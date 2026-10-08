@@ -119,6 +119,12 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-agent-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Capabilities', exact: true }).click();
       await page.getByText('UNSUPPORTED BY OFFICIAL API', { exact: true }).first().waitFor();
+      const capacity = page.getByRole('region', { name: 'Workspace publishing capacity', exact: true });
+      await capacity.waitFor();
+      assert.equal(await capacity.locator('[data-youtube-capacity]').count(), 3);
+      await capacity.getByText(/These counters cover Rafii requests and do not show Google’s remaining allocation/).waitFor();
+      assert.ok(await capacity.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth + 1), 'Capacity controls must fit the mobile viewport.');
+      await capacity.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-capacity-${width}.png`) });
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
       assert.equal(await page.getByLabel('Visibility', { exact: true }).count(), 0);
       await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-capabilities-${width}.png`), fullPage: true });
@@ -188,7 +194,7 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
         productionNotReady: true, officialUnsupportedCommunity: true, publicGateHeld: true, humanReviewBeforeWrite: true,
         distinctOAuthLaneConnections: true, explicitAgenticConsent: true, reviewableLibraryPlan: true,
         finiteThirtyDayAuthority: true, policyPreviewNotExecution: true, unapprovedAutopilotHeld: true,
-        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, noHorizontalOverflow: true });
+        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true });
       await context.close();
     }
     writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2) + '\n');

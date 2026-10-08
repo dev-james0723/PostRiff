@@ -36,7 +36,7 @@ class YouTubeCreatorService:
         self.capacity = CapacityController(service.connection_factory,
             CapacityPolicy.from_environment(service.oauth.providers.get('youtube'), os.environ), clock=self.clock)
         self._capacities = {}
-        self.oauth.identity_admission = lambda workspace, provider: self.capacity_for(provider).record_identity(workspace)
+        self.oauth.identity_admission = self._identity_admission
         self.engine = UploadEngine(self.journal, self.worker_api, self.video_chunk, clock=self.clock, finalize=self.finalize_upload,
                                    chunk_size=os.environ.get('POSTRIFF_YOUTUBE_UPLOAD_CHUNK_BYTES'))
         from .notifications import PushNotifications
@@ -44,9 +44,8 @@ class YouTubeCreatorService:
         from .agent import YouTubePublishingAgent
         self.agent = YouTubePublishingAgent(self)
 
-    def maintenance(self):
-        """One read-only grant/identity refresh and one approved notification renewal per tick."""
-        provider = self.oauth.providers.get('youtube')
+    def retention(self):
+        """Cleanup remains owned by shared cron even when fleet dispatch is enabled."""
         # Retention continues after feature rollback; legacy deployments may lack 089.
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute("SELECT to_regclass('public.pr_youtube_cache')")
@@ -55,22 +54,60 @@ class YouTubeCreatorService:
                 purge_expired_data(cur)
                 cur.execute("SELECT to_regclass('public.pr_youtube_quota_daily')")
                 if cur.fetchone()[0] is None:
-                    return {'enabled': False, 'dataCleanup': True, 'blocker': 'youtube_capacity_schema_097_required'}
+                    return {'dataCleanup': True, 'blocker': 'youtube_capacity_schema_097_required'}
                 cur.execute("DELETE FROM public.pr_youtube_rate_windows WHERE window_start<now()-interval '1 day'")
                 cur.execute("DELETE FROM public.pr_youtube_quota_daily WHERE quota_date<(now() AT TIME ZONE 'America/Los_Angeles')::date-90")
-        if not provider or not getattr(provider, 'creator_enabled', False):
-            return {'enabled': False, 'dataCleanup': has_schema}
+        return {'dataCleanup': has_schema}
+
+    def maintenance(self, *, dispatch=True):
+        cleanup = self.retention()
+        provider = self.oauth.providers.get('youtube')
+        if cleanup.get('blocker') or not provider or not getattr(provider, 'creator_enabled', False):
+            return {'enabled': False, **cleanup}
+        if not dispatch:
+            return {'enabled': True, **cleanup, 'scheduler': 'isolated_youtube_fleet'}
+        result = self.identity_one()
+        result.pop('_selection', None)
+        result.pop('selected', None)
+        try:
+            renewed = self.notifications.renew_one()
+        except AlphaError:
+            renewed = False
+        return {'enabled': True, **result, 'notificationLeaseRenewed': renewed,
+                'publishingAgent': self.agent.dispatch_one()}
+
+    def fleet_schema_ready(self):
+        with self.service.connection_factory() as db, db.cursor() as cur:
+            cur.execute("""SELECT to_regclass('public.pr_youtube_cache'),to_regclass('public.pr_youtube_quota_daily'),
+                to_regclass('public.pr_worker_tenants')""")
+            row = cur.fetchone()
+        return bool(row and all(row))
+
+    def claim_identity(self, *, excluded=()):
+        """Claim-only seam for fleet concurrency acceptance; no provider request."""
+        exclusion = ''.join(' AND NOT (c.workspace_id::text=%s AND c.connection_id=%s)' for _ in excluded)
+        parameters = tuple(value for pair in excluded for value in pair)
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT c.workspace_id::text,c.connection_id FROM public.pr_encrypted_credentials c
+                JOIN public.pr_workspaces w ON w.id=c.workspace_id
                 LEFT JOIN public.pr_youtube_cache k ON k.workspace_id=c.workspace_id AND k.connection_id=c.connection_id
                   AND k.cache_key='authorization-check'
-                WHERE c.provider='youtube' AND c.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at<=now())
-                ORDER BY k.refreshed_at NULLS FIRST,c.updated_at LIMIT 1 FOR UPDATE OF c SKIP LOCKED""")
+                WHERE c.provider='youtube' AND c.revoked_at IS NULL AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
+                  AND (k.expires_at IS NULL OR k.expires_at<=now())""" + exclusion + """
+                ORDER BY k.refreshed_at NULLS FIRST,c.updated_at LIMIT 1 FOR UPDATE OF c SKIP LOCKED""", parameters)
             row = cur.fetchone()
             if row:
                 cur.execute("""INSERT INTO public.pr_youtube_cache(workspace_id,connection_id,cache_key,source,data,expires_at)
                     VALUES(%s,%s,'authorization-check','Rafii operational lease','{}'::jsonb,now()+interval '5 minutes')
-                    ON CONFLICT(workspace_id,connection_id,cache_key) DO UPDATE SET expires_at=excluded.expires_at,refreshed_at=now()""", row)
+                    ON CONFLICT(workspace_id,connection_id,cache_key) DO UPDATE SET expires_at=excluded.expires_at,refreshed_at=now()
+                    WHERE pr_youtube_cache.expires_at<=now() RETURNING connection_id""", row)
+                if not cur.fetchone():
+                    row = None  # Another invocation committed this lease after our selection snapshot.
+        return row
+
+    def identity_one(self, *, excluded=()):
+        """Commit a short identity lease before network I/O; return internal selection."""
+        row = self.claim_identity(excluded=excluded)
         checked, intervention = False, None
         if row:
             workspace, connection = row
@@ -97,15 +134,15 @@ class YouTubeCreatorService:
                 elif error.code in ('youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
                     self.operational_error(workspace, connection, error, 'oauth.binding')
                     intervention = error.code
-        try:
-            renewed = self.notifications.renew_one()
-        except AlphaError:
-            renewed = False
-        result = {'enabled': True, 'authorizationChecked': checked, 'notificationLeaseRenewed': renewed,
-                  'publishingAgent': self.agent.dispatch_one()}
+        result = {'selected': bool(row), 'authorizationChecked': checked, '_selection': row}
         if intervention:
             result['reconnectionRequired'] = intervention
         return result
+
+    def _identity_admission(self, workspace, provider):
+        from .fleet import before_request
+        before_request()
+        self.capacity_for(provider).record_identity(workspace)
 
     def _member(self, workspace, token, connection, right='read', fresh=False):
         from ..hosted import _membership
@@ -136,6 +173,8 @@ class YouTubeCreatorService:
     def account_usage(self, workspace, connection, provider=None):
         capacity = self.capacity_for(provider) if provider is not None else self.capacity
         def record(method, bucket, units):
+            from .fleet import before_request
+            before_request()
             capacity.record(workspace, connection, method, bucket, units)
         return record
 

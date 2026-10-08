@@ -37,6 +37,21 @@ def policy_digest(policy):
     return digest({key: policy.get(key) for key in POLICY_FIELDS})
 
 
+def policy_authorization(policy):
+    """Exact authority generation, separate from the owner's approved rules digest."""
+    return {'policyId': policy.get('id'), 'policyDigest': policy_digest(policy),
+            'grantedBy': policy.get('grantedBy'), 'grantedAt': policy.get('grantedAt'),
+            'authorizationGeneration': policy.get('authorizationGeneration'), 'status': policy.get('status')}
+
+
+def fleet_authorization_current(state, candidate):
+    policy = next((p for p in root(state)['policies']
+                   if p.get('id') == candidate[2] and p.get('connectionId') == candidate[1]), None)
+    if not policy or len(candidate) != 6 or candidate[5] != policy_authorization(policy):
+        return False
+    return candidate[4] is None or root(state).get('fleetLease', {}).get('authorization') == candidate[5]
+
+
 def find_draft(state, connection, identifier):
     draft = next((d for d in root(state)['drafts'] if d.get('id') == identifier and d.get('connectionId') == connection), None)
     if not draft:
@@ -204,7 +219,7 @@ def activate_policy(state, connection, identifier, body, actor, now):
     for existing in root(state)['policies']:
         if existing.get('connectionId') == connection and existing.get('status') == 'active' and existing['id'] != policy['id']:
             existing.update(status='revoked', revokedAt=now, revokedBy=actor)
-    policy.update(status='active', grantedBy=actor, grantedAt=now)
+    policy.update(status='active', grantedBy=actor, grantedAt=now, authorizationGeneration=uuid.uuid4().hex)
     return policy
 
 
@@ -373,11 +388,14 @@ class YouTubePublishingAgent:
         return self._write(workspace, token, connection, {**body, '_event': 'policy_' + action},
             lambda state, actor: change_policy(state, connection, identifier, action, actor, self.clock()), right='owner')
 
-    def dispatch_one(self):
-        """At most one finite plan per tick; revalidate and fence against concurrent owner changes."""
-        from ..hosted import audit
-        from ..billing import require_publishing
+    def _select_candidate(self, *, fleet=False, exclude_workspaces=()):
+        """Fleet selection commits a 120-second fenced lease before OAuth I/O."""
         candidate = None
+        filters = ''
+        extra = ()
+        if fleet:
+            filters = " AND NOT (id=ANY(%s::uuid[])) AND coalesce((state#>>'{youtubeAgent,fleetLease,until}')::float8,0)<=%s"
+            extra = (list(exclude_workspaces), self.clock())
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
                 AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
@@ -387,35 +405,82 @@ class YouTubePublishingAgent:
                       AND d->>'status'='proposed' AND d->>'connectionId'=p->>'connectionId'
                       AND (d->>'uploadWorkflow'<>'upload_later' OR (d->>'uploadAt')::float8<=%s)
                       AND EXISTS(SELECT 1 FROM jsonb_array_elements(p->'drafts') e WHERE e->>'id'=d->>'id'))
-                ORDER BY coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0),id LIMIT 100""",
-                (self.clock(), self.clock(), self.clock() + 1800))
+                """ + filters + """ ORDER BY coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0),id LIMIT 100""" +
+                (' FOR UPDATE SKIP LOCKED' if fleet else ''),
+                (self.clock(), self.clock(), self.clock() + 1800) + extra)
             for workspace, raw in cur.fetchall():
                 state = json.loads(raw) if isinstance(raw, str) else raw
                 for policy in root(state)['policies']:
                     if policy.get('status') != 'active' or not policy['startsAt'] <= self.clock() < policy['endsAt']:
                         continue
                     for entry in policy['drafts']:
-                        draft = find_draft(state, policy['connectionId'], entry['id'])
+                        try:
+                            draft = find_draft(state, policy['connectionId'], entry['id'])
+                        except AlphaError:
+                            continue
                         if draft.get('status') == 'proposed' and (draft['uploadWorkflow'] != 'upload_later' or draft['uploadAt'] <= self.clock() + 1800):
                             candidate = (workspace, policy['connectionId'], policy['id'], draft['id'])
                             break
                     if candidate: break
-                if candidate: break
+                if candidate:
+                    authorization = policy_authorization(policy)
+                    lease_id = None
+                    if fleet:
+                        lease_id = uuid.uuid4().hex
+                        root(state)['fleetLease'] = {'id': lease_id, 'until': self.clock() + 120,
+                                                    'authorization': authorization}
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                                    (json.dumps(state), workspace))
+                    candidate = (*candidate, lease_id, authorization)
+                    break
+        return candidate
+
+    def dispatch_one(self, *, fleet=False, exclude_workspaces=()):
+        """At most one finite plan; fleet mode adds a durable workspace claim."""
+        candidate = self._select_candidate(fleet=fleet, exclude_workspaces=exclude_workspaces)
         if not candidate:
             return {'dispatched': False, 'providerVerified': False}
-        workspace, connection, policy_id, draft_id = candidate
+        if not fleet:
+            return self._dispatch_candidate(candidate)
+        from .fleet import release_planner
+        try:
+            return {**self._dispatch_candidate(candidate), '_workspace': candidate[0]}
+        finally:
+            release_planner(self, candidate)
+
+    def _dispatch_candidate(self, candidate):
+        from ..hosted import audit
+        from ..billing import require_publishing
+        if not candidate:
+            return {'dispatched': False, 'providerVerified': False}
+        if len(candidate) != 6:
+            return {'dispatched': False, 'authorityChanged': True, 'providerVerified': False}
+        workspace, connection, policy_id, draft_id = candidate[:4]
+        leased = candidate[4] is not None
         try:
             self._agentic_gate(workspace, connection)
-            self.creator.oauth.reverify_for_worker(workspace, connection)
+            verification = self.creator.oauth.reverify_for_worker(workspace, connection)
+            if verification.get('state') == 'verification_unavailable':
+                return {'dispatched': False, 'deferred': True, 'providerVerified': False}
+            if leased and (verification.get('state') != 'read_verified' or verification.get('ready') is not True):
+                raise AlphaError('Reconnect the exact agentic channel before dispatch.', 409, code='youtube_agentic_oauth_required')
             with self.service.connection_factory() as db, db.cursor() as cur:
                 cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace,))
                 row = cur.fetchone()
                 if not row:
                     return {'dispatched': False, 'providerVerified': False}
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                if leased:
+                    lease = root(state).get('fleetLease', {})
+                    if lease.get('id') != candidate[4] or lease.get('until', 0) <= self.clock():
+                        return {'dispatched': False, 'leaseLost': True, 'providerVerified': False}
+                if not fleet_authorization_current(state, candidate):
+                    return {'dispatched': False, 'authorityChanged': True, 'providerVerified': False}
                 if state.get('accountBlock') or state.get('accountDeletion'):
                     raise AlphaError('Workspace unavailable.', 403)
-                policy = next(p for p in root(state)['policies'] if p.get('id') == policy_id)
+                policy = next((p for p in root(state)['policies'] if p.get('id') == policy_id), None)
+                if policy is None:
+                    raise AlphaError('The finite publishing policy is unavailable.', 409, code='youtube_agent_policy_changed')
                 cur.execute("""SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id
                     WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p""",
                     (workspace, policy.get('grantedBy')))
@@ -432,12 +497,20 @@ class YouTubePublishingAgent:
                       {'policyId': policy_id, 'draftId': draft_id, 'channelId': policy['channelId']})
             return {'dispatched': True, 'jobId': result['jobId'], 'providerVerified': False}
         except AlphaError as error:
+            if getattr(error, 'capacity_reason', None) == 'fleet_budget':
+                return {'dispatched': False, 'deferred': True, 'providerVerified': False}
             # One durable actionable intervention, no automatic duplicate provider submission.
             with self.service.connection_factory() as db, db.cursor() as cur:
                 cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace,))
                 row = cur.fetchone()
                 if row:
                     state = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                    if leased:
+                        lease = root(state).get('fleetLease', {})
+                        if lease.get('id') != candidate[4] or lease.get('until', 0) <= self.clock():
+                            return {'dispatched': False, 'leaseLost': True, 'providerVerified': False}
+                    if not fleet_authorization_current(state, candidate):
+                        return {'dispatched': False, 'authorityChanged': True, 'providerVerified': False}
                     policy = next((p for p in root(state)['policies'] if p.get('id') == policy_id), None)
                     if policy and policy.get('status') == 'active':
                         policy.update(status='paused', intervention={'code': error.code or 'youtube_agent_held', 'message': str(error), 'at': self.clock()})

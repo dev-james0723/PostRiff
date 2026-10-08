@@ -40,6 +40,7 @@ suite.addTests(loader.loadTestsFromNames([
     'test_hosted_storage_library',
     'test_video_uploads',
     'test_video_provision',
+    'test_dev_hosted_resumable',
     'test_postriff_phase2',
     'test_postriff_phase2_hosted',
     'test_postriff_phase2_learning',

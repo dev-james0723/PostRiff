@@ -64,6 +64,17 @@ export interface YouTubeOverview {
     resetTimeZone: string;
     note: string;
     workspaceUsageToday: { method: string; attempts: number; estimatedUnits: number | null }[];
+    admission?: {
+      configuredProjectCeilings: Record<string, number>;
+      workspaceCeilings: Record<string, number>;
+      workspaceUsageToday: Record<string, { reservedUnits: number; admittedRequests: number; delayedRequests: number }>;
+      approvedQuotaEvidence: boolean;
+      pendingQueueLimit: number;
+      requestsPerMinute: number;
+      resetAt: number;
+      resetTimeZone: string;
+      actualGoogleRemaining: null;
+    };
   };
   uploads: {
     operationKey: string;

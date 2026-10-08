@@ -55,7 +55,7 @@ cleanup() {
 import base64, hashlib, json, sys
 from pathlib import Path
 root = Path(sys.argv[1])
-names = ['CLOUD-SYNTHETIC-browser.json', 'CLOUD-SYNTHETIC-failure.png'] + [f'CLOUD-SYNTHETIC-agent-{w}.png' for w in (1440, 390, 320)]
+names = ['CLOUD-SYNTHETIC-browser.json', 'CLOUD-SYNTHETIC-failure.png'] + [f'CLOUD-SYNTHETIC-{surface}-{w}.png' for surface in ('agent', 'capacity') for w in (1440, 390, 320)]
 for name in names:
     path = root / name
     if path.is_file() and not path.is_symlink() and path.stat().st_size <= 1024 * 1024:

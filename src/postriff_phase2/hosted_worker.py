@@ -30,17 +30,21 @@ def configured_worker_limits(values=None):
     return jobs, seconds
 
 
-def due_workspaces_sql(capacity_ready=True):
+def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False):
     """The actual bounded selection, shared with disposable query-plan acceptance."""
     dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
     dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
+    if youtube_only and exclude_youtube:
+        raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+    platform_filter = (" AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
+                       " AND coalesce(j#>>'{manifest,platform}','')<>'YouTube'" if exclude_youtube else '')
     return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
         """ + dispatch_join + """
         WHERE w.state ? 'phase2' AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
           AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
             WHERE coalesce(j->>'state','') NOT IN ('verified','failed','canceled','held')
               AND coalesce((j->>'leaseUntil')::double precision,0)<=%s
-              AND coalesce((j->>'nextAt')::double precision,0)<=%s)
+              AND coalesce((j->>'nextAt')::double precision,0)<=%s""" + platform_filter + """)
         ORDER BY """ + dispatch_order + """ LIMIT 100 FOR UPDATE OF w SKIP LOCKED"""
 
 
@@ -97,7 +101,9 @@ class PostgresWorker:
         except (AlphaError, KeyError, TypeError):
             return False
 
-    def claim(self):
+    def claim(self, *, youtube_only=False, exclude_youtube=False):
+        if youtube_only and exclude_youtube:
+            raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
@@ -113,13 +119,31 @@ class PostgresWorker:
                 # Select only tenants with due work, oldest dispatch first. The
                 # durable cursor survives cron/worker restarts; a busy tenant
                 # cannot monopolize every chunk lease by sorting before others.
-                cur.execute(due_workspaces_sql(capacity_ready), (self.clock(), self.clock()))
+                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube), (self.clock(), self.clock()))
                 for workspace_id, revision, raw_state in cur.fetchall():
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
                     original = json.dumps(state, sort_keys=True)
-                    self.commands.engine.invalidate(state)
+                    if youtube_only or exclude_youtube:
+                        # Invalidation can hold jobs too; the isolated lane must
+                        # not change another platform's review or queued job.
+                        data = state['phase2']
+                        jobs, reviews = data['jobs'], data['reviews']
+                        def selected_platform(item):
+                            match = item.get('manifest', {}).get('platform') == 'YouTube'
+                            return match if youtube_only else not match
+                        data['jobs'] = [job for job in jobs if selected_platform(job)]
+                        data['reviews'] = [review for review in reviews if selected_platform(review)]
+                        try:
+                            self.commands.engine.invalidate(state)
+                        finally:
+                            data['jobs'], data['reviews'] = jobs, reviews
+                    else:
+                        self.commands.engine.invalidate(state)
                     selected = None
                     for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
+                        is_youtube = job.get('manifest', {}).get('platform') == 'YouTube'
+                        if (youtube_only and not is_youtube) or (exclude_youtube and is_youtube):
+                            continue
                         now = self.clock()
                         if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
                             continue
@@ -338,8 +362,9 @@ class PostgresWorker:
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
             return True
 
-    def step(self, crash=None):
-        claimed = self.claim()
+    def step(self, crash=None, *, youtube_only=False, exclude_youtube=False):
+        claimed = (self.claim(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
+                   if youtube_only or exclude_youtube else self.claim())
         if not claimed or crash == "after_claim":
             return bool(claimed)
         if claimed.get('youtubeForward'):
@@ -370,6 +395,15 @@ class PostgresWorker:
         return True
 
     def tick(self, max_jobs=None, max_seconds=None):
+        from .youtube.fleet import enabled
+        fleet_owns_youtube = enabled()
+        return self._tick(max_jobs, max_seconds, exclude_youtube=fleet_owns_youtube)
+
+    def tick_youtube(self, max_jobs, max_seconds):
+        """Dedicated lane: no other platform or maintenance dispatch can run."""
+        return self._tick(max_jobs, max_seconds, youtube_only=True)
+
+    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False):
         if max_jobs is None or max_seconds is None:
             configured_jobs, configured_seconds = configured_worker_limits()
             max_jobs = configured_jobs if max_jobs is None else max_jobs
@@ -378,8 +412,13 @@ class PostgresWorker:
             raise AlphaError("Use bounded worker limits.")
         started, processed = time.monotonic(), 0
         youtube = getattr(self.social, 'youtube', None) or getattr(self, 'youtube_maintenance', None)
-        maintenance = youtube.maintenance() if youtube else {'enabled': False}
-        while processed < max_jobs and time.monotonic() - started < max_seconds and self.step():
+        maintenance = ({'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
+                       youtube.maintenance(dispatch=False) if youtube and exclude_youtube else
+                       youtube.maintenance() if youtube else {'enabled': False})
+        def step():
+            return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
+                    if youtube_only or exclude_youtube else self.step())
+        while processed < max_jobs and time.monotonic() - started < max_seconds and step():
             processed += 1
         return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
                 "youtubeMaintenance": maintenance, "capacityIntervention": getattr(self, 'capacity_intervention', None),

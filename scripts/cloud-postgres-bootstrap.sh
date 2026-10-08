@@ -82,6 +82,17 @@ cd -- "$jcb_pg_repo_root"
 # These tests inject Google, storage and agent transports. A clean environment
 # excludes application credentials, production DSNs, proxy settings and research
 # switches. Only the disposable cluster can be reached by the libpq defaults.
+# Keep concurrent fleet claims in their own clean cluster: prior fixture accounts
+# must not be blocked or mutated merely to make claim selection deterministic.
+for jcb_pg_group in creator fleet; do
+  if [ "$jcb_pg_group" = creator ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_creator.py tests/phase2/postgres_video.py
+      tests/phase2/postgres_consumer_campaign_worker.py tests/phase2/postgres_youtube_acceptance.py
+      tests/phase2/postgres_youtube_capacity.py tests/phase2/postgres_youtube_scale.py
+      tests/phase2/postgres_library_lifecycle.py tests/phase2/postgres_reverify.py)
+  else
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_fleet.py)
+  fi
 env -i \
   PATH="$PATH" HOME="$jcb_pg_home" TMPDIR="$jcb_pg_temp_root" \
   CI=true LC_ALL=C PYTHONDONTWRITEBYTECODE=1 \
@@ -90,12 +101,5 @@ env -i \
   PGUSER=postriff_test PGHOST=127.0.0.1 PGPORT=55438 PGDATABASE=postgres \
   PGCONNECT_TIMEOUT=5 PGPASSFILE=/dev/null PGSERVICEFILE=/dev/null \
   POSTRIFF_TEST_DSN='host=127.0.0.1 port=55438 dbname=postgres user=postriff_test' \
-  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py \
-    tests/phase2/postgres_youtube_creator.py \
-    tests/phase2/postgres_video.py \
-    tests/phase2/postgres_consumer_campaign_worker.py \
-    tests/phase2/postgres_youtube_acceptance.py \
-    tests/phase2/postgres_youtube_capacity.py \
-    tests/phase2/postgres_youtube_scale.py \
-    tests/phase2/postgres_library_lifecycle.py \
-    tests/phase2/postgres_reverify.py
+  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py "${jcb_pg_scripts[@]}"
+done

@@ -431,5 +431,29 @@
     "measuredSustainedCadence": false,
     "requiredFleetProvisioned": false,
     "note": "Current cron cannot provide this scenario; arithmetic maxima omit latency, quota delays and failures. Extra invocations are not a proven safe fleet; a bounded dedicated/batched maintenance scheduler and cloud/provider capacity acceptance are required."
+  },
+  "isolatedWorkerCandidate": {
+    "implementation": "IMPLEMENTED; source-bound cloud synthetic concurrency PASS cfj6vg03bh",
+    "reference": "FLEET-OPERATIONS.md",
+    "activated": false,
+    "paidRuntimeProvisioned": false,
+    "providerThroughputVerified": false,
+    "lanes": [
+      "upload",
+      "identity",
+      "planner"
+    ],
+    "defaultItemsPerInvocation": 10,
+    "maxItemsPerInvocation": 25,
+    "defaultSecondsPerInvocation": 20,
+    "maxSecondsPerInvocation": 45,
+    "note": "Shared once-per-minute cron remains unchanged while fleet flag is off. Batched entrypoints do not create a scheduler, sustainable throughput, additional Google capacity or paid-storage authorization.",
+    "syntheticConcurrentClaims": {
+      "workers": 8,
+      "distinctClaimsPerLane": 64,
+      "uploadDuplicateLeases": 0,
+      "providerCalls": 0,
+      "productionAcceptance": false
+    }
   }
 }

@@ -17,6 +17,7 @@ import { CreatorReceipts } from './creator-receipts';
 import { UploadRecovery, StreamConfiguration } from './creator-recovery';
 import { YouTubeResourceList } from './resource-list';
 import { YouTubeAgentControls } from './agent-controls';
+import { YouTubeQuotaControls } from './quota-controls';
 
 const control = 'border-input bg-background w-full rounded-md border px-3 py-2 text-sm';
 const actionLabels: Record<string, string> = {
@@ -1653,6 +1654,7 @@ export function YouTubeCreatorView() {
                     {overview.data?.quota.resetTimeZone}.
                   </p>
                   <p className='text-muted-foreground text-xs'>{overview.data?.quota.note}</p>
+                  <YouTubeQuotaControls admission={overview.data?.quota.admission} />
                   <p className='text-sm'>
                     Community Post publishing and native YouTube Articles are unsupported by the
                     official public API.

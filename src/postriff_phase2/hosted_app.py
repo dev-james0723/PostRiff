@@ -472,7 +472,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -497,6 +497,22 @@ class HostedApplication:
                     from rafii_control.hosted import embedded_app
                     control = self.control_app = embedded_app(os.environ, self._runtime)
                 return control(environ, start_response)
+            if path.startswith('/api/cron/youtube/'):
+                lanes = {'uploads': 'upload', 'identity': 'identity', 'planner': 'planner'}
+                suffix = path.removeprefix('/api/cron/youtube/')
+                if method != 'GET' or suffix not in lanes:
+                    raise AlphaError('This hosted route is unavailable.', 404)
+                # Authenticate before initializing database, storage or provider clients.
+                # User bearer tokens and request-supplied budgets never select fleet authority.
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                supplied = environ.get('HTTP_AUTHORIZATION', '')
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, 'Bearer ' + expected)):
+                    raise AlphaError('Cron authorization failed.', 401)
+                service = self._runtime()
+                from .youtube.fleet import run_lane
+                return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
@@ -1049,7 +1065,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker":
+            if path == "/api/cron/worker" or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:
