@@ -192,12 +192,14 @@ expect_error("rules: unknown field is rejected", lambda: route("POST", w1, ["col
 
 # --- a new matching upload joins after re-evaluation; a missed event is repaired by tick -------------------------------------
 service.library.metadata(w1, "owner", r3, {"tags": ["rehearsal"]})
-check("incremental: not yet a member before the hook runs", r3 not in members(cid))
+check("incremental: a tag edit joins at once through the metadata hook", members(cid).get(r3) == "rule", members(cid))
 result = hook(w1, r3)
-check("incremental: hook re-evaluates one lineage", result["status"] == "ok" and members(cid).get(r3) == "rule", (result, members(cid)))
-service.library.metadata(w1, "owner", r4, {"tags": ["rehearsal"]})  # no hook call: a missed event
+check("incremental: re-running the hook for one lineage is idempotent", result["status"] == "ok" and members(cid).get(r3) == "rule", (result, members(cid)))
 with connection() as db:
+    # A missed event: the tag lands without passing through metadata(), so no hook ran.
+    db.execute("UPDATE public.pr_library_assets SET tags=%s WHERE workspace_id=%s AND id=%s", (["rehearsal"], w1, uuid.UUID(hex=r4)))
     db.execute("UPDATE public.pr_library_collections SET updated_at=now()-interval '1 hour' WHERE id=%s", (uuid.UUID(hex=cid),))
+check("reconcile: the missed event is not yet reflected", r4 not in members(cid), members(cid))
 tick = service.library_intelligence.tick(connection)
 check("reconcile: tick repairs the missed event", tick["collections"]["status"] == "ok" and tick["collections"]["checked"] >= 1
       and members(cid).get(r4) == "rule", (tick, members(cid)))
