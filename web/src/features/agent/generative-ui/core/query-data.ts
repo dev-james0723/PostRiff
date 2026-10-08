@@ -109,13 +109,22 @@ export function numberAt(value: unknown, path?: string | null): number | undefin
   return undefined;
 }
 
-/** A row's stable id: `idField` when given, else `id`, `ref`, then common domain id names. */
+/** A row's stable id: `idField` when given, else its opaque `ref` (`type:id`), `id`, then common domain id names. */
 export function rowId(row: Row, idField?: string | null): string | undefined {
-  const fields = idField ? [idField] : ['id', 'ref', 'draftId', 'itemId', 'campaignId', 'eventId', 'sourceId'];
+  const fields = idField ? [idField] : ['ref', 'id', 'draftId', 'itemId', 'campaignId', 'eventId', 'sourceId'];
   for (const field of fields) {
     const value = getPath(row, field);
     if (typeof value === 'string' && value) return value;
     if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   }
   return undefined;
+}
+
+const REF = /^([a-z][a-z0-9_]{0,31}):([A-Za-z0-9:_.-]{1,80})$/;
+
+/** `{type, id}` of an opaque `type:id` ref (from bound data), for lane F's selection memory; null otherwise. */
+export function refParts(value: unknown): { type: string; id: string } | null {
+  if (typeof value !== 'string') return null;
+  const match = REF.exec(value);
+  return match ? { type: match[1], id: match[2] } : null;
 }

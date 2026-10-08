@@ -6,8 +6,11 @@
  *   node web/scripts/generate-openui-assets.mjs --check   exit 1 when the committed assets differ (drift check in CI)
  *
  * Inputs (single source): web/src/features/agent/generative-ui/component-specs.ts + library-registry.ts (+ lane E's
- * journey specs through core/journey-module.ts), core/prompt-text.ts, and lane E's journey examples
- * src/postriff_phase2/agent_runtime_v2/generated/journey-examples/<J0x>-*.openui.
+ * journey specs through core/journey-module.ts), core/prompt-text.ts, and lane E's journey examples under
+ * src/postriff_phase2/agent_runtime_v2/generated/journey-examples/: full programs <J0x>-*.openui (generate prompts) and
+ * edits/<J0x>-*.patch.openui with their base named in journeys.json (patch prompts). Every example is checked by the
+ * same trusted validator the presenter's output goes through; upstream prompt lines that contradict Rafii's grounding
+ * rules are replaced (core/prompt-text.ts PROMPT_REWRITES) and a missing anchor fails the run.
  *
  * Outputs:
  *   src/postriff_phase2/agent_runtime_v2/generated/openui-assets.json
@@ -73,48 +76,117 @@ const packageVersion = (name) => JSON.parse(readFileSync(path.join(WEB, 'node_mo
 const registry = load(path.join(SRC, 'features/agent/generative-ui/library-registry.ts'));
 const prompts = load(path.join(SRC, 'features/agent/generative-ui/core/prompt-text.ts'));
 const contracts = load(path.join(SRC, 'lib/agent-runtime/ui-contracts.ts'));
+const validator = load(path.join(SRC, 'lib/agent-runtime/ui-parser/index.ts'));
 const langCore = requireWeb('@openuidev/lang-core');
 
+/** Full-program journey examples: journey-examples/<J0x>-<name>.openui (subfolders such as edits/ and pending/ are not programs). */
 function journeyExamples() {
   const byJourney = {};
   if (!existsSync(EXAMPLES_DIR)) return byJourney;
   for (const name of readdirSync(EXAMPLES_DIR).sort()) {
     const match = /^(J0[1-9])-[A-Za-z0-9_-]+\.openui$/.exec(name);
-    if (!match) continue;
+    if (!match || !statSync(path.join(EXAMPLES_DIR, name)).isFile()) continue;
     (byJourney[match[1]] ??= []).push({ name, source: readFileSync(path.join(EXAMPLES_DIR, name), 'utf8').trim() });
   }
   return byJourney;
 }
 
-/** Structural check of an example against its library (the full manifest policy is applied at run time). */
-function exampleProblems(library, source, allowed) {
-  const parser = langCore.createParser(library.toJSONSchema(), 'RafiiRoot');
-  const result = parser.parse(source);
-  const problems = [];
-  if (!result.root || result.root.statementId !== 'root' || result.root.typeName !== 'RafiiRoot') problems.push('root_invalid');
-  if (result.meta.incomplete) problems.push('incomplete');
-  for (const e of result.meta.errors) problems.push(`${e.code}:${e.statementId ?? ''}`);
-  for (const u of result.meta.unresolved) problems.push(`unresolved:${u}`);
-  if (result.mutationStatements.length) problems.push('mutation');
-  for (const q of result.queryStatements) {
-    if (q.toolAST?.k !== 'Str') problems.push(`query_name:${q.statementId}`);
-    if (q.defaultsAST && q.defaultsAST.k !== 'Null') problems.push(`query_defaults:${q.statementId}`);
+/**
+ * Lane E's edit examples: journey-examples/edits/<J0x>-<case>.patch.openui, each with its base program named in
+ * journey-examples/journeys.json by an entry `{patch: "edits/<file>", base: "<J0x-name>.openui"}` (anywhere in the file).
+ */
+function journeyEdits(problems) {
+  const dir = path.join(EXAMPLES_DIR, 'edits');
+  const byJourney = {};
+  if (!existsSync(dir)) return byJourney;
+  const bases = new Map();
+  const catalog = path.join(EXAMPLES_DIR, 'journeys.json');
+  if (existsSync(catalog)) {
+    const visit = (value) => {
+      if (Array.isArray(value)) return value.forEach(visit);
+      if (!value || typeof value !== 'object') return;
+      if (typeof value.patch === 'string' && typeof value.base === 'string') {
+        bases.set(path.basename(value.patch), value.base.endsWith('.openui') ? value.base : `${value.base}.openui`);
+      }
+      Object.values(value).forEach(visit);
+    };
+    visit(JSON.parse(readFileSync(catalog, 'utf8')));
   }
+  for (const name of readdirSync(dir).sort()) {
+    const match = /^(J0[1-9])-[A-Za-z0-9_-]+\.patch\.openui$/.exec(name);
+    if (!match) continue;
+    const base = bases.get(name);
+    if (!base || !existsSync(path.join(EXAMPLES_DIR, base))) {
+      problems.push(`edit_without_base:${name}`);
+      continue;
+    }
+    (byJourney[match[1]] ??= []).push({
+      name,
+      base: readFileSync(path.join(EXAMPLES_DIR, base), 'utf8').trim(),
+      patch: readFileSync(path.join(dir, name), 'utf8').trim(),
+    });
+  }
+  return byJourney;
+}
+
+/** Literal Query binding names and registered action ids a source uses (examples use real binding names). */
+function namesUsed(libraryName, source) {
+  const vlib = validator.validatorLibrary(libraryName);
+  const reads = new Set();
+  const actions = new Set();
   const { text } = langCore.autoClose(source);
   for (const stmt of langCore.split(langCore.tokenize(text))) {
     langCore.walkAST(langCore.parseExpression(stmt.tokens), (node) => {
-      if (node.k === 'Comp' && !langCore.isBuiltin(node.name) && node.name !== 'Query' && !allowed.has(node.name)) {
-        problems.push(`component_outside_journey:${node.name}`);
+      if (node.k !== 'Comp') return;
+      if (node.name === 'Query' && node.args[0]?.k === 'Str') reads.add(node.args[0].v);
+      const rules = vlib.rules[node.name] ?? {};
+      const params = vlib.params[node.name] ?? [];
+      for (const [prop, rule] of Object.entries(rules)) {
+        const arg = node.args[params.indexOf(prop)];
+        if (rule === 'action-id' && arg?.k === 'Str') actions.add(arg.v);
       }
     });
   }
-  return problems;
+  return { reads: [...reads], actions: [...actions] };
+}
+
+/**
+ * An example goes through the same trusted validator the presenter's output does (generate mode, or patch mode on its
+ * base), with a policy of this journey's components and the binding names the example itself uses.
+ */
+function exampleProblems(libraryName, allowed, source, base = null) {
+  const used = namesUsed(libraryName, base ? `${base}\n${source}` : source);
+  const result = validator.validateAndMergeUi({
+    v: 'v1',
+    contractVersion: contracts.CONTRACT_VERSION,
+    mode: base ? 'patch' : 'generate',
+    baseSource: base,
+    candidateSource: source,
+    libraryHash: validator.validatorLibrary(libraryName).libraryHash,
+    policy: { rootName: 'RafiiRoot', allowedComponents: [...allowed], readBindings: used.reads, actionIds: used.actions, founder: libraryName === 'founder' },
+    scope: { workspaceId: 'assets', artifactId: 'assets', attemptId: 'assets' },
+  });
+  return result.accepted ? [] : result.errors;
+}
+
+/** Replace upstream prompt lines that contradict Rafii grounding; a missing anchor is a problem (package drift). */
+function rewritePrompt(text, label, problems) {
+  let out = text;
+  for (const { find, replace } of prompts.PROMPT_REWRITES) {
+    if (!out.includes(find)) {
+      problems.push(`prompt_anchor_missing:${label}:${find.slice(0, 40)}`);
+      continue;
+    }
+    out = out.split(find).join(replace);
+  }
+  return out;
 }
 
 function build() {
   const problems = registry.registryProblems();
   const files = new Map(); // absolute path → text
   const examples = journeyExamples();
+  const edits = journeyEdits(problems);
   const libraries = {};
   const promptIndex = {};
   const specLibraries = {};
@@ -179,41 +251,56 @@ function build() {
       }
     }
     const exampleTexts = [];
+    const editTexts = [];
     for (const journey of target.journeysCovered) {
       for (const example of examples[journey] ?? []) {
-        const issues = exampleProblems(library, example.source, allowed);
+        const issues = exampleProblems(target.library, allowed, example.source);
         if (issues.length) problems.push(`example:${example.name}:${issues.slice(0, 5).join(',')}`);
         exampleTexts.push(example.source);
       }
+      for (const edit of edits[journey] ?? []) {
+        const issues = exampleProblems(target.library, allowed, edit.patch, edit.base);
+        if (issues.length) problems.push(`edit:${edit.name}:${issues.slice(0, 5).join(',')}`);
+        editTexts.push(edit.patch);
+      }
     }
-    const coreExamples = prompts.CORE_EXAMPLES.filter((source) => !exampleProblems(library, source, allowed).length);
+    const coreExamples = prompts.CORE_EXAMPLES.filter((source) => !exampleProblems(target.library, allowed, source).length);
+    const corePatches = prompts.CORE_PATCH_EXAMPLES.filter(
+      (example) => coreExamples.includes(prompts.CORE_EXAMPLES[example.base]) && !exampleProblems(target.library, allowed, example.patch, prompts.CORE_EXAMPLES[example.base]).length,
+    ).map((example) => example.patch);
     if (target.library === 'consumer' && target.journey === 'all') {
       prompts.CORE_EXAMPLES.forEach((source, index) => {
-        const issues = exampleProblems(library, source, allowed);
+        const issues = exampleProblems(target.library, allowed, source);
         if (issues.length) problems.push(`core_example_${index}:${issues.slice(0, 5).join(',')}`);
+      });
+      prompts.CORE_PATCH_EXAMPLES.forEach((example, index) => {
+        const issues = exampleProblems(target.library, allowed, example.patch, prompts.CORE_EXAMPLES[example.base]);
+        if (issues.length) problems.push(`core_patch_${index}:${issues.slice(0, 5).join(',')}`);
       });
     }
     for (const mode of ['generate', 'patch']) {
-      const text = langCore.generateSystemPrompt({
+      const label = `${target.library}:${target.journey}:${mode}`;
+      // Patch prompts show patches only (their own Edit Mode rules forbid re-emitting a whole program).
+      const shown = mode === 'patch' ? [...corePatches, ...editTexts.slice(0, 6)] : [...coreExamples, ...exampleTexts.slice(0, 6)];
+      const generated = langCore.generateSystemPrompt({
         library: registry.subsetSpec(library.toSpec(), allowed),
         promptOptions: {
           toolCalls: false,
           bindings: true,
           editMode: mode === 'patch',
           preamble: preambleFor(mode),
-          examples: [...coreExamples, ...exampleTexts.slice(0, 6)],
+          examples: shown,
           additionalRules: prompts.rulesFor(target.library),
         },
       });
-      if (/mock data/i.test(text)) problems.push(`prompt_mock_data:${target.library}:${target.journey}:${mode}`);
-      if (/\bMutation\(/.test(text.replace(/Never write Mutation/g, ''))) problems.push(`prompt_mutation_section:${target.library}:${target.journey}:${mode}`);
+      const rewritten = rewritePrompt(generated, label, problems);
+      const text = rewritten.endsWith('\n') ? rewritten : `${rewritten}\n`;
+      if (/mock data/i.test(text)) problems.push(`prompt_mock_data:${label}`);
+      if (/\bMutation\(/.test(text.replace(/Never write Mutation/g, ''))) problems.push(`prompt_mutation_section:${label}`);
+      if (/https?:\/\/(?!\.\.\.)/.test(text)) problems.push(`prompt_external_url:${label}`);
       const file = `prompts/${target.library}-${target.journey}-${mode}.txt`;
-      files.set(path.join(PY_GENERATED, file), text.endsWith('\n') ? text : `${text}\n`);
-      promptIndex[`${target.library}:${target.journey}:${mode}`] = {
-        file,
-        promptHash: sha256(text.endsWith('\n') ? text : `${text}\n`),
-        components: [...allowed],
-      };
+      files.set(path.join(PY_GENERATED, file), text);
+      promptIndex[label] = { file, promptHash: sha256(text), components: [...allowed] };
     }
   }
 

@@ -122,3 +122,27 @@ test('the committed asset manifest matches the specs (when generated)', (t) => {
   const web = path.join(WEB, 'src', 'features', 'agent', 'generative-ui', 'generated', 'openui-assets.json');
   assert.equal(fs.readFileSync(web, 'utf8'), fs.readFileSync(file, 'utf8'), 'browser copy equals the Python copy');
 });
+
+test('only core/openui.ts imports @openuidev/react-lang and every Renderer opts out of observability (D-A3)', () => {
+  const root = path.join(WEB, 'src');
+  const offenders = [];
+  const renderers = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(ts|tsx|mts|js|jsx)$/.test(entry.name)) {
+        const text = fs.readFileSync(full, 'utf8');
+        const rel = path.relative(root, full).split(path.sep).join('/');
+        if (/from\s+['"]@openuidev\/react-lang['"]|import\(\s*['"]@openuidev\/react-lang['"]\s*\)|require\(\s*['"]@openuidev\/react-lang['"]\s*\)/.test(text) && rel !== 'features/agent/generative-ui/core/openui.ts') offenders.push(rel);
+        if (/<Renderer[\s>]/.test(text)) renderers.push({ rel, ok: /publishObservability=\{false\}/.test(text) });
+      }
+    }
+  };
+  walk(root);
+  assert.deepEqual(offenders, []);
+  assert.ok(renderers.length >= 1);
+  for (const r of renderers) assert.ok(r.ok, `${r.rel} renders OpenUI without publishObservability={false}`);
+  const facade = fs.readFileSync(path.join(root, 'features/agent/generative-ui/core/openui.ts'), 'utf8');
+  assert.ok(facade.indexOf("import './openui-optout'") < facade.indexOf('@openuidev/react-lang'), 'devtools opt-out is imported first');
+});
