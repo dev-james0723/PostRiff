@@ -63,8 +63,7 @@ export function formatBytes(bytes: unknown, locale: string): string | null {
 function validZone(zone: string | null | undefined): string | undefined {
   if (!zone) return undefined;
   try {
-    new Intl.DateTimeFormat('en', { timeZone: zone });
-    return zone;
+    return new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone ? zone : undefined;
   } catch {
     return undefined;
   }

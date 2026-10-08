@@ -10,7 +10,7 @@
  */
 import { formatInstant, formatMicroMoney, formatNumber } from '../../journeys/format';
 import { useJourneyEnvironment } from '../../journeys/runtime';
-import { Missing, Pill, QueryFrame } from './shared';
+import { InAppLink, Missing, Pill, QueryFrame } from './shared';
 import type { JourneyRendererProps } from './types';
 
 function dims(value: Record<string, unknown> | null | undefined): string {
@@ -154,9 +154,9 @@ export function FounderAttentionList({ props }: JourneyRendererProps) {
                 <Pill tone={item.severity === 'critical' ? 'attention' : item.severity === 'warning' ? 'waiting' : 'muted'}>{copy.founder.severity[item.severity] ?? item.severity}</Pill>
               ) : null}
               {item.href && item.href.startsWith('/') ? (
-                <a className='rafii-focus text-primary underline-offset-4 hover:underline' href={item.href}>
+                <InAppLink href={item.href}>
                   {item.title ?? item.id}
-                </a>
+                </InAppLink>
               ) : (
                 <span>{item.title ?? item.id}</span>
               )}

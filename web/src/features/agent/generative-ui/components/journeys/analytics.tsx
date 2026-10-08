@@ -14,7 +14,7 @@ import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import { formatCalendarDate, formatInstant, formatNumber } from '../../journeys/format';
 import { useJourneyEnvironment } from '../../journeys/runtime';
 import { ANALYTICS_METRICS } from '../../journeys/views';
-import { Missing, Pill, QueryFrame } from './shared';
+import { InAppLink, Missing, Pill, QueryFrame, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 const tableProps = z.object({ metrics: z.array(z.enum(ANALYTICS_METRICS)).min(1).max(6).optional().nullable(), title: z.string().max(120).optional().nullable() });
@@ -31,16 +31,17 @@ export function toNumber(value: unknown): number | null {
   return d === 0 ? null : n / d;
 }
 
-export function MetricTable({ props }: JourneyRendererProps) {
+export function MetricTable({ props, statementId }: JourneyRendererProps) {
   const { copy, locale, timeZone } = useJourneyEnvironment();
   const literal = tableProps.safeParse(props);
   const wanted = literal.success && literal.data.metrics ? literal.data.metrics : null;
   return (
     <QueryFrame value={props.data} binding='analytics_posts' label={copy.analytics.tableTitle} title={(literal.success ? literal.data.title : null) ?? copy.analytics.tableTitle}>
-      {(data) => {
+      {(data, result) => {
         const present = new Set(data.posts.flatMap((p) => Object.keys(p.metrics)));
         const metrics = (wanted ?? ANALYTICS_METRICS.filter((m) => present.has(m))).slice(0, 6);
         return (
+          <>
           <div className='flex flex-col gap-1.5'>
             <p className='text-muted-foreground text-xs'>
               {formatInstant(data.startUtc, data.timeZone, locale, null, { dateOnly: true, withZone: false })} – {formatInstant(data.endUtc, data.timeZone, locale, null, { dateOnly: true })}
@@ -95,6 +96,8 @@ export function MetricTable({ props }: JourneyRendererProps) {
               </p>
             ) : null}
           </div>
+            <Pager result={result} cursor={props.cursor} statementId={statementId} />
+          </>
         );
       }}
     </QueryFrame>
@@ -264,9 +267,9 @@ export function CoverageNote({ props }: JourneyRendererProps) {
                   </span>
                 ) : null}
                 {!c.direct && c.enableHref ? (
-                  <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={c.enableHref}>
+                  <InAppLink href={c.enableHref}>
                     {copy.analytics.enable}
-                  </a>
+                  </InAppLink>
                 ) : null}
               </li>
             ))}

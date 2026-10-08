@@ -4,12 +4,15 @@
  * founder component ships in the consumer chat bundle.
  */
 import { FounderAttentionList, FounderCostBreakdown, FounderMetricsTable, FounderNote, FounderSourceHealth } from './founder';
+import { tagged } from './tagged';
 import type { JourneyRenderers } from './types';
 
-export const FOUNDER_JOURNEY_RENDERERS: JourneyRenderers = {
+const RENDERERS: JourneyRenderers = {
   FounderNote,
   FounderMetricsTable,
   FounderCostBreakdown,
   FounderAttentionList,
   FounderSourceHealth,
 };
+
+export const FOUNDER_JOURNEY_RENDERERS: JourneyRenderers = Object.fromEntries(Object.entries(RENDERERS).map(([name, renderer]) => [name, tagged(name, renderer)]));

@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { formatCalendarDate, formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
-import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle } from './shared';
+import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 const ID = /^[A-Za-z0-9_.:-]{1,120}$/;
@@ -31,7 +31,8 @@ export function CampaignList({ props, statementId }: JourneyRendererProps) {
   const record = useSelectionRecorder(statementId ?? 'campaigns');
   return (
     <QueryFrame value={props.data} binding='campaigns_list' label={copy.campaigns.listTitle} title={(literal.success ? literal.data.title : null) ?? copy.campaigns.listTitle}>
-      {(data) => (
+      {(data, result) => (
+        <>
         <ul className='flex flex-col divide-y divide-border rounded-[var(--rafii-radius-card)] border'>
           {data.campaigns.map((c) => {
             const isSelected = selected === c.campaignId;
@@ -63,6 +64,8 @@ export function CampaignList({ props, statementId }: JourneyRendererProps) {
             );
           })}
         </ul>
+          <Pager result={result} cursor={props.cursor} statementId={statementId} />
+        </>
       )}
     </QueryFrame>
   );
@@ -167,11 +170,12 @@ export function CampaignPlan({ props }: JourneyRendererProps) {
   );
 }
 
-export function CampaignItems({ props }: JourneyRendererProps) {
+export function CampaignItems({ props, statementId }: JourneyRendererProps) {
   const { copy, locale } = useJourneyEnvironment();
   return (
     <QueryFrame value={props.data} binding='campaign_items' label={copy.campaigns.itemsTitle} title={copy.campaigns.itemsTitle}>
-      {(data) => (
+      {(data, result) => (
+        <>
         <ul className='flex flex-col gap-1 text-sm'>
           {data.items.map((item, i) => (
             <li key={item.itemId ?? item.ref ?? i} className='flex flex-col gap-0.5 rounded-md border p-2'>
@@ -193,6 +197,8 @@ export function CampaignItems({ props }: JourneyRendererProps) {
             </li>
           ))}
         </ul>
+          <Pager result={result} cursor={props.cursor} statementId={statementId} />
+        </>
       )}
     </QueryFrame>
   );

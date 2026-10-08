@@ -301,8 +301,7 @@
       "verified": false,
       "providerReference": false,
       "lastEvent": null,
-      "ref": "job:job_5",
-      "atUtc": "2026-10-09T01:00:00Z"
+      "ref": "job:job_5"
      }
     ],
     "totals": {
