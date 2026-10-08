@@ -77,6 +77,9 @@ const MESSAGES = {
   useUpdate: ['Use the updated view', '使用更新後的畫面', '使用更新后的视图'],
   linkBlocked: ['This link can’t be opened from here.', '無法從這裡開啟這個連結。', '无法从这里打开这个链接。'],
   unknownComponent: ['This part can’t be shown.', '無法顯示這個部分。', '无法显示这个部分。'],
+  expand: ['Expand', '展開', '展开'],
+  dataTable: ['Data table', '資料表', '数据表'],
+  picked: ['Picked', '已選', '已选'],
 } as const;
 
 export type GenUiMessageKey = keyof typeof MESSAGES;
