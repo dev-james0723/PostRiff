@@ -169,8 +169,8 @@ def _still_covered(ctx, grant: dict) -> tuple[bool, set]:
 
 def _voice_withdraw(ctx, keys, *, force: bool):
     try:
-        from . import voice
-        withdraw = voice.withdraw_for_keys
+        import importlib
+        withdraw = importlib.import_module(f"{__package__}.voice").withdraw_for_keys  # honours sys.modules (absent workstream)
     except (ImportError, AttributeError):
         return "unavailable"
     return withdraw(ctx, keys, force=force)

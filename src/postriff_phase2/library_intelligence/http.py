@@ -125,6 +125,18 @@ def write_context(service, token, workspace_id):
         yield ctx
 
 
+def _record_failure(service, feature, event, error):
+    """Authorization denials, refusals and failures, counted after the failed transaction rolled back. No workspace id is
+    attached (a denied caller may not belong to it); only the route and the error code are kept."""
+    try:
+        from . import telemetry
+        kind = "denied" if error.status in (401, 403, 404) else "refused" if error.status < 500 else "failed"
+        with service.repository.connection_factory() as db, db.cursor() as cur:
+            telemetry.record(cur, feature, kind, 1, {"route": event, "code": error.code or f"http_{error.status}"})
+    except Exception:  # noqa: BLE001 — metrics never change the outcome
+        pass
+
+
 def dispatch(service, method: str, workspace_id: str, rest: list[str], query: dict, body_reader, token):
     """Returns (status, payload). Unknown paths 404 like the rest of the hosted API."""
     found = match(method, rest)
@@ -138,9 +150,18 @@ def dispatch(service, method: str, workspace_id: str, rest: list[str], query: di
     except (ImportError, AttributeError):
         raise AlphaError("This Library capability is not available in this build.", 503, code="library_capability_unavailable") from None
     opener = read_context if mode == "read" else write_context
-    with opener(service, token, workspace_id) as ctx:
-        ctx.require("read")
-        result = handler(ctx, {"params": params, "query": query, "body": body if isinstance(body, dict) else {}})
+    feature = f"library.{module_name}"
+    event = function_name.removesuffix("_http")
+    from . import telemetry
+    try:
+        with opener(service, token, workspace_id) as ctx:
+            ctx.require("read")
+            # Latency per route, labelled ok or by error code (content-free; spec §12 query latency).
+            with telemetry.timed(ctx, feature, event):
+                result = handler(ctx, {"params": params, "query": query, "body": body if isinstance(body, dict) else {}})
+    except AlphaError as error:
+        _record_failure(service, feature, event, error)
+        raise
     status = 200
     if isinstance(result, dict) and "_status" in result:
         status = int(result.pop("_status"))

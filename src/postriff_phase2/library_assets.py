@@ -341,9 +341,15 @@ class UniversalLibrary:
             a = self._row(cur,w,i,True)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
+            # Every derivative goes with it (segments, vectors, previews, voice spans, packs, suggestions). An exact duplicate
+            # that still references the bytes takes over the original object, so only the released object is deleted.
+            from .library_intelligence import lifecycle
+            released = lifecycle.on_source_deleted(cur,w,i,actor=p,service=self.service)
             from .library_intelligence import collections as smart
             smart.reevaluate_for_asset(cur,w,i)  # a previous version may become current; own savepoint, never raises
-        s.delete(w,'file',a['object_name'])
+        to_delete = (released.get('sibling') or {}).get('objectToDelete')
+        if to_delete:
+            s.delete(w,'file',to_delete)
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             self._forget(cur,w,i)

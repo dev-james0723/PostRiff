@@ -1236,6 +1236,11 @@ class HostedWorkspaceService:
         from .media_notes import purge_asset
         def purge_metadata(cur, _state, _principal):
             purge_asset(cur, workspace_id, asset_id)
+            cur.execute("SELECT to_regclass('public.pr_library_jobs')")
+            if cur.fetchone()[0]:
+                # Library intelligence derivatives of this photo/video (vectors, annotations, voice spans, packs, suggestions).
+                from .library_intelligence import lifecycle
+                lifecycle.on_source_deleted(cur, workspace_id, asset_id, actor=_principal, service=self)
             # Shared organization must not retain deleted legacy media references.
             cur.execute("SELECT to_regclass('public.pr_library_labels')")
             if cur.fetchone()[0]:
