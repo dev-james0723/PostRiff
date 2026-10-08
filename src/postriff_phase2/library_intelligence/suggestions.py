@@ -63,6 +63,7 @@ SYSTEM_ACTOR = "00000000-0000-0000-0000-000000000000"
 EVENT_TYPES = ("version_linked", "capability_failed", "draft_changed", "collection_proposal", "permission_revoked", "source_integrity", "sweep")
 PROACTIVE = frozenset({"capability_failed", "draft_changed", "collection_proposal", "sweep"})
 ACTIONS = ("seen", "dismiss", "snooze", "apply", "disable_category", "enable_category", "preferences")
+OPEN_STATES = ("new", "seen", "snoozed")
 DEPENDENT_KINDS = ("draft", "post", "source_pack", "idea", "asset")
 HIDDEN = ("deleting", "duplicate", "missing")
 KEYLIKE = re.compile(r"^[A-Za-z0-9_.:\-]{1,120}$")
@@ -92,7 +93,8 @@ IS_MEMBER = ("/*lio:sugg.is_member*/ SELECT m.user_id::text FROM public.pr_membe
              "WHERE m.workspace_id=%s AND m.status='active' AND p.deleted_at IS NULL AND m.user_id=ANY(%s::uuid[])")
 PREFS = ("/*lio:sugg.prefs*/ SELECT recipient::text,category,disabled,snooze_days,external_opt_in FROM public.pr_library_suggestion_prefs "
          "WHERE workspace_id=%s AND recipient=ANY(%s::uuid[])")
-TODAY = ("/*lio:sugg.today*/ SELECT recipient::text,count(*) FROM public.pr_library_suggestions WHERE workspace_id=%s AND recipient=ANY(%s::uuid[]) "
+# The daily cap is per person across every workspace they belong to (spec §11), not per workspace.
+TODAY = ("/*lio:sugg.today*/ SELECT recipient::text,count(*) FROM public.pr_library_suggestions WHERE recipient=ANY(%s::uuid[]) "
          "AND NOT critical AND created_at>now()-make_interval(secs=>%s) GROUP BY recipient")
 PUT = ("/*lio:sugg.put*/ INSERT INTO public.pr_library_suggestions(id,workspace_id,recipient,dedup_key,category,critical,trigger,candidate_refs,affected,"
        "reason,consent_revision,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,"
@@ -108,7 +110,8 @@ SUGG_COLS = ("id::text,category,critical,trigger,candidate_refs,affected,reason,
 INBOX = (f"/*lio:sugg.inbox*/ SELECT {SUGG_COLS} FROM public.pr_library_suggestions WHERE workspace_id=%s AND recipient=%s "
          "AND (state IN ('new','seen') OR (state='snoozed' AND snooze_until<=now())) AND (expires_at IS NULL OR expires_at>now()) "
          "ORDER BY critical DESC,created_at DESC LIMIT %s")
-GET = f"/*lio:sugg.get*/ SELECT {SUGG_COLS},recipient::text FROM public.pr_library_suggestions WHERE workspace_id=%s AND id=%s AND recipient=%s FOR UPDATE"
+GET = (f"/*lio:sugg.get*/ SELECT {SUGG_COLS},recipient::text,coalesce(expires_at<=now(),false) FROM public.pr_library_suggestions "
+       "WHERE workspace_id=%s AND id=%s AND recipient=%s FOR UPDATE")
 SET = ("/*lio:sugg.set*/ UPDATE public.pr_library_suggestions SET state=%s,snooze_until=NULL,updated_at=now() WHERE workspace_id=%s AND id=%s "
        "RETURNING state,extract(epoch from snooze_until)")
 SNOOZE = ("/*lio:sugg.snooze*/ UPDATE public.pr_library_suggestions SET state='snoozed',snooze_until=now()+make_interval(days=>%s),updated_at=now() "
@@ -577,7 +580,7 @@ def _prefs(ctx, recipients) -> dict:
 def _today(ctx, recipients) -> dict:
     if not recipients:
         return {}
-    ctx.cur.execute(TODAY, (ctx.workspace_id, sorted(recipients), CAP_WINDOW_SECONDS))
+    ctx.cur.execute(TODAY, (sorted(recipients), CAP_WINDOW_SECONDS))
     return {r: int(n) for r, n in ctx.cur.fetchall()}
 
 
@@ -586,8 +589,8 @@ def _emit(ctx, candidates: list) -> list:
     if not candidates:
         return []
     recipients = sorted({r for cand in candidates for r in cand["recipients"]})
-    for recipient in recipients:  # serializes the daily cap per recipient; sorted to avoid lock-order deadlocks
-        ctx.cur.execute(LOCK, (f"library-suggestions:{ctx.workspace_id}:{recipient}",))
+    for recipient in recipients:  # serializes the cross-workspace daily cap per person; sorted to avoid lock-order deadlocks
+        ctx.cur.execute(LOCK, (f"library-suggestions:{recipient}",))
     prefs, today = _prefs(ctx, recipients), _today(ctx, recipients)
     revision = policy.revisions(ctx)["grantRevision"]
     created = []
@@ -718,13 +721,21 @@ def set_suggestion_state(ctx, suggestion_id, action, *, snooze_days=None, catego
         raise AlphaError("This suggestion is unavailable.", 404, code="library_unavailable")
     current = _public(row)
     out: dict = {"warnings": []}
+    if action in ("seen", "dismiss", "snooze", "apply") and not (action == "dismiss" and current["state"] == "dismissed"):
+        # Only an open suggestion changes state, so a dismissed, suppressed (revoked), expired or applied one is never
+        # revived by a snooze or applied again; the row lock above makes "apply" happen exactly once.
+        if current["state"] not in OPEN_STATES or bool(row[12]):
+            if action == "apply" and current["state"] == "applied":
+                raise AlphaError("This suggestion was already applied.", 409, code="library_suggestion_applied")
+            raise AlphaError("This suggestion is no longer available.", 409, code="library_suggestion_unavailable")
     if action in ("disable_category", "enable_category", "preferences"):
         out.update(_set_preference(ctx, current["category"], action, snooze_days))
     elif action == "seen":
         if current["state"] == "new":
             ctx.cur.execute(SET, ("seen", ctx.workspace_id, sid))
     elif action == "dismiss":
-        ctx.cur.execute(SET, ("dismissed", ctx.workspace_id, sid))
+        if current["state"] != "dismissed":
+            ctx.cur.execute(SET, ("dismissed", ctx.workspace_id, sid))
     elif action == "snooze":
         days = snooze_days or _prefs(ctx, [ctx.actor]).get((ctx.actor, current["category"]), {}).get("snoozeDays") or SNOOZE_DEFAULT_DAYS
         ctx.cur.execute(SNOOZE, (int(days), ctx.workspace_id, sid))
