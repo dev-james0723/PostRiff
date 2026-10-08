@@ -1,0 +1,11 @@
+root = RafiiRoot([agenda, form, check, waiting])
+$selectedJob = null
+$when = null
+$zone = "Asia/Hong_Kong"
+cal = Query("calendar_agenda", {start: "2026-10-05", end: "2026-10-11", zone: $zone}, null)
+slot = Query("slot_check", {jobId: $selectedJob, local: $when, zone: $zone}, null)
+open = Query("open_proposals", {}, null, 30)
+agenda = CalendarAgenda(cal, $selectedJob, "Pick the post to move")
+form = RescheduleForm("schedule_prepare", "job", $selectedJob, $when, $zone)
+check = SlotCheck(slot)
+waiting = ProposalList(open)

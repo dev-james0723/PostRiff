@@ -1,0 +1,7 @@
+root = RafiiRoot([plan, items, progress])
+detail = Query("campaign_detail", {campaignId: "c_51a7e"}, null)
+members = Query("campaign_items", {campaignId: "c_51a7e"}, null)
+task = Query("task_progress", {}, null)
+plan = CampaignPlan(detail)
+items = CampaignItems(members)
+progress = TaskProgress(task)

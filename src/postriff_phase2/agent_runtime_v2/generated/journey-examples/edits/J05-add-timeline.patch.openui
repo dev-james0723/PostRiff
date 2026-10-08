@@ -1,0 +1,3 @@
+root = RafiiRoot([plan, items, timeline, progress])
+upcoming = Query("campaign_timeline", {campaignId: "c_51a7e", zone: "Asia/Hong_Kong"}, null)
+timeline = CampaignTimeline(upcoming, "Next 30 days")

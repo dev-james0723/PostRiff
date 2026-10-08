@@ -1,0 +1,9 @@
+root = RafiiRoot([list, detail, history, change])
+$selectedAutomation = null
+autos = Query("automations_list", {}, null, 60)
+plan = Query("automation_detail", {automationId: "t_weekly_tips"}, null)
+runs = Query("automation_history", {automationId: "t_weekly_tips"}, null)
+list = AutomationList(autos, $selectedAutomation)
+detail = AutomationDetail(plan)
+history = RunHistory(runs)
+change = AutomationChangeForm("automation_change_prepare", "changeRequest", $selectedAutomation)
