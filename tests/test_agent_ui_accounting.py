@@ -181,6 +181,30 @@ class Accounting(unittest.TestCase):
         self.assertEqual(row["costState"], "unknown")
         self.assertEqual(m.settle_orphans(self.runtime, self.cur, WS), 0)
 
+    def test_cron_sweep_books_orphans_and_skips_a_busy_workspace(self):
+        attempt, rid = self.reserved()
+        row = self.db.attempts[attempt["attemptId"]]
+        row["state"], row["finishedLongAgo"] = "canceled", True
+        from test_agent_ui_stream_fakes import FakeConn
+        self.db.busy_workspaces = {WS}
+
+        class Factory:
+            def __init__(inner):
+                inner.conn = FakeConn(self.db)
+
+            def __call__(inner):
+                return inner
+
+            def __enter__(inner):
+                return inner.conn
+
+            def __exit__(inner, *exc):
+                return False
+        self.assertEqual(m.sweep_orphans(Factory(), ledger=self.runtime.service.ledger), {"settledUnknown": 0, "providerRequests": 0})
+        self.db.busy_workspaces = set()
+        self.assertEqual(m.sweep_orphans(Factory(), ledger=self.runtime.service.ledger), {"settledUnknown": 1, "providerRequests": 0})
+        self.assertEqual([s["costState"] for s in self.db.settlements_for(rid)], ["estimated_unknown"])
+
     def test_outcome_table(self):
         cfg = self.runtime.cfg
         self.assertEqual(m.outcome_of(cfg, {"costState": "unknown", "known": True, "inputTokens": 1, "outputTokens": 1, "model": "gpt-6-luna"})[0], "unknown")

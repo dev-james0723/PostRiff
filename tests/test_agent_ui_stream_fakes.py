@@ -189,6 +189,14 @@ class FakeDB:
                 out.append((t["attemptId"], t["reservationId"]))
         return out
 
+    def sql_orphan_workspaces(self, grace, limit):
+        found = {t["workspaceId"] for t in self.attempts.values() if t["reservationId"] and t["state"] not in LIVE and t.get("finishedLongAgo")
+                 and not self.settlements_for(t["reservationId"])}
+        return [(w,) for w in sorted(found)][:limit]
+
+    def sql_workspace_lock_skip(self, workspace_id):
+        return [] if workspace_id in getattr(self, "busy_workspaces", ()) else [(workspace_id,)]
+
     def sql_attempt_usage_state(self, attempt_id, workspace_id):
         self.attempts[attempt_id]["costState"] = "unknown"
         return []
@@ -209,6 +217,12 @@ class FakeCursor:
     def fetchall(self):
         rows, self._rows = self._rows, []
         return rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
 class FakeConn:

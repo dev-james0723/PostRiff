@@ -408,6 +408,45 @@ assert one("SELECT meta->>'chain' FROM public.pr_usage_ledger WHERE workspace_id
 assert validator.calls[-1]["mode"] == "patch" and validator.calls[-1]["base"] == GOOD_PROGRAM.strip()
 checks.append("S14")
 
+# S15 a second tab while the first is still producing: attaches to the live attempt (one producer), no second dispatch ----------
+transport.scripts.append([("delta", "root = RafiiRoot([a])\n"), ("sleep", 0.6), ('delta', 'a = Text("x")\n'), ("final", usage_final(800, 40))])
+run15 = eligible_run()
+calls_before = len(transport.calls)
+first_tab = post(run15, "e2e-key-0000000000015")
+artifact15 = parse(next(first_tab) + next(first_tab))[0]["artifactId"]
+second_tab = drain(post(run15, "e2e-key-0000000000016"))
+assert second_tab[0]["kind"] == "ui.started" and second_tab[0]["artifactId"] == artifact15, [e["kind"] for e in second_tab]
+rest15 = drain(first_tab)
+assert rest15[-1]["kind"] == "ui.ready", [e["kind"] for e in rest15]
+assert len(transport.calls) == calls_before + 1, "one producer per artifact revision"
+assert one("SELECT count(*) FROM public.pr_ui_attempts WHERE artifact_id::text=%s", artifact15) == (1,)
+checks.append("S15")
+
+# S16 an explicit UI-only retry of the interrupted view: a new key, a new metered attempt, then ready -----------------------------
+attempt13_id = one("SELECT id::text FROM public.pr_ui_attempts WHERE artifact_id::text=%s", artifact13)[0]
+transport.scripts.append(program_in_pieces() + [("final", usage_final(1400, 300))])
+retry = contracts.validate_presentation_request({"parentRunId": run13, "idempotencyKey": "e2e-key-0000000000017", "retryOfAttemptId": attempt13_id})
+retried = drain(ui_stream.create_presentation(e2e, {}, Started(), wid, OWNER, retry))
+assert retried[0]["kind"] == "ui.started" and retried[0]["payload"]["kind"] == "retry" and retried[-1]["kind"] == "ui.ready", [e["kind"] for e in retried]
+assert one("SELECT revision, generation_state FROM public.pr_ui_artifacts WHERE id::text=%s", artifact13) == (1, "ready")
+assert one("SELECT count(*) FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key LIKE %s AND kind='reserve'", wid, f"agent:{run13}:ui:%")[0] == 2
+checks.append("S16")
+
+# S17 cron: an orphaned hold (terminal attempt never settled) is booked unknown across workspaces, zero provider requests ----------
+run17 = eligible_run()
+art17 = artifact(run17, one("SELECT conversation_id::text FROM public.pr_agent_runs WHERE id::text=%s", run17)[0])
+attempt17 = attempt(art17)
+with tx() as (cur, auth):
+    hold17 = ui_metering.reserve_attempt(runtime, cur, auth, {"artifactId": art17, "runId": run17}, {"attemptId": attempt17, "kind": "generate"}, plan(5_000))
+with connection() as db:
+    db.execute("UPDATE public.pr_ui_attempts SET state='canceled', finished_at=now()-interval '1 hour' WHERE id::text=%s", (attempt17,))
+swept = ui_metering.sweep_orphans(connection, ledger=service.ledger)
+assert swept["settledUnknown"] >= 1 and swept["providerRequests"] == 0, swept
+assert rows("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s AND kind IN ('settle','release')", wid, hold17["reservationId"]) \
+    == [("estimated_unknown",)]
+assert ui_metering.sweep_orphans(connection, ledger=service.ledger)["settledUnknown"] == 0
+checks.append("S17")
+
 for check in checks:
     print(f"PASS:{check}", flush=True)
 print(json.dumps({"script": "postgres_agent_ui_stream", "passed": checks}), flush=True)

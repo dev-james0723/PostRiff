@@ -246,14 +246,34 @@ ORPHAN_SQL = ("/* rafii-ui:orphan_holds */ SELECT t.id::text, t.reservation_id F
               "AND s.kind IN ('settle','release')) ORDER BY t.updated_at LIMIT 20")
 
 
-def settle_orphans(runtime, cur, workspace_id) -> int:
+def settle_orphans(runtime, cur, workspace_id, *, ledger=None) -> int:
     """A terminal attempt whose producer died before settling (for example canceled by the person, then the function was killed)
     keeps an open hold that no lease reaper sees. Book each as `unknown`: the hold stays until reconciled, never zero, never an
     estimate. Called at admission inside the caller's transaction (workspace row locked)."""
     cur.execute(ORPHAN_SQL, (workspace_id, ORPHAN_GRACE_SECONDS))
     rows = cur.fetchall() or []
     for attempt_id, reservation_id in rows:
-        _ledger(runtime).settle(cur, workspace_id, reservation_id, "unknown")
+        (ledger or _ledger(runtime)).settle(cur, workspace_id, reservation_id, "unknown")
         cur.execute("/* rafii-ui:attempt_usage_state */ UPDATE public.pr_ui_attempts SET cost_state='unknown', updated_at=now() WHERE id::text=%s AND workspace_id=%s",
                     (attempt_id, workspace_id))
     return len(rows)
+
+
+ORPHAN_WORKSPACES_SQL = ("/* rafii-ui:orphan_workspaces */ SELECT DISTINCT t.workspace_id::text FROM public.pr_ui_attempts t WHERE t.reservation_id IS NOT NULL "
+                         "AND t.state NOT IN ('queued','streaming','validating') AND coalesce(t.finished_at, t.updated_at) < now() - make_interval(secs => %s) "
+                         "AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=t.workspace_id AND s.reservation_id::text=t.reservation_id "
+                         "AND s.kind IN ('settle','release')) LIMIT %s")
+
+
+def sweep_orphans(connection_factory, *, ledger=None, limit: int = 50) -> dict:
+    """Cron entry (next to ui_store.reap_all): orphaned holds of terminal attempts in every workspace, booked `unknown` in one
+    short transaction; a workspace whose row is busy is skipped until the next tick. Zero provider requests."""
+    count = 0
+    with connection_factory() as db, db.cursor() as cur:
+        cur.execute(ORPHAN_WORKSPACES_SQL, (ORPHAN_GRACE_SECONDS, int(limit)))
+        for (workspace_id,) in cur.fetchall() or []:
+            cur.execute("/* rafii-ui:workspace_lock_skip */ SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE SKIP LOCKED", (workspace_id,))
+            if not cur.fetchone():
+                continue
+            count += settle_orphans(None, cur, workspace_id, ledger=ledger)
+    return {"settledUnknown": count, "providerRequests": 0}
