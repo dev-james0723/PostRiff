@@ -1,6 +1,6 @@
 /** Real Next/API/disposable PostgreSQL + real sample bytes. Identity/storage are synthetic. */
 const assert=require('node:assert/strict');
-const {randomUUID}=require('node:crypto');
+const {createHash,randomUUID}=require('node:crypto');
 const {readFileSync,mkdirSync,writeFileSync}=require('node:fs');
 const {resolve}=require('node:path');
 const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
@@ -8,6 +8,19 @@ const base='http://127.0.0.1:4439';
 const out=process.env.RAFII_LIBRARY_EVIDENCE||resolve(__dirname,'../../docs/consumer-ready/evidence/library');
 mkdirSync(out,{recursive:true});
 const checks=[];
+// Observe the current locator on every poll: signed-source renewal may replace
+// an image while decode() is pending, even when its replacement loads correctly.
+async function waitForLoadedRaster(locator,minimumDimension,timeout){
+ const deadline=Date.now()+timeout;
+ await locator.waitFor({state:'visible',timeout});
+ let observed;
+ while(Date.now()<deadline){
+  observed=await locator.evaluate(image=>({connected:image.isConnected,complete:image.complete,width:image.naturalWidth,height:image.naturalHeight}),undefined,{timeout:Math.max(1,deadline-Date.now())});
+  if(observed.connected&&observed.complete&&observed.width>minimumDimension&&observed.height>minimumDimension)return;
+  await locator.page().waitForTimeout(Math.min(50,Math.max(1,deadline-Date.now())));
+ }
+ assert.fail(`Current source image did not load within ${timeout}ms: ${JSON.stringify(observed)}`);
+}
 (async()=>{
  let generatedPoster=null;
  for(const [engine,browserType] of Object.entries({chromium,webkit})){
@@ -262,10 +275,40 @@ const checks=[];
    }
    await search.fill('');
    await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
-   await page.getByLabel('Type',{exact:true}).selectOption('image');
+   const kindFilterControl=page.locator('#library-kind');await kindFilterControl.waitFor({state:'visible'});
+   const primedPhotos=page.waitForResponse(response=>response.url().startsWith(path+'?')&&new URL(response.url()).searchParams.get('kind')==='image'&&response.request().method()==='GET'&&response.ok(),{timeout:15000});
+   await kindFilterControl.selectOption('image');
    await page.getByRole('button',{name:'Done',exact:true}).click();
+   assert.equal((await (await primedPhotos).json()).assets.length,0,'prime the actual normalized Photos query before uploading');
    await page.getByText('No photos match these filters',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'unmatched type must retain search');
+   // The cached, empty normalized Photos result must refresh after the legacy
+   // image mutation. Keep this filter active for both upload and deletion.
+   const photoBytes=readFileSync(resolve(__dirname,'../public/raffi/full-512.png'));
+   assert.ok(photoBytes.readUInt32BE(16)>=320&&photoBytes.readUInt32BE(20)>=320,'real PNG fixture must meet the image decoder dimensions');
+   const photoUpload=page.waitForResponse(response=>response.url()===base+'/api/workspaces/'+ws+'/actions'&&response.request().method()==='POST'&&response.request().postDataJSON().action==='p2_media_upload',{timeout:30000});
+   await picker.setInputFiles({name:`photo-cache-${engine}-${width}.png`,mimeType:'image/png',buffer:photoBytes});
+   const photoUploadResponse=await photoUpload;
+   assert.equal(photoUploadResponse.status(),200,await photoUploadResponse.text());
+   const photoSnapshot=await photoUploadResponse.json();
+   const uploadedPhoto=photoSnapshot.state.phase2.assets.find(asset=>asset.sourceHash===createHash('sha256').update(photoBytes).digest('hex')&&!asset.deleted);
+   assert.ok(uploadedPhoto,'actual image upload must return the original source fingerprint');
+   const photoCard=page.getByRole('button',{name:/^Photo /}).first();
+   await photoCard.waitFor({state:'visible',timeout:15000});
+   await waitForLoadedRaster(photoCard.locator('img'),319,15000);
+   assert.equal(await page.getByRole('button',{name:/^Photo /}).count(),1,'new photo appears under the existing Photos filter without reload');
+   await photoCard.click();
+   await page.getByRole('button',{name:'Delete…',exact:true}).click();
+   const photoDeletion=page.waitForResponse(response=>response.url()===base+'/api/workspaces/'+ws+'/actions'&&response.request().method()==='POST'&&response.request().postDataJSON().action==='p2_media_delete'&&response.request().postDataJSON().payload.assetId===uploadedPhoto.id,{timeout:30000});
+   await page.getByRole('alertdialog').getByRole('button',{name:'Delete',exact:true}).click();
+   const photoDeleteResponse=await photoDeletion;
+   assert.equal(photoDeleteResponse.status(),200,await photoDeleteResponse.text());
+   await photoCard.waitFor({state:'detached',timeout:15000});
+   await page.getByText('No photos match these filters',{exact:true}).waitFor({timeout:15000});
+   const photosAfterDelete=await context.request.get(path+'?kind=image',{headers});
+   assert.equal(photosAfterDelete.status(),200,await photosAfterDelete.text());
+   assert.ok(!(await photosAfterDelete.json()).assets.some(asset=>asset.id===uploadedPhoto.id),'deleted photo is absent from the normalized Photos API');
+   checks.push({engine,width,photoCache:'primed normalized Photos query; actual512px PNG UI upload appears; same asset UI deletion disappears; no reload or filter change',execution:'real source/UI/API/DB/decoder; synthetic identity/storage'});
    await page.getByRole('button',{name:'Show all',exact:true}).click();
    await restoredDocument.waitFor({state:'visible',timeout:15000});
    const emptyCollectionName='Empty acceptance '+width;
@@ -274,7 +317,8 @@ const checks=[];
    await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:'Remove collection '+emptyCollectionName,exact:true}).waitFor();
    await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
-   await page.getByLabel('Collection',{exact:true}).selectOption({label:emptyCollectionName});
+   const collectionFilterControl=page.locator('#library-collection');await collectionFilterControl.waitFor({state:'visible'});
+   await collectionFilterControl.selectOption({label:emptyCollectionName});
    await page.getByRole('button',{name:'Done',exact:true}).click();
    await page.getByText('No assets match these filters',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'empty collection must retain search');
@@ -334,7 +378,7 @@ const checks=[];
    await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
-   const firstPage=reader.locator('img[data-document-page="1"]');await firstPage.waitFor({state:'visible',timeout:90000});await firstPage.evaluate(image=>image.decode());
+   const firstPage=reader.locator('img[data-document-page="1"]');await waitForLoadedRaster(firstPage,500,90000);
    assert.ok(await firstPage.evaluate(image=>image.naturalWidth>500&&image.naturalHeight>500),'reader must load actual first-page raster');
    const firstPageSrc=await firstPage.getAttribute('src');
    assert.ok(await reader.getByRole('button',{name:'Previous page',exact:true}).isDisabled(),'first page has no previous page');
@@ -342,7 +386,7 @@ const checks=[];
    await reader.getByRole('button',{name:'Show page sidebar',exact:true}).click();
    await reader.getByRole('button',{name:'Go to page 2',exact:true}).waitFor();
    await reader.getByRole('button',{name:'Go to page 2',exact:true}).click();
-   const secondPage=reader.locator('img[data-document-page="2"]');await secondPage.waitFor({state:'visible',timeout:90000});await secondPage.evaluate(image=>image.decode());
+   const secondPage=reader.locator('img[data-document-page="2"]');await waitForLoadedRaster(secondPage,500,90000);
    assert.notEqual(firstPageSrc,await secondPage.getAttribute('src'),'source pages have distinct images');
    assert.ok(await reader.getByRole('button',{name:'Next page',exact:true}).isDisabled(),'last page has no next page');
    await reader.getByRole('button',{name:'Read page text',exact:true}).click();
@@ -362,8 +406,14 @@ const checks=[];
    await reader.getByLabel('Document zoom',{exact:true}).selectOption('width');
    const readerStage=reader.getByRole('slider',{name:'Page navigation',exact:true});await readerStage.focus();await readerStage.press('Home');
    await reader.locator('img[data-document-page="1"]').waitFor({state:'visible',timeout:90000});
-   await reader.getByLabel('Page number',{exact:true}).fill('2');await reader.getByLabel('Page number',{exact:true}).press('Enter');
-   await reader.locator('img[data-document-page="2"]').waitFor({state:'visible',timeout:90000});
+   const pageNumber=reader.getByLabel('Page number',{exact:true});
+   await pageNumber.fill('2');assert.equal(await pageNumber.inputValue(),'2','page navigation must preserve the entered page before submission');
+   await pageNumber.press('Enter');
+   try{await reader.locator('img[data-document-page="2"]').waitFor({state:'visible',timeout:90000});}
+   catch(error){
+    const navigationState=await reader.evaluate(element=>{const input=element.querySelector('#document-page-number');const slider=element.querySelector('input[type="range"]');return{pageInput:input?.value,inputValid:input?.checkValidity(),validationMessage:input?.validationMessage,slider:slider?.value,footer:element.querySelector('footer')?.innerText,alerts:[...element.querySelectorAll('[role="alert"],[role="status"]')].map(node=>node.textContent?.slice(0,400)),images:[...element.querySelectorAll('img[data-document-page]')].map(image=>({page:image.dataset.documentPage,complete:image.complete,width:image.naturalWidth,height:image.naturalHeight})),text:element.innerText.slice(0,1200)};}).catch(diagnosticError=>({diagnosticError:String(diagnosticError)}));
+    error.message+=`\nDocument page-jump state (${engine} ${width}): ${JSON.stringify(navigationState)}`;throw error;
+   }
    await reader.getByLabel('Document zoom',{exact:true}).selectOption('page');
    assert.ok(await reader.evaluate(element=>element.getBoundingClientRect().width<=innerWidth+1),'reader controls fit the viewport');
    await page.addScriptTag({path:require.resolve('axe-core')});
@@ -476,7 +526,7 @@ const checks=[];
     const movButton=page.getByRole('button',{name:new RegExp('Video '+movName)}).first();await movButton.waitFor({timeout:30000});
     const movCard=page.getByRole('listitem').filter({has:movButton}),movPlayer=movCard.locator('[data-library-media-player="video"]');
     await movPlayer.scrollIntoViewIfNeeded();
-    const movPoster=movPlayer.locator('img');await movPoster.waitFor({state:'visible',timeout:15000});await movPoster.evaluate(image=>image.decode());
+    const movPoster=movPlayer.locator('img');await waitForLoadedRaster(movPoster,0,15000);
     assert.ok(await movPoster.evaluate(image=>image.naturalWidth>0),'MOV must have a captured actual source frame');
     const movVideo=movPlayer.locator('video'),movHint=await movVideo.evaluate(video=>video.canPlayType('video/quicktime'));
     await movPlayer.getByRole('button',{name:'Play video preview',exact:true}).click();

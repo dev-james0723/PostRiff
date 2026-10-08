@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconArrowsMaximize, IconMinus, IconPlus, IconRotateClockwise, IconTextSize } from '@tabler/icons-react';
 import { Icons } from '@/components/icons';
@@ -132,7 +132,7 @@ function DocumentReader({ asset }: { asset: LibraryAsset }) {
     if (query.data) setPageCount(query.data.pageCount);
     setImageFailed(false);
   }, [query.data]);
-  useEffect(() => { setPageInput(String(page)); setMatchIndex(0); stage.current?.scrollTo({ top: 0, left: 0 }); }, [page]);
+  useEffect(() => { setMatchIndex(0); stage.current?.scrollTo({ top: 0, left: 0 }); }, [page]);
   useEffect(() => { setMatchIndex(0); }, [search]);
   useEffect(() => { if (find) searchInput.current?.focus(); }, [find]);
   useEffect(() => { currentMatch.current?.scrollIntoView({ block: 'center' }); }, [matchIndex, matches]);
@@ -144,7 +144,13 @@ function DocumentReader({ asset }: { asset: LibraryAsset }) {
     return () => observer.disconnect();
   }, []);
 
-  const go = (target: number) => { if (pageCount) setPage(Math.min(pageCount, Math.max(1, target))); };
+  const go = useCallback((target: number) => {
+    if (!pageCount) return;
+    const next = Math.min(pageCount, Math.max(1, target));
+    // Keep navigation and its editable draft in the same event; a later effect must not overwrite typing.
+    setPage(next);
+    setPageInput(String(next));
+  }, [pageCount]);
   const changeZoom = (amount: number) => { setZoom(Math.min(300, Math.max(25, shownZoom + amount))); setFit('custom'); };
   useEffect(() => {
     const element = reader.current;
@@ -154,13 +160,13 @@ function DocumentReader({ asset }: { asset: LibraryAsset }) {
       if ((event.target as HTMLElement).closest('input,select,textarea,button,a')) return;
       if (['ArrowRight', 'PageDown', 'ArrowLeft', 'PageUp', 'Home', 'End'].includes(event.key) && pageCount) {
         event.preventDefault();
-        setPage((current) => event.key === 'Home' ? 1 : event.key === 'End' ? pageCount : Math.min(pageCount, Math.max(1, current + (['ArrowRight', 'PageDown'].includes(event.key) ? 1 : -1))));
+        go(event.key === 'Home' ? 1 : event.key === 'End' ? pageCount : page + (['ArrowRight', 'PageDown'].includes(event.key) ? 1 : -1));
       }
       if (['+', '=', '-'].includes(event.key)) { event.preventDefault(); setZoom(Math.min(300, Math.max(25, shownZoom + (event.key === '-' ? -25 : 25)))); setFit('custom'); }
     };
     element.addEventListener('keydown', handleKeys);
     return () => element.removeEventListener('keydown', handleKeys);
-  }, [pageCount, shownZoom]);
+  }, [go, page, pageCount, shownZoom]);
   const original = (download: boolean) => {
     const target = window.open('about:blank', '_blank');
     if (target) target.opener = null;

@@ -255,10 +255,10 @@ export function LibraryView() {
       const assetKind = kindOf(asset);
       if (assetKind === 'document' || assetKind === 'file' || assetKind === 'audio') {
         await api.deleteLibraryFile(workspaceId, asset.id);
-        await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       } else {
         await act.mutateAsync({ revision, action: 'p2_media_delete', payload: { assetId: asset.id } });
       }
+      await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       // The card leaves the grid, so success needs no toast.
     } catch (error) {
       toast.error('Couldn’t delete this asset', { description: error instanceof ApiError ? error.message : undefined });
