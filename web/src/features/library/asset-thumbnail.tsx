@@ -20,7 +20,7 @@ function extensionOf(asset: Asset) {
 }
 
 function previewText(asset: Asset) {
-  const text = (asset.aiSummary || asset.extractedText || '').replace(/\s+/g, ' ').trim();
+  const text = (asset.extractedText || asset.aiSummary || '').replace(/\s+/g, ' ').trim();
   return text.length > 240 ? `${text.slice(0, 237).trimEnd()}…` : text;
 }
 
@@ -31,7 +31,7 @@ function DocumentCover({ asset, size }: { asset: Asset; size: AssetThumbnailSize
   const spreadsheet = ['csv', 'xls', 'xlsx', 'ods'].includes(extension);
   const presentation = ['ppt', 'pptx', 'odp'].includes(extension);
   const label = extension === 'pdf' ? 'PDF · FIRST PAGE' :
-    ['doc', 'docx', 'odt', 'rtf'].includes(extension) ? 'DOCUMENT · FIRST PAGE' :
+    ['doc', 'docx', 'odt', 'rtf'].includes(extension) ? 'DOCUMENT · OPENING CONTENT' :
       spreadsheet ? 'SHEET PREVIEW' : presentation ? 'SLIDE PREVIEW' : markdown ? 'MARKDOWN' :
         ['txt', 'text'].includes(extension) ? 'TEXT PREVIEW' : `${extension.toUpperCase()} FILE`;
   const Icon = spreadsheet ? Icons.fileTypeXls :
