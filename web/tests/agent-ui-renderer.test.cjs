@@ -152,7 +152,12 @@ function capture(fn) {
 test('an accepted view renders every primitive inside the generated frame, after the native answer', () => {
   const result = canonical(KITCHEN);
   const { value: html, errors } = capture(() => render({ artifact: artifact({ canonicalSource: result.canonicalSource, sourceHash: result.sourceHash }) }));
-  const why = () => `\nconsole.error: ${errors.slice(0, 3).join('\n')}\nhtml: ${html.slice(0, 2500)}`;
+  const markers = [...html.matchAll(/data-genui(?:-invalid|-missing)?="[^"]*"/g)].map((m) => m[0]);
+  const openui = loader.load('src/features/agent/generative-ui/core/openui.ts');
+  const parsed = openui.createParser(library.CONSUMER_LIBRARY.toJSONSchema(), 'RafiiRoot').parse(result.canonicalSource);
+  const rootKids = (parsed.root?.props?.children ?? []).map((c) => (c && c.typeName) || String(c));
+  const why = () =>
+    `\nmarkers: ${markers.join(' ')}\nreact-library parse: children=${rootKids.join(',')} errors=${JSON.stringify(parsed.meta.errors).slice(0, 800)} unresolved=${parsed.meta.unresolved}\nconsole.error: ${errors.slice(0, 3).join('\n')}`;
   assert.ok(html.indexOf('data-native') < html.indexOf('data-rafii-generated'), 'native answer first');
   assert.match(html, new RegExp(`data-rafii-generated="" data-artifact-id="${ARTIFACT_ID}" data-generation-state="ready"`));
   for (const name of ['RafiiRoot', 'Stack', 'Grid', 'Section', 'Card', 'Tabs', 'AccordionItem', 'Text', 'EvidenceLink', 'EmptyState', 'LoadingState', 'ErrorState',
