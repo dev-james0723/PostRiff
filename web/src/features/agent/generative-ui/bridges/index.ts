@@ -29,10 +29,19 @@ export const createUiBridges: CreateUiBridges = ({ transport, artifact, onContin
     dispose.action();
     dispose.query();
   };
+  let disposed = false;
   return {
     query,
     action,
+    dispose() {
+      // Stops both bridges: in-flight reads/writes aborted, debounce timers cleared, caches and listeners dropped.
+      if (disposed) return;
+      disposed = true;
+      query.dispose();
+      action.dispose();
+    },
     onContinue(request: ContinueRequest) {
+      if (disposed) return;
       // A generated follow-up is the person's labeled request through the existing turn path; ids come from the
       // artifact this bridge belongs to, never from the generated control.
       const message = typeof request?.message === 'string' ? request.message.trim().slice(0, MAX_CONTINUE_CHARS) : '';
