@@ -146,7 +146,10 @@ class Dispatcher(unittest.TestCase):
     def test_a_viewer_or_a_stale_view_never_reaches_the_command(self):
         with self.assertRaises(AlphaError) as viewer:
             self.run_action(self.script(), who=auth("viewer"))
-        self.assertEqual(viewer.exception.status, 404, "current() drops controls the role can't use: the id is unknown to a viewer")
+        self.assertEqual((viewer.exception.status, viewer.exception.code), (403, "ui_forbidden"), "an offered control the role can't use is 403 (NC02)")
+        with self.assertRaises(AlphaError) as never:
+            self.run_action(self.script(), request={**self.request(), "actionId": "publish_now"}, who=auth("viewer"))
+        self.assertEqual((never.exception.status, never.exception.code), (404, "ui_action"), "an id the view never offered stays 404")
         stale = {**self.request(), "artifactRevision": 2}
         with self.assertRaises(AlphaError) as old:
             self.run_action(self.script(), request=stale)

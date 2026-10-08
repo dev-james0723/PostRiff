@@ -201,7 +201,7 @@ def _():
         db.execute("UPDATE public.pr_memberships SET role='viewer' WHERE workspace_id=%s AND user_id=%s", (wid, MEMBER_ID))
     denied(lambda: ui_actions.execute_http(runtime, wid, MEMBER, ui_contracts.validate_action(
         {"artifactId": A["artifactId"], "artifactRevision": 1, "actionId": "campaign_create", "inputs": {"goal": "Spring recital", "audience": "Families"},
-         "idempotencyKey": "k_" + uuid.uuid4().hex, "activationId": act["activationId"]})), 404, "ui_action")
+         "idempotencyKey": "k_" + uuid.uuid4().hex, "activationId": act["activationId"]})), 403, "ui_forbidden")
     campaigns = service.get(wid, OWNER)["state"].get("raffi", {}).get("campaignPlanning", {}).get("campaigns", [])
     assert not any(c.get("goal") == "Spring recital" for c in campaigns), "the demoted member's confirmed action never ran"
     with connection() as db:

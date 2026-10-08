@@ -371,8 +371,9 @@ def _():
 @scenario("A01", "A viewer is never offered or allowed a write; a forged activation writes nothing")
 def _():
     before = counts()
-    denied(lambda: activate("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, token=VIEWER), 404, "ui_action")
-    denied(lambda: execute("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, "act_" + "x" * 43, token=VIEWER), 404, "ui_action")
+    denied(lambda: activate("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, token=VIEWER), 403, "ui_forbidden")
+    denied(lambda: execute("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, "act_" + "x" * 43, token=VIEWER), 403, "ui_forbidden")
+    denied(lambda: activate("publish_now", {}, token=VIEWER), 404, "ui_action")   # never offered: indistinguishable from unknown
     effective = ui_capabilities.current(None, auth_for(VIEWER), ART["manifest"])
     assert effective["actions"] == []
     assert counts() == before
@@ -504,7 +505,7 @@ def _():
 
 @scenario("A08", "Schedule prepare is a proposal on a new assistant message: prepared, not applied; only the native decide applies it")
 def _():
-    denied(lambda: activate("schedule_prepare", {"draftId": DRAFT, "local": local_in(4), "zone": HK}, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("schedule_prepare", {"draftId": DRAFT, "local": local_in(4), "zone": HK}, token=EDITOR), 403, "ui_forbidden")
     rev = query("draft_read", {"draftId": DRAFT})["data"]["revision"]
     inputs = {"draftId": DRAFT, "local": local_in(4), "zone": HK}
     act = activate("schedule_prepare", inputs)
@@ -542,7 +543,7 @@ def _():
 def _():
     act = activate("voice_sample_select", {"sourceId": SAMPLE_ID, "selected": True}, token=EDITOR)
     assert execute("voice_sample_select", {"sourceId": SAMPLE_ID, "selected": True}, act["activationId"], token=EDITOR)["verified"] is True
-    denied(lambda: activate("voice_sample_grant", {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("voice_sample_grant", {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}, token=EDITOR), 403, "ui_forbidden")
     grant = {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}
     granted = execute("voice_sample_grant", grant, activate("voice_sample_grant", grant)["activationId"])
     assert granted["verified"] is True, granted
@@ -644,7 +645,7 @@ def _():
     prefs = query("voice_preferences")["data"]
     assert any(p["id"] == created["id"] for p in prefs["pending"]) and not any(l.get("statement") == "Avoid emojis in posts" for l in prefs["learned"])
     inputs = {"proposalId": created["id"], "decision": "remember"}
-    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 403, "ui_forbidden")
     decided = execute("preference_decide", inputs, activate("preference_decide", inputs)["activationId"])
     assert decided["outcome"] == "applied" and decided["verified"] is True, decided
     after = query("voice_preferences")["data"]
