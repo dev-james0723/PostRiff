@@ -176,6 +176,16 @@ def _():
         out = ui_queries.query_ui_binding(cur, founder_auth, art, manifest, req, runtime=runtime,
                                           founder={"mode": "live", "environment": "test", "principal": {"userId": ONE}, "request_id": "req-1"})
     assert out["state"] in ("unavailable", "denied") and out["data"] is None, out
+    # Through query_http exactly as the founder route calls it (founder runtime + its capability): founder artifact served,
+    # a consumer artifact of the same workspace is the same 404 as a ghost.
+    founder_runtime = SimpleNamespace(service=service, cfg=runtime.cfg, founder={"namespace": "founder:live:test", "mode": "live", "environment": "test",
+                                                                                 "principal": {"userId": ONE}, "request_id": "req-2"})
+    served = ui_queries.query_http(founder_runtime, wid, OWNER, req)
+    assert served["state"] in ("unavailable", "denied"), served
+    other_ns = SimpleNamespace(service=service, cfg=runtime.cfg, founder={**founder_runtime.founder, "namespace": "founder:demo:test"})
+    denied(lambda: ui_queries.query_http(other_ns, wid, OWNER, req), 404, "ui_artifact")
+    denied(lambda: ui_queries.query_http(founder_runtime, wid, OWNER, ui_contracts.validate_query(
+        {"artifactId": A["artifactId"], "artifactRevision": 1, "bindingId": "drafts_list"})), 404, "ui_artifact")
     assert manifest["actions"] == [] and all(q["name"].startswith("founder_") for q in manifest["queries"])
     denied(lambda: ui_capabilities.build_manifest(None, auth_for(OWNER, wid), {"journey_ids": ["J09"]}, scope="founder"), 404)
     return {"founderState": out["state"], "consumerOnFounder": consumer_art.code}
