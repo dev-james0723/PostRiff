@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { passkeyError } from '@/lib/auth/mfa';
 import { createPasskeyProofClient } from '@/lib/supabase/client';
+import { passkeyHostMatches } from '@/lib/auth/passkey-host';
 
 /**
  * Passkeys as the sign-in itself (Supabase's experimental passkey feature): one Face ID / Touch ID
@@ -19,7 +20,7 @@ export interface SignInPasskey {
 }
 
 export function passkeySignInEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_PASSKEY_SIGN_IN === 'true';
+  return process.env.NEXT_PUBLIC_PASSKEY_SIGN_IN === 'true' && passkeyHostMatches(process.env.NEXT_PUBLIC_PASSKEY_RP_ID);
 }
 
 export async function listSignInPasskeys(client: SupabaseClient): Promise<SignInPasskey[]> {
