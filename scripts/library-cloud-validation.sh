@@ -5,7 +5,11 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
 fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="$PWD/src:$PWD/tests"
-python -m unittest test_library_extract test_hosted_storage_library test_hosted_storage_video
+if ! command -v libreoffice >/dev/null; then
+  sudo -n apt-get -qq update
+  sudo -n apt-get -y -qq install libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+fi
+python -m unittest test_video_provision test_library_preview test_library_extract test_hosted_storage_library test_hosted_storage_video
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
   sudo -n apt-get -y -qq install postgresql
