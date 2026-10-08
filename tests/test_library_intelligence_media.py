@@ -214,6 +214,9 @@ class MemoryCursor:
                     for a in db.annotations if str(a["id"]) == str(uuid.UUID(str(args[1])))]
         elif flat.startswith("SELECT capability,state,progress,error_code,detail,retryable,processor_version,"):
             rows = [(cap, *v) for (key, cap), v in db.capabilities.items() if key == args[1]]
+        elif "lib:embeddings-inactive-segments" in flat:
+            db.embeddings_superseded = getattr(db, "embeddings_superseded", 0) + 1  # corrections supersede stale vectors
+            rows = []
         elif flat.startswith("SELECT pg_advisory_xact_lock("):
             rows = [(None,)]  # actions serialize identical idempotency keys
         elif flat.startswith("SELECT actor::text,request_hash,status,result FROM public.pr_library_action_receipts"):
