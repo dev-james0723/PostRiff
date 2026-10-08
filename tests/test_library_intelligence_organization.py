@@ -461,10 +461,10 @@ class OrgDB:
         wanted = set(args[1])
         return [(r, cat, p["disabled"], p["snooze_days"], p["external_opt_in"]) for (r, cat), p in self.prefs.items() if r in wanted]
 
-    def _sugg_today(self, args):
+    def _sugg_today(self, args):  # across every workspace, like the real statement
         counts = {}
         for s in self.suggestions:
-            if s["recipient"] in args[1] and not s["critical"] and s["created"] > self.now - args[2]:
+            if s["recipient"] in args[0] and not s["critical"] and s["created"] > self.now - args[1]:
                 counts[s["recipient"]] = counts.get(s["recipient"], 0) + 1
         return list(counts.items())
 

@@ -71,7 +71,7 @@ class SuggDB(OrgDB):
         return (s["state"] in ("new", "seen") or (s["state"] == "snoozed" and s["snooze"] <= self.now)) and (s["expires"] is None or s["expires"] > self.now)
 
     def _sugg_inbox(self, args):
-        rows = [s for s in self.suggestions if s["recipient"] == args[1] and self._visible(s)]
+        rows = [s for s in self.suggestions if s.get("ws", args[0]) == args[0] and s["recipient"] == args[1] and self._visible(s)]
         rows.sort(key=lambda s: (not s["critical"], -s["created"]))
         return [self._row(s) for s in rows[:args[2]]]
 
@@ -80,7 +80,8 @@ class SuggDB(OrgDB):
 
     def _sugg_get(self, args):
         s = self._find(args[1].hex)
-        return [self._row(s) + (s["recipient"],)] if s and s["recipient"] == args[2] else []
+        expired = s is not None and s["expires"] is not None and s["expires"] <= self.now
+        return [self._row(s) + (s["recipient"], expired)] if s and s["recipient"] == args[2] and s.get("ws", args[0]) == args[0] else []
 
     def _sugg_set(self, args):
         s = self._find(args[2].hex)
@@ -247,6 +248,25 @@ class Suggestions(Base):
         failed = [s for s in mine(db) if s["category"] == "failed_processing"]
         self.assertEqual(len(failed), 5)
         self.assertEqual(len({s["dedup"] for s in failed}), 5)
+
+    def test_cap_counts_across_workspaces(self):
+        db = self.db
+        elsewhere = "22222222-2222-2222-2222-222222222222"
+        for n in range(2):  # two noncritical suggestions the same person already received today in another workspace
+            db.suggestions.append({"id": k(0xC0 + n), "ws": elsewhere, "recipient": ACTOR, "dedup": f"elsewhere:{n}", "category": "failed_processing",
+                                   "critical": False, "trigger": {}, "candidates": [], "affected": [{"kind": "asset", "key": "x"}], "reason": "r",
+                                   "state": "new", "snooze": None, "created": db.now - 60, "expires": None})
+        for key in FAILED:
+            db.add(key, kind="document", title=f"Report {key[-3:]}")
+            db.caps[(key, "extract")] = "failed"
+        self.evaluate({"type": "sweep"})
+        here = lambda who: [s for s in db.suggestions if s["recipient"] == who and s.get("ws") == WS]  # noqa: E731
+        self.assertEqual(len(here(ACTOR)), 1, "the cap is per person, so only one more fits today")
+        self.assertEqual(len(here(EDITOR)), 3)
+        self.assertEqual(suggestions.inbox_http(self.ctx, {"params": {}, "query": {}, "body": {}})["cap"]["shownToday"], 3)
+        self.assertTrue(db.sql(r"lio:sugg\.today") and all("workspace_id" not in sql for sql in db.sql(r"lio:sugg\.today")))
+        locks = [args[0] for sql, args in db.executed if "lio:sugg.lock" in sql]
+        self.assertTrue(locks and all(WS not in key for key in locks), "the advisory lock is per person, not per workspace")
 
     def test_event_replay_dedup(self):
         db = self.db
@@ -434,11 +454,30 @@ class Suggestions(Base):
         viewer = context(db, role="viewer")
         self.assertEqual(actions.apply(viewer, envelope("suggestion.set_state", payload={"suggestionId": proposal["id"], "action": "apply"}))["status"],
                          "denied")
+        snoozed = suggestions.set_suggestion_state(self.ctx, proposal["id"], "snooze")
+        self.assertEqual(snoozed["suggestion"]["state"], "snoozed", "a snoozed proposal can still be applied")
         applied = actions.apply(self.ctx, envelope("suggestion.set_state", payload={"suggestionId": proposal["id"], "action": "apply"}))
         self.assertEqual(applied["status"], "applied", applied)
         self.assertEqual(proposal["state"], "applied")
         created = next(x for x in db.collections.values() if x["kind"] == "smart")
         self.assertEqual(len(db.members(next(cid for cid, x in db.collections.items() if x is created))), 3)
+        again = actions.apply(self.ctx, envelope("suggestion.set_state", payload={"suggestionId": proposal["id"], "action": "apply"}))
+        self.assertEqual(again["status"], "conflict")
+        self.assertIn("already applied", again["warnings"][0])
+        self.assertEqual(sum(1 for x in db.collections.values() if x["kind"] == "smart"), 1, "applied exactly once")
+        for state, expires in (("dismissed", None), ("suppressed", None), ("expired", None), ("new", db.now - 1)):
+            other = dict(proposal, id=k(0xAB00 + len(db.suggestions)), dedup=f"organization:copy:{state}:{expires}", state=state, expires=expires)
+            db.suggestions.append(other)
+            refused = actions.apply(self.ctx, envelope("suggestion.set_state", payload={"suggestionId": other["id"], "action": "apply"}))
+            self.assertEqual((refused["status"], refused["warnings"][0]), ("conflict", "This suggestion is no longer available."), (state, refused))
+            self.assertEqual(other["state"], state, "a refused apply changes nothing")
+            if state == "suppressed":
+                revived = actions.apply(self.ctx, envelope("suggestion.set_state", payload={"suggestionId": other["id"], "action": "snooze"}))
+                self.assertEqual(revived["status"], "conflict", "a suppressed suggestion is never revived by a snooze")
+            if state == "dismissed":
+                self.assertEqual(actions.apply(self.ctx, envelope("suggestion.set_state", payload={"suggestionId": other["id"], "action": "dismiss"}))["status"],
+                                 "applied", "dismissing again is a harmless no-op")
+        self.assertEqual(sum(1 for x in db.collections.values() if x["kind"] == "smart"), 1)
 
     def test_evaluate_due_never_raises(self):
         db = self.db
