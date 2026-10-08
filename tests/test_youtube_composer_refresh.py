@@ -20,6 +20,7 @@ class ComposerDatabase:
     def __init__(self, connections=1):
         self.revision, self.role, self.can_publish, self.depth = 12, 'approver', False, 0
         self.rowcount, self.result, self.counts, self.audits = 1, None, {}, []
+        self.revocation_locks = []
         self.credentials, self.state = {}, {'variants': [{'id': 'draft'}], 'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(connections):
             connection = f'connection-{index}'
@@ -54,6 +55,10 @@ class ComposerDatabase:
         if sql.startswith('SELECT w.revision,w.state,'):
             self.result = ((self.revision, copy.deepcopy(self.state), self.role, self.can_publish, False, False, False)
                            if params == ('workspace', 'user') else None)
+        elif sql == 'SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE':
+            assert params == ('workspace',)
+            self.revocation_locks.append('workspace')
+            self.result = ('workspace',)
         elif sql.startswith('SELECT provider_account_id,refresh_supported,'):
             credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
             self.result = ((credential['account'], credential['refresh'], credential['present'], credential['expires'])
@@ -69,6 +74,9 @@ class ComposerDatabase:
             credential = self.credentials[params[1]]
             self.result = ((credential['token'], 'test', list(credential['scopes'])) if not credential['revoked'] else None)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM'):
+            if "provider='youtube'" in sql and sql.endswith('FOR UPDATE'):
+                assert self.revocation_locks[-1:] == ['workspace'], 'Revocation must lock workspace before credential.'
+                self.revocation_locks.append('credential')
             credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
             self.result = ((credential['token'], 'test') if credential and not credential['revoked'] else None)
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
@@ -119,6 +127,8 @@ def composer_for(connections=1):
     provider = SimpleNamespace(inspect_scopes=lambda *_: None, identity=Mock(return_value={'providerAccountId': 'UC-synthetic-0'}))
     oauth = OAuthService(repo, commands, SimpleNamespace(decrypt=lambda value, _: value),
                          {'youtube': provider}, 'https://rafii.example', clock=lambda: NOW)
+    # Isolate age-recovery SQL; policy receipts and RLS use the dedicated real PG group.
+    oauth.youtube_policy.require_user = Mock(return_value={'policyId': 'synthetic', 'receiptId': 'synthetic-user'})
 
     def token_for_worker(workspace, connection):
         assert db.depth == 0, 'The foreground workspace transaction must close before provider I/O.'
@@ -141,6 +151,17 @@ def approval(db, index=0):
 
 
 class YouTubeComposerRefreshTests(unittest.TestCase):
+    def test_fresh_channel_still_requires_the_actual_composer_actors_policy_acceptance(self):
+        service, oauth, db, _, _ = composer_for()
+        db.state['phase2']['channels'][0]['verifiedAt'] = NOW
+        oauth.youtube_policy.require_user.side_effect = AlphaError('Synthetic missing agreement.', 409,
+            code='youtube_policy_acceptance_required')
+        with self.assertRaises(AlphaError) as caught:
+            service.mutate('workspace', 'session', 12, 'p2_approve', approval(db))
+        self.assertEqual(caught.exception.code, 'youtube_policy_acceptance_required')
+        oauth.token_for_worker.assert_not_called()
+        service.repository.mutate.assert_not_called()
+
     def test_authorized_creator_refreshes_then_explicitly_retries_same_review(self):
         service, oauth, db, _, _ = composer_for()
         before = copy.deepcopy(db.state['phase2']['reviews'])
@@ -249,6 +270,7 @@ class YouTubeComposerRefreshTests(unittest.TestCase):
                 self.assertEqual(db.state['phase2']['reviews'][0]['manifest'], original_manifest)
                 self.assertEqual(db.state['phase2']['jobs'], [])
                 self.assertEqual(db.credentials['connection-0']['revoked'], change == 'identity')
+                self.assertEqual(db.revocation_locks, ['workspace', 'credential'] if change == 'identity' else [])
                 service.repository.mutate.assert_not_called()
 
     def test_stale_revocation_observation_cannot_purge_the_current_composer_grant(self):
@@ -257,9 +279,11 @@ class YouTubeComposerRefreshTests(unittest.TestCase):
         self.assertFalse(oauth.mark_youtube_revoked('workspace', 'connection-0', expected_access_token='older-grant'))
         self.assertEqual(db.credentials['connection-0'], before)
         self.assertEqual(db.audits, [])
+        self.assertEqual(db.revocation_locks, ['workspace', 'credential'])
         self.assertTrue(oauth.mark_youtube_revoked('workspace', 'connection-0', expected_access_token=TOKEN))
         self.assertTrue(db.credentials['connection-0']['revoked'])
         self.assertEqual(db.credentials['connection-0']['token'], '')
+        self.assertEqual(db.revocation_locks, ['workspace', 'credential'] * 2)
 
     def test_missing_refresh_revocation_and_transient_rate_limits_fail_closed(self):
         for cause in ('missing_refresh', 'revoked'):

@@ -51,7 +51,7 @@ class YouTubeCreatorService:
             cur.execute("SELECT to_regclass('public.pr_youtube_cache')")
             has_schema = cur.fetchone()[0] is not None
             if has_schema:
-                purge_expired_data(cur)
+                purge_expired_data(cur, agent_context=True)
                 cur.execute("SELECT to_regclass('public.pr_youtube_quota_daily')")
                 if cur.fetchone()[0] is None:
                     return {'dataCleanup': True, 'blocker': 'youtube_capacity_schema_097_required'}
@@ -159,7 +159,7 @@ class YouTubeCreatorService:
         before_request()
         self.capacity_for(provider).record_identity(workspace)
 
-    def _member(self, workspace, token, connection, right='read', fresh=False):
+    def _member(self, workspace, token, connection, right='read', fresh=False, *, policy_required=True):
         from ..hosted import _membership
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), right)
@@ -169,6 +169,9 @@ class YouTubeCreatorService:
             found = cur.fetchone()
             if not found:
                 raise AlphaError('Connection unavailable.', 404)
+            if policy_required:
+                self.oauth.youtube_policy.require_user(cur, workspace, actor, token,
+                    self.oauth.providers.get('youtube'), force=True)
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
         return actor, resource_id(found[0], 'channel'), state
 
@@ -194,7 +197,7 @@ class YouTubeCreatorService:
         return record
 
     def _api(self, workspace, connection, channel=None):
-        grant = self.oauth.token_for_worker(workspace, connection)
+        grant = self.oauth.token_for_worker(workspace, connection, youtube_policy_required=True)
         if grant['provider'] != 'youtube':
             raise AlphaError('Connection unavailable.', 404)
         canonical = grant.get('providerAccountId')

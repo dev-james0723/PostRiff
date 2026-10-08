@@ -35,6 +35,29 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       };
       const boot = await request('POST', '/api/auth/verify', { plan: 'studio' });
       const wid = boot.workspaceId;
+      const policyPage = await context.newPage();
+      await policyPage.goto(base + '/app/youtube');
+      const agree = policyPage.getByRole('button', { name: 'Agree to YouTube policies', exact: true });
+      await agree.waitFor();
+      assert.equal(await agree.isEnabled(), false, 'The synthetic user must explicitly check agreement.');
+      await policyPage.getByRole('checkbox', { name: 'I agree to these Privacy Policy and Terms revisions for my YouTube use in this workspace.', exact: true }).check();
+      const [accepted] = await Promise.all([
+        policyPage.waitForResponse(response => response.url().endsWith('/youtube-policy') && response.request().method() === 'POST'),
+        agree.click()
+      ]);
+      assert.ok(accepted.ok(), await accepted.text());
+      assert.equal((await accepted.json()).receipt.userId, principal);
+      await policyPage.goto(base + '/app/channels?connect=youtube&capability=publish');
+      await policyPage.waitForFunction(() => document.querySelector('[data-tour="connect-continue"]')?.disabled === false);
+      await policyPage.getByRole('button', { name: 'Cancel', exact: true }).click();
+      for (let reopening = 0; reopening < 2; reopening++) {
+        await policyPage.locator('[data-tour="channels-connect"]').first().click();
+        await policyPage.locator('[data-tour="connect-platform"]').filter({ hasText: 'YouTube' }).click();
+        await policyPage.waitForFunction(() => document.querySelector('[data-tour="connect-continue"]')?.disabled === false);
+        await policyPage.getByRole('button', { name: 'Cancel', exact: true }).click();
+      }
+      results.push({ width, check: 'SYNTHETIC explicit policy checkbox, holder receipt and cached connect-sheet reopen' });
+      await policyPage.close();
       const started = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, { capability: 'publish' });
       const connected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, { state: new URL(started.authorizeUrl).searchParams.get('state'), code: 'synthetic-code' });
       const cid = connected.connectionId;

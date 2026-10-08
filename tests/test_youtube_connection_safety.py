@@ -33,7 +33,7 @@ class Repository:
         if sql.startswith('SELECT provider,access_ciphertext'):
             self.result = ('youtube', TOKEN, None, 'test', NOW + 3600, False, False, list(self.scopes), CHANNEL, NOW - 10)
         elif sql.startswith('SELECT provider,provider_account_id,scopes'):
-            self.result = ('youtube', CHANNEL, list(self.scopes), TOKEN)
+            self.result = ('youtube', CHANNEL, list(self.scopes), TOKEN, 'test')
         elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
             self.result = (True,)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
@@ -85,6 +85,10 @@ def service_for(observation):
     engine = SimpleNamespace(invalidate=Mock(), channel_state=lambda c: 'Ready for posting' if c['capabilityVerified'] else 'Needs reconnect')
     vault = SimpleNamespace(decrypt=lambda value, _: value)
     service = OAuthService(repo, SimpleNamespace(engine=engine), vault, {'youtube': provider}, 'https://rafii.example', clock=lambda: NOW)
+    # Isolate scope observation/custody; the policy dependency has its own real
+    # receipt/RLS/OAuth regressions in the dedicated policy acceptance PG group.
+    service.youtube_policy.require_user = Mock(return_value=None)
+    service.youtube_policy.assert_connection = Mock()
     service.mark_youtube_revoked = Mock()
     return service, repo, provider
 

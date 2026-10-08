@@ -31,6 +31,7 @@ from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.youtube.model import ANALYTICS, MANAGE, READ, UPLOAD
 from postriff_phase2.youtube.provider import YouTubeProvider
 from postriff_phase2.youtube.uploads import UploadEngine
+from youtube_policy_fixture import register_synthetic_policy, accept_synthetic_policy
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 USER = str(uuid4())
@@ -245,6 +246,8 @@ journal = service.youtube.journal
 checks = []
 try:
     WORKSPACE = service.bootstrap(TOKEN, 'studio')['workspaceId']
+    register_synthetic_policy(connection, service.oauth.public_base_url)
+    accept_synthetic_policy(service, WORKSPACE, TOKEN)
     CONNECTION = authorize()
     key = (WORKSPACE, CONNECTION, 'synthetic-journal-transaction')
 

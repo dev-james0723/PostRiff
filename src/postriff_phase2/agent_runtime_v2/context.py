@@ -25,6 +25,7 @@ class EffectLedger:
     tool_activity: list[dict] = field(default_factory=list)
     references: list[dict] = field(default_factory=list)
     facts: list[dict] = field(default_factory=list)
+    youtube_provider_context: list[dict] = field(default_factory=list)  # server-assigned consent provenance, shared by specialists
     citations: list[dict] = field(default_factory=list)
     changed: list[dict] = field(default_factory=list)
     proposals: list[dict] = field(default_factory=list)       # full proposals, stored on the assistant message

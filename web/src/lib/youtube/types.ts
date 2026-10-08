@@ -178,3 +178,15 @@ export interface YouTubeAgentMutation<T> {
   executed: false;
   providerVerified: false;
 }
+export interface YouTubePolicyStatus {
+  ready: boolean;
+  requiredForConnection: boolean;
+  accepted: boolean;
+  policy: {
+    id: string;
+    privacy: { revision: string; url: string; sha256: string };
+    terms: { revision: string; url: string; sha256: string };
+    publishedAt: number;
+  } | null;
+  receipt: { id: string; policyId: string; workspaceId: string; userId: string; acceptedAt: number } | null;
+}

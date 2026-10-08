@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'scripts')]
+from youtube_policy_fixture import register_synthetic_policy
 import postriff_dev_hosted as harness
 from postriff_phase2.youtube.model import READ, UPLOAD, MANAGE, ANALYTICS
 from postriff_phase2.youtube.provider import YouTubeProvider
@@ -85,12 +86,14 @@ def local_service(*args, **kwargs):
         db.execute((ROOT / 'migrations/postriff/089_youtube_creator.sql').read_text())
         db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
         db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
+        db.execute((ROOT / 'migrations/postriff/099_youtube_policy_acceptance.sql').read_text())
     provider = YouTubeProvider(STANDARD_CLIENT, 'local-synthetic-secret', transport=SyntheticGoogle(), creator_enabled=True)
     provider.agentic_provider = YouTubeProvider(AGENTIC_CLIENT, 'local-agentic-synthetic-secret',
         transport=SyntheticGoogle(AGENTIC_CLIENT), creator_enabled=True, authorization_lane='agentic')
     provider.execution_enabled = provider.agentic_provider.execution_enabled = True
     kwargs['providers']['youtube'] = provider
     service = original(*args, **kwargs)
+    register_synthetic_policy(args[0], service.oauth.public_base_url)
     upsert = service.commands.upsert_verified_channel
     def with_library_fixture(state, *arguments, **options):
         result = upsert(state, *arguments, **options)

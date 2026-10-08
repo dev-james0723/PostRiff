@@ -292,11 +292,13 @@ class YouTubePublishingAgent:
         self.creator, self.service = creator, creator.service
         self.repository, self.clock = creator.repository, creator.clock
 
-    def _member(self, workspace, token, connection, right='read', fresh=False):
-        return self.creator._member(workspace, token, connection, right, fresh=fresh)
+    def _member(self, workspace, token, connection, right='read', fresh=False, *, policy_required=True):
+        return self.creator._member(workspace, token, connection, right, fresh=fresh, policy_required=policy_required)
 
     def overview(self, workspace, token, connection):
-        _, channel, state = self._member(workspace, token, connection)
+        # Local standing-authority controls stay visible for pause/revoke even
+        # when a legal revision blocks new Creator/provider execution.
+        _, channel, state = self._member(workspace, token, connection, policy_required=False)
         view = copy.deepcopy(root(state))
         view['drafts'] = [d for d in view['drafts'] if d.get('connectionId') == connection]
         view['policies'] = [p for p in view['policies'] if p.get('connectionId') == connection]
@@ -307,17 +309,25 @@ class YouTubePublishingAgent:
             provider = self.creator.oauth.provider_for_connection(workspace, connection)
         except AlphaError:
             provider = None
-        view['autopilotGate'] = {'canActivate': bool(getattr(provider, 'authorization_lane', None) == 'agentic'
+        policy_ready = True
+        try:
+            with self.repository.transaction(token, workspace) as (cur, _, actor):
+                self.creator.oauth.youtube_policy.require_user(cur, workspace, actor, token, provider, force=True)
+        except AlphaError as error:
+            if error.code not in ('youtube_policy_not_ready', 'youtube_policy_acceptance_required', 'youtube_policy_interactive_required'):
+                raise
+            policy_ready = False
+        view['autopilotGate'] = {'canActivate': bool(policy_ready and getattr(provider, 'authorization_lane', None) == 'agentic'
             and getattr(provider, 'creator_enabled', False) and getattr(provider, 'execution_enabled', True) and project_public_gate(provider)),
             'reason': 'A separate, actually routed agentic OAuth client and verified Google/YouTube approvals are required.'}
         view['pauseNotice'] = 'Pause stops new uploads and API writes. A video already scheduled on YouTube must be cancelled separately in Creator.'
         return view
 
-    def _write(self, workspace, token, connection, body, operation, *, right='edit', fresh=False, billing=False):
+    def _write(self, workspace, token, connection, body, operation, *, right='edit', fresh=False, billing=False, policy_required=True):
         from ..billing import require_publishing
         from ..source_policy import stamp
         revision = body.get('revision')
-        self._member(workspace, token, connection, right, fresh=fresh)
+        self._member(workspace, token, connection, right, fresh=fresh, policy_required=policy_required)
         output = {}
         def apply(state, actor):
             output.update(operation(state, actor))
@@ -386,7 +396,8 @@ class YouTubePublishingAgent:
         if action not in ('pause', 'revoke'):
             raise AlphaError('YouTube policy action unavailable.', 404)
         return self._write(workspace, token, connection, {**body, '_event': 'policy_' + action},
-            lambda state, actor: change_policy(state, connection, identifier, action, actor, self.clock()), right='owner')
+            lambda state, actor: change_policy(state, connection, identifier, action, actor, self.clock()),
+            right='owner', policy_required=False)
 
     def _select_candidate(self, *, fleet=False, exclude_workspaces=()):
         """Fleet selection commits a 120-second fenced lease before OAuth I/O."""

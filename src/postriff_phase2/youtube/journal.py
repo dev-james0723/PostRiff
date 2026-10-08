@@ -131,6 +131,8 @@ class UploadJournal:
 
 def purge_authorized_data(cur, workspace_id, connection_id):
     """Revocation deletes authorized content immediately; keep only content-free audit events."""
+    from .agent_context import purge_connection
+    purge_connection(cur, workspace_id, connection_id)
     for table in ('pr_youtube_cache', 'pr_youtube_reporting_coverage', 'pr_youtube_chat_cursor',
                   'pr_youtube_uploads', 'pr_youtube_actions', 'pr_youtube_settings', 'pr_youtube_push'):
         cur.execute('SELECT to_regclass(%s)', ('public.' + table,))
@@ -139,7 +141,12 @@ def purge_authorized_data(cur, workspace_id, connection_id):
     cur.execute("DELETE FROM public.pr_audience_threads WHERE workspace_id=%s AND connection_id=%s AND provider='youtube'", (workspace_id, connection_id))
 
 
-def purge_expired_data(cur):
+def purge_expired_data(cur, *, agent_context=False):
+    if agent_context:
+        # Chat/result scans belong to shared retention cron, never a foreground
+        # creator overview (which reuses this cache-expiry helper).
+        from .agent_context import purge_expired
+        purge_expired(cur)
     # Cascades also remove reply drafts and their saved approval context.
     cur.execute("DELETE FROM public.pr_audience_threads WHERE provider='youtube' AND ingested_at<=now()-interval '30 days'")
     cur.execute('DELETE FROM public.pr_youtube_cache WHERE expires_at<=now()')

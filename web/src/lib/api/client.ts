@@ -1,4 +1,4 @@
-import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation } from '@/lib/youtube/types';
+import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
@@ -236,6 +236,9 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
+    acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
+      send<YouTubePolicyStatus>('POST', `${ws(w)}/youtube-policy`, body),
     youtubeOverview: (w: string, c: string) =>
       get<YouTubeOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}`),
     youtubeAgent: (w: string, c: string) =>

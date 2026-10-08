@@ -16,6 +16,7 @@ from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.youtube.model import READ, UPLOAD, MANAGE, ANALYTICS, MONEY
 from postriff_phase2.youtube.provider import YouTubeProvider
 from postriff_phase2.youtube.journal import purge_authorized_data
+from youtube_policy_fixture import register_synthetic_policy, accept_synthetic_policy
 
 ROOT = Path(__file__).resolve().parents[2]
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
@@ -104,6 +105,9 @@ service = HostedWorkspaceService(connection, verify, vault=vault, providers={'yo
 for token, plan in (('one', 'studio'), ('two', 'assist')):
     service.bootstrap(token, plan)
 wid, foreign = workspaces[ONE], workspaces[TWO]
+register_synthetic_policy(connection, service.oauth.public_base_url)
+accept_synthetic_policy(service, wid, 'one')
+accept_synthetic_policy(service, foreign, 'two')
 
 def authorize(workspace, token, feature='publish', conn=None):
     started = service.oauth.start(workspace, token, 'youtube', feature, {'connectionId': conn} if conn else {})

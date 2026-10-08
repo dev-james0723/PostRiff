@@ -35,6 +35,7 @@ class CredentialRepository:
     def __init__(self, access, refresh, expires):
         self.access, self.refresh, self.expires = access, refresh, expires
         self.result, self.updates = None, []
+        self.revocation_locks = []
         self.state = {'phase2': {'channels': [{'id': 'connection', 'scopes': SCOPES, 'identityVerified': True}]}}
 
     @contextmanager
@@ -49,6 +50,10 @@ class CredentialRepository:
         if sql.startswith('SELECT provider,access_ciphertext'):
             self.result = ('youtube', self.access, self.refresh, 'synthetic-key', self.expires,
                            bool(self.refresh), False, SCOPES, 'UC' + 'a' * 22, NOW - 3600)
+        elif sql == 'SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE':
+            assert params == ('workspace',)
+            self.revocation_locks.append('workspace')
+            self.result = ('workspace',)
         elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
             self.result = (True,)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
@@ -56,6 +61,9 @@ class CredentialRepository:
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):
+            if "provider='youtube'" in sql and sql.endswith('FOR UPDATE'):
+                assert self.revocation_locks[-1:] == ['workspace'], 'Revocation must lock workspace before credential.'
+                self.revocation_locks.append('credential')
             self.result = (self.access, 'synthetic-key')
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET access_ciphertext='):
             self.updates.append((sql, params))
@@ -95,7 +103,7 @@ class ConnectionFlowRepository:
             self.txn, self.consumed, self.result = params, False, ('txn',)
         elif sql.startswith('SELECT id::text,member_id::text,provider,extract'):
             t = self.txn
-            self.result = ('txn', t[1], t[2], NOW + 600, self.consumed, t[7], t[8])
+            self.result = ('txn', t[1], t[2], NOW + 600, self.consumed, t[7], t[8], t[5])
         elif sql.startswith('SELECT id::text,member_id::text,provider,capability'):
             t = self.txn
             self.result = ('txn', t[1], t[2], t[3], t[4], t[5], t[7], t[8], NOW + 600, self.consumed)
@@ -125,8 +133,17 @@ def worker_service(provider, access, refresh, expires):
     repository = CredentialRepository(access, refresh, expires)
     vault = SimpleNamespace(decrypt=lambda value, _: value, encrypt=lambda value: (value, 'synthetic-key'))
     service = OAuthService(repository, None, vault, {'youtube': provider}, 'https://rafii.example', clock=lambda: NOW)
+    stub_policy_dependency(service)
     service.mark_youtube_revoked = Mock()
     return service, repository
+
+
+def stub_policy_dependency(service):
+    # These issuer/custody fixtures isolate their existing subject. The real
+    # policy SQL and dispatch dependency are tested in the isolated policy group.
+    service.youtube_policy = SimpleNamespace(require_user=Mock(return_value=None),
+        require_pending=Mock(return_value=None), bind=Mock(), assert_connection=Mock(),
+        guarded_provider=lambda provider, _grant: provider)
 
 
 class YouTubeOAuthBindingTests(unittest.TestCase):
@@ -331,17 +348,19 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
             purge.assert_not_called()
         self.assertEqual((repository.access, repository.refresh), (fresh['accessToken'], fresh['refreshToken']))
         self.assertFalse(any('revoked_at=now()' in sql for sql, _ in repository.updates))
+        self.assertEqual(repository.revocation_locks, ['workspace', 'credential'])
 
     def test_api_revocation_fence_rejects_stale_observation_and_unbound_call(self):
         provider = YouTubeProvider('standard-client', 'synthetic-secret', transport=Wire())
         old = provider._grant({'access_token': 'synthetic-old-access'})
         fresh = provider._grant({'access_token': 'synthetic-new-consent'})
-        service, _ = worker_service(provider, fresh['accessToken'], None, NOW + 60)
+        service, repository = worker_service(provider, fresh['accessToken'], None, NOW + 60)
         service.mark_youtube_revoked = OAuthService.mark_youtube_revoked.__get__(service)
         with patch('postriff_phase2.youtube.journal.purge_authorized_data') as purge:
             self.assertFalse(service.mark_youtube_revoked('workspace', 'connection', expected_access_token=old['accessToken']))
             self.assertFalse(service.mark_youtube_revoked('workspace', 'connection'))
             purge.assert_not_called()
+        self.assertEqual(repository.revocation_locks, ['workspace', 'credential'])
 
     @patch('postriff_phase2.hosted._membership', return_value=SimpleNamespace(allows=lambda _right: True))
     @patch('postriff_phase2.hosted.audit')
@@ -368,6 +387,7 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
         commands = SimpleNamespace(upsert_verified_channel=lambda state, actor, channel, **kw: state['phase2']['channels'].append(channel))
         service = OAuthService(repository, commands, vault, {'youtube': standard}, 'https://legacy.example', clock=lambda: NOW,
                                youtube_public_base_url='https://rafii.example')
+        stub_policy_dependency(service)
         service._keep_picture = Mock()
         admissions = []
         def reserve(workspace, selected):
@@ -418,6 +438,7 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
                 agentic.exchange = Mock(side_effect=AssertionError('Lost owner/session authority must stop before token exchange.'))
                 agentic.identity = Mock()
                 service = OAuthService(repository, None, vault, {'youtube': standard}, 'https://rafii.example', clock=lambda: NOW)
+                stub_policy_dependency(service)
                 started = service.start('workspace', 'session', 'youtube', 'autopilot',
                                         {'authorizationLane': 'agentic', 'agenticConsent': True})
                 state = parse_qs(urlsplit(started['authorizeUrl']).query)['state'][0]

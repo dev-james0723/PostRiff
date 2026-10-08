@@ -25,6 +25,8 @@ class MaintenanceDatabase:
     def execute(self, sql, params=()):
         if sql.startswith('SELECT to_regclass'):
             self.row = ('present',)
+        elif sql.startswith('SELECT DISTINCT workspace_id::text FROM (SELECT workspace_id FROM public.pr_messages'):
+            self.row = None  # This focused maintenance fixture has no expired chat context.
         elif 'SELECT c.workspace_id' in sql:
             self.row = ('workspace', 'connection')
         elif sql.startswith(('DELETE ', 'INSERT ')):

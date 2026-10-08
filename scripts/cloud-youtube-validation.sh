@@ -51,6 +51,7 @@ suite.addTests(loader.loadTestsFromNames([
     'test_reply_writer',
     'test_postriff_content_types',
     'test_postriff_receipt_contract',
+    'test_agent_runtime', 'test_agent_runtime_references', 'test_rafii_followups', 'test_site_agent',
 ]))
 if loader.errors:
     for error in loader.errors:

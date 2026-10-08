@@ -70,6 +70,8 @@ class OAuthService:
         self.youtube_public_base_url = youtube_public_base_url or None
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
         self.identity_admission = None  # hosted service wires durable quota reservation outside workspace locks
+        from .youtube.policy_acceptance import YouTubePolicyAcceptance
+        self.youtube_policy = YouTubePolicyAcceptance(self)
         from .social_history import SocialHistoryService
         self.history = SocialHistoryService(self)
 
@@ -229,7 +231,8 @@ class OAuthService:
 
     def provider_for_grant(self, grant):
         """Server-only routing from protected token custody, never a projected lane."""
-        return self._provider_for_access(grant['provider'], grant['accessToken'])
+        provider = self._provider_for_access(grant['provider'], grant['accessToken'])
+        return self.youtube_policy.guarded_provider(provider, grant) if grant['provider'] == 'youtube' else provider
 
     def provider_for_connection(self, workspace_id, connection_id):
         with self.repository.connection_factory() as db, db.cursor() as cur:
@@ -325,6 +328,8 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
+            policy_acceptance = self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter,
+                capability=capability, scopes=scopes) if provider_id == 'youtube' else None
             if provider_id == 'youtube' and lane == 'agentic':
                 require(_membership(row), 'owner')
                 self.repository.assert_fresh(token, principal)
@@ -343,7 +348,8 @@ class OAuthService:
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
-                                  'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard')}) if provider_id == 'youtube' else verifier
+                                  'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
+                                  'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else verifier
             ciphertext, key_id = self.vault.encrypt(custody)
             stored_capability = capability if capability in CAPABILITIES else 'identity'
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, stored_capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
@@ -404,7 +410,7 @@ class OAuthService:
         from .hosted import _membership, audit
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), 'manage_connections')
-            cur.execute("SELECT id::text,member_id::text,provider,extract(epoch from expires_at),consumed_at IS NOT NULL,verifier_ciphertext,key_id FROM public.pr_oauth_transactions WHERE workspace_id=%s AND state_hash=%s FOR UPDATE", (workspace_id, hashlib.sha256(state.encode()).hexdigest()))
+            cur.execute("SELECT id::text,member_id::text,provider,extract(epoch from expires_at),consumed_at IS NOT NULL,verifier_ciphertext,key_id,scopes FROM public.pr_oauth_transactions WHERE workspace_id=%s AND state_hash=%s FOR UPDATE", (workspace_id, hashlib.sha256(state.encode()).hexdigest()))
             txn = cur.fetchone()
             if not txn or txn[1] != principal or txn[2] != provider_id or txn[4]:
                 raise AlphaError('Connection request unavailable.', 404)
@@ -414,6 +420,8 @@ class OAuthService:
             adapter = self._youtube_provider(context.get('authorizationLane', 'standard'))
             if context.get('clientId') != adapter.client_id:
                 raise AlphaError('The YouTube OAuth configuration changed. Start again.', 409, code='youtube_oauth_binding_changed')
+            if code and not error:
+                self.youtube_policy.require_pending(cur, workspace_id, principal, token, adapter, txn[7], context)
             if getattr(adapter, 'authorization_lane', 'standard') == 'agentic':
                 require(_membership(row), 'owner')
                 self.repository.assert_fresh(token, principal)
@@ -499,6 +507,8 @@ class OAuthService:
                     self.repository.assert_fresh(token, principal)
                 if not getattr(adapter, 'execution_enabled', True):
                     raise AlphaError('This YouTube authorization workflow is paused. Start again when enabled.', 503)
+            policy_acceptance = self.youtube_policy.require_pending(cur, workspace_id, principal, token, adapter,
+                scopes, youtube_context) if provider_id == 'youtube' else None
             if bot_code:
                 grant = adapter.grant_from_context(context)
             elif device_code:
@@ -507,6 +517,16 @@ class OAuthService:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
                 grant = adapter.exchange(code, verifier, redirect)
+            if provider_id == 'youtube':
+                # Incremental Google consent can return older, broader permissions.
+                # Only the legacy nonpublic READ grant may proceed without policy.
+                returned_scopes = grant.get('scopes')
+                if not returned_scopes:
+                    returned_scopes = adapter.inspect_scopes(grant['accessToken'])
+                if not isinstance(returned_scopes, list) or not returned_scopes:
+                    raise AlphaError('YouTube permissions could not be verified.', 503, code='youtube_verification_unavailable')
+                policy_acceptance = self.youtube_policy.require_pending(cur, workspace_id, principal, token,
+                    adapter, returned_scopes, youtube_context)
             identity = adapter.identity(grant["accessToken"])
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
@@ -538,6 +558,8 @@ class OAuthService:
             # Keep Gmail/Calendar and other consent paths independent of 098.
             consent_generation_sql = ',authorization_generation=gen_random_uuid()' if provider_id == 'youtube' else ''
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL" + consent_generation_sql + ",rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
+            if provider_id == 'youtube':
+                self.youtube_policy.bind(cur, workspace_id, connection_id, policy_acceptance)
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
             for name, value in matrix.items():
@@ -903,9 +925,9 @@ class OAuthService:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         return {'channels': views, 'providers': catalog}
 
-    def token_for_worker(self, workspace_id, connection_id):
+    def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
         try:
-            return self._token_for_worker(workspace_id, connection_id)
+            return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required)
         except AlphaError as error:
             if error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
@@ -927,6 +949,9 @@ class OAuthService:
         with self.repository.connection_factory() as db, db.cursor() as cur:
             if expected_access_token is None and expected_ciphertext is None:
                 return False  # No observed credential can authorize purging a possibly newer grant.
+            # Match disconnect and derived-data writes: workspace before
+            # credential, including audit/child foreign-key acquisition.
+            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE", (workspace_id,))
             cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
             observed = cur.fetchone()
             if not observed or (expected_ciphertext is not None and observed[0] != expected_ciphertext):
@@ -955,7 +980,7 @@ class OAuthService:
                 error.credential_revocation_ciphertext = access_ciphertext
             raise
 
-    def _token_for_worker(self, workspace_id, connection_id):
+    def _token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
         """Server-only token custody. Instagram renews while valid, never after expiry."""
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
@@ -978,6 +1003,9 @@ class OAuthService:
                 with self._credential_errors(row[0], row[1]):
                     provider, access_ct, refresh_ct, key_id, expires, refresh_supported, _, scopes, account_id, issued_at = row
                     adapter = self._provider_for_access(provider, self.vault.decrypt(access_ct, key_id))
+                    if provider == 'youtube':
+                        self.youtube_policy.assert_connection(workspace_id, connection_id, adapter, scopes=scopes,
+                            generation=authorization_generation, force=youtube_policy_required, cur=cur)
                     if not getattr(adapter, "execution_enabled", True):
                         raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
                     binding_scopes = None
@@ -1042,21 +1070,29 @@ class OAuthService:
                             # Block this request without erasing the last verified scope set.
                             raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable')
                         scopes = reported if authoritative else []
+                        if provider == 'youtube':
+                            self.youtube_policy.assert_connection(workspace_id, connection_id, adapter, scopes=scopes,
+                                generation=authorization_generation, force=youtube_policy_required, cur=cur)
                         cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                     return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires, 'providerAccountId': account_id,
                             **({'refreshBindingRequired': refresh_binding_required, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
-                                'authorizationGeneration': authorization_generation} if provider == 'youtube' else {})}
+                                'authorizationGeneration': authorization_generation,
+                                '_youtubePolicyContext': {'workspace': workspace_id, 'connection': connection_id,
+                                    'force': youtube_policy_required}} if provider == 'youtube' else {})}
 
     def verify(self, workspace_id, token, connection_id):
         """Re-check identity and scope drift for an existing connection."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
-            cur.execute("SELECT provider,provider_account_id,scopes,access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
+            cur.execute("SELECT provider,provider_account_id,scopes,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
-        provider_id, account_id, scopes, starting_ciphertext = stored
+            if stored[0] == 'youtube':
+                adapter = self._provider_for_access('youtube', self.vault.decrypt(stored[3], stored[4]))
+                self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2])
+        provider_id, account_id, scopes, starting_ciphertext = stored[:4]
         grant = None
         reported = []
         identity = None
@@ -1172,6 +1208,11 @@ class OAuthService:
             if any(not isinstance(connection, str) or not connection for connection in channel_ids):
                 raise AlphaError('Choose an available channel.')
             channels = [find(data.get('channels', []), connection) for connection in dict.fromkeys(channel_ids)]
+            if any(channel.get('platform') == 'YouTube' for channel in channels):
+                # The shared composer can use a fresh channel without calling
+                # Creator._member or revalidation. Its actual actor must agree too.
+                self.youtube_policy.require_user(cur, workspace_id, principal, token,
+                    self.providers.get('youtube'), force=True)
             if action == 'p2_review' and ((variant.get('channelId') and variant['channelId'] != channels[0]['id'])
                     or (variant.get('platform') and variant['platform'] != channels[0]['platform'])):
                 raise AlphaError('This draft belongs to another channel. Select its channel or prepare a new draft.', 409)
