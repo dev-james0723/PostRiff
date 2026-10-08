@@ -1,0 +1,373 @@
+{
+ "campaigns_list": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "campaigns": [
+     {
+      "campaignId": "c_51a7e",
+      "goal": "Fill the 12 October recital",
+      "audience": "Piano students and parents in Hong Kong",
+      "status": "active",
+      "missingFacts": [
+       "ticket link"
+      ],
+      "facts": {
+       "date": "12 Oct",
+       "venue": "City Hall"
+      },
+      "automations": [
+       {
+        "automationId": "t_weekly_tips",
+        "name": "Weekly practice tips",
+        "status": "active",
+        "schedule": "Every Monday 09:00",
+        "policy": "drafts",
+        "nextRun": "Mon 13 Oct 09:00"
+       }
+      ],
+      "platforms": [
+       "Threads"
+      ],
+      "href": "/app/automations?campaign=c_51a7e",
+      "ref": "campaign:c_51a7e",
+      "version": 4,
+      "itemCount": 3,
+      "createdAt": null,
+      "updatedAt": "2026-10-07T00:00:00Z"
+     }
+    ],
+    "offset": 0
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "campaign_detail": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "campaignId": "c_51a7e",
+    "goal": "Fill the 12 October recital",
+    "audience": "Piano students and parents in Hong Kong",
+    "status": "active",
+    "missingFacts": [
+     "ticket link"
+    ],
+    "facts": {
+     "date": "12 Oct",
+     "venue": "City Hall"
+    },
+    "automations": [
+     {
+      "automationId": "t_weekly_tips",
+      "name": "Weekly practice tips",
+      "status": "active",
+      "schedule": "Every Monday 09:00",
+      "policy": "drafts",
+      "nextRun": "Mon 13 Oct 09:00"
+     }
+    ],
+    "platforms": [
+     "Threads"
+    ],
+    "href": "/app/automations?campaign=c_51a7e",
+    "drafts": [],
+    "draftCount": 2,
+    "posts": [],
+    "lastWeek": [],
+    "upcomingRuns": [],
+    "ref": "campaign:c_51a7e",
+    "version": 4,
+    "accountIds": [
+     "ch_th"
+    ],
+    "itemCount": 3,
+    "derived": {
+     "platformsNotCovered": {
+      "rule": "connected platforms none of this campaign's automations post to",
+      "items": [
+       "LinkedIn"
+      ]
+     },
+     "noUpcomingRun": {
+      "rule": "no active automation with a next run",
+      "value": false
+     },
+     "failedOrSkippedLastWeek": {
+      "rule": "runs in the last 7 days that failed or were skipped",
+      "items": []
+     }
+    },
+    "progress": {
+     "items": {
+      "drafts": 2,
+      "draftsNeedingReview": 1,
+      "posts": 1,
+      "postsVerified": 0,
+      "postsWaiting": 1,
+      "missing": 0
+     },
+     "runs": {
+      "completed": 2
+     },
+     "rule": "derived from linked items and automation runs; a campaign has no completion state of its own"
+    },
+    "note": "Drafts and posts here are truncated; campaign_items lists every linked item."
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "campaign_items": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "campaignId": "c_51a7e",
+    "version": 4,
+    "items": [
+     {
+      "itemId": "i1",
+      "kind": "draft",
+      "addedAt": "2026-10-01T00:00:00Z",
+      "needsReview": true,
+      "addedByYou": true,
+      "draftId": "v_1",
+      "ref": "draft:v_1",
+      "exists": true,
+      "platform": "Threads",
+      "revision": 2,
+      "excerpt": "Recital week notes"
+     },
+     {
+      "itemId": "i2",
+      "kind": "post",
+      "addedAt": "2026-10-02T00:00:00Z",
+      "needsReview": false,
+      "addedByYou": true,
+      "jobId": "job_1",
+      "ref": "job:job_1",
+      "exists": true,
+      "state": "approved",
+      "platform": "Threads",
+      "local": "2026-10-09T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "atUtc": "2026-10-09T01:00:00Z"
+     },
+     {
+      "itemId": "i3",
+      "kind": "draft",
+      "addedAt": "2026-10-03T00:00:00Z",
+      "needsReview": false,
+      "addedByYou": false,
+      "draftId": "v_gone",
+      "ref": "draft:v_gone",
+      "exists": false,
+      "platform": null,
+      "revision": null,
+      "excerpt": ""
+     }
+    ],
+    "offset": 0,
+    "max": 200
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 3,
+    "total": 3,
+    "note": null
+   },
+   "warnings": [
+    "Some linked items are no longer in the workspace."
+   ]
+  }
+ },
+ "campaign_timeline": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "campaignId": "c_51a7e",
+    "timeZone": "Asia/Hong_Kong",
+    "startUtc": "2026-10-07T16:00:00Z",
+    "endUtc": "2026-11-06T16:00:00Z",
+    "truncated": false,
+    "events": [
+     {
+      "kind": "post",
+      "jobId": "job_1",
+      "ref": "job:job_1",
+      "atUtc": "2026-10-09T01:00:00Z",
+      "local": "2026-10-09T09:00",
+      "jobZone": "Asia/Hong_Kong",
+      "jobLocal": "2026-10-09T09:00",
+      "status": "approved",
+      "platform": "Threads"
+     },
+     {
+      "kind": "planned_run",
+      "automationId": "t_weekly_tips",
+      "ref": "automation:t_weekly_tips",
+      "name": "Weekly practice tips",
+      "atUtc": "2026-10-13T01:00:00Z",
+      "local": "2026-10-13T09:00",
+      "scheduleZone": "Asia/Hong_Kong",
+      "scheduleLocal": "2026-10-13T09:00",
+      "status": "planned"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": "Planned runs come from the automation's schedule; dependencies between campaign items are not recorded by Rafii."
+   },
+   "warnings": []
+  }
+ },
+ "task_progress": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "task": {
+     "taskId": "77777777-8888-4999-8aaa-bbbbbbbbbbbb",
+     "title": "Draft, link and schedule",
+     "status": "running",
+     "version": 3,
+     "steps": [
+      {
+       "id": "s1",
+       "label": "Draft the LinkedIn post",
+       "state": "done",
+       "kind": null,
+       "dependsOn": [],
+       "entities": [],
+       "outputs": [],
+       "approvals": [],
+       "reason": null,
+       "verified": true,
+       "startedAt": null,
+       "updatedAt": null
+      },
+      {
+       "id": "s2",
+       "label": "Add it to the recital campaign",
+       "state": "done",
+       "kind": null,
+       "dependsOn": [
+        "s1"
+       ],
+       "entities": [],
+       "outputs": [],
+       "approvals": [],
+       "reason": null,
+       "verified": true,
+       "startedAt": null,
+       "updatedAt": null
+      },
+      {
+       "id": "s3",
+       "label": "Schedule for Friday 9am",
+       "state": "needs_user",
+       "kind": null,
+       "dependsOn": [
+        "s1"
+       ],
+       "entities": [],
+       "outputs": [],
+       "approvals": [],
+       "reason": "Waiting for you to apply the proposal",
+       "verified": false,
+       "startedAt": null,
+       "updatedAt": null
+      }
+     ],
+     "counts": {}
+    },
+    "summary": {
+     "done": 2,
+     "total": 3,
+     "lines": [],
+     "open": [
+      "s3"
+     ]
+    },
+    "rule": "only the tool that did a step's work marks it done"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": null
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "task": null
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 0,
+    "note": "No multi-step task in this conversation."
+   },
+   "warnings": []
+  }
+ },
+ "actions": [
+  {
+   "actionId": "campaign_create",
+   "label": "Create campaign",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  },
+  {
+   "actionId": "campaign_update",
+   "label": "Save brief",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  },
+  {
+   "actionId": "campaign_link",
+   "label": "Add to campaign",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": null
+  }
+ ]
+}

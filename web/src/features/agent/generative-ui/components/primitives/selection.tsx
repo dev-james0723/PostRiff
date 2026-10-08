@@ -20,7 +20,7 @@ const MAX_PICK = 20;
 const MAX_ROWS = 100;
 
 const selectionProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   labelField: z.string().min(1).max(120),
   value: z.unknown().optional(),
   idField: z.string().max(120).optional(),

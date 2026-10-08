@@ -306,7 +306,7 @@ export function safeLinkTarget(href: unknown): { href: string; external: boolean
 
 const linkProps = z.object({
   label: z.union([z.string(), z.number()]),
-  href: z.unknown(),
+  href: z.unknown().optional(),
   source: z.union([z.string(), z.number()]).optional(),
   asOf: z.union([z.string(), z.number()]).optional(),
 });

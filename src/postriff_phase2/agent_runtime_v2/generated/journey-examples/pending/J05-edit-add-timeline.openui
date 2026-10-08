@@ -1,0 +1,4 @@
+root = RafiiRoot([plan, timeline, progress])
+$zone = "Asia/Hong_Kong"
+upcoming = Query("campaign_timeline", {campaignRef: $campaign, period: "next_30_days", zone: $zone}, null)
+timeline = CampaignTimeline(upcoming, "Next 30 days")

@@ -42,7 +42,7 @@ def _now() -> float:
 def permission_revision(member) -> str:
     """A digest of the member's role and flags: a change between issue and use narrows the capability."""
     summary = member.summary() if hasattr(member, "summary") else {}
-    return ui_contracts.sha256_text(ui_contracts.canonical_json({"role": getattr(member, "role", None), "summary": summary}))
+    return ui_contracts.sha256_text(ui_contracts.canonical_json({"role": getattr(member, "role", None), "summary": summary}, max_depth=None))
 
 
 def _allows(member, requirement: str) -> bool:
@@ -121,7 +121,7 @@ def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
                                       "expiresAt": common.iso(issued + ACTION_TTL_SECONDS)}
     source = {"journeys": journeys, "queries": [q["name"] for q in queries], "actions": [a["actionId"] for a in actions], "scope": scope,
               "principal": auth.principal, "workspace": auth.workspace_id, "issued": issued}
-    manifest_id = "mf_" + ui_contracts.sha256_text(ui_contracts.canonical_json(source))[:32]
+    manifest_id = "mf_" + ui_contracts.sha256_text(ui_contracts.canonical_json(source, max_depth=None))[:32]
     groups = list(dict.fromkeys(projection.get("component_group_ids") or projection.get("componentGroups") or []))
     return {"manifestId": manifest_id, "version": MANIFEST_VERSION, "bindingVersion": 1, "journeyIds": journeys, "componentGroups": groups,
             "queries": queries, "actions": actions, "expiresAt": common.iso(issued + QUERY_TTL_SECONDS),

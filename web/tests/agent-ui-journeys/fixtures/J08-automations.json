@@ -1,0 +1,307 @@
+{
+ "automations_list": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "automations": [
+     {
+      "automationId": "t_weekly_tips",
+      "ref": "automation:t_weekly_tips",
+      "name": "Weekly practice tips",
+      "status": "active",
+      "schedule": "Every Monday at 09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "policy": "drafts",
+      "platforms": [
+       "Threads"
+      ],
+      "nextRun": {
+       "atUtc": "2026-10-13T01:00:00Z",
+       "local": "2026-10-13T09:00",
+       "offset": "+08:00",
+       "timeZone": "Asia/Hong_Kong"
+      },
+      "nextPublish": null,
+      "campaignId": "c_51a7e",
+      "pausedReason": null,
+      "version": 7,
+      "href": "/app/automations?edit=t_weekly_tips"
+     },
+     {
+      "automationId": "t_paused",
+      "ref": "automation:t_paused",
+      "name": "Monthly recap",
+      "status": "paused",
+      "schedule": "Every Monday at 09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "policy": "drafts",
+      "platforms": [
+       "Threads"
+      ],
+      "nextRun": null,
+      "nextPublish": null,
+      "campaignId": "c_51a7e",
+      "pausedReason": "Campaign brief changed",
+      "version": 7,
+      "href": "/app/automations?edit=t_weekly_tips"
+     }
+    ],
+    "offset": 0,
+    "statusCounts": {
+     "active": 1,
+     "paused": 1
+    }
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "automation_detail": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "taskId": "t_weekly_tips",
+    "name": "Weekly practice tips",
+    "status": "active",
+    "scheduleText": "Every Monday at 09:00",
+    "policy": "drafts",
+    "plan": null,
+    "platforms": [
+     "Threads"
+    ],
+    "needs": [
+     "A connected Threads account"
+    ],
+    "contentLabel": null,
+    "voiceMode": null,
+    "ref": "automation:t_weekly_tips",
+    "timeZone": "Asia/Hong_Kong",
+    "nextRun": {
+     "atUtc": "2026-10-13T01:00:00Z",
+     "local": "2026-10-13T09:00",
+     "offset": "+08:00",
+     "timeZone": "Asia/Hong_Kong"
+    },
+    "nextPublish": null,
+    "upcoming": [
+     {
+      "atUtc": "2026-10-13T01:00:00Z",
+      "local": "2026-10-13T09:00",
+      "offset": "+08:00"
+     },
+     {
+      "atUtc": "2026-10-20T01:00:00Z",
+      "local": "2026-10-20T09:00",
+      "offset": "+08:00"
+     }
+    ],
+    "version": 7,
+    "campaignId": "c_51a7e",
+    "pausedReason": null,
+    "history": 2,
+    "href": "/app/automations?edit=t_weekly_tips"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "automation_history": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "automationId": "t_weekly_tips",
+    "offset": 0,
+    "runs": [
+     {
+      "runId": "r2",
+      "ref": "automation_run:r2",
+      "status": "failed",
+      "attention": true,
+      "scheduledUtc": "2026-10-06T01:00:00Z",
+      "scheduledLocal": "2026-10-06T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "completedUtc": null,
+      "seen": false,
+      "cost": {
+       "usdMicro": null,
+       "state": "unknown"
+      },
+      "items": [
+       {
+        "platform": "Threads",
+        "state": "failed",
+        "reason": "Account disconnected"
+       }
+      ]
+     },
+     {
+      "runId": "r1",
+      "ref": "automation_run:r1",
+      "status": "completed",
+      "attention": false,
+      "scheduledUtc": "2026-09-29T01:00:00Z",
+      "scheduledLocal": "2026-09-29T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "completedUtc": "2026-09-29T01:02:00Z",
+      "seen": true,
+      "cost": {
+       "usdMicro": 12500,
+       "state": "known"
+      },
+      "items": [
+       {
+        "platform": "Threads",
+        "state": "drafted",
+        "reason": null
+       }
+      ]
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "connections_status": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "accounts": [
+     {
+      "connectionId": "ch_th",
+      "platform": "Threads",
+      "account": "@jamesau.piano",
+      "connectionState": "reconnect_required",
+      "readiness": null,
+      "demo": false,
+      "revoked": false,
+      "levels": {
+       "publish": "Direct",
+       "analytics": "Direct"
+      },
+      "canPublish": false,
+      "publishCode": "reconnect",
+      "publishReason": "Reconnect this account to publish.",
+      "ref": "connection:ch_th",
+      "needsReconnect": true
+     },
+     {
+      "connectionId": "ch_li",
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "connectionState": "connected",
+      "readiness": null,
+      "demo": true,
+      "revoked": false,
+      "levels": {
+       "publish": "Assisted"
+      },
+      "canPublish": true,
+      "publishCode": null,
+      "publishReason": null,
+      "ref": "connection:ch_li",
+      "needsReconnect": false
+     }
+    ],
+    "publishingLive": false,
+    "attention": {
+     "state": "unavailable",
+     "reason": "feature_disabled",
+     "items": []
+    },
+    "recovery": {
+     "guideId": "connect_account",
+     "href": "/app/channels"
+    },
+    "rule": "levels come from each account's verified capability record"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": "Attention items aren't available on this deployment; account states are shown."
+   },
+   "warnings": []
+  }
+ },
+ "recovery_guides": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "guides": [
+     {
+      "guideId": "connect_account",
+      "title": "Connect an account",
+      "summary": "Link a social account so Rafii can prepare posts for it.",
+      "href": "/app/channels?guide=connect_account",
+      "page": "/app/channels",
+      "canOpen": true,
+      "reason": null
+     },
+     {
+      "guideId": "set_up_voice",
+      "title": "Set up your voice",
+      "summary": null,
+      "href": "/app/brand?guide=set_up_voice",
+      "page": "/app/brand",
+      "canOpen": false,
+      "reason": "Only an owner can do this."
+     }
+    ],
+    "pages": [
+     {
+      "label": "Automations",
+      "href": "/app/automations"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "actions": [
+  {
+   "actionId": "automation_change_prepare",
+   "label": "Prepare change",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": "Prepares a proposal to change an automation."
+  }
+ ]
+}

@@ -79,7 +79,7 @@ function ScrollRegion(props: { label: string; children: JSX.Element; wide: boole
 }
 
 const tableProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   columns: z.array(column).min(1),
   cursor: z.unknown().optional(),
   caption: z.union([z.string(), z.number()]).optional(),
@@ -173,7 +173,7 @@ export const ToolBoundTable: RafiiComponentRenderer = ({ props, statementId }) =
 };
 
 const metricProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   field: z.string().min(1).max(120),
   label: z.union([z.string(), z.number()]),
   format: z.enum(['number', 'percent', 'currency', 'duration']).optional(),
@@ -207,7 +207,7 @@ export const Metric: RafiiComponentRenderer = ({ props, statementId }) => {
 };
 
 const timelineProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   timeField: z.string().min(1).max(120),
   titleField: z.string().min(1).max(120),
   statusField: z.string().max(120).optional(),
@@ -261,7 +261,7 @@ export const Timeline: RafiiComponentRenderer = ({ props, statementId }) => {
 };
 
 const comparisonProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   labelField: z.string().min(1).max(120),
   fields: z.array(column).min(1),
   idField: z.string().max(120).optional(),
@@ -350,7 +350,7 @@ export const Comparison: RafiiComponentRenderer = ({ props, statementId }) => {
 };
 
 const taskProps = z.object({
-  source: z.unknown(),
+  source: z.unknown().optional(),
   labelField: z.string().max(120).optional(),
   statusField: z.string().max(120).optional(),
 });

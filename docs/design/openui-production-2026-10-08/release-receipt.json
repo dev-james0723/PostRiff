@@ -3,12 +3,12 @@
   "scope": "Rafii x OpenUI full release: C01-C10, J01-J09, consumer chat/panel/expanded/mobile/browser voice + founder surface",
   "final_commit_sha": null,
   "merge_sha": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/dev-james0723/PostRiff/pull/137",
   "ci_results": [],
   "deployment_id": null,
   "deployment_sha": null,
   "canonical_origin": null,
-  "canonical_origin_note": "rafii.io NXDOMAIN and not attached to the Vercel project as of 2026-10-08 12:30 EDT; observed production alias https://postriff-phase2-private.vercel.app",
+  "canonical_origin_note": "rafii.io live: DNS/TLS 2026-10-08 17:56Z; production env cut over to https://rafii.io in dpl_9xGG8feQ6mxQHN8yQvm3Ygz6SpXd (domain-migration session, PR #135 65b1ea83)",
   "verified_at": null,
   "timezone": "America/New_York",
   "library_versions_and_hashes": {
@@ -21,16 +21,20 @@
   "migrations": [
     {
       "file": "migrations/postriff/102_agent_ui_artifacts.sql",
-      "applied_production": false,
-      "evidence": null
+      "sha256_prefix": "11ee1ee184d2597a",
+      "applied_production": true,
+      "method": "Supabase MCP apply_migration name=102_agent_ui_artifacts on buoyhkbodnhzngaotoel (begin/commit lines stripped; statements identical)",
+      "verified": "6 pr_ui_* tables, relrowsecurity+relforcerowsecurity true, 1 service_only policy each, has_table_privilege(authenticated, select)=false",
+      "announced_to": "domain-migration session, acked"
     }
   ],
   "feature_flag_state": {
-    "RAFII_GENUI_ENABLED": null,
-    "RAFII_GENUI_ACTIONS_ENABLED": null,
-    "RAFII_GENUI_EDITS_ENABLED": null,
-    "RAFII_GENUI_FOUNDER_ENABLED": null,
-    "RAFII_GENUI_WORKSPACES": null
+    "RAFII_GENUI_ENABLED": "1 (Production env set; inert until the GenUI build)",
+    "RAFII_GENUI_ACTIONS_ENABLED": "1",
+    "RAFII_GENUI_EDITS_ENABLED": "1",
+    "RAFII_GENUI_FOUNDER_ENABLED": "1",
+    "RAFII_GENUI_WORKSPACES": "one canary workspace (James's, 0ceb3635\u2026)",
+    "RAFII_GENUI_VALIDATOR_URL": "https://rafii.io (custom domain is exempt from deployment SSO protection)"
   },
   "eligible_audience": null,
   "journey_results": {
@@ -50,14 +54,28 @@
   "physical_device_evidence": null,
   "model_attempt_and_cost_summary": null,
   "rollback_deployment": {
-    "deployment_id": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
-    "sha": "bb4ca5aa",
-    "recorded_at": "2026-10-08T14:20:00-04:00",
-    "previous": {
-      "deployment_id": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
-      "sha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816"
-    },
-    "note": "consumer-saas advanced to bb4ca5aa (PR #134) during the release; integration merged it at 1e023ffa"
+    "deployment_id": "dpl_HPRcYu9tsfvDDUwtHoZwiuES1xgy",
+    "sha": "65b1ea83",
+    "recorded_at": "2026-10-08T21:00:00-04:00",
+    "note": "65b1ea83 + rafii.io env, legacy temporary redirect, FB/IG/YouTube/TikTok callback pins removed (domain-migration session)",
+    "previous": [
+      {
+        "deployment_id": "dpl_EVqE4ugSHbJoWkbmErhpqUDV48Cf",
+        "sha": "65b1ea83"
+      },
+      {
+        "deployment_id": "dpl_9xGG8feQ6mxQHN8yQvm3Ygz6SpXd",
+        "sha": "65b1ea83"
+      },
+      {
+        "deployment_id": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+        "sha": "bb4ca5aa"
+      },
+      {
+        "deployment_id": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+        "sha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816"
+      }
+    ]
   },
   "rollback_drill": null,
   "known_unverified_items": [],
