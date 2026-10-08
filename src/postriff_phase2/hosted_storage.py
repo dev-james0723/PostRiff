@@ -265,7 +265,12 @@ class SupabaseStorage:
             size = int(found.get("content-length"))
         except (TypeError, ValueError):
             size = None
-        return {"bytes": size, "mime": (found.get("content-type") or "").split(";")[0].strip().lower() or None, "etag": found.get("etag")}
+        mime = (found.get("content-type") or "").split(";")[0].strip().lower() or None
+        # Supabase serves HTML objects as text/plain for safety. Preserve the declared
+        # upload identity for verification while downloads remain safely rendered as text.
+        if category == "file" and object_name.rsplit(".", 1)[-1].lower() in ("html", "htm") and mime == "text/plain":
+            mime = "text/html"
+        return {"bytes": size, "mime": mime, "etag": found.get("etag")}
 
     def read_range(self, workspace_id, category, object_name, start, length):
         """At most `length` bytes from `start`, read with the no-redirect opener and closed early even when storage
