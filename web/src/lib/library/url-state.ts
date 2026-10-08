@@ -11,6 +11,8 @@ export const LIBRARY_SCOPES = ['all', 'collection', 'selection'] as const;
 export const LIBRARY_USAGE = ['all', 'unused', 'used'] as const;
 export const LIBRARY_KINDS = ['all', 'image', 'video', 'audio', 'document', 'file'] as const;
 export const LIBRARY_SORTS = ['newest', 'stored', 'largest'] as const;
+/** Search the Library, or ask it a question; switching keeps each one's state. */
+export const LIBRARY_PANELS = ['search', 'ask'] as const;
 
 /** The server's selection cap (`contracts.MAX_SELECTION`). */
 export const MAX_SELECTED = 200;
@@ -22,6 +24,7 @@ export type LibraryScopeParam = (typeof LIBRARY_SCOPES)[number];
 export type LibraryUsageParam = (typeof LIBRARY_USAGE)[number];
 export type LibraryKindParam = (typeof LIBRARY_KINDS)[number];
 export type LibrarySortParam = (typeof LIBRARY_SORTS)[number];
+export type LibraryPanelParam = (typeof LIBRARY_PANELS)[number];
 
 export interface LibraryUrlState {
   q: string;
@@ -35,6 +38,7 @@ export interface LibraryUrlState {
   density: LibraryDensity;
   sel: string[];
   asset: string;
+  panel: LibraryPanelParam;
 }
 
 export const DEFAULT_LIBRARY_STATE: LibraryUrlState = {
@@ -48,7 +52,8 @@ export const DEFAULT_LIBRARY_STATE: LibraryUrlState = {
   mode: 'gallery',
   density: 'comfortable',
   sel: [],
-  asset: ''
+  asset: '',
+  panel: 'search'
 };
 
 /** Asset and collection ids: UUIDs, 32-hex keys or legacy media ids. No dots, slashes, colons or query characters. */
@@ -112,7 +117,8 @@ export function parseLibraryState(params: URLSearchParams | Record<string, strin
     mode: literal(LIBRARY_VIEW_MODES, read(params, 'mode'), d.mode),
     density: literal(LIBRARY_DENSITIES, read(params, 'density'), d.density),
     sel: sanitizeIds(read(params, 'sel') ?? ''),
-    asset: isSafeId(asset) ? asset : ''
+    asset: isSafeId(asset) ? asset : '',
+    panel: literal(LIBRARY_PANELS, read(params, 'panel'), d.panel)
   };
 }
 
@@ -133,6 +139,7 @@ export function serializeLibraryState(state: Partial<LibraryUrlState>): Record<s
   const sel = sanitizeIds(full.sel);
   if (sel.length) out.sel = sel.join(',');
   if (isSafeId(full.asset)) out.asset = full.asset;
+  if (full.panel !== DEFAULT_LIBRARY_STATE.panel) out.panel = full.panel;
   return out;
 }
 

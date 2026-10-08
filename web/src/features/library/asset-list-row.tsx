@@ -39,6 +39,7 @@ export interface AssetListRowProps {
   selecting?: boolean;
   onSelect?: (selected: boolean, extend: boolean) => void;
   density?: LibraryDensity;
+  onExclude?: () => void;
   footer?: ReactNode;
 }
 
@@ -62,6 +63,7 @@ export function AssetListRow({
   selecting = false,
   onSelect,
   density = 'comfortable',
+  onExclude,
   footer
 }: AssetListRowProps) {
   const reduce = useReducedMotion();
@@ -185,6 +187,12 @@ export function AssetListRow({
           <ContextMenuItem onSelect={() => router.push('/app/ideas')}>
             <Icons.sparkles className='text-muted-foreground size-4' aria-hidden />
             Open Ideas
+          </ContextMenuItem>
+        ) : null}
+        {onExclude ? (
+          <ContextMenuItem onSelect={onExclude}>
+            <Icons.minus className='text-muted-foreground size-4' aria-hidden />
+            Exclude from this collection
           </ContextMenuItem>
         ) : null}
         <ContextMenuItem onSelect={() => void copyHash(asset.hash)}>

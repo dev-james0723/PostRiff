@@ -54,7 +54,7 @@ export function bottomClearance({ mobile, playerOpen, playerExpanded = false }: 
 /**
  * The phone layout above the first result at 390 × 844, in CSS pixels, from the classes used in the Library:
  * app header `h-16`, page padding `pt-3`, title, the Add button row (`h-12`), page gap `gap-5`, the search row
- * (`min-h-11`) with its scope line, the collection switcher row (`h-11`), the filter row (`min-h-11`), the view row (`min-h-11`) and the
+ * (`min-h-11`) with its scope line and Search/Ask switch, the collection switcher row (`h-11`), the filter row (`min-h-11`), the view row (`min-h-11`) and the
  * `gap-3` between them. No banners (the spec's measurement condition).
  */
 export const MOBILE_CHROME_PX = {
@@ -65,7 +65,7 @@ export const MOBILE_CHROME_PX = {
   addButton: 48,
   pageGap: 20,
   search: 44,
-  scopeLine: 24,
+  scopeLine: 44,
   switcher: 44,
   filters: 44,
   view: 44,

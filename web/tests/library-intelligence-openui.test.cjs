@@ -325,3 +325,39 @@ test('test_fallback_browsing_works: the same validated data renders without Open
   const view = fs.readFileSync(path.join(SRC, 'features', 'library', 'library-view.tsx'), 'utf8');
   assert.doesNotMatch(view, /openui|LibraryTaskSurface/i, 'the deterministic Library shell never depends on generated UI');
 });
+
+test('runtime action ids: library_ plus the type in snake case, within the manifest pattern', () => {
+  assert.equal(P.manifestActionId('collection.save'), 'library_collection_save');
+  assert.equal(P.manifestActionId('version.accept_replacement'), 'library_version_accept_replacement');
+  for (const type of S.LIBRARY_ACTION_TYPES) assert.match(P.manifestActionId(type), P.MANIFEST_ACTION_ID, type);
+  assert.equal(new Set(S.LIBRARY_ACTION_TYPES.map(P.manifestActionId)).size, S.LIBRARY_ACTION_TYPES.length, 'no two types share an id');
+  const descriptors = read('descriptors.ts');
+  assert.match(descriptors, /export const LIBRARY_OPENUI_ACTION_IDS/);
+  assert.match(descriptors, /LIBRARY_ACTION_TYPES\.map\(\(type\) => \[type, manifestActionId\(type\)\]\)/);
+  assert.match(descriptors, /actions: entry\.actions/, 'descriptors keep their dotted action types');
+});
+
+test('test_missing_on_action_renders_unavailable: without an injected handler, controls are disabled and inert', () => {
+  const none = P.resolveActionHandler(undefined);
+  assert.equal(none.available, false);
+  assert.doesNotThrow(() => none.call('library.open', {}));
+  assert.equal(P.resolveActionHandler(null).available, false);
+  const calls = [];
+  const some = P.resolveActionHandler((id, inputs) => calls.push([id, inputs]));
+  assert.equal(some.available, true);
+  some.call('library.select', { a: 1 });
+  assert.deepEqual(calls, [['library.select', { a: 1 }]]);
+
+  const components = read('components.tsx');
+  assert.match(components, /onAction\?: LibraryOnAction \| null;/, 'the handler is optional for the runtime bridge');
+  const declared = components.split('\n').filter((line) => /^export function [A-Z]\w+\(\{[^}]*\bonAction\b/.test(line)).length;
+  const resolved = (components.match(/const act = resolveActionHandler\(onAction\);/g) || []).length;
+  assert.equal(resolved, declared, 'every component with controls resolves its handler');
+  assert.equal(declared, 8, 'all components but SourceScope have controls');
+  assert.doesNotMatch(components, /\bonAction\(/, 'no component calls the raw handler');
+  assert.match(components, /disabled=\{!act\.available \|\| !host\.writesEnabled \|\| host\.busyActionId !== null\}/);
+  assert.match(components, /disabled=\{!act\.available\} onClick=\{\(\) => act\.call\('library\.open'/);
+  assert.match(components, /Actions aren’t available in this view\./);
+  assert.doesNotMatch(components, /useLibraryActionAdapter/, 'inside generated UI only the injected onAction is used');
+});
+

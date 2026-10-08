@@ -10,6 +10,7 @@ import { countLabel, storageNotice } from '@/lib/library/wording';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useLibraryCollections } from '../library-organizer';
+import { SmartCollectionDialog } from './smart-collections';
 
 function chip(selected: boolean) {
   return cn(
@@ -30,6 +31,8 @@ export function CollectionRail({
   collapsed,
   onCollapsedChange,
   storage,
+  smartCollections = false,
+  onAnnounce,
   className
 }: {
   active: string;
@@ -38,6 +41,9 @@ export function CollectionRail({
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   storage?: { usedBytes: number; limitBytes: number } | null;
+  /** Smart collections can be created when the Library intelligence service answers in this build. */
+  smartCollections?: boolean;
+  onAnnounce?: (message: string) => void;
   className?: string;
 }) {
   const collections = useLibraryCollections();
@@ -77,10 +83,14 @@ export function CollectionRail({
               type='button'
               className={chip(active === collection.id)}
               aria-current={active === collection.id ? 'true' : undefined}
-              aria-label={`${collection.name}, ${countLabel(collection.count)}`}
+              aria-label={`${collection.name}, ${collection.kind === 'smart' ? 'smart collection, ' : ''}${countLabel(collection.count)}`}
               onClick={() => onSelect(collection.id)}
             >
-              <span className='max-w-[12rem] truncate lg:max-w-none'>{collection.name}</span>
+              <span className='flex min-w-0 items-center gap-1.5'>
+                {collection.kind === 'smart' ? <Icons.sparkles className='size-3.5 shrink-0' aria-hidden /> : null}
+                <span className='max-w-[12rem] truncate lg:max-w-none'>{collection.name}</span>
+                {collection.kind === 'smart' ? <span className='text-muted-foreground text-[11px]'>Smart</span> : null}
+              </span>
               <span aria-hidden className='text-muted-foreground text-xs tabular-nums'>
                 {collection.count}
               </span>
@@ -102,7 +112,9 @@ export function CollectionRail({
           </li>
         ) : null}
       </ul>
-      {canEdit && managing ? <CollectionManagement id={panelId} onRemoved={(id) => id === active && onSelect('')} /> : null}
+      {canEdit && managing ? (
+        <CollectionManagement id={panelId} onRemoved={(id) => id === active && onSelect('')} smartCollections={smartCollections} onCreated={(id) => onSelect(id)} onAnnounce={onAnnounce} />
+      ) : null}
       {notice && notice.level !== 'unknown' ? (
         <p className={cn('hidden px-1 text-xs lg:block', notice.level === 'ok' ? 'text-muted-foreground' : 'text-foreground font-medium')}>{notice.label}</p>
       ) : null}
@@ -111,12 +123,25 @@ export function CollectionRail({
 }
 
 /** Create and remove collections. Removing a collection keeps its files. */
-function CollectionManagement({ id, onRemoved }: { id: string; onRemoved: (collectionId: string) => void }) {
+function CollectionManagement({
+  id,
+  onRemoved,
+  smartCollections,
+  onCreated,
+  onAnnounce
+}: {
+  id: string;
+  onRemoved: (collectionId: string) => void;
+  smartCollections: boolean;
+  onCreated: (collectionId: string) => void;
+  onAnnounce?: (message: string) => void;
+}) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const collections = useLibraryCollections();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [building, setBuilding] = useState(false);
 
   async function change(action: () => Promise<unknown>, after?: () => void) {
     setBusy(true);
@@ -168,7 +193,16 @@ function CollectionManagement({ id, onRemoved }: { id: string; onRemoved: (colle
           ))}
         </ul>
       ) : null}
-      <p className='text-muted-foreground text-xs'>Removing a collection keeps its files in your Library.</p>
+      {smartCollections ? (
+        <>
+          <Button variant='glass' size='control' className='h-11 self-start' onClick={() => setBuilding(true)}>
+            <Icons.sparkles aria-hidden />
+            New smart collection
+          </Button>
+          <SmartCollectionDialog open={building} onOpenChange={setBuilding} existing={null} onSaved={onCreated} onAnnounce={onAnnounce ?? (() => undefined)} />
+        </>
+      ) : null}
+      <p className='text-muted-foreground text-xs'>Removing a collection keeps its files in your Library. Smart collections add and remove items by their criteria.</p>
     </section>
   );
 }

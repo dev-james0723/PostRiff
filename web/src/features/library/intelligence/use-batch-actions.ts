@@ -5,17 +5,22 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
 import { keys as queryKeys, useAct } from '@/lib/api/hooks';
 import type { Snapshot } from '@/lib/api/types';
-import { idempotencyKeyFor, mergeOutcomes, newIdempotencyKey, outcomeFromError, reduceBatchOutcomes, type BatchOutcome, type BatchSummary } from '@/lib/library/batch';
+import { idempotencyKeyFor, mergeOutcomes, newIdempotencyKey, outcomeFromActionResult, outcomeFromError, reduceBatchOutcomes, type BatchOutcome, type BatchSummary } from '@/lib/library/batch';
+import { overrideEnvelope } from '@/lib/library/smart-rules';
+import { assetRefFor } from '@/lib/library/url-state';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { LibraryAsset } from '../use-library';
 
-export type BatchKind = 'collection-add' | 'collection-remove' | 'tag-add' | 'delete';
+/** collection-add/remove edit manual collections; collection-include/exclude are overrides on a smart collection. */
+export type BatchKind = 'collection-add' | 'collection-remove' | 'collection-include' | 'collection-exclude' | 'tag-add' | 'delete';
 
 export interface BatchParams {
   collectionId?: string;
   collectionName?: string;
   tag?: string;
+  /** The smart collection revision the override was made against (kept so a retry sends the identical request). */
+  revision?: number;
 }
 
 export interface BatchRun {
@@ -38,6 +43,8 @@ export interface OverlayPatch {
 const VERB: Record<BatchKind, string> = {
   'collection-add': 'added',
   'collection-remove': 'removed',
+  'collection-include': 'included',
+  'collection-exclude': 'excluded',
   'tag-add': 'tagged',
   delete: 'deleted'
 };
@@ -56,7 +63,16 @@ function tagsOf(asset: LibraryAsset) {
  * keys. The deterministic routes used here write absolute values (a membership list, a tag list, a deletion), so a
  * repeat cannot apply twice either. The optimistic view is rolled back for each item that did not apply.
  */
-export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<string, LibraryAsset>; onAnnounce: (message: string) => void }) {
+export function useBatchActions({
+  assets,
+  manualCollectionIds,
+  onAnnounce
+}: {
+  assets: ReadonlyMap<string, LibraryAsset>;
+  /** Manual collections only: the item PATCH edits these, and smart memberships follow their rules. */
+  manualCollectionIds: ReadonlySet<string>;
+  onAnnounce: (message: string) => void;
+}) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const act = useAct();
@@ -87,10 +103,12 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
   const performOne = useCallback(
     async (kind: BatchKind, asset: LibraryAsset, params: BatchParams, _key: string): Promise<BatchOutcome> => {
       const id = asset.id;
+      // Smart-collection overrides go through performOverride as one action; never fall through to a delete.
+      if (kind === 'collection-include' || kind === 'collection-exclude') return { id, status: 'failed', message: 'Use the collection override.', retryable: false };
       try {
         if (kind === 'collection-add' || kind === 'collection-remove') {
           const collectionId = params.collectionId ?? '';
-          const current = asset.collections ?? [];
+          const current = (asset.collections ?? []).filter((id) => manualCollectionIds.has(id));
           const member = current.includes(collectionId);
           if (kind === 'collection-add' && member) return { id, status: 'skipped', message: 'Already in this collection', retryable: false };
           if (kind === 'collection-remove' && !member) return { id, status: 'skipped', message: 'Not in this collection', retryable: false };
@@ -113,7 +131,27 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
         return outcomeFromError(id, error instanceof ApiError ? error : { message: error instanceof Error ? error.message : undefined }, kind === 'delete' ? 'delete' : 'update');
       }
     },
-    [api, workspaceId, deleteMedia]
+    [api, workspaceId, deleteMedia, manualCollectionIds]
+  );
+
+  /**
+   * Include or exclude on a smart collection: one server action for all targets at the revision read just before,
+   * with one idempotency key for the run (a retry sends the identical request, so it cannot apply twice).
+   */
+  const performOverride = useCallback(
+    async (kind: 'collection-include' | 'collection-exclude', targets: LibraryAsset[], params: BatchParams, key: string): Promise<{ outcomes: BatchOutcome[]; revision?: number }> => {
+      const collectionId = params.collectionId ?? '';
+      let revision = params.revision;
+      try {
+        if (typeof revision !== 'number') revision = (await api.libraryCollection(workspaceId, collectionId)).collection.revision;
+        const envelope = overrideEnvelope(collectionId, kind === 'collection-include' ? 'include' : 'exclude', targets.map((asset) => assetRefFor(asset.id)), revision, `override-${Date.now()}`);
+        const result = await api.libraryAction(workspaceId, { ...envelope, idempotencyKey: key });
+        return { outcomes: targets.map((asset) => outcomeFromActionResult(asset.id, result)), revision };
+      } catch (error) {
+        return { outcomes: targets.map((asset) => outcomeFromError(asset.id, error instanceof ApiError ? error : { message: error instanceof Error ? error.message : undefined })), revision };
+      }
+    },
+    [api, workspaceId]
   );
 
   const optimistic = useCallback((kind: BatchKind, asset: LibraryAsset, params: BatchParams): OverlayPatch => {
@@ -121,7 +159,8 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
     if (kind === 'tag-add') return { tags: [...new Set([...tagsOf(asset), params.tag ?? ''])].filter(Boolean) };
     const current = asset.collections ?? [];
     const collectionId = params.collectionId ?? '';
-    return { collections: kind === 'collection-add' ? [...new Set([...current, collectionId])] : current.filter((value) => value !== collectionId) };
+    const joining = kind === 'collection-add' || kind === 'collection-include';
+    return { collections: joining ? [...new Set([...current, collectionId])] : current.filter((value) => value !== collectionId) };
   }, []);
 
   const execute = useCallback(
@@ -140,12 +179,21 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
         return next;
       });
       publish(true);
-      for (const asset of targets) {
-        const slot = idempotencyKeyFor(itemKeys.current, runId, asset.id, () => newIdempotencyKey('lib-batch', randomKey));
+      if (kind === 'collection-include' || kind === 'collection-exclude') {
+        const slot = idempotencyKeyFor(itemKeys.current, runId, '*', () => newIdempotencyKey('lib-override', randomKey));
         itemKeys.current = slot.keys;
-        const outcome = await performOne(kind, asset, params, slot.key);
-        outcomes = mergeOutcomes(outcomes, [outcome]);
+        const override = await performOverride(kind, targets, params, slot.key);
+        params = { ...params, revision: override.revision };
+        outcomes = mergeOutcomes(outcomes, override.outcomes);
         publish(true);
+      } else {
+        for (const asset of targets) {
+          const slot = idempotencyKeyFor(itemKeys.current, runId, asset.id, () => newIdempotencyKey('lib-batch', randomKey));
+          itemKeys.current = slot.keys;
+          const outcome = await performOne(kind, asset, params, slot.key);
+          outcomes = mergeOutcomes(outcomes, [outcome]);
+          publish(true);
+        }
       }
       const summary = reduceBatchOutcomes(outcomes, VERB[kind]);
       // Undo the optimistic change for everything that did not apply (conflict, denied, failed).
@@ -159,6 +207,7 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
       onAnnounce(summary.label);
       await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       await client.invalidateQueries({ queryKey: ['library-collections', workspaceId] });
+      if (params.collectionId) await client.invalidateQueries({ queryKey: ['library-collection', workspaceId, params.collectionId] });
       // Fresh server data now carries the applied changes; the overlay is no longer needed for them.
       setOverlay((current) => {
         const next = { ...current };
@@ -166,7 +215,7 @@ export function useBatchActions({ assets, onAnnounce }: { assets: ReadonlyMap<st
         return next;
       });
     },
-    [assets, client, onAnnounce, optimistic, performOne, workspaceId]
+    [assets, client, onAnnounce, optimistic, performOne, performOverride, workspaceId]
   );
 
   const retry = useCallback(() => {

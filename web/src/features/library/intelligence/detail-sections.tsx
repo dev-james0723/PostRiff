@@ -25,9 +25,8 @@ export function useAssetIntelligence(asset: LibraryAsset | null, reachable: bool
   const shared = { enabled, retry: false, staleTime: 30_000, refetchOnWindowFocus: false } as const;
   const card = useQuery({ queryKey: ['library-card', workspaceId, key], queryFn: () => api.libraryCard(workspaceId, key), ...shared });
   const segments = useQuery({ queryKey: ['library-segments', workspaceId, key], queryFn: () => api.librarySegments(workspaceId, key), ...shared });
-  const related = useQuery({ queryKey: ['library-related', workspaceId, key], queryFn: () => api.libraryRelated(workspaceId, key), ...shared });
   const usage = useQuery({ queryKey: ['library-usage', workspaceId, key], queryFn: () => api.libraryUsage(workspaceId, key), ...shared });
-  return { key, card, segments, related, usage };
+  return { key, card, segments, usage };
 }
 
 export type AssetIntelligence = ReturnType<typeof useAssetIntelligence>;
@@ -343,69 +342,6 @@ export function SegmentList({ segments, focus }: { segments: ContentSegment[]; f
         );
       })}
     </ol>
-  );
-}
-
-/* --- related ---------------------------------------------------------------------------------------------------- */
-
-function labelOf(item: unknown): string | null {
-  if (!item || typeof item !== 'object') return null;
-  const record = item as Record<string, unknown>;
-  const title = record.displayTitle ?? record.title ?? record.label;
-  return typeof title === 'string' && title.trim() ? title.trim() : null;
-}
-
-export function RelatedList({ card, related }: { card: UnderstandingCard | undefined; related: { relations: unknown[]; nearDuplicates: unknown[]; versions: unknown[] } | undefined }) {
-  const versions = card?.versions ?? [];
-  const relations = (related?.relations ?? []).map(labelOf).filter((label): label is string => Boolean(label));
-  const duplicates = (related?.nearDuplicates ?? []).map(labelOf).filter((label): label is string => Boolean(label));
-  if (!versions.length && !relations.length && !duplicates.length) {
-    return <p className='text-muted-foreground text-sm'>No versions or related items are recorded for this item.</p>;
-  }
-  return (
-    <div className='flex flex-col gap-3'>
-      {versions.length ? (
-        <div className='flex flex-col gap-1'>
-          <p className='rafii-eyebrow'>Versions</p>
-          <ol className='flex flex-col gap-1 text-sm'>
-            {versions.map((version) => (
-              <li key={version.versionId} className='flex items-baseline justify-between gap-2'>
-                <span>
-                  Version {version.versionNo}
-                  {version.current ? <span className='text-muted-foreground'> · current</span> : null}
-                </span>
-                <span className='text-muted-foreground text-xs' title={formatDateTime(version.createdAt)}>
-                  {relativeTime(version.createdAt)}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-      {relations.length ? (
-        <div className='flex flex-col gap-1'>
-          <p className='rafii-eyebrow'>Related</p>
-          <ul className='flex flex-col gap-1 text-sm'>
-            {relations.map((label, index) => (
-              <li key={`${label}-${index}`}>{label}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {duplicates.length ? (
-        <div className='flex flex-col gap-1'>
-          <p className='rafii-eyebrow'>Possible near-duplicates</p>
-          <ul className='flex flex-col gap-1 text-sm'>
-            {duplicates.map((label, index) => (
-              <li key={`${label}-${index}`} className='flex items-baseline justify-between gap-2'>
-                <span>{label}</span>
-                <OriginBadge origin='ai_suggested' />
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
   );
 }
 

@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ApiError } from '@/lib/api/client';
-import type { AssetRef, SourcePack } from '@/lib/api/library-intelligence-types';
+import type { AssetRef, ComparisonResult, SourcePack } from '@/lib/api/library-intelligence-types';
 import { OUTCOME_TEXT, newIdempotencyKey, outcomeFromActionResult, outcomeFromError, reduceBatchOutcomes, type BatchOutcome } from '@/lib/library/batch';
 import { normalizeKey } from '@/lib/library/url-state';
 import { countLabel } from '@/lib/library/wording';
@@ -28,6 +28,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { assetTitle, dimensionsOf, kindLabel } from '../asset-card';
 import type { LibraryAsset } from '../use-library';
 import type { BatchKind, BatchParams, BatchRun } from './use-batch-actions';
+import { ComparisonView } from './versions-panel';
 
 /** Glass with an opaque fill where transparency is reduced or unsupported (the global material covers the rest). */
 export const OPAQUE_GLASS_FALLBACK = '[@media(prefers-reduced-transparency:reduce)]:bg-popover [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none';
@@ -67,8 +68,8 @@ export function BatchBar({
   onAnnounce
 }: {
   selected: SelectedItem[];
-  collections: { id: string; name: string }[];
-  activeCollection: { id: string; name: string } | null;
+  collections: { id: string; name: string; kind?: 'manual' | 'smart' }[];
+  activeCollection: { id: string; name: string; kind?: 'manual' | 'smart' } | null;
   canEdit: boolean;
   /** Selected items used in a post, for the deletion impact. */
   usedCount: number;
@@ -133,16 +134,28 @@ export function BatchBar({
                 />
                 <DropdownMenuContent align='end' className='rafii-elevated min-w-56 rounded-[var(--rafii-radius-card)] p-1.5'>
                   {collections.map((collection) => (
-                    <DropdownMenuItem key={collection.id} className='min-h-11 px-3' onClick={() => onRun('collection-add', ids, { collectionId: collection.id, collectionName: collection.name })}>
-                      {collection.name}
+                    <DropdownMenuItem
+                      key={collection.id}
+                      className='min-h-11 gap-2 px-3'
+                      onClick={() => onRun(collection.kind === 'smart' ? 'collection-include' : 'collection-add', ids, { collectionId: collection.id, collectionName: collection.name })}
+                    >
+                      {collection.kind === 'smart' ? <Icons.sparkles className='size-3.5' aria-hidden /> : null}
+                      <span className='min-w-0 flex-1 truncate'>{collection.name}</span>
+                      {collection.kind === 'smart' ? <span className='text-muted-foreground text-xs'>include</span> : null}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
             {canEdit && activeCollection ? (
-              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy} onClick={() => onRun('collection-remove', ids, { collectionId: activeCollection.id, collectionName: activeCollection.name })}>
-                Remove from this collection
+              <Button
+                variant='glass'
+                size='control'
+                className='h-11 shrink-0'
+                disabled={busy}
+                onClick={() => onRun(activeCollection.kind === 'smart' ? 'collection-exclude' : 'collection-remove', ids, { collectionId: activeCollection.id, collectionName: activeCollection.name })}
+              >
+                {activeCollection.kind === 'smart' ? 'Exclude from this collection' : 'Remove from this collection'}
               </Button>
             ) : null}
             {canEdit ? (
@@ -428,10 +441,10 @@ function factsOf(item: SelectedItem) {
   return [assetTitle(asset), kindLabel(asset), dimensionsOf(asset), typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null, asset.mime].filter((value): value is string => Boolean(value));
 }
 
-/** Two items side by side, plus whatever the comparison service can say for this type. */
+/** Two items side by side through the server's comparison: honest about what it can compare for these formats. */
 function CompareDialog({ open, onOpenChange, items }: { open: boolean; onOpenChange: (open: boolean) => void; items: SelectedItem[] }) {
   const { api, workspaceId } = useWorkspaceApi();
-  const [result, setResult] = useState<{ differences: { field: string; before: string; after: string }[]; summary: string | null } | null>(null);
+  const [result, setResult] = useState<ComparisonResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -439,15 +452,9 @@ function CompareDialog({ open, onOpenChange, items }: { open: boolean; onOpenCha
     setBusy(true);
     setError(null);
     try {
-      const response = await api.libraryCompare(workspaceId, items.map((item) => item.ref));
-      const raw = Array.isArray(response.differences) ? (response.differences as unknown[]) : [];
-      const differences = raw
-        .map((entry) => (entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : null))
-        .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry.field === 'string'))
-        .map((entry) => ({ field: String(entry.field), before: String(entry.before ?? '—'), after: String(entry.after ?? '—') }));
-      setResult({ differences, summary: typeof response.summary === 'string' ? response.summary : null });
+      setResult(await api.libraryCompare(workspaceId, items.map((item) => item.ref)));
     } catch (failure) {
-      setError(failure instanceof ApiError && failure.status === 503 ? 'Comparing versions isn’t available in this version yet. The basic facts are shown above.' : failure instanceof Error ? failure.message : 'The comparison didn’t finish.');
+      setError(failure instanceof ApiError && failure.status === 503 ? 'Comparing isn’t available in this version yet. The basic facts are shown above.' : failure instanceof Error ? failure.message : 'The comparison didn’t finish.');
     } finally {
       setBusy(false);
     }
@@ -455,60 +462,29 @@ function CompareDialog({ open, onOpenChange, items }: { open: boolean; onOpenCha
 
   return (
     <RafiiDialog open={open} onOpenChange={onOpenChange}>
-      <RafiiDialogContent size='md'>
-        <RafiiDialogHeader title='Compare' intro='Each side keeps its own version. Nothing is replaced from here.' />
+      <RafiiDialogContent size='lg'>
+        <RafiiDialogHeader title='Compare' intro='Each side keeps its own version and approval. Nothing is replaced from here.' />
         <RafiiDialogBody className='flex flex-col gap-4'>
-          <div className='grid gap-3 sm:grid-cols-2'>
-            {items.map((item, index) => (
-              <div key={item.id} className='rafii-quiet flex flex-col gap-1 rounded-[var(--rafii-radius-card)] p-3 text-sm'>
-                <span className='rafii-eyebrow'>{index === 0 ? 'First' : 'Second'}</span>
-                {factsOf(item).map((fact) => (
-                  <span key={fact} className='break-words'>
-                    {fact}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
+          {result ? (
+            <ComparisonView result={result} />
+          ) : (
+            <div className='grid gap-3 sm:grid-cols-2'>
+              {items.map((item, index) => (
+                <div key={item.id} className='rafii-quiet flex flex-col gap-1 rounded-[var(--rafii-radius-card)] p-3 text-sm'>
+                  <span className='rafii-eyebrow'>{index === 0 ? 'First' : 'Second'}</span>
+                  {factsOf(item).map((fact) => (
+                    <span key={fact} className='break-words'>
+                      {fact}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           {error ? (
             <p role='alert' className='text-muted-foreground text-sm'>
               {error}
             </p>
-          ) : null}
-          {result ? (
-            <div className='flex flex-col gap-2'>
-              {result.summary ? <p className='text-sm'>{result.summary}</p> : null}
-              {result.differences.length ? (
-                <table className='w-full text-left text-sm'>
-                  <thead>
-                    <tr className='text-muted-foreground text-xs'>
-                      <th scope='col' className='py-1 pr-3 font-medium'>
-                        Field
-                      </th>
-                      <th scope='col' className='py-1 pr-3 font-medium'>
-                        First
-                      </th>
-                      <th scope='col' className='py-1 font-medium'>
-                        Second
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.differences.map((difference) => (
-                      <tr key={difference.field}>
-                        <th scope='row' className='py-1 pr-3 font-normal'>
-                          {difference.field}
-                        </th>
-                        <td className='py-1 pr-3'>{difference.before}</td>
-                        <td className='py-1'>{difference.after}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : !result.summary ? (
-                <p className='text-muted-foreground text-sm'>No differences were reported for this type of item.</p>
-              ) : null}
-            </div>
           ) : null}
         </RafiiDialogBody>
         <RafiiDialogFooter className='flex-row justify-end'>
