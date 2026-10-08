@@ -77,7 +77,8 @@ class Plans(unittest.TestCase):
         self.assertEqual(plan.prompt_hash, contracts.sha256_text(plan.instructions + "\n\n" + plan.input_text))
 
     def test_shared_prompt_names_the_allowed_components(self):
-        plan = self.plan(projection=projection(journey_ids=["J01", "J06"], component_group_ids=["layout"]))
+        plan = self.plan(projection=projection(journey_ids=["J01", "J06"], component_group_ids=["layout"]),
+                         manifest={**manifest(), "journeyIds": ["J01", "J06"], "componentGroups": ["layout"]})
         self.assertEqual(plan.prompt_key, "consumer:all:generate")
         self.assertIn("Use only these components: Card, EmptyState, RafiiRoot, Stack, Text.", plan.instructions)
         self.assertEqual(plan.policy["allowedComponents"], ["Card", "EmptyState", "RafiiRoot", "Stack", "Text"])

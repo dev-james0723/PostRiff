@@ -328,11 +328,14 @@ class PresentationPlan:
 
 
 def library_for(manifest: dict, projection: dict) -> str:
-    name = (manifest or {}).get("library")
-    if name in LIBRARIES:
-        return name
-    journeys = list((projection or {}).get("journey_ids") or (manifest or {}).get("journeyIds") or [])
-    return "founder" if journeys == ["J09"] or (manifest or {}).get("scope") == "founder" else "consumer"
+    """The component library follows the manifest's server-side scope (never the projection's journey list): a founder
+    manifest uses the founder library, a consumer manifest the consumer library."""
+    manifest = manifest or {}
+    scope = manifest.get("scope")
+    if scope in ("workspace", "founder"):
+        return "founder" if scope == "founder" else "consumer"
+    name = manifest.get("library")
+    return name if name in LIBRARIES else "consumer"
 
 
 def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: str = "generate", mode: str = "generate", chain: str | None = None,
@@ -356,9 +359,12 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
             raise PresentationRefused("egress_denied", "the presenter route is not the processor the turn used")
     library = library_for(manifest, projection)
     lib = assets.library(library)
-    journeys = [j for j in projection.get("journey_ids") or manifest.get("journeyIds") or [] if j in contracts.JOURNEYS]
-    if library == "consumer" and "J09" in journeys:
-        raise PresentationRefused("egress_denied", "founder journeys never use the consumer presenter")
+    requested = [j for j in list(projection.get("journey_ids") or []) + list(manifest.get("journeyIds") or []) if j in contracts.JOURNEYS]
+    if (library == "consumer") == ("J09" in requested) and requested:
+        # J09 only in founder scope; founder scope only for J09 (a scope/journey mismatch is never presented).
+        if library == "consumer" or any(j != "J09" for j in requested):
+            raise PresentationRefused("egress_denied", "founder and consumer journeys never share a presenter")
+    journeys = list(dict.fromkeys(j for j in (manifest.get("journeyIds") or projection.get("journey_ids") or []) if j in contracts.JOURNEYS))
     prompt_key, base_prompt = assets.prompt(library, journeys, mode)
     public = contracts.public_manifest(manifest)
     if library == "founder" and public["actions"]:
