@@ -61,7 +61,17 @@
    "keys": [],
    "lists": {
     "sources": [
-     "ref"
+     "ref",
+     "active",
+     "approvedFacts",
+     "facts",
+     "fetchedAt",
+     "host",
+     "kind",
+     "origin",
+     "published",
+     "retracted",
+     "title"
     ]
    }
   },
@@ -70,6 +80,13 @@
     "reason",
     "searches",
     "note"
+   ],
+   "lists": {}
+  },
+  "task_progress": {
+   "keys": [
+    "summary",
+    "rule"
    ],
    "lists": {}
   }

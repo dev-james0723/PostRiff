@@ -798,7 +798,10 @@
       "lists": {},
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "summary",
+        "rule"
+       ],
        "lists": {}
       }
      },
@@ -1046,7 +1049,17 @@
        "keys": [],
        "lists": {
         "sources": [
-         "ref"
+         "ref",
+         "active",
+         "approvedFacts",
+         "facts",
+         "fetchedAt",
+         "host",
+         "kind",
+         "origin",
+         "published",
+         "retracted",
+         "title"
         ]
        }
       }
@@ -1599,7 +1612,10 @@
       "lists": {},
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "summary",
+        "rule"
+       ],
        "lists": {}
       }
      },
@@ -3055,7 +3071,10 @@
       "lists": {},
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "summary",
+        "rule"
+       ],
        "lists": {}
       }
      },
@@ -3973,7 +3992,10 @@
       "lists": {},
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "summary",
+        "rule"
+       ],
        "lists": {}
       }
      },
@@ -5309,7 +5331,17 @@
      "keys": [],
      "lists": {
       "sources": [
-       "ref"
+       "ref",
+       "active",
+       "approvedFacts",
+       "facts",
+       "fetchedAt",
+       "host",
+       "kind",
+       "origin",
+       "published",
+       "retracted",
+       "title"
       ]
      }
     }
@@ -6754,7 +6786,10 @@
     "lists": {},
     "open": false,
     "optional": {
-     "keys": [],
+     "keys": [
+      "summary",
+      "rule"
+     ],
      "lists": {}
     }
    },
