@@ -177,6 +177,9 @@ const checks=[];
    await page.keyboard.press('Escape');
    await markdownReader.waitFor({state:'hidden'});
    const returnedViewerTrigger=page.getByRole('button',{name:'Open document viewer',exact:true});
+   // Base UI restores focus after the popup's exit transition and a cleanup microtask.
+   // Observe that exact target; never move focus on behalf of the application.
+   await page.waitForFunction(element=>element===document.activeElement,await returnedViewerTrigger.elementHandle(),{timeout:5000});
    assert.ok(await returnedViewerTrigger.evaluate(element=>element===document.activeElement),'Escape closes only the nested reader and restores its launcher focus');
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
    await page.getByRole('button',{name:'Save details',exact:true}).click();

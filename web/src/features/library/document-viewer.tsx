@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { IconArrowsMaximize, IconMinus, IconPlus, IconRotateClockwise, IconTextSize } from '@tabler/icons-react';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -245,12 +245,11 @@ export function DocumentViewerLauncher({ asset }: { asset: LibraryAsset }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   if (!canViewDocument(asset)) return null;
-  return <>
-    <Button ref={trigger} variant='glass' size='control' className='w-full' disabled={!['ready', 'unsupported'].includes(asset.processing || '')} onClick={() => setOpen(true)}><IconArrowsMaximize aria-hidden />Open document viewer</Button>
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent showCloseButton={false} finalFocus={() => trigger.current} className='rafii-elevated h-dvh max-h-dvh w-screen max-w-none gap-0 overflow-hidden rounded-none p-0 sm:h-[92dvh] sm:w-[min(1400px,96vw)] sm:max-w-none sm:rounded-[var(--rafii-radius-dialog)]'>
-        {open ? <DocumentReader key={asset.id} asset={asset} /> : null}
-      </DialogContent>
-    </Dialog>
-  </>;
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger ref={trigger} disabled={!['ready', 'unsupported'].includes(asset.processing || '')} render={<Button variant='glass' size='control' className='w-full' />}><IconArrowsMaximize aria-hidden />Open document viewer</DialogTrigger>
+    <DialogContent showCloseButton={false} finalFocus={trigger} className='rafii-elevated h-dvh max-h-dvh w-screen max-w-none gap-0 overflow-hidden rounded-none p-0 sm:h-[92dvh] sm:w-[min(1400px,96vw)] sm:max-w-none sm:rounded-[var(--rafii-radius-dialog)]'>
+      {/* The portal owns unmounting after close, so focus returns after the complete dialog lifecycle. */}
+      <DocumentReader key={asset.id} asset={asset} />
+    </DialogContent>
+  </Dialog>;
 }
