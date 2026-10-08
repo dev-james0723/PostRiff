@@ -57,7 +57,7 @@ def http_transport(method, url, headers=None, form=None, body=None, data=None):
     return {"status": status, "headers": {k.lower(): v for k, v in response_headers.items()}, "body": parsed}
 
 
-from .provider_base import OAuthProvider, _credential_shape  # noqa: E402,F401  (re-exported)
+from .provider_base import OAuthProvider, _credential_shape, fixed_https_origin  # noqa: E402,F401  (re-exported)
 
 
 class LinkedInProvider(OAuthProvider):
@@ -257,6 +257,10 @@ def registry_from_environment(values, transport=None):
         registry.diagnostics[provider_id] = diagnostic
         if adapter is None:
             continue
+        if adapter.callback_origin is None and provider_id != "bluesky" and values.get(prefix + "CALLBACK_ORIGIN"):
+            # Only a fixed HTTPS origin; a malformed value leaves the default rather than guessing.
+            adapter.callback_origin = fixed_https_origin(values.get(prefix + "CALLBACK_ORIGIN"))
+            registry.diagnostics[provider_id]["callbackOriginPinned"] = adapter.callback_origin is not None
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
         adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
         adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
