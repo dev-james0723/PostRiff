@@ -14,7 +14,7 @@
     {
       "provider": "linkedin",
       "name": "LinkedIn",
-      "environment": "Protected branch preview; exact source a27236736fe524caf842be5a1dc6c91fc34e1baa; production unchanged",
+      "environment": "Protected branch preview source dd199b02737d77d5e2eb5bd9ef112af62f204eba, deployment dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k READY; production unchanged",
       "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
       "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
       "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
@@ -27,25 +27,25 @@
         "profile"
       ],
       "accountRequirements": "Member; no organization required",
-      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary Tester B minimum connection and Chrome reload observed. Full lifecycle/iPhone/live isolation and production acceptance remain pending.",
-      "customerConnection": "DISCONNECTED_OWNER_START_REQUIRED",
+      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary B minimum connection demonstrated on current dd199b02 preview. Full tenant-negative/iPhone/time-dependent and production acceptance remain pending.",
+      "customerConnection": "CONNECTED_IDENTITY_ONLY",
       "featurePermission": "Tester B actual identity-only grant verified; publishing not enabled. No publishing/organization/read/analytics capability promoted.",
       "tokenExchange": "REAL_EXCHANGED: Tester B Account only transaction consumed; Tester A identity/extension history retained separately.",
       "identityAndDestination": "VERIFIED: two distinct member subjects bound to two distinct originating Rafii users/workspaces; B owner attested no provider-app role; neither Rafii user has any Founder operator record.",
       "persistence": "PASS: encrypted durable connection, reload and genuinely new Rafii session retained the original Tester B credential and workspace binding. A survives deployment/reload separately.",
       "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
-      "disconnectReconnect": "Approved remote revocation/local token removal PASS. Two expired callback returns rejected safely; reconnect incomplete.",
-      "failureStep": "Two callbacks returned after their ten-minute transaction windows. No token saved. Owner-controlled start of fresh flow needed.",
-      "blockerClass": "HUMAN_CONSENT",
-      "owner": "Account owner: confirm intended B profile and complete consent; agent: same-subject/workspace proof and remaining regression",
-      "nextAction": "After validated preview update, owner starts Account only when ready, confirms intended B LinkedIn profile and completes official consent within ten minutes. Agent verifies same subject/workspace and actual grant; no repeated disconnect approval.",
+      "disconnectReconnect": "PASS: approved remote revocation/local removal, then real same-account/workspace reconnect on dd199b02 with openid/profile only; A unchanged. Two expired callbacks were safely rejected before successful third attempt.",
+      "failureStep": "No current LinkedIn identity connection failure. Full live tenant-negative, real iPhone and genuine expiry acceptance remain pending; required database CI test under repair.",
+      "blockerClass": "UNVERIFIED",
+      "owner": "Agent: remaining CI/security validation; account owner: supported real iPhone consent/session test when device available.",
+      "nextAction": "Preserve both grants; complete remaining acceptance and exact production release review. No repeat basic consent or disconnect approval needed.",
       "console": "https://www.linkedin.com/developers/apps",
       "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
       "evidenceRef": "evidence/linkedin-tester-b-20261008.json",
       "ordinaryExternalPass": false,
       "additionalBlockers": [
-        "HUMAN_CONSENT",
-        "UNVERIFIED"
+        "UNVERIFIED",
+        "TOOL_ACCESS"
       ],
       "historicalObservationBeforeConsoleRecovery": {
         "appIdentityAndOwnership": "Operator console requires sign-in; actual app/OIDC product unverified",
@@ -116,7 +116,9 @@
         "evidence/linkedin-tester-b-20261008.json",
         "evidence/preview-status-a2723673.json",
         "evidence/linkedin-tester-b-fresh-session-20261008.json",
-        "evidence/linkedin-tester-b-lifecycle-20261008.json"
+        "evidence/linkedin-tester-b-lifecycle-20261008.json",
+        "evidence/preview-status-dd199b02.json",
+        "evidence/linkedin-tester-b-reconnect-dd199b02.json"
       ],
       "freshSessionEvidence": "evidence/linkedin-tester-b-fresh-session-20261008.json",
       "historicalObservationBeforeAuthorizedDisconnect": {
@@ -125,7 +127,10 @@
         "nextAction": "Approve prepared Tester B disconnect/reconnect test; owner performs any provider consent. Then live cross-tenant negative checks and real iPhone Safari. Keep genuine token aging pending. No repeat initial consent or preview approval required.",
         "failureStep": "Original false identity BLOCKED status repaired and verified on exact preview source; no current exchange failure."
       },
-      "lifecycleEvidence": "evidence/linkedin-tester-b-lifecycle-20261008.json"
+      "lifecycleEvidence": "evidence/linkedin-tester-b-lifecycle-20261008.json",
+      "currentPreviewEvidence": "evidence/preview-status-dd199b02.json",
+      "connectionEvidenceSourceBoundary": "Current dd199b02 B normal-UI reconnect, same original subject/connection/workspace, minimum validated grant and reload PASS. Prior genuinely new Rafii session evidence remains a2723673; no new post-reconnect login claimed.",
+      "reconnectEvidence": "evidence/linkedin-tester-b-reconnect-dd199b02.json"
     },
     {
       "provider": "threads",
@@ -466,11 +471,12 @@
     "desktop and real iPhone Safari"
   ],
   "latestConsoleObservationAt": "2026-10-07T07:26:52.475Z",
-  "latestEvidenceRef": "evidence/linkedin-tester-b-lifecycle-20261008.json",
-  "latestLiveObservationAt": "2026-10-08T02:44:03.580154+00:00",
+  "latestEvidenceRef": "evidence/preview-status-dd199b02.json",
+  "latestLiveObservationAt": "2026-10-08T03:11:35.515828+00:00",
   "ordinaryExternalConnectionObservedProviders": 1,
   "countDefinitions": {
     "ordinaryExternalConnectionObservedProviders": "At least one non-Founder user with attested no provider-app role completed real minimum consent/exchange/identity and reload on this preview.",
     "verifiedOrdinaryExternalProviders": "Full required lifecycle, tenancy, desktop/iPhone and release acceptance; this count remains zero."
-  }
+  },
+  "latestPreviewObservationAtUtc": "2026-10-08 02:51:34 UTC"
 }

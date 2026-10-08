@@ -113,6 +113,21 @@ class FrontierSQL(unittest.TestCase):
             cur.execute('SELECT * FROM pr_trend_jobs WHERE scope_key=%s AND job_id=%s',(self.scope,jid))
             return row(cur)
 
+    def maintenance_pass(self, *, after=None):
+        # The worker scans all scopes in bounded pages. Follow its documented
+        # cursor instead of assuming this fixture sorts into the first page.
+        cancelled = 0
+        while True:
+            receipt = self.engine.maintenance(after=after)
+            self.assertEqual(receipt['status'], 'ok')
+            cancelled += receipt['cancelled']
+            next_key = receipt['next_key']
+            if next_key is None:
+                return cancelled
+            if after is not None:
+                self.assertGreater(next_key, after, 'maintenance cursor must advance')
+            after = next_key
+
     def fetch(self, sql, args=()):
         with self.connect() as db: return db.execute(sql,args).fetchone()
 
@@ -230,12 +245,27 @@ class FrontierSQL(unittest.TestCase):
         with self.assertRaisesRegex(C.ContractError,'frontier_reservation_required'): self.engine.dispatch_context(claim)
 
     def test_source_deletion_cancels_query_and_purges_dependent_audit(self):
-        d = self.admitted(self.produce([self.proposal()]))
+        produced = self.produce([self.proposal()])
+        d = self.admitted(produced)
+        sample = self.admitted(produced, 'keyword_independent_sample')
+        # A full valid page sorts before the request under test even when this
+        # workspace is first. The default worker page must not reach it yet.
         with self.connect() as db:
+            for i in range(100):
+                db.execute('''INSERT INTO pr_trend_outbox(scope_key,event_id,event_key,event_type,node_id,payload)
+                    SELECT scope_key,%s,%s,event_type,node_id,payload FROM pr_trend_outbox
+                    WHERE scope_key=%s AND payload->>'record'='allocation' LIMIT 1''',
+                    (str(uuid.uuid4()), 'frontier-allocation:'+format(i, '064x'), self.scope))
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertEqual(self.engine.maintenance()['cancelled'],1)
+        first_page = self.engine.maintenance()
+        self.assertIsNotNone(first_page['next_key'])
+        self.assertEqual(self.job(d['job_id'])['state'], 'queued')
+        self.assertGreaterEqual(self.maintenance_pass(after=first_page['next_key']), 1)
+        self.assertEqual(self.job(d['job_id'])['state'], 'cancelled')
         self.assertEqual(self.job(d['job_id'])['payload'],{})
+        self.assertEqual(self.job(sample['job_id'])['state'], 'queued')
+        self.assertTrue(self.job(sample['job_id'])['payload'])
         # The suite intentionally shares an isolated database and earlier tests
         # leave many independently purgeable nodes. This assertion is about the
         # revoked dependency cascade, not the worker's 100-row page boundary.
@@ -243,13 +273,16 @@ class FrontierSQL(unittest.TestCase):
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
     def test_revoked_policy_cannot_read_dispatch_or_retain_query(self):
-        d = self.admitted(self.produce([self.proposal()]))
+        produced = self.produce([self.proposal()])
+        d = self.admitted(produced)
         with self.connect() as db:
             db.execute('UPDATE pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s AND provider_id=%s',(self.scope,self.provider))
         with self.assertRaises(C.ContractError): self.engine.report(self.scope,self.provider,self.version)
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertEqual(self.engine.maintenance()['cancelled'],2)
-        self.assertEqual(self.job(d['job_id'])['payload'],{})
+        self.assertGreaterEqual(self.maintenance_pass(), 2)
+        for job_id in produced['jobs']:
+            self.assertEqual(self.job(job_id)['state'], 'cancelled')
+            self.assertEqual(self.job(job_id)['payload'], {})
 
     def test_private_evidence_never_becomes_a_cross_scope_parent(self):
         first = self.admitted(self.produce([self.proposal()]))

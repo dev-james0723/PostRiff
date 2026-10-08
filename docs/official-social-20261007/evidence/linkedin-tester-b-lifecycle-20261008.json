@@ -1,6 +1,6 @@
 {
-  "observedAt": "2026-10-08T02:44:03.580154+00:00",
-  "execution": "REAL approved disconnect PASS; two over-ten-minute callback returns safely rejected; no new grant saved",
+  "observedAt": "2026-10-08T03:11:35.515828+00:00",
+  "execution": "REAL approved disconnect and same-account minimum-scope reconnect PASS across approved preview revisions; full acceptance remains PARTIAL",
   "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
   "deploymentId": "dpl_3DTXnHyuRyjMVLqVhAGiSE92C6Hh",
   "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
@@ -108,16 +108,38 @@
         "sha256": "a2dc7157e27d5319d44d76b73e6a7d1475553dd65f28d33f53a2905f5586f420",
         "redaction": "Collapsed sidebar; no email, credential, code, state or verifier visible."
       }
+    },
+    {
+      "refMd5": "a9a6fca143a45895831e476837b3e6ff",
+      "createdAt": "2026-10-08T03:07:17.067020Z",
+      "expiresAt": "2026-10-08T03:17:17.067020Z",
+      "consumedAt": "2026-10-08T03:07:37.560963Z",
+      "outcome": "exchanged",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "state": "PASS_SAME_ACCOUNT_RECONNECTED",
+      "sourceSha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+      "deploymentId": "dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k",
+      "actualScopes": [
+        "openid",
+        "profile"
+      ],
+      "tokenSavedEncrypted": true,
+      "sameOriginalAccountConnectionWorkspace": true,
+      "evidenceRef": "linkedin-tester-b-reconnect-dd199b02.json"
     }
   ],
-  "currentCustomerConnection": "DISCONNECTED_OWNER_START_REQUIRED",
+  "currentCustomerConnection": "CONNECTED_IDENTITY_ONLY",
   "fullAcceptance": "PARTIAL",
   "pending": [
-    "same-account reconnect completion",
-    "live unauthorized tenant rejection",
-    "real iPhone Safari",
-    "genuine expiry/reauthorization"
+    "live unauthorized tenant-negative requests",
+    "real iPhone Safari redirect/session restoration",
+    "genuine time-dependent expiry/reauthorization",
+    "production release authorization and verification"
   ],
   "security": "No token, code, state, verifier, password, cookie, email or raw customer identifier retained.",
-  "nextAction": "Finish validated preview update, leave normal Account only selection before OAuth start; owner clicks Continue when ready and completes LinkedIn consent within ten minutes. Same-account/workspace proof remains required."
+  "nextAction": "Preserve connected B/A grants; finish required CI repair, live tenant-negative and real iPhone checks. Do not repeat disconnect or owner consent merely to refresh evidence.",
+  "completedReconnectEvidence": "linkedin-tester-b-reconnect-dd199b02.json"
 }

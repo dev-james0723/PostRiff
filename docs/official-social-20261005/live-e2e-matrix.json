@@ -9,7 +9,7 @@
       "execution": "real provider API",
       "state": "PARTIAL",
       "evidence": "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
-      "externalBlocker": "Historical ordinary B minimum connection/reload/fresh session PASS retained. Approved disconnect/revocation passed and A remains connected. Two callbacks expired safely; B must start fresh Account only when ready and complete consent within ten minutes. Live tenant-negative/iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
+      "externalBlocker": "Ordinary B minimum connection/reload/fresh session, approved disconnect, and current dd199b02 same-account/workspace reconnect/reload PASS. Live tenant-negative, real iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
       "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
@@ -19,7 +19,7 @@
       },
       "blockerClass": [
         "UNVERIFIED",
-        "HUMAN_CONSENT"
+        "TOOL_ACCESS"
       ],
       "historicalObservationBeforeTesterA": {
         "state": "NOT_RUN",
@@ -45,8 +45,9 @@
       "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
       "freshSessionEvidence": "../official-social-20261007/evidence/linkedin-tester-b-fresh-session-20261008.json",
       "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
-      "disconnectReconnect": "APPROVED_DISCONNECT_PASS_OWNER_START_REQUIRED",
-      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session"
+      "disconnectReconnect": "PASS_SAME_ACCOUNT_WORKSPACE_MINIMUM_GRANT",
+      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session",
+      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json"
     },
     {
       "provider": "linkedin",
@@ -54,7 +55,7 @@
       "execution": "real provider API",
       "state": "PARTIAL",
       "evidence": "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
-      "externalBlocker": "Historical ordinary B minimum connection/reload/fresh session PASS retained. Approved disconnect/revocation passed and A remains connected. Two callbacks expired safely; B must start fresh Account only when ready and complete consent within ten minutes. Live tenant-negative/iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
+      "externalBlocker": "Ordinary B minimum connection/reload/fresh session, approved disconnect, and current dd199b02 same-account/workspace reconnect/reload PASS. Live tenant-negative, real iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
       "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
@@ -64,7 +65,7 @@
       },
       "blockerClass": [
         "UNVERIFIED",
-        "HUMAN_CONSENT"
+        "TOOL_ACCESS"
       ],
       "historicalObservationBeforeTesterA": {
         "state": "NOT_RUN",
@@ -90,8 +91,9 @@
       "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
       "freshSessionEvidence": "../official-social-20261007/evidence/linkedin-tester-b-fresh-session-20261008.json",
       "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
-      "disconnectReconnect": "APPROVED_DISCONNECT_PASS_OWNER_START_REQUIRED",
-      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session"
+      "disconnectReconnect": "PASS_SAME_ACCOUNT_WORKSPACE_MINIMUM_GRANT",
+      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session",
+      "reconnectEvidence": "../official-social-20261007/evidence/linkedin-tester-b-reconnect-dd199b02.json"
     },
     {
       "provider": "linkedin",

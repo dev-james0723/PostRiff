@@ -1,0 +1,90 @@
+{
+  "observedAtUtc": "2026-10-08T03:15:54.876940+00:00",
+  "execution": "REAL Depot disposable PostgreSQL, synthetic providers only; no provider call/customer data",
+  "initialRequiredGate": {
+    "runId": "37719377128",
+    "jobId": "113123253272",
+    "headSha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+    "testedMergeSha": "25abc59717544238058d6c4861efdb55463c51b1",
+    "treeSha": "a9a1e142e02a647a1930d71647ce77ade33e8d0b",
+    "headAndMergeTreesEqual": true,
+    "artifactId": 11526160931,
+    "artifactSha256": "cca5ee6cbc29eca389394c2645273fed03cfaf01ab0102abd11730cba0d6c812",
+    "failure": "FrontierSQL.test_source_deletion_cancels_query_and_purges_dependent_audit expected cancellation on first default 100-row page; shared UUID-sorted fixtures can put its event on a later page."
+  },
+  "change": "Test-only cursor traversal, deterministic 100 valid preceding events, exact job cancellation/payload removal and preservation of valid sample. Also fix identical first-page assumption in revoked-policy test. Existing cloud shell gains a focused regression mode.",
+  "productionCleanupChanged": false,
+  "productionLimitsChanged": false,
+  "validation": {
+    "initialMappingUnavailable": {
+      "runId": null,
+      "runUrl": null,
+      "exitCode": 2,
+      "sourceHead": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+      "startedAt": "2026-10-08T03:07:16.846365+00:00",
+      "elapsedSeconds": 32.558,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T030749342453Z-test.json",
+      "sourceFingerprint": "0c022eedab458af8800486eaf74de1b5dd8320063d7eeefc0045c057e92d2fcf",
+      "patchSha256": "969a9125d60f2dc3ce6cd430928caa732bd864fe83cacd31b84a66b8b3bc8d46",
+      "patchBytes": 585671
+    },
+    "fixtureCursorError": {
+      "runId": "6fv5qc4kxj",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6fv5qc4kxj",
+      "exitCode": 1,
+      "sourceHead": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+      "startedAt": "2026-10-08T03:10:17.258026+00:00",
+      "elapsedSeconds": 74.099,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T031131253731Z-test.json",
+      "sourceFingerprint": "8792297b4c4dc76f6c3f8d55b301697cbf1ba95e640a3d800755386c31c54523",
+      "patchSha256": "65f9139998f31d734561212268efd0ad3adeaf04dc9cb8c6cfb4b663505cc236",
+      "patchBytes": 585685
+    },
+    "validRed": {
+      "runId": "vx92wxbfxq",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/vx92wxbfxq",
+      "exitCode": 1,
+      "sourceHead": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+      "startedAt": "2026-10-08T03:12:17.573830+00:00",
+      "elapsedSeconds": 71.387,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T031328911348Z-test.json",
+      "sourceFingerprint": "a5c5befc6ea7e83007a59d8a91a55401677160997d7e7d29def27d3549bb0151",
+      "patchSha256": "b8db51ed157ce901f876ea3fe677594548ec966d7536a87a88ba7151b855da0b",
+      "patchBytes": 585687
+    },
+    "green": {
+      "runId": "cqvwgc0ssf",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/cqvwgc0ssf",
+      "exitCode": 0,
+      "sourceHead": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+      "startedAt": "2026-10-08T03:13:51.728230+00:00",
+      "elapsedSeconds": 81.899,
+      "receiptLocal": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T031513552138Z-test.json",
+      "sourceFingerprint": "71e349e64c6714827cae6f86c2f94e0530f0dbe40600785f2ab159ee9f85ce55",
+      "patchSha256": "07d621d7fed03d958345eb9acbdedcf2e125825e6a04aec922028eb472255c05",
+      "patchBytes": 588806
+    }
+  },
+  "reproduction": {
+    "validRed": {
+      "tests": 37,
+      "failures": 1,
+      "errors": 0,
+      "skips": 0
+    },
+    "green": {
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "incidentalFirstReproduction": "An initial synthetic filler used invalid cursor keys and caused one additional fixture error; corrected to canonical frontier-allocation digest keys before the valid red/green pair. No production contract relaxed."
+  },
+  "validatedFileSha256": {
+    "tests/test_trend_frontier.py": "349efc0528815543c9ea941f89ecb66a06f42e40a446159570f5908cdf3db5fe",
+    "scripts/social-validation-cloud.sh": "b131fac04df089bb5b9a38879c871c344b891b5d54f0d39a0a13321700033799"
+  },
+  "jcbMapping": "Reviewed one-argument temporary config/workflow generated via official jcb setup; both restored byte-for-byte after remote runs. No cloud guard bypass or local heavy fallback.",
+  "localValidation": "JSON/CSV preservation, Python AST, bash -n and git diff --check only. Existing unrelated heavyweight process observed by JCB was preserved; not launched by this task.",
+  "next": "Commit/push scoped changes to already-authorized PR/preview; observe required GitHub checks. No production release authorization."
+}

@@ -1,0 +1,144 @@
+{
+  "observedAtUtc": "2026-10-08T03:11:35.515828+00:00",
+  "execution": "REAL protected preview deployment/source/UI verification; B same-account reconnect and reload PASS",
+  "implementation": {
+    "sha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+    "codeCommit": "a7da3b62299f51e737aa2803750023a0b389fa18",
+    "branch": "codex/social-connection-recovery-20261007",
+    "remote": "dev-james0723/PostRiff",
+    "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "prState": "OPEN DRAFT"
+  },
+  "deployment": {
+    "id": "dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "state": "READY",
+    "sha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+    "branch": "codex/social-connection-recovery-20261007",
+    "url": "postriff-phase2-private-p9zsj8wik-jamesau0723-6572s-projects.vercel.app",
+    "target": null
+  },
+  "previewAlias": {
+    "alias": "postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "deploymentId": "dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k"
+  },
+  "productionAlias": {
+    "alias": "postriff-phase2-private.vercel.app",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "deploymentId": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en"
+  },
+  "productionSource": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+  "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "browser": {
+    "testerA": {
+      "connection": "Connected — publishing not enabled.",
+      "identityTimestamp": "Verified 42 minutes ago",
+      "evidence": "Latest real read at 2026-10-08T02:05:07.171633Z; old operation evidence was not renewed by this read.",
+      "reloadOnNewDeployment": true,
+      "screenshotLocal": "/private/tmp/rafii-linkedin-a-dd199b02.jpg",
+      "screenshotSha256": "20fc0c283bef22c108922a6aaa36718f49f8372ddee22482c8902b0a848fe6a6",
+      "redaction": "No email, credential, OAuth code/state, cookie or verifier visible.",
+      "newDeploymentLiveIdentityRead": {
+        "state": "PASS",
+        "at": "2026-10-08T02:59:01.437137Z",
+        "auditRefMd5": "80524bc206c451e12492fb525017ec39",
+        "workspaceRefMd5": "a58131ee20e1ece4c84521a0f93c264b",
+        "actorRefMd5": "58c6b0a690cf020e176488f6b2edbb33",
+        "connectionRefMd5": "73f65b0074242d0fb7ab3cf1866af5f1",
+        "accountRefMd5": "c6ab7097b2851aa1d71208285a23fbab",
+        "serverState": "read_verified",
+        "actualScopes": [
+          "openid",
+          "profile",
+          "w_member_social"
+        ],
+        "encryptedAccessPresent": true,
+        "revoked": false,
+        "ui": "Connected — publishing not enabled; Verified 3 seconds ago",
+        "screenshotLocal": "/private/tmp/rafii-linkedin-a-reverified-dd199b02.jpg",
+        "screenshotSha256": "31f91d7d23737adb32d92575b6b0af2c2a7aac74f076c23c1b098ab23b631a14",
+        "screenshotSavedAt": "2026-10-08T02:59:19.649020+00:00",
+        "effect": "Only existing grant introspection/member identity read. No refresh, publishing or broader permission."
+      }
+    },
+    "testerB": {
+      "connection": "CONNECTED_IDENTITY_ONLY",
+      "ui": "Connected — publishing not enabled. Verified 1 minute ago; 2 permissions.",
+      "newTransactionStartedByAgent": false,
+      "ownerCompletedConsent": true,
+      "reconnectEvidence": "linkedin-tester-b-reconnect-dd199b02.json",
+      "reloadOnNewDeployment": true,
+      "screenshotLocal": "/private/tmp/rafii-linkedin-b-reconnected-dd199b02.jpg",
+      "screenshotSha256": "39fa6342a65c04320dbbf949b58ba74fcb7768f9d2f4fcf09ab644f55f494e74",
+      "redaction": "Collapsed sidebar; no email, OAuth code/state, token, cookie, password or verifier visible."
+    }
+  },
+  "validation": {
+    "depotCI": {
+      "runId": "7m9ltm43nd",
+      "exitCode": 0
+    },
+    "depotBrowser": {
+      "runId": "xhlskmbhtk",
+      "exitCode": 0
+    },
+    "sourceFingerprint": "d5516ac01c16181914a44e467a46adcba61b2804bf21f03e4b868e8c757f9f1d",
+    "sourceFilesReceipt": "identity-verification-time-a7da3b62.json",
+    "local": "Only focused Python regression, git/schema/file hash checks; no local heavy execution."
+  },
+  "github": {
+    "requiredReleaseRun": "37719377128",
+    "state": "FAILED_RELEASE_GATE_UNDER_REPAIR",
+    "growthStudio": {
+      "runId": "37719377074",
+      "firstAttempt": "FAILED",
+      "testedMergeSha": "25abc59717544238058d6c4861efdb55463c51b1",
+      "failure": "Turbopack restore panic aborted Next development server; missing chunks and timeout followed.",
+      "artifactId": 11525361496,
+      "artifactSha256": "94aa0e2de54a879ae9b2644981b0132173c0128d3cfd247509524bd09b7870f6",
+      "artifactLocal": "/private/tmp/rafii-growth-dd199b02.zip",
+      "retry": {
+        "attempt": 2,
+        "conclusion": "success",
+        "jobId": 113124676761,
+        "sourceSha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba"
+      }
+    },
+    "releaseFailure": {
+      "runId": "37719377128",
+      "jobId": "113123253272",
+      "stage": "Disposable DB integration, migrations and restore",
+      "test": "test_trend_frontier.FrontierSQL.test_source_deletion_cancels_query_and_purges_dependent_audit",
+      "error": "Expected one cancellation on the first default 100-row page; observed zero. Shared fixtures can sort beyond it. Focused deterministic reproduction and test-only cursor repair in progress.",
+      "artifactId": 11526160931,
+      "artifactSha256": "cca5ee6cbc29eca389394c2645273fed03cfaf01ab0102abd11730cba0d6c812",
+      "artifactLocal": "/private/tmp/rafii-local-gates-dd199b02.zip"
+    }
+  },
+  "qualification": {
+    "ordinaryExternalMinimumConnectionObservedProviders": 1,
+    "observationDeployment": "dd199b02: B same-account minimum-scope reconnect and reload; prior fresh-session proof retained separately",
+    "ordinaryExternalFullAcceptanceProviders": 0,
+    "currentBConnection": "CONNECTED_IDENTITY_ONLY",
+    "capabilities": 205,
+    "liveCases": 196,
+    "livePartial": 2,
+    "liveNotRun": 194,
+    "livePassed": 0,
+    "otherOperationsPromoted": false
+  },
+  "release": {
+    "authorization": "Existing push/PR/preview and exact LinkedIn preview plan applied; production merge/deploy, DDL, other provider configuration, review submission and X spending remain unauthorized.",
+    "rollback": "Prior READY preview dpl_3DTXnHyuRyjMVLqVhAGiSE92C6Hh / a2723673; preserve credential key and grants. No rollback performed."
+  },
+  "continuation": {
+    "sessionId": "01a114a0-509b-7a43-a3bc-8f52d884ea1a",
+    "revision": 469,
+    "phase": "LinkedIn ordinary-user lifecycle and preview verification",
+    "next": "Finish scoped PostgreSQL paging regression and required remote CI. B/A are connected; no repeat owner consent/disconnect. Real iPhone/live tenant-negative and genuine expiry remain pending.",
+    "tokenPilot": "Known durable registry cap; preserve other sessions and use scoped receipt fallback.",
+    "tokenCostCounters": "unknown; no savings claimed."
+  },
+  "secretSafety": "No token, secret, code, state, verifier, password, cookie, email or raw customer identifier retained."
+}

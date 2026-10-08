@@ -31,6 +31,20 @@ if [ "${1:-}" = --history-import-regression ]; then
     exit "$jcb_social_history_status"
   fi
 fi
+# Reproduce the required release gate's paged cleanup contract in isolation.
+if [ "${1:-}" = --frontier-regression ]; then
+  cd -- "$jcb_social_root"
+  export PYTHONPATH="$jcb_social_root/src:$jcb_social_root/tests"
+  if ! command -v pg_config >/dev/null; then
+    sudo -n apt-get -qq update
+    sudo -n apt-get -y -qq install postgresql
+  fi
+  export POSTRIFF_PG_BIN="$(pg_config --bindir)"
+  sudo -n mkdir -p /var/run/postgresql
+  sudo -n chmod 1777 /var/run/postgresql
+  python scripts/postriff_pg_suite.py postgres_trend_frontier
+  exit 0
+fi
 jcb_social_connection_only=0
 case "${1:-}" in
   --connection-regression) jcb_social_connection_only=1 ;;
