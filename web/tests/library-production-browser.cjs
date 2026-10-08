@@ -155,6 +155,8 @@ const checks=[];
    await sourceReviewLink.click();await page.waitForURL(/\/app\/ideas\?source=/);
    await page.locator('[data-tour="ideas-facts"]').getByText('Finger exercises',{exact:false}).waitFor({timeout:15000});
    await page.getByRole('heading',{name:'How it may be used',exact:true}).waitFor();
+   await page.getByText(doc.sha256,{exact:true}).waitFor();
+   await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).click();

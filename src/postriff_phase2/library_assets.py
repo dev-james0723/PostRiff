@@ -549,7 +549,7 @@ class UniversalLibrary:
             self.service.commands.engine._apply(state,'source',{'kind':'text','title':a['displayTitle'] or a['originalFilename'],'text':text})
             source=state['sources'][-1]
             source_id_value=source['id']
-            source.update(origin={'kind':'library','assetId':i,'sha256':a['sha256'],'locator':'extracted text','clipped':len(detail['extractedText'])>19000},sourcePolicy='rewrite_approval',egressConsent=['local'])
+            source.update(origin={'kind':'library','assetId':i,'sha256':a['sha256'],'filename':a['originalFilename'],'locator':'extracted text','clipped':len(detail['extractedText'])>19000},sourcePolicy='rewrite_approval',egressConsent=['local'])
             selected['id']=source_id_value
             return state
         selected={}
