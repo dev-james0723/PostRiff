@@ -7,6 +7,9 @@ The child has no credentials, no Internet sockets, bounded CPU/memory/output,
 an isolated disposable Office profile, disabled macros and disabled link updates.
 """
 import io
+import json
+import logging
+import re
 import os
 from pathlib import Path
 import shutil
@@ -84,7 +87,9 @@ def render(raw, extension, page_number=1, metadata=False):
                 raw = _safe_html(source).encode(); ext = 'html'
             source = work / ('source.'+ext)
             source.write_bytes(raw)
-            executable = ROOT / 'office/program/soffice'
+            # Run the headless ELF directly: Vercel does not guarantee the shell
+            # wrapper's dirname/grep/uname utilities or its oosplash loader.
+            executable = ROOT / 'office/program/soffice.bin'
             command = str(executable) if executable.exists() else shutil.which('libreoffice')
             if not command:
                 raise RuntimeError('Document renderer unavailable')
@@ -94,9 +99,11 @@ def render(raw, extension, page_number=1, metadata=False):
                 fonts = work / 'fonts.conf'
                 fonts.write_text('<fontconfig><dir>'+str(ROOT / 'fonts')+'</dir><cachedir>'+str(work / 'font-cache')+'</cachedir></fontconfig>')
                 env['FONTCONFIG_FILE'] = str(fonts)
-            result = subprocess.run([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to','pdf','--outdir',str(work),str(source)], env=env, cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45, check=False)
+            result = subprocess.run([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to','pdf','--outdir',str(work),str(source)], env=env, cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45, check=False)
             output = work / 'source.pdf'
             if result.returncode or not output.exists() or output.stat().st_size > 32*1024*1024:
+                missing = re.findall(rb'([A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*): cannot open shared object file', result.stderr)
+                logging.warning('Office renderer failed: exit=%s pdf_present=%s missing_libraries=%s', result.returncode, output.exists(), [name.decode('ascii') for name in missing])
                 raise ValueError('Document could not be rendered')
             pdf = output.read_bytes()
     with pdfium.PdfDocument(pdf) as doc:
@@ -135,6 +142,11 @@ def render_isolated(raw, extension, page_number=None):
     try:
         result, error_output = process.communicate(raw, timeout=60)
         if process.returncode or len(result)>3*1024*1024 or (page_number is None and not result.startswith(b'\xff\xd8')):
+            # Report only controlled process diagnostics, never document text or paths.
+            exceptions = re.findall(rb'^([A-Za-z]+(?:Error|Exception)):', error_output, re.MULTILINE)
+            codes = re.findall(rb'\[Errno ([0-9]+)\]', error_output)
+            office = re.findall(rb'Office renderer failed: exit=(-?[0-9]+) pdf_present=(True|False) missing_libraries=(\[[A-Za-z0-9_.+, \'-]*\])', error_output)
+            logging.warning('Library renderer failed: exit=%s exceptions=%s errno=%s office=%s', process.returncode, [v.decode('ascii') for v in exceptions], [v.decode('ascii') for v in codes], [[v.decode('ascii') for v in row] for row in office])
             raise ValueError('First-page preview unavailable (renderer exit '+str(process.returncode)+')')
         if page_number is not None:
             import json, base64

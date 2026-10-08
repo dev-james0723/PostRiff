@@ -75,7 +75,7 @@ class FirstPageRendering(unittest.TestCase):
         from pathlib import Path
         from library_samples import office
         from postriff_phase2.library_preview import ROOT
-        executable=ROOT/'office/program/soffice'
+        executable=ROOT/'office/program/soffice.bin'
         command=str(executable) if executable.exists() else shutil.which('libreoffice')
         for source_ext,targets in [('docx',['doc','odt','rtf']),('xlsx',['xls','ods']),('pptx',['ppt','odp'])]:
             for target in targets:

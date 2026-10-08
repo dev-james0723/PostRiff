@@ -14,13 +14,15 @@ import tempfile
 import urllib.request
 
 VERSION = '26.2.6'
+BUNDLE_REVISION = VERSION + '-elf-closure-2'
+DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
 SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
 
 def main():
     if os.uname().sysname != 'Linux' or not shutil.which('dnf'):
         raise SystemExit('Renderer bundling requires the cloud Amazon Linux build image.')
     root = Path(__file__).resolve().parents[1] / '.document-runtime'
-    if (root / 'VERSION').exists() and (root / 'VERSION').read_text() == VERSION:
+    if (root / 'VERSION').exists() and (root / 'VERSION').read_text() == BUNDLE_REVISION:
         return
     root.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='rafii-renderer-build-') as work:
@@ -46,11 +48,27 @@ def main():
         if attempt == 3:
             raise SystemExit('Unresolved document runtime dependencies: ' + ', '.join(missing))
         subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', *['/usr/lib64/' + name for name in missing]], check=True)
+    absent_providers = ['/usr/lib64/' + name for name in DYNAMIC_PROVIDERS if not (Path('/usr/lib64') / name).is_file()]
+    if absent_providers:
+        subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', *absent_providers], check=True)
     shutil.copytree(office, root / 'office', dirs_exist_ok=True, symlinks=False)
     libdir = root / 'lib'
     libdir.mkdir(exist_ok=True)
-    pending = [p for p in (office / 'program').iterdir() if p.is_file() and ('.so' in p.name or p.name == 'soffice.bin')]
-    pending.append(Path('/usr/lib64/libseccomp.so.2'))
+    # Office opens plugins and helper executables after startup. Inspect every
+    # ELF rather than guessing from filename suffixes (oosplash has no .so).
+    pending = []
+    for binary in (office / 'program').rglob('*'):
+        if binary.is_file():
+            with binary.open('rb') as source:
+                if source.read(4) == b'\x7fELF':
+                    pending.append(binary)
+    # NSS opens these crypto/token providers dynamically; ldd cannot discover
+    # them from libnss3. Include their ordinary transitive dependencies too.
+    for name in DYNAMIC_PROVIDERS:
+        provider = Path('/usr/lib64') / name
+        if not provider.is_file():
+            raise SystemExit('Required runtime provider missing: ' + name)
+        pending.append(provider)
     seen = set()
     while pending:
         binary = pending.pop()
@@ -66,7 +84,7 @@ def main():
             if dep.name not in {'libc.so.6', 'libm.so.6', 'libdl.so.2', 'libpthread.so.0', 'librt.so.1', 'libresolv.so.2'}:
                 pending.append(dep)
     shutil.copytree('/usr/share/fonts', root / 'fonts', dirs_exist_ok=True, symlinks=False)
-    (root / 'VERSION').write_text(VERSION)
+    (root / 'VERSION').write_text(BUNDLE_REVISION)
     print('Runtime bundle bytes', sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))
     print('Bundled checksum-verified LibreOffice', VERSION)
 
