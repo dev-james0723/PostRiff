@@ -97,7 +97,7 @@ const checks=[];
     assert.ok(videoAsset,`uploaded video missing from Library listing: ${JSON.stringify(videoListing)}`);
     const posterResponse=await context.request.get(base+'/api/workspaces/'+ws+'/media/'+videoAsset.id,{headers});
     assert.equal(posterResponse.status(),200,await posterResponse.text());
-    assert.match(posterResponse.headers()['content-type']||'','image/jpeg');
+    assert.equal(posterResponse.headers()['content-type'],'image/jpeg');
     generatedPoster=await posterResponse.body();
     assert.ok(generatedPoster.length>100,'video upload must produce a non-empty JPEG poster');
    }
