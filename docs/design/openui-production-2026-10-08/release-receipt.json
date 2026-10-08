@@ -3,7 +3,7 @@
   "scope": "Rafii x OpenUI full release: C01-C10, J01-J09, consumer chat/panel/expanded/mobile/browser voice + founder surface",
   "final_commit_sha": null,
   "merge_sha": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/dev-james0723/PostRiff/pull/137",
   "ci_results": [],
   "deployment_id": null,
   "deployment_sha": null,
@@ -29,11 +29,12 @@
     }
   ],
   "feature_flag_state": {
-    "RAFII_GENUI_ENABLED": null,
-    "RAFII_GENUI_ACTIONS_ENABLED": null,
-    "RAFII_GENUI_EDITS_ENABLED": null,
-    "RAFII_GENUI_FOUNDER_ENABLED": null,
-    "RAFII_GENUI_WORKSPACES": null
+    "RAFII_GENUI_ENABLED": "1 (Production env set; inert until the GenUI build)",
+    "RAFII_GENUI_ACTIONS_ENABLED": "1",
+    "RAFII_GENUI_EDITS_ENABLED": "1",
+    "RAFII_GENUI_FOUNDER_ENABLED": "1",
+    "RAFII_GENUI_WORKSPACES": "one canary workspace (James's, 0ceb3635\u2026)",
+    "RAFII_GENUI_VALIDATOR_URL": "https://rafii.io (custom domain is exempt from deployment SSO protection)"
   },
   "eligible_audience": null,
   "journey_results": {
@@ -53,11 +54,15 @@
   "physical_device_evidence": null,
   "model_attempt_and_cost_summary": null,
   "rollback_deployment": {
-    "deployment_id": "dpl_9xGG8feQ6mxQHN8yQvm3Ygz6SpXd",
+    "deployment_id": "dpl_EVqE4ugSHbJoWkbmErhpqUDV48Cf",
     "sha": "65b1ea83",
-    "recorded_at": "2026-10-08T19:30:00-04:00",
-    "note": "rafii.io cutover build (65b1ea83 + rafii.io production env) by the domain-migration session; pre-cutover same code old env: dpl_Da8ay2PGHZ2JwG6Qo6tc5Tr7BGu2",
+    "recorded_at": "2026-10-08T20:00:00-04:00",
+    "note": "65b1ea83 + rafii.io env + RAFII_LEGACY_HOST_REDIRECT=temporary (domain-migration session)",
     "previous": [
+      {
+        "deployment_id": "dpl_9xGG8feQ6mxQHN8yQvm3Ygz6SpXd",
+        "sha": "65b1ea83"
+      },
       {
         "deployment_id": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
         "sha": "bb4ca5aa"
