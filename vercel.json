@@ -15,7 +15,7 @@
           "excludeFiles": "{.venv/**,.phase3-build-venv/**,.env*,broker.key,*.command,desktop/**,vendor/**,src/james_au_social/**,**/__pycache__/**,web/**,tests/**,docs/**,studio/**}"
         }
       },
-      "buildCommand": "python3 runtime/build_document_renderer.py"
+      "buildCommand": "python3 runtime/build_document_renderer.py && python3 runtime/provision_video_storage.py"
     },
     "rafii_phone_media": {
       "root": ".",
