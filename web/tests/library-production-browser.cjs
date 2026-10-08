@@ -28,7 +28,13 @@ const checks=[];
     const u=new URL(route.request().url()),r=await context.request.get(base+'/dev/storage'+u.pathname);
     return route.fulfill({status:r.status(),body:await r.body(),headers:{'Content-Type':r.headers()['content-type'],'Access-Control-Allow-Origin':'*'}});
    });
-   const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+   const page=await context.newPage(),errors=[],uploadTrace=[];
+   const relevantUploadUrl=value=>{try{const u=new URL(value);if(u.searchParams.has('token'))u.searchParams.set('token','[redacted]');return u.origin+u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch{return value}};
+   const isUploadRequest=request=>/\/library\/files(?:\/|\?|$)|devharness\.supabase\.co|\/dev\/upload\//.test(request.url());
+   page.on('pageerror',error=>errors.push(error.message));
+   page.on('request',request=>{if(isUploadRequest(request))uploadTrace.push({event:'request',method:request.method(),url:relevantUploadUrl(request.url())})});
+   page.on('response',response=>{if(isUploadRequest(response.request()))uploadTrace.push({event:'response',method:response.request().method(),url:relevantUploadUrl(response.url()),status:response.status()})});
+   page.on('requestfailed',request=>{if(isUploadRequest(request))uploadTrace.push({event:'requestfailed',method:request.method(),url:relevantUploadUrl(request.url()),failure:request.failure()?.errorText})});
    await page.goto(base+'/app/library');
    const welcome=page.getByRole('button',{name:'Not now',exact:true});
    try{await welcome.waitFor({state:'visible',timeout:5000});await welcome.click();await welcome.waitFor({state:'hidden',timeout:5000});}
@@ -47,7 +53,9 @@ const checks=[];
     if(doc&&doc.indexingStatus!=='pending')break;
     await new Promise(resolve=>setTimeout(resolve,250));
    }
-   assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}`);assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}`);
+   const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
+   assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
+   assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
    await page.getByRole('button',{name:'Save details',exact:true}).click();
