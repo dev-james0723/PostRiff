@@ -338,14 +338,16 @@ export class UiArtifactStream {
       return;
     }
     if (error && (error as { name?: string }).name === 'AbortError') return;
+    // A replay tail that closed normally (it had events or heartbeats) reconnects promptly and resets the failure count;
+    // failures back off exponentially with jitter, capped at 15 s, and stop after maxReconnects.
     if (progressed) this.attempts = 0;
-    this.attempts += 1;
-    const max = this.opts.maxReconnects ?? 8;
-    if (this.attempts > max) {
-      this.set('failed', { code: 'ui_stream_unreachable' });
-      return;
+    else {
+      this.attempts += 1;
+      if (this.attempts > (this.opts.maxReconnects ?? 8)) {
+        this.set('failed', { code: 'ui_stream_unreachable' });
+        return;
+      }
     }
-    // A replay tail that closed normally reconnects promptly; failures back off exponentially with jitter, capped at 15 s.
     const base = progressed ? 250 : Math.min(15_000, 500 * 2 ** (this.attempts - 1));
     const jitter = Math.floor((this.opts.random ?? Math.random)() * 250);
     this.set('reconnecting');
