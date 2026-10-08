@@ -145,5 +145,6 @@ test('only core/openui.ts imports @openuidev/react-lang and every Renderer opts 
   assert.ok(renderers.length >= 1);
   for (const r of renderers) assert.ok(r.ok, `${r.rel} renders OpenUI without publishObservability={false}`);
   const facade = fs.readFileSync(path.join(root, 'features/agent/generative-ui/core/openui.ts'), 'utf8');
-  assert.ok(facade.indexOf("import './openui-optout'") < facade.indexOf('@openuidev/react-lang'), 'devtools opt-out is imported first');
+  assert.ok(facade.includes("import './openui-optout'"), 'facade imports the devtools opt-out');
+  assert.ok(facade.indexOf("import './openui-optout'") < facade.indexOf("from '@openuidev/react-lang'"), 'devtools opt-out is imported first');
 });
