@@ -91,6 +91,9 @@ export default function PrivacyPage() {
       </p>
 
       <h2 id='retention'>6. Retention</h2>
+      <p>
+        For YouTube, the general table below has these exceptions: Inbox comment copies expire 30 days after their last fetch, and cached creator data, including analytics responses, expires at its configured time, no later than 30 days after refresh. Maintenance removes expired comment copies and caches, and downloaded reporting datasets ingested more than 30 days ago. These periods apply to Rafii's working copies; they do not delete the original content on YouTube.
+      </p>
       <table>
         <thead>
           <tr>
