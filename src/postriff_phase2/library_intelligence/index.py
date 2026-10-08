@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import math
 import uuid
 from collections import OrderedDict
@@ -48,14 +49,18 @@ QUERY_CACHE_SIZE = 256
 
 VECTOR_COLUMN_SQL = ("/* lib:vector-column */ SELECT 1 FROM information_schema.columns WHERE table_schema='public' "
                      "AND table_name='pr_library_embeddings' AND column_name='embedding'")
-SUPERSEDE_SQL = ("/* lib:embeddings-supersede */ UPDATE public.pr_library_embeddings SET status='superseded' WHERE workspace_id=%(w)s "
+SUPERSEDE_SQL = ("/* lib:embeddings-supersede */ UPDATE public.pr_library_embeddings SET status='superseded',superseded_at=now() WHERE workspace_id=%(w)s "
                  "AND version_key=%(vk)s AND modality=%(modality)s AND model_id=%(model)s AND status='active'")
 INSERT_SQL = ("/* lib:embeddings-insert */ INSERT INTO public.pr_library_embeddings(id,workspace_id,asset_key,version_key,segment_id,modality,model_id,"
               "dims,index_generation,consent_revision,status,embedding) VALUES(%(id)s,%(w)s,%(ak)s,%(vk)s,%(sid)s,%(modality)s,%(model)s,%(dims)s,"
               "%(gen)s,%(consent)s,'active',%(vec)s::vector)")
-TOMBSTONE_SQL = ("/* lib:embeddings-tombstone */ UPDATE public.pr_library_embeddings SET status=%(status)s WHERE workspace_id=%(w)s AND status='active' "
+TOMBSTONE_SQL = ("/* lib:embeddings-tombstone */ UPDATE public.pr_library_embeddings SET status=%(status)s,"
+                 "superseded_at=CASE WHEN %(status)s='superseded' THEN now() ELSE superseded_at END WHERE workspace_id=%(w)s AND status='active' "
                  "AND (asset_key=ANY(%(keys)s::text[]) OR version_key=ANY(%(keys)s::text[])) AND (%(modality)s::text IS NULL OR modality=%(modality)s) "
                  "AND (NOT %(cloud_only)s OR model_id NOT LIKE 'local/%%')")
+INACTIVE_SEGMENTS_SQL = ("/* lib:embeddings-inactive-segments */ UPDATE public.pr_library_embeddings e SET status='superseded',superseded_at=now() "
+                         "WHERE e.workspace_id=%(w)s AND e.version_key=%(vk)s AND e.status='active' AND e.segment_id IS NOT NULL AND EXISTS ("
+                         "SELECT 1 FROM public.pr_library_segments s WHERE s.id=e.segment_id AND s.workspace_id=e.workspace_id AND s.superseded_at IS NOT NULL)")
 SEGMENTS_FOR_EMBEDDING_SQL = ("/* lib:segments-for-embedding */ SELECT replace(id::text,'-',''),text FROM public.pr_library_segments "
                               "WHERE workspace_id=%(w)s AND version_key=%(vk)s AND superseded_at IS NULL ORDER BY ordinal LIMIT %(n)s")
 
@@ -202,6 +207,25 @@ def tombstone(cur, workspace_id, keys, *, status: str, modality: str | None = No
     return cur.rowcount or 0
 
 
+def tombstone_inactive_segments(cur, workspace_id, version_key: str) -> int:
+    """Supersede the active embeddings of this version whose passage was corrected or re-extracted. The corrected text is
+    embedded again by the next embed_text run. Cleanup inside its own savepoint: search's kNN independently refuses
+    embeddings of superseded passages, so a failure here only delays this cleanup and never resurfaces old wording or
+    aborts the caller's transaction."""
+    savepoint = _savepoint(cur, "lib_tombstone")
+    try:
+        cur.execute(INACTIVE_SEGMENTS_SQL, {"w": workspace_id, "vk": c.asset_key(version_key)})
+        changed = cur.rowcount or 0
+    except Exception as error:
+        if savepoint is None:
+            raise
+        _rollback(cur, savepoint)
+        print(json.dumps({"event": "library_intelligence.embedding_tombstone_failed", "error": type(error).__name__}), flush=True)
+        return 0
+    _release(cur, savepoint)
+    return changed
+
+
 # --- query embeddings ------------------------------------------------------------------------------------------------
 def providers_for(ctx):
     if "providers" not in ctx.caches:
@@ -331,14 +355,21 @@ def _combine_receipts(receipts):
             "usage": {"inputTokens": sum(tokens) if all(isinstance(t, int) for t in tokens) else None}, "cost": cost, "calls": len(receipts)}
 
 
-def _run_text(job) -> dict:
-    from . import policy
+def _job_member(job, name):
+    return job.get(name) if isinstance(job, dict) else getattr(job, name, None)
 
-    library = getattr(job, "library", None)
-    if library is not None:  # optional in-run recheck when the job runner supplies a LibraryContext
-        decision = policy.authorize_processing(library, job.version, "cloud", "embedding")
-        if not decision.allowed:
-            return _outcome("failed", error_code=decision.reason, detail=policy.message(decision.reason))
+
+def _may_continue(job) -> bool:
+    """Immediately before each provider call: job.recheck() re-authorizes cloud processing in a fresh short transaction
+    (worker A's JobContext); without it, job.heartbeat() at least confirms the lease was not cancelled or revoked."""
+    for name in ("recheck", "heartbeat"):
+        check = _job_member(job, name)
+        if callable(check):
+            return bool(check())
+    return True
+
+
+def _run_text(job) -> dict:
     prov = getattr(job, "providers", None) or providers_module.Providers()
     try:
         prov.require("embedding")
@@ -354,6 +385,9 @@ def _run_text(job) -> dict:
     embeddings, receipts = [], []
     for start in range(0, len(selected), EMBED_BATCH):
         batch = selected[start:start + EMBED_BATCH]
+        if not _may_continue(job):  # revoked or cancelled while running: send nothing more and keep nothing already made
+            return _outcome("blocked_permission", provider=_combine_receipts(receipts), error_code="library_processing_revoked",
+                            detail="Cloud processing is no longer allowed for this item.")
         try:
             result = prov.embed([s["text"] for s in batch], dims=TEXT_DIMS)
         except AlphaError as error:
