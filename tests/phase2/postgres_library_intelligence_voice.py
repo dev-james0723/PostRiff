@@ -338,27 +338,28 @@ check("grant revoke: no approved span remains", all(r[5] == "revoked" for r in v
 status, grant_b = route("POST", w1, ["grants"], "owner", {"grantType": "purpose", "purpose": "voice", "scope": {"kind": "asset", "assetId": note},
                                                           "attestation": WROTE})
 outcome_box = {}
-original_recheck = policy.recheck
+original_hold = voice.hold_workspace
 
 
-def recheck_after_concurrent_revoke(rctx_unused, decisions):
-    # Deterministic interleaving: the approval has passed its first check; another session commits the revoke before
-    # the approval's recheck runs (recheck reads the committed revision without holding a lock).
-    policy.recheck = original_recheck
+def revoke_before_hold(hctx):
+    # Deterministic interleaving: the approval has passed its first permission check; another session commits the revoke
+    # before the approval takes the workspace lock for its final recheck and write. (After the lock, a revoke would
+    # serialize behind the approval instead, and its propagation would withdraw the new span.)
+    voice.hold_workspace = original_hold
     with connection() as db, db.cursor() as cur:
         rctx = api.context(cur, OWNER, w1, service=service, now=clock[0])
         outcome_box["revoke"] = policy.revoke(rctx, grant_b["grantId"])
     outcome_box["interleaved"] = True
-    return original_recheck(rctx_unused, decisions)
+    return original_hold(hctx)
 
 
-policy.recheck = recheck_after_concurrent_revoke
+voice.hold_workspace = revoke_before_hold
 try:
     with ctx() as c1:
         expect_error("toctou: approval refused after the concurrent revoke",
                      lambda: voice.approve_voice_span(c1, ref, span(0, [P0, P1, P2]), "default", WROTE, uses=USES, confirmed=True), 403, "library_grant_required")
 finally:
-    policy.recheck = original_recheck
+    voice.hold_workspace = original_hold
 check("toctou: the revoke committed between the approval's check and its write", outcome_box.get("interleaved") is True and outcome_box.get("revoke"), outcome_box)
 check("toctou: nothing admitted", all(r[5] == "revoked" for r in voice_rows(w1))
       and not any(s.get("active") for s in samples_in(state_of(w1)[1])), voice_rows(w1))
