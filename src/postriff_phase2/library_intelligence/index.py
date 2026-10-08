@@ -259,8 +259,10 @@ def ledger_cursor(ctx):
 def possibly_billed(error) -> bool:
     """The provider answered 200 but the body was unusable, so the call may have been billed (settle as unknown, never as
     a free failure). Refusals, rate limits and timeouts are not billed."""
-    text = str(error).lower()
-    return isinstance(error, AlphaError) and error.code == "library_provider_failed" and ("unreadable" in text or "unexpected shape" in text)
+    if not isinstance(error, AlphaError):
+        return False
+    text = str(error).lower()  # legacy message match kept for any caller still raising the generic code
+    return error.code == "library_provider_unreadable" or (error.code == "library_provider_failed" and ("unreadable" in text or "unexpected shape" in text))
 
 
 def _settle_committed(ctx, settle, reservation, result, *, failed: bool):

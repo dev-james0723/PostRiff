@@ -156,7 +156,7 @@ class Providers:
         data = self._json(f"{GATEWAY}/embeddings", self._gateway_key(), {"model": model, "input": [t[:8000] for t in texts], "dimensions": dims, "encoding_format": "float"})
         vectors = [item.get("embedding") for item in sorted(data.get("data") or [], key=lambda x: x.get("index", 0))]
         if len(vectors) != len(texts) or any(not isinstance(v, list) or len(v) != dims for v in vectors):
-            raise AlphaError("The embedding provider returned an unexpected shape.", 502, code="library_provider_failed")
+            raise AlphaError("The embedding provider returned an unexpected shape.", 502, code="library_provider_unreadable")
         cost, provider = self._gateway_cost(data)
         tokens = (data.get("usage") or {}).get("prompt_tokens")
         if cost["kind"] == "unknown" and isinstance(tokens, int):
@@ -191,7 +191,7 @@ class Providers:
         try:
             data = json.loads(out)
         except ValueError:
-            raise AlphaError("The transcription provider returned an unexpected shape.", 502, code="library_provider_failed") from None
+            raise AlphaError("The transcription provider returned an unexpected shape.", 502, code="library_provider_unreadable") from None
         segments = []
         for s in data.get("segments") or []:
             try:
@@ -221,9 +221,9 @@ class Providers:
             parsed = json.loads(content) if isinstance(content, str) else content
         except (KeyError, IndexError, TypeError, ValueError):
             ai_call_events.attempt(provider="vercel-ai-gateway", model=model, workload=capability, latency_ms=latency, status="failed")
-            raise AlphaError("The provider returned an unreadable answer.", 502, code="library_provider_failed") from None
+            raise AlphaError("The provider returned an unreadable answer.", 502, code="library_provider_unreadable") from None
         if not isinstance(parsed, dict):
-            raise AlphaError("The provider returned an unreadable answer.", 502, code="library_provider_failed")
+            raise AlphaError("The provider returned an unreadable answer.", 502, code="library_provider_unreadable")
         cost, provider = self._gateway_cost(data)
         usage = data.get("usage") or {}
         if cost["kind"] == "unknown" and isinstance(usage.get("total_tokens"), int):
