@@ -289,6 +289,17 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
       .catch(() => undefined);
   };
 
+  /** `cursor` is reserved: it is the opaque page position (UiQueryV1.cursor), never a binding input. */
+  const splitCursor = (
+    raw: Record<string, JsonValue>,
+    explicit: string | null | undefined,
+  ): { inputs: Record<string, JsonValue>; cursor: string | null } => {
+    if (!hasOwn(raw, 'cursor')) return { inputs: raw, cursor: explicit ?? null };
+    const { cursor: fromArgs, ...rest } = raw;
+    const value = explicit !== undefined ? explicit : fromArgs;
+    return { inputs: rest, cursor: typeof value === 'string' && value.length > 0 && value.length <= 512 ? value : null };
+  };
+
   const read = async (
     name: string,
     rawInputs: Record<string, JsonValue>,
@@ -306,8 +317,8 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
     if (disposed || !artifact.accepted) {
       return localResult('unavailable', disposed ? 'This view is no longer open.' : 'This view is still being prepared.');
     }
-    const inputs: Record<string, JsonValue> =
-      rawInputs && typeof rawInputs === 'object' && !Array.isArray(rawInputs) ? rawInputs : {};
+    const split = splitCursor(rawInputs && typeof rawInputs === 'object' && !Array.isArray(rawInputs) ? rawInputs : {}, readOptions.cursor);
+    const inputs = split.inputs;
     let canonical: string;
     try {
       canonical = canonicalJson(inputs);
@@ -317,7 +328,7 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
     if (new TextEncoder().encode(canonical).length > BOUNDS.inputBytes) {
       return localResult('unavailable', 'This request was too large.');
     }
-    const cursor = readOptions.cursor ?? null;
+    const cursor = split.cursor;
     const key = cacheKey(name, inputs, cursor);
     const hit = cache.get(key);
     if (!active) {
@@ -391,6 +402,7 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
       return wrap(await read(name, call?.arguments ?? {}));
     },
   };
+
 
   return {
     toolProvider() {
