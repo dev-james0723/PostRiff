@@ -44,7 +44,7 @@ export function useJourneyEnvironment(): JourneyEnvironment {
  * local store (no model call, no network unless a Query depends on it); with a literal it keeps local field state.
  */
 export function useBound<T>(name: string, prop: unknown): { value: T | undefined; set: (value: T) => void; bound: boolean } {
-  const field = useStateField(name, prop as never) as { value: unknown; setValue: (value: unknown) => void; isReactive: boolean };
+  const field = useStateField<unknown>(name, prop);
   const value = field.value === null ? undefined : (field.value as T | undefined);
   return { value, set: (next: T) => field.setValue(next), bound: field.isReactive };
 }
