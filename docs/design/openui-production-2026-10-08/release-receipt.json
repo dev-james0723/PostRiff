@@ -21,8 +21,11 @@
   "migrations": [
     {
       "file": "migrations/postriff/102_agent_ui_artifacts.sql",
-      "applied_production": false,
-      "evidence": null
+      "sha256_prefix": "11ee1ee184d2597a",
+      "applied_production": true,
+      "method": "Supabase MCP apply_migration name=102_agent_ui_artifacts on buoyhkbodnhzngaotoel (begin/commit lines stripped; statements identical)",
+      "verified": "6 pr_ui_* tables, relrowsecurity+relforcerowsecurity true, 1 service_only policy each, has_table_privilege(authenticated, select)=false",
+      "announced_to": "domain-migration session, acked"
     }
   ],
   "feature_flag_state": {
