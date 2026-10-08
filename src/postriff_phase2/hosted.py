@@ -430,6 +430,9 @@ class HostedWorkspaceService:
         from .library_intelligence import LibraryIntelligence
         # Library intelligence (2026-10-08 package): search, understanding, organization and source packs over the same assets.
         self.library_intelligence = LibraryIntelligence(self)
+        from .library_intelligence import effects as library_effects
+        # Scheduled posts record Library usage; changed drafts get a quiet, debounced suggestion pass (savepoint, never raises).
+        self.repository.effects.append(library_effects.capture)
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is

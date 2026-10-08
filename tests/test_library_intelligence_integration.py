@@ -51,6 +51,36 @@ class WriterOrder(unittest.TestCase):
         self.assertTrue(written["media"])
 
 
+class Effects(unittest.TestCase):
+    def test_new_scheduled_job_records_usage_and_never_raises(self):
+        import os
+        from unittest import mock
+        from postriff_phase2.library_intelligence import effects, usage
+        calls = []
+        media = "a" * 32
+        before = {"phase2": {"jobs": []}, "variants": []}
+        after = {"phase2": {"jobs": [{"id": "job1", "manifest": {"platform": "Threads", "media": [{"id": media}, {"id": "../x"}]}}]}, "variants": []}
+        with mock.patch.object(usage, "record_usage", lambda cur, ws, a, v, kind, **kw: calls.append((a, kind, kw["dedup_key"], kw["channel"])) or {"recorded": True}), \
+                mock.patch.dict(os.environ, {"RAFII_LIBRARY_SUGGESTIONS_ENABLED": ""}):
+            effects.capture(FakeCursor(), "ws", before, after, "actor")
+        self.assertEqual(calls, [(media, "post_scheduled", f"schedule:job1:{media}", "Threads")], "only valid Library ids; deduplicated per job")
+
+        def boom(*_a, **_k):
+            raise RuntimeError("db down")
+        cur = FakeCursor()
+        with mock.patch.object(usage, "record_usage", boom):
+            effects.capture(cur, "ws", before, after, "actor")  # must not raise into the command
+        self.assertTrue(cur.sql(r"ROLLBACK TO SAVEPOINT library_intelligence_effects"))
+
+    def test_published_wrapper_calls_inner_first(self):
+        from unittest import mock
+        from postriff_phase2.library_intelligence import effects, usage
+        order = []
+        with mock.patch.object(usage, "record_usage", lambda *a, **k: order.append("usage") or {"recorded": True}):
+            effects.on_published(lambda cur, ws, job: order.append("inner"))(FakeCursor(), "ws", {"id": "j", "manifest": {"media": [{"id": "b" * 32}]}})
+        self.assertEqual(order, ["inner", "usage"])
+
+
 class OfficeXmlGuard(unittest.TestCase):
     def test_utf16_part_cannot_hide_a_doctype(self):
         import io

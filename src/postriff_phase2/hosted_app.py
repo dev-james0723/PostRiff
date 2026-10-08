@@ -236,7 +236,9 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    from .library_intelligence.effects import on_published as library_published
+    # Verified posts record which Library media they used (descriptive usage; never affects the publication).
+    worker = PostgresWorker(database, social=social, on_verified=library_published(with_time_back(on_verified, service.time_savings)))
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
