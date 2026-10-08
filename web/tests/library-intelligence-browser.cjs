@@ -138,6 +138,8 @@ async function openLibrary(page, query = '') {
         page.on('pageerror', (error) => errors.push(error.message));
         await openLibrary(page);
         const label = `${engine} ${spec.name}`;
+        // The first-view screenshot comes before any check, so a failing viewport still returns its picture.
+        await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}.png`) });
 
         // A059: one Add control, scope in plain words, compact chrome.
         check(`${label}: one Add control`, (await page.getByRole('button', { name: /^Add to Library|^Add ·/ }).count()) === 1);
@@ -165,15 +167,14 @@ async function openLibrary(page, query = '') {
         const digitsHidden = await page.evaluate(() => [...document.querySelectorAll('[data-slot="digit-swap"]')].every((node) => node.closest('[aria-hidden="true"]')));
         check(`${label}: animated digits are hidden from assistive tech`, digitsHidden);
 
-        // A059: the first meaningful item is on screen without scrolling (phone portrait target).
-        const first = await page.locator('[data-tour="library-card"] button[data-library-open]').first().boundingBox();
+        // A059: the first meaningful item is on screen without scrolling (phone portrait target). Measure the card's
+        // preview itself: audio and video cards put their inline player above the open button.
+        const first = await page.locator('[data-tour="library-card"]').first().locator('[data-library-thumbnail]').first().boundingBox();
         const tabBar = spec.mobile && spec.viewport.width < 768 ? await page.locator('nav[aria-label="Mobile navigation"]').boundingBox() : null;
         const limit = tabBar ? tabBar.y : spec.viewport.height;
         const firstVisible = Boolean(first) && first.y >= 0 && first.y + Math.min(first.width, first.height) <= limit;
         if (spec.name === 'phone-390x844') check(`${label}: first item preview visible without scrolling`, firstVisible, { first, limit });
         else checks.push({ name: `${label}: first item preview position (recorded)`, ok: true, detail: { first, limit, firstVisible } });
-
-        await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}.png`) });
 
         if (spec.name === 'phone-390x844' || spec.name === 'desktop-1440x900') {
           // Keyboard selection: Space selects, the batch bar appears only then, Escape clears.
