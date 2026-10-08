@@ -192,9 +192,15 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
       <div className={cn('relative flex min-h-0 flex-1 items-center justify-center', compact ? (video ? 'h-40 min-h-40' : 'min-h-20') : 'min-h-24')}>
         {video ? <>
           {posterUrl ? <Image src={posterUrl} alt='' fill unoptimized sizes={compact ? '320px' : '400px'} className='object-cover' /> : <Icons.video aria-hidden className='text-muted-foreground size-8' />}
+          {/* Uploaded originals do not provide a timed caption track. Never fabricate one;
+              audio transcripts can be imported/read through the asset details. */}
+          {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
           <video ref={node => { media.current = node; }} src={active ? source.data?.url : undefined} poster={posterUrl} muted={volume === 0} playsInline loop preload='metadata' aria-label={`Video preview of ${title}`} {...mediaEvents} className='absolute inset-0 h-full w-full object-contain' />
           <span className='rafii-glass pointer-events-none absolute top-2 left-2 rounded-full px-2 py-1 text-[10px] font-medium'>{volume === 0 ? 'Silent preview' : 'Video preview'}</span>
         </> : <>
+          {/* An audio-only upload has no timed captions; its optional imported transcript
+              remains available in details, rather than inventing synchronization. */}
+          {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
           <audio ref={node => { media.current = node; }} src={source.data?.url} preload={activated ? 'metadata' : 'none'} {...mediaEvents} />
           {waveform.data ? <svg viewBox='0 0 384 64' preserveAspectRatio='none' aria-label='Waveform decoded from the original audio' role='img' data-waveform-source='original-audio' className='mx-4 h-16 w-[calc(100%-2rem)]'>
             {waveform.data.map((peak, index) => <rect key={index} x={index * 4} y={32 - Math.max(1, peak * 56) / 2} width={2} height={Math.max(1, peak * 56)} rx={1} fill='currentColor' className={index / 96 <= progress ? 'text-foreground' : 'text-muted-foreground/50'} />)}

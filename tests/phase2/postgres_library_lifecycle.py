@@ -3,7 +3,7 @@ import runpy
 from pathlib import Path
 base=runpy.run_path(str(Path(__file__).with_name('postgres_library.py')))
 globals().update({k:v for k,v in base.items() if not k.startswith('__')})
-from library_samples import samples
+from library_samples import samples, viewer_pdf
 from postriff_phase2.library_extract import MIMES,AUDIO_MIMES
 from postriff_phase2.site_agent.tools import Context
 from postriff_phase2.site_agent.library_reads import library_read,library_search
@@ -22,6 +22,18 @@ for ext,raw in samples().items():
     if ext not in ('bin','wav') and detail['asset']['processing']!='duplicate':
         check(ext+': extracted acceptance text','Brahms' in detail['extractedText'],detail)
     check(ext+': signed private original',library.url(wid,'one',i,True)['url'].startswith('https://') if detail['asset']['processing']!='duplicate' else True)
+
+# Explicit retry processes only this bounded source, even without a cron scheduler.
+reader=viewer_pdf()
+reader_upload=library.begin(wid,'one',{'filename':'reader.pdf','mime':'application/pdf','bytes':len(reader)})['upload'];reader_id=reader_upload['assetId']
+storage.put(wid,reader_id+'.pdf',reader,'application/pdf')
+check('complex document starts in durable queue',library.commit(wid,'one',reader_id)['status']=='queued')
+check('explicit small-document retry completes extraction',library.retry(wid,'one',reader_id)['status']=='ready')
+reader_first=library.viewer_page(wid,'one',reader_id,1);reader_second=library.viewer_page(wid,'one',reader_id,2)
+check('private viewer retrieves two actual distinct pages',reader_first['pageCount']==2 and 'Brahms' in reader_first['text'] and 'Mozart' in reader_second['text'] and reader_first['url']!=reader_second['url'])
+reader_thumbs=[library._preview_object({'id':reader_id,'sha256':hashlib.sha256(reader).hexdigest()},n) for n in (1,2)]
+library.delete(wid,'one',reader_id)
+check('deletion removes every rendered page',all((wid,name) not in storage.objects for name in reader_thumbs))
 
 # Search has no dependence on title and supports CJK substrings.
 text=b'Unique lifecycle search marker.\nSecond fact for permission test.'

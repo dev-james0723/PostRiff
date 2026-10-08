@@ -234,7 +234,11 @@ class UniversalLibrary:
             if a['processing_status'] not in ('failed','queued'):
                 raise AlphaError('This file is not waiting for a retry.',409)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
-        return {'status':'queued','assetId':i}
+        # An explicit retry can complete a bounded small file without waiting
+        # for cron (preview deployments do not run production cron schedules).
+        # Larger files retain their durable background queue and lease.
+        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 else 'queued'
+        return {'status':status,'assetId':i}
 
     def detail(self,w,t,i):
         with self.service.repository.transaction(t,w) as (cur,row,p):
