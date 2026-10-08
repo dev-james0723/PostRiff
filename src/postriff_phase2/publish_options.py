@@ -60,16 +60,8 @@ def _tiktok(options, media):
 
 
 def _youtube(options, media, text):
-    _video(media, "YouTube")
-    title = options.get("title")
-    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 100 or "<" in title or ">" in title:
-        raise AlphaError("Give the video a title of up to 100 characters, without < or >.", 400)
-    if options.get("privacyStatus") not in YOUTUBE_PRIVACY:
-        raise AlphaError("Choose private, unlisted or public for this video.", 400)
-    made_for_kids = _flag(options, "madeForKids", "YouTube")
-    if len(text.encode()) > 5000:
-        raise AlphaError("A YouTube description allows 5,000 bytes. Shorten the text.", 409)
-    return {"title": title.strip(), "privacyStatus": options["privacyStatus"], "madeForKids": made_for_kids}
+    from .youtube.model import validate_video
+    return validate_video(options, media, text)
 
 
 def _pinterest(options, media):

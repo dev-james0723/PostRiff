@@ -56,6 +56,7 @@ jobs:
           python scripts/consumer_ready_check.py ci-trend-schema node web/tests/trend-contract.cjs
       - name: Types, lint and isolated production build
         run: |
+          (cd web && node node_modules/next/dist/bin/next typegen)
           python scripts/consumer_ready_check.py ci-types npm --prefix web run typecheck
           python scripts/consumer_ready_check.py ci-lint npm --prefix web run lint
           python scripts/consumer_ready_web.py --prepare npm ci

@@ -14,6 +14,7 @@ PY
 bash scripts/library-cloud-validation.sh
 export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 test -x "$POSTRIFF_PG_BIN/initdb"
+(cd web && node node_modules/next/dist/bin/next typegen)
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build

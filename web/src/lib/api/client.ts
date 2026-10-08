@@ -1,3 +1,4 @@
+import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
@@ -57,6 +58,7 @@ import type {
   VideoCommitResult,
   VideoUploadBegin,
   VideoUploadTicket,
+  VideoResumeTicket,
   SecurityEvent,
   SessionInfo,
   Snapshot,
@@ -234,7 +236,85 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
-    oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, string>) =>
+    youtubeOverview: (w: string, c: string) =>
+      get<YouTubeOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}`),
+    youtubeAgent: (w: string, c: string) =>
+      get<YouTubeAgentOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}/agent`),
+    youtubeAgentPrepare: (w: string, c: string, body: Record<string, unknown>) =>
+      send<YouTubeAgentMutation<YouTubeAgentDraft>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/drafts`, body),
+    youtubeAgentApprove: (w: string, c: string, id: string, body: Record<string, unknown>) =>
+      send<YouTubeAgentMutation<YouTubeAgentDraft>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/drafts/${encodeURIComponent(id)}/approve`, body),
+    youtubeAgentPolicyPreview: (w: string, c: string, body: Record<string, unknown>) =>
+      send<YouTubeAgentMutation<YouTubeAgentPolicy>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/policies/preview`, body),
+    youtubeAgentPolicyAction: (w: string, c: string, id: string, action: 'activate' | 'pause' | 'revoke', body: Record<string, unknown>) =>
+      send<YouTubeAgentMutation<YouTubeAgentPolicy>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/policies/${encodeURIComponent(id)}/${action}`, body),
+    youtubeRead: (w: string, c: string, resource: string, query: Record<string, unknown> = {}) =>
+      send<YouTubeData>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/read/${encodeURIComponent(resource)}`,
+        query
+      ),
+    youtubePreview: (w: string, c: string, body: Record<string, unknown>) =>
+      send<YouTubeActionReview>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/preview`, body),
+    youtubeApprove: (w: string, c: string, id: string, body: Record<string, unknown>) =>
+      send<YouTubeActionReceipt>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/approve`,
+        body
+      ),
+    youtubeActions: (w: string, c: string) =>
+      get<{ actions: YouTubeActionReceipt[] }>(`${ws(w)}/youtube/${encodeURIComponent(c)}/actions`),
+    youtubeReconcile: (w: string, c: string, id: string) =>
+      send<YouTubeActionReceipt>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/reconcile`
+      ),
+    youtubeNotificationPreview: (w: string, c: string, body: Record<string, unknown>) =>
+      send<{ id: string; digest: string; manifest: Record<string, unknown> }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/notifications/preview`,
+        body
+      ),
+    youtubeNotificationApprove: (w: string, c: string, id: string, digest: string) =>
+      send<{ status: string }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/notifications/${encodeURIComponent(id)}/approve`,
+        { confirmed: true, digest }
+      ),
+    youtubeStreamKey: (w: string, c: string, id: string) =>
+      send<{ streamKey: string; sensitive: true }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/stream-key`
+      ),
+    youtubeStreamConfiguration: (w: string, c: string, streamId: string) =>
+      send<{ streamId: string; cdn: Record<string, unknown>; sensitive: true }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/stream-configuration`,
+        { streamId }
+      ),
+    youtubeUploadRecovery: (w: string, c: string, key: string) =>
+      send<{ manifest: Record<string, unknown>; digest: string }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/uploads/${encodeURIComponent(key)}/review-recovery`
+      ),
+    youtubeResumeUpload: (w: string, c: string, key: string, digest: string) =>
+      send<{ status: string; resumed: boolean }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/uploads/${encodeURIComponent(key)}/resume`,
+        { confirmed: true, digest }
+      ),
+    youtubeSensitive: (
+      w: string,
+      c: string,
+      capability: 'monetary' | 'memberships',
+      enabled: boolean
+    ) =>
+      send<{ authorized: boolean }>(
+        'POST',
+        `${ws(w)}/youtube/${encodeURIComponent(c)}/sensitive-authorization`,
+        { capability, enabled, confirmed: true }
+      ),
+    oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, unknown>) =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>
       send<OAuthComplete>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/complete`, {
@@ -354,6 +434,8 @@ export function createApi(getToken: TokenSource) {
     /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
     mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),
     beginVideoUpload: (w: string, body: VideoUploadBegin) => send<VideoUploadTicket>('POST', `${ws(w)}/media/videos`, body),
+    resumeVideoUpload: (w: string, assetId: string, body: { mime: 'video/mp4' | 'video/quicktime'; bytes: number }) =>
+      send<VideoResumeTicket>('POST', `${ws(w)}/media/videos/${encodeURIComponent(assetId)}/resume`, body),
     commitVideoUpload: (w: string, assetId: string, body: VideoCommitBody) =>
       send<VideoCommitResult & Partial<Snapshot>>('POST', `${ws(w)}/media/videos/${encodeURIComponent(assetId)}/commit`, body),
     abortVideoUpload: (w: string, assetId: string) =>

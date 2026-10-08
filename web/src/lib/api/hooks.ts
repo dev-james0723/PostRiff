@@ -7,6 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { ApiError } from './client';
 import type { ActiveTimeBeat, Snapshot, TimeSavingsCalibrationInput, TimeSavingsRange } from './types';
 
 export const keys = {
@@ -191,6 +192,14 @@ export function useAct() {
   return useMutation({
     mutationFn: (input: { revision: number; action: string; payload?: Record<string, unknown> }) =>
       api.act(w, input.revision, input.action, input.payload ?? {}),
+    onError: (error: unknown) => {
+      if (error instanceof ApiError && error.status === 409 &&
+          (error.code === 'youtube_connection_refreshed' || error.code === 'youtube_connection_changed')) {
+        // Read the new authority/revision only. The person must review and submit again.
+        void client.invalidateQueries({ queryKey: keys.snapshot(w) });
+        void client.invalidateQueries({ queryKey: keys.channels(w) });
+      }
+    },
     onSuccess: (snapshot: Snapshot) => {
       client.setQueryData(keys.snapshot(w), snapshot);
       void client.invalidateQueries({ queryKey: keys.usage(w) });

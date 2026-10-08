@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "observedOn": "2026-10-08",
+  "execution": "MISSION EVIDENCE RECORD; NO PUBLIC LAUNCH CLAIM",
+  "productionGoogleProject": {
+    "id": "rafii-youtube-production",
+    "number": "568838253270",
+    "name": "Rafii YouTube Production",
+    "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+    "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
+    "oauthClientId": null,
+    "oauthConfiguration": "NOT CONFIGURED",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ],
+    "oauthAudience": null,
+    "oauthPublishingStatus": null,
+    "verificationStatus": "NOT SUBMITTED",
+    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
+    "existingReferenceProjectId": "rafii-509720",
+    "domainOwnership": "NOT VERIFIED: Google Search Console signed-in account lacks property; additive Spaceship TXT candidate prepared but unsaved, owner action-time confirmation pending"
+  },
+  "stagingGoogleProject": {
+    "id": "rafii-509720",
+    "number": "81579135390",
+    "audience": "External",
+    "publishingStatus": "Testing",
+    "evidence": "Prior same-day acceptance public-rollout-20261008/RECEIPT.md; prior source, not revalidated in this mission.",
+    "productionUse": false
+  },
+  "runningProduction": {
+    "url": "https://rafii.io",
+    "commit": "bb4ca5aa",
+    "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+    "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
+    "integrationBranchDeployed": false,
+    "youtubePublicLaunchReady": false,
+    "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+  },
+  "approvedProductionQuotas": {
+    "dailyUploads": 100,
+    "searchCalls": 100,
+    "generalUnits": 10000,
+    "analytics": {
+      "queriesPerDay": 100000,
+      "queriesPerMinute": 720,
+      "queriesPerMinutePerUser": 720,
+      "status": "VERIFIED DEFAULT; NOT AN EXTENSION"
+    },
+    "status": "VERIFIED CONFIGURED DEFAULT DATA API ALLOCATION; EXTENSION NOT SUBMITTED",
+    "note": "GOOGLE-QUOTAS.observed.json retains exact Console labels. This does not establish audit approval, public-upload eligibility or sufficient rollout capacity."
+  },
+  "submissions": {
+    "googleOAuth": "NOT SUBMITTED",
+    "youtubeAudit": "NOT SUBMITTED",
+    "quotaExtension": "NOT SUBMITTED",
+    "applicationIds": []
+  },
+  "thisMissionProviderEffects": {
+    "googleProjectCreated": true,
+    "newAccountOAuthConsent": false,
+    "privateVideoUploaded": false,
+    "nativeScheduleCreated": false,
+    "publicVideoPublished": false,
+    "autopilotProviderExecuted": false,
+    "youtubeDataApiEnabled": true,
+    "youtubeAnalyticsApiEnabled": true
+  },
+  "releaseGate": "Pre-reconciliation b0ca13a4 passed all GHA checks (main37850230732,99PG modules; Library37850230723,140browser checks), aux and Vercel preview. Production advanced to65b1ea83/PR135; current candidate merges and preserves its canonical-origin/Bluesky/passkey/proxy behavior. Fresh combined-source cloud validation and PR CI required before merge/deploy. Public/agentic/fleet flags remain off.",
+  "ownerInputsPending": [
+    "verified operator/legal/contact facts",
+    "legal approval/required attestations",
+    "independent account OAuth consent",
+    "exact approved disposable private test asset",
+    "separate explicit public test-publication consent after eligibility"
+  ],
+  "storage": {
+    "status": "BLOCKED OWNER BILLING",
+    "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
+    "observedPlan": "Free",
+    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "productionVideoBucket": "postriff-video",
+    "bucketPublic": false,
+    "bucketFileSizeLimitBytes": 50000000,
+    "freeGlobalProviderFileLimitMB": 50,
+    "largeVideoAcceptance": false,
+    "ownerBillingDecision": "PENDING EXISTING QUESTION",
+    "pricingEstimateUSDPerMonth": {
+      "proBase": 25,
+      "secondActiveMicroProject": 10,
+      "totalBeforeUsageTax": 35,
+      "status": "PUBLIC PRICE ESTIMATE ONLY; actual owner checkout required",
+      "source": "https://supabase.com/pricing"
+    },
+    "limitsSource": "https://supabase.com/docs/guides/storage/uploads/file-limits",
+    "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
+  },
+  "databaseMigrations": {
+    "production": {
+      "089": {
+        "version": "20261008190651",
+        "status": "VERIFIED"
+      },
+      "097": {
+        "version": "20261008193806",
+        "status": "VERIFIED"
+      }
+    },
+    "staging": {
+      "089": {
+        "status": "PRIOR VERIFIED RECEIPT"
+      },
+      "097": {
+        "version": "20261008193754",
+        "status": "VERIFIED"
+      }
+    },
+    "verification": "Three capacity/worker tables enforce FORCE RLS; anon/authenticated SELECT denied; service_role allowed. Production eight creator tables similarly verified after 089.",
+    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls."
+  },
+  "recordScope": "Dated baseline plus actual configuration actions; runningProduction is the earlier bb4ca5aa observation, not a claim of latest live version. Production branch advanced to65b1ea83; final coordinating release receipt and exact-SHA smoke supersede this snapshot.",
+  "productionEnvironmentChanges": {
+    "execution": "VERIFIED VERCEL CONFIGURATION; EFFECTIVE AFTER NEXT DEPLOYMENT",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "values": {
+      "NEXT_PUBLIC_APP_URL": "https://rafii.io",
+      "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "0",
+      "POSTRIFF_YOUTUBE_AGENTIC_ENABLED": "0"
+    },
+    "preserved": "This mission did not change global POSTRIFF_PUBLIC_BASE_URL, existing Gmail/Calendar grants or credentials. Separate PR135 canonical-origin migration is preserved; callback landing now rafii.io. Fresh Google callback registration/consent remains unverified.",
+    "youtubeCallbackObserved": "Latest public YouTube and Gmail denied callbacks302 to rafii.io/channels/connect and rafii.io/connectors/connect; transport landing only, no provider acceptance."
+  }
+}

@@ -29,11 +29,14 @@ import type { ChannelView, ProviderView } from '@/lib/api/types';
 import {
   ATTENTION_STATES,
   attentionSentence,
+  automaticallyRenews,
   channelBadge,
+  disconnectReceipt,
   disconnectedByCustomer,
   expiringSoon,
   needsAttention,
   nowSeconds,
+  GOOGLE_PERMISSIONS_URL,
   reconnectCapability,
   VERIFIED_STATES,
   type ChannelBadge
@@ -75,6 +78,7 @@ export interface ChannelCardProps {
  * unknown each get their own mark (DNA §20.2, §21.6); the words come from `channelBadge`.
  */
 function connectionIcon(channel: ChannelView, expiring: boolean): Icon {
+  if (channel.refreshBindingRequired || channel.connectionState === 'client_binding_missing') return Icons.warning;
   if (VERIFIED_STATES.has(channel.connectionState)) return expiring ? Icons.clock : Icons.check;
   if (disconnectedByCustomer(channel)) return Icons.circleDashed;
   switch (channel.connectionState) {
@@ -122,17 +126,21 @@ function DisconnectButton({
   const [open, setOpen] = useState(false);
   const { locale } = usePreferences();
   const { copy, lang } = historyImportCopy(locale);
+  const youtube = platform.toLowerCase() === 'youtube';
+  const label = youtube ? 'Remove from Rafii' : 'Disconnect';
   return (
     <>
       <Button variant='quiet' disabled={disabled} className={cn(CONTROL_44, 'text-destructive hover:text-destructive')} onClick={() => setOpen(true)}>
-        Disconnect
+        {label}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={DIALOG_ELEVATED}>
           <AlertDialogHeader>
-            <AlertDialogTitle className='text-xl font-medium tracking-tight'>Disconnect {platform}?</AlertDialogTitle>
+            <AlertDialogTitle className='text-xl font-medium tracking-tight'>{youtube ? 'Remove YouTube connection from Rafii?' : `Disconnect ${platform}?`}</AlertDialogTitle>
             <AlertDialogDescription>
-              Rafii loses access to {account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.
+              {youtube
+                ? `Rafii removes its stored credentials and associated local YouTube data for ${account}. Approved Rafii jobs are held at the next claim. This does not cancel a native publication schedule already accepted by YouTube. Google authorization may remain active when it is shared with another connection; the result will state whether token revocation was confirmed or deferred.`
+                : `Rafii loses access to ${account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.`}
             </AlertDialogDescription>
             <AlertDialogDescription lang={lang}>{copy.purge}</AlertDialogDescription>
           </AlertDialogHeader>
@@ -148,8 +156,38 @@ function DisconnectButton({
                 void onConfirm();
               }}
             >
-              Disconnect
+              {label}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+function GoogleAuthorizationControl({ disabled }: { disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant='quiet' className={CONTROL_44} disabled={disabled} onClick={() => setOpen(true)}>
+        Revoke Google authorization…
+      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className={DIALOG_ELEVATED}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Rafii access in Google</AlertDialogTitle>
+            <AlertDialogDescription>
+              In Google permissions, select the Google account you control and the correct Rafii application, then remove its access. This can affect other channels, workspaces and Google services authorized through that same application. Separate Rafii applications may have separate grants.
+            </AlertDialogDescription>
+            <AlertDialogDescription>
+              Google revocation stops future authorized API calls; it does not cancel schedules already accepted by YouTube or delete YouTube videos. Also use Remove from Rafii to purge this local connection and hold its pending Rafii jobs. Returning from Google does not confirm revocation: use Re-verify to check access, and reconnect if access was revoked. Cleanup after revocation detection remains subject to the published data-deletion policy.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={DIALOG_FOOTER_PLAIN}>
+            <AlertDialogCancel variant='glass' size='control'>Close</AlertDialogCancel>
+            <Button variant='action' size='control' render={<a href={GOOGLE_PERMISSIONS_URL} aria-label='Open Google permissions to review and revoke Rafii authorization' target='_blank' rel='noopener noreferrer' />}>
+              Open Google permissions
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -201,7 +239,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const badge = channelBadge(channel);
   const attention = needsAttention(channel, undefined, held);
   const expiring = expiringSoon(channel);
-  const expired = typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
+  const renewable = automaticallyRenews(channel);
+  const expired = !renewable && typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
@@ -255,9 +294,10 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   async function disconnect() {
     setBusy(true);
     try {
-      await api.disconnectChannel(workspaceId, channel.id);
+      const result = await api.disconnectChannel(workspaceId, channel.id);
       // The card leaves the list (`listedOnChannels`), so the toast is the confirmation.
-      toast.success(`${channel.platform} disconnected`, { description: channel.account });
+      const receipt = disconnectReceipt(channel.platform, channel.account, result);
+      toast.message(receipt.title, { description: receipt.description, duration: 20000 });
       await refresh();
     } catch (err) {
       // 404: already disconnected (another tab, or a list that had not caught up). Show the list as it is.
@@ -350,7 +390,14 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       {/* A div, not a p: the scopes list expands a block inside this row. */}
       {!disconnected && (
         <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs'>
-          {channel.expiresAt ? (
+          {channel.refreshBindingRequired ? (
+            <span className='text-foreground'>Reconnect once for background access</span>
+          ) : renewable ? (
+            <>
+              <span>Automatic renewal enabled</span>
+              <span aria-hidden>·</span>
+            </>
+          ) : channel.expiresAt ? (
             <>
               <span className={cn((expiring || expired) && 'text-foreground font-medium')} title={formatDate(channel.expiresAt)}>
                 {expired ? `Expired ${relativeTime(channel.expiresAt)}` : `Expires ${relativeTime(channel.expiresAt)}`}
@@ -365,7 +412,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <span aria-hidden className='hidden md:inline'>
             ·
           </span>
-          <ScopesList scopes={channel.scopes} />
+          {channel.platform === 'YouTube' ? <Link href={`/app/youtube?channel=${encodeURIComponent(channel.id)}`} className='text-sm underline'>Independent creator capabilities</Link> : <ScopesList scopes={channel.scopes} />}
         </div>
       )}
 
@@ -421,6 +468,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <DestinationPicker channelId={channel.id} platform={channel.platform} label={provider.destinationLabel ?? 'Channel'} disabled={busy} />
         )}
         {canManage && !disconnected && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
+        {canManage && channel.platform.toLowerCase() === 'youtube' && <GoogleAuthorizationControl disabled={busy} />}
       </div>
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
     </Surface>

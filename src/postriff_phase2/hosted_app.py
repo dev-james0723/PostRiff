@@ -197,7 +197,7 @@ def runtime_from_environment(environ=None):
     verify = supabase_verifier(project_url, publishable, database)
     storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video", file_bucket=values.get("POSTRIFF_LIBRARY_BUCKET") or "postriff-library"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
-    from .oauth import CredentialVault
+    from .oauth import CredentialVault, OAuthService
     from .providers import registry_from_environment, http_transport
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
@@ -206,7 +206,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -215,8 +215,10 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) or getattr(p, 'creator_enabled', False) for p in providers.values()
     ) else None
+    if social is not None:
+        social.youtube = service.youtube
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
@@ -236,7 +238,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -470,7 +472,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith('/api/cron/youtube/') else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -495,13 +497,31 @@ class HostedApplication:
                     from rafii_control.hosted import embedded_app
                     control = self.control_app = embedded_app(os.environ, self._runtime)
                 return control(environ, start_response)
+            if path.startswith('/api/cron/youtube/'):
+                lanes = {'uploads': 'upload', 'identity': 'identity', 'planner': 'planner'}
+                suffix = path.removeprefix('/api/cron/youtube/')
+                if method != 'GET' or suffix not in lanes:
+                    raise AlphaError('This hosted route is unavailable.', 404)
+                # Authenticate before initializing database, storage or provider clients.
+                # User bearer tokens and request-supplied budgets never select fleet authority.
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                supplied = environ.get('HTTP_AUTHORIZATION', '')
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, 'Bearer ' + expected)):
+                    raise AlphaError('Cron authorization failed.', 401)
+                service = self._runtime()
+                from .youtube.fleet import run_lane
+                return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
                 self._runtime().repository.api_tokens.authorize(self._token(environ), method, path.strip("/").split("/"), client_label(environ))
             if path == "/api/health" and method == "GET":
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
-                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False})
+                revision = os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
+                revision = revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None
+                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision})
             if path == "/api/catalog" and method == "GET":
                 provider = (self.public_auth or {}).get("provider", "supabase")
                 return self._json(start_response, 200, {"templates": catalog(), "routes": routes(), "profileMetadata": metadata(), "phase2": True, "authMode": "dev" if provider == "dev" else "supabase", "execution": (self.public_auth or {}).get("execution", "hosted")})
@@ -509,6 +529,9 @@ class HostedApplication:
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            if path.startswith('/api/youtube/notifications/') and method in ('GET', 'POST'):
+                from .youtube.http import notification_callback
+                return notification_callback(self, environ, start_response, self._runtime(), method, path.rsplit('/', 1)[-1])
             from .phone import http as phone_http
             if (routed := phone_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
@@ -603,9 +626,13 @@ class HostedApplication:
                         raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
                     location = ProductivityConnectorService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 else:
-                    callback_config = OAuthService(None, None, None, {}, configured_base)
-                    callback_config.callback_uri(provider_id)  # fixed HTTPS origin validation; no provider call
-                    location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
+                    youtube_base = None
+                    if provider_id == 'youtube':
+                        youtube_base = (getattr(configured_service, 'youtube_public_base_url', None) if configured_service is not None
+                            else OAuthService.youtube_origin_from_environment(os.environ))
+                    callback_config = OAuthService(None, None, None, {}, configured_base, youtube_public_base_url=youtube_base)
+                    callback_base = callback_config.callback_base_url(provider_id)  # fixed HTTPS origin; no provider call
+                    location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
@@ -837,6 +864,9 @@ class HostedApplication:
                 if len(parts) == 7 and parts[4] == "reply-drafts" and parts[6] == "reply" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, audience.approve_reply(parts[2], token, parts[5], body.get("digest"), body.get("confirmed")))
+            if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
+                from .youtube.http import handle as youtube_handle
+                return youtube_handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
@@ -937,6 +967,8 @@ class HostedApplication:
                 uploads = service.video_uploads
                 if len(parts) == 5 and method == "POST":
                     return self._json(start_response, 201, uploads.begin(parts[2], token, self._body(environ)))
+                if len(parts) == 7 and parts[6] == "resume" and method == "POST":
+                    return self._json(start_response, 200, uploads.resume(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 7 and parts[6] == "commit" and method == "POST":
                     return self._json(start_response, 200, uploads.commit(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 6 and method == "DELETE":
@@ -1033,7 +1065,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker":
+            if path == "/api/cron/worker" or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:
