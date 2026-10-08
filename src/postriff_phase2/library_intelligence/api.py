@@ -32,7 +32,8 @@ def answer(cur, principal, workspace_id, params, **kw) -> dict:
     from . import answers
     if not isinstance(params, dict):
         c.fail("Ask a question with a search scope.")
-    return answers.answer_library(context(cur, principal, workspace_id, **kw), params.get("question"), c.search_request(params.get("search") or {}))
+    # answer_library validates the search request itself and requires an explicit scope; do not default one here.
+    return answers.answer_library(context(cur, principal, workspace_id, **kw), params.get("question"), params.get("search"))
 
 
 def apply_action(cur, principal, workspace_id, envelope, **kw) -> dict:
