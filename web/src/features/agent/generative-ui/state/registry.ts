@@ -109,6 +109,15 @@ export function currentUiContext(scopeKey: string | null, conversationId: string
   return inUse.get(`${scopeKey}|${conversationId ?? ''}`)?.context;
 }
 
+/**
+ * The same, for code that knows only the workspace (browser voice): the active consumer scope must be this workspace's
+ * (`workspace:<principal>:<workspaceId>`), so a voice call never carries another workspace's or person's view.
+ */
+export function currentUiContextForWorkspace(workspaceId: string | null, conversationId: string | null): UiTurnContextV1 | undefined {
+  if (!workspaceId || !activeScope || !activeScope.startsWith('workspace:') || !activeScope.endsWith(`:${workspaceId}`)) return undefined;
+  return currentUiContext(activeScope, conversationId);
+}
+
 export function clearUiContext(artifactId: string) {
   const entry = byArtifact.get(artifactId);
   if (!entry) return;
@@ -124,9 +133,9 @@ export function clearUiContext(artifactId: string) {
 export function enterUiScope(scopeKey: string | null): boolean {
   if (scopeKey === activeScope) return false;
   activeScope = scopeKey;
-  for (const map of [fresh, inUse]) for (const key of [...map.keys()]) if (!key.startsWith(`${scopeKey ?? '\u0000'}|`)) map.delete(key);
-  for (const [artifactId, entry] of [...byArtifact.entries()]) if (entry.scopeKey !== scopeKey) byArtifact.delete(artifactId);
-  for (const key of [...memoryKeys.keys()]) if (!key.startsWith(`${scopeKey ?? '\u0000'}|`)) memoryKeys.delete(key);
+  for (const map of [fresh, inUse]) for (const key of map.keys()) if (!key.startsWith(`${scopeKey ?? '\u0000'}|`)) map.delete(key);
+  for (const [artifactId, entry] of byArtifact.entries()) if (entry.scopeKey !== scopeKey) byArtifact.delete(artifactId);
+  for (const key of memoryKeys.keys()) if (!key.startsWith(`${scopeKey ?? '\u0000'}|`)) memoryKeys.delete(key);
   writeKeys(Object.fromEntries(Object.entries(readKeys()).filter(([key]) => scopeKey && key.startsWith(`${scopeKey}|`))));
   for (const listener of listeners) listener();
   return true;

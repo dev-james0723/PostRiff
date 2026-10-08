@@ -42,8 +42,19 @@ def _summary(dctx, basis=None):
     return insights.summary(dctx.cur, dctx.workspace_id, _jobs(dctx.state), dctx.now, basis=basis)
 
 
+def _past_window(dctx, inputs):
+    """Performance looks back: without dates the window is the last 30 days up to today (inclusive) in the person's zone."""
+    if inputs.get("start") or inputs.get("end"):
+        if inputs.get("end") and not inputs.get("start"):
+            end = dt.date.fromisoformat(inputs["end"])
+            inputs = {**inputs, "start": (end - dt.timedelta(days=29)).isoformat()}
+        return common.window(inputs, dctx.zone, dctx.now, default_days=30)
+    today = dt.datetime.fromtimestamp(dctx.now, ZoneInfo(dctx.zone)).date()
+    return common.window({"start": (today - dt.timedelta(days=29)).isoformat(), "end": today.isoformat()}, dctx.zone, dctx.now)
+
+
 def _filtered(dctx, inputs, posts):
-    lo, hi = common.window(inputs, dctx.zone, dctx.now, default_days=30)
+    lo, hi = _past_window(dctx, inputs)
     jobs = {j.get("id"): j for j in _jobs(dctx.state)}
     kept, undated = [], 0
     for post in posts:

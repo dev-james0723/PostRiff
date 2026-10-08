@@ -169,13 +169,23 @@ def _attempt_key_exists(cur, workspace_id, key) -> bool:
     return cur.fetchone() is not None
 
 
-def _artifact_head(cur, workspace_id, artifact_id) -> dict:
-    """The consumer artifact (404 for a missing, foreign or founder-scoped one)."""
+def _run_in_scope(run_key: str, scope: str, scope_key: str) -> bool:
+    """Consumer scope: an `agent:` run that is not a founder run. Founder scope: exactly this founder namespace's runs
+    (`agent:founder:<mode>:<env>:…`, scope_key `founder:<mode>:<env>`)."""
+    run_key = str(run_key or "")
+    if scope == "founder":
+        return bool(scope_key) and scope_key.startswith("founder:") and run_key.startswith(f"agent:{scope_key}:")
+    return scope == "workspace" and run_key.startswith("agent:") and not run_key.startswith("agent:founder:")
+
+
+def _artifact_head(cur, workspace_id, artifact_id, *, scope: str = "workspace", scope_key: str = "") -> dict:
+    """The artifact in exactly the caller's scope (404 for a missing or foreign one, and for one of the other scope)."""
     cur.execute("/* rafii-ui:artifact_head */ SELECT a.parent_run_id::text, a.slot, a.actor::text, a.scope, a.scope_key, a.surface, a.journey_ids, a.revision, "
                 "a.source_hash, a.manifest, a.current_attempt_id::text, r.idempotency_key FROM public.pr_ui_artifacts a JOIN public.pr_agent_runs r ON r.id=a.parent_run_id "
                 "WHERE a.id::text=%s AND a.workspace_id=%s", (str(artifact_id).lower(), workspace_id))
     row = cur.fetchone()
-    if not row or row[3] != "workspace" or (row[4] or "") or str(row[11] or "").startswith("agent:founder:"):
+    expected_key = scope_key if scope == "founder" else ""
+    if not row or row[3] != scope or (row[4] or "") != expected_key or not _run_in_scope(row[11], scope, scope_key):
         raise AlphaError("That view is unavailable.", 404, code="ui_artifact")
     manifest = row[9] if isinstance(row[9], dict) else (json.loads(row[9]) if isinstance(row[9], str) else {})
     return {"artifactId": str(artifact_id).lower(), "runId": row[0], "slot": row[1], "actor": row[2], "surface": row[5], "journeyIds": list(row[6] or []),
@@ -361,9 +371,11 @@ class _Outcome:
 class _Producer:
     """Owns one admitted attempt chain (the attempt, then at most one automatic repair) for the lifetime of one request."""
 
-    def __init__(self, runtime, token, auth, workspace_id, *, lease, plan, projection, manifest, base_source, instruction, selection, deadline,
+    def __init__(self, runtime, tx, auth, workspace_id, *, lease, plan, projection, manifest, base_source, instruction, selection, deadline,
                  first_events, terminal, owner, route, request_id, started):
-        self.runtime, self.token, self.auth, self.workspace_id = runtime, token, auth, workspace_id
+        # `tx(need)` opens the caller's short authorized transaction (consumer: ui_http.ui_transaction; founder: the control
+        # boundary's own), so the same producer serves both route families.
+        self.runtime, self.tx, self.auth, self.workspace_id = runtime, tx, auth, workspace_id
         self.artifact, self.attempt, self.plan = lease["artifact"], lease["attempt"], plan
         self.projection, self.manifest = projection or {}, manifest or {}
         self.base_source, self.instruction, self.selection = base_source, instruction, selection
@@ -442,7 +454,9 @@ class _Producer:
                     return
                 status = (outcome.usage or {}).get("status")
                 if status not in ("ok", "incomplete"):
-                    yield from self._terminal("ui.failed", "failed", "provider_timeout" if status == "timeout" else "provider_error", outcome.usage)
+                    given = (outcome.usage or {}).get("reason")
+                    reason = given if given in contracts.REASON_CODES else ("provider_timeout" if status == "timeout" else "provider_error")
+                    yield from self._terminal("ui.failed", "failed", reason, outcome.usage)
                     return
                 candidate = ui_presenter.strip_fences(outcome.candidate)
                 validation = self._validate(candidate)
@@ -467,6 +481,7 @@ class _Producer:
             raise
         except Exception as error:  # noqa: BLE001 — every failure ends in a terminal frame with a stable reason
             log.error(json.dumps({"event": "agent_ui.stream_failed", "errorClass": type(error).__name__, "requestId": self.request_id}))
+            self._stop_worker()          # book what the provider task knows before settling, never after
             frame = self._safe_terminal("ui.failed", "failed", "internal_error")
             if frame is not None:
                 yield frame
@@ -490,7 +505,8 @@ class _Producer:
 
     def _run_attempt(self):
         self.dispatched, self.usage = False, None
-        limit = contracts.BOUNDS["patchBytes"] if self.plan.mode == "patch" else contracts.BOUNDS["sourceBytes"]
+        founder = getattr(self.auth, "scope", "workspace") == "founder"
+        limit = (contracts.BOUNDS["founderPatchBytes"] if founder else contracts.BOUNDS["patchBytes"]) if self.plan.mode == "patch" else contracts.BOUNDS["sourceBytes"]
         worker = self.worker = _Worker(self._presenter_items)
         worker.start()
         parts, pending, pending_since = [], [], None
@@ -655,7 +671,7 @@ class _Producer:
         attempt_id = self.attempt["attemptId"]
         failure, settled_here = None, False
         try:
-            with ui_http.ui_transaction(self.runtime, self.token, self.workspace_id, "edit") as (cur, auth):
+            with self.tx("edit") as (cur, auth):
                 if _attempt_state(cur, self.workspace_id, attempt_id) not in LIVE_STATES:
                     failure = "closed"
                 else:
@@ -707,7 +723,7 @@ class _Producer:
         original = self.attempt
         refused, event = None, None
         try:
-            with ui_http.ui_transaction(self.runtime, self.token, self.workspace_id, "edit") as (cur, auth):
+            with self.tx("edit") as (cur, auth):
                 ui_metering.settle_attempt(self.runtime, cur, auth, original, usage)
                 _ui_store().finish_attempt(cur, original["attemptId"], "failed", "parse_rejected")
                 lease = _call(_ui_store().create_or_resume_artifact, cur, auth, self.artifact["runId"], self.artifact.get("slot") or "main",
@@ -878,6 +894,22 @@ def _deadline(started: float) -> float:
     return started + min(GENERATION_SECONDS, DEPLOYMENT_SECONDS - DEPLOYMENT_MARGIN_SECONDS)
 
 
+def _flags(runtime, workspace_id, scope) -> dict:
+    """The deployment's GenUI switches for this workspace (founder ones in founder scope); the routes re-check them independently."""
+    try:
+        return runtime.cfg.genui_for(workspace_id, founder=scope == "founder")
+    except Exception:  # noqa: BLE001 — unknown switches: no write controls
+        return {"enabled": True, "actions": False, "edits": False}
+
+
+def _without_disabled_actions(manifest, flags):
+    """With the actions kill switch off the presenter never composes a write control: no action ids in its prompt or in the
+    validator policy (an ActionButton is then rejected). The stored manifest of an existing artifact is not rewritten."""
+    if not isinstance(manifest, dict) or (flags or {}).get("actions"):
+        return manifest
+    return {**manifest, "actions": []}
+
+
 def _plan_or_refusal(build):
     try:
         return build(), None
@@ -891,70 +923,110 @@ def _library_info(plan):
     return {"libraryHash": plan.library_hash, "libraryVersion": plan.library_version, "languageVersion": plan.language_version, "promptHash": plan.prompt_hash}
 
 
-def create_presentation(runtime, environ, start_response, workspace_id, token, request):
-    """POST …/agent/ui/presentations → text/event-stream of one presentation attempt (or a replay of the existing one)."""
-    started = time.monotonic()
+def _consumer_tx(runtime, token, workspace_id):
+    return lambda need: ui_http.ui_transaction(runtime, token, workspace_id, need)
+
+
+def _start_presentation(runtime, tx, workspace_id, request, *, started, request_id):
+    """Admission of one presentation (shared by the consumer stream and blocking route families). Returns
+    ("replay", auth, artifact_id, cursor) for an attempt this request must not produce, or ("produce", producer)."""
     owner = _lease_owner()
     store = _ui_store()
     from . import ui_capabilities, ui_projection
-    replay_from = None
-    with ui_http.ui_transaction(runtime, token, workspace_id, "edit") as (cur, auth):
+    with tx("edit") as (cur, auth):
+        scope = getattr(auth, "scope", "workspace") or "workspace"
+        scope_key = getattr(auth, "scope_key", "") or ""
         _sweep(runtime, cur, workspace_id)
         parent = _parent_run(cur, workspace_id, request["parentRunId"])
-        if parent is None or not parent["runKey"].startswith("agent:") or parent["runKey"].startswith("agent:founder:"):
+        if parent is None or not _run_in_scope(parent["runKey"], scope, scope_key):
+            # A founder run is never presented on a consumer route and vice versa (same 404 as a missing run).
             raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+        if (request.get("surface") == "founder") != (scope == "founder"):
+            raise AlphaError("Unknown surface.", 400, code="ui_surface")
         if parent["actor"] != str(auth.principal):
             # Presentations are metered to the person whose turn it was (the conversation may be shared; replay stays open).
             raise AlphaError("Only the person who asked can start this view.", 403, code="ui_forbidden")
         if request.get("conversationId") and request["conversationId"].lower() != str(parent["conversationId"]).lower():
             raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
         key, retry_of = request["idempotencyKey"], request.get("retryOfAttemptId")
+        kind = "retry" if retry_of else "generate"
         if _attempt_key_exists(cur, workspace_id, key):
             lease = _call(store.create_or_resume_artifact, cur, auth, parent["runId"], request["slot"], key, surface=request["surface"], manifest=None,
-                          projection=None, kind="retry" if retry_of else "generate", retry_of=retry_of, lease_owner=owner)
-            replay_from = (lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0))
-        else:
-            result = parent["result"] or {}
-            usage = result.get("usage") or {}
-            if (parent["status"] != "completed" or result.get("composedBy") != "manager" or usage.get("billing") != "metered"
-                    or not (result.get("ui") or {}).get("eligible")):
-                # Plain text, greetings, fallbacks and deterministic answers never reach the presenter.
-                raise AlphaError("This answer doesn't need an interactive view.", 409, code="ui_not_eligible")
-            if retry_of is None and parent["ageSeconds"] > FRESH_SECONDS:
-                # Reopening an old answer shows its stored state; it never starts (or charges for) a new generation.
-                raise AlphaError("This answer is too old to start an interactive view; ask again for a fresh one.", 409, code="ui_not_eligible")
-            verified = {**result, "runId": parent["runId"], "conversationId": parent["conversationId"]}
-            projection = ui_projection.project_ui_context(cur, auth, verified, request["surface"], {})
-            manifest = ui_capabilities.build_manifest(cur, auth, projection, scope="workspace")
-            plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest,
-                                                                             kind="retry" if retry_of else "generate", mode="generate"))
-            lease = _call(store.create_or_resume_artifact, cur, auth, parent["runId"], request["slot"], key, surface=request["surface"], manifest=manifest,
-                          projection=projection, kind="retry" if retry_of else "generate", retry_of=retry_of, lease_owner=owner, library=_library_info(plan))
-            if not lease.get("created"):
-                replay_from = (lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0))
-            else:
-                events, terminal = _admit(runtime, cur, auth, lease, plan=plan, refusal=refusal, manifest=manifest, retry_of=retry_of)
-    if replay_from is not None:
-        return _replay_stream(runtime, environ, start_response, workspace_id, auth, replay_from[0], replay_from[1], route="agent.ui.presentations")
-    producer = _Producer(runtime, token, auth, workspace_id, lease=lease, plan=plan, projection=projection, manifest=manifest, base_source=None, instruction=None,
+                          projection=None, kind=kind, retry_of=retry_of, lease_owner=owner)
+            return "replay", auth, lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0)
+        result = parent["result"] or {}
+        usage = result.get("usage") or {}
+        if (parent["status"] != "completed" or result.get("composedBy") != "manager" or usage.get("billing") != "metered"
+                or not (result.get("ui") or {}).get("eligible")):
+            # Plain text, greetings, fallbacks and deterministic answers never reach the presenter.
+            raise AlphaError("This answer doesn't need an interactive view.", 409, code="ui_not_eligible")
+        if retry_of is None and parent["ageSeconds"] > FRESH_SECONDS:
+            # Reopening an old answer shows its stored state; it never starts (or charges for) a new generation.
+            raise AlphaError("This answer is too old to start an interactive view; ask again for a fresh one.", 409, code="ui_not_eligible")
+        verified = {**result, "runId": parent["runId"], "conversationId": parent["conversationId"]}
+        flags = _flags(runtime, workspace_id, scope)
+        projection = _call(ui_projection.project_ui_context, cur, auth, verified, request["surface"], {}, flags=flags)
+        # Lane D's projection carries the manifest it built from the same journeys for this member (deterministic per issue).
+        manifest = projection.get("manifest") if isinstance(projection.get("manifest"), dict) else _call(ui_capabilities.build_manifest, cur, auth, projection,
+                                                                                                          scope=scope, flags=flags)
+        manifest = _without_disabled_actions(manifest, flags)
+        plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind=kind, mode="generate"))
+        lease = _call(store.create_or_resume_artifact, cur, auth, parent["runId"], request["slot"], key, surface=request["surface"], manifest=manifest,
+                      projection=projection, kind=kind, retry_of=retry_of, lease_owner=owner, library=_library_info(plan))
+        if not lease.get("created"):
+            return "replay", auth, lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0)
+        events, terminal = _admit(runtime, cur, auth, lease, plan=plan, refusal=refusal, manifest=manifest, retry_of=retry_of)
+    producer = _Producer(runtime, tx, auth, workspace_id, lease=lease, plan=plan, projection=projection, manifest=manifest, base_source=None, instruction=None,
                          selection=None, deadline=_deadline(started), first_events=events, terminal=terminal, owner=owner, route="presentations",
-                         request_id=_request_id(environ), started=started)
+                         request_id=request_id, started=started)
+    return "produce", producer
+
+
+def create_presentation(runtime, environ, start_response, workspace_id, token, request):
+    """POST …/agent/ui/presentations → text/event-stream of one presentation attempt (or a replay of the existing one)."""
+    started = time.monotonic()
+    admitted = _start_presentation(runtime, _consumer_tx(runtime, token, workspace_id), workspace_id, request, started=started,
+                                   request_id=_request_id(environ))
+    if admitted[0] == "replay":
+        _, auth, artifact_id, cursor = admitted
+        return _replay_stream(runtime, environ, start_response, workspace_id, auth, artifact_id, cursor, route="agent.ui.presentations")
+    producer = admitted[1]
     _sse_start(start_response)
     return _Closing(producer.frames(), producer.unstarted)
 
 
-def create_edit(runtime, environ, start_response, workspace_id, token, artifact_id, request):
-    """POST …/presentations/{a}/edits → an explicit, separately metered patch on (baseRevision, baseSourceHash)."""
+def _drain_producer(producer) -> dict:
+    frames = producer.frames()
+    try:
+        for _ in frames:
+            pass
+    finally:
+        frames.close()
+    return {"artifactId": producer.artifact["artifactId"], "attemptId": producer.attempt["attemptId"], "producing": True, "outcome": producer.outcome,
+            "lastSeq": producer.last_seq}
+
+
+def run_presentation(runtime, workspace_id, request, *, transaction, request_id=None) -> dict:
+    """Blocking form for a route family that cannot stream (D-A22 founder: durable checkpoints + `GET …/events?after=` polling).
+    `transaction(need)` yields (cur, UiAuth) from that boundary's own authentication (founder scope set server-side). Produces
+    the attempt to its terminal state inside this request; a duplicate key or another live producer only reports the artifact."""
     started = time.monotonic()
+    admitted = _start_presentation(runtime, transaction, workspace_id, request, started=started, request_id=request_id)
+    if admitted[0] == "replay":
+        return {"artifactId": admitted[2], "producing": False, "replayCursor": admitted[3]}
+    return _drain_producer(admitted[1])
+
+
+def _start_edit(runtime, tx, workspace_id, artifact_id, request, *, started, request_id):
+    """Admission of one explicit edit. Returns ("replay", auth, artifact_id, cursor) or ("produce", producer)."""
     owner = _lease_owner()
     store = _ui_store()
     from . import ui_capabilities
     if request.get("artifactId") and str(request["artifactId"]).lower() != str(artifact_id).lower():
         raise AlphaError("That view is unavailable.", 404, code="ui_artifact")
-    replay_from = None
-    with ui_http.ui_transaction(runtime, token, workspace_id, "edit") as (cur, auth):
+    with tx("edit") as (cur, auth):
         _sweep(runtime, cur, workspace_id)
-        head = _artifact_head(cur, workspace_id, artifact_id)
+        head = _store_head(cur, auth, workspace_id, artifact_id)
         if head["actor"] != str(auth.principal):
             raise AlphaError("Only the person who asked can change this view.", 403, code="ui_forbidden")
         key = request["idempotencyKey"]
@@ -963,40 +1035,63 @@ def create_edit(runtime, environ, start_response, workspace_id, token, artifact_
             lease = _call(store.create_or_resume_artifact, cur, auth, head["runId"], head["slot"], key, surface=head["surface"], manifest=None, projection=None,
                           kind="edit", lease_owner=owner, base=base, base_revision=request["baseRevision"], base_source_hash=request["baseSourceHash"],
                           instruction=request["instruction"])
-            replay_from = (lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0))
-        else:
-            busy = _current_attempt(cur, workspace_id, head["artifactId"])
-            if busy and busy["state"] in LIVE_STATES:
-                raise AlphaError("This view is already changing. Wait for it to finish, then ask again.", 409, code="ui_busy")
-            # Compare-and-swap BEFORE anything is reserved or sent: a stale tab never spends and never overwrites.
-            if head["revision"] < 1 or request["baseRevision"] != head["revision"] or request["baseSourceHash"] != head["sourceHash"]:
-                error = AlphaError("This view changed since the edit started. Nothing was overwritten or charged.", 409, code="ui_revision_conflict")
-                error.current = {"revision": head["revision"], "sourceHash": head["sourceHash"]}
-                raise error
-            base_source = _revision_source(cur, workspace_id, head["artifactId"], head["revision"])
-            if not base_source or contracts.sha256_text(base_source) != head["sourceHash"]:
-                raise AlphaError("This view changed since the edit started. Nothing was overwritten or charged.", 409, code="ui_revision_conflict")
-            manifest = ui_capabilities.current(cur, auth, head["manifest"])
-            projection = {"journey_ids": head["journeyIds"], "component_group_ids": list((manifest or {}).get("componentGroups") or []), "allowed_context": {}}
-            plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind="edit", mode="patch",
-                                                                             base_source=base_source, base_revision=head["revision"],
-                                                                             instruction=request["instruction"], selection=request.get("selection")))
-            lease = _call(store.create_or_resume_artifact, cur, auth, head["runId"], head["slot"], key, surface=head["surface"], manifest=manifest,
-                          projection=projection, kind="edit", lease_owner=owner, base=base, base_revision=request["baseRevision"],
-                          base_source_hash=request["baseSourceHash"], instruction=request["instruction"], library=_library_info(plan))
-            if not lease.get("created"):
-                replay_from = (lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0))
-            else:
-                if plan is not None:
-                    plan = dataclasses.replace(plan, chain=ui_metering.chain_for("edit", lease["attempt"]["attemptId"]))
-                events, terminal = _admit(runtime, cur, auth, lease, plan=plan, refusal=refusal, manifest=manifest)
-    if replay_from is not None:
-        return _replay_stream(runtime, environ, start_response, workspace_id, auth, replay_from[0], replay_from[1], route="agent.ui.edits")
-    producer = _Producer(runtime, token, auth, workspace_id, lease=lease, plan=plan, projection=projection, manifest=manifest, base_source=base_source,
+            return "replay", auth, lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0)
+        busy = _current_attempt(cur, workspace_id, head["artifactId"])
+        if busy and busy["state"] in LIVE_STATES:
+            raise AlphaError("This view is already changing. Wait for it to finish, then ask again.", 409, code="ui_busy")
+        # Compare-and-swap BEFORE anything is reserved or sent: a stale tab never spends and never overwrites.
+        if head["revision"] < 1 or request["baseRevision"] != head["revision"] or request["baseSourceHash"] != head["sourceHash"]:
+            error = AlphaError("This view changed since the edit started. Nothing was overwritten or charged.", 409, code="ui_revision_conflict")
+            error.current = {"revision": head["revision"], "sourceHash": head["sourceHash"]}
+            raise error
+        base_source = _revision_source(cur, workspace_id, head["artifactId"], head["revision"])
+        if not base_source or contracts.sha256_text(base_source) != head["sourceHash"]:
+            raise AlphaError("This view changed since the edit started. Nothing was overwritten or charged.", 409, code="ui_revision_conflict")
+        manifest = _without_disabled_actions(ui_capabilities.current(cur, auth, head["manifest"]), _flags(runtime, workspace_id, getattr(auth, "scope", "workspace")))
+        projection = {"journey_ids": head["journeyIds"], "component_group_ids": list((manifest or {}).get("componentGroups") or []), "allowed_context": {}}
+        plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind="edit", mode="patch",
+                                                                         base_source=base_source, base_revision=head["revision"],
+                                                                         instruction=request["instruction"], selection=request.get("selection")))
+        lease = _call(store.create_or_resume_artifact, cur, auth, head["runId"], head["slot"], key, surface=head["surface"], manifest=manifest,
+                      projection=projection, kind="edit", lease_owner=owner, base=base, base_revision=request["baseRevision"],
+                      base_source_hash=request["baseSourceHash"], instruction=request["instruction"], library=_library_info(plan))
+        if not lease.get("created"):
+            return "replay", auth, lease["artifact"]["artifactId"], int(lease.get("replay_cursor") or 0)
+        if plan is not None:
+            plan = dataclasses.replace(plan, chain=ui_metering.chain_for("edit", lease["attempt"]["attemptId"]))
+        events, terminal = _admit(runtime, cur, auth, lease, plan=plan, refusal=refusal, manifest=manifest)
+    producer = _Producer(runtime, tx, auth, workspace_id, lease=lease, plan=plan, projection=projection, manifest=manifest, base_source=base_source,
                          instruction=request["instruction"], selection=request.get("selection"), deadline=_deadline(started), first_events=events,
-                         terminal=terminal, owner=owner, route="edits", request_id=_request_id(environ), started=started)
+                         terminal=terminal, owner=owner, route="edits", request_id=request_id, started=started)
+    return "produce", producer
+
+
+def _store_head(cur, auth, workspace_id, artifact_id) -> dict:
+    """The artifact the caller may edit or cancel, in the caller's own scope (consumer or founder; never the other)."""
+    head = _artifact_head(cur, workspace_id, artifact_id, scope=getattr(auth, "scope", "workspace") or "workspace", scope_key=getattr(auth, "scope_key", "") or "")
+    return head
+
+
+def create_edit(runtime, environ, start_response, workspace_id, token, artifact_id, request):
+    """POST …/presentations/{a}/edits → an explicit, separately metered patch on (baseRevision, baseSourceHash)."""
+    started = time.monotonic()
+    admitted = _start_edit(runtime, _consumer_tx(runtime, token, workspace_id), workspace_id, artifact_id, request, started=started,
+                           request_id=_request_id(environ))
+    if admitted[0] == "replay":
+        _, auth, replay_artifact, cursor = admitted
+        return _replay_stream(runtime, environ, start_response, workspace_id, auth, replay_artifact, cursor, route="agent.ui.edits")
+    producer = admitted[1]
     _sse_start(start_response)
     return _Closing(producer.frames(), producer.unstarted)
+
+
+def run_edit(runtime, workspace_id, artifact_id, request, *, transaction, request_id=None) -> dict:
+    """Blocking form of create_edit for a route family that cannot stream (founder, patch cap BOUNDS.founderPatchBytes)."""
+    started = time.monotonic()
+    admitted = _start_edit(runtime, transaction, workspace_id, artifact_id, request, started=started, request_id=request_id)
+    if admitted[0] == "replay":
+        return {"artifactId": admitted[2], "producing": False, "replayCursor": admitted[3]}
+    return _drain_producer(admitted[1])
 
 
 # --- replay -----------------------------------------------------------------------------------------------------------------
@@ -1096,20 +1191,19 @@ def replay(runtime, environ, start_response, workspace_id, token, artifact_id, a
 
 
 # --- cancel -----------------------------------------------------------------------------------------------------------------
-def cancel_http(runtime, workspace_id, token, artifact_id):
-    """POST …/presentations/{a}/cancel — stops the presentation only. The live producer sees the canceled attempt at its next
-    poll, settles what it knows (unknown keeps the hold) and forwards this ui.canceled event. The business answer, its proposals
-    and receipts are not touched."""
+def cancel_presentation(runtime, workspace_id, artifact_id, *, transaction) -> dict:
+    """Stop the presentation only. The live producer sees the canceled attempt at its next poll, settles what it knows (unknown
+    keeps the hold) and forwards this ui.canceled event. The business answer, its proposals and receipts are not touched."""
     store = _ui_store()
-    with ui_http.ui_transaction(runtime, token, workspace_id, "edit") as (cur, auth):
-        head = _artifact_head(cur, workspace_id, artifact_id)
+    with transaction("edit") as (cur, auth):
+        head = _store_head(cur, auth, workspace_id, artifact_id)
         if head["actor"] != str(auth.principal):
             raise AlphaError("Only the person who asked can stop this view.", 403, code="ui_forbidden")
         attempt = _current_attempt(cur, workspace_id, head["artifactId"])
         if attempt and attempt["state"] in LIVE_STATES and attempt["leaseExpired"]:
             try:
                 with _savepoint(cur):
-                    store.reap_expired(cur, workspace_id, None)
+                    _call(store.reap_expired, cur, workspace_id, None, ledger=getattr(getattr(runtime, "service", None), "ledger", None))
             except Exception:  # noqa: BLE001
                 pass
             attempt = _current_attempt(cur, workspace_id, head["artifactId"])
@@ -1121,6 +1215,11 @@ def cancel_http(runtime, workspace_id, token, artifact_id):
                                    {"reason": "canceled_by_user", "fallback": "native", "attempt": attempt["attemptId"]})
         return {"artifactId": head["artifactId"], "attemptId": attempt["attemptId"], "state": "canceled", "canceled": True, "seq": event.get("seq"),
                 "businessResult": "unchanged"}
+
+
+def cancel_http(runtime, workspace_id, token, artifact_id):
+    """POST …/presentations/{a}/cancel (consumer route)."""
+    return cancel_presentation(runtime, workspace_id, artifact_id, transaction=_consumer_tx(runtime, token, workspace_id))
 
 
 # --- G04 probe --------------------------------------------------------------------------------------------------------------
@@ -1170,4 +1269,4 @@ def probe(runtime, environ, start_response, workspace_id, token):
     return _Closing(_probe_frames(_request_id(environ), started))
 
 
-__all__ = ["create_presentation", "replay", "cancel_http", "create_edit", "probe"]
+__all__ = ["create_presentation", "replay", "cancel_http", "create_edit", "probe", "run_presentation", "run_edit", "cancel_presentation"]

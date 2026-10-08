@@ -81,3 +81,68 @@ export const CORE_EXAMPLES: readonly string[] = [
   ].join('\n'),
   ['root = RafiiRoot([none])', 'none = EmptyState("Nothing to show for this period", "Try a longer period or another platform.")'].join('\n'),
 ];
+
+/**
+ * Edits shown in patch-mode prompts: `base` indexes CORE_EXAMPLES; the generator validates each patch by merging it onto
+ * its base with the trusted validator (patch mode). Lane E's journey edits are added from journey-examples/edits/.
+ */
+export const CORE_PATCH_EXAMPLES: readonly { base: number; patch: string }[] = [
+  {
+    base: 1,
+    patch: [
+      'root = RafiiRoot([figures, tabs, savesChart])',
+      'savesChart = ToolBoundChart(trend, "bar", "day", [{field: "saves", label: "Saves"}], "Saves by day")',
+    ].join('\n'),
+  },
+  {
+    base: 0,
+    patch:
+      'platform = Select("platform", "Platform", [{value: "all", label: "All platforms"}, {value: "instagram", label: "Instagram"}, {value: "threads", label: "Threads"}, {value: "linkedin", label: "LinkedIn"}], $platform)',
+  },
+  {
+    base: 2,
+    patch: ['compare = null', 'root = RafiiRoot([pick, next])'].join('\n'),
+  },
+];
+
+/**
+ * Exact upstream lines of OpenUI 0.3.2's generated prompt that contradict Rafii's grounding rules, and their Rafii
+ * replacements (applied by the generator to every prompt). A missing anchor fails the generator, so a package upgrade
+ * that changes the upstream text is caught instead of silently shipping the contradiction.
+ */
+export const PROMPT_REWRITES: readonly { find: string; replace: string }[] = [
+  {
+    find: 'Use @-prefixed built-in functions (@Count, @Sum, @Avg, @Min, @Max, @Round) on Query results — do NOT hardcode computed values.',
+    replace:
+      'Use @Count, @Sort, @Filter and @Each to arrange and count the rows you show. Totals, averages and other figures come from Query fields computed by the server; never compute them with @Sum, @Avg, @Min or @Max, and never type them.',
+  },
+  {
+    find: '`@Count(@Filter(data.rows, "field", "==", "val"))` for KPIs/chart values, `@Round(@Avg(data.rows.score), 1)`, `@Each(data.rows, "item", Comp(item.field))` for per-item rendering.',
+    replace:
+      '`@Count(@Filter(rows.data.items, "status", "==", "draft"))` counts rows that are shown; `@Each(rows.data.items, "item", EvidenceLink(item.title, item.href))` renders one component per row.',
+  },
+  {
+    find: 'Array pluck: `data.rows.field` extracts a field from every row → use with @Sum, @Avg, charts, tables.',
+    replace: 'Array pluck: `rows.data.items.title` extracts a field from every row.',
+  },
+  {
+    find: 'CORRECT: `Col("Actions", @Each(rows, "t", Button("Edit", Action([@Set($id, t.id)]))))`',
+    replace: 'CORRECT: `Stack(@Each(rows.data.items, "t", Button(t.title, Action([@Set($id, t.id)]))))`',
+  },
+  {
+    find: 'WRONG: `myBtn = Button("Edit", Action([@Set($id, t.id)]))` then `Col("Actions", @Each(rows, "t", myBtn))` — t is undefined in myBtn.',
+    replace: 'WRONG: `myBtn = Button(t.title, Action([@Set($id, t.id)]))` then `Stack(@Each(rows.data.items, "t", myBtn))` — t is undefined in myBtn.',
+  },
+  {
+    find: '- @OpenUrl("https://...") — Navigate to a URL',
+    replace: '- @OpenUrl("/app/...") — Open an in-app page (in-app paths only; never a web address)',
+  },
+  {
+    find: 'viewBtn = Button("View", Action([@OpenUrl("https://example.com")]))',
+    replace: 'viewBtn = Button("Open the Library", Action([@OpenUrl("/app/library")]))',
+  },
+  {
+    find: '3. Query statements — defaults resolve immediately so components render with data',
+    replace: '3. Query statements (the third argument is always null) — their reads start once Rafii accepts the view',
+  },
+];

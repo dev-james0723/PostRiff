@@ -72,11 +72,11 @@ class FakeDB:
 
     # helpers used by tests
     def add_parent(self, *, eligible=True, status="completed", composed="manager", billing="metered", age=5.0, actor=ME, ceiling=88_000, spent=30_000,
-                   spent_state="actual", journeys=("J01",), workspace=WS):
+                   spent_state="actual", journeys=("J01",), workspace=WS, run_key=None):
         run_id, conversation = uid(), uid()
         result = {"composedBy": composed, "usage": {"billing": billing}, "ui": {"eligible": eligible, "journeyIds": list(journeys)},
                   "answerText": "Here are your drafts.", "references": [{"type": "draft", "id": "d1", "title": PRIVATE_CONTEXT_TEXT}]}
-        self.runs[run_id] = {"runId": run_id, "workspaceId": workspace, "conversationId": conversation, "status": status, "runKey": "agent:" + uid(),
+        self.runs[run_id] = {"runId": run_id, "workspaceId": workspace, "conversationId": conversation, "status": status, "runKey": run_key or "agent:" + uid(),
                              "actor": actor, "result": result, "age": age}
         if ceiling is not None:
             rid = uid()
@@ -189,6 +189,14 @@ class FakeDB:
                 out.append((t["attemptId"], t["reservationId"]))
         return out
 
+    def sql_orphan_workspaces(self, grace, limit):
+        found = {t["workspaceId"] for t in self.attempts.values() if t["reservationId"] and t["state"] not in LIVE and t.get("finishedLongAgo")
+                 and not self.settlements_for(t["reservationId"])}
+        return [(w,) for w in sorted(found)][:limit]
+
+    def sql_workspace_lock_skip(self, workspace_id):
+        return [] if workspace_id in getattr(self, "busy_workspaces", ()) else [(workspace_id,)]
+
     def sql_attempt_usage_state(self, attempt_id, workspace_id):
         self.attempts[attempt_id]["costState"] = "unknown"
         return []
@@ -209,6 +217,12 @@ class FakeCursor:
     def fetchall(self):
         rows, self._rows = self._rows, []
         return rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
 class FakeConn:
@@ -484,15 +498,15 @@ class FakeStore:
 
 
 # --- lane D and C fakes ------------------------------------------------------------------------------------------------------
-def fake_projection(cur, auth, verified_result, surface, selection_state):
+def fake_projection(cur, auth, verified_result, surface, selection_state, *, flags=None):
     return {"manifest_id": "m-1", "journey_ids": list((verified_result.get("ui") or {}).get("journeyIds") or ["J01"]), "component_group_ids": ["layout", "data"],
             "data_bindings": [{"name": "drafts_list"}], "action_bindings": [{"actionId": "draft_edit"}],
-            "allowed_context": {"drafts": {"count": 3, "kinds": ["linkedin", "x"]}, "body": PRIVATE_CONTEXT_TEXT,
-                                "thumbnailUrl": "https://storage.example/x?token=secret"},
+            "allowed_context": {"counts": {"drafts": 3}, "toolStates": {"drafts_list": "available"}, "refs": [{"type": "draft", "id": "d1"}],
+                                "language": "en", "body": PRIVATE_CONTEXT_TEXT, "thumbnailUrl": "https://storage.example/x?token=secret"},
             "fallback_text": "Here are your drafts.", "egress_decision": {"allowed": True, "provider": "openai", "reason": None}}
 
 
-def fake_manifest(cur, auth, projection, *, scope="workspace"):
+def fake_manifest(cur, auth, projection, *, scope="workspace", flags=None):
     return {"manifestId": "m-1", "bindingVersion": 1, "journeyIds": list(projection["journey_ids"]), "componentGroups": ["layout", "data"],
             "library": "consumer", "queries": [{"name": "drafts_list", "description": "Drafts in this workspace", "argsSchema": {"type": "object"},
                                                 "refreshMinSeconds": 30, "pageSize": 50}],
@@ -605,7 +619,8 @@ def make_assets(root=None, *, tamper=False) -> str:
 
 
 def make_cfg(**extra):
-    values = {"OPENAI_API_KEY": "sk-test-not-a-real-key", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1"}
+    values = {"OPENAI_API_KEY": "sk-test-not-a-real-key", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1",
+              "RAFII_GENUI_ACTIONS_ENABLED": "1", "RAFII_GENUI_FOUNDER_ENABLED": "1"}
     values.update(extra)
     return config.RuntimeConfig.from_environment(values={k: v for k, v in values.items() if v is not None})
 

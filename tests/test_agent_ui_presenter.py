@@ -77,7 +77,8 @@ class Plans(unittest.TestCase):
         self.assertEqual(plan.prompt_hash, contracts.sha256_text(plan.instructions + "\n\n" + plan.input_text))
 
     def test_shared_prompt_names_the_allowed_components(self):
-        plan = self.plan(projection=projection(journey_ids=["J01", "J06"], component_group_ids=["layout"]))
+        plan = self.plan(projection=projection(journey_ids=["J01", "J06"], component_group_ids=["layout"]),
+                         manifest={**manifest(), "journeyIds": ["J01", "J06"], "componentGroups": ["layout"]})
         self.assertEqual(plan.prompt_key, "consumer:all:generate")
         self.assertIn("Use only these components: Card, EmptyState, RafiiRoot, Stack, Text.", plan.instructions)
         self.assertEqual(plan.policy["allowedComponents"], ["Card", "EmptyState", "RafiiRoot", "Stack", "Text"])
@@ -99,13 +100,27 @@ class Plans(unittest.TestCase):
         self.assertEqual(self.plan().ceiling_usd_micro, plan.ceiling_usd_micro)
 
     def test_private_text_urls_and_secrets_never_reach_the_model_input(self):
-        plan = self.plan(projection=projection(allowed_context={"count": 3, "body": PRIVATE_CONTEXT_TEXT, "draftText": "x", "previewUrl": "https://a/b",
-                                                                "nested": [{"title": "ok", "href": "https://x"}, "https://cdn.example/a?sig=1"],
-                                                                "note": "private", "label": "Bearer abc.def.ghi", "kinds": ["linkedin"]}))
-        for leaked in (PRIVATE_CONTEXT_TEXT, "previewUrl", "https://", "sig=1", "private", "Bearer"):
+        plan = self.plan(projection=projection(allowed_context={"counts": {"drafts": 3, "note": "private"}, "body": PRIVATE_CONTEXT_TEXT, "draftText": "x",
+                                                                "previewUrl": "https://a/b", "fallback_text": "the native answer",
+                                                                "refs": [{"type": "draft", "id": "d1", "href": "https://x"}, "https://cdn.example/a?sig=1"],
+                                                                "ruleLabels": ["Bearer abc.def.ghi", "linkedin"]}))
+        for leaked in (PRIVATE_CONTEXT_TEXT, "previewUrl", "https://", "sig=1", "private", "Bearer", "native answer", "draftText"):
             self.assertNotIn(leaked, plan.input_text)
-        self.assertIn('"count":3', plan.input_text)
+        self.assertIn('"drafts":3', plan.input_text)
+        self.assertIn('"id":"d1"', plan.input_text)
         self.assertIn("linkedin", plan.input_text)
+
+    def test_bindings_carry_argument_schemas_and_result_shapes(self):
+        plan = self.plan()
+        self.assertIn('rowsField "drafts" (data.drafts[]) with fields draftId', plan.instructions)
+        self.assertIn("values: data.offset, data.missingIds", plan.instructions)
+        self.assertIn('args: {"type":"object"}', plan.instructions)
+        shaped = dict(manifest())
+        shaped["queries"] = [{**shaped["queries"][0], "dataShape": {"keys": ["rows", "total"], "lists": {"rows": ["a", "b"]}, "open": True}}]
+        plan = self.plan(manifest=shaped)
+        self.assertIn('rowsField "rows" (data.rows[]) with fields a, b', plan.instructions)
+        self.assertIn("values: data.total", plan.instructions)
+        self.assertIn("use only the ones listed", plan.instructions)
 
     def test_refusals_happen_before_any_reservation_or_call(self):
         cases = [(make_cfg(OPENAI_API_KEY=None), {}, "no_model_route"),

@@ -8,6 +8,9 @@
  *   library     consumer | founder
  *   fieldHosts  component → name prop of input components (for dirty-state protection)
  *   onFirstComponent  called by the first component that renders real content (G17 mark)
+ *   fetchPreview      authenticated GET of an existing same-workspace preview route (`/api/workspaces/{w}/media/…`,
+ *                     `/api/workspaces/{w}/library/files/…/preview|url`) through the message's transport; null when the
+ *                     view may not load previews (not accepted, founder scope, no transport)
  */
 import { createContext, type JSX, type ReactNode, useContext } from 'react';
 import type { UiSurface } from '@/lib/agent-runtime/ui-contracts';
@@ -22,6 +25,7 @@ export interface GenUiRuntime {
   /** Narrow layouts (side panel, phone) collapse grids and comparisons to one column. */
   compact: boolean;
   onFirstComponent(): void;
+  fetchPreview: ((path: string, signal: AbortSignal) => Promise<Response>) | null;
 }
 
 const INERT: GenUiRuntime = {
@@ -33,6 +37,7 @@ const INERT: GenUiRuntime = {
   library: 'consumer',
   compact: false,
   onFirstComponent: () => undefined,
+  fetchPreview: null,
 };
 
 const GenUiRuntimeContext = createContext<GenUiRuntime>(INERT);
