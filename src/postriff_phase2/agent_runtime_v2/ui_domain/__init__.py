@@ -205,9 +205,16 @@ def validate(schema_: dict, inputs: dict | None) -> dict:
     return out
 
 
+def data_shape(name: str) -> dict:
+    """Field names only (no values): what a row path and row fields look like, for the presenter and E's components."""
+    from .shapes import OPEN_SHAPES, SHAPES
+    shape = SHAPES.get(name) or {"keys": [], "lists": {}}
+    return {"keys": list(shape["keys"]), "lists": {k: list(v) for k, v in shape["lists"].items()}, "open": name in OPEN_SHAPES}
+
+
 def public_query(binding: QueryBinding) -> dict:
     return {"name": binding.name, "description": binding.description, "argsSchema": binding.args, "refreshMinSeconds": binding.refresh,
-            "pageSize": binding.page}
+            "pageSize": binding.page, "dataShape": data_shape(binding.name)}
 
 
 def public_action(binding: ActionBinding) -> dict:
@@ -218,10 +225,7 @@ def public_action(binding: ActionBinding) -> dict:
 def catalog() -> dict:
     """The machine-readable catalog lanes C/E/G build on: per journey the read bindings (name, argsSchema, dataShape) and the
     action controls (actionId, inputSchema, effect), plus flat maps with the server-side metadata."""
-    from .shapes import OPEN_SHAPES, SHAPES
-
-    def shape(name):
-        return {**SHAPES.get(name, {"keys": [], "lists": {}}), "open": name in OPEN_SHAPES}
+    shape = data_shape
 
     return {"contractVersion": ui_contracts.CONTRACT_VERSION,
             "journeys": {j: {"queries": [{"name": n, "argsSchema": QUERIES[n].args, "dataShape": shape(n)} for n in JOURNEY_QUERIES[j]],
@@ -247,7 +251,9 @@ class Receipt:
 
 
 def load() -> None:
-    """Import every journey module (registration side effects), once."""
+    """Import every journey module (registration side effects), once. The site agent's tools module goes first: it imports its
+    `reads` module at its end, so importing `reads` first would be circular."""
+    from ...site_agent import tools as _site_tools  # noqa: F401
     from . import analytics, automations, calendar, campaigns, drafts, founder, library, research, voice  # noqa: F401
 
 

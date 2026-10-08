@@ -80,7 +80,7 @@ def drafts_list(dctx, inputs, cursor):
     variants = _variants(dctx.state)
     ids = inputs.get("ids")
     status = inputs.get("status") or "all"
-    if ids:
+    if ids is not None:   # present-but-empty ids select nothing (never "all drafts")
         order = {i: n for n, i in enumerate(ids)}
         variants = sorted((v for v in variants if v["id"] in order), key=lambda v: order[v["id"]])
     else:
@@ -102,7 +102,7 @@ def drafts_list(dctx, inputs, cursor):
         words = [w for w in inputs["q"].casefold().split() if w]
         variants = [v for v in variants if all(w in " ".join([v.get("text") or "", v.get("platform") or "", v.get("language") or ""]).casefold() for w in words)]
     created = _created_at(dctx, variants)
-    if not ids:
+    if ids is None:
         newest = (inputs.get("sort") or "newest") == "newest"
         variants = sorted(variants, key=lambda v: (created.get(v["id"]) or 0, v["id"]), reverse=newest)
     page, next_cursor, start = common.paginate("drafts_list", inputs, cursor, variants, default=50)
@@ -111,7 +111,7 @@ def drafts_list(dctx, inputs, cursor):
     state = "empty" if not variants else ("partial" if missing else "available")
     return ui_contracts.query_result(state, {"drafts": rows, "offset": start, "missingIds": missing}, as_of=common.iso(dctx.now),
                                      source_refs=[r["ref"] for r in rows], revision=str(dctx.revision), next_cursor=next_cursor, known=len(variants), total=len(variants),
-                                     note="Set-aside drafts are listed only when asked for." if status != "set_aside" and not ids else None,
+                                     note="Set-aside drafts are listed only when asked for." if status != "set_aside" and ids is None else None,
                                      warnings=["Some requested drafts are not in this workspace."] if missing else [])
 
 
@@ -144,7 +144,8 @@ def draft_evidence(dctx, inputs, _cursor):
     for source_id in v.get("sourceIds") or []:
         source = by_id.get(source_id)
         if source is None:
-            sources.append({"sourceId": source_id, "available": False})
+            sources.append({"sourceId": source_id, "ref": None, "available": False, "kind": None, "title": None, "active": False, "retracted": None, "approvedFacts": None,
+                            "facts": None, "origin": None, "host": None, "published": None, "fetchedAt": None})
             continue
         facts = [f for f in source.get("facts") or [] if isinstance(f, dict)]
         origin = source.get("origin") or {}
