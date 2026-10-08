@@ -1,53 +1,64 @@
 /**
- * Lane C — trusted OpenUI parser adapter (validate + merge). Uses `@openuidev/lang-core` only (no React, no DOM, no I/O).
- * Frozen interface (A): the route `web/src/app/internal/agent-ui/validate/route.ts` calls `validateAndMergeUi(request)`.
- * Implementation rules: evidence/r0/openui-package.md §4.5 and §5 (root must be RafiiRoot, no Mutation statements, Query
- * tool names must be literal read bindings from the policy, null defaults, literal refresh >= 30 s, component/action
- * allowlists, bounds, unexplained-deletion guard in patch mode). C replaces this stub.
+ * Lane C — trusted OpenUI parser adapter (validate + merge) behind A's Node route
+ * `web/src/app/internal/agent-ui/validate/route.ts`. Server-only (node:crypto); uses `@openuidev/lang-core` only — no
+ * React, no DOM, no network, no tool execution. Frozen interface (A): `validateAndMergeUi(request)`.
+ *
+ * The libraries are built from `component-specs.ts` + `library-registry.ts` (the same objects the browser renders with),
+ * so the library hash here is the identity of what is actually validated; the Python side additionally re-checks
+ * `sourceHash == sha256(canonicalSource)` and `libraryHash` (ui_validator.py).
  */
-export interface UiValidatorPolicy {
-  rootName: string;
-  allowedComponents: string[];
-  readBindings: string[];
-  actionIds: string[];
-  founder?: boolean;
+import { createHash } from 'node:crypto';
+import {
+  createSpecLibrary,
+  LIBRARY_DEFINITIONS,
+  libraryHashInput,
+  type LibraryName,
+} from '@/features/agent/generative-ui/library-registry';
+import {
+  validateCandidate,
+  type PropRuleName,
+  type UiValidationResult,
+  type UiValidatorPolicy,
+  type UiValidatorRequest,
+  type ValidatorLibrary,
+} from './validate';
+
+export type { PropRuleName, UiValidationResult, UiValidatorPolicy, UiValidatorRequest, ValidatorLibrary };
+
+export function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-export interface UiValidatorRequest {
-  v: 'v1';
-  contractVersion: string;
-  mode: 'generate' | 'patch';
-  baseSource: string | null;
-  candidateSource: string;
-  libraryHash: string;
-  policy: UiValidatorPolicy;
-  scope: { workspaceId: string; artifactId: string; attemptId: string };
-}
+const libraries = new Map<LibraryName, ValidatorLibrary>();
 
-export interface UiValidationResult {
-  accepted: boolean;
-  canonicalSource: string | null;
-  sourceHash: string | null;
-  statementCount: number;
-  queryNames: string[];
-  actionIds: string[];
-  componentNames: string[];
-  errors: string[];
-  libraryHash: string | null;
-  libraryVersion: string | null;
-}
-
-export function validateAndMergeUi(_request: UiValidatorRequest): UiValidationResult {
-  return {
-    accepted: false,
-    canonicalSource: null,
-    sourceHash: null,
-    statementCount: 0,
-    queryNames: [],
-    actionIds: [],
-    componentNames: [],
-    errors: ['validation_unavailable'],
-    libraryHash: null,
-    libraryVersion: null,
+/** One library's validator context (parser schema, hash, positional params, prop rules), built once per process. */
+export function validatorLibrary(name: LibraryName): ValidatorLibrary {
+  const cached = libraries.get(name);
+  if (cached) return cached;
+  const library = createSpecLibrary(name);
+  const schema = library.toJSONSchema();
+  const definition = LIBRARY_DEFINITIONS[name];
+  const params: Record<string, readonly string[]> = {};
+  const rules: Record<string, Readonly<Record<string, PropRuleName>>> = {};
+  for (const spec of definition.specs) {
+    const def = schema.$defs?.[spec.name];
+    params[spec.name] = Object.keys((def?.properties as Record<string, unknown> | undefined) ?? {});
+    if (spec.rules) rules[spec.name] = { ...spec.rules } as Record<string, PropRuleName>;
+  }
+  const context: ValidatorLibrary = {
+    name,
+    root: definition.root,
+    schema,
+    libraryHash: sha256Hex(libraryHashInput(library.toSpec())),
+    libraryVersion: definition.version,
+    params,
+    rules,
   };
+  libraries.set(name, context);
+  return context;
+}
+
+export function validateAndMergeUi(request: UiValidatorRequest): UiValidationResult {
+  const name: LibraryName = request && typeof request === 'object' && request.policy && request.policy.founder ? 'founder' : 'consumer';
+  return validateCandidate(request, validatorLibrary(name), sha256Hex);
 }

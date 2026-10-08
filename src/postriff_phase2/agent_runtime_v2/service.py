@@ -482,7 +482,9 @@ class AgentRuntimeService:
         if ui_selection and ui_selection.get("references"):
             # What the person selected in a generated view, as stored when they selected it (not the live table's order).
             resolved_chips = resolved_chips + [r for r in ui_selection["references"] if isinstance(r, dict) and r.get("id")][:12]
-            refs_note = "\n".join(x for x in (refs_note, ui_selection.get("note")) if x) or refs_note
+            refs_note = list(refs_note or []) + [{"phrase": "selection in the interactive view", "source": "generated view",
+                                                  "resolvedTo": [{"type": r.get("type"), "id": r.get("id")} for r in ui_selection["references"] if isinstance(r, dict)][:12],
+                                                  "note": ui_selection.get("note") or ""}]
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
                            **({"attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]} if attachments else {})}
