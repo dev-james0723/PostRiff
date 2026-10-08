@@ -38,8 +38,8 @@ ROUTES = (
     ("GET", ("grants",), "policy_http", "list_http", "read"),
     ("POST", ("grants",), "policy_http", "grant_http", "write"),
     ("DELETE", ("grants", KEY), "policy_http", "revoke_http", "write"),
-    ("POST", ("ingest", "link"), "intake", "link_http", "write"),
-    ("POST", ("ingest", "note"), "intake", "note_http", "write"),
+    ("POST", ("ingest", "link"), "intake", "link_http", "read"),   # fetch unlocked; store via ctx.open_write()
+    ("POST", ("ingest", "note"), "intake", "note_http", "read"),
     ("POST", ("collections", "preview"), "collections", "preview_http", "read"),
     ("GET", ("collections", KEY), "collections", "collection_http", "read"),
     ("POST", ("source-packs",), "source_packs", "recommend_http", "write"),
