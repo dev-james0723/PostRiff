@@ -9,6 +9,7 @@ const out=process.env.RAFII_LIBRARY_EVIDENCE||resolve(__dirname,'../../docs/cons
 mkdirSync(out,{recursive:true});
 const checks=[];
 (async()=>{
+ let generatedPoster=null;
  for(const [engine,browserType] of Object.entries({chromium,webkit})){
   const browser=await browserType.launch({headless:true});
   try{for(const width of [1440,390]){
@@ -18,7 +19,7 @@ const checks=[];
    await context.addInitScript(id=>localStorage.setItem('postriff-dev-principal',id),principal);
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
    const ws=(await boot.json()).workspaceId,path=base+'/api/workspaces/'+ws+'/library';
-   const storageTrace=[],markdownBytes=Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.');
+   const storageTrace=[],thumbnailFormats=new Set(['md']),markdownBytes=Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.');
    await context.route('https://devharness.supabase.co/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,POST,OPTIONS','Access-Control-Allow-Headers':'*'}});
@@ -37,6 +38,7 @@ const checks=[];
    });
    await context.route('https://dev.invalid/**',async route=>{
     const u=new URL(route.request().url()),r=await context.request.get(base+'/dev/storage'+u.pathname);
+    storageTrace.push({method:'GET',status:r.status(),mime:r.headers()['content-type']||null,object:u.pathname.split('/').slice(-2).join('/')});
     return route.fulfill({status:r.status(),body:await r.body(),headers:{'Content-Type':r.headers()['content-type'],'Access-Control-Allow-Origin':'*'}});
    });
    const page=await context.newPage(),errors=[],uploadTrace=[];
@@ -67,6 +69,39 @@ const checks=[];
    const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
    assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
+   await page.locator('[data-library-thumbnail="md"]').first().waitFor({timeout:15000});
+   const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4'));
+   if(engine==='chromium'){
+    await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
+   }else{
+    assert.ok(generatedPoster, 'Chromium must extract a real video frame before WebKit can verify poster display');
+    const ticketResponse=await context.request.post(base+'/api/workspaces/'+ws+'/media/videos',{headers,data:{mime:'video/mp4',bytes:videoBytes.length,duration:8,width:896,height:560}});
+    assert.equal(ticketResponse.status(),201,await ticketResponse.text());
+    const ticket=(await ticketResponse.json()).upload;
+    const token=new URL(ticket.uploadUrl).searchParams.get('token');
+    assert.ok(token,'video upload ticket must contain a signed token');
+    const put=await context.request.put(base+'/dev/upload/'+token,{data:videoBytes,headers:{'Content-Type':'video/mp4'}});
+    assert.equal(put.status(),200,await put.text());
+    const committed=await context.request.post(base+'/api/workspaces/'+ws+'/media/videos/'+ticket.assetId+'/commit',{headers,data:{frames:[{at:1,data:generatedPoster.toString('base64')}],locationCleared:true}});
+    assert.ok(committed.ok(),await committed.text());
+    const titled=await context.request.patch(base+'/api/workspaces/'+ws+'/library/assets/'+ticket.assetId,{headers,data:{title:videoName}});
+    assert.ok(titled.ok(),await titled.text());
+    await page.reload();
+   }
+   const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoCard.waitFor({timeout:30000});
+   const videoPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await videoPoster.waitFor({state:'visible',timeout:15000});
+   await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
+   if(engine==='chromium'){
+    const videoListing=await (await context.request.get(path,{headers})).json();
+    const videoAsset=videoListing.assets.find(asset=>asset.originalFilename===videoName||asset.displayTitle===videoName);
+    assert.ok(videoAsset,`uploaded video missing from Library listing: ${JSON.stringify(videoListing)}`);
+    const posterResponse=await context.request.get(base+'/api/workspaces/'+ws+'/media/'+videoAsset.id,{headers});
+    assert.equal(posterResponse.status(),200,await posterResponse.text());
+    assert.equal(posterResponse.headers()['content-type'],'image/jpeg');
+    generatedPoster=await posterResponse.body();
+    assert.ok(generatedPoster.length>100,'video upload must produce a non-empty JPEG poster');
+   }
+   thumbnailFormats.add('video');
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
    await page.getByRole('button',{name:'Save details',exact:true}).click();
@@ -89,15 +124,45 @@ const checks=[];
     await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+ticket.assetId);
     const d=await (await context.request.get(path+'/files/'+ticket.assetId,{headers})).json();
     assert.ok(['ready','unsupported','duplicate'].includes(d.asset.processing),JSON.stringify(d));
+    if(d.asset.processing!=='duplicate')thumbnailFormats.add(ext);
     if(d.asset.processing==='ready')assert.match(d.extractedText,/Rafii archive acceptance/);
     checks.push({engine,width,format:ext,status:d.asset.processing,execution:'real file/API/DB; synthetic identity/storage'});
    }
    await page.reload();
+   for(const ext of thumbnailFormats){
+    await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
+   }
+   const wordThumbnail=page.locator('[data-library-thumbnail="docx"][data-thumbnail-preview="first-page"]').first();
+   await wordThumbnail.waitFor({timeout:15000});
+   assert.match(await wordThumbnail.innerText(),/Rafii archive acceptance/,'DOCX thumbnail must show extracted content from the beginning of its first page');
+   await search.fill('sample.pdf');
+   const pdfCard=page.getByRole('button',{name:/Document sample, first-page preview/}).first();await pdfCard.waitFor({timeout:15000});
+   await pdfCard.scrollIntoViewIfNeeded();
+   const pdfFrame=page.locator('[data-thumbnail-preview="first-page"] iframe').first();await pdfFrame.waitFor({timeout:15000});
+   assert.match(await pdfFrame.getAttribute('src'),/#page=1&view=Fit&toolbar=0&navpanes=0$/,'PDF thumbnail must target its first page');
+   const pdfFetchDeadline=Date.now()+15000;
+   while(Date.now()<pdfFetchDeadline&&!storageTrace.some(item=>item.method==='GET'&&item.mime==='application/pdf'&&item.status===200))await new Promise(resolve=>setTimeout(resolve,100));
+   assert.ok(storageTrace.some(item=>item.method==='GET'&&item.mime==='application/pdf'&&item.status===200),`PDF first-page thumbnail did not read the private PDF object: ${JSON.stringify(storageTrace)}`);
+   const view=page.getByRole('radiogroup',{name:'Library view'});
+   await view.getByRole('radio',{name:'List'}).click();
+   await page.locator('[data-thumbnail-preview="first-page"] iframe').first().waitFor({timeout:15000});
+   await page.getByRole('button',{name:/Document sample, first-page preview/}).first().click();
+   await page.getByRole('button',{name:'Close asset details'}).waitFor();
+   assert.ok(await page.locator('[data-thumbnail-preview="first-page"] iframe').count()>=2,'PDF first-page thumbnail must also appear in asset details');
+   await page.getByRole('button',{name:'Close asset details'}).click();
+   await search.fill(videoName);
+   const videoRow=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoRow.waitFor({timeout:15000});
+   const listPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await listPoster.waitFor({state:'visible',timeout:15000});
+   await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
+   await videoRow.click();await page.locator('[data-library-thumbnail="video"][data-thumbnail-preview="video-poster"]').last().waitFor({timeout:15000});
+   await page.getByRole('button',{name:'Close asset details'}).click();
+   await search.fill('');
    await page.getByRole('button',{name:/Audio sample/}).first().click();
    await page.getByRole('button',{name:'Play audio in Now Playing'}).click();
    await page.getByLabel('Now Playing',{exact:true}).waitFor();
    await page.getByText('Add or replace transcript',{exact:true}).click();await page.getByLabel('Transcript',{exact:true}).fill('Searchable audio bowing lesson.');await page.getByRole('button',{name:'Save transcript',exact:true}).click();
    await page.getByRole('button',{name:'Close asset details'}).click();
+   await page.getByRole('button',{name:'Close player',exact:true}).click();
    await page.screenshot({path:resolve(out,`library-${engine}-${width}.png`),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'horizontal overflow');
    const beforeDelete=await (await context.request.get(path,{headers})).json();
