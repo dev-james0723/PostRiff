@@ -71,7 +71,11 @@ class FirstPageRendering(unittest.TestCase):
             for target in targets:
                 with self.subTest(format=target), tempfile.TemporaryDirectory() as temp:
                     work=Path(temp);source=work/('fixture.'+source_ext);source.write_bytes(office(source_ext))
-                    result=subprocess.run([command,'-env:UserInstallation='+(work/'profile').as_uri(),'--headless','--convert-to',target,'--outdir',temp,str(source)],capture_output=True,timeout=45)
+                    env = None
+                    if ROOT.exists():
+                        import os
+                        env = {**os.environ,'LD_LIBRARY_PATH':str(ROOT/'lib')+':'+str(ROOT/'office/program')}
+                    result=subprocess.run([command,'-env:UserInstallation='+(work/'profile').as_uri(),'--headless','--convert-to',target,'--outdir',temp,str(source)],capture_output=True,timeout=45,env=env)
                     converted=work/('fixture.'+target)
                     self.assertTrue(converted.exists(),result.stdout.decode()+result.stderr.decode())
                     self.image(converted.read_bytes(),target)

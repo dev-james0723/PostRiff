@@ -60,6 +60,7 @@ export function AssetListRow({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
+  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
   const preview = useAssetImage(asset.id, nearView && mediaAsset);
   const video = assetKind === 'video';
   const title = libraryAssetTitle(asset);

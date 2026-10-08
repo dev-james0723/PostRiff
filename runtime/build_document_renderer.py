@@ -33,7 +33,7 @@ def main():
         with tarfile.open(archive) as tar:
             tar.extractall(work / 'rpms', filter='data')
         rpms = sorted(str(p) for p in (work / 'rpms').rglob('*.rpm'))
-        subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', 'libXinerama', 'cups-libs', 'dbus-glib', 'cairo', 'libseccomp', 'fontconfig', 'dejavu-sans-fonts', 'dejavu-serif-fonts', *rpms], check=True)
+        subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', 'libXinerama', 'cups-libs', 'dbus-glib', 'cairo', 'libseccomp', 'nss', 'fontconfig', 'dejavu-sans-fonts', 'dejavu-serif-fonts', *rpms], check=True)
     office = next(Path('/opt').glob('libreoffice26.2'))
     shutil.copytree(office, root / 'office', dirs_exist_ok=True, symlinks=False)
     libdir = root / 'lib'
@@ -56,6 +56,7 @@ def main():
                 pending.append(dep)
     shutil.copytree('/usr/share/fonts', root / 'fonts', dirs_exist_ok=True, symlinks=False)
     (root / 'VERSION').write_text(VERSION)
+    print('Runtime bundle bytes', sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))
     print('Bundled checksum-verified LibreOffice', VERSION)
 
 if __name__ == '__main__':
