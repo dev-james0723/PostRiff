@@ -382,7 +382,7 @@ function FlowBody({
                   ] as const
                 ).map(([value, label]) => (
                   <label key={value} className='flex min-h-11 items-center gap-2 text-sm'>
-                    <input type='radio' name={`${id}-where`} value={value} checked={where === value} onChange={() => setWhere(value)} className='size-4' />
+                    <input type='radio' name={`${id}-where`} value={value} checked={where === value} onChange={() => setWhere(value)} aria-label={label} className='size-4' />
                     {label}
                   </label>
                 ))}
@@ -471,13 +471,12 @@ function FlowBody({
                         setDraftId(variant.id);
                         setConflict(null);
                       }}
+                      aria-label={`${variant.platform} · ${variant.language}`}
                       className='mt-1 size-4'
                     />
-                    <span className='flex min-w-0 flex-col'>
-                      <span className='font-medium'>
-                        {variant.platform} · {variant.language}
-                      </span>
-                      <span className='text-muted-foreground line-clamp-2 text-xs'>{variant.text || 'Empty draft'}</span>
+                    <span className='flex min-w-0 flex-col font-medium'>
+                      {variant.platform} · {variant.language}
+                      <span className='text-muted-foreground line-clamp-2 text-xs font-normal'>{variant.text || 'Empty draft'}</span>
                     </span>
                   </label>
                 ))}

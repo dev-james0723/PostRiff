@@ -121,7 +121,7 @@ for case, checks in VERIFIED.items():
         run(case, "UNVERIFIED", note=f"Postgres checks exist ({'; '.join(checks)}) but the candidate run {RUN} did not pass.")
 GOV_ENV = "Local git worktree and documents; remote CI receipt"
 if PASSED:
-    run("A075", "VERIFIED", evidence=["docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md", "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md", f"merge commit c471f7ae reconciles origin/consumer-saas bb4ca5aa (#134); `git merge-base --is-ancestor origin/consumer-saas {SHA}`"],
+    run("A075", "VERIFIED", evidence=["docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md", "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md", f"merge commits c471f7ae (#134) and 5b43b140 (#135) reconcile origin/consumer-saas 65b1ea83; `git merge-base --is-ancestor origin/consumer-saas {SHA}`"],
         command="Manual procedure: recorded origin, base, worktrees, leases and in-flight Library/OpenUI branches before code; merged the current base before release validation", env=GOV_ENV)
     run("A077", "VERIFIED", evidence=[RUNREF, f"JCB receipt sourceHead={SHA}: typecheck, lint, build, focused unit, disposable PostgreSQL lifecycle/RLS (both phases), npm audit, secrets scan and browser harnesses in one run"], env=ENV)
     run("A078", "VERIFIED", evidence=[RUNREF, "pgmigration::migration: every existing asset row unchanged", "pgmigration::migration: 097 re-applies cleanly (attempt 2)", "pglifecycle::backfill: dry run counts only", "docs/releases/rafii-intelligent-library-2026-10-08.md (preconditions, pgvector schema, canary, rollback)", "OWNER-MAP.md: 097-099 reserved here, 102-103 by OpenUI"], env=ENV)
