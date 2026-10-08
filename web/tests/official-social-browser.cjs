@@ -75,10 +75,12 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    // Observed preview incident shape, still entirely synthetic: saved member
    // identity and verified OIDC product must not inherit publication blockers.
    const memberIdentity={...identity,appApproved:true,eligible:true,blockers:['LIVE E2E NOT PROVEN']};
-   activeChannel={...channel,id:'fixture-li',platform:'LinkedIn',account:'LinkedIn identity fixture',accountType:'member',scopes:['openid','profile'],socialReadiness:{...channel.socialReadiness,publishing:'PUBLISHING_AWAITING_PROVIDER_REVIEW'},officialCapabilities:{connected:memberIdentity,member_identity:memberIdentity,member_publish:publish,organization_identity:{...identity,granted:false,permission_group:'organization_identity'}}};
+   activeChannel={...channel,id:'fixture-li',platform:'LinkedIn',account:'LinkedIn identity fixture',accountType:'member',scopes:['openid','profile'],identityVerifiedAt:Date.now()/1000,capabilities:{...channel.capabilities,identity:{...channel.capabilities.identity,verifiedAt:Date.now()/1000-7200}},socialReadiness:{...channel.socialReadiness,publishing:'PUBLISHING_AWAITING_PROVIDER_REVIEW'},officialCapabilities:{connected:memberIdentity,member_identity:memberIdentity,member_publish:publish,organization_identity:{...identity,granted:false,permission_group:'organization_identity'}}};
    activeProvider={...provider,id:'linkedin',platform:'LinkedIn',capabilities:{identity:true,publish:true},officialCapabilities:activeChannel.officialCapabilities};
    await page.reload({waitUntil:'domcontentloaded'});
    await page.getByText('LinkedIn identity fixture',{exact:true}).waitFor();
+   const identityReadTime=await page.getByText(/^Verified /).first().textContent();
+   assert.match(identityReadTime,/^Verified /);assert.doesNotMatch(identityReadTime,/hours? ago/);
    await page.getByText('Connected — publishing not enabled.',{exact:true}).waitFor();
    await page.getByText('Individual capabilities and verification',{exact:true}).click();
    assert.equal(await page.getByText('Identity verified for this account',{exact:false}).count(),2);
@@ -96,7 +98,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
    await page.waitForURL('**/app/channels?connected=fixture-ig');
    assert.equal(completionWorkspace,wid);
-   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,minimumIdentitySelected:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,minimumIdentitySelected:true,latestIdentityVerificationShown:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}

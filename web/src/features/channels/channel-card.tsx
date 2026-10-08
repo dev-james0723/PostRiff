@@ -206,7 +206,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const expiring = expiringSoon(channel);
   const expired = typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
-  const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
+  const identityVerifiedAt = channel.identityVerifiedAt ?? channel.capabilities.identity?.verifiedAt ?? null;
   const connectionMessage = connectionSummary(channel);
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 

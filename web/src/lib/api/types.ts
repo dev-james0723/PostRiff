@@ -1391,6 +1391,8 @@ export interface OfficialCapability {
 }
 
 export interface ChannelView {
+  /** Server-recorded identity read; independent of operation approval/evidence times. */
+  identityVerifiedAt?: number | null;
   officialCapabilities?: Record<string, OfficialCapability>;
   id: string;
   platform: string;
