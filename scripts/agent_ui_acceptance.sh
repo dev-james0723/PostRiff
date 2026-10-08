@@ -41,6 +41,7 @@ cloud_only() {
 
 API_PORT=4538 WEB_PORT=4539 PROVIDER_PORT=4540 PG_PORT=55538
 PIDS=()
+BUILD_OK=1   # 0: the production build failed → the run fails; the API/parser corpora still run on `next dev`, scenes are skipped
 cleanup() {
   for pid in "${PIDS[@]:-}"; do [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true; done
   sleep 2
@@ -58,18 +59,33 @@ start_stack() {
                  "RAFII_GENUI_VALIDATOR_SECRET=$RAFII_GENUI_VALIDATOR_SECRET")
   if [ ! -f web/.next/BUILD_ID ]; then
     echo "::group::web production build (credential-free env)"
-    (cd web && "${web_env[@]}" npm run build) >"$EVIDENCE/web-build.log" 2>&1 || { tail -n 60 "$EVIDENCE/web-build.log"; echo "::endgroup::"; return 1; }
-    tail -n 15 "$EVIDENCE/web-build.log"; echo "::endgroup::"
+    if (cd web && "${web_env[@]}" npm run build) >"$EVIDENCE/web-build.log" 2>&1; then
+      tail -n 15 "$EVIDENCE/web-build.log"
+    else
+      BUILD_OK=0
+      grep -E "error TS|Error:|Failed" "$EVIDENCE/web-build.log" | head -n 20 || true
+      echo "::error::web production build failed; the run fails. Backend corpora continue on next dev; browser scenes are skipped."
+      record web-build 1 0
+    fi
+    echo "::endgroup::"
   fi
   CI=true RAFII_WEB_INTERNAL_URL="http://127.0.0.1:$WEB_PORT" POSTRIFF_DEV_WEB_ORIGIN="http://127.0.0.1:$WEB_PORT" \
     "$PY" tests/agent_ui_acceptance/serve.py --port "$API_PORT" --pg-port "$PG_PORT" --provider-port "$PROVIDER_PORT" \
     --state-file "$EVIDENCE/stack.json" >"$EVIDENCE/harness.log" 2>&1 &
   PIDS+=("$!")
-  (cd web && exec "${web_env[@]}" npx next start -p "$WEB_PORT" -H 127.0.0.1) >"$EVIDENCE/web.log" 2>&1 &
+  if [ "$BUILD_OK" = 1 ]; then
+    (cd web && exec "${web_env[@]}" npx next start -p "$WEB_PORT" -H 127.0.0.1) >"$EVIDENCE/web.log" 2>&1 &
+  else
+    local dev_env=() item
+    for item in "${web_env[@]}"; do [ "$item" = "NODE_ENV=production" ] && item="NODE_ENV=development"; dev_env+=("$item"); done
+    (cd web && exec "${dev_env[@]}" npx next dev -p "$WEB_PORT" -H 127.0.0.1) >"$EVIDENCE/web.log" 2>&1 &
+  fi
   PIDS+=("$!")
-  for _ in $(seq 1 150); do
-    if curl -sf "http://127.0.0.1:$API_PORT/api/health" >/dev/null && curl -sf -o /dev/null "http://127.0.0.1:$WEB_PORT/" && [ -s "$EVIDENCE/stack.json" ]; then
-      echo "acceptance stack ready (api :$API_PORT, web :$WEB_PORT, fixture provider :$PROVIDER_PORT)"; return 0
+  for _ in $(seq 1 200); do
+    if curl -sf "http://127.0.0.1:$API_PORT/api/health" >/dev/null && curl -s -o /dev/null --max-time 240 "http://127.0.0.1:$WEB_PORT/" && [ -s "$EVIDENCE/stack.json" ]; then
+      # Compile the parser-seam route once (a dev server compiles on first request; an unsigned POST is refused 401).
+      curl -s -o /dev/null --max-time 240 -X POST -H 'Content-Type: application/json' -d '{}' "http://127.0.0.1:$WEB_PORT/internal/agent-ui/validate" || true
+      echo "acceptance stack ready (api :$API_PORT, web :$WEB_PORT $([ "$BUILD_OK" = 1 ] && echo production || echo 'next dev fallback'), fixture provider :$PROVIDER_PORT)"; return 0
     fi
     sleep 2
   done
@@ -123,9 +139,14 @@ case "$mode" in
     start_stack || { record "$mode-stack" 1 0; exit 1; }
     run_py_corpus api_corpus api-corpus || failed=1
     run_py_corpus validator_corpus validator-corpus || failed=1
-    if [ "$mode" = browser ]; then
+    if [ "$BUILD_OK" != 1 ]; then
+      failed=1   # a red production build always fails the run, whatever the corpora say
+    fi
+    if [ "$mode" = browser ] && [ "$BUILD_OK" = 1 ]; then
       run_scenes || failed=1
       bundle_grep || failed=1
+    elif [ "$mode" = browser ]; then
+      echo "browser scenes skipped: they need the production build, which failed (see web-build.log)" | tee "$EVIDENCE/e2e-skipped.txt"
     fi
     summarize || failed=1
     exit "$failed" ;;
