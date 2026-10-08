@@ -214,7 +214,7 @@ check("derivative: media merged into the version row", scalar("SELECT media->>'p
 check("derivative: only allowlisted media facts are stored", scalar("SELECT media ? 'notAMediaFact' FROM public.pr_library_assets WHERE id=%s", (doc,)) is False)
 
 # --- lease expiry recovery ------------------------------------------------------------------------------------------------
-lease_calls = register("visual", "pg-lease-1", category="vision", run=lambda job: {"state": "ready", "media": {"leaseAttempt": job.attempt}})
+lease_calls = register("visual", "pg-lease-1", category="vision", run=lambda job: {"state": "ready", "media": {"pages": 100 + job.attempt}})  # an allowlisted fact marks which attempt wrote
 lease_job = enqueue("visual", "pg-lease-1")["job"]["jobId"]
 crashed = jobs.claim_next(intel, connection)
 check("lease: crashed worker held the job", crashed and crashed["job"]["id"] == lease_job and job_row(lease_job)[:2] == ("processing", 1))
@@ -225,7 +225,7 @@ summary = intel.tick(connection, max_jobs=10, max_seconds=60)["jobs"]
 check("lease: expired lease recovered by the next tick", summary["claimed"] == 1 and job_row(lease_job)[:2] == ("completed", 2), (summary, job_row(lease_job)))
 late = jobs.run_claimed(intel, connection, crashed)
 check("lease: the late worker writes nothing", late in ("lost", "completed") and
-      scalar("SELECT media->>'leaseAttempt' FROM public.pr_library_assets WHERE id=%s", (doc,)) == "2", late)
+      scalar("SELECT media->>'pages' FROM public.pr_library_assets WHERE id=%s", (doc,)) == "102", late)
 
 # --- attempts ceiling with backoff ----------------------------------------------------------------------------------------
 def flaky(job):
@@ -258,14 +258,14 @@ check("cancel: cancelled job never runs", intel.tick(connection, max_jobs=10, ma
 def cancel_mid_run(job):
     with write_context(service, "one", wid) as ctx:
         jobs.cancel(ctx, doc, ["preview"])
-    return {"state": "ready", "media": {"midCancel": True}}
+    return {"state": "ready", "media": {"slides": 777}}  # would be visible if a cancelled job wrote
 
 
 register("preview", "pg-midcancel-1", run=cancel_mid_run)
 mid_job = enqueue("preview", "pg-midcancel-1")["job"]["jobId"]
 summary = intel.tick(connection, max_jobs=10, max_seconds=60)["jobs"]
 check("cancel: mid-run cancellation wins at finalize", summary["cancelled"] == 1 and job_row(mid_job)[0] == "cancelled", summary)
-check("cancel: no derivative after cancellation", scalar("SELECT media ? 'midCancel' FROM public.pr_library_assets WHERE id=%s", (doc,)) is False)
+check("cancel: no derivative after cancellation", scalar("SELECT coalesce(media->>'slides','') FROM public.pr_library_assets WHERE id=%s", (doc,)) != "777")
 check("cancel: capability shows cancelled", cap_state(doc, "preview") == "cancelled")
 
 # --- cloud: no grant -> no job; budget refusal -> provider never called ---------------------------------------------------
@@ -292,7 +292,7 @@ providers_module.settle = lambda cur, ws, reservation, result, failed=False: set
 def revoke_mid_run(job):
     with write_context(service, "one", wid) as ctx:
         policy.revoke(ctx, granted["grantId"])
-    return {"state": "ready", "media": {"afterRevoke": True}, "provider": {"provider": "synthetic", "model": "m", "cost": {"kind": "unknown", "usdMicro": None}}}
+    return {"state": "ready", "media": {"textLength": 888}, "provider": {"provider": "synthetic", "model": "m", "cost": {"kind": "unknown", "usdMicro": None}}}
 
 
 try:
@@ -301,7 +301,7 @@ try:
     intel.tick(connection, max_jobs=10, max_seconds=60)
 finally:
     providers_module.reserve, providers_module.settle = real_reserve, real_settle
-check("revocation: no derivative written", scalar("SELECT media ? 'afterRevoke' FROM public.pr_library_assets WHERE id=%s", (doc,)) is False)
+check("revocation: no derivative written", scalar("SELECT coalesce(media->>'textLength','') FROM public.pr_library_assets WHERE id=%s", (doc,)) != "888")
 check("revocation: job stopped, capability blocked_permission", job_row(revoked_job)[0] in ("cancelled", "blocked") and cap_state(doc, "understand") == "blocked_permission",
       (job_row(revoked_job), cap_state(doc, "understand")))
 check("revocation: the provider attempt is still settled once", len(settled) == 1, settled)
