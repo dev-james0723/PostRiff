@@ -31,6 +31,11 @@ if [ -n "$suites" ]; then
 fi
 # Adjacent PostgreSQL regressions on the same candidate (postgres_library_lifecycle already ran in the caller).
 python scripts/postriff_pg_suite.py postgres_agent_runtime postgres_agent_style
+# Library lint findings with file:line (the CI lint task prints GitHub annotations without locations). Informational
+# here; `jcb lint` remains the gate.
+if [ -x web/node_modules/.bin/oxlint ]; then
+  (cd web && node_modules/.bin/oxlint -f unix src/features/library src/lib/library src/lib/api) || echo "LIBRARY_LINT_FINDINGS_ABOVE"
+fi
 # Web source tests (node --test, no browser). All web tests, so adjacent features regress here too.
 web_tests=(web/tests/*.test.cjs web/tests/*.test.mjs)
 node --test "${web_tests[@]}"
