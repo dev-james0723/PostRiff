@@ -139,6 +139,10 @@ case "$mode" in
     start_stack || { record "$mode-stack" 1 0; exit 1; }
     run_py_corpus api_corpus api-corpus || failed=1
     run_py_corpus validator_corpus validator-corpus || failed=1
+    # 04-ACCEPTANCE bounded concurrency (1 / 5 / 20 sessions, fixture provider, loopback harness only): fails on any
+    # cross-tenant read; per-session outcomes are evidence (a lane still blocked shows up as its status, not as a pass).
+    RAFII_LIVE_CHECKS=1 "$PY" scripts/agent_ui_live.py concurrency --origin "http://127.0.0.1:$API_PORT" --levels 1,5,20 \
+      --out "$EVIDENCE/concurrency.json" 2>&1 | tail -n 3 || failed=1
     if [ "$BUILD_OK" != 1 ]; then
       failed=1   # a red production build always fails the run, whatever the corpora say
     fi
