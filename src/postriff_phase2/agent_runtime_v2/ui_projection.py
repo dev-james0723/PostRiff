@@ -269,7 +269,8 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state):  #
     manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope)
     projection.update({"manifest_id": manifest["manifestId"], "manifest": manifest,
                        "data_bindings": [{"name": q["name"], "description": q["description"], "argsSchema": q["argsSchema"], "refreshMinSeconds": q["refreshMinSeconds"],
-                                          "pageSize": q["pageSize"], "journey": ui_domain.QUERIES[q["name"]].journey} for q in manifest["queries"]],
+                                          "pageSize": q["pageSize"], "dataShape": q.get("dataShape") or ui_domain.data_shape(q["name"]),
+                                          "journey": ui_domain.QUERIES[q["name"]].journey} for q in manifest["queries"]],
                        "action_bindings": [{"actionId": a["actionId"], "label": a["label"], "effect": a["effect"], "requiresConfirmation": a["requiresConfirmation"],
                                             "inputSchema": a["inputSchema"], "journey": ui_domain.ACTIONS[a["actionId"]].journey} for a in manifest["actions"]]})
     return projection

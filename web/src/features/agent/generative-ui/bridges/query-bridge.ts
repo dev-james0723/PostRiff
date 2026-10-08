@@ -98,6 +98,20 @@ const STATUS_MESSAGES: Record<number, string> = {
   429: 'Too many updates at once. Rafii will try again shortly.',
 };
 
+function refreshMs(entry: QueryEntry): number {
+  return Math.max(BOUNDS.refreshMinSeconds, entry.refreshMinSeconds ?? BOUNDS.refreshMinSeconds) * 1000;
+}
+
+async function parse(response: Response): Promise<UiQueryResultV1 | null> {
+  try {
+    const body: unknown = await response.json();
+    const parsed = uiQueryResultSchema.safeParse(body);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
   const { transport, artifact } = options;
   const now = options.now ?? (() => Date.now());
@@ -128,7 +142,7 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
   let disposed = false;
 
   const emit = () => {
-    for (const listener of [...listeners]) {
+    for (const listener of Array.from(listeners)) {
       try {
         listener();
       } catch {
@@ -156,8 +170,6 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
     }
     return null;
   };
-
-  const refreshMs = (entry: QueryEntry) => Math.max(BOUNDS.refreshMinSeconds, entry.refreshMinSeconds ?? BOUNDS.refreshMinSeconds) * 1000;
 
   const cacheKey = (name: string, inputs: Record<string, JsonValue>, cursor: string | null) =>
     [scopeKey, artifact.artifactId, String(artifact.revision), name, canonicalJson(inputs), cursor ?? ''].join('\u0000');
@@ -199,16 +211,6 @@ export function createQueryBridge(options: QueryBridgeOptions): QueryBridge {
     const count = prior + 1;
     const delay = status === 429 ? MAX_BACKOFF_MS : Math.min(MAX_BACKOFF_MS, 1000 * 2 ** (count - 1));
     failures.set(key, { count, until: now() + delay });
-  };
-
-  const parse = async (response: Response): Promise<UiQueryResultV1 | null> => {
-    try {
-      const body: unknown = await response.json();
-      const parsed = uiQueryResultSchema.safeParse(body);
-      return parsed.success ? parsed.data : null;
-    } catch {
-      return null;
-    }
   };
 
   const fetchOnce = async (
