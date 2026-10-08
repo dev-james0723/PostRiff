@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { formatInstant, formatMicroMoney } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
-import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle } from './shared';
+import { InAppLink, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 const ID = /^[A-Za-z0-9_.:-]{1,120}$/;
@@ -30,7 +30,8 @@ export function AutomationList({ props, statementId }: JourneyRendererProps) {
   const record = useSelectionRecorder(statementId ?? 'automations');
   return (
     <QueryFrame value={props.data} binding='automations_list' label={copy.automations.listTitle} title={copy.automations.listTitle}>
-      {(data) => (
+      {(data, result) => (
+        <>
         <ul className='flex flex-col divide-y divide-border rounded-[var(--rafii-radius-card)] border'>
           {data.automations.map((a) => {
             const isSelected = selected === a.automationId;
@@ -65,6 +66,8 @@ export function AutomationList({ props, statementId }: JourneyRendererProps) {
             );
           })}
         </ul>
+          <Pager result={result} cursor={props.cursor} statementId={statementId} />
+        </>
       )}
     </QueryFrame>
   );
@@ -109,9 +112,9 @@ export function AutomationDetail({ props }: JourneyRendererProps) {
             </p>
           ) : null}
           {a.href ? (
-            <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={a.href}>
+            <InAppLink href={a.href}>
               {copy.common.open}
-            </a>
+            </InAppLink>
           ) : null}
         </article>
       )}
@@ -119,11 +122,12 @@ export function AutomationDetail({ props }: JourneyRendererProps) {
   );
 }
 
-export function RunHistory({ props }: JourneyRendererProps) {
+export function RunHistory({ props, statementId }: JourneyRendererProps) {
   const { copy, locale } = useJourneyEnvironment();
   return (
     <QueryFrame value={props.data} binding='automation_history' label={copy.automations.historyTitle} title={copy.automations.historyTitle}>
-      {(data) => (
+      {(data, result) => (
+        <>
         <ul className='flex flex-col gap-1.5 text-sm'>
           {data.runs.map((run) => (
             <li key={run.ref} className='flex flex-col gap-0.5 rounded-md border p-2'>
@@ -148,6 +152,8 @@ export function RunHistory({ props }: JourneyRendererProps) {
             </li>
           ))}
         </ul>
+          <Pager result={result} cursor={props.cursor} statementId={statementId} />
+        </>
       )}
     </QueryFrame>
   );
@@ -187,9 +193,9 @@ export function ConnectionHealth({ props }: JourneyRendererProps) {
                 <li key={i} className='flex flex-wrap items-center gap-2'>
                   {item.severity ? <Pill tone={item.severity === 'critical' ? 'attention' : 'waiting'}>{item.severity}</Pill> : null}
                   {item.href ? (
-                    <a className='rafii-focus text-primary underline-offset-4 hover:underline' href={item.href}>
+                    <InAppLink href={item.href}>
                       {item.title ?? item.kind}
-                    </a>
+                    </InAppLink>
                   ) : (
                     <span>{item.title ?? item.kind}</span>
                   )}
@@ -198,9 +204,9 @@ export function ConnectionHealth({ props }: JourneyRendererProps) {
             </ul>
           ) : null}
           {data.accounts.some((a) => a.needsReconnect) && data.recovery?.href ? (
-            <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={data.recovery.href}>
+            <InAppLink href={data.recovery.href}>
               {copy.automations.reconnect}
-            </a>
+            </InAppLink>
           ) : null}
         </div>
       )}
@@ -217,9 +223,9 @@ export function RecoveryGuides({ props }: JourneyRendererProps) {
           {data.guides.map((g) => (
             <li key={g.guideId} className='flex flex-col gap-0.5'>
               {g.href && g.canOpen !== false ? (
-                <a className='rafii-focus text-primary font-medium underline-offset-4 hover:underline' href={g.href}>
+                <InAppLink href={g.href} className='font-medium'>
                   {g.title ?? g.guideId}
-                </a>
+                </InAppLink>
               ) : (
                 <span className='font-medium'>{g.title ?? g.guideId}</span>
               )}

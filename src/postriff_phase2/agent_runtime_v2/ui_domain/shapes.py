@@ -99,7 +99,10 @@ OPTIONAL: dict[str, dict] = {
     "campaign_timeline": _s("", events="automationId name scheduleZone scheduleLocal runId items jobId jobZone jobLocal platform"),
     "analytics_compare": _s("", comparisons="sampleSize measured missing mean minimum reason causalityEstablished"),
     "research_results": _s("reason searches note"),
-    "draft_evidence": _s("", sources="ref"),
+    # A source no longer in the workspace may be reported as {sourceId, available: false} alone.
+    "draft_evidence": _s("", sources="ref active approvedFacts facts fetchedAt host kind origin published retracted title"),
+    # With no multi-step task in the conversation the result may be {task: null} alone.
+    "task_progress": _s("summary rule"),
 }
 
 

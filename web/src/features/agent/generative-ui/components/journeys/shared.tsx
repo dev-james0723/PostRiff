@@ -6,6 +6,7 @@
  * Facts on screen come from the bound query result only. Generated text never reaches these pieces except through the
  * separate `Commentary` component, which is labelled as Rafii's note.
  */
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { StateMessage } from '@/components/rafii/state-message';
 import { LoadingRows } from '../primitives/shared';
@@ -13,8 +14,27 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { JsonValue, UiQueryResultV1 } from '@/lib/agent-runtime/ui-contracts';
 import { formatAsOf, formatCount } from '../../journeys/format';
-import { useBindingStatus, useJourneyAction, useJourneyEnvironment, useStreaming } from '../../journeys/runtime';
+import { useGenUiLocale } from '../../core/locale';
+import { useBindingStatus, useBound, useJourneyAction, useJourneyEnvironment, useStreaming } from '../../journeys/runtime';
 import { readQuery, type BindingName, type ViewData } from '../../journeys/views';
+
+/** A same-origin path ("/app/…", "/control/…") from bound data or Rafii's own copy; anything else is plain text. */
+export function inAppPath(href: unknown): string | null {
+  if (typeof href !== 'string' || href.length > 400) return null;
+  if (!href.startsWith('/') || href.startsWith('//') || href.includes('\\') || /[\s<>"'`]/.test(href)) return null;
+  return href;
+}
+
+/** In-app navigation through the app router (client-side), never an external or script URL. */
+export function InAppLink({ href, children, className }: { href: unknown; children: ReactNode; className?: string }) {
+  const path = inAppPath(href);
+  if (!path) return <span className={className}>{children}</span>;
+  return (
+    <Link href={path} className={cn('rafii-focus text-primary text-xs underline-offset-4 hover:underline', className)}>
+      {children}
+    </Link>
+  );
+}
 
 export type Tone = 'neutral' | 'good' | 'waiting' | 'attention' | 'muted';
 
@@ -251,4 +271,32 @@ export function ActionOutcomeLine({ outcome, verified }: { outcome: string; veri
 export function CountLabel({ value, word }: { value: number | null | undefined; word: (n: number) => string }) {
   if (typeof value !== 'number') return <Missing />;
   return <>{word(value)}</>;
+}
+
+/**
+ * Page through a bound list: the component's `cursor` prop and the Query's `cursor` argument are the same `$variable`
+ * (lane D lifts that reserved argument into UiQueryV1.cursor). Paging never calls a model; without a bound cursor the
+ * component shows the first page and its in-app link instead.
+ */
+export function Pager({ result, cursor, statementId, fallback }: { result: UiQueryResultV1; cursor: unknown; statementId?: string; fallback?: ReactNode }) {
+  const l = useGenUiLocale();
+  const streaming = useStreaming();
+  const page = useBound<string>(`cursor_${statementId ?? 'list'}`, cursor);
+  if (!page.bound) return result.nextCursor ? <>{fallback ?? null}</> : null;
+  const current = typeof page.value === 'string' && page.value ? page.value : null;
+  if (!current && !result.nextCursor) return null;
+  return (
+    <div className='flex flex-wrap items-center gap-2'>
+      {current ? (
+        <Button type='button' variant='quiet' size='xs' disabled={streaming} onClick={() => page.set('')}>
+          {l.t('firstPage')}
+        </Button>
+      ) : null}
+      {result.nextCursor ? (
+        <Button type='button' variant='quiet' size='xs' disabled={streaming} onClick={() => page.set(result.nextCursor as string)}>
+          {l.t('nextPage')}
+        </Button>
+      ) : null}
+    </div>
+  );
 }

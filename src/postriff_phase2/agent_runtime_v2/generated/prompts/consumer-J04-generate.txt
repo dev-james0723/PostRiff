@@ -73,6 +73,23 @@ Inputs only change this view. Bind them to $variables and use those in Query arg
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.
 
+### Rafii’s note
+Commentary(text: string) — Your own short explanation, shown apart from the records and labelled as Rafii’s note. Never put figures, dates, titles or statuses in it: those come from bound components.
+Commentary is your explanation only. Records, figures and statuses always come from bound components.
+To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.
+
+### Voice
+VoiceSourcePicker(data: QueryRef, selected?: $binding<string[]>, cursor?: $binding<string>) — Writing samples from a voice_sources Query with each sample’s exact use grants and, when purpose and route are given, why a sample is excluded. Bind selected to a $variable (sample ids). Picking only selects.
+VoiceAnalyzeLocal(actionId: "voice_profile_analyze_local", samples?: $binding<string[]>) — Analyse the picked samples with Rafii’s local rules (no AI, no cost) into a proposed profile. samples is the selection $variable.
+VoiceProfileReview(data: QueryRef, actionId?: "voice_profile_approve") — The voice in effect next to the proposed one (voice_profile_state Query), each observation with its evidence level, and how many drafts an approval affects. actionId "voice_profile_approve" lets an owner approve the proposal shown.
+VoicePreferenceList(data: QueryRef, actionId?: "preference_decide") — Learned preferences in effect and proposals waiting for an owner (voice_preferences Query). actionId "preference_decide" offers Remember / Dismiss on each proposal.
+VoiceLearningStatus(data: QueryRef) — What learning is doing now (voice_learning_status Query): on or off, edits waiting, proposals waiting. Rafii trains no model.
+VoiceSampleImport(actionId: "voice_samples_import", name: string) — Paste writing to keep as a private style sample, with the person’s explicit confirmation. name is the form field name.
+Show the voice in effect and the proposed voice separately. Nothing is trained; a proposal changes nothing until an owner approves it.
+
+### Consent
+VoiceConsentPanel(data: QueryRef) — Every consent layer separately from a voice_consent Query: sample grants, cloud memory, learning from edits, photo processing and web research. Changes happen on the Memory page.
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -164,6 +181,24 @@ next = ActionButton("example_rewrite", null, {draftIds: $picked})
 
 root = RafiiRoot([none])
 none = EmptyState("Nothing to show for this period", "Try a longer period or another platform.")
+
+root = RafiiRoot([consent, status, sample])
+allowed = Query("voice_consent", {}, null)
+learning = Query("voice_learning_status", {}, null)
+consent = VoiceConsentPanel(allowed)
+status = VoiceLearningStatus(learning)
+sample = VoiceSampleImport("voice_samples_import", "pastedSample")
+
+root = RafiiRoot([note, picker, analyze, review, prefs])
+$selectedSamples = []
+samples = Query("voice_sources", {purpose: "analysis", route: "local-rules"}, null)
+profile = Query("voice_profile_state", {}, null)
+learned = Query("voice_preferences", {}, null)
+note = Commentary("The voice in effect is what Rafii writes with now. A proposed profile changes nothing until an owner approves it.")
+picker = VoiceSourcePicker(samples, $selectedSamples)
+analyze = VoiceAnalyzeLocal("voice_profile_analyze_local", $selectedSamples)
+review = VoiceProfileReview(profile, "voice_profile_approve")
+prefs = VoicePreferenceList(learned, "preference_decide")
 
 ## Important Rules
 - Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)

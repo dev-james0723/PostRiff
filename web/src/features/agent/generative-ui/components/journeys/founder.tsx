@@ -10,7 +10,7 @@
  */
 import { formatInstant, formatMicroMoney, formatNumber } from '../../journeys/format';
 import { useJourneyEnvironment } from '../../journeys/runtime';
-import { Missing, Pill, QueryFrame } from './shared';
+import { InAppLink, Missing, Pill, QueryFrame } from './shared';
 import type { JourneyRendererProps } from './types';
 
 function dims(value: Record<string, unknown> | null | undefined): string {
@@ -92,7 +92,7 @@ export function FounderCostBreakdown({ props }: JourneyRendererProps) {
   return (
     <QueryFrame value={props.data} binding='founder_costs' label={copy.founder.costsTitle} title={copy.founder.costsTitle}>
       {(data) => {
-        const rows = data.rows ?? data.current?.rows ?? [];
+        const rows = data.rows ?? [];
         return (
           <div className='flex flex-col gap-1.5'>
             {data.dimension ? <p className='text-muted-foreground text-xs'>{data.dimension}</p> : null}
@@ -134,7 +134,7 @@ export function FounderCostBreakdown({ props }: JourneyRendererProps) {
                 {data.previous.reason ? ` · ${data.previous.reason.replaceAll('_', ' ')}` : ''}
               </p>
             ) : null}
-            <Receipt id={data.receiptId ?? data.current?.receiptId} mode={data.mode} />
+            <Receipt id={data.receiptId} mode={data.mode} />
           </div>
         );
       }}
@@ -154,9 +154,9 @@ export function FounderAttentionList({ props }: JourneyRendererProps) {
                 <Pill tone={item.severity === 'critical' ? 'attention' : item.severity === 'warning' ? 'waiting' : 'muted'}>{copy.founder.severity[item.severity] ?? item.severity}</Pill>
               ) : null}
               {item.href && item.href.startsWith('/') ? (
-                <a className='rafii-focus text-primary underline-offset-4 hover:underline' href={item.href}>
+                <InAppLink href={item.href}>
                   {item.title ?? item.id}
-                </a>
+                </InAppLink>
               ) : (
                 <span>{item.title ?? item.id}</span>
               )}

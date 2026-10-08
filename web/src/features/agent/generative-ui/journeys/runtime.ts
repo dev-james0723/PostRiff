@@ -1,7 +1,7 @@
 'use client';
 /**
  * The only place journey components touch the runtime around them (lane E):
- *   - lane C's OpenUI facade (`core/openui.ts`, the single importer of @openuidev/react-lang, D-A3) for reactive
+ *   - lane C's OpenUI facade (`core/openui.ts`, the single importer of the OpenUI React runtime, D-A3) for reactive
  *     `$bindings` and the streaming flag;
  *   - lane D's bridge context (`bridges/context.tsx`, D-A29) for the per-binding query status and the guarded action path.
  *

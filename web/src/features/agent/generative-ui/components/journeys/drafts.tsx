@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils';
 import { formatCount, formatInstant, textLength } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { DraftDetail as DraftDetailData, DraftRow } from '../../journeys/views';
-import { CountLabel, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
+import { CountLabel, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 /** drafts_list accepts at most 10 ids; comparing more than four is not readable. */
 export const MAX_SELECTED_DRAFTS = 10;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.length > 0 && v.length <= 160) : [];
@@ -77,7 +77,7 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
   const record = useSelectionRecorder(statementId ?? 'drafts');
   return (
     <QueryFrame value={props.data} binding='drafts_list' label={copy.drafts.title} title={literal.success ? literal.data.title : null}>
-      {(data) => {
+      {(data, result) => {
         const titleOf = (d: DraftRow) => `${d.platform ?? ''} · ${d.excerpt.slice(0, 60)}`.trim();
         const toggle = (draft: DraftRow) => {
           const next = toggleInOrder(selected, draft.draftId, MAX_SELECTED_DRAFTS);
@@ -89,6 +89,7 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
           );
         };
         return (
+          <>
         <div className='flex flex-col gap-2'>
           {selected.length > 0 ? (
             <p className='text-muted-foreground text-xs' role='status'>
@@ -119,6 +120,8 @@ export function DraftList({ props, statementId }: JourneyRendererProps) {
           </ul>
           {data.missingIds && data.missingIds.length > 0 ? <p className='text-muted-foreground text-xs'>{copy.drafts.missingRequested}</p> : null}
         </div>
+            <Pager result={result} cursor={props.cursor} statementId={statementId} />
+          </>
         );
       }}
     </QueryFrame>

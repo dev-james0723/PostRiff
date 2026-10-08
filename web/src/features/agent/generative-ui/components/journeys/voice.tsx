@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { VoiceSample } from '../../journeys/views';
-import { CountValue, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
+import { InAppLink, CountValue, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 export const MAX_SELECTED_SAMPLES = 50;
@@ -38,7 +38,7 @@ export function VoiceSourcePicker({ props, statementId }: JourneyRendererProps) 
   const record = useSelectionRecorder(statementId ?? 'samples');
   return (
     <QueryFrame value={props.data} binding='voice_sources' label={copy.voice.samplesTitle} title={copy.voice.samplesTitle}>
-      {(data) => {
+      {(data, result) => {
         const excluded = new Map((data.eligibility?.excluded ?? []).map((x) => [x.sourceId, x.reason]));
         const toggle = (sample: VoiceSample) => {
           const next = toggleInOrder(selected, sample.sourceId, MAX_SELECTED_SAMPLES);
@@ -50,6 +50,7 @@ export function VoiceSourcePicker({ props, statementId }: JourneyRendererProps) 
           );
         };
         return (
+          <>
           <div className='flex flex-col gap-2'>
             {data.eligibility ? (
               <p className='text-muted-foreground text-xs'>
@@ -90,6 +91,8 @@ export function VoiceSourcePicker({ props, statementId }: JourneyRendererProps) 
             </ul>
             {selected.length ? <p className='text-muted-foreground text-xs'>{copy.common.selected(selected.length)} · {copy.common.selectionHint}</p> : null}
           </div>
+            <Pager result={result} cursor={props.cursor} statementId={statementId} />
+          </>
         );
       }}
     </QueryFrame>
@@ -301,9 +304,9 @@ export function VoiceConsentPanel({ props }: JourneyRendererProps) {
             <p className='text-muted-foreground text-xs'>{data.rule}</p>
             {!data.owner ? <p className='text-muted-foreground text-xs'>{copy.voice.ownerDecides}</p> : null}
             {data.href ? (
-              <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={data.href}>
+              <InAppLink href={data.href}>
                 {copy.common.open}
-              </a>
+              </InAppLink>
             ) : null}
           </div>
         );
@@ -366,8 +369,8 @@ export function VoiceSampleImport({ props, statementId }: JourneyRendererProps) 
         {copy.voice.importTitleField}
         <Input id={`${fieldId}-title`} value={titleValue} maxLength={160} onChange={(e) => title.set(e.target.value)} />
       </label>
-      <label className='flex items-start gap-2 text-xs'>
-        <input type='checkbox' className='mt-0.5' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+      <label className='flex items-start gap-2 text-xs' htmlFor={`${fieldId}-confirm`}>
+        <input id={`${fieldId}-confirm`} type='checkbox' className='mt-0.5' aria-label={copy.voice.importConfirm} checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         <span>{copy.voice.importConfirm}</span>
       </label>
       <p className='text-muted-foreground text-xs'>{copy.voice.importHint}</p>

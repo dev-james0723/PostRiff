@@ -14,12 +14,12 @@ import { formatBytes, formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { LibraryRow } from '../../journeys/views';
 import { AssetPreviewView } from '../primitives/asset-preview';
-import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
+import { InAppLink, GuardedAction, Missing, Pager, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
 import type { JourneyRendererProps } from './types';
 
 /** library_selection accepts at most 4 items for one message. */
 export const MAX_SELECTED_ASSETS = 4;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v)) : [];
@@ -27,7 +27,8 @@ function strings(value: unknown): string[] {
 
 /** Preview through lane C's AssetPreviewView: only this workspace's own preview routes, never a signed URL. */
 export function AssetCover({ row, size = 'card' }: { row: LibraryRow; size?: 'row' | 'card' | 'detail' }) {
-  return <AssetPreviewView item={row} size={size} />;
+  // The card prints the title itself; the preview keeps it only as the image's alternative text.
+  return <AssetPreviewView item={{ ...row, alt: row.alt ?? row.title ?? null, title: null }} size={size} />;
 }
 
 function RowFlags({ row }: { row: LibraryRow }) {
@@ -101,11 +102,16 @@ export function LibraryBrowser({ props, statementId }: JourneyRendererProps) {
                 );
               })}
             </ul>
-            {result.nextCursor ? (
-              <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href='/app/library'>
-                {copy.common.more} · {copy.library.open}
-              </a>
-            ) : null}
+            <Pager
+              result={result}
+              cursor={props.cursor}
+              statementId={statementId}
+              fallback={
+                <InAppLink href='/app/library'>
+                  {copy.common.more} · {copy.library.open}
+                </InAppLink>
+              }
+            />
             {selected.length ? <p className='text-muted-foreground text-xs'>{copy.common.selectionHint}</p> : null}
           </div>
         );
@@ -143,9 +149,9 @@ export function LibraryAssetCard({ props, statementId }: JourneyRendererProps) {
                 <p className='text-muted-foreground text-xs'>{item.mediaConsent.modelMayView ? copy.library.modelMayView : copy.library.modelMayNotView}</p>
               ) : null}
               {item.href ? (
-                <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={item.href}>
+                <InAppLink href={item.href}>
                   {copy.library.open}
-                </a>
+                </InAppLink>
               ) : null}
             </div>
           </div>

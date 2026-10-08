@@ -27,6 +27,8 @@ const title = () => z.string().optional();
 const selectionList = () => bindable(z.array(z.string()).optional());
 const selectionOne = () => bindable(z.string().optional());
 const fieldName = () => z.string();
+/** Page position: bind the same $variable here and as the Query's `cursor` argument to page (never a model call). */
+const cursor = () => bindable(z.string().optional());
 
 function spec(name: string, description: string, props: z.ZodObject, rules?: RafiiComponentSpec['rules'], fieldNameProp?: string): RafiiComponentSpec {
   return { name, description, props, ...(rules ? { rules } : {}), ...(fieldNameProp ? { fieldNameProp } : {}) };
@@ -49,7 +51,7 @@ const TaskProgress = spec(
 const DraftList = spec(
   'DraftList',
   'Drafts from a drafts_list Query: platform, language, length against the platform limit, review and queue state. Bind selected to a $variable (draft ids, in the order picked). Picking only selects.',
-  z.object({ data: queryRef, selected: selectionList(), title: title() }),
+  z.object({ data: queryRef, selected: selectionList(), title: title(), cursor: cursor() }),
   query,
 );
 const DraftCompare = spec(
@@ -82,7 +84,7 @@ const DraftEditor = spec(
 const CalendarAgenda = spec(
   'CalendarAgenda',
   'Scheduled, waiting and planned posts from a calendar_agenda Query, by day, each time in its zone, with rule-labelled close-together notes. Bind selected to a $variable to pick a waiting post (job id).',
-  z.object({ data: queryRef, selected: selectionOne(), title: title() }),
+  z.object({ data: queryRef, selected: selectionOne(), title: title(), cursor: cursor() }),
   query,
 );
 const QueueStatus = spec(
@@ -120,7 +122,7 @@ const ProposalList = spec(
 const LibraryBrowser = spec(
   'LibraryBrowser',
   'Library results from a library_search Query (photos, videos, audio, documents) with type, size, tags and processing state. Bind selected to a $variable (asset ids, up to 4, in the order picked). Picking only selects.',
-  z.object({ data: queryRef, selected: selectionList(), title: title() }),
+  z.object({ data: queryRef, selected: selectionList(), title: title(), cursor: cursor() }),
   query,
 );
 const LibraryAssetCard = spec(
@@ -146,7 +148,7 @@ const LibrarySelectionCheck = spec(
 const VoiceSourcePicker = spec(
   'VoiceSourcePicker',
   'Writing samples from a voice_sources Query with each sample’s exact use grants and, when purpose and route are given, why a sample is excluded. Bind selected to a $variable (sample ids). Picking only selects.',
-  z.object({ data: queryRef, selected: selectionList() }),
+  z.object({ data: queryRef, selected: selectionList(), cursor: cursor() }),
   query,
 );
 const VoiceAnalyzeLocal = spec(
@@ -191,7 +193,7 @@ const VoiceSampleImport = spec(
 const CampaignList = spec(
   'CampaignList',
   'Campaign briefs from a campaigns_list Query with status, platforms and missing details. Bind selected to a $variable (one campaign id).',
-  z.object({ data: queryRef, selected: selectionOne(), title: title() }),
+  z.object({ data: queryRef, selected: selectionOne(), title: title(), cursor: cursor() }),
   query,
 );
 const CampaignPlan = spec(
@@ -203,7 +205,7 @@ const CampaignPlan = spec(
 const CampaignItems = spec(
   'CampaignItems',
   'Every draft, post and image linked to a campaign (campaign_items Query) with its current state.',
-  z.object({ data: queryRef }),
+  z.object({ data: queryRef, cursor: cursor() }),
   query,
 );
 const CampaignTimeline = spec(
@@ -238,7 +240,7 @@ const METRICS = ['views', 'reach', 'likes', 'comments', 'replies', 'reposts', 'q
 const MetricTable = spec(
   'MetricTable',
   'Published posts from an analytics_posts Query with each metric’s stored reading (or why it is missing), its read time and definition version. metrics picks up to 6 columns.',
-  z.object({ data: queryRef, metrics: z.array(z.enum(METRICS)).optional(), title: title() }),
+  z.object({ data: queryRef, metrics: z.array(z.enum(METRICS)).optional(), title: title(), cursor: cursor() }),
   query,
 );
 const MetricChart = spec(
@@ -288,7 +290,7 @@ const ComparisonMatrix = spec(
 const SavedSources = spec(
   'SavedSources',
   'Web sources saved in this workspace (research_sources Query) with site, date, read time and approved facts.',
-  z.object({ data: queryRef }),
+  z.object({ data: queryRef, cursor: cursor() }),
   query,
 );
 
@@ -296,7 +298,7 @@ const SavedSources = spec(
 const AutomationList = spec(
   'AutomationList',
   'Every live automation from an automations_list Query: status, schedule, time zone, policy, platforms and next run. Bind selected to a $variable (one automation id).',
-  z.object({ data: queryRef, selected: selectionOne() }),
+  z.object({ data: queryRef, selected: selectionOne(), cursor: cursor() }),
   query,
 );
 const AutomationDetail = spec(
@@ -308,7 +310,7 @@ const AutomationDetail = spec(
 const RunHistory = spec(
   'RunHistory',
   'An automation’s recent runs from an automation_history Query: when, status, outcome per platform and cost (unknown stays unknown).',
-  z.object({ data: queryRef }),
+  z.object({ data: queryRef, cursor: cursor() }),
   query,
 );
 const ConnectionHealth = spec(
@@ -413,7 +415,10 @@ export const CONSUMER_JOURNEY_SPECS: readonly RafiiComponentSpec[] = [
 const group = (id: string, name: string, components: string[], notes?: string[]): RafiiGroupSpec => ({ id, name, components, ...(notes ? { notes } : {}) });
 
 export const CONSUMER_JOURNEY_GROUPS: readonly RafiiGroupSpec[] = [
-  group('journey_common', 'Rafii’s note', ['Commentary'], ['Commentary is your explanation only. Records, figures and statuses always come from bound components.']),
+  group('journey_common', 'Rafii’s note', ['Commentary'], [
+    'Commentary is your explanation only. Records, figures and statuses always come from bound components.',
+    'To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.',
+  ]),
   group('tasks', 'Task progress', ['TaskProgress']),
   group('drafts', 'Drafts', ['DraftList', 'DraftCompare', 'DraftDetail', 'DraftEvidence', 'DraftEditor'], [
     'To compare picked drafts: picks = Query("drafts_list", {ids: $selectedDrafts}, null) and DraftCompare(picks, $selectedDrafts).',

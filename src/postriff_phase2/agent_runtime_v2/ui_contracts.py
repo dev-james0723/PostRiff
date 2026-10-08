@@ -164,8 +164,8 @@ def parse_event_id(value) -> int | None:
 
 
 # --- canonical JSON and digests ----------------------------------------------------------------------------------------
-def _canon(value, depth=0):
-    if depth > BOUNDS["inputDepth"]:
+def _canon(value, depth=0, max_depth=BOUNDS["inputDepth"]):
+    if max_depth is not None and depth > max_depth:
         raise AlphaError("These inputs are nested too deeply.", 400, code="ui_input_depth")
     if value is None or isinstance(value, (bool, str)):
         return value
@@ -178,17 +178,19 @@ def _canon(value, depth=0):
             raise AlphaError("A number in these inputs is not finite.", 400, code="ui_input_number")
         return int(value) if value.is_integer() and abs(value) <= 2 ** 53 else value
     if isinstance(value, list):
-        return [_canon(v, depth + 1) for v in value]
+        return [_canon(v, depth + 1, max_depth) for v in value]
     if isinstance(value, dict):
         if not all(isinstance(k, str) for k in value):
             raise AlphaError("Input keys must be text.", 400, code="ui_input_key")
-        return {k: _canon(value[k], depth + 1) for k in sorted(value)}
+        return {k: _canon(value[k], depth + 1, max_depth) for k in sorted(value)}
     raise AlphaError("These inputs contain a value Rafii can't accept.", 400, code="ui_input_type")
 
 
-def canonical_json(value) -> str:
-    """Sorted keys, no whitespace, UTF-8 text, integral floats as integers. The server is the only authority for digests."""
-    return json.dumps(_canon(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+def canonical_json(value, *, max_depth: int | None = BOUNDS["inputDepth"]) -> str:
+    """Sorted keys, no whitespace, UTF-8 text, integral floats as integers. The server is the only authority for digests.
+    The default depth bound is for client-supplied inputs; server-built data (query results, manifests, schemas) passes
+    `max_depth=None`."""
+    return json.dumps(_canon(value, 0, max_depth), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
 def sha256_text(text: str) -> str:

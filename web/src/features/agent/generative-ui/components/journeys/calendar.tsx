@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { formatCalendarDate, formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { AgendaEntry, QueueItem } from '../../journeys/views';
-import { CountValue, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, type Tone } from './shared';
+import { InAppLink, CountValue, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, type Tone, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -29,7 +29,7 @@ const STATUS_TONE: Record<string, Tone> = {
   unknown: 'muted',
 };
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-const titleProps = z.object({ title: z.string().max(120).optional() });
+const titleProps = z.object({ title: z.string().max(120).nullish() });
 
 function StatusPill({ status }: { status: string }) {
   const { copy } = useJourneyEnvironment();
@@ -48,7 +48,7 @@ export function CalendarAgenda({ props, statementId }: JourneyRendererProps) {
   const record = useSelectionRecorder(statementId ?? 'agenda');
   return (
     <QueryFrame value={props.data} binding='calendar_agenda' label={copy.calendar.title} title={literal.success ? literal.data.title : null}>
-      {(data) => {
+      {(data, result) => {
         const groups = new Map<string, AgendaEntry[]>();
         for (const entry of data.entries) {
           const day = dayOf(entry) ?? '';
@@ -57,6 +57,7 @@ export function CalendarAgenda({ props, statementId }: JourneyRendererProps) {
         const close = data.derived?.closeTogether;
         const closeIds = new Set((close?.pairs ?? []).flatMap((p) => [p.first, p.second]));
         return (
+          <>
           <div className='flex flex-col gap-3'>
             <p className='text-muted-foreground text-xs'>
               {formatCalendarDate(data.range.start, locale)} – {formatCalendarDate(data.range.end, locale)} · {copy.common.timeZone}: {data.range.timeZone}
@@ -123,6 +124,8 @@ export function CalendarAgenda({ props, statementId }: JourneyRendererProps) {
             ) : null}
             {selected ? <p className='text-muted-foreground text-xs'>{copy.common.selectionHint}</p> : null}
           </div>
+            <Pager result={result} cursor={props.cursor} statementId={statementId} />
+          </>
         );
       }}
     </QueryFrame>
@@ -203,9 +206,9 @@ export function QueueStatus({ props }: JourneyRendererProps) {
           <QueueList title={copy.calendar.attention} items={data.attention} empty={copy.common.none} />
           <QueueList title={copy.calendar.upcoming} items={data.upcoming} empty={copy.common.none} />
           {data.href ? (
-            <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={data.href}>
+            <InAppLink href={data.href}>
               {copy.common.open} {copy.calendar.queueTitle}
-            </a>
+            </InAppLink>
           ) : null}
         </div>
       )}
@@ -259,8 +262,7 @@ const rescheduleProps = z.object({ actionId: z.literal('schedule_prepare'), targ
 function validZone(zone: string): boolean {
   if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/.test(zone)) return false;
   try {
-    new Intl.DateTimeFormat('en', { timeZone: zone });
-    return true;
+    return new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone.length > 0;
   } catch {
     return false;
   }

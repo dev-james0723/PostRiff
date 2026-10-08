@@ -73,6 +73,19 @@ Inputs only change this view. Bind them to $variables and use those in Query arg
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.
 
+### Rafii’s note
+Commentary(text: string) — Your own short explanation, shown apart from the records and labelled as Rafii’s note. Never put figures, dates, titles or statuses in it: those come from bound components.
+Commentary is your explanation only. Records, figures and statuses always come from bound components.
+To page a list: $page = null, rows = Query("binding", {…, cursor: $page}, null) and pass $page as the list’s cursor.
+
+### Analytics
+MetricTable(data: QueryRef, metrics?: "views" | "reach" | "likes" | "comments" | "replies" | "reposts" | "quotes" | "shares" | "saved"[], title?: string, cursor?: $binding<string>) — Published posts from an analytics_posts Query with each metric’s stored reading (or why it is missing), its read time and definition version. metrics picks up to 6 columns.
+MetricChart(data: QueryRef, kind?: "line" | "bar", title?: string) — One metric over time per account from an analytics_series Query, line or bar, with gaps where nothing was read and the numbers as a table.
+ComparisonSummary(data: QueryRef) — Like-for-like comparison from an analytics_compare Query: sample size, measured, missing and the minimum sample. Observations only, never causes.
+CoverageNote(data: QueryRef) — Which accounts share analytics, how many published posts have readings, and how to turn analytics on (analytics_coverage Query).
+PostFeedback(data: QueryRef) — One published post’s readings against the account’s own usual results (post_feedback Query), when post feedback is on.
+Show CoverageNote with any metric view. Missing readings are Unavailable, never 0; never compute totals or averages yourself.
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -164,6 +177,14 @@ next = ActionButton("example_rewrite", null, {draftIds: $picked})
 
 root = RafiiRoot([none])
 none = EmptyState("Nothing to show for this period", "Try a longer period or another platform.")
+
+root = RafiiRoot([coverage, table, compare], "Last 30 days")
+cov = Query("analytics_coverage", {}, null)
+posts = Query("analytics_posts", {start: "2026-09-08", end: "2026-10-07", zone: "Asia/Hong_Kong"}, null)
+like = Query("analytics_compare", {metric: "views", start: "2026-09-08", end: "2026-10-07", zone: "Asia/Hong_Kong"}, null)
+coverage = CoverageNote(cov)
+table = MetricTable(posts, ["views", "likes", "replies"])
+compare = ComparisonSummary(like)
 
 ## Important Rules
 - Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)

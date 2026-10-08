@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 import { formatInstant } from '../../journeys/format';
 import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { ResearchPage } from '../../journeys/views';
-import { GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder } from './shared';
+import { InAppLink, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, toggleInOrder, Pager } from './shared';
 import type { JourneyRendererProps } from './types';
 
 export const MAX_SELECTED_PAGES = 6;
@@ -59,9 +59,9 @@ export function ResearchStatus({ props }: JourneyRendererProps) {
           </p>
           {!data.allowed && data.reason ? <p className='text-muted-foreground text-xs'>{copy.research.reason[data.reason] ?? data.reason}</p> : null}
           {!data.allowed && data.guide?.href && data.guide.canOpen !== false ? (
-            <a className='rafii-focus text-primary text-xs underline-offset-4 hover:underline' href={data.guide.href}>
+            <InAppLink href={data.guide.href}>
               {data.guide.title ?? copy.research.openGuide}
-            </a>
+            </InAppLink>
           ) : null}
         </div>
       )}
@@ -163,7 +163,9 @@ export function ComparisonMatrix({ props, statementId }: JourneyRendererProps) {
               <caption className='sr-only'>{copy.research.matrixTitle}</caption>
               <thead>
                 <tr className='border-b text-left'>
-                  <th scope='col' className='text-muted-foreground py-1 pr-2 font-medium' />
+                  <th scope='col' className='text-muted-foreground py-1 pr-2 font-medium'>
+                    <span className='sr-only'>{copy.research.facts}</span>
+                  </th>
                   {pages.map((p) => (
                     <th key={p.index} scope='col' className='py-1 pr-2 align-top font-medium'>
                       [{p.index + 1}] <ExternalLink href={p.url}>{p.title ?? p.host ?? ''}</ExternalLink>
@@ -220,11 +222,12 @@ export function ComparisonMatrix({ props, statementId }: JourneyRendererProps) {
   );
 }
 
-export function SavedSources({ props }: JourneyRendererProps) {
+export function SavedSources({ props, statementId }: JourneyRendererProps) {
   const { copy, locale, timeZone } = useJourneyEnvironment();
   return (
     <QueryFrame value={props.data} binding='research_sources' label={copy.research.savedTitle} title={copy.research.savedTitle}>
-      {(data) => (
+      {(data, result) => (
+        <>
         <ul className='flex flex-col gap-1 text-sm'>
           {data.sources.map((s) => (
             <li key={s.ref} className='flex flex-col gap-0.5 rounded-md border p-2'>
@@ -243,6 +246,8 @@ export function SavedSources({ props }: JourneyRendererProps) {
             </li>
           ))}
         </ul>
+          <Pager result={result} cursor={props.cursor} statementId={statementId} />
+        </>
       )}
     </QueryFrame>
   );

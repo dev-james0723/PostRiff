@@ -70,6 +70,14 @@ DateRange(name: string, label: string, value?: $binding<{start: string, end: str
 Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary" | "quiet") — A local control that never changes saved data: Action([@Set($v, x)]), @Reset, @Run(query) to refresh, @ToAssistant("follow-up") or @OpenUrl("/app/…"). variant: primary | secondary | quiet.
 Inputs only change this view. Bind them to $variables and use those in Query arguments.
 
+### Founder console
+FounderNote(text: string) — Your own short explanation, labelled as Rafii’s note and shown apart from the receipts. Never put figures in it.
+FounderMetricsTable(data: QueryRef) — Receipt-backed metrics from a founder_metrics Query: each value or Unavailable with its reason, unit and data state.
+FounderCostBreakdown(data: QueryRef) — AI cost by one dimension from a founder_costs Query: actual and estimated cost per row with its cost basis and receipt.
+FounderAttentionList(data: QueryRef) — What needs the founder now from a founder_attention Query, by severity, with console links.
+FounderSourceHealth(data: QueryRef) — Data-source health from a founder_sources Query: each source’s state, last good time and reason.
+Every figure comes with its receipt. Unavailable metrics stay unavailable; never estimate or add rows across currencies or periods.
+
 ## Built-in Functions
 
 Data functions prefixed with `@` to distinguish from components. These are the ONLY functions available — do NOT invent new ones.
@@ -137,6 +145,8 @@ root = RafiiRoot([figures, tabs, savesChart])
 savesChart = ToolBoundChart(trend, "bar", "day", [{field: "saves", label: "Saves"}], "Saves by day")
 
 platform = Select("platform", "Platform", [{value: "all", label: "All platforms"}, {value: "instagram", label: "Instagram"}, {value: "threads", label: "Threads"}, {value: "linkedin", label: "LinkedIn"}], $platform)
+
+cost = Query("founder_costs", {dimension: "model", period: "mtd"}, null)
 
 
 ## Edit Mode

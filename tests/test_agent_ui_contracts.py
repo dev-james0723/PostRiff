@@ -72,6 +72,16 @@ class Validators(unittest.TestCase):
         with self.assertRaises(AlphaError):
             c.validate_query({"artifactId": UUID, "bindingId": "drafts_list", "inputs": deep})
 
+    def test_server_data_may_nest_deeper_than_client_inputs(self):
+        deep = {}
+        cursor = deep
+        for _ in range(20):
+            cursor["a"] = {}
+            cursor = cursor["a"]
+        with self.assertRaises(AlphaError):
+            c.canonical_json(deep)
+        self.assertTrue(c.canonical_json(deep, max_depth=None).startswith('{"a":'))
+
     def test_browser_edit_carries_instruction_not_dsl(self):
         with self.assertRaises(AlphaError) as raised:
             c.validate_patch({"baseRevision": 1, "baseSourceHash": "a" * 64, "instruction": "add a chart", "idempotencyKey": "k" * 20,
