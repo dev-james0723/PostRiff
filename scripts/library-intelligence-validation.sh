@@ -7,7 +7,9 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
 fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="$PWD/src:$PWD/tests"
-echo "CANDIDATE_SHA=$(git rev-parse HEAD 2>/dev/null || echo unknown) TREE=$(git write-tree 2>/dev/null || echo unknown)"
+# JCB applies the local working tree as a patch onto the base checkout; the candidate SHA is the receipt's sourceHead.
+echo "REMOTE_BASE=$(git rev-parse HEAD 2>/dev/null || echo unknown) PATCHED_FILES_DIGEST=$(git ls-files -m -o --exclude-standard | sort | xargs -r sha256sum | sha256sum | cut -c1-16)"
+shopt -s nullglob
 python -m unittest discover -s tests -p 'test_library_intelligence_*.py' -v
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
@@ -16,7 +18,8 @@ fi
 export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 sudo -n mkdir -p /var/run/postgresql
 sudo -n chmod 1777 /var/run/postgresql
-suites=$(ls tests/phase2/postgres_library_intelligence*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')
+suites=""
+for path in tests/phase2/postgres_library_intelligence*.py; do suites="$suites $(basename "$path" .py)"; done
 if [ -n "$suites" ]; then
   echo "PG_PHASE=no_vector"
   LIBRARY_PG_PHASE=no_vector python scripts/postriff_pg_suite.py $suites
@@ -29,7 +32,6 @@ fi
 # Adjacent PostgreSQL regressions on the same candidate (postgres_library_lifecycle already ran in the caller).
 python scripts/postriff_pg_suite.py postgres_agent_runtime postgres_agent_style
 # Web source tests (node --test, no browser). All web tests, so adjacent features regress here too.
-shopt -s nullglob
 web_tests=(web/tests/*.test.cjs web/tests/*.test.mjs)
 node --test "${web_tests[@]}"
 # Every Python unit test in the repository (fast; no providers, no network).
