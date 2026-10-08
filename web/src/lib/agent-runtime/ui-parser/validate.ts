@@ -94,7 +94,7 @@ const MAX_FORM_NAMES = 100;
 /** `$` + identifier, at most 64 characters in all. */
 const STATE_NAME = /^\$[A-Za-z_][A-Za-z0-9_]{0,62}$/;
 /** A Form name is a literal identifier (it becomes a persisted state key), at most 64 characters. */
-const FORM_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+const FORM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
 interface Stmt {
   id: string;

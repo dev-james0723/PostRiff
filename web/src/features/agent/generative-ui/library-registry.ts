@@ -93,7 +93,7 @@ export const JOURNEY_LIBRARIES: Readonly<Record<JourneyId, JourneyLibrary>> = Ob
     const groups = [...core, ...extra.filter((g) => !core.includes(g))].filter((g) => known.has(g));
     return [journey, { library, groups }];
   }),
-) as Record<JourneyId, JourneyLibrary>;
+) as unknown as Record<JourneyId, JourneyLibrary>;
 
 /** Component names of the given groups (in group order, de-duplicated). */
 export function groupComponents(library: LibraryName, groupIds: readonly string[]): string[] {
