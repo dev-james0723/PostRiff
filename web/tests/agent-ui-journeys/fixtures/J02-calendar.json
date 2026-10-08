@@ -1,0 +1,460 @@
+{
+ "calendar_agenda": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "range": {
+     "start": "2026-10-05",
+     "end": "2026-10-11",
+     "timeZone": "Asia/Hong_Kong",
+     "startUtc": "2026-10-04T16:00:00Z",
+     "endUtc": "2026-10-11T16:00:00Z"
+    },
+    "entries": [
+     {
+      "kind": "job",
+      "id": "job_1",
+      "ref": "job:job_1",
+      "state": "approved",
+      "status": "scheduled",
+      "title": null,
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "atUtc": "2026-10-09T01:00:00Z",
+      "local": "2026-10-09T09:00",
+      "offset": "+08:00",
+      "timeZone": "Asia/Hong_Kong",
+      "jobZone": "Asia/Hong_Kong",
+      "jobLocal": "2026-10-09T09:00",
+      "fromAutomation": false,
+      "excerpt": "Recital week notes",
+      "href": "/app/calendar?view=week"
+     },
+     {
+      "kind": "job",
+      "id": "job_2",
+      "ref": "job:job_2",
+      "state": "approved",
+      "status": "scheduled",
+      "title": null,
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "atUtc": "2026-10-09T02:00:00Z",
+      "local": "2026-10-09T10:00",
+      "offset": "+08:00",
+      "timeZone": "Asia/Hong_Kong",
+      "jobZone": "America/New_York",
+      "jobLocal": "2026-10-08T22:00",
+      "fromAutomation": false,
+      "excerpt": "Recital week notes",
+      "href": "/app/calendar?view=week"
+     },
+     {
+      "kind": "review",
+      "id": "rev_1",
+      "ref": "review:rev_1",
+      "state": "needs_review",
+      "status": "awaiting_approval",
+      "title": null,
+      "platform": "Threads",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "atUtc": "2026-10-10T04:00:00Z",
+      "local": "2026-10-10T12:00",
+      "offset": "+08:00",
+      "timeZone": "Asia/Hong_Kong",
+      "jobZone": "Asia/Hong_Kong",
+      "jobLocal": "2026-10-09T09:00",
+      "fromAutomation": false,
+      "excerpt": "Recital week notes",
+      "href": "/app/calendar?view=week"
+     },
+     {
+      "kind": "job",
+      "id": "job_4",
+      "ref": "job:job_4",
+      "state": "mystery_state",
+      "status": "unknown",
+      "title": null,
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "atUtc": "2026-10-11T03:00:00Z",
+      "local": "2026-10-11T11:00",
+      "offset": "+08:00",
+      "timeZone": "Asia/Hong_Kong",
+      "jobZone": "Asia/Hong_Kong",
+      "jobLocal": "2026-10-09T09:00",
+      "fromAutomation": false,
+      "excerpt": "Recital week notes",
+      "href": "/app/calendar?view=week"
+     }
+    ],
+    "offset": 0,
+    "total": 4,
+    "statusCounts": {
+     "scheduled": 2,
+     "awaiting_approval": 1,
+     "unknown": 1
+    },
+    "unknownStates": [
+     "mystery_state"
+    ],
+    "days": [
+     {
+      "date": "2026-10-05",
+      "weekday": "Monday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-06",
+      "weekday": "Tuesday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-07",
+      "weekday": "Wednesday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-08",
+      "weekday": "Thursday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-09",
+      "weekday": "Friday",
+      "count": 2
+     },
+     {
+      "date": "2026-10-10",
+      "weekday": "Saturday",
+      "count": 1
+     },
+     {
+      "date": "2026-10-11",
+      "weekday": "Sunday",
+      "count": 1
+     }
+    ],
+    "daysNote": null,
+    "derived": {
+     "closeTogether": {
+      "rule": "two posts on the same account less than 2 hours apart",
+      "pairs": [
+       {
+        "first": "job_1",
+        "second": "job_2",
+        "platform": "LinkedIn",
+        "account": "James Au",
+        "minutes": 60
+       }
+      ]
+     },
+     "emptyDays": {
+      "rule": "days from today in this range with nothing scheduled, waiting or planned",
+      "days": [
+       "2026-10-08"
+      ]
+     }
+    },
+    "href": "/app/calendar?view=week"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 4,
+    "total": 4,
+    "note": "Unknown states are counted as unknown, never as scheduled."
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "range": {
+     "start": "2026-10-05",
+     "end": "2026-10-11",
+     "timeZone": "Asia/Hong_Kong",
+     "startUtc": "2026-10-04T16:00:00Z",
+     "endUtc": "2026-10-11T16:00:00Z"
+    },
+    "entries": [],
+    "offset": 0,
+    "total": 0,
+    "statusCounts": {},
+    "unknownStates": [],
+    "days": [
+     {
+      "date": "2026-10-05",
+      "weekday": "Monday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-06",
+      "weekday": "Tuesday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-07",
+      "weekday": "Wednesday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-08",
+      "weekday": "Thursday",
+      "count": 0
+     },
+     {
+      "date": "2026-10-09",
+      "weekday": "Friday",
+      "count": 2
+     },
+     {
+      "date": "2026-10-10",
+      "weekday": "Saturday",
+      "count": 1
+     },
+     {
+      "date": "2026-10-11",
+      "weekday": "Sunday",
+      "count": 1
+     }
+    ],
+    "daysNote": null,
+    "derived": null,
+    "href": "/app/calendar?view=week"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 0,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "queue_status": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "statusCounts": {
+     "scheduled": 2,
+     "failed_held_uncertain": 1
+    },
+    "unknownStates": [],
+    "draftsUnscheduled": null,
+    "waitingApproval": [
+     {
+      "reviewId": "rev_1",
+      "ref": "review:rev_1",
+      "platform": "Threads",
+      "account": "@jamesau.piano",
+      "local": "2026-10-10T12:00",
+      "timeZone": "Asia/Hong_Kong",
+      "atUtc": "2026-10-10T04:00:00Z",
+      "expired": true
+     }
+    ],
+    "upcoming": [
+     {
+      "jobId": "job_1",
+      "state": "approved",
+      "title": "Approved",
+      "meaning": "Waiting for its time.",
+      "steps": [],
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "publishAt": "2026-10-09T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "attempts": 0,
+      "demo": false,
+      "fromAutomation": false,
+      "verified": false,
+      "providerReference": false,
+      "lastEvent": null,
+      "ref": "job:job_1",
+      "atUtc": "2026-10-09T01:00:00Z"
+     }
+    ],
+    "attention": [
+     {
+      "jobId": "job_5",
+      "state": "platform_disconnected",
+      "title": "Account disconnected",
+      "meaning": "Reconnect the account before this can publish.",
+      "steps": [],
+      "platform": "LinkedIn",
+      "account": "James Au",
+      "publishAt": "2026-10-09T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "attempts": 0,
+      "demo": true,
+      "fromAutomation": false,
+      "verified": false,
+      "providerReference": false,
+      "lastEvent": null,
+      "ref": "job:job_5",
+      "atUtc": "2026-10-09T01:00:00Z"
+     }
+    ],
+    "totals": {
+     "waitingApproval": 1,
+     "upcoming": 1,
+     "attention": 1
+    },
+    "href": "/app/queue"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 3,
+    "total": 3,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "slot_check": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "draftId": "v_1",
+    "jobId": null,
+    "platform": "LinkedIn",
+    "account": "James Au",
+    "channelId": "ch_li",
+    "local": "2026-10-09T09:30",
+    "timeZone": "Asia/Hong_Kong",
+    "atUtc": "2026-10-09T01:30:00Z",
+    "valid": true,
+    "problems": [],
+    "collisions": [
+     {
+      "kind": "job",
+      "id": "job_1",
+      "ref": "job:job_1",
+      "local": "2026-10-09T09:00",
+      "minutesApart": 30,
+      "status": "approved"
+     }
+    ],
+    "rule": "posts on the same account less than 2 hours apart (Rafii's calendar rule); an observation, not a block"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  },
+  "problem": {
+   "state": "available",
+   "data": {
+    "draftId": "v_1",
+    "jobId": null,
+    "platform": "LinkedIn",
+    "account": null,
+    "channelId": null,
+    "local": "2026-10-09T09:30",
+    "timeZone": "Asia/Hong_Kong",
+    "atUtc": null,
+    "valid": false,
+    "problems": [
+     {
+      "code": "needs_account",
+      "message": "This LinkedIn draft has no account, and Rafii won't pick one for you."
+     }
+    ],
+    "collisions": [],
+    "rule": "posts on the same account less than 2 hours apart (Rafii's calendar rule); an observation, not a block"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 0,
+    "note": null
+   },
+   "warnings": [
+    "This LinkedIn draft has no account, and Rafii won't pick one for you."
+   ]
+  }
+ },
+ "open_proposals": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "proposals": [
+     {
+      "proposalId": "p_1",
+      "messageId": "m_9",
+      "type": "schedule",
+      "summary": [
+       "Schedule LinkedIn post for James Au at 2026-10-09 09:30 (Asia/Hong_Kong)"
+      ],
+      "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expiresAt": "2026-10-08T15:00:00Z",
+      "requiredPermission": "approve",
+      "status": "proposed",
+      "view": {}
+     }
+    ],
+    "conversationId": "conv_1",
+    "applyWith": "the native proposal card (agent/approvals/decide)"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": "Prepared proposals are not applied until you apply them on their card."
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "proposals": [],
+    "conversationId": "conv_1"
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 0,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "actions": [
+  {
+   "actionId": "schedule_prepare",
+   "label": "Prepare schedule",
+   "effect": "PREPARE_EXTERNAL",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": "Prepares a proposal to schedule this draft (or move this waiting post) at the chosen local time."
+  }
+ ]
+}

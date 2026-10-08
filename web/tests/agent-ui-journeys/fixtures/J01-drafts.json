@@ -1,0 +1,461 @@
+{
+ "drafts_list": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "drafts": [
+     {
+      "draftId": "v_1",
+      "ref": "draft:v_1",
+      "platform": "LinkedIn",
+      "language": "en",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "revision": 3,
+      "characters": 812,
+      "limit": 3000,
+      "overLimit": false,
+      "needsReview": false,
+      "hasProposedUpdate": false,
+      "committed": false,
+      "committedJobState": null,
+      "setAside": false,
+      "sourceCount": 2,
+      "warningsCount": 0,
+      "unknownsCount": 1,
+      "writerModel": "gpt-5.5",
+      "voice": "personalized",
+      "fromAutomation": false,
+      "createdAt": "2026-10-07T09:12:00Z",
+      "excerpt": "Recital week notes 1: what the Chopin ballade taught me about pacing.",
+      "href": "/app/queue?view=drafts&draft=v_1"
+     },
+     {
+      "draftId": "v_2",
+      "ref": "draft:v_2",
+      "platform": "Threads",
+      "language": "zh-Hant-HK",
+      "account": "@jamesau.piano",
+      "channelId": "ch_li",
+      "revision": 3,
+      "characters": 531,
+      "limit": 500,
+      "overLimit": true,
+      "needsReview": true,
+      "hasProposedUpdate": false,
+      "committed": false,
+      "committedJobState": null,
+      "setAside": false,
+      "sourceCount": null,
+      "warningsCount": 0,
+      "unknownsCount": 1,
+      "writerModel": null,
+      "voice": "neutral",
+      "fromAutomation": false,
+      "createdAt": "2026-10-07T09:12:00Z",
+      "excerpt": "今個星期練蕭邦敘事曲，最大得着係學識留白。",
+      "href": "/app/queue?view=drafts&draft=v_2"
+     },
+     {
+      "draftId": "v_3",
+      "ref": "draft:v_3",
+      "platform": "Instagram",
+      "language": "en",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "revision": 3,
+      "characters": 812,
+      "limit": 3000,
+      "overLimit": false,
+      "needsReview": false,
+      "hasProposedUpdate": false,
+      "committed": true,
+      "committedJobState": "approved",
+      "setAside": false,
+      "sourceCount": 2,
+      "warningsCount": 0,
+      "unknownsCount": 1,
+      "writerModel": "gpt-5.5",
+      "voice": "personalized",
+      "fromAutomation": false,
+      "createdAt": "2026-10-07T09:12:00Z",
+      "excerpt": "Backstage at City Hall before the recital.",
+      "href": "/app/queue?view=drafts&draft=v_3"
+     }
+    ],
+    "offset": 0,
+    "missingIds": []
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 3,
+    "total": 3,
+    "note": null
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "drafts": [],
+    "offset": 0,
+    "missingIds": []
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": 0,
+    "note": null
+   },
+   "warnings": []
+  },
+  "denied": {
+   "state": "denied",
+   "data": null,
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": null
+   },
+   "warnings": [
+    "You need edit access to see drafts here."
+   ]
+  },
+  "partial": {
+   "state": "partial",
+   "data": {
+    "drafts": [
+     {
+      "draftId": "v_1",
+      "ref": "draft:v_1",
+      "platform": "LinkedIn",
+      "language": "en",
+      "account": "James Au",
+      "channelId": "ch_li",
+      "revision": 3,
+      "characters": 812,
+      "limit": 3000,
+      "overLimit": false,
+      "needsReview": false,
+      "hasProposedUpdate": false,
+      "committed": false,
+      "committedJobState": null,
+      "setAside": false,
+      "sourceCount": 2,
+      "warningsCount": 0,
+      "unknownsCount": 1,
+      "writerModel": "gpt-5.5",
+      "voice": "personalized",
+      "fromAutomation": false,
+      "createdAt": "2026-10-07T09:12:00Z",
+      "excerpt": "Recital week notes 1: what the Chopin ballade taught me about pacing.",
+      "href": "/app/queue?view=drafts&draft=v_1"
+     },
+     {
+      "draftId": "v_2",
+      "ref": "draft:v_2",
+      "platform": "Threads",
+      "language": "zh-Hant-HK",
+      "account": "@jamesau.piano",
+      "channelId": "ch_li",
+      "revision": 3,
+      "characters": 531,
+      "limit": 500,
+      "overLimit": true,
+      "needsReview": true,
+      "hasProposedUpdate": false,
+      "committed": false,
+      "committedJobState": null,
+      "setAside": false,
+      "sourceCount": null,
+      "warningsCount": 0,
+      "unknownsCount": 1,
+      "writerModel": null,
+      "voice": "neutral",
+      "fromAutomation": false,
+      "createdAt": "2026-10-07T09:12:00Z",
+      "excerpt": "今個星期練蕭邦敘事曲，最大得着係學識留白。",
+      "href": "/app/queue?view=drafts&draft=v_2"
+     }
+    ],
+    "offset": 0,
+    "missingIds": [
+     "v_9"
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": [
+    "Some requested drafts are not in this workspace."
+   ]
+  },
+  "invalid": {
+   "state": "available",
+   "data": {
+    "drafts": [
+     {
+      "draftId": "v_1"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "draft_read": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "draftId": "v_1",
+    "ref": "draft:v_1",
+    "platform": "LinkedIn",
+    "language": "en",
+    "account": "James Au",
+    "channelId": "ch_li",
+    "revision": 3,
+    "characters": 812,
+    "limit": 3000,
+    "overLimit": false,
+    "needsReview": false,
+    "hasProposedUpdate": false,
+    "committed": false,
+    "committedJobState": null,
+    "setAside": false,
+    "sourceCount": 2,
+    "warningsCount": 0,
+    "unknownsCount": 1,
+    "writerModel": "gpt-5.5",
+    "voice": "personalized",
+    "fromAutomation": false,
+    "createdAt": "2026-10-07T09:12:00Z",
+    "excerpt": "Recital week notes 1: what the Chopin ballade taught me about pacing.",
+    "href": "/app/queue?view=drafts&draft=v_1",
+    "text": "Recital week notes 1: what the Chopin ballade taught me about pacing.\n\nThree things changed in the last bars.",
+    "openings": [
+     "Pacing is a decision, not a speed."
+    ],
+    "selectedOpening": null,
+    "unknowns": [
+     "Which hall date to mention"
+    ],
+    "warnings": [],
+    "blockedByRetraction": false,
+    "proposedUpdate": null,
+    "scheduled": [],
+    "editable": true,
+    "editBlockedReason": null,
+    "voiceSourceCount": 3,
+    "revisionsCount": 3
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  },
+  "committed": {
+   "state": "available",
+   "data": {
+    "draftId": "v_3",
+    "ref": "draft:v_3",
+    "platform": "Instagram",
+    "language": "en",
+    "account": "James Au",
+    "channelId": "ch_li",
+    "revision": 3,
+    "characters": 812,
+    "limit": 3000,
+    "overLimit": false,
+    "needsReview": false,
+    "hasProposedUpdate": false,
+    "committed": true,
+    "committedJobState": "approved",
+    "setAside": false,
+    "sourceCount": 2,
+    "warningsCount": 0,
+    "unknownsCount": 1,
+    "writerModel": "gpt-5.5",
+    "voice": "personalized",
+    "fromAutomation": false,
+    "createdAt": "2026-10-07T09:12:00Z",
+    "excerpt": "Backstage at City Hall before the recital.",
+    "href": "/app/queue?view=drafts&draft=v_3",
+    "text": "Backstage at City Hall before the recital.",
+    "openings": [],
+    "selectedOpening": null,
+    "unknowns": [],
+    "warnings": [],
+    "blockedByRetraction": false,
+    "proposedUpdate": null,
+    "scheduled": [
+     {
+      "jobId": "job_9",
+      "state": "approved",
+      "title": "Approved",
+      "meaning": "Waiting for its time.",
+      "platform": "Instagram",
+      "account": "@jamesau.piano",
+      "publishAt": "2026-10-09T09:00",
+      "timeZone": "Asia/Hong_Kong",
+      "attempts": 0,
+      "demo": false,
+      "fromAutomation": false,
+      "verified": false,
+      "providerReference": false,
+      "lastEvent": null
+     }
+    ],
+    "editable": false,
+    "editBlockedReason": "This draft is already in the publishing queue; prepare a new draft instead.",
+    "voiceSourceCount": 0,
+    "revisionsCount": 1
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  },
+  "unavailable": {
+   "state": "unavailable",
+   "data": null,
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": "That draft is not in this workspace."
+   },
+   "warnings": []
+  }
+ },
+ "draft_evidence": {
+  "partial": {
+   "state": "partial",
+   "data": {
+    "draftId": "v_1",
+    "edges": [
+     {
+      "edge": "derived_from",
+      "type": "source",
+      "id": "s_1",
+      "via": "draft.sourceIds"
+     },
+     {
+      "edge": "belongs_to_campaign",
+      "type": "campaign",
+      "id": "c_1",
+      "via": "campaign.items (linked by a person)",
+      "title": "Autumn recital"
+     }
+    ],
+    "sources": [
+     {
+      "sourceId": "s_1",
+      "ref": "source:s_1",
+      "available": true,
+      "kind": "url",
+      "title": "Programme notes — Chopin Ballade No. 1",
+      "active": true,
+      "retracted": false,
+      "approvedFacts": 3,
+      "facts": 5,
+      "origin": "web",
+      "host": "example.org",
+      "published": null,
+      "fetchedAt": 1791460000
+     },
+     {
+      "sourceId": "s_gone",
+      "available": false
+     }
+    ],
+    "voiceFit": {
+     "empty": false,
+     "findings": [
+      {
+       "trait": "Sentence length",
+       "source": "profile",
+       "verdict": "matches",
+       "basis": "measured",
+       "evidence": "Average 14 words"
+      },
+      {
+       "trait": "Tone: warm",
+       "source": "profile",
+       "verdict": "unclear",
+       "basis": "needs_writer",
+       "evidence": "Tone can't be counted"
+      }
+     ],
+     "summary": {
+      "matches": 1,
+      "differs": 0,
+      "unclear": 1
+     },
+     "basis": null,
+     "platform": "LinkedIn"
+    }
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 2,
+    "note": null
+   },
+   "warnings": [
+    "A source this draft used is no longer in the workspace."
+   ]
+  }
+ },
+ "actions": [
+  {
+   "actionId": "draft_edit",
+   "label": "Save edit",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": "Saves your edited text to this unscheduled draft. It needs review again; nothing is scheduled or published."
+  }
+ ]
+}

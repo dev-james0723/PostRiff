@@ -1,0 +1,6 @@
+root = RafiiRoot([note, list])
+$status = "unscheduled"
+$selectedDrafts = []
+drafts = Query("drafts_list", {status: $status}, null)
+note = Commentary("These are your drafts that are not scheduled yet. Pick two to compare them side by side.")
+list = DraftList(drafts, $selectedDrafts, $status, "Unscheduled drafts")
