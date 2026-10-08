@@ -237,6 +237,9 @@ create table if not exists public.pr_library_relations (
 );
 create unique index if not exists pr_library_relations_identity on public.pr_library_relations(workspace_id, from_key, from_version, relation, to_kind, to_key, coalesce(to_version, ''), coalesce(from_segment::text, ''));
 create index if not exists pr_library_relations_to on public.pr_library_relations(workspace_id, to_kind, to_key);
+create index if not exists pr_library_relations_from_version on public.pr_library_relations(workspace_id, from_version, relation);
+create index if not exists pr_library_relations_to_version on public.pr_library_relations(workspace_id, to_version) where to_kind = 'asset';
+create index if not exists pr_library_collections_smart_due on public.pr_library_collections(updated_at) where kind = 'smart';
 
 -- Voice spans: an index of author-attested Library spans. The canonical sample, its grants, revocation and the derived
 -- speaker profile stay in the existing voice system (state.sources kind 'voice_sample'); voice_source_id links to it.

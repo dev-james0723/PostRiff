@@ -451,7 +451,9 @@ class Idempotency(Base):
         with mock.patch.dict(os.environ, {"RAFII_LIBRARY_ENRICHMENT_ENABLED": ""}):
             called = []
             self.assertEqual(jobs.on_asset_processed(lambda: called.append(1), WS, DOC)["status"], "disabled")
-            self.assertEqual(called, [])
+            # Only the deterministic smart-collection re-evaluation runs (one connection); nothing is enqueued.
+            self.assertEqual(called, [1])
+            self.assertEqual(self.db.jobs, {})
 
         def broken():
             raise RuntimeError("database unavailable")

@@ -149,6 +149,9 @@ def _ideas_source(ctx, version: dict):
     return next((s for s in ctx.state.get("sources", []) if s.get("id") == source_id), None)
 
 
+ideas_source = _ideas_source  # public name for comparison/relations; the private one stays for existing callers
+
+
 def _legacy_denial(ctx, version: dict) -> str | None:
     source = _ideas_source(ctx, version)
     if source is None:

@@ -356,7 +356,7 @@ export function createApi(getToken: TokenSource) {
     deleteLibraryFile: (w: string, assetId: string) =>
       send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
 
-    libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number }[] }>(`${ws(w)}/library/collections`),
+    libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number; kind?: 'manual' | 'smart' }[] }>(`${ws(w)}/library/collections`),
     createLibraryCollection: (w: string, name: string) => send('POST', `${ws(w)}/library/collections`, { name }),
     deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),
     updateLibraryAsset: (w: string, id: string, body: { title?: string; tags?: string[]; collections?: string[] }) => send('PATCH', `${ws(w)}/library/assets/${encodeURIComponent(id)}`, body),

@@ -105,7 +105,7 @@ def resolve(ctx, ref: dict) -> dict:
     A citation or action bound to an old version keeps resolving to that old version, never the newest one."""
     ref = c.asset_ref(ref)
     version = get(ctx, ref["versionId"])
-    if version["assetId"] != ref["assetId"]:
+    if ref["assetId"] not in (version["assetId"], version["versionId"]):  # lineage id, or a pre-link self reference
         raise AlphaError("This item is unavailable.", 404, code="library_unavailable")
     if ref["sha256"] and version["sha256"] and ref["sha256"] != version["sha256"]:
         raise AlphaError("This source version changed. Refresh before using it.", 409, code="library_version_mismatch")

@@ -272,12 +272,16 @@ class UniversalLibrary:
                 cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(tags,w,i))
                 cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(tags,w,i))
             if collections is not None:
-                cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
+                # Only manual collections are edited here; smart membership follows rules and overrides.
+                cur.execute("SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[]) AND kind='manual'",(w,collections))
                 if len(cur.fetchall()) != len(set(collections)):
                     raise AlphaError('Collection unavailable.',404)
-                cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
+                cur.execute("DELETE FROM public.pr_library_collection_items i USING public.pr_library_collections c WHERE i.workspace_id=%s AND i.asset_key=%s AND c.workspace_id=i.workspace_id AND c.id=i.collection_id AND c.kind='manual'",(w,i))
                 for c in set(collections):
                     cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
+            if title is not None or tags is not None:
+                from .library_intelligence import collections as smart
+                smart.reevaluate_for_asset(cur,w,i)  # own savepoint; never raises
             cur.execute('SELECT 1 FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s',(w,i))
             normalized = bool(cur.fetchone())
         return {'asset':self.detail(w,t,i)['asset']} if normalized else {'assetId':i,'status':'updated'}
@@ -299,8 +303,8 @@ class UniversalLibrary:
                 if cur.fetchone()[0]>=100:
                     raise AlphaError('This workspace has reached 100 collections.',409)
                 cur.execute('INSERT INTO public.pr_library_collections(id,workspace_id,name,created_by) VALUES(%s,%s,%s,%s) ON CONFLICT(workspace_id,name) DO NOTHING',(uuid.uuid4(),w,name.strip(),p))
-            cur.execute('SELECT c.id::text,c.name,count(i.asset_key) FROM public.pr_library_collections c LEFT JOIN public.pr_library_collection_items i ON i.workspace_id=c.workspace_id AND i.collection_id=c.id WHERE c.workspace_id=%s GROUP BY c.id ORDER BY c.name',(w,))
-            return {'collections':[{'id':i.replace('-',''),'name':n,'count':int(c)} for i,n,c in cur.fetchall()]}
+            cur.execute('SELECT c.id::text,c.name,count(i.asset_key),c.kind FROM public.pr_library_collections c LEFT JOIN public.pr_library_collection_items i ON i.workspace_id=c.workspace_id AND i.collection_id=c.id WHERE c.workspace_id=%s GROUP BY c.id ORDER BY c.name',(w,))
+            return {'collections':[{'id':i.replace('-',''),'name':n,'count':int(c),'kind':k} for i,n,c,k in cur.fetchall()]}
 
     def transcript(self,w,t,i,text):
         if not isinstance(text,str) or not text.strip() or len(text)>250000 or '\x00' in text:
@@ -337,6 +341,8 @@ class UniversalLibrary:
             a = self._row(cur,w,i,True)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
+            from .library_intelligence import collections as smart
+            smart.reevaluate_for_asset(cur,w,i)  # a previous version may become current; own savepoint, never raises
         s.delete(w,'file',a['object_name'])
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)

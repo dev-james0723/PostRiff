@@ -356,6 +356,13 @@ def on_asset_processed(connect, workspace_id, asset_key) -> dict:
     """Called by library_assets after an original finishes (ready/unsupported) and its transaction committed. Enqueues the
     private LOCAL default capabilities only, and only when enrichment is switched on. Never raises into the upload flow."""
     try:
+        # Smart collections are deterministic organization, not enrichment: a new upload joins matching collections now.
+        try:
+            from . import collections
+            with connect() as db, db.cursor() as cur:
+                collections.reevaluate_for_asset(cur, workspace_id, asset_key)
+        except Exception as error:  # reconcile_due repairs a missed evaluation
+            print(json.dumps({"event": "library_intelligence.collections_hook_failed", "error": type(error).__name__}), flush=True)
         if not policy.enabled("enrichment"):
             return {"status": "disabled"}
         key = c.asset_key(asset_key)
@@ -808,6 +815,8 @@ def complete_capability(ctx, job_id, result, expected_grant_revision, *, lease_t
         try:
             written = _write(ctx, version, proc, outcome)
             cur.execute("RELEASE SAVEPOINT library_finalize")
+            from . import collections
+            collections.reevaluate_for_asset(cur, ctx.workspace_id, key)  # own savepoint; never raises
             embedded = written.get("embeddings")
             if isinstance(embedded, dict) and embedded.get("vector") is False:
                 # No pgvector here: nothing was indexed, so the capability is honestly unsupported, not "ready".
