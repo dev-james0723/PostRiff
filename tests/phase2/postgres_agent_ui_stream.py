@@ -201,6 +201,8 @@ calls = rows("SELECT workload, feature, status, cost_usd_micro, physical_attempt
 assert calls == [("ui_presenter", "agent", "ok", cost, f"{first}:p1", run)], calls
 with tx() as (cur, auth):
     assert ui_metering.allowance(cur, wid, run)["room"] == 88_000 - 30_000 - cost, "a settled attempt counts at its actual"
+with connection() as db:
+    db.execute("UPDATE public.pr_ui_attempts SET state='failed', finished_at=now() WHERE id::text=%s", (first,))   # F's terminal transition
 third = attempt(art)
 with tx() as (cur, auth):
     held = ui_metering.reserve_attempt(runtime, cur, auth, {"artifactId": art, "runId": run}, {"attemptId": third, "kind": "repair"}, plan(9_000))

@@ -169,14 +169,23 @@ def _attempt_key_exists(cur, workspace_id, key) -> bool:
     return cur.fetchone() is not None
 
 
+def _run_in_scope(run_key: str, scope: str, scope_key: str) -> bool:
+    """Consumer scope: an `agent:` run that is not a founder run. Founder scope: exactly this founder namespace's runs
+    (`agent:founder:<mode>:<env>:…`, scope_key `founder:<mode>:<env>`)."""
+    run_key = str(run_key or "")
+    if scope == "founder":
+        return bool(scope_key) and scope_key.startswith("founder:") and run_key.startswith(f"agent:{scope_key}:")
+    return scope == "workspace" and run_key.startswith("agent:") and not run_key.startswith("agent:founder:")
+
+
 def _artifact_head(cur, workspace_id, artifact_id, *, scope: str = "workspace", scope_key: str = "") -> dict:
     """The artifact in exactly the caller's scope (404 for a missing or foreign one, and for one of the other scope)."""
     cur.execute("/* rafii-ui:artifact_head */ SELECT a.parent_run_id::text, a.slot, a.actor::text, a.scope, a.scope_key, a.surface, a.journey_ids, a.revision, "
                 "a.source_hash, a.manifest, a.current_attempt_id::text, r.idempotency_key FROM public.pr_ui_artifacts a JOIN public.pr_agent_runs r ON r.id=a.parent_run_id "
                 "WHERE a.id::text=%s AND a.workspace_id=%s", (str(artifact_id).lower(), workspace_id))
     row = cur.fetchone()
-    founder_run = str(row[11] or "").startswith("agent:founder:") if row else False
-    if not row or row[3] != scope or (row[4] or "") != (scope_key if scope == "founder" else "") or founder_run != (scope == "founder"):
+    expected_key = scope_key if scope == "founder" else ""
+    if not row or row[3] != scope or (row[4] or "") != expected_key or not _run_in_scope(row[11], scope, scope_key):
         raise AlphaError("That view is unavailable.", 404, code="ui_artifact")
     manifest = row[9] if isinstance(row[9], dict) else (json.loads(row[9]) if isinstance(row[9], str) else {})
     return {"artifactId": str(artifact_id).lower(), "runId": row[0], "slot": row[1], "actor": row[2], "surface": row[5], "journeyIds": list(row[6] or []),
@@ -907,11 +916,14 @@ def _start_presentation(runtime, tx, workspace_id, request, *, started, request_
     from . import ui_capabilities, ui_projection
     with tx("edit") as (cur, auth):
         scope = getattr(auth, "scope", "workspace") or "workspace"
+        scope_key = getattr(auth, "scope_key", "") or ""
         _sweep(runtime, cur, workspace_id)
         parent = _parent_run(cur, workspace_id, request["parentRunId"])
-        if parent is None or not parent["runKey"].startswith("agent:") or parent["runKey"].startswith("agent:founder:") != (scope == "founder"):
+        if parent is None or not _run_in_scope(parent["runKey"], scope, scope_key):
             # A founder run is never presented on a consumer route and vice versa (same 404 as a missing run).
             raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+        if (request.get("surface") == "founder") != (scope == "founder"):
+            raise AlphaError("Unknown surface.", 400, code="ui_surface")
         if parent["actor"] != str(auth.principal):
             # Presentations are metered to the person whose turn it was (the conversation may be shared; replay stays open).
             raise AlphaError("Only the person who asked can start this view.", 403, code="ui_forbidden")

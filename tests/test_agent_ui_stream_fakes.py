@@ -487,8 +487,8 @@ class FakeStore:
 def fake_projection(cur, auth, verified_result, surface, selection_state):
     return {"manifest_id": "m-1", "journey_ids": list((verified_result.get("ui") or {}).get("journeyIds") or ["J01"]), "component_group_ids": ["layout", "data"],
             "data_bindings": [{"name": "drafts_list"}], "action_bindings": [{"actionId": "draft_edit"}],
-            "allowed_context": {"drafts": {"count": 3, "kinds": ["linkedin", "x"]}, "body": PRIVATE_CONTEXT_TEXT,
-                                "thumbnailUrl": "https://storage.example/x?token=secret"},
+            "allowed_context": {"counts": {"drafts": 3}, "toolStates": {"drafts_list": "available"}, "refs": [{"type": "draft", "id": "d1"}],
+                                "language": "en", "body": PRIVATE_CONTEXT_TEXT, "thumbnailUrl": "https://storage.example/x?token=secret"},
             "fallback_text": "Here are your drafts.", "egress_decision": {"allowed": True, "provider": "openai", "reason": None}}
 
 
