@@ -26,6 +26,7 @@ permissions:
 concurrency:
   group: agent-ui-${{ github.ref }}
   cancel-in-progress: true
+# Lane branches (claude/rafii-openui-<lane>-*) push here for cloud typecheck/lint/unit/PG; only A merges.
 env:
   OPENUI_TELEMETRY_DISABLED: '1'
   DO_NOT_TRACK: '1'
@@ -90,17 +91,25 @@ jobs:
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y postgresql-17
           sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Types
+        if: ${{ !cancelled() }}
+        run: npm --prefix web run typecheck
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm --prefix web run lint
       - name: Contract, unit and parser tests
+        if: ${{ !cancelled() }}
         env:
           CI: 'true'
         run: bash scripts/agent_ui_validation.sh unit
       - name: Real PostgreSQL scenarios (roles, tenants, idempotency, CAS)
+        if: ${{ !cancelled() }}
         env:
           CI: 'true'
         run: |
           if compgen -G 'tests/phase2/postgres_agent_ui_*.py' >/dev/null; then bash scripts/agent_ui_validation.sh database; else echo 'no agent-ui PG scenarios yet'; fi
       - name: Browser acceptance (lane G)
-        if: ${{ hashFiles('scripts/agent_ui_acceptance.sh') != '' }}
+        if: ${{ !cancelled() && hashFiles('scripts/agent_ui_acceptance.sh') != '' }}
         env:
           CI: 'true'
         run: bash scripts/agent_ui_validation.sh browser
