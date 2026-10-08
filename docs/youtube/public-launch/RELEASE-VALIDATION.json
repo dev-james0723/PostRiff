@@ -110,5 +110,15 @@
     "Sustainable media/identity/agent worker fleets are not provisioned or provider benchmarked",
     "Verified legal/operator details, legal approval, actual account consent and disposable private asset remain pending",
     "Google Console connection is unattached; actual client/API/verification/quota configuration remains pending"
-  ]
+  ],
+  "postSnapshotCorrections": {
+    "status": "PENDING FULL PULL-REQUEST CI ON UPDATED HEAD",
+    "scope": [
+      "Preserve disabled-feature specialist instruction behavior while gating YouTube tools",
+      "Numerically ordered 089/097 migration harness",
+      "Worker-freeze fixture recognizes new schema query and still covers all three workers",
+      "Eight exact reviewed checksum/synthetic-fixture secret-scan entries"
+    ],
+    "reuse": "Frontend, upload/schedule runtime and capacity/worker implementations are unchanged by these corrections; earlier source-bound JCB results are retained for those paths. Current full PR CI must cover the changed registration/fixture/scan inputs."
+  }
 }

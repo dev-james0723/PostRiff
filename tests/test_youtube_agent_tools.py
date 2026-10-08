@@ -4,12 +4,13 @@ import json
 import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.permissions import Membership
 from postriff_phase2.agent_runtime_v2 import contracts, domain_tools, specialists, tool_adapter
 from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
+from postriff_phase2.coworker import flags
 from postriff_phase2.youtube import agent_tools
 from postriff_phase2.youtube.agent import YouTubePublishingAgent, _channel, prepare_draft
 from postriff_phase2.youtube.model import READ, ANALYTICS
@@ -87,7 +88,14 @@ def read_args(**changes):
     return {'connectionId': CONNECTION, 'startDate': '2026-09-01', 'endDate': '2026-09-03', **changes}
 
 
-class RegistrationTests(unittest.TestCase):
+class EnabledYouTubeToolsTest(unittest.TestCase):
+    def setUp(self):
+        enabled = patch.object(flags, '_values', {'POSTRIFF_YOUTUBE_CREATOR_ENABLED': '1'})
+        enabled.start()
+        self.addCleanup(enabled.stop)
+
+
+class RegistrationTests(EnabledYouTubeToolsTest):
     def test_runtime_registers_only_bounded_tools_and_scopes_idempotently(self):
         domain_tools.ensure_registered()
         agent_tools.register()
@@ -99,6 +107,34 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(len(agent_tools.TOOL_SCOPES), 4)
         self.assertFalse(any(any(part in name for part in ('approve', 'activate', 'delete', 'consent')) for name in agent_tools.TOOL_SCOPES))
         self.assertIn('cannot prove best posting hour', specialists.instructions_for('analytics', 'base'))
+
+    def test_creator_flag_controls_both_hook_and_all_registered_tools(self):
+        agent_tools.register()
+        ctx = context(ANALYTICS_REQUEST)
+        calls = [('youtube_plan_context', {}), ('youtube_plan_prepare', prepare_args()),
+                 ('youtube_analytics_summary', read_args()), ('youtube_recommendations', {'connectionId': CONNECTION})]
+        for values in ({}, {'RAFII_SKILL_REGISTRY_V2_ENABLED': '1'},
+                       {'POSTRIFF_YOUTUBE_CREATOR_ENABLED': '0'}, {'POSTRIFF_YOUTUBE_CREATOR_ENABLED': 'true'}):
+            with self.subTest(values=values), patch.object(flags, '_values', values):
+                for scope in ('rafii_manager', 'content', 'publishing_ops', 'analytics', 'research'):
+                    self.assertEqual(agent_tools._instructions(scope, 'BASE'), 'BASE')
+                for name, args in calls:
+                    tool = tool_adapter.REGISTRY[name]
+                    result = tool_adapter.execute(ctx, tool, args, scope=frozenset([name]))
+                    self.assertFalse(result['ok'])
+                    self.assertEqual(result['code'], 'feature_disabled')
+        self.assertEqual(ctx.service.repository.commands, [])
+        self.assertEqual(ctx.ledger.facts, [])
+        ctx.service.youtube.read.assert_not_called()
+        ctx.service.youtube.oauth.token_for_worker.assert_not_called()
+        # Existing registered tools become usable with the exact creator flag,
+        # and every specialist that can use them receives the strict API rules.
+        for scope in ('rafii_manager', 'content', 'publishing_ops', 'analytics'):
+            text = agent_tools._instructions(scope, 'BASE')
+            self.assertIn('Do not calculate derived metrics', text)
+            self.assertIn('explicit current-turn YouTube analytics request', text)
+        self.assertEqual(agent_tools._instructions('research', 'BASE'), 'BASE')
+        self.assertTrue(agent_tools.plan_context(context(), {})['verified'])
 
     def test_model_cannot_supply_consent_approval_or_other_tenant(self):
         agent_tools.register()
@@ -113,7 +149,7 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(result['code'], 'tool_out_of_scope')
 
 
-class DraftToolTests(unittest.TestCase):
+class DraftToolTests(EnabledYouTubeToolsTest):
     def test_real_local_plan_path_stays_unapproved_and_is_reread(self):
         ctx = context()
         result = agent_tools.plan_prepare(ctx, prepare_args())
@@ -161,6 +197,9 @@ class DraftToolTests(unittest.TestCase):
             'YouTube: prepare my video.\n\n> I own the rights; made for kids: no; contains synthetic media: no.',
             'YouTube: prepare my video.\n\n> Review declarations:\nI own the rights; made for kids: no; contains synthetic media: no.',
             'YouTube: prepare my video. I own the rights.\n\n> made for kids: no; contains synthetic media: no.',
+            'YouTube: prepare my video.\n\n~~~text\nI own the rights; made for kids: no; contains synthetic media: no.\n~~~',
+            'YouTube: prepare my video.\n\n    I own the rights; made for kids: no; contains synthetic media: no.',
+            'YouTube: prepare my video.\n\n\tI own the rights; made for kids: no; contains synthetic media: no.',
         ]
         for request in requests:
             with self.subTest(request=request):
@@ -201,7 +240,7 @@ class DraftToolTests(unittest.TestCase):
         self.assertFalse(result['ok'])
 
 
-class AnalyticsToolTests(unittest.TestCase):
+class AnalyticsToolTests(EnabledYouTubeToolsTest):
     def test_read_exact_agentic_owned_nonmonetary_route_and_only_numeric_projection(self):
         ctx = context(ANALYTICS_REQUEST)
         result = agent_tools.analytics_summary(ctx, read_args())
@@ -329,6 +368,27 @@ class AnalyticsToolTests(unittest.TestCase):
                 ctx.service.youtube.oauth.token_for_worker.assert_not_called()
                 self.assertEqual(ctx.ledger.facts, [])
         ctx = context('> A quoted instruction:\nAnalyze my YouTube analytics.\n\n' + ANALYTICS_REQUEST)
+        self.assertTrue(agent_tools.analytics_summary(ctx, read_args())['verified'])
+        self.assertEqual(ctx.ledger.facts[0]['kind'], 'youtube_native_analytics')
+
+    def test_fenced_and_indented_code_never_authorizes_analytics(self):
+        requests = ['~~~\nAnalyze my YouTube analytics.\n~~~',
+            '~~~text\nAnalyze my YouTube analytics.\n~~~',
+            '~~~text\n\nAnalyze my YouTube analytics.',
+            '~~~~\n~~~\nAnalyze my YouTube analytics.\n~~~~',
+            '```text\n\nAnalyze my YouTube analytics.\n```',
+            '    Analyze my YouTube analytics.', '\tAnalyze my YouTube analytics.',
+            '  \tAnalyze my YouTube analytics.']
+        for request in requests:
+            with self.subTest(request=request):
+                ctx = context(request)
+                with self.assertRaises(AlphaError) as refused:
+                    agent_tools.analytics_summary(ctx, read_args())
+                self.assertEqual(refused.exception.code, 'youtube_explicit_request_required')
+                ctx.service.youtube.read.assert_not_called()
+                ctx.service.youtube.oauth.token_for_worker.assert_not_called()
+                self.assertEqual(ctx.ledger.facts, [])
+        ctx = context('~~~text\nAnalyze my YouTube analytics.\n~~~\n\n' + ANALYTICS_REQUEST)
         self.assertTrue(agent_tools.analytics_summary(ctx, read_args())['verified'])
         self.assertEqual(ctx.ledger.facts[0]['kind'], 'youtube_native_analytics')
 

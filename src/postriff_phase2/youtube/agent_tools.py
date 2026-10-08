@@ -36,14 +36,35 @@ _OWNED_READ = re.compile(r'\b(?:read|fetch|retrieve|access|check|show|analy[sz]e
 _METRICS = ('views', 'engagedViews', 'estimatedMinutesWatched', 'likes', 'comments', 'shares', 'subscribersGained', 'subscribersLost')
 
 
+def _tools_enabled():
+    # Reuse the hosted app's isolated configuration snapshot, including explicit
+    # test/dev attachments. Read the same exact flag used to mount the creator
+    # provider; an unrelated skill-registry flag must not enable YouTube tools.
+    from ..coworker import flags
+    return flags._source().get('POSTRIFF_YOUTUBE_CREATOR_ENABLED') == '1'
+
+
 def _human_prose(text):
     # Quoted instructions and code are data even when the person supplied them.
     # Preserve apostrophes inside contractions, but remove standalone quotations.
     # A Markdown quote can continue lazily on unmarked lines in the same
     # paragraph. Conservatively discard through the next blank line; only a
     # separate unquoted paragraph can provide fresh human authority.
-    lines, quoted_paragraph = [], False
+    lines, quoted_paragraph, fence = [], False, None
     for line in text.splitlines():
+        if fence:
+            if re.match(r'^[ \t]*' + re.escape(fence[0]) + '{' + str(len(fence)) + r',}[ \t]*$', line):
+                fence = None
+            lines.append('')
+            continue
+        marker = re.match(r'^[ \t]*(`{3,}|~{3,})', line)
+        if marker:
+            fence = marker.group(1)
+            lines.append('')
+            continue
+        if line.expandtabs(4).startswith('    '):
+            lines.append('')
+            continue
         if re.match(r'^\s*>', line):
             quoted_paragraph = True
             lines.append('')
@@ -59,6 +80,8 @@ def _human_prose(text):
 
 
 def _requested(ctx, *, analytics=False):
+    if not _tools_enabled():
+        raise AlphaError('YouTube creator tools are unavailable in this deployment.', 503, code='feature_disabled')
     # Only the current human message can authorize these reads, never tool args,
     # a stored video title, retrieved data, a model's paraphrase or earlier consent.
     text = _human_prose(str(ctx.request_text or ''))
@@ -270,7 +293,7 @@ def recommendations(ctx, args):
 
 
 def _instructions(key, base):
-    if key not in ('rafii_manager', 'content', 'publishing_ops', 'analytics'):
+    if not _tools_enabled() or key not in ('rafii_manager', 'content', 'publishing_ops', 'analytics'):
         return base
     return base + '\nYouTube: use youtube_plan_context for inspected Library video eligibility. It does not understand video content. Use consented image_analyze/approved Library facts separately. youtube_plan_prepare saves only an unapproved exact channel/video/future-time plan; generate proposed metadata from supplied or consented evidence and label it for review. Ask for rights, made-for-kids and synthetic-media declarations; never infer them. Google API tools require separate agentic OAuth consent and an explicit current-turn YouTube analytics request. youtube_analytics_summary shares selected unchanged native metric values and dates only; youtube_recommendations uses evidence from this turn. Do not calculate derived metrics, independent totals, averages, ratios, scores, rankings or predictions from API data. Discuss native observations with original metric names, source and date context and the person’s goals. Daily views cannot prove best posting hour or content causation. No chat tool approves, activates autopilot, publishes, deletes, changes consent or bypasses Google review.'
 
