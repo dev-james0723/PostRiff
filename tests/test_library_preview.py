@@ -74,7 +74,7 @@ class FirstPageRendering(unittest.TestCase):
         import subprocess,tempfile,shutil
         from pathlib import Path
         from library_samples import office
-        from postriff_phase2.library_preview import ROOT
+        from postriff_phase2.library_preview import ROOT, _run_office
         executable=ROOT/'office/program/soffice.bin'
         command=str(executable) if executable.exists() else shutil.which('libreoffice')
         for source_ext,targets in [('docx',['doc','odt','rtf']),('xlsx',['xls','ods']),('pptx',['ppt','odp'])]:
@@ -85,7 +85,7 @@ class FirstPageRendering(unittest.TestCase):
                     if ROOT.exists():
                         import os
                         env = {**os.environ,'LD_LIBRARY_PATH':str(ROOT/'lib')+':'+str(ROOT/'office/program')}
-                    result=subprocess.run([command,'-env:UserInstallation='+(work/'profile').as_uri(),'--headless','--convert-to',target,'--outdir',temp,str(source)],capture_output=True,timeout=45,env=env)
+                    result=_run_office([command,'-env:UserInstallation='+(work/'profile').as_uri(),'--headless','--convert-to',target,'--outdir',temp,str(source)],cwd=work,env=env)
                     converted=work/('fixture.'+target)
                     self.assertTrue(converted.exists(),result.stdout.decode()+result.stderr.decode())
                     self.image(converted.read_bytes(),target)

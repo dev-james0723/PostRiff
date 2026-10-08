@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 VERSION = 'source-page-v1'
 SUPPORTED = {'pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm', 'csv', 'json'}
@@ -66,6 +67,17 @@ def _safe_html(source):
     parser = Clean(); parser.feed(source)
     return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'+''.join(parser.out)+'</body></html>'
 
+def _run_office(arguments, *, env, cwd):
+    # LibreOffice exithelper.h defines 81 as a normal first-run restart.
+    # Keep the same isolated profile and one shared deadline across restarts.
+    deadline = time.monotonic() + 45
+    for attempt in range(3):
+        result = subprocess.run(arguments, env=env, cwd=cwd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=max(0.01, deadline-time.monotonic()), check=False)
+        if result.returncode != 81:
+            return result
+    return result
+
 def render(raw, extension, page_number=1, metadata=False):
     import pypdfium2 as pdfium
     if extension not in SUPPORTED or not raw or len(raw) > 50 * 1024 * 1024:
@@ -99,7 +111,7 @@ def render(raw, extension, page_number=1, metadata=False):
                 fonts = work / 'fonts.conf'
                 fonts.write_text('<fontconfig><dir>'+str(ROOT / 'fonts')+'</dir><cachedir>'+str(work / 'font-cache')+'</cachedir></fontconfig>')
                 env['FONTCONFIG_FILE'] = str(fonts)
-            result = subprocess.run([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to','pdf','--outdir',str(work),str(source)], env=env, cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45, check=False)
+            result = _run_office([command, '-env:UserInstallation='+ (work / 'profile').as_uri(), '--headless','--invisible','--nodefault','--nolockcheck','--nologo','--norestore','--convert-to','pdf','--outdir',str(work),str(source)], env=env, cwd=work)
             output = work / 'source.pdf'
             if result.returncode or not output.exists() or output.stat().st_size > 32*1024*1024:
                 missing = re.findall(rb'([A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*): cannot open shared object file', result.stderr)
