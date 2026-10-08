@@ -77,6 +77,7 @@ const checks=[];
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'horizontal overflow');
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('button',{name:'Delete…',exact:true}).click();
    const dialog=page.getByRole('alertdialog');await dialog.getByRole('button',{name:/^Delete/}).click();
+   await page.getByRole('button',{name:/Document Brahms browser notes/}).waitFor({state:'detached',timeout:15000});
    assert.equal((await context.request.get(path+'/files/'+doc.id,{headers})).status(),404);
    assert.deepEqual(errors,[],'browser runtime errors');
    checks.push({engine,width,status:'pass',flows:['upload','rename','tags','collection','search','source-review','audio-player','transcript','delete','responsive'],execution:'real UI/API/DB; synthetic storage/identity'});
