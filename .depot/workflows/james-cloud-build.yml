@@ -47,12 +47,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-next-lint"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-lint"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -117,12 +117,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-next-typecheck"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-typecheck"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -190,12 +190,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-next-test"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-test"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -260,12 +260,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-next-build"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-build"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"
@@ -330,12 +330,12 @@ jobs:
       - name: Mount durable package cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-npm"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
           path: "/mnt/jcb-package-cache/_cacache"
       - name: Mount durable Next.js cache
         uses: depot/cache-mount@v1
         with:
-          name: "jcb-e408bbcd8242-3f8771e7-07c94c20-next-ci"
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-ci"
           path: "/mnt/jcb-framework-cache"
       - name: Connect framework cache
         working-directory: "web"

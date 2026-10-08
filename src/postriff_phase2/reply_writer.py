@@ -107,7 +107,7 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
     runtime, chosen = writer_for(ideas, model)
     with service.repository.transaction(token, workspace_id) as (cur, row, principal):
         require(ideas._member(row), "edit")
-        cur.execute("SELECT text,author_handle,provider,provider_post_id FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL",
+        cur.execute("SELECT text,author_handle,provider,provider_post_id FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL AND (provider<>'youtube' OR ingested_at>now()-interval '30 days')",
                     (thread_id, workspace_id))
         thread = cur.fetchone()
         if not thread:

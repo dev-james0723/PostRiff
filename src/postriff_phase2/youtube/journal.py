@@ -52,6 +52,8 @@ def purge_authorized_data(cur, workspace_id, connection_id):
 
 
 def purge_expired_data(cur):
+    # Cascades also remove reply drafts and their saved approval context.
+    cur.execute("DELETE FROM public.pr_audience_threads WHERE provider='youtube' AND ingested_at<=now()-interval '30 days'")
     cur.execute('DELETE FROM public.pr_youtube_cache WHERE expires_at<=now()')
     cur.execute("DELETE FROM public.pr_youtube_reporting_coverage WHERE ingested_at<now()-interval '30 days'")
     cur.execute("DELETE FROM public.pr_youtube_chat_cursor WHERE updated_at<now()-interval '30 days'")

@@ -23,7 +23,7 @@ class DisabledHostedSocial:
 
 
 class PostgresWorker:
-    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None):
+    def __init__(self, connection_factory, social=None, clock=time.time, worker_id=None, on_verified=None, youtube_maintenance=None):
         self.connection_factory = connection_factory
         self.social = social or DisabledHostedSocial()
         self.clock = clock
@@ -31,6 +31,7 @@ class PostgresWorker:
         self.commands = HostedPhase2Commands(clock)
         # Optional server-side hook (e.g. native insights ingestion) run in the same transaction once verified.
         self.on_verified = on_verified
+        self.youtube_maintenance = youtube_maintenance
 
     def _event(self, job, state, message):
         job["state"] = state
@@ -39,7 +40,7 @@ class PostgresWorker:
     def _approved(self, cur, workspace_id, state, job):
         from .billing import require_publishing
         try:
-            if state.get('accountDeletion'): return False
+            if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())
             manifest = job['manifest']
             channel = find(state['phase2']['channels'], manifest['channelId'])
@@ -310,7 +311,7 @@ class PostgresWorker:
         if type(max_jobs) is not int or not 1 <= max_jobs <= 25 or type(max_seconds) not in (int, float) or not 1 <= max_seconds <= 45:
             raise AlphaError("Use bounded worker limits.")
         started, processed = time.monotonic(), 0
-        youtube = getattr(self.social, 'youtube', None)
+        youtube = getattr(self.social, 'youtube', None) or getattr(self, 'youtube_maintenance', None)
         maintenance = youtube.maintenance() if youtube else {'enabled': False}
         while processed < max_jobs and time.monotonic() - started < max_seconds and self.step():
             processed += 1

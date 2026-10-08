@@ -6,6 +6,7 @@ never exchanges) → authenticated `complete` (same member, same workspace, sing
 server-side connector worker; they never reach the browser, the agent, or a log.
 """
 import base64
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -921,6 +922,95 @@ class OAuthService:
 
     # --- worker re-verification (orchestration §5 step 2) ------------------------------
     WORKER_REVERIFIED = "channel.reverified_by_worker"
+    COMPOSER_REVERIFIED = "channel.reverified_for_composer"
+
+    def refresh_for_composer(self, workspace_id, token, revision, action, payload):
+        """Authenticated age recovery only; never submit or advance a review/approval."""
+        if action not in ('p2_review', 'p2_approve', 'p2_approve_many'):
+            return
+        if not isinstance(payload, dict):
+            raise AlphaError('Expected a structured command.')
+        from .hosted import _membership, throttle
+        from .permissions import STEP_UP_ACTIONS, classify
+        from .store import find
+        from .contracts import digest
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), classify(action))
+            if action in STEP_UP_ACTIONS:
+                self.repository.assert_fresh(token, principal)
+            if type(revision) is not int or revision != row[0]:
+                raise AlphaError('Workspace changed; reload.', 409, code='workspace_revision_conflict')
+            state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+            data = state.get('phase2') or {}
+            channel_ids = []
+            if action == 'p2_review':
+                variant = find(state.get('variants', []), payload.get('variantId'))
+                channel_ids.append(payload.get('channelId'))
+            else:
+                reviews = payload.get('reviews') if action == 'p2_approve_many' else [payload]
+                if payload.get('confirmed') is not True or not isinstance(reviews, list) or not 1 <= len(reviews) <= 10:
+                    raise AlphaError('Explicitly review between one and ten exact destinations.')
+                for requested in reviews:
+                    if not isinstance(requested, dict):
+                        raise AlphaError('Expected exact review IDs and digests.')
+                    review = find(data.get('reviews', []), requested.get('reviewId'))
+                    manifest = review['manifest']
+                    if (review['digest'] != requested.get('digest') or review['digest'] != digest(manifest)
+                            or review['status'] not in ('needs_review', 'approved')
+                            or manifest['expiresAt'] <= self.clock()
+                            or not self.commands.engine.current(state, manifest)):
+                        raise AlphaError('This approval is stale. Prepare a new review.', 409)
+                    channel_ids.append(manifest['channelId'])
+            if any(not isinstance(connection, str) or not connection for connection in channel_ids):
+                raise AlphaError('Choose an available channel.')
+            channels = [find(data.get('channels', []), connection) for connection in dict.fromkeys(channel_ids)]
+            if action == 'p2_review' and ((variant.get('channelId') and variant['channelId'] != channels[0]['id'])
+                    or (variant.get('platform') and variant['platform'] != channels[0]['platform'])):
+                raise AlphaError('This draft belongs to another channel. Select its channel or prepare a new draft.', 409)
+            target = next((channel for channel in channels if self.commands.engine.channel_reverification_due(channel)), None)
+            if target is None:
+                return
+            connection_id = target['id']
+            cur.execute("SELECT provider_account_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
+            credential = cur.fetchone()
+            if not credential or (credential[3] is not None and credential[3] <= self.clock() and not (credential[1] and credential[2])):
+                raise AlphaError('This YouTube connection needs Google authorization again. Reconnect it before reviewing a post.', 409, code='youtube_reconnect_required')
+            if credential[0] != target.get('providerAccountId'):
+                raise AlphaError('YouTube channel identity changed. Reload and prepare a new review.', 409, code='youtube_connection_changed')
+            # One selected connection per request, regardless of bulk destination count.
+            # Counters commit before provider I/O, including unsuccessful observations.
+            throttle(cur, f'youtube-composer-workspace:{workspace_id}', 10, 60)
+            throttle(cur, f'youtube-composer-channel:{workspace_id}:{connection_id}', 2, 60)
+        try:
+            result = self._reverify_connection(workspace_id, connection_id,
+                authenticated=(token, revision, action), actor=principal, audit_event=self.COMPOSER_REVERIFIED)
+        except AlphaError as error:
+            if error.status == 404 or error.code == 'youtube_revoked_oauth':
+                raise AlphaError('This YouTube connection needs Google authorization again. Reconnect it before reviewing a post.', 409, code='youtube_reconnect_required') from error
+            raise
+        if result.get('state') == 'verification_unavailable':
+            raise AlphaError('YouTube permissions could not be verified. Try again shortly; no post was approved.', 503, code='youtube_verification_unavailable')
+        if result.get('state') != 'read_verified' or result.get('ready') is not True:
+            raise AlphaError('YouTube permissions or identity changed. Reload and prepare a new review; reconnect if required. No post was approved.', 409, code='youtube_connection_changed')
+        raise AlphaError('YouTube connection refreshed. Reload and review the post, then try again. No post was approved.', 409, code='youtube_connection_refreshed')
+
+    @contextmanager
+    def _reverification_commit(self, workspace_id, authenticated=None):
+        if authenticated is not None:
+            from .hosted import _membership
+            from .permissions import STEP_UP_ACTIONS, classify
+            token, revision, action = authenticated
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(_membership(row), classify(action))
+                if action in STEP_UP_ACTIONS:
+                    self.repository.assert_fresh(token, principal)
+                if type(revision) is not int or revision != row[0]:
+                    raise AlphaError('Workspace changed; reload.', 409, code='workspace_revision_conflict')
+                yield cur, (row[1],), principal
+        else:
+            with self.repository.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+                yield cur, cur.fetchone(), None
 
     def reverify_for_worker(self, workspace_id, connection_id):
         """Re-verify a channel on the worker's own authority, right before an approved post is committed.
@@ -947,7 +1037,12 @@ class OAuthService:
         (system) actor. Returns {"connectionId", "state", "ready"}; ready means read_verified and the channel is
         "Ready for posting" now.
         """
+        return self._reverify_connection(workspace_id, connection_id)
+
+    def _reverify_connection(self, workspace_id, connection_id, *, authenticated=None, actor=None, audit_event=None):
+        """Private shared read proof; foreground callers use refresh_for_composer's permission boundary."""
         from .hosted import audit
+        audit_event = audit_event or self.WORKER_REVERIFIED
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT c.provider,c.provider_account_id,w.state FROM public.pr_encrypted_credentials c JOIN public.pr_workspaces w ON w.id=c.workspace_id WHERE c.workspace_id=%s AND c.connection_id=%s AND c.revoked_at IS NULL", (workspace_id, connection_id))
@@ -960,10 +1055,10 @@ class OAuthService:
             raise AlphaError("Connection unavailable.", 404)
 
         def unavailable(cur, reason):
-            audit(cur, workspace_id, None, self.WORKER_REVERIFIED, connection_id, {"state": "verification_unavailable", "reason": reason})
+            audit(cur, workspace_id, actor, audit_event, connection_id, {"state": "verification_unavailable", "reason": reason})
             return {"connectionId": connection_id, "state": "verification_unavailable", "ready": False}
 
-        if state.get("accountDeletion"):
+        if state.get("accountDeletion") or state.get("accountBlock"):
             with self.repository.connection_factory() as db:
                 with db.cursor() as cur:
                     return unavailable(cur, "account_deletion_pending")
@@ -984,46 +1079,43 @@ class OAuthService:
                 with db.cursor() as cur:
                     return unavailable(cur, "provider_unavailable")
         reported = list(reported) if isinstance(reported, list) and all(isinstance(s, str) for s in reported) else []
-        with self.repository.connection_factory() as db:
-            with db.cursor() as cur:
-                cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
-                locked = cur.fetchone()
-                cur.execute("SELECT access_ciphertext,key_id,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
-                current = cur.fetchone()
-                if not locked or not current:
-                    raise AlphaError("Connection unavailable.", 404)
-                try:
-                    same_credential = self.vault.decrypt(current[0], current[1]) == grant["accessToken"]
-                except AlphaError:
-                    same_credential = False
-                if not same_credential:
-                    return unavailable(cur, "credential_rotated")  # a person re-authorized meanwhile; their grant wins
-                state = json.loads(locked[0]) if isinstance(locked[0], str) else locked[0]
-                if state.get("accountDeletion"):
-                    return unavailable(cur, "account_deletion_pending")
-                channel = next((c for c in state.get("phase2", {}).get("channels", []) if c.get("id") == connection_id), None)
-                if channel is None:
-                    raise AlphaError("Connection unavailable.", 404)
-                existing, credential_scopes, observed = set(channel.get("scopes") or []), set(current[2] or []), set(reported)
-                if lower_bound and observed and observed <= existing and observed <= credential_scopes and not observed == existing == credential_scopes:
-                    return unavailable(cur, "grant_not_observable")
-                changed = observed != credential_scopes or observed != existing
-                outcome = "reauthorization_required" if drift else "scope_missing" if not reported else "scope_changed" if changed else "read_verified"
-                if observed != existing:
-                    channel["scopes"] = sorted(observed)
-                channel.update(identityVerified=not drift, verifiedAt=self.clock())
-                channel["expiresAt"] = float(grant["expiresAt"]) if grant.get("expiresAt") else channel.get("expiresAt", 0)
-                if outcome != "read_verified":
-                    channel["capabilityVerified"] = False
-                    cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Permissions changed or could not be verified; reconnect and review.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace_id, connection_id))
-                if outcome == "reauthorization_required":
-                    channel["revoked"] = True
-                if observed != credential_scopes:
-                    cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (sorted(observed), workspace_id, connection_id))
-                self.commands.engine.invalidate(state)
-                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
-                audit(cur, workspace_id, None, self.WORKER_REVERIFIED, connection_id, {"state": outcome})
-                ready = outcome == "read_verified" and self.commands.engine.channel_state(channel) == "Ready for posting"
+        with self._reverification_commit(workspace_id, authenticated) as (cur, locked, actor):
+            cur.execute("SELECT access_ciphertext,key_id,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            current = cur.fetchone()
+            if not locked or not current:
+                raise AlphaError("Connection unavailable.", 404)
+            try:
+                same_credential = self.vault.decrypt(current[0], current[1]) == grant["accessToken"]
+            except AlphaError:
+                same_credential = False
+            if not same_credential:
+                return unavailable(cur, "credential_rotated")  # a person re-authorized meanwhile; their grant wins
+            state = json.loads(locked[0]) if isinstance(locked[0], str) else locked[0]
+            if state.get("accountDeletion") or state.get("accountBlock"):
+                return unavailable(cur, "account_deletion_pending")
+            channel = next((c for c in state.get("phase2", {}).get("channels", []) if c.get("id") == connection_id), None)
+            if channel is None:
+                raise AlphaError("Connection unavailable.", 404)
+            existing, credential_scopes, observed = set(channel.get("scopes") or []), set(current[2] or []), set(reported)
+            if lower_bound and observed and observed <= existing and observed <= credential_scopes and not observed == existing == credential_scopes:
+                return unavailable(cur, "grant_not_observable")
+            changed = observed != credential_scopes or observed != existing
+            outcome = "reauthorization_required" if drift else "scope_missing" if not reported else "scope_changed" if changed else "read_verified"
+            if observed != existing:
+                channel["scopes"] = sorted(observed)
+            channel.update(identityVerified=not drift, verifiedAt=self.clock())
+            channel["expiresAt"] = float(grant["expiresAt"]) if grant.get("expiresAt") else channel.get("expiresAt", 0)
+            if outcome != "read_verified":
+                channel["capabilityVerified"] = False
+                cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Permissions changed or could not be verified; reconnect and review.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace_id, connection_id))
+            if outcome == "reauthorization_required":
+                channel["revoked"] = True
+            if observed != credential_scopes:
+                cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (sorted(observed), workspace_id, connection_id))
+            self.commands.engine.invalidate(state)
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
+            audit(cur, workspace_id, actor, audit_event, connection_id, {"state": outcome})
+            ready = outcome == "read_verified" and self.commands.engine.channel_state(channel) == "Ready for posting"
         return {"connectionId": connection_id, "state": outcome, "ready": ready}
 
     def disconnect(self, workspace_id, token, connection_id):

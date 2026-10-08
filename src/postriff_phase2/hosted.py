@@ -762,6 +762,8 @@ class HostedWorkspaceService:
         return self._present(self.repository.get(workspace_id, token))
 
     def mutate(self, workspace_id, token, revision, action, payload):
+        if action in ('p2_review', 'p2_approve', 'p2_approve_many'):
+            self.oauth.refresh_for_composer(workspace_id, token, revision, action, payload)
         if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
             from .voice_ai import HostedVoiceAnalysis
             return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)

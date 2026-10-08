@@ -49,6 +49,10 @@ export default function DataDeletionPage() {
         <li>You can also revoke Rafii from the platform’s own settings (for example LinkedIn → Settings → Permitted services, or Meta → Apps and websites); the next Rafii request will then fail and the connection will be shown as needing re-authorisation.</li>
       </ul>
 
+      <p>
+        For YouTube, removing a connection in Rafii and removing Google's authorization are separate controls. Google-wide revocation can also affect other connected channels or Google integrations using the same account and project. Rafii may defer that remote step to protect other active connections and shows whether it was confirmed. You can remove Google's authorization from <a href='https://security.google.com/settings/security/permissions' className='underline'>Google's permissions settings</a>. Disconnecting does not delete content already published on YouTube; that requires a separate action.
+      </p>
+
       <h2 id='source'>3. Remove a single source</h2>
       <p>
         In <strong>Ideas</strong> or <strong>Account → Privacy &amp; data</strong> you can retract a source. Retraction removes its text and facts and blocks drafts that depend on it until drafted again. Waiting posts for those drafts are held until approved again. Retraction from Privacy &amp; data also records a data request with a receipt.

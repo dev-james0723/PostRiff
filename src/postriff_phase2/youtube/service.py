@@ -38,10 +38,15 @@ class YouTubeCreatorService:
     def maintenance(self):
         """One read-only grant/identity refresh and one approved notification renewal per tick."""
         provider = self.oauth.providers.get('youtube')
-        if not provider or not getattr(provider, 'creator_enabled', False):
-            return {'enabled': False}
+        # Retention continues after feature rollback; legacy deployments may lack 089.
         with self.service.connection_factory() as db, db.cursor() as cur:
-            purge_expired_data(cur)
+            cur.execute("SELECT to_regclass('public.pr_youtube_cache')")
+            has_schema = cur.fetchone()[0] is not None
+            if has_schema:
+                purge_expired_data(cur)
+        if not provider or not getattr(provider, 'creator_enabled', False):
+            return {'enabled': False, 'dataCleanup': has_schema}
+        with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT c.workspace_id::text,c.connection_id FROM public.pr_encrypted_credentials c
                 LEFT JOIN public.pr_youtube_cache k ON k.workspace_id=c.workspace_id AND k.connection_id=c.connection_id
                   AND k.cache_key='authorization-check'

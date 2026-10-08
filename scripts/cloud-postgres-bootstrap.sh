@@ -95,4 +95,5 @@ env -i \
     tests/phase2/postgres_video.py \
     tests/phase2/postgres_consumer_campaign_worker.py \
     tests/phase2/postgres_youtube_acceptance.py \
-    tests/phase2/postgres_library_lifecycle.py
+    tests/phase2/postgres_library_lifecycle.py \
+    tests/phase2/postgres_reverify.py

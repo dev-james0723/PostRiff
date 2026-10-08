@@ -61,6 +61,10 @@ export default function TermsPage() {
         Connecting a platform account is your own authorisation to that platform, subject to its terms. Platforms change their APIs and review status; where a platform has not yet approved Rafii for direct publishing, the capability is shown as Assisted (export only) and we will not represent it as more than that. We are not responsible for a platform suspending, rate-limiting or removing content.
       </p>
 
+      <p>
+        When you use YouTube features, you also agree to the <a href='https://www.youtube.com/t/terms' className='underline'>YouTube Terms of Service</a>. Availability depends on granted permissions, channel eligibility, Rafii's applicable review status and provider limits. A connected channel does not guarantee that upload, public visibility or scheduling is available.
+      </p>
+
       <h2 id='billing'>6. Trial, subscriptions and billing</h2>
       <p>
         New workspaces get a {TRIAL.days}-day trial with {TRIAL.connectedAccounts} connected accounts and {TRIAL.writingBatches} writing batches. No payment method is required and the trial never converts into a paid plan automatically. Paid plans remain proposed until commercial approval and payment verification are complete. If enabled, they are billed monthly in advance through Stripe at the price shown when you subscribe. Plan allowances stop when they are used up; there is no automatic overage charge. You can cancel at any time from the billing portal; access to paid features continues until the end of the paid period, and your drafts stay readable and exportable afterwards. We may change prices with at least 30 days’ notice by email; a change applies from your next renewal. [Refund policy — to be confirmed by counsel.] Taxes are shown at checkout where applicable.

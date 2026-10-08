@@ -25,6 +25,6 @@ def ingest(connection_factory, workspace, connection, channel_id, threads, now):
 
 def reply_target(connection_factory, workspace, thread_id):
     with connection_factory() as db, db.cursor() as cur:
-        cur.execute("SELECT connection_id,provider_comment_id,provider_parent_id FROM public.pr_audience_threads WHERE workspace_id=%s AND id::text=%s AND provider='youtube' AND tombstoned_at IS NULL", (workspace, thread_id))
+        cur.execute("SELECT connection_id,provider_comment_id,provider_parent_id FROM public.pr_audience_threads WHERE workspace_id=%s AND id::text=%s AND provider='youtube' AND tombstoned_at IS NULL AND ingested_at>now()-interval '30 days'", (workspace, thread_id))
         row = cur.fetchone()
     return {'connectionId': row[0], 'commentId': row[2] or row[1]} if row else None

@@ -136,7 +136,7 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
 
     @patch('postriff_phase2.billing.require_publishing')
     def test_revoked_grant_identity_scope_digest_and_approval_changes_block(self, _billing):
-        for failure in ('revoked', 'identity', 'scopes', 'digest', 'approval_expired'):
+        for failure in ('revoked', 'identity', 'scopes', 'digest', 'approval_expired', 'account_block'):
             with self.subTest(failure=failure):
                 worker, db, now, _, reverify = worker_for(1)
 
@@ -149,6 +149,8 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
                         channel.update(providerAccountId='UC-another-channel', identityVerified=False, revoked=True)
                     elif failure == 'scopes':
                         channel.update(scopes=[], capabilityVerified=False)
+                    elif failure == 'account_block':
+                        db.state['accountBlock'] = {'reason': 'Synthetic founder block after claim'}
                     elif failure == 'digest':
                         job['approvalDigest'] = 'changed-after-claim'
                     else:

@@ -70,7 +70,7 @@ class AudienceService:
     # --- customer surface ------------------------------------------------------------
     def threads(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
-            cur.execute("SELECT id::text,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,extract(epoch from ingested_at),tombstoned_at IS NOT NULL,extract(epoch from created_at_provider) FROM public.pr_audience_threads WHERE workspace_id=%s ORDER BY ingested_at DESC LIMIT 200", (workspace_id,))
+            cur.execute("SELECT id::text,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,extract(epoch from ingested_at),tombstoned_at IS NOT NULL,extract(epoch from created_at_provider) FROM public.pr_audience_threads WHERE workspace_id=%s AND (provider<>'youtube' OR ingested_at>now()-interval '30 days') ORDER BY ingested_at DESC LIMIT 200", (workspace_id,))
             items = []
             for r in cur.fetchall():
                 reply_level = self._capability(cur, workspace_id, r[1], "reply")
@@ -82,7 +82,7 @@ class AudienceService:
                 items.append({"threadId": r[0], "connectionId": r[1], "provider": r[2], "providerPostId": r[3], "commentId": r[4], "author": r[5], "text": r[6], "ingestedAt": float(r[7]), "tombstoned": bool(r[8]), "replyAvailable": reply_level == "Direct" and self._member(row).allows("reply"), "replyLevel": reply_level, "createdAtProvider": float(r[9]) if r[9] is not None else None, "replies": replies})
             cur.execute("SELECT connection_id,level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='comments_read'", (workspace_id,))
             capability = [{"connectionId": c, "commentsRead": l} for c, l in cur.fetchall()]
-            cur.execute("SELECT count(*),count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.workspace_id=t.workspace_id AND d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified','uncertain'))) FROM public.pr_audience_threads t WHERE workspace_id=%s", (workspace_id,))
+            cur.execute("SELECT count(*),count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.workspace_id=t.workspace_id AND d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified','uncertain'))) FROM public.pr_audience_threads t WHERE workspace_id=%s AND (provider<>'youtube' OR ingested_at>now()-interval '30 days')", (workspace_id,))
             total, answered = cur.fetchone()
             return {"counts": {"all": total, "replied": answered, "unanswered": total - answered}, "replySendingEnabled": self.reply_sender_enabled, "threads": items, "capabilities": capability, "limits": "Automated or bulk replies and moderation are not available in this release; each reply is approved individually."}
 
@@ -105,7 +105,7 @@ class AudienceService:
             return {"draftId": draft_id, "origin": "copilot", "text": written["text"], "needs": written["needs"], "label": "Suggested by Rafii's AI writer"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
-            cur.execute("SELECT provider FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
+            cur.execute("SELECT provider FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL AND (provider<>'youtube' OR ingested_at>now()-interval '30 days')", (thread_id, workspace_id))
             thread = cur.fetchone()
             if not thread:
                 raise AlphaError("Thread unavailable.", 404)
@@ -119,7 +119,7 @@ class AudienceService:
 
     def reply_preview(self, workspace_id, token, draft_id):
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
-            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s", (draft_id, workspace_id))
+            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s AND (t.provider<>'youtube' OR t.ingested_at>now()-interval '30 days')", (draft_id, workspace_id))
             r = cur.fetchone()
             if not r:
                 raise AlphaError("Draft unavailable.", 404)

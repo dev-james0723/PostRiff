@@ -20,6 +20,8 @@ cd -- "$jcb_youtube_repo_root"
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="$jcb_youtube_repo_root/src:$jcb_youtube_repo_root/tests"
 
+"$TREND_VISUAL_TEST_PYTHON" "$jcb_youtube_repo_root/scripts/cloud-dependency-security.py"
+
 echo "YouTube Python contracts: injected transports; no creator acceptance calls."
 "$TREND_VISUAL_TEST_PYTHON" - <<'PY'
 import sys
@@ -42,6 +44,7 @@ suite.addTests(loader.loadTestsFromNames([
     'test_wave4_hosted_publish',
     'test_asset_kinds',
     'test_postriff_audience_contract',
+    'test_reply_writer',
     'test_postriff_content_types',
     'test_postriff_receipt_contract',
 ]))

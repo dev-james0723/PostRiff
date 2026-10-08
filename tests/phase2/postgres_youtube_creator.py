@@ -260,6 +260,44 @@ with connection() as db:
     encrypted = db.execute('SELECT secret_ciphertext FROM public.pr_youtube_push WHERE id::text=%s', (push['id'],)).fetchone()[0]
     assert form['hub.secret'] not in encrypted and form['hub.verify_token'] not in encrypted
 
+# Aged API comments disappear from reads before maintenance, including approval previews.
+# Retention remains active with creator execution disabled; no Google calls are needed.
+from postriff_phase2.youtube.comments import reply_target
+with connection() as db:
+    aged = db.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,text,ingested_at) VALUES(%s,%s,'youtube','synthetic-video','aged-comment','old API text',now()-interval '31 days') RETURNING id::text", (wid, conn)).fetchone()[0]
+    fresh = db.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,text) VALUES(%s,%s,'youtube','synthetic-video','fresh-comment','fresh API text') RETURNING id::text", (wid, conn)).fetchone()[0]
+    other = db.execute("INSERT INTO public.pr_audience_threads(workspace_id,connection_id,provider,provider_post_id,provider_comment_id,text,ingested_at) VALUES(%s,%s,'instagram','synthetic-post','unrelated-aged','keep other provider',now()-interval '31 days') RETURNING id::text", (wid, conn)).fetchone()[0]
+    aged_draft = db.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status) VALUES(%s,%s,%s,'manual','saved draft','draft') RETURNING id::text", (wid, aged, ONE)).fetchone()[0]
+view = service.audience.threads(wid, 'one')
+ids = {item['threadId'] for item in view['threads']}
+assert aged not in ids and fresh in ids and other in ids
+assert view['counts']['all'] == len(ids)
+assert reply_target(connection, wid, aged) is None
+assert reply_target(connection, wid, fresh)['commentId'] == 'fresh-comment'
+for operation in (
+    lambda: service.audience.draft_reply(wid, 'one', aged, {'origin': 'manual', 'text': 'blocked'}),
+    lambda: service.audience.reply_preview(wid, 'one', aged_draft),
+):
+    try:
+        operation()
+        raise AssertionError('Expired YouTube context was exposed')
+    except AlphaError as error:
+        assert error.status == 404
+provider.creator_enabled = False
+before_calls = (google.writes, google.exchanges, google.revocations)
+from postriff_phase2.hosted_worker import PostgresWorker, DisabledHostedSocial
+cleanup_worker = PostgresWorker(connection, youtube_maintenance=service.youtube)
+assert isinstance(cleanup_worker.social, DisabledHostedSocial)
+cleanup_worker.step = lambda: False
+assert cleanup_worker.tick(max_jobs=1, max_seconds=1)['youtubeMaintenance'] == {'enabled': False, 'dataCleanup': True}
+assert before_calls == (google.writes, google.exchanges, google.revocations)
+with connection() as db:
+    assert db.execute('SELECT count(*) FROM public.pr_audience_threads WHERE id::text=%s', (aged,)).fetchone()[0] == 0
+    assert db.execute('SELECT count(*) FROM public.pr_reply_drafts WHERE id::text=%s', (aged_draft,)).fetchone()[0] == 0
+    assert db.execute('SELECT count(*) FROM public.pr_audience_threads WHERE id::text IN (%s,%s)', (fresh, other)).fetchone()[0] == 2
+assert service.youtube.maintenance()['dataCleanup']  # safe replay after deletion
+provider.creator_enabled = True
+
 service.youtube._cache(wid, conn, 'private-test', {'secretCreatorData': 'synthetic'})
 service.youtube._cache(foreign, conn, 'private-test', {'secretCreatorData': 'other-workspace'})
 # A distinct Brand Channel ID cannot prove that Google project/account revocation is isolated.
@@ -286,4 +324,4 @@ with connection() as db:
     assert db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind LIKE %s", (wid, 'youtube.%')).fetchone()[0] >= 5
 
 print(json.dumps({'status': 'pass', 'execution': 'disposable local PostgreSQL; synthetic Google transport; NOT real E2E',
-                  'checks': ['idempotent migration', 'one-use OAuth state committed before exchange and survives rollback', 'encrypted tokens', 'incremental refresh preservation', 'refresh recovery', '37 independent capability gates', 'monetary access off', 'two-workspace isolation', 'browser SQL denied', 'credential foreign keys', 'write intent committed before API call', 'destructive target confirmation', 'readback and read-only reconciliation', 'ambiguous write never repeated', 'bounded authorization revalidation', 'viewer cannot execute creator writes', 'encrypted signed push subscription and duplicate delivery', 'shared-workspace disconnect preserves other grant', 'revocation purges authorized data']}))
+                  'checks': ['idempotent migration', 'one-use OAuth state committed before exchange and survives rollback', 'encrypted tokens', 'incremental refresh preservation', 'refresh recovery', '37 independent capability gates', 'monetary access off', 'two-workspace isolation', 'browser SQL denied', 'credential foreign keys', 'write intent committed before API call', 'destructive target confirmation', 'readback and read-only reconciliation', 'ambiguous write never repeated', 'bounded authorization revalidation', 'viewer cannot execute creator writes', 'encrypted signed push subscription and duplicate delivery', 'shared-workspace disconnect preserves other grant', 'revocation purges authorized data', 'aged comment read/approval denial', 'feature-disabled retention and cascading draft cleanup']}))
