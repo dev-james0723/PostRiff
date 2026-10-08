@@ -3,7 +3,7 @@
  "lane": "durable artifacts, CAS history, replay/resume, UI state, surfaces and voice continuity, founder surface (R5)",
  "branch": "claude/rafii-openui-f-surfaces",
  "base_sha": "31cbee09",
- "head_sha": "1940f6b8c39375bdff5019f4583105be8049248f",
+ "head_sha": "0bd4aed8",
  "head_note": "head_sha is the code head this record describes; the commit adding this file follows it",
  "owned_paths": [
   "src/postriff_phase2/agent_runtime_v2/ui_store.py",
@@ -34,7 +34,10 @@
   "state module: artifact reducer (preview vs accepted, edits keep the accepted revision, failures keep last valid, library fallback), UiStateController (debounce, CAS conflict merge, refusal stop, size cap, applyUiPatch with lost values), UiArtifactStateContext for C, useRecordSelection for E, tab registries (stable presentation keys, fresh turns, uiContext, scope reset)",
   "surfaces: one ArtifactSession per (scope, artifact) shared by chat/panel/mobile/expanded/founder; fresh-turn-only presentation start; reload = snapshots only; explicit Build/Try again (cost note, new key)/Change this view/Stop/Expand; C's RafiiGenerativeMessage lazily mounted with render/status/manifest/historical/active",
   "mounts: SiteAgentAnswer and FounderAnswer generated slots; panel (panel/mobile per D-A21), full chat (chat + agent follow-ups with uiContext), founder chat; Escape skip list and page outline skip generated layers; founder section contract drift fixed",
-  "voice: uiContext on delegated turns (host hook or the tab's view in use for this workspace/conversation), speakableSummary-only speech guard (source-like text never spoken, record ids stripped)"
+  "voice: uiContext on delegated turns (host hook or the tab's view in use for this workspace/conversation), speakableSummary-only speech guard (source-like text never spoken, record ids stripped)",
+  "NC18: no reads, write controls, edits, retries or saved state on a view this build cannot draw; snapshot/by-message return manifest.actions [] and fallback: true; persist_ui_state 409 library_unsupported; server supported hashes include declared compatibleLibraryHashes",
+  "Chromium miss root cause (confirmed by G's diagnostics): a panel turn sent before the agent status answered went through the legacy site agent; send() now waits for the status inside the busy turn; the status query retries transient failures twice with backoff (shared file use-agent.ts) and the panel shows a visible native note with 'Check again' when it truly fails",
+  "GeneratedAnswerSlot: fresh marks re-render it, C's pending frame renders as soon as the presentation starts, transient start failures re-offer 'Build interactive view' with the same stable key, host carries data-ui-plan / data-ui-problem"
  ],
  "interfaces_produced": [
   "ui_store frozen entry points + ext: attempt_state, replay_view, reap_all, StateConflict/RevisionConflict (.current), supported_library_hashes, snapshot()/by_message() cursor-level helpers",
@@ -62,18 +65,35 @@
    "conclusion": "success",
    "test_counts": "31 OK",
    "sha": "1940f6b8"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37859273141",
+   "conclusion": "agent-ui success; agent-ui-browser failure outside F",
+   "sha": "156dbd6d",
+   "test_counts": "unit-python 274, unit-web 183, database 5 scripts all OK; browser chromium 13 pass / 1 fail (keyboard-only) / 2 blocked (edit ready within 90 s; scope-switch harness 402), webkit identical; api-corpus failures: NC02 viewer activate 404 vs 403 (lane D), NC16 G test sends visible as bare ids (G, per amended D-A43)"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37860701202",
+   "conclusion": "agent-ui success",
+   "sha": "0bd4aed8",
+   "test_counts": "Types, Lint, drift, unit-python 274, unit-web 185, database 5 scripts all OK"
   }
  ],
  "blockers": [
   {
-   "kind": "other_lane_ci",
-   "exact_dependency": "lane C/A: web/src/features/agent/generative-ui/generated assets drift on the integrated tree → agent-ui-renderer.test.cjs 'stable statement ids key children' and 'unsafe links render as text' see libraryHash unsupported; generate-openui-assets --check fails",
-   "independent_work_remaining": "none in lane F; re-run F on the integration head after A's final asset regeneration"
-  },
-  {
    "kind": "live_verification",
    "exact_dependency": "G04/G11/G15/G19 deployed and real-iPhone evidence needs the integrated deployment (lane G/A)",
    "independent_work_remaining": "none in lane F"
+  },
+  {
+   "kind": "other_lane",
+   "exact_dependency": "lane D: NC02 viewer activate answers 404 'Unknown action' (ui_actions._binding on the role-narrowed manifest) where G expects 403",
+   "independent_work_remaining": "none in lane F"
+  },
+  {
+   "kind": "other_lane",
+   "exact_dependency": "lanes B/C: typing-during-patch edit produced no new ready revision within 90 s; keyboard-only Tab into/out of the generated view (C)",
+   "independent_work_remaining": "F's edit path (Change this view → POST edits) is wired; investigate with B if the edit stream reaches F"
   }
  ],
  "shared_patches": [
@@ -81,12 +101,13 @@
   "02-service-ui-selection-refs-note.patch (applied b9c67dce)",
   "03-ui-validator-state-names.patch (applied b9c67dce)",
   "04-cron-ui-reaper.patch (applied b9c67dce)",
-  "05-founder-ui-budget-buckets.patch (applied 091da6f3)"
+  "05-founder-ui-budget-buckets.patch (applied 091da6f3)",
+  "web/src/lib/agent-runtime/use-agent.ts minimal patch in-branch (bounded status retry, agentStatusQuery, refetchStatus) — for A's review at integration"
  ],
  "defects_reported": [
   "service.py refs_note \"\\n\".join over a list (fixed by patch 02)",
   "lane B: create_presentation/_artifact_head refused founder runs/artifacts (B fixed per A)",
   "lane C: renderer lint/test failures (C fixed in 8dba78c5); remaining asset drift (A regenerates)"
  ],
- "next_action": "A: integrate claude/rafii-openui-f-surfaces; after the final asset regeneration, run agent-ui on the integration head; G: browser scenes locate [data-rafii-generated] (C) inside [data-rafii-generated-host] (F)"
+ "next_action": "A: integrate claude/rafii-openui-f-surfaces @ 0bd4aed8 (review shared use-agent.ts patch); G: rerun browser scenes; D: NC02 status code"
 }
