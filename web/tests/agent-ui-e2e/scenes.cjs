@@ -220,13 +220,17 @@ scene('keyboard-only', async (t) => {
     const inView = !!el?.closest(sel);
     return { inView, el: el ? `${el.tagName.toLowerCase()}${el.closest('[data-genui]') ? `@${el.closest('[data-genui]').getAttribute('data-genui')}` : ''}` : null };
   }, GENERATED);
+  // WebKit follows Safari's default keyboard model: plain Tab reaches only text fields and pop-up selects; Alt+Tab reaches
+  // buttons, links and checkboxes too. Use the key that visits every control, so the check means the same in both engines.
+  const tab = t.browser === 'webkit' ? 'Alt+Tab' : 'Tab';
   if (plan.hasBefore) await page.locator('[data-g-kb="before"]').focus();
   else await page.evaluate(() => document.activeElement?.blur());
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tab);
   const entered = await where();
   await page.locator('[data-g-kb="last"]').focus();
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tab);
   const exited = await where();
+  t.metric('tabKey', tab);
   t.assert(entered.inView, `Tab from the control before the view lands inside it (landed on ${entered.el}; first tabbable inside: ${plan.first})`);
   t.assert(!exited.inView, `Tab from the view's last control (${plan.last}) leaves the view (landed on ${exited.el})`);
   const visible = await page.evaluate(() => { const el = document.activeElement; const s = el && getComputedStyle(el); return !!s && (s.outlineStyle !== 'none' || s.boxShadow !== 'none'); });
@@ -305,6 +309,7 @@ scene('scope-switch-aborts', async (t) => {
   if (!(await trigger.count())) blocked('app: the sidebar workspace menu is not reachable on this page/viewport');
   await trigger.click();
   const target = page.getByRole('menuitem').filter({ hasText: /editor/i }).first();
+  await target.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});   // the menu renders its items after opening
   if (!(await target.count())) blocked('app: the second workspace is not listed in the workspace menu');
   const since = Date.now();
   await target.click();

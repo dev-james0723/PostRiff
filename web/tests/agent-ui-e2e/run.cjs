@@ -56,7 +56,7 @@ async function main() {
     const consoleLines = [];
     const agentCalls = [];
     const t = {
-      base, providerBase, viewports: VIEWPORTS, workspaceId: boot.workspaceId, principal, shared,
+      base, providerBase, viewports: VIEWPORTS, workspaceId: boot.workspaceId, principal, shared, browser: browserName,
       async page({ surface = 'panel', viewport, locale = 'en-US', reducedMotion = 'no-preference', mobile } = {}) {
         const vp = viewport || (surface === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 900 });
         const isMobile = mobile ?? vp.width < 768;

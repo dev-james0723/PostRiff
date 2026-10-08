@@ -189,7 +189,13 @@ class World:
             self.call(owner, "POST", f"/api/workspaces/{w}/ideas/runs/{run['runId']}/apply", {"expectedRevision": snap["revision"], "artifactHash": run["artifactHash"]})
             snap = self.call(owner, "GET", f"/api/workspaces/{w}")
             draft = next((v for v in snap["state"].get("variants") or [] if (v.get("provenance") or {}).get("runId") == run["runId"]), None)
-            out.update({"channelId": linkedin["id"], "draftId": draft and draft["id"]})
+            # Scheduling preconditions, the same way the existing site-agent scene seeds them: the draft is confirmed after
+            # review, and the account's identity + capability are verified (store.channel_state "Ready for posting").
+            if draft:
+                snap = self.call(owner, "POST", f"/api/workspaces/{w}/actions", {"expectedRevision": snap["revision"], "action": "p2_variant_review", "payload": {
+                    "variantId": draft["id"], "variantRevision": draft["revision"], "confirmed": True, "excludedUnknowns": draft.get("unknowns") or []}})
+            verified = self.api.request("POST", f"/api/workspaces/{w}/channels/{linkedin['id']}/verify", owner.token, {})
+            out.update({"channelId": linkedin["id"], "draftId": draft and draft["id"], "channelVerify": verified.status})
         except (AssertionError, KeyError, StopIteration) as error:
             out["seedError"] = str(error)[:300]
         self._seeded = out
