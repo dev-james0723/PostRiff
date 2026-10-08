@@ -30,6 +30,8 @@ class SocialPreflightTests(unittest.TestCase):
         values = self.configured()
         report = preflight.inspect_environment(values)
         self.assertTrue(report['configured'])
+        self.assertFalse(report['publicConnectionReady'])
+        self.assertTrue(all(not p['connectReady'] for p in report['providers']))
         self.assertFalse(report['liveOAuthVerified'])
         self.assertFalse(report['liveHistoryVerified'])
         for key, value in values.items():

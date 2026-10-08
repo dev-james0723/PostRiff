@@ -139,7 +139,7 @@ export function levelRank(level: string | undefined) {
 }
 
 /** The capabilities a person can ask a provider for, in the order the OAuth start endpoint expects them. */
-export const CONNECT_CAPABILITIES = ['publish', 'analytics', 'comments_read', 'reply', 'posts_read', 'identity'] as const;
+export const CONNECT_CAPABILITIES = ['publish', 'analytics', 'comments_read', 'reply', 'posts_read', 'identity', 'organization_identity', 'organization_publish', 'organization_analytics', 'organization_video_analytics', 'organization_posts_read', 'organization_comments_read', 'organization_reply', 'moderate', 'manage', 'monetary_analytics', 'memberships', 'boards', 'trends', 'upload_inbox', 'delete', 'mentions', 'location', 'audience_insights', 'product_tag', 'messaging', 'commerce', 'commerce_write'] as const;
 export type ConnectCapability = (typeof CONNECT_CAPABILITIES)[number];
 
 /**

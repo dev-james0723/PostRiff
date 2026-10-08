@@ -30,3 +30,19 @@ test('actual PostgreSQL snapshot reaches the UI without losing receipt fields', 
   const html = renderToStaticMarkup(React.createElement(component(), {job:persisted}));
   for (const text of ['555','999','https://www.instagram.com/p/ABC/','provider lookup']) assert.ok(html.includes(text));
 });
+
+test('accepted LinkedIn receipt provides owner inspection without claiming API verification', () => {
+  const accepted = {...job,state:'provider_accepted',manifest:{platform:'LinkedIn'},container:undefined,providerReference:'urn:li:share:123',url:'https://www.linkedin.com/feed/update/urn:li:share:123/',verification:null};
+  const html = renderToStaticMarkup(React.createElement(component(), {job:accepted}));
+  assert.ok(html.includes('Open post to confirm'));
+  assert.ok(html.includes('Publication is not API verified'));
+  assert.ok(html.includes('Do not resubmit'));
+  assert.ok(!html.includes('Open verified post'));
+  const stale = renderToStaticMarkup(React.createElement(component(), {job:{...accepted,verification:{method:'provider_lookup',at:1}}}));
+  assert.ok(stale.includes('Open post to confirm'));
+  assert.ok(!stale.includes('Verified ·'));
+  for (const update of [{state:'uncertain'}, {url:'https://www.linkedin.com/feed/update/urn:li:share:999/'}, {url:'https://evil.test/feed/update/urn:li:share:123/'}, {providerReference:'bad'}, {manifest:{platform:'Instagram'}}]) {
+    const unsafe = renderToStaticMarkup(React.createElement(component(), {job:{...accepted,...update}}));
+    assert.ok(!unsafe.includes('<a '), JSON.stringify(update));
+  }
+});

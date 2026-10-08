@@ -7,6 +7,7 @@ import json
 import sys
 import time
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -73,41 +74,47 @@ PAGES = {"data": [{"id": "10001", "name": "James Au Studio", "tasks": ["ANALYZE"
 class FacebookAdapter(unittest.TestCase):
     def test_login_for_business_config_or_scopes(self):
         with_config = FacebookPagesProvider("app", "secret", config_id="2961092884234131")
+        with self.assertRaises(AlphaError): with_config.authorize_url(BASE + '/cb', 'S', 'C', ['pages_show_list'])
+        with_config.login_configs = {('pages_show_list',):'2961092884234131'}
         query = parse_qs(urlparse(with_config.authorize_url(BASE + "/cb", "S", "C", ["pages_show_list"])).query)
         self.assertEqual((query["config_id"][0], "scope" in query, query["response_type"][0]), ("2961092884234131", False, "code"))
         plain = parse_qs(urlparse(FacebookPagesProvider("app", "secret").authorize_url(BASE + "/cb", "S", "C", ["pages_show_list", "pages_manage_posts"])).query)
         self.assertEqual(plain["scope"][0], "pages_show_list,pages_manage_posts")
 
-    def test_exchange_makes_a_long_lived_token_proves_every_call_and_picks_the_only_page(self):
+    def test_exchange_validates_the_person_token_and_retains_explicit_page_choice(self):
         wire = Wire([ok({"access_token": "SHORT"}), ok({"access_token": "LONG", "expires_in": 5184000}), ok({"id": "777", "name": "James Au"}),
+                     ok({'data': {'app_id': 'app', 'user_id': '777', 'is_valid': True}}),
                      ok({"data": [{"permission": "pages_manage_posts", "status": "granted"}, {"permission": "pages_read_engagement", "status": "granted"},
                                   {"permission": "business_management", "status": "declined"}]}), ok(PAGES)])
         facebook = FacebookPagesProvider("app", "secret", transport=wire)
         grant = facebook.exchange("CODE", "V", BASE + "/api/oauth/facebook/callback")
         session = json.loads(grant["accessToken"])
-        self.assertEqual((session["user"], session["page"]["id"], session["page"]["token"]), ("777", "10001", "PT1"))
+        self.assertEqual(session["user"], "777")
+        self.assertIsNone(session["page"])
+        wire.responses.append(ok(PAGES))
+        grant["accessToken"] = facebook.with_destination(grant["accessToken"], "10001")
         self.assertEqual(grant["scopes"], ["pages_manage_posts", "pages_read_engagement"])
         self.assertNotIn("secret", wire.calls[0]["url"])  # the app secret travels in the form body
         query = parse_qs(urlparse(wire.calls[2]["url"]).query)
         self.assertEqual(query["appsecret_proof"][0], hmac.new(b"secret", b"LONG", hashlib.sha256).hexdigest())
-        wire.responses.append(ok({"id": "10001", "name": "James Au Studio"}))
+        wire.responses.append(ok(PAGES))
         self.assertEqual(facebook.identity(grant["accessToken"]), {"providerAccountId": "777", "handle": "James Au Studio", "accountType": "page"})
-        self.assertIn("access_token=PT1", wire.calls[-1]["url"])  # a chosen Page proves access with its own token
+        self.assertIn("access_token=LONG", wire.calls[-1]["url"])  # minimum Page identity uses the person's authorized Page list
 
     def test_destinations_are_pages_with_create_content_and_revocation_uses_the_query(self):
         session = json.dumps({"v": 1, "user": "777", "ut": "LONG", "scope": ["pages_manage_posts"], "page": None})
         facebook = FacebookPagesProvider("app", "secret", transport=Wire([ok(PAGES), ok(PAGES), ok({"success": True})]))
-        self.assertEqual([d["id"] for d in facebook.destinations(session)], ["10001"])
+        self.assertEqual([d["id"] for d in facebook.destinations(session)], ["10001", "10002"])
         self.assertEqual(json.loads(facebook.with_destination(session, "10001"))["page"]["token"], "PT1")
         self.assertTrue(facebook.revoke(session))
         self.assertEqual((facebook.transport.calls[-1]["method"], "access_token=LONG" in facebook.transport.calls[-1]["url"]), ("DELETE", True))
         with self.assertRaises(AlphaError):
-            FacebookPagesProvider("app", "secret", transport=Wire([ok(PAGES)])).with_destination(session, "10002")
+            FacebookPagesProvider("app", "secret", transport=Wire([ok(PAGES)])).revalidate_page(json.dumps({**json.loads(session), "page":{"id":"10002"}}), "CREATE_CONTENT")
 
-    def test_scopes_stand_on_the_page_token_after_the_user_token_lapses(self):
+    def test_expired_person_token_does_not_reuse_historical_page_scopes(self):
         session = json.dumps({"v": 1, "user": "777", "ut": "EXPIRED", "scope": ["pages_manage_posts"], "page": {"id": "10001", "name": "Studio", "token": "PT1"}})
         facebook = FacebookPagesProvider("app", "secret", transport=Wire([ok({"error": {"code": 190}}, 400), ok({"id": "10001", "name": "Studio"})]))
-        self.assertEqual(facebook.inspect_scopes(session, "777"), ["pages_manage_posts"])
+        self.assertIsNone(facebook.inspect_scopes(session, "777"))
         self.assertIsNone(FacebookPagesProvider("app", "secret", transport=Wire([])).inspect_scopes(session, "999"))
 
 
@@ -187,6 +194,14 @@ class PinterestAdapter(unittest.TestCase):
 
 # --- per-post options -----------------------------------------------------------------------------------------------
 class TikTokRules(unittest.TestCase):
+    def test_url_cover_ai_and_photo_inbox_validation(self):
+        normalized=self.check(transferMode='url',coverTimestampMs=29000,isAigc=True)
+        self.assertEqual(normalized['coverTimestampMs'],29000);self.assertTrue(normalized['isAigc'])
+        with self.assertRaises(AlphaError): self.check(coverTimestampMs=30000)
+        with self.assertRaises(AlphaError): self.check(transferMode='other')
+        with self.assertRaises(AlphaError): publish_options.normalize('TikTok',{'mode':'inbox','consent':True,'title':'😀'*46},IMAGE,'caption')
+        photo=publish_options.normalize('TikTok',{'mode':'inbox','consent':True,'title':'Photo','isAigc':True},IMAGE,'caption')
+        self.assertEqual(photo['transferMode'],'url');self.assertTrue(photo['isAigc']);self.assertNotIn('privacyLevel',photo)
     def check(self, **overrides):
         return publish_options.normalize("TikTok", tiktok_options(**overrides), VIDEO, "caption")
 
@@ -216,9 +231,10 @@ class TikTokRules(unittest.TestCase):
             self.check(commercial={"enabled": True, "brandedContent": True})
         self.assertTrue(self.check(commercial={"enabled": True, "brandedContent": True}, consentText=publish_options.tiktok_consent_text(True))["commercial"]["brandedContent"])
 
-    def test_a_video_is_required(self):
+    def test_a_video_or_official_photo_post_is_required(self):
+        self.assertEqual(publish_options.normalize("TikTok", tiktok_options(), IMAGE, "caption")["coverIndex"], 0)
         with self.assertRaises(AlphaError):
-            publish_options.normalize("TikTok", tiktok_options(), IMAGE, "caption")
+            publish_options.normalize("TikTok", tiktok_options(), [], "caption")
 
 
 class OtherOptions(unittest.TestCase):
@@ -243,7 +259,7 @@ class OtherOptions(unittest.TestCase):
 
     def test_other_platforms_need_none(self):
         self.assertIsNone(publish_options.normalize("Facebook", None, [], "text"))
-        self.assertIsNone(publish_options.normalize("LinkedIn", {"anything": 1}, [], "text"))
+        with self.assertRaises(AlphaError): publish_options.normalize("LinkedIn", {"anything": 1}, [], "text")
 
 
 # --- publishing -----------------------------------------------------------------------------------------------------
@@ -307,7 +323,7 @@ class YouTubePublishing(unittest.TestCase):
         wire = Wire([ok({}, 200, {"location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=abc"}), ok({"id": "abcdefghijk", "status": {"uploadStatus": "uploaded"}})])
         result = self.social(wire).submit(manifest("YouTube", self.channel, media=VIDEO, options=self.options))
         self.assertEqual((result["state"], result["reference"]), ("provider_accepted", "abcdefghijk"))
-        self.assertIn("private", result["confirmed"])
+        self.assertIn("visibility", result["confirmed"])
         opened = wire.calls[0]
         self.assertEqual((opened["headers"]["X-Upload-Content-Length"], opened["body"]["status"]["privacyStatus"]), ("2048", "public"))
         self.assertEqual((wire.calls[1]["method"], len(wire.calls[1]["data"])), ("PUT", 2048))
@@ -347,6 +363,14 @@ class YouTubePublishing(unittest.TestCase):
 
 
 class TikTokPublishing(unittest.TestCase):
+    def test_verified_video_url_preserves_cover_disclosure_and_pending_receipt(self):
+        wire=Wire([ok(CREATOR),ok({'data':{'publish_id':'url_video'},'error':{'code':'ok'}})])
+        social=self.social(wire);social.providers['tiktok'].verified_media_domains={'media.example'}
+        with patch('postriff_phase2.official_publishers.OfficialPublishers.media_url',return_value='https://media.example/approved.mp4'):
+            result=social.submit(manifest('TikTok','OPEN',media=VIDEO,options=tiktok_options(transferMode='url',coverTimestampMs=1000,isAigc=True)))
+        self.assertEqual(result['state'],'provider_accepted');self.assertEqual(len(wire.calls),2)
+        body=wire.calls[-1]['body'];self.assertEqual(body['source_info']['source'],'PULL_FROM_URL')
+        self.assertEqual(body['post_info']['video_cover_timestamp_ms'],1000);self.assertTrue(body['post_info']['is_aigc'])
     def social(self, wire, raw=b"\x00" * 4096):
         tiktok = reviewed(TikTokProvider("key", "secret", transport=wire))
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["video.publish"], "openId": "OPEN"}), ["video.publish"]), {"tiktok": tiktok}, storage(raw))
@@ -359,7 +383,7 @@ class TikTokPublishing(unittest.TestCase):
         post_info = wire.calls[1]["body"]["post_info"]
         self.assertEqual((post_info["disable_duet"], post_info["disable_comment"], post_info["disable_stitch"]), (True, False, True))  # duet off by the creator
         self.assertEqual(wire.calls[2]["headers"]["Content-Range"], "bytes 0-4095/4096")
-        self.assertIn("private", result["confirmed"])
+        self.assertIn("visibility", result["confirmed"])
 
     def test_privacy_no_longer_offered_duration_and_unaudited(self):
         narrow = {**CREATOR, "data": {**CREATOR["data"], "privacy_level_options": ["SELF_ONLY"]}}
@@ -462,7 +486,10 @@ class ApprovalChecks(unittest.TestCase):
         variant, channel = self.prepared
         state = copy.deepcopy(self.j.state)
         state["variants"][0].update(platform=platform, text="Rehearsal notes")
-        next(c for c in state["phase2"]["channels"] if c["id"] == channel["id"])["platform"] = platform
+        prepared_channel = next(c for c in state["phase2"]["channels"] if c["id"] == channel["id"])
+        prepared_channel["platform"] = platform
+        if platform == "Facebook":
+            prepared_channel.update(destinationId="1234567890", accountType="page")
         payload = {"channelId": channel["id"], "variantId": variant["id"], "localTime": datetime.fromtimestamp(self.now + 60, timezone.utc).replace(tzinfo=None).isoformat(),
                    "timeZone": "UTC", "acknowledgedWarnings": variant["warnings"], "publishOptions": options}
         if image:
@@ -486,9 +513,10 @@ class ApprovalChecks(unittest.TestCase):
 
     def test_video_platforms_require_verified_media_and_freeze_its_identity(self):
         for platform, options in (("YouTube", {"title": "t", "privacyStatus": "private", "madeForKids": False}), ("TikTok", tiktok_options())):
-            with self.subTest(platform=platform), self.assertRaises(AlphaError) as refused:
-                self.build(platform, options, image=True)
-            self.assertIn("video", str(refused.exception))
+            if platform == "YouTube":
+                with self.assertRaises(AlphaError): self.build(platform, options, image=True)
+            else:
+                self.assertEqual(self.build(platform, options, image=True)["media"][0]["mime"], "image/jpeg")
             with self.subTest(platform=platform), self.assertRaises(AlphaError):
                 self.build(platform, options, video=True, location_checked=False)
             approved = self.build(platform, options, video=True)

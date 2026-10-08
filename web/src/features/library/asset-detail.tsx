@@ -94,6 +94,10 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
   );
 }
 
+function isLegacyPdf(asset: LibraryAsset) {
+  return asset.mime === 'application/pdf' && asset.processing === 'validated';
+}
+
 /** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
 function LargeImage({ asset }: { asset: LibraryAsset }) {
   const assetKind = kindOf(asset);
@@ -101,6 +105,7 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
   const image = useAssetImage(asset.id, mediaAsset);
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = assetKind === 'video';
+  if (isLegacyPdf(asset)) return <div className='rafii-quiet flex min-h-40 flex-col items-center justify-center gap-3 rounded-[var(--rafii-radius-card)] p-4 text-sm'><span>Verified PDF · {asset.pages ?? 'Unknown'} pages</span><button type='button' className='rafii-focus underline' onClick={() => void api.media(workspaceId, asset.id).then((blob) => { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `rafii-${asset.id}.pdf`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch((error) => toast.error(error instanceof Error ? error.message : 'Document unavailable'))}>Download original PDF</button></div>;
   if (assetKind === 'audio') {
     return <div className='flex flex-col items-center gap-3'>
       <AssetFileThumbnail asset={asset} size='detail' />
@@ -253,7 +258,7 @@ function DetailBody({
   return (
     <div className='flex flex-col gap-6'>
       <LargeImage asset={asset} />
-      {!['image', 'video'].includes(kindOf(asset) ?? '') ? <DocumentText asset={asset} /> : null}
+      {!isLegacyPdf(asset) && !['image', 'video'].includes(kindOf(asset) ?? '') ? <DocumentText asset={asset} /> : null}
       <AssetOrganizer key={asset.id} asset={asset} canEdit={canEdit} />
 
       {publishing && (
@@ -322,11 +327,12 @@ function DetailActions({
 }: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
   const { api, workspaceId } = useWorkspaceApi();
   const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
+  const fileAsset = !mediaAsset && !isLegacyPdf(asset);
   return (
     <>
       {mediaAsset && !canApprove && canEdit && <p className='text-muted-foreground text-xs leading-relaxed'>Only approvers can use media in posts.</p>}
       <div className='flex flex-wrap gap-2'>
-        {canApprove && mediaAsset ? (
+        {canApprove && (mediaAsset || isLegacyPdf(asset)) ? (
           <Link href={`/app/queue?asset=${encodeURIComponent(asset.id)}`} className={cn(buttonVariants({ variant: 'action', size: 'control' }), 'flex-1 sm:flex-none')}>
             <Icons.send aria-hidden />
             Use in a post
@@ -337,7 +343,7 @@ function DetailActions({
             <LearnMoreChevron />
           </Link>
         ) : null}
-        {!mediaAsset ? (
+        {fileAsset ? (
           <Button
             variant='glass'
             size='control'
@@ -346,7 +352,7 @@ function DetailActions({
             Open original
           </Button>
         ) : null}
-        {!mediaAsset ? <Button variant='quiet' size='control' onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id, true).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to download the file.'); }).catch(() => { target?.close(); toast.error('Download unavailable'); }); }}>Download</Button> : null}
+        {fileAsset ? <Button variant='quiet' size='control' onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id, true).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to download the file.'); }).catch(() => { target?.close(); toast.error('Download unavailable'); }); }}>Download</Button> : null}
         {canEdit && (
           <Button
             variant='destructive'

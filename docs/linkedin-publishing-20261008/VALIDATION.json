@@ -1,0 +1,912 @@
+{
+  "state": "DISPATCH_AND_FACEBOOK_FULL_CLOUD_CHECKS_PASS; EXPIRED_APPROVAL_UI_FIX_FOCUSED_PASS; FINAL_DELIVERY_PENDING",
+  "execution": "Actual required GitHub/Depot cloud validation and ordinary-user identity proof; no live LinkedIn publication.",
+  "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+  "priorRemoteRuns": [
+    {
+      "task": "test",
+      "runId": "rgw3grb6k7",
+      "exitCode": 1,
+      "purpose": "RED: incorrect restricted-review gate, schedule capability, unescaped commentary and missing image alt",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T042654538640Z-test.json",
+      "sourceFingerprint": "b00eba226d4cbdd8851a43c2dda037dc16efd93a655f141503fb715cc940dd7c"
+    },
+    {
+      "task": "test",
+      "runId": "b4j3g6l60h",
+      "exitCode": 0,
+      "purpose": "Focused GREEN:9 Python +5 JS at that source; synthetic only",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043052256324Z-test.json",
+      "sourceFingerprint": "dbd3dc10df935e2feb507eb76f0de4dd367592df3b60637b2ef3d0a8ccbb2c1d",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6x66t7612b?job=5v4lc6nhpg&attempt=52dxx2qct7"
+    },
+    {
+      "task": "ci",
+      "runId": "55q3qzs92p",
+      "exitCode": 1,
+      "purpose": "Caught FakeProvider compatibility regression after affected tests/SQL passed; fixed using getattr adapter.id",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043526419368Z-ci.json",
+      "sourceFingerprint": "5ae83187f748b26f52e07565336314e406c25b315d4d4de774dc17d7fbf99c9f"
+    },
+    {
+      "task": "ci",
+      "runId": "njs1p84h8q",
+      "exitCode": 0,
+      "purpose": "Integrated affected lint/types/JS/Python13 publishing regressions/disposable SQL/production build PASS before accepted-receipt follow-up and environment observability",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T043851732721Z-ci.json",
+      "sourceFingerprint": "5de87d6c29b57c100828de33019d2738d363e0462240d8336518a18d5d8de21f"
+    },
+    {
+      "task": "e2e",
+      "runId": "qgncxfxxl7",
+      "exitCode": 0,
+      "purpose": "Cloud Chromium1280/390px connection/permission UI fixtures PASS at njs1p84h8q source. Latest accepted-receipt case not included. Not real iPhone or ordinary-user live proof.",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T044222975040Z-e2e.json",
+      "sourceFingerprint": "5de87d6c29b57c100828de33019d2738d363e0462240d8336518a18d5d8de21f"
+    }
+  ],
+  "latestAttempt": {
+    "schema": "rafii.github-validation.v1",
+    "observedAtUtc": "2026-10-08T08:04:02.004791+00:00",
+    "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "state": "ALL_REQUIRED_CHECKS_PASSED",
+    "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "isDraft": true,
+    "mergeable": "MERGEABLE",
+    "checks": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:50:21Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462686/job/113202876400",
+        "name": "founder",
+        "startedAt": "2026-10-08T07:37:21Z",
+        "status": "COMPLETED",
+        "workflowName": "Founder admin browser"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:38:30Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462541/job/113202543508",
+        "name": "growth-studio",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "COMPLETED",
+        "workflowName": "Growth Studio browser acceptance"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:42:32Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462654/job/113202543146",
+        "name": "native-learning-browser",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "COMPLETED",
+        "workflowName": "Growth metrics acceptance"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:40:17Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462532/job/113202542366",
+        "name": "local-foundation",
+        "startedAt": "2026-10-08T07:36:21Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii Control foundation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:44:54Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462656/job/113202543610",
+        "name": "scenes",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii browser scenes"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:59:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832",
+        "name": "local-gates",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii local release gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:43:36Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202543373",
+        "name": "library",
+        "startedAt": "2026-10-08T07:36:22Z",
+        "status": "COMPLETED",
+        "workflowName": "Universal Library release validation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:36:20Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462560/job/113202544624",
+        "name": "dependency-lock",
+        "startedAt": "2026-10-08T07:36:20Z",
+        "status": "COMPLETED",
+        "workflowName": "Universal Library release validation"
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "Vercel",
+        "startedAt": "2026-10-08T07:37:27Z",
+        "state": "SUCCESS",
+        "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/HUGEcuSxUJCJYwxaP31XTpNV2mrQ"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T07:37:28Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://vercel.com/github",
+        "name": "Vercel Preview Comments",
+        "startedAt": "2026-10-08T07:37:28Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "integratedRunId": "37744462566",
+    "integratedJobId": "113202542832",
+    "run": {
+      "conclusion": "success",
+      "headSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+      "jobs": [
+        {
+          "completedAt": "2026-10-08T07:59:52Z",
+          "conclusion": "success",
+          "databaseId": 113202542832,
+          "name": "local-gates",
+          "startedAt": "2026-10-08T07:36:22Z",
+          "status": "completed",
+          "steps": [
+            {
+              "completedAt": "2026-10-08T07:36:23Z",
+              "conclusion": "success",
+              "name": "Set up job",
+              "number": 1,
+              "startedAt": "2026-10-08T07:36:22Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:36:31Z",
+              "conclusion": "success",
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "number": 2,
+              "startedAt": "2026-10-08T07:36:23Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:36:31Z",
+              "conclusion": "success",
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "number": 3,
+              "startedAt": "2026-10-08T07:36:31Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:36:39Z",
+              "conclusion": "success",
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "number": 4,
+              "startedAt": "2026-10-08T07:36:31Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:37:17Z",
+              "conclusion": "success",
+              "name": "Install pinned application and validation tools",
+              "number": 5,
+              "startedAt": "2026-10-08T07:36:39Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:37:33Z",
+              "conclusion": "success",
+              "name": "Install PostgreSQL 17 using its signed official repository",
+              "number": 6,
+              "startedAt": "2026-10-08T07:37:17Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:37:46Z",
+              "conclusion": "success",
+              "name": "Install ffmpeg (media decoding tests render a test image with it)",
+              "number": 7,
+              "startedAt": "2026-10-08T07:37:34Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:42:24Z",
+              "conclusion": "success",
+              "name": "Python domain and security contracts",
+              "number": 8,
+              "startedAt": "2026-10-08T07:37:46Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:52:54Z",
+              "conclusion": "success",
+              "name": "Disposable DB integration, migrations and restore",
+              "number": 9,
+              "startedAt": "2026-10-08T07:42:24Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:53:10Z",
+              "conclusion": "success",
+              "name": "Web contracts and locale checks",
+              "number": 10,
+              "startedAt": "2026-10-08T07:52:54Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:54:53Z",
+              "conclusion": "success",
+              "name": "Types, lint and isolated production build",
+              "number": 11,
+              "startedAt": "2026-10-08T07:53:10Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:54:54Z",
+              "conclusion": "success",
+              "name": "Product copy audit",
+              "number": 12,
+              "startedAt": "2026-10-08T07:54:53Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:55:14Z",
+              "conclusion": "success",
+              "name": "Actual isolated Python function archive",
+              "number": 13,
+              "startedAt": "2026-10-08T07:54:54Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:56:57Z",
+              "conclusion": "success",
+              "name": "Offline source secret scan",
+              "number": 14,
+              "startedAt": "2026-10-08T07:55:14Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:57:06Z",
+              "conclusion": "success",
+              "name": "Dependency audits",
+              "number": 15,
+              "startedAt": "2026-10-08T07:56:57Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:48Z",
+              "conclusion": "success",
+              "name": "Real local browser, API and database integration",
+              "number": 16,
+              "startedAt": "2026-10-08T07:57:06Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:50Z",
+              "conclusion": "success",
+              "name": "Retain evidence tied to this commit",
+              "number": 17,
+              "startedAt": "2026-10-08T07:59:48Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:50Z",
+              "conclusion": "success",
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "number": 32,
+              "startedAt": "2026-10-08T07:59:50Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:50Z",
+              "conclusion": "success",
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "number": 33,
+              "startedAt": "2026-10-08T07:59:50Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:50Z",
+              "conclusion": "success",
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "number": 34,
+              "startedAt": "2026-10-08T07:59:50Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T07:59:50Z",
+              "conclusion": "success",
+              "name": "Complete job",
+              "number": 35,
+              "startedAt": "2026-10-08T07:59:50Z",
+              "status": "completed"
+            }
+          ],
+          "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37744462566/job/113202542832"
+        }
+      ],
+      "status": "completed"
+    },
+    "artifacts": [
+      {
+        "created_at": "2026-10-08T07:59:50Z",
+        "digest": "sha256:380adaac0b9d9f73afee9b1630327509d70ff69a5101ba7580399cc7f177bf04",
+        "expired": false,
+        "expires_at": "2026-10-22T07:59:48Z",
+        "id": 11536033176,
+        "name": "local-gates-d8eb4e698da25108b2d82ebdc320241f3d727c69",
+        "size_in_bytes": 4765809
+      }
+    ],
+    "actualTestedPrMerge": {
+      "parents": [
+        "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+        "7a4cefbaba92ac65ca17da8082a208a092faf5ca"
+      ],
+      "sha": "d8eb4e698da25108b2d82ebdc320241f3d727c69",
+      "tree": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+      "deployedHeadSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+      "deployedHeadTreeSha": "97e0a1f7431b5f406ccee19a724fbc4d4f337446",
+      "treesIdentical": true
+    }
+  },
+  "localLightweight": [
+    {
+      "check": "accepted receipt known-acceptance single Python unit",
+      "red": "state uncertain vs provider_accepted",
+      "green": "PASS1 test,0.002s; no provider calls"
+    },
+    {
+      "check": "runtime configuration diagnostic single Python unit",
+      "result": "PASS1 test,0.000s; synthetic only"
+    },
+    {
+      "check": "AST parse affected Python / bash -n / git diff --check",
+      "result": "PASS; no Node/build/full suite locally"
+    },
+    {
+      "check": "Final evidence JSON/CSV/acceptance invariants and scoped diff",
+      "result": "PASS; exact receipt evidence/local-receipts-validation-b7ee0e68.json. CSV LF restored after formatting check; no heavy repeat."
+    }
+  ],
+  "cloudAdapterPreserved": "Temporary focused task adapter and .depot workflow restored byte-for-byte before integrated CI; not part of worker change",
+  "pending": [
+    "Deliverd38 preview and pass exact delivery checks",
+    "One exact already-authorized public text pilot: expired original job cannot execute; fresh normal-UI review needed, then single dispatch and native inspection",
+    "Permanent cleanup requires action-time confirmation for only returned pilot post ID",
+    "Facebook prepared minimum preview configuration approval and secure secret handoff; real applicable Meta external access evidence",
+    "Real iPhone Safari, post-reconnect fresh Rafii session, live negative tenancy, genuine elapsed expiry/reauthorization and production acceptance",
+    "Separate permissions/evidence/exact content approvals for all further operations"
+  ],
+  "externalEffects": [
+    "Authorized non-force recovery branch push/PR131/preview only",
+    "Approved two preview LinkedIn product/workflow settings applied; owner actual openid/profile/w_member_social grant saved",
+    "One exact normal-UI approved job held with no provider submission; original approval has expired; no provider POST/publication"
+  ],
+  "reason": "JCB launcher unavailable before submission. Existing authorized GitHub PR validation passed on final SHA; installed Depot fallback browser passed on identical frontend/script/workflow inputs. No local heavy fallback.",
+  "historicalJcbAttempt": {
+    "task": "ci",
+    "state": "TOOL_ACCESS_BEFORE_SUBMISSION",
+    "runId": null,
+    "exitCode": 143,
+    "log": "/private/tmp/rafii-linkedin-publishing-final-ci.log",
+    "diagnostic": "JCB-TOOL-ACCESS.txt",
+    "noDuplicateCloudRun": true,
+    "alreadyEscalated": true,
+    "boundedGitMetadataDiagnostic": "Also stalled; only own diagnostic stopped. No runtime copied, package installed or policy bypassed."
+  },
+  "directDepotBrowser": {
+    "runId": "lhz2r5w6md",
+    "workflowId": "dvmd6j3g6n",
+    "url": "https://depot.dev/orgs/jf34f85hr0/workflows/dvmd6j3g6n?job=1s5kp526hs&attempt=jr4qcj8f7r",
+    "exitCode": 0,
+    "testedSource": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+    "currentSource": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "scope": "Synthetic official-social-browser.cjs Chromium1280/390 including accepted receipt; frontend/script/workflow unchanged. New backend validation remains required GitHub source checks.",
+    "frontendTree": "36c504b99c79beb6561eead3eb9f71a3a9a022c5",
+    "browserWorkflowSha256": "5524a728fe0a07666e99cf5a6aef8f995797579b5e5dbdd9e1b0aa5e4fc49e49",
+    "execution": "DIRECT_DEPOT_FALLBACK_NOT_JCB",
+    "receipt": "docs/linkedin-publishing-20261008/evidence/depot-lhz2r5w6md/RESULT.json"
+  },
+  "liveIdentityEvidence": "evidence/connection-b7ee0e68.json",
+  "privateCandidateEvidence": "evidence/private-pilot-draft-b7ee0e68.json",
+  "historicalValidatedSourceB7": {
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "observedAtUtc": "2026-10-08T05:47:34.218642+00:00",
+    "state": "ALL_REQUIRED_CHECKS_PASSED",
+    "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "isDraft": true,
+    "mergeable": "MERGEABLE",
+    "checks": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:36:41Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997381/job/113163212698",
+        "name": "founder",
+        "startedAt": "2026-10-08T05:22:43Z",
+        "status": "COMPLETED",
+        "workflowName": "Founder admin browser"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:24:08Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997331/job/113163001308",
+        "name": "growth-studio",
+        "startedAt": "2026-10-08T05:21:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Growth Studio browser acceptance"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:27:51Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997516/job/113163001899",
+        "name": "native-learning-browser",
+        "startedAt": "2026-10-08T05:21:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Growth metrics acceptance"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:25:11Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997389/job/113163001883",
+        "name": "local-foundation",
+        "startedAt": "2026-10-08T05:21:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii Control foundation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:32:15Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997372/job/113163001404",
+        "name": "scenes",
+        "startedAt": "2026-10-08T05:21:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii browser scenes"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:46:35Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997375/job/113163001581",
+        "name": "local-gates",
+        "startedAt": "2026-10-08T05:21:56Z",
+        "status": "COMPLETED",
+        "workflowName": "Rafii local release gates"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:28:38Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997363/job/113163001580",
+        "name": "library",
+        "startedAt": "2026-10-08T05:21:55Z",
+        "status": "COMPLETED",
+        "workflowName": "Universal Library release validation"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:21:53Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997363/job/113163003175",
+        "name": "dependency-lock",
+        "startedAt": "2026-10-08T05:21:54Z",
+        "status": "COMPLETED",
+        "workflowName": "Universal Library release validation"
+      },
+      {
+        "__typename": "StatusContext",
+        "context": "Vercel",
+        "startedAt": "2026-10-08T05:22:46Z",
+        "state": "SUCCESS",
+        "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/E6mrgNSbYf8ZSHG6XxU6rynUTg3T"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-08T05:22:47Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://vercel.com/github",
+        "name": "Vercel Preview Comments",
+        "startedAt": "2026-10-08T05:22:47Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "integratedRunId": "37731997375",
+    "integratedJobId": "113163001581",
+    "run": {
+      "conclusion": "success",
+      "headSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "jobs": [
+        {
+          "completedAt": "2026-10-08T05:46:35Z",
+          "conclusion": "success",
+          "databaseId": 113163001581,
+          "name": "local-gates",
+          "startedAt": "2026-10-08T05:21:56Z",
+          "status": "completed",
+          "steps": [
+            {
+              "completedAt": "2026-10-08T05:21:57Z",
+              "conclusion": "success",
+              "name": "Set up job",
+              "number": 1,
+              "startedAt": "2026-10-08T05:21:57Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:22:02Z",
+              "conclusion": "success",
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "number": 2,
+              "startedAt": "2026-10-08T05:21:58Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:22:03Z",
+              "conclusion": "success",
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "number": 3,
+              "startedAt": "2026-10-08T05:22:02Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:22:10Z",
+              "conclusion": "success",
+              "name": "Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "number": 4,
+              "startedAt": "2026-10-08T05:22:03Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:22:51Z",
+              "conclusion": "success",
+              "name": "Install pinned application and validation tools",
+              "number": 5,
+              "startedAt": "2026-10-08T05:22:10Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:23:06Z",
+              "conclusion": "success",
+              "name": "Install PostgreSQL 17 using its signed official repository",
+              "number": 6,
+              "startedAt": "2026-10-08T05:22:51Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:23:21Z",
+              "conclusion": "success",
+              "name": "Install ffmpeg (media decoding tests render a test image with it)",
+              "number": 7,
+              "startedAt": "2026-10-08T05:23:06Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:28:27Z",
+              "conclusion": "success",
+              "name": "Python domain and security contracts",
+              "number": 8,
+              "startedAt": "2026-10-08T05:23:21Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:39:15Z",
+              "conclusion": "success",
+              "name": "Disposable DB integration, migrations and restore",
+              "number": 9,
+              "startedAt": "2026-10-08T05:28:27Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:39:33Z",
+              "conclusion": "success",
+              "name": "Web contracts and locale checks",
+              "number": 10,
+              "startedAt": "2026-10-08T05:39:15Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:41:19Z",
+              "conclusion": "success",
+              "name": "Types, lint and isolated production build",
+              "number": 11,
+              "startedAt": "2026-10-08T05:39:33Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:41:20Z",
+              "conclusion": "success",
+              "name": "Product copy audit",
+              "number": 12,
+              "startedAt": "2026-10-08T05:41:19Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:41:44Z",
+              "conclusion": "success",
+              "name": "Actual isolated Python function archive",
+              "number": 13,
+              "startedAt": "2026-10-08T05:41:20Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:43:39Z",
+              "conclusion": "success",
+              "name": "Offline source secret scan",
+              "number": 14,
+              "startedAt": "2026-10-08T05:41:44Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:43:50Z",
+              "conclusion": "success",
+              "name": "Dependency audits",
+              "number": 15,
+              "startedAt": "2026-10-08T05:43:39Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:30Z",
+              "conclusion": "success",
+              "name": "Real local browser, API and database integration",
+              "number": 16,
+              "startedAt": "2026-10-08T05:43:50Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:32Z",
+              "conclusion": "success",
+              "name": "Retain evidence tied to this commit",
+              "number": 17,
+              "startedAt": "2026-10-08T05:46:30Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:32Z",
+              "conclusion": "success",
+              "name": "Post Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+              "number": 32,
+              "startedAt": "2026-10-08T05:46:32Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:32Z",
+              "conclusion": "success",
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "number": 33,
+              "startedAt": "2026-10-08T05:46:32Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:32Z",
+              "conclusion": "success",
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "number": 34,
+              "startedAt": "2026-10-08T05:46:32Z",
+              "status": "completed"
+            },
+            {
+              "completedAt": "2026-10-08T05:46:32Z",
+              "conclusion": "success",
+              "name": "Complete job",
+              "number": 35,
+              "startedAt": "2026-10-08T05:46:32Z",
+              "status": "completed"
+            }
+          ],
+          "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997375/job/113163001581"
+        }
+      ],
+      "status": "completed",
+      "updatedAt": "2026-10-08T05:46:36Z",
+      "url": "https://github.com/dev-james0723/PostRiff/actions/runs/37731997375"
+    },
+    "artifacts": [
+      {
+        "id": 11529949331,
+        "name": "local-gates-f19131506cf445c19c876bc424c3167992adf1f0",
+        "size_in_bytes": 4760647,
+        "digest": "sha256:e202e4f2e54eecaf7d68524e5833a44459ef335da3378d740d6a7657c59b83b0",
+        "expired": false,
+        "created_at": "2026-10-08T05:46:31Z",
+        "expires_at": "2026-10-22T05:46:30Z",
+        "archive_download_url": "https://api.github.com/repos/dev-james0723/PostRiff/actions/artifacts/11529949331/zip"
+      }
+    ],
+    "actualTestedPrMerge": {
+      "parentShas": [
+        "07b3295eb5518f604760e507c0bbbb2d73c8e048",
+        "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8"
+      ],
+      "sha": "f19131506cf445c19c876bc424c3167992adf1f0",
+      "treeSha": "d4eb557fd8e6bd479922da941a1090f4b358bc30",
+      "deployedHeadSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+      "deployedHeadTreeSha": "d4eb557fd8e6bd479922da941a1090f4b358bc30",
+      "treesIdentical": true
+    }
+  },
+  "currentCandidate": {
+    "applicationSourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+    "lastVerifiedDeploymentSourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "finalDeliveryRequiredChecks": "PENDING push under existing preview authorization",
+    "expiredApprovalBrowser": {
+      "runId": "td827856ht",
+      "workflowId": "45wsxmd3d6",
+      "jobId": "1f2slb3r11",
+      "attemptId": "gc3djgc26s",
+      "state": "PASS",
+      "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+      "snapshot": {
+        "transportMode": "remote_patch",
+        "baseSha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+        "baseRef": "refs/remotes/origin/consumer-saas",
+        "branch": "codex/linkedin-publishing-recovery-20261008",
+        "sourceHead": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+        "includedFileCount": 2748,
+        "includedBytes": 1902272,
+        "sourceFingerprint": "9f76df7da95844f146f7fa5038d8fec7204de61046ef19048650513f01d965d8",
+        "markerPath": ".depot/jcb-source.json",
+        "patchBytes": 699352,
+        "patchSha256": "cf93313149c7734af36fec12f17f4826bb7ed69edda866abea2b2f30aa4a4d99",
+        "excludedForbiddenCount": 28,
+        "inputExcludes": [
+          "docs/**",
+          "downloads/**",
+          "motion/**",
+          "artifacts/**",
+          "vendor/**",
+          ".preview/**",
+          "audio-reactive-fix/**",
+          "PostRiff_Research_2026-09-18/**",
+          "*.zip",
+          "desktop/**",
+          "studio/**",
+          "docs/linkedin-publishing-20261008/evidence/**",
+          "docs/facebook-connection-20261008/**",
+          "docs/official-social-20261008/**"
+        ],
+        "explicitExcludedCount": 2549,
+        "changedPathCount": 103,
+        "recoverableRawReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json"
+      },
+      "localReceipt": "/private/tmp/rafii-expired-approval-green-cloud.json",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+      "status": {
+        "org_id": "jf34f85hr0",
+        "run_id": "td827856ht",
+        "status": "finished",
+        "workflows": [
+          {
+            "workflow_id": "45wsxmd3d6",
+            "status": "finished",
+            "name": "James Cloud Build",
+            "jobs": [
+              {
+                "job_display_name": "e2e",
+                "job_id": "1f2slb3r11",
+                "job_key": "_inline_0.yaml:e2e",
+                "status": "finished",
+                "attempts": [
+                  {
+                    "attempt_id": "gc3djgc26s",
+                    "attempt": 1,
+                    "status": "finished",
+                    "sandbox_id": "wptl6d4plwcqpz2fkg7j",
+                    "session_id": "1d074db8-cd6d-49e2-9162-7c7f192b6297",
+                    "logs_command": "depot ci logs gc3djgc26s --org jf34f85hr0",
+                    "download_available": true,
+                    "download_command": "depot ci logs gc3djgc26s --output-file logs.txt --org jf34f85hr0",
+                    "view_url": "https://depot.dev/orgs/jf34f85hr0/workflows/45wsxmd3d6?job=1f2slb3r11&attempt=gc3djgc26s",
+                    "ssh_available": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "browser": {
+        "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+        "checks": [
+          {
+            "callbackThroughNormalUI": true,
+            "restoresOriginatingWorkspaceFromOtherSelection": true,
+            "width": 1280,
+            "granularCapabilities": true,
+            "savedIdentitySeparatedFromRelease": true,
+            "sharePermissionSeparatedFromLiveQualification": true,
+            "restrictedOrganizationRemainsBlocked": true,
+            "approvedJobScopedDispatchOnce": true,
+            "futureJobNotDispatched": true,
+            "heldRecoveryKeepsOriginalJob": true,
+            "expiredNoSubmitApprovalCanPrepareAgain": true,
+            "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+            "ownerCheckNeverApiVerified": true,
+            "noAcceptedPostResubmission": true,
+            "minimumIdentitySelected": true,
+            "latestIdentityVerificationShown": true,
+            "noReadyFromIdentity": true,
+            "readHierarchy": true,
+            "immutableApproval": true,
+            "noDuplicateAfterUnknown": true,
+            "horizontalOverflow": false
+          },
+          {
+            "callbackThroughNormalUI": true,
+            "restoresOriginatingWorkspaceFromOtherSelection": true,
+            "width": 390,
+            "granularCapabilities": true,
+            "savedIdentitySeparatedFromRelease": true,
+            "sharePermissionSeparatedFromLiveQualification": true,
+            "restrictedOrganizationRemainsBlocked": true,
+            "approvedJobScopedDispatchOnce": true,
+            "futureJobNotDispatched": true,
+            "heldRecoveryKeepsOriginalJob": true,
+            "expiredNoSubmitApprovalCanPrepareAgain": true,
+            "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+            "ownerCheckNeverApiVerified": true,
+            "noAcceptedPostResubmission": true,
+            "minimumIdentitySelected": true,
+            "latestIdentityVerificationShown": true,
+            "noReadyFromIdentity": true,
+            "readHierarchy": true,
+            "immutableApproval": true,
+            "noDuplicateAfterUnknown": true,
+            "horizontalOverflow": false
+          }
+        ]
+      },
+      "execution": "Synthetic cloud Next/Chromium only; not real iPhone or live provider proof"
+    },
+    "redRegression": {
+      "runId": "cdltwwq04q",
+      "workflowId": "tn4w6rw0w2",
+      "jobId": "vtswz9vtk8",
+      "attemptId": "v9lddbchrp",
+      "state": "RED_REPRODUCED",
+      "failure": "Prepare again not visible for expired definitive no-submit hold; locator timeout30s",
+      "sourceHead": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+      "snapshot": "7a4cefba plus the new focused browser regression, before UI fix",
+      "localReceipt": "/private/tmp/rafii-expired-approval-red-cloud.json",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/tn4w6rw0w2?job=vtswz9vtk8&attempt=v9lddbchrp",
+      "cliFollowExitCode": 0,
+      "cliExitCodeIsNotJobVerdict": true
+    }
+  },
+  "dispatchAndFacebookRegression": {
+    "implementationCommit": "381ac2d01a8cd5666f48647e0d6ff0d8ae44b4f7",
+    "fixtureCommit": "c671ca5ce985bbf911e8185b917d1179ff962565",
+    "boundedWorkerCompatibilityCommit": "33816595da8a867b77bb8d402b0c108df48fd33f",
+    "currentProductionBaseMerge": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "localChecks": "One narrow Python test per reproduced failure; AST/diff only. No local Node, build, browser process or large Python/SQL suite.",
+    "historicalDepotCi": {
+      "gf62plns7p": "FAILED old Facebook fixture, correctedc671",
+      "dwzvglfjml": "Two attempts: sandbox infrastructure startup failure before tests",
+      "mltrb9b64k": "Alternate8-core validation runner also failed before tests"
+    },
+    "historicalGithubC671": {
+      "integratedRun": "37743102658",
+      "failure": "Temporary PostgreSQL failed to start in voice harness; fresh7a4 scenes passed without provider code change",
+      "scenesRun": "37743102582"
+    },
+    "currentIntegrated": "PASS37744462566, including new Facebook and worker scoped PostgreSQL modules"
+  }
+}

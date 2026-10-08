@@ -37,6 +37,8 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 080–089 | — | RAFII Product Growth v2 (PR #87) | Reserved by that session. |
 | 072–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
+| 100 | `100_social_cost_reservations` | Social connection recovery 2026-10-07 | Candidate only. Scanned 360 local/remote refs and active worktree migration directories; 100 unused. Server-only durable X ceilings; no spending policy enabled. |
+
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 
 - 020–022 (credits): `origin/consumer-saas`, `origin/raffi/agent-runtime-merge`, `origin/raffi/launch-final`, `origin/raffi/site-agent-release`, `origin/fix/channel-lifecycle` and their local branches, plus `feat/time-back-mvp`, `release/pr2-reconcile`, `release/pr2-update`, `rafii/coworker-integration` and `rafii/integration-runtime-coworker`.

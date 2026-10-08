@@ -1,0 +1,75 @@
+{
+  "observedAtUtc": "2026-10-08T03:11:35.515828+00:00",
+  "execution": "REAL ordinary-external-user normal-UI reconnect and reload PASS; full acceptance remains PARTIAL",
+  "provider": "linkedin",
+  "appId": "263833009",
+  "sourceSha": "dd199b02737d77d5e2eb5bd9ef112af62f204eba",
+  "deploymentId": "dpl_B5FtyQPacHZ6N6Nst3gL6S3w8t2k",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "tester": "B",
+  "memberRefMd5": "f278edef7611535718d32e2018648710",
+  "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "accountRefMd5": "62c2c6ce86976d46e6c446e3ecefce46",
+  "connectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+  "transaction": {
+    "refMd5": "a9a6fca143a45895831e476837b3e6ff",
+    "createdAt": "2026-10-08T03:07:17.067020Z",
+    "expiresAt": "2026-10-08T03:17:17.067020Z",
+    "consumedAt": "2026-10-08T03:07:37.560963Z",
+    "outcome": "exchanged",
+    "requestedScopes": [
+      "openid",
+      "profile"
+    ]
+  },
+  "audit": {
+    "refMd5": "8b986765fc8a2b0b4229a9e3ebd7fc54",
+    "kind": "channel.connected",
+    "at": "2026-10-08T03:07:37.560963Z",
+    "actorMatchesInitiatingMember": true,
+    "workspaceMatchesOrigin": true
+  },
+  "credential": {
+    "originalCreatedAt": "2026-10-08T01:39:31.171685Z",
+    "updatedAt": "2026-10-08T03:07:37.560963Z",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "grantEvidence": "Persisted provider-validated grant from real OAuth completion; not requested-scope fallback.",
+    "encryptedAccessPresent": true,
+    "encryptedRefreshPresent": false,
+    "revoked": false,
+    "accessExpiresAt": "2026-12-07T03:07:37.109962Z",
+    "refreshSupported": false,
+    "sameOriginalAccountConnectionWorkspace": true
+  },
+  "ui": {
+    "status": "Connected — publishing not enabled.",
+    "permissions": 2,
+    "reloadPassed": true,
+    "verificationTime": "Verified 1 minute ago",
+    "screenshotLocal": "/private/tmp/rafii-linkedin-b-reconnected-dd199b02.jpg",
+    "screenshotSha256": "39fa6342a65c04320dbbf949b58ba74fcb7768f9d2f4fcf09ab644f55f494e74",
+    "screenshotSavedAtUtc": "2026-10-08T03:09:34.505749+00:00",
+    "redaction": "Collapsed sidebar; no email, OAuth code/state, token, cookie, password or verifier visible."
+  },
+  "testerA": {
+    "grantUnchanged": true,
+    "revoked": false,
+    "lastRealReadAt": "2026-10-08T02:59:01.437137Z",
+    "separateMemberWorkspaceSubject": true
+  },
+  "ordinaryExternalEvidence": "B owner confirmed no provider-app role in conversation; both Rafii users checked against actual Founder store earlier. Provider-app role independence is owner attestation, not an independently queried LinkedIn role audit.",
+  "freshSessionBoundary": "Prior actual new Rafii session passed before authorized disconnect; post-reconnect reload passed now. No new post-reconnect sign-out/sign-in is claimed.",
+  "renewal": "Explicit reauthorization required when this grant expires; actual future expiry remains pending. No mocked clock or fake token aging.",
+  "pending": [
+    "live unauthorized tenant-negative requests",
+    "real iPhone Safari redirect/session restoration",
+    "genuine time-dependent expiry/reauthorization",
+    "production release authorization and verification"
+  ],
+  "authorization": "Existing exact B disconnect/reconnect and identity-only preview plan; owner performed official consent. No new permissions, publishing, X spending, DDL or production change.",
+  "secretSafety": "No raw account/member/workspace IDs, email, tokens, code, state, verifier, cookies or credentials retained."
+}

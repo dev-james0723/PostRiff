@@ -1,0 +1,16 @@
+{
+  "task": "e2e",
+  "provider": "depot",
+  "sourceHead": "e46917952b7ad1e8813966997eabb3dc495531d3",
+  "startedAt": "2026-10-07T04:59:37.215911+00:00",
+  "runId": "n2rmd0xcpl",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/n2rmd0xcpl",
+  "remoteExitCode": 0,
+  "exitCode": 0,
+  "elapsedSeconds": 77.152,
+  "snapshot": {
+    "sourceFingerprint": "73b22b3fd749d8eb61f725086f62d287c1b974dd1d2f2487291ebc5d1f5fb824",
+    "patchSha256": "76c5258da67cf47072c736e456c7f7ce794495707e56a47d2b5f578ee504935e",
+    "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e"
+  }
+}

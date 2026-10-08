@@ -142,6 +142,8 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 \ir ../../migrations/postriff/094_universal_library_lifecycle.sql
 \ir ../../migrations/postriff/095_universal_library_storage.sql
 \ir ../../migrations/postriff/096_universal_library_duplicate_index.sql
+\ir ../../migrations/postriff/100_social_cost_reservations.sql
+\ir ../../migrations/postriff/101_x_oauth_provider.sql
 do $$ begin
  if not exists (
   select 1 from pg_indexes

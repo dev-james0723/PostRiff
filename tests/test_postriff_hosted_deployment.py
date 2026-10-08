@@ -167,7 +167,7 @@ class HostedDeploymentPreparationTests(unittest.TestCase):
             def __init__(self):
                 self.raw = None
 
-            def put_immutable(self, _workspace_id, _category, _object_name, raw, _content_type="image/jpeg"):
+            def put_immutable(self, _workspace_id, _category, _object_name, raw, content_type="image/jpeg"):
                 self.raw = raw
                 return "workspace/media/object.jpg"
 

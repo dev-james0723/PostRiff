@@ -1,0 +1,43 @@
+{
+  "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+  "checks": [
+    {
+      "callbackThroughNormalUI": true,
+      "restoresOriginatingWorkspaceFromOtherSelection": true,
+      "width": 1280,
+      "granularCapabilities": true,
+      "savedIdentitySeparatedFromRelease": true,
+      "sharePermissionSeparatedFromLiveQualification": true,
+      "restrictedOrganizationRemainsBlocked": true,
+      "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+      "ownerCheckNeverApiVerified": true,
+      "noAcceptedPostResubmission": true,
+      "minimumIdentitySelected": true,
+      "latestIdentityVerificationShown": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    },
+    {
+      "callbackThroughNormalUI": true,
+      "restoresOriginatingWorkspaceFromOtherSelection": true,
+      "width": 390,
+      "granularCapabilities": true,
+      "savedIdentitySeparatedFromRelease": true,
+      "sharePermissionSeparatedFromLiveQualification": true,
+      "restrictedOrganizationRemainsBlocked": true,
+      "acceptedLinkedInReceiptVisibleWithoutPrivateRead": true,
+      "ownerCheckNeverApiVerified": true,
+      "noAcceptedPostResubmission": true,
+      "minimumIdentitySelected": true,
+      "latestIdentityVerificationShown": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    }
+  ]
+}

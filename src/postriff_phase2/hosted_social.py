@@ -16,6 +16,7 @@ from postriff_alpha.domain import AlphaError
 from .atproto_oauth import tid
 from .capabilities import HOSTED_PUBLISHERS
 from .provider_candidates import LinkedInCandidate, little_plain
+from .official_social import THREADS_VERSION
 from .providers import GRAPH_VERSION, http_transport
 from .outcomes import valid_receipt_url
 from .social_connectors import multipart
@@ -46,7 +47,7 @@ def _uncertain(message):
 
 
 class HostedSocial:
-    """Mounted only when at least one production-reviewed provider is registered."""
+    """Mounted only with reviewed provider access or verified member Share access."""
     X_RECONCILE_LIMIT = 3  # billed reads before X reconciliation stops and asks a person
     MASTODON_MEDIA_POLLS, MASTODON_MEDIA_WAIT = 5, 2.0
 
@@ -55,6 +56,15 @@ class HostedSocial:
         self.transport = transport or http_transport
         self.sleep = sleep
         self.linkedin = LinkedInCandidate(transport=None, version=LINKEDIN_VERSION)
+        from .official_publishers import OfficialPublishers
+        self.official = OfficialPublishers(self)
+
+    def official_enabled(self, manifest):
+        provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
+        return bool(provider and getattr(provider, "official_social_enabled", False))
+
+    def advance_official(self, manifest, job, action):
+        return self.official.advance(manifest, job, action)
 
     # --- helpers ------------------------------------------------------------------
     def _grant(self, manifest):
@@ -72,7 +82,11 @@ class HostedSocial:
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.
-        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False):
+        options = manifest.get('publishOptions') or {}
+        member_product = (getattr(provider, 'id', None) == 'linkedin' and getattr(provider, 'member_publishing_approved', lambda: False)()
+                          and options.get('destinationType', 'member') == 'member'
+                          and not str(options.get('authorUrn', '')).startswith('urn:li:organization:'))
+        if not provider.production_reviewed and not getattr(provider, "account_scoped_direct", False) and not member_product:
             return None
         if getattr(provider, "publisher", None) is not None and (not getattr(provider, "publish_live_tested", False)
                 or not getattr(provider, "publishing_permission", False)):
@@ -92,6 +106,8 @@ class HostedSocial:
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
+        if self.official_enabled(manifest) and manifest["platform"] in ("LinkedIn", "Threads", "Instagram"):
+            return self.advance_official(manifest, {"progress": {"stage": "create_attempted"}}, "create")
         grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         required = ({"LinkedIn": {"w_member_social"}, "Threads": {"threads_basic", "threads_content_publish"}, "Instagram": {"instagram_business_basic", "instagram_business_content_publish"}}.get(manifest["platform"])
                     or set(getattr(provider, "publish_required", ())))
@@ -515,7 +531,7 @@ class HostedSocial:
         body = sent.get("body") if isinstance(sent.get("body"), dict) else {}
         video_id = str(body.get("id") or "")
         if sent.get("status") in (200, 201) and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
-            note = "" if options["privacyStatus"] == "private" else ". Until Google audits Rafii, YouTube keeps uploads private"
+            note = "" if options["privacyStatus"] == "private" else ". Requested visibility and public-upload audit eligibility require provider verification"
             return {"state": "provider_accepted", "reference": video_id, "confirmed": "YouTube received the video; processing and read-back pending" + note}
         return self._youtube_rejection(sent) or _uncertain("No conclusive YouTube upload response; Rafii will look for it on the channel; do not resubmit")
 
@@ -556,20 +572,32 @@ class HostedSocial:
             return {"state": "failed", "confirmed": f"This video is longer than TikTok allows this account ({limit} seconds). Nothing was posted."}
         commercial = options.get("commercial") or {}
         chunk, count = provider.chunks(len(raw))
+        source_info = {"source": "FILE_UPLOAD", "video_size": len(raw), "chunk_size": chunk, "total_chunk_count": count}
+        if options.get('transferMode') == 'url':
+            from urllib.parse import urlsplit
+            from .official_publishers import OfficialPublishers
+            address = OfficialPublishers(self).media_url(manifest,media)
+            if urlsplit(address).hostname not in getattr(provider,'verified_media_domains',()):
+                return {'state':'held','confirmed':'TikTok URL transfer requires an explicitly verified media domain; no post initialized.'}
+            source_info = {'source':'PULL_FROM_URL','video_url':address}
         opened = provider.api(token, "POST", "/v2/post/publish/video/init/", body={
             "post_info": {"title": manifest["payload"]["text"], "privacy_level": options["privacyLevel"],
                           # A setting the creator turned off stays off whatever the post allowed.
                           "disable_comment": options.get("allowComment") is not True or info["commentDisabled"],
                           "disable_duet": options.get("allowDuet") is not True or info["duetDisabled"],
                           "disable_stitch": options.get("allowStitch") is not True or info["stitchDisabled"],
-                          "brand_content_toggle": commercial.get("brandedContent") is True, "brand_organic_toggle": commercial.get("yourBrand") is True},
-            "source_info": {"source": "FILE_UPLOAD", "video_size": len(raw), "chunk_size": chunk, "total_chunk_count": count}})
+                          "brand_content_toggle": commercial.get("brandedContent") is True, "brand_organic_toggle": commercial.get("yourBrand") is True,
+                          **({'video_cover_timestamp_ms':options['coverTimestampMs']} if 'coverTimestampMs' in options else {}),
+                          **({'is_aigc':options['isAigc']} if 'isAigc' in options else {})},
+            "source_info": source_info})
         body = opened.get("body") if isinstance(opened.get("body"), dict) else {}
         error = body.get("error") if isinstance(body.get("error"), dict) else {}
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         publish_id, upload_url = data.get("publish_id"), data.get("upload_url")
-        if opened.get("status") != 200 or error.get("code") not in (None, "ok") or not isinstance(publish_id, str) or not isinstance(upload_url, str):
+        if opened.get("status") != 200 or error.get("code") not in (None, "ok") or not isinstance(publish_id, str) or (source_info['source']=='FILE_UPLOAD' and not isinstance(upload_url, str)):
             return self._tiktok_rejection(opened.get("status"), error) or {"state": "failed", "confirmed": "TikTok did not start the upload, so nothing was posted."}
+        if source_info['source']=='PULL_FROM_URL':
+            return {'state':'provider_accepted','reference':publish_id,'confirmed':'TikTok accepted verified URL transfer; native processing and visibility reconciliation pending.'}
         try:
             provider_host(upload_url, provider.UPLOAD_HOSTS)
         except AlphaError:
@@ -583,8 +611,7 @@ class HostedSocial:
                 sent = {"status": None}
             if sent.get("status") not in (200, 201, 206):
                 return {**_uncertain("The video upload to TikTok was interrupted; reconcile by publish id; do not resubmit"), "reference": publish_id}
-        private = " Until TikTok audits Rafii, the post is private: only you can see it." if options["privacyLevel"] != "SELF_ONLY" else ""
-        return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; it may take a few minutes." + private}
+        return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; final visibility requires native status reconciliation."}
 
     def _submit_pinterest(self, manifest, provider, token):
         options = manifest.get("publishOptions") or {}
@@ -621,6 +648,41 @@ class HostedSocial:
             page = session.get("page") if isinstance(session.get("page"), dict) else None
             if not reference or not page:
                 return _uncertain("No Facebook reference or Page was recorded; check the Page; do not resubmit")
+            media = manifest.get('media') or []
+            if options.get('format') == 'story':
+                # Stories have their own read surface and expiry semantics. A
+                # successful photo upload or a ready video is not a Story receipt.
+                expected_media = {str(a['id']) for a in (job or {}).get('providerAssets', [])}
+                expected_media.add(str((job or {}).get('container') or reference))
+                after = None
+                for _ in range(3):
+                    params = {'fields':'id,post_id,media_id,status,url,creation_time', 'limit':100}
+                    if after: params['after'] = after
+                    response = provider.graph('GET','/'+page['id']+'/stories',page['token'],params)
+                    body = response.get('body') or {}
+                    if response.get('status') != 200: break
+                    for story in body.get('data') or []:
+                        if str(story.get('post_id') or story.get('id')) != reference and str(story.get('media_id')) not in expected_media: continue
+                        if story.get('status') not in ('PUBLISHED','ARCHIVED'): continue
+                        result = {'state':'verified','reference':reference,'verification':'provider_lookup','confirmed':'Facebook Page Story matched its approved media'+(' and is now archived after expiry' if story['status']=='ARCHIVED' else '; Stories expire after 24 hours')}
+                        if valid_receipt_url(story.get('url'),'Facebook'): result['url'] = story['url']
+                        return result
+                    after = ((body.get('paging') or {}).get('cursors') or {}).get('after') if (body.get('paging') or {}).get('next') else None
+                    if not after: break
+                return _uncertain('Facebook Story publication/expiry is not confirmed; do not create another Story')
+            if media and str(media[0].get('mime') or '').startswith('video/'):
+                response = provider.graph('GET','/'+reference,page['token'],{'fields':'id,from,description,published,status,permalink_url'})
+                body = response.get('body') or {}; status = body.get('status') or {}
+                if response.get('status') != 200 or str((body.get('from') or {}).get('id')) != page['id'] or body.get('description','') != text:
+                    return _uncertain('Facebook video read-back did not match the approved Page and description')
+                if status.get('video_status') == 'error' or any((status.get(phase) or {}).get('status') == 'error' for phase in ('processing_phase','publishing_phase')):
+                    return {'state':'failed','reference':reference,'verification':'provider_lookup','confirmed':'Facebook reports video processing/publication failure'}
+                ready = status.get('video_status') == 'ready' or (status.get('processing_phase') or {}).get('status') == 'complete'
+                if not ready or body.get('published') is not True:
+                    return {'state':'provider_accepted','reference':reference,'confirmed':'Facebook video is still processing or awaiting publication'}
+                result = {'state':'verified','reference':reference,'verification':'provider_lookup','confirmed':'Facebook confirmed the approved video is processed and published on this Page'}
+                if valid_receipt_url(body.get('permalink_url'),'Facebook'): result['url'] = body['permalink_url']
+                return result
             if "_" not in reference:
                 # A bare photo id: a photo carries its caption as `name` and links to its Page post through page_story_id.
                 response = provider.graph("GET", f"/{reference}", page["token"], {"fields": "id,name,page_story_id,from"})
@@ -635,6 +697,10 @@ class HostedSocial:
             if response.get("status") != 200 or str((body.get("from") or {}).get("id")) != page["id"] or body.get("message") != text:
                 return _uncertain("Facebook read-back did not match the exact approved post")
             if body.get("is_published") is False:
+                if manifest.get('nativeScheduleAt'):
+                    check = provider.graph('GET', '/'+reference, page['token'], {'fields':'id,is_published,scheduled_publish_time'})
+                    if check.get('status') == 200 and (check.get('body') or {}).get('scheduled_publish_time') == manifest['nativeScheduleAt']:
+                        return {'state':'native_scheduled','reference':reference,'verification':'provider_lookup','confirmed':'Facebook confirmed the approved native schedule; not yet published'}
                 return _uncertain("Facebook holds the post but shows it as unpublished; check the Page; do not resubmit")
             result = {"state": "verified", "reference": reference, "confirmed": "Facebook read-back matched the approved text and Page", "verification": "provider_lookup"}
             permalink = body.get("permalink_url")
@@ -652,6 +718,8 @@ class HostedSocial:
                 return _uncertain("YouTube read-back did not match the exact approved upload")
             upload = status.get("uploadStatus")
             if upload == "processed":
+                if manifest.get('nativeScheduleAt') and status.get('privacyStatus') == 'private' and status.get('publishAt') == options.get('publishAt'):
+                    return {'state':'native_scheduled','reference':reference,'verification':'provider_lookup','confirmed':'YouTube processed the upload and confirmed the approved native schedule; not yet public'}
                 kept_private = options.get("privacyStatus") != "private" and status.get("privacyStatus") == "private"
                 return {"state": "verified", "reference": reference, "url": f"https://youtu.be/{reference}", "verification": "provider_lookup",
                         "confirmed": "YouTube read-back matched the approved upload" + (" (YouTube kept it private: Rafii's Google project is not audited yet)" if kept_private else "")}
@@ -731,7 +799,11 @@ class HostedSocial:
             return early
         reference = response.get("headers", {}).get("x-restli-id")
         if response.get("status") == 201 and isinstance(reference, str) and reference.startswith(("urn:li:share:", "urn:li:ugcPost:")):
-            return {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending"}
+            result = {"state": "provider_accepted", "reference": reference, "confirmed": "LinkedIn accepted the create request; publication verification pending. Do not resubmit."}
+            url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+            if valid_receipt_url(url, 'LinkedIn'):
+                result['url'] = url
+            return result
         return _uncertain("No conclusive LinkedIn acceptance evidence; do not resubmit")
 
     def _submit_threads(self, manifest, token):
@@ -741,14 +813,14 @@ class HostedSocial:
         if image_url:
             params["image_url"] = image_url
             params["alt_text"] = manifest["media"][0].get("alt", "")
-        container = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads", form=params)
+        container = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads", form=params)
         early = self._classify_status(container.get("status"))
         if early:
             return early
         container_id = str(container.get("body", {}).get("id", ""))
         if container.get("status") != 200 or not container_id.isdigit():
             return _uncertain("Threads did not return a container id; do not resubmit")
-        publish = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads_publish", form={"creation_id": container_id, "access_token": token})
+        publish = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads_publish", form={"creation_id": container_id, "access_token": token})
         media_id = str(publish.get("body", {}).get("id", ""))
         if publish.get("status") == 200 and media_id.isdigit():
             return {"state": "provider_accepted", "reference": media_id, "container": container_id, "confirmed": "Threads returned a media id; publication verification pending"}
@@ -815,6 +887,26 @@ class HostedSocial:
         # Even a rate-limit response here must not authorize a second publish.
         return _uncertain('Publish outcome not confirmed; check the platform; do not resubmit')
 
+    def cancel_native(self, manifest, job):
+        provider = self._provider(manifest)
+        if provider is None: return _uncertain('Cannot cancel without provider authorization; native schedule may still publish')
+        if self.oauth.clock() >= manifest['nativeScheduleAt']:
+            return _uncertain('Scheduled time has passed; review publication before requesting deletion')
+        grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        token, reference = grant['accessToken'], job['providerReference']
+        if manifest['platform'] == 'YouTube':
+            if 'https://www.googleapis.com/auth/youtube.force-ssl' not in grant['scopes']:
+                return {'state':'held','confirmed':'Enable YouTube management to delete the scheduled upload; it may still publish until provider cancellation succeeds'}
+            response = provider.api(token, 'DELETE', provider.API+'/videos?'+urlencode({'id':reference}))
+            success = response.get('status') == 204
+        elif manifest['platform'] == 'Facebook':
+            page = provider.revalidate_page(token, 'CREATE_CONTENT')
+            if 'pages_manage_posts' not in grant['scopes']: return _uncertain('Page cancellation permission lost; native schedule may still publish')
+            response = provider.graph('DELETE', '/'+quote(reference, safe=''), page['token'])
+            success = response.get('status') == 200 and (response.get('body') or {}).get('success') is True
+        else: return _uncertain('This provider has no implemented native cancellation')
+        return {'state':'canceled','reference':reference,'verification':'provider_lookup','confirmed':'Provider confirmed deletion of the scheduled content'} if success else _uncertain('Native cancellation outcome is unknown; reconcile before deleting again')
+
     # --- reconcile ----------------------------------------------------------------
     def reconcile(self, manifest, job):
         provider = self._provider(manifest)
@@ -826,6 +918,39 @@ class HostedSocial:
             return _uncertain(f"Cannot reconcile without a valid grant: {error}")
         token, reference = grant["accessToken"], job.get("providerReference")
         try:
+            if self.official_enabled(manifest) and manifest['platform'] == 'X' and (job.get('providerThread') or (manifest.get('publishOptions') or {}).get('thread')):
+                from .official_operations import OfficialAPI
+                ids = job.get('providerThread') or []
+                parts = [manifest['payload']['text'], *((manifest.get('publishOptions') or {}).get('thread') or [])]
+                if len(ids) != len(parts):
+                    return _uncertain('Thread creation was interrupted; known posts remain. Do not recreate a possibly accepted reply')
+                checked = job.get('threadChecked', 0)
+                for index in range(checked, min(checked+5, len(ids))):
+                    OfficialAPI(provider, grant)._x_budget()
+                    response = provider.api(token, 'GET', '/2/tweets/'+quote(ids[index], safe='')+'?tweet.fields=author_id,referenced_tweets')
+                    item = (response.get('body') or {}).get('data') or {}
+                    parent = ids[index-1] if index else (manifest.get('publishOptions') or {}).get('replyToId')
+                    reply_ids = [str(r.get('id')) for r in item.get('referenced_tweets') or [] if r.get('type') == 'replied_to']
+                    if response.get('status') != 200 or str(item.get('author_id')) != manifest['providerAccountId'] or item.get('text') != parts[index] or (parent and reply_ids != [parent]):
+                        return _uncertain('X thread lookup did not match the approved author, text and parent relationship')
+                    checked += 1
+                result = {'state': 'verified', 'reference': ids[0], 'providerThread': ids, 'threadChecked': checked, 'verification': 'provider_lookup', 'confirmed': 'Every X thread post matched the approved author, text and hierarchy'}
+                if checked < len(ids): result.update(state='processing', verification='thread_lookup', confirmed='Known X thread IDs partly verified; remaining metered lookups pending')
+                return result
+            if self.official_enabled(manifest) and job.get('cancelRequested') and manifest.get('nativeScheduleAt') and reference and job.get('progress', {}).get('stage') == 'cancel_attempted':
+                if manifest['platform'] == 'YouTube':
+                    response = provider.api(token, 'GET', provider.API+'/videos?'+urlencode({'part':'id','id':reference}))
+                    gone = response.get('status') == 200 and (response.get('body') or {}).get('items') == []
+                else:
+                    page = provider.revalidate_page(token, 'CREATE_CONTENT')
+                    response = provider.graph('GET', '/'+quote(reference,safe=''), page['token'], {'fields':'id'})
+                    gone = response.get('status') == 404
+                if gone: return {'state':'canceled','reference':reference,'verification':'provider_lookup','confirmed':'Provider lookup confirms scheduled content was removed'}
+                return _uncertain('Native cancellation is not confirmed; inspect the scheduled content; do not repeat deletion')
+            if self.official_enabled(manifest) and manifest['platform'] == 'YouTube'  and job.get('providerUpload') and not reference:
+                recovered = self.official.additional.youtube(manifest, job, 'status', provider, grant)
+                if recovered.get('state') == 'processing': recovered['verification'] = 'resumable_upload_status'
+                return recovered
             publisher = getattr(provider, "publisher", None)
             if publisher is not None:
                 return publisher.reconcile(manifest, job, provider, token, self)
@@ -834,20 +959,30 @@ class HostedSocial:
             if manifest["platform"] in WAVE3:
                 return self._reconcile_wave3(manifest, provider, token, reference, job)
             if manifest["platform"] == "LinkedIn":
-                if not reference or "r_member_social" not in grant["scopes"]:
-                    return _uncertain("LinkedIn read scope unavailable; verify the exact post manually")
+                organization = (manifest.get('publishOptions') or {}).get('destinationType') == 'organization'
+                required_read = 'r_organization_social' if organization else 'r_member_social'
+                if not reference:
+                    return _uncertain("LinkedIn post receipt is missing; inspect the account before any new submission")
+                if required_read not in grant["scopes"]:
+                    result = {"state": "provider_accepted", "reference": reference,
+                              "confirmed": "LinkedIn accepted this post. Restricted read permission is unavailable; open the post to confirm publication. Do not resubmit."}
+                    url = 'https://www.linkedin.com/feed/update/' + reference + '/'
+                    if valid_receipt_url(url, 'LinkedIn'):
+                        result.update(reference=reference, url=url)
+                    return result
                 response = self.transport("GET", "https://api.linkedin.com/rest/posts/" + quote(reference, safe=""), headers={"Linkedin-Version": LINKEDIN_VERSION, "X-Restli-Protocol-Version": "2.0.0", "Authorization": "Bearer " + token})
                 body = response.get("body", {})
-                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:
+                if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISHED" and (not self.official_enabled(manifest) or body.get("author") == ((manifest.get("publishOptions") or {}).get("authorUrn") or manifest["providerAccountId"])) and little_plain(body.get("commentary") or "") == manifest["payload"]["text"]:
                     return {"state": "verified", "reference": reference, "confirmed": "LinkedIn reports the exact post as PUBLISHED", "verification": "provider_lookup"}
                 if response.get("status") == 200 and body.get("lifecycleState") == "PUBLISH_FAILED":
                     return {"state": "failed", "confirmed": "LinkedIn reports PUBLISH_FAILED"}
                 return _uncertain("LinkedIn lookup did not confirm the exact post")
             if manifest["platform"] in ("Threads", "Instagram"):
+                version = THREADS_VERSION if manifest["platform"] == "Threads" else GRAPH_VERSION
                 base = "https://graph.threads.net" if manifest["platform"] == "Threads" else "https://graph.instagram.com"
                 if reference:
                     fields = "id,text,permalink,owner" if manifest["platform"] == "Threads" else "id,caption,permalink,owner"
-                    response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
+                    response = self.transport("GET", f"{base}/{version}/{quote(reference)}?" + urlencode({"fields": fields, "access_token": token}))
                     body = response.get("body", {})
                     text_key = "text" if manifest["platform"] == "Threads" else "caption"
                     owner_matches = isinstance(body.get('owner'), dict) and str(body['owner'].get('id')) == manifest['providerAccountId']
@@ -857,10 +992,10 @@ class HostedSocial:
                 container = job.get("container") or next((e.get("container") for e in reversed(job.get("events", [])) if e.get("container")), None)
                 if container:
                     if manifest['platform'] == 'Instagram':
-                        response = self.transport('GET', f'{base}/{GRAPH_VERSION}/{quote(str(container))}?' + urlencode({'fields': 'status_code', 'access_token': token}))
+                        response = self.transport('GET', f'{base}/{version}/{quote(str(container))}?' + urlencode({'fields': 'status_code', 'access_token': token}))
                         code = response.get('body', {}).get('status_code') if response.get('status') == 200 else None
                         return _uncertain('Container ' + str(code or 'lookup unavailable') + '; publish outcome requires manual review; do not resubmit')
-                    response = self.transport("GET", f"{base}/{GRAPH_VERSION}/{quote(str(container))}?" + urlencode({"fields": "status_code,status", "access_token": token}))
+                    response = self.transport("GET", f"{base}/{version}/{quote(str(container))}?" + urlencode({"fields": "status_code,status", "access_token": token}))
                     code = response.get("body", {}).get("status_code") or response.get("body", {}).get("status")
                     if code == "PUBLISHED":
                         return {"state": "published", "confirmed": "Container reports PUBLISHED; media lookup pending"}

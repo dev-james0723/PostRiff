@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-10-08T05:21:48.119288+00:00",
+  "state": "TEST_ONLY_REPAIR_LOCAL_GREEN_REMOTE_PENDING",
+  "implementationSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "parentSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+  "changedFiles": [
+    "tests/test_postriff_providers.py"
+  ],
+  "diff": {
+    "insertions": 10,
+    "deletions": 2,
+    "productionCodeChanged": false
+  },
+  "trigger": {
+    "system": "GitHub full Python CI",
+    "runId": "37730908113",
+    "artifactId": "11530420688",
+    "artifactSha256": "bfddd3afc972030e7808eb8321a9fe1db7987a3a23e2581773cb09a24763346c",
+    "log": "/private/tmp/rafii-ci-python-5e4644fb.log",
+    "result": {
+      "testsRun": 3823,
+      "skipped": 371,
+      "failures": 1
+    },
+    "failure": "Stale no-private-read assertion expected uncertain despite a known accepted reference"
+  },
+  "localValidation": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests python3 -m unittest -v test_postriff_providers.Worker.test_linkedin_submit_and_reconcile_classification",
+    "red": {
+      "exitCode": 1,
+      "testCount": 1,
+      "failure": "'provider_accepted' != 'uncertain'"
+    },
+    "green": {
+      "exitCode": 0,
+      "testCount": 1,
+      "durationSeconds": 0.002
+    },
+    "gitDiffCheck": "PASS",
+    "assertions": [
+      "Known synthetic201 reference retains provider_accepted and exact safe native URL",
+      "No API verification claim without readback",
+      "Explicit no-resubmit instruction",
+      "Missing reference remains uncertain",
+      "No restricted GET or duplicate POST occurs",
+      "Existing429 retry,403 hold and unknown200 uncertain expectations preserved"
+    ]
+  },
+  "remoteValidation": {
+    "newCandidate": "PENDING parent required checks; no remote job submitted by worker"
+  },
+  "execution": "SYNTHETIC_ONLY",
+  "externalEffects": {
+    "pushedByWorker": false,
+    "providerCalls": false,
+    "configChanged": false,
+    "productionReleased": false
+  },
+  "preserved": [
+    "Parent PILOT-APPROVAL.md edits",
+    "Parent share-on-linkedin-preview.candidate.json edits",
+    "Parent request candidate JSON",
+    "All existing untracked evidence and other work"
+  ],
+  "usageCost": "UNKNOWN; no provider billing authority used"
+}

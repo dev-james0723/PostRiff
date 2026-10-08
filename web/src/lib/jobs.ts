@@ -3,11 +3,11 @@ import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import type { Job, Review, Phase2State } from '@/lib/api/types';
 
 /** Approved and waiting for the worker; `p2_cancel` ends these at once. */
-export const WAITING: ReadonlySet<string> = new Set(['scheduled', 'approved', 'claimed']);
+export const WAITING: ReadonlySet<string> = new Set(['scheduled', 'approved', 'claimed', 'native_scheduled']);
 /** The worker has handed the post to the provider. A cancel here cannot recall it; it turns uncertain. */
 export const PUBLISHING: ReadonlySet<string> = new Set(['processing', 'submitting', 'provider_accepted', 'published']);
 /** The worker handed the post to the provider, or the provider has not confirmed it yet. */
-export const IN_FLIGHT: ReadonlySet<string> = new Set([...PUBLISHING, 'uncertain']);
+export const IN_FLIGHT: ReadonlySet<string> = new Set([...PUBLISHING, 'uncertain', 'native_scheduled']);
 /**
  * Approval, capability or entitlement changed after approval. The worker skips a held job, and it still counts
  * toward the account's daily limit until it is cancelled (`store.py` approve counts every job not failed or cancelled).
@@ -108,6 +108,7 @@ export interface JobBadge {
  * confirmed before the provider verified it. Only publishing and cancelling pulse.
  */
 export function jobBadge(job: { state: string; cancelRequested?: boolean; verification?: { method?: string | null } | null }): JobBadge {
+  if (job.state === 'native_scheduled') return {status:job.cancelRequested ? 'warning':'info',label:job.cancelRequested ? 'Provider cancellation pending':'Scheduled on provider',pulse:false,title:'The provider confirmed future scheduling. Publication and playability still need verification.'};
   const group = jobGroup(job.state);
   const label = stateWords(job.state);
   // Only a job that has not reached the provider is actually being cancelled; after submission the request

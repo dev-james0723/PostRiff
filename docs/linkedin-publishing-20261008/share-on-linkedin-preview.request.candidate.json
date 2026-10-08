@@ -1,0 +1,43 @@
+{
+  "executionState": "CANDIDATE_ONLY_NOT_APPLIED",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "upsert": false,
+  "precondition": "Both exact preview branch keys remain absent; do not overwrite or reuse a production variable. Required source checks pass; approval obtained.",
+  "requestBody": [
+    {
+      "key": "POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON",
+      "value": "{\"share_on_linkedin\":{\"state\":\"approved\",\"appId\":\"86761m831bhyiu\",\"audience\":\"external\",\"approvedScopes\":[\"w_member_social\"],\"evidenceRef\":\"docs/linkedin-publishing-20261008/app-product-observation.json\",\"environment\":\"preview\",\"callbackUri\":\"https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback\"}}",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/social-connection-recovery-20261007",
+      "comment": "Reviewed existing Share on LinkedIn app product evidence; preview only; live publishing proof pending."
+    },
+    {
+      "key": "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED",
+      "value": "true",
+      "type": "encrypted",
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "codex/social-connection-recovery-20261007",
+      "comment": "LinkedIn preview operation rollout only; actual grants and exact-operation approvals remain required."
+    }
+  ],
+  "scopeEffect": "Allows eligible preview member grants with actual w_member_social to use supported publishing workflows under existing per-operation safeguards. Only Tester B receives the separately proposed one-post pilot; no public operation is executed by configuration preparation.",
+  "productionChange": false,
+  "applied": false,
+  "requiredChecksEvidence": "evidence/github-b7ee0e68.json",
+  "preparedPrivateDraftEvidence": "evidence/private-pilot-draft-b7ee0e68.json",
+  "cleanupConfirmation": "Only the newly returned pilot post ID; confirmation at the permanent-deletion boundary before browser deletion.",
+  "previewActivationDeployment": {
+    "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+    "target": "preview",
+    "gitBranch": "codex/social-connection-recovery-20261007",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "productionExcluded": true
+  }
+}

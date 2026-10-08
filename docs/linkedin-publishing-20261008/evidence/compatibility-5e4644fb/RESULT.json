@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "state": "CANDIDATE_REPAIR_LOCAL_GREEN_REMOTE_PENDING",
+  "timestamp": "2026-10-08T05:06:04.506140+00:00",
+  "implementationSha": "5e4644fbb4b2c7bb2f4f7d0a2bb7b9c0c15f748a",
+  "parentSha": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+  "trigger": {
+    "system": "GitHub required scenes",
+    "runId": "37729976628",
+    "jobId": "113156652915",
+    "step": "Seed the synthetic workspace",
+    "operation": "LinkedIn OAuth complete",
+    "status": 500,
+    "exception": "AttributeError",
+    "execution": "SYNTHETIC"
+  },
+  "repair": {
+    "files": [
+      "src/postriff_phase2/hosted_app.py",
+      "src/postriff_phase2/hosted_social.py",
+      "src/postriff_phase2/oauth.py",
+      "tests/test_linkedin_publishing_recovery.py"
+    ],
+    "behavior": "Optional member_publishing_approved method defaults false at all generic consumers; basic identity remains valid and missing method supplies no publishing approval. Existing independent production-reviewed adapter behavior remains intact."
+  },
+  "localValidation": {
+    "test": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests python3 -m unittest -v test_linkedin_publishing_recovery.MemberPublishingAccess.test_adapter_without_member_product_method_keeps_identity_and_fails_closed",
+    "redExit": 1,
+    "redResult": "AttributeError reproduced in reviewed and unreviewed cases",
+    "greenExit": 0,
+    "greenResult": "One narrow test / two cases passed",
+    "ast": "PASS four changed Python files",
+    "gitDiffCheck": "PASS"
+  },
+  "remoteValidation": {
+    "currentSourceIntegratedChecks": "PENDING parent authorized push and required GitHub checks",
+    "browserReuse": {
+      "runId": "lhz2r5w6md",
+      "testedSha": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+      "state": "PASS unchanged browser/frontend inputs only; not new backend execution evidence",
+      "browserAndWorkflowSha256": "5524a728fe0a07666e99cf5a6aef8f995797579b5e5dbdd9e1b0aa5e4fc49e49",
+      "frontendChanged": false
+    }
+  },
+  "externalEffects": {
+    "pushedByWorker": false,
+    "configurationActivated": false,
+    "broaderConsent": false,
+    "realPublication": false,
+    "delete": false,
+    "productionRelease": false
+  },
+  "nextAction": "Parent integrates/pushes this exact candidate on existing authorized PR131; required scenes uses real disposable DevProvider to validate OAuth completion. No unchanged browser harness rerun needed."
+}

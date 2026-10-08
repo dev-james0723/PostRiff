@@ -1,0 +1,164 @@
+{
+  "observedAt": "2026-10-07T07:26:52.475Z",
+  "execution": "authenticated-console-and-production-ui-inspection",
+  "productionSource": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+  "productionDeployment": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
+  "ordinaryExternalPasses": 0,
+  "target": 8,
+  "sourceChanges": "OAuth preview isolation committed as 40fcf9a9; forward X schema migration prepared and under cloud regression",
+  "effects": {
+    "providerSettingsChanged": false,
+    "credentialsRevealed": false,
+    "providerConsent": false,
+    "tokenExchange": false,
+    "productionDdl": false,
+    "productionRelease": false,
+    "paidProviderCalls": false,
+    "oauthStartTransactions": "Normal UI prepared LinkedIn, Instagram and Facebook identity redirects; no provider continuation/consent. X start rolled back on constraint violation."
+  },
+  "providers": [
+    {
+      "provider": "linkedin",
+      "appId": "263833009",
+      "clientId": "86761m831bhyiu",
+      "runtimeMapping": "MATCH via generated normal-UI authorization URL",
+      "product": "Sign In with LinkedIn using OpenID Connect Added / Standard Tier",
+      "registeredCallbacks": [
+        "http://127.0.0.1:4321/callback",
+        "https://postriff-phase2-private.vercel.app/api/oauth/linkedin/callback"
+      ],
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "ordinaryExternalPass": false,
+      "next": "Approve the prepared branch-only preview callback/environment action, then owner consent and two ordinary-user acceptance."
+    },
+    {
+      "provider": "threads",
+      "appId": "2284812538978484",
+      "productAppId": "1431031092226762",
+      "appName": "James Au Studio — Threads",
+      "consoleState": "Testing / Unpublished",
+      "minimumPermissionState": "threads_basic Ready for testing",
+      "registeredCallbacks": [
+        "https://threads-jamesau.meta:4316/callback"
+      ],
+      "productionRuntime": "Not configured; normal UI Connect disabled",
+      "ordinaryExternalPass": false,
+      "next": "Prepare exact hosted callback and missing product credentials, genuine integration demo and applicable external-access review; existing app only."
+    },
+    {
+      "provider": "instagram",
+      "appId": "1401844428820097",
+      "productAppId": "1717799895963991",
+      "productName": "James Au Studio Identity-IG",
+      "runtimeMapping": "MATCH via generated normal-UI authorization URL",
+      "requestedScopes": [
+        "instagram_business_basic"
+      ],
+      "generatedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/instagram/callback",
+      "registeredCallback": "NOT_INSPECTED",
+      "consoleState": "Parent Rafii app Published; instagram_business_basic Ready for testing",
+      "appReviewPage": "Something went wrong. Please try again later.",
+      "ordinaryExternalPass": false,
+      "next": "Verify exact product callback and advanced/public basic access; use a real minimum-scope demo and review, separately from publishing/insights."
+    },
+    {
+      "provider": "facebook",
+      "appId": "1401844428820097",
+      "appName": "Rafii",
+      "runtimeMapping": "MATCH via generated normal-UI authorization URL",
+      "consoleState": "Published parent app; pages_show_list Ready for testing; public access not verified",
+      "requestedProductionScopes": [
+        "pages_show_list",
+        "business_management"
+      ],
+      "candidateMinimumScopes": [
+        "pages_show_list"
+      ],
+      "generatedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/facebook/callback",
+      "existingLoginConfiguration": {
+        "id": "2961092884234131",
+        "name": "James Au Studio FB Publishing",
+        "scopes": [
+          "pages_manage_engagement",
+          "pages_manage_posts",
+          "pages_read_engagement",
+          "pages_show_list"
+        ]
+      },
+      "appReviewPage": "Something went wrong. Please try again later.",
+      "ordinaryExternalPass": false,
+      "next": "Confirm minimum Page endpoint contract, then approve a separate exact-scope basic login config; do not reuse publishing config for identity."
+    },
+    {
+      "provider": "x",
+      "visibleAppId": "33504271",
+      "runtimeMapping": "UNVERIFIED; normal-UI start fails before returning authorization URL",
+      "consoleState": "OAuth2 Set up; Pay Per Use",
+      "productionFailure": {
+        "observedAt": "2026-10-07T07:20:29.030Z",
+        "routePattern": "/api/workspaces/:id/channels/x/oauth/start",
+        "status": 500,
+        "exceptionType": "CheckViolation",
+        "requestId": "27a137d9647b48728084be3cf84e2538",
+        "liveConstraint": "pr_oauth_transactions_provider_check: length(provider) >= 2 AND <= 40"
+      },
+      "repair": "101_x_oauth_provider.sql permits canonical x only, preserving other bounds and RLS; not applied in production",
+      "ordinaryExternalPass": false,
+      "next": "Validate/review migration101, map actual app, configure OAuth2 only after approval, then explicit current-price endpoint-limited spending policy and migration100."
+    },
+    {
+      "provider": "youtube",
+      "projectId": "rafii-509720",
+      "clientId": "81579135390-fbaui3k787sv1v2clgn6ead480mopjkd.apps.googleusercontent.com",
+      "runtimeMapping": "MATCH from prior observation; audience freshly rechecked",
+      "consoleState": "External / Testing, one test user, zero other users",
+      "minimumScopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "sharedDeclaredScopes": "YouTube read/upload, calendar.readonly and restricted gmail.readonly; unchanged",
+      "ordinaryExternalPass": false,
+      "next": "Review production-audience and applicable verification for this existing project, preserving unrelated declared scopes; genuine ordinary-user channel read acceptance."
+    },
+    {
+      "provider": "tiktok",
+      "appId": "7689508412459370497",
+      "productionState": "Draft; required metadata/products/scopes unconfigured",
+      "productionClientKey": "awwo14d0ftcdq56e",
+      "sandboxId": "7689479552734136327",
+      "sandboxClientKey": "sbaw5erc39q65ndb6r",
+      "runtimeMapping": "Production runtime key exactly matches this sandbox key",
+      "sandboxProducts": [
+        "Login Kit",
+        "Content Posting API"
+      ],
+      "sandboxScopes": [
+        "user.info.basic",
+        "video.publish",
+        "video.upload"
+      ],
+      "sandboxTargetAccounts": 1,
+      "registeredSandboxCallback": "https://postriff-phase2-private.vercel.app/api/oauth/tiktok/callback",
+      "ordinaryExternalPass": false,
+      "next": "Complete truthful production Login Kit metadata and minimum user.info.basic; record required genuine sandbox demo, approve review submission, then deliberate production credential switch after approval."
+    },
+    {
+      "provider": "pinterest",
+      "appId": "1615884",
+      "appName": "Rafii",
+      "consoleState": "Trial access pending; Your request is still being reviewed.",
+      "credentialState": "App secret unavailable while access pending; redirect editing disabled",
+      "ordinaryExternalPass": false,
+      "next": "Await actual existing request outcome; configure credentials/callback when issued and prepare genuine applicable review demo. Do not create another app."
+    }
+  ],
+  "crossProviderBlockers": [
+    "Candidate preview lacks provider pairs and vault key, and currently inherits another branch's staging origin",
+    "Two ordinary non-Founder Rafii identities/workspaces and social users without app roles not supplied",
+    "Real iPhone Safari validation unavailable after normal Mirroring timeout",
+    "Actual token exchange, identity/destination, persistence, disconnect/reconnect, tenant isolation and time-dependent renewal not run"
+  ],
+  "browserRecovery": "User activated the authorized recovery window. Native Chrome checks resumed without bypass; exact-tab API remains unavailable."
+}

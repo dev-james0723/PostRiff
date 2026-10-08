@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SuccessCheck } from '@/components/ui/success-check';
 import { useFlash } from '@/hooks/use-flash';
@@ -26,6 +26,7 @@ import { keys } from '@/lib/api/hooks';
 import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { ApiError } from '@/lib/api/client';
 import type { ChannelView, ProviderView } from '@/lib/api/types';
+import { connectionSummary } from '@/lib/channels/connection-status';
 import {
   ATTENTION_STATES,
   attentionSentence,
@@ -41,6 +42,8 @@ import {
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { OfficialCapabilities } from './official-capabilities';
+import { NativeSocialPanel } from './native-social-panel';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
@@ -203,7 +206,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const expiring = expiringSoon(channel);
   const expired = typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
-  const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
+  const identityVerifiedAt = channel.identityVerifiedAt ?? channel.capabilities.identity?.verifiedAt ?? null;
+  const connectionMessage = connectionSummary(channel);
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 
   async function refresh() {
@@ -307,7 +311,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           layout='inline'
           title={sentence}
           action={
-            canManage && provider ? (
+            held > 0 && !disconnected && !ATTENTION_STATES.has(channel.connectionState) && !expiring ? (
+              <Link href={`/app/queue?channel=${encodeURIComponent(channel.id)}`} className={buttonVariants({ variant: 'glass', size: 'control' })}>Review held posts</Link>
+            ) : canManage && provider ? (
               <Button variant='glass' size='control' onClick={reconnect}>
                 <Icons.refresh className='size-4' />
                 Reconnect
@@ -320,8 +326,11 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
-      {!disconnected && channel.socialReadiness && (
+      {!disconnected && connectionMessage && <p className='text-sm' aria-label='Connection status'>{connectionMessage}</p>}
+      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} readiness={channel.socialReadiness} offered={provider?.capabilities} setupIssue={provider?.memberPublishingStatus && !provider.memberPublishingStatus.approved ? 'Rafii’s LinkedIn publishing setup is incomplete. Your account remains connected; the Rafii operator needs to finish setup.' : undefined} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
+      {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
+      {!disconnected && channel.platform === 'Facebook' && channel.accountType !== 'page' && <p className='text-sm'>Choose an eligible Page to finish connecting Facebook.</p>}
+      {!disconnected && !channel.officialCapabilities && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
           <li>
             {channel.socialReadiness.publishing === 'PUBLISHING_AVAILABLE'

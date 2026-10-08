@@ -1,0 +1,678 @@
+{
+  "verifiedOrdinaryExternalProviders": 0,
+  "targetCount": 8,
+  "productionSource": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+    "sourceSha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "READY independently advanced; no connection-first production acceptance claimed"
+  },
+  "providers": [
+    {
+      "provider": "linkedin",
+      "name": "LinkedIn",
+      "environment": "READY exact7a4 preview; alldispatch/Facebook required checks PASS; d38 expiry recovery candidate focused PASS",
+      "appIdentityAndOwnership": "James Studio console app263833009; OIDC Added Standard Tier and Share Added Default Tier observed2026-10-08T04:20Z. Configured OAuth client matches. Community Management not Added.",
+      "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
+      "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
+      "generatedCallback": "MATCH: exact branch preview callback in consumed Tester A and Tester B server transactions",
+      "registeredCallback": "MATCH: branch preview callback added under approved LinkedIn preview plan",
+      "minimumScopes": "openid profile",
+      "requestedScopes": "Basic minimum remains openid/profile. Separately approved owner Enable Publish requested openid/profile/w_member_social.",
+      "grantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
+      "accountRequirements": "Member; no organization required",
+      "publicReadiness": "Ordinary B minimum consent/exchange/identity and current preview reload verified. Full tenant-negative, real iPhone, genuine expiry and production acceptance pending.",
+      "customerConnection": "CONNECTED_REAL_PUBLISHING_PERMISSION_VERIFICATION_PENDING",
+      "featurePermission": "Actual write grant saved; public operation not yet performed; fullyAvailable/liveVerified remain false.",
+      "tokenExchange": "REAL_EXCHANGED: Tester B Account only transaction consumed; Tester A identity/extension history retained separately.",
+      "identityAndDestination": "VERIFIED: two distinct member subjects bound to two distinct originating Rafii users/workspaces; B owner attested no provider-app role; neither Rafii user has any Founder operator record.",
+      "persistence": "PASS encrypted durable connection;7a4 normal reload retained exact approved job connection and actual openid/profile/w_member_social. Post-reconnect fresh Rafii session still pending.",
+      "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
+      "disconnectReconnect": "PASS: approved remote revocation/local removal, then real same-account/workspace reconnect on dd199b02 with openid/profile only; A unchanged. Two expired callbacks were safely rejected before successful third attempt.",
+      "failureStep": "No connection failure. Original approved pilot held without provider submission and expired07:27Z; original must not execute.",
+      "blockerClass": "UNVERIFIED",
+      "owner": "Agent: final source/checks and fresh exact review; owner: native inspection, exact returned-ID cleanup confirmation and device acceptance.",
+      "nextAction": "Deliver final preview then preserve/cancel expired no-submit job and prepare a fresh review of the same already-authorized draft. No repeated OAuth consent, duplicate public post or expired dispatch.",
+      "console": "https://www.linkedin.com/developers/apps",
+      "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
+      "evidenceRef": "evidence/linkedin-tester-b-20261008.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "UNVERIFIED",
+        "TOOL_ACCESS"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Operator console requires sign-in; actual app/OIDC product unverified",
+        "generatedCallback": "UNVERIFIED on deployment",
+        "registeredCallback": "UNVERIFIED",
+        "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+        "blockerClass": "TOOL_ACCESS",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "historicalObservationBeforeTesterA": {
+        "provider": "linkedin",
+        "name": "LinkedIn",
+        "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+        "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
+        "credentials": "Present; validity UNVERIFIED",
+        "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/linkedin/callback",
+        "generatedCallback": "MATCH: exact production callback from normal UI",
+        "registeredCallback": "MATCH: exact production callback registered",
+        "minimumScopes": "openid profile",
+        "requestedScopes": "openid profile (actual normal-UI authorization URL)",
+        "grantedScopes": null,
+        "accountRequirements": "Member; no organization required",
+        "publicReadiness": "NOT_VERIFIED",
+        "customerConnection": "NOT_RUN",
+        "featurePermission": "No capabilities promoted",
+        "tokenExchange": "NOT_RUN",
+        "identityAndDestination": "NOT_RUN",
+        "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+        "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+        "disconnectReconnect": "Live NOT_RUN",
+        "failureStep": "Before external-user consent acceptance",
+        "blockerClass": "HUMAN_CONSENT",
+        "owner": "James/operator",
+        "nextAction": "Approve the prepared branch-only preview callback/environment action, then owner consent and two ordinary-user acceptance.",
+        "console": "https://www.linkedin.com/developers/apps",
+        "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
+        "evidenceRef": "evidence/operator-console-20261007.json",
+        "ordinaryExternalPass": false,
+        "additionalBlockers": [
+          "CONFIGURATION",
+          "ORDINARY_USERS_REQUIRED",
+          "IPHONE_VALIDATION_UNAVAILABLE"
+        ]
+      },
+      "historicalObservationBeforeTesterB": {
+        "environment": "Protected branch preview; actual source a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2; production unchanged",
+        "publicReadiness": "OIDC Standard Tier/app/callback observed; independent ordinary-user and full lifecycle acceptance still pending",
+        "customerConnection": "CONNECTED_TESTER_A_PROVIDER_APP_ROLE_UNVERIFIED",
+        "grantedScopes": [
+          "openid",
+          "profile",
+          "w_member_social"
+        ],
+        "persistence": "Encrypted durable access token and same connection after browser reload observed; fresh-session test pending",
+        "failureStep": "No current token-exchange failure; misleading capability labels repaired in validated candidate, preview update pending",
+        "nextAction": "Deploy approved status fix, verify saved connection; Tester B then connects an intended personal LinkedIn profile with no provider-app role using Account only. Complete fresh session, two-workspace isolation, disconnect/reconnect and real iPhone acceptance.",
+        "evidenceRef": "evidence/linkedin-tester-a-20261008.json"
+      },
+      "ordinaryExternalBasicConnectionObserved": true,
+      "providerAppIndependenceEvidence": "Tester B owner attestation in conversation; not an independently queried LinkedIn role audit.",
+      "evidenceRefs": [
+        "evidence/linkedin-tester-a-20261008.json",
+        "evidence/linkedin-tester-b-20261008.json",
+        "evidence/preview-status-a2723673.json",
+        "evidence/linkedin-tester-b-fresh-session-20261008.json",
+        "evidence/linkedin-tester-b-lifecycle-20261008.json",
+        "evidence/preview-status-dd199b02.json",
+        "evidence/linkedin-tester-b-reconnect-dd199b02.json",
+        "evidence/preview-status-18798a19.json",
+        "evidence/library-merge-validation-20261008.json",
+        "evidence/preview-status-2bdab047.json",
+        "evidence/migration-order-ci-repair-20261008.json",
+        "../linkedin-publishing-20261008/evidence/connection-b7ee0e68.json",
+        "../linkedin-publishing-20261008/evidence/tester-b-publishing-grant-20261008.json",
+        "../linkedin-publishing-20261008/evidence/approved-pilot-job-held-20261008.json",
+        "../linkedin-publishing-20261008/evidence/connection-7a4cefba.json",
+        "../linkedin-publishing-20261008/evidence/approved-pilot-job-expired-20261008.json",
+        "../linkedin-publishing-20261008/evidence/expired-approval-red-green.json"
+      ],
+      "freshSessionEvidence": "evidence/linkedin-tester-b-fresh-session-20261008.json",
+      "historicalObservationBeforeAuthorizedDisconnect": {
+        "customerConnection": "CONNECTED_TESTER_B_ORDINARY_USER_BASIC_OBSERVED",
+        "disconnectReconnect": "PREPARED; exact Tester B disconnect/reconnect approval pending, no action performed",
+        "nextAction": "Approve prepared Tester B disconnect/reconnect test; owner performs any provider consent. Then live cross-tenant negative checks and real iPhone Safari. Keep genuine token aging pending. No repeat initial consent or preview approval required.",
+        "failureStep": "Original false identity BLOCKED status repaired and verified on exact preview source; no current exchange failure."
+      },
+      "lifecycleEvidence": "evidence/linkedin-tester-b-lifecycle-20261008.json",
+      "currentPreviewEvidence": "../linkedin-publishing-20261008/evidence/connection-7a4cefba.json",
+      "connectionEvidenceSourceBoundary": "b7 A/B normal authenticated reload retained distinct subjects/workspaces/connections. Real B identity/token recheck5e reused only because app code unchanged at b7. No new refresh/fresh-session/live tenant-negative/iPhone test claimed.",
+      "reconnectEvidence": "evidence/linkedin-tester-b-reconnect-dd199b02.json",
+      "publishingProductObservation": {
+        "shareAdded": true,
+        "tier": "Default Tier",
+        "communityManagementAdded": false,
+        "evidence": "../linkedin-publishing-20261008/app-product-observation.json",
+        "livePublishingPassed": false
+      },
+      "currentPreviewRuntime": {
+        "provider": "linkedin",
+        "configured": true,
+        "connectReady": true,
+        "publicConnectionReady": true,
+        "configurationState": "configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": true,
+          "clientSecret": true
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback"
+      },
+      "historicalObservationBeforeWriteConsent": {
+        "environment": "READY verified previewb7ee0e68; all required GitHub checks PASS; B retained saved identity. Publishing configuration/consent/pilot pending.",
+        "customerConnection": "CONNECTED_IDENTITY_ONLY",
+        "grantedScopes": [
+          "openid",
+          "profile"
+        ],
+        "featurePermission": "Tester B actual identity-only grant verified; publishing not enabled. No publishing/organization/read/analytics capability promoted.",
+        "nextAction": "Approve prepared preview publishing activation and exact one-post pilot; owner performs optional w_member_social consent. Preserve grants. Complete remaining independent connection acceptance before production."
+      }
+    },
+    {
+      "provider": "threads",
+      "name": "Threads",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "James Au Studio — Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
+      "credentials": "Missing client ID and secret",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/threads/callback",
+      "generatedCallback": "UNVERIFIED on deployment",
+      "registeredCallback": "Only https://threads-jamesau.meta:4316/callback; hosted callback missing",
+      "minimumScopes": "threads_basic",
+      "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+      "grantedScopes": null,
+      "accountRequirements": "Threads profile",
+      "publicReadiness": "NOT_VERIFIED",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before external-user consent acceptance",
+      "blockerClass": "PROVIDER_REVIEW",
+      "owner": "James/operator",
+      "nextAction": "Prepare exact hosted callback and missing product credentials, genuine integration demo and applicable external-access review; existing app only.",
+      "console": "https://developers.facebook.com/apps/",
+      "primarySource": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Meta app inventory HTTP 500; correct Threads product/app ownership unverified",
+        "registeredCallback": "UNVERIFIED",
+        "blockerClass": "CONFIGURATION",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Recover existing Threads product credentials in Vercel secure store after app/callback/public access verification. Do not create a replacement app.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "currentPreviewRuntime": {
+        "provider": "threads",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/threads/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "instagram",
+      "name": "Instagram",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "Rafii parent 1401844428820097 Published; Instagram product James Au Studio Identity-IG 1717799895963991 matches runtime; instagram_business_basic Ready for testing; review page server error",
+      "credentials": "Present; validity UNVERIFIED",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/instagram/callback",
+      "generatedCallback": "MATCH: exact production callback from normal UI",
+      "registeredCallback": "UNVERIFIED",
+      "minimumScopes": "instagram_business_basic",
+      "requestedScopes": "instagram_business_basic (actual normal-UI authorization URL)",
+      "grantedScopes": null,
+      "accountRequirements": "Business/Creator; Instagram Login; no Facebook Page required",
+      "publicReadiness": "NOT_VERIFIED",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before external-user consent acceptance",
+      "blockerClass": "PROVIDER_REVIEW",
+      "owner": "James/operator + Meta",
+      "nextAction": "Verify exact product callback and advanced/public basic access; use a real minimum-scope demo and review, separately from publishing/insights.",
+      "console": "https://developers.facebook.com/apps/",
+      "primarySource": "https://www.postman.com/meta/instagram/folder/6raa77c/instagram-api-with-instagram-login",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "UNVERIFIED",
+        "HUMAN_CONSENT",
+        "CONFIGURATION"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Meta app inventory HTTP 500; Instagram Login public access approval unverified",
+        "generatedCallback": "UNVERIFIED on deployment",
+        "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+        "blockerClass": "TOOL_ACCESS",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Inspect Instagram Login product and minimum permission advanced/public access. Insights audit is independent.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "currentPreviewRuntime": {
+        "provider": "instagram",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/instagram/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "facebook",
+      "name": "Facebook",
+      "environment": "Current verified recovery preview; no Facebook connector settings applied",
+      "appIdentityAndOwnership": "Rafii Meta app1401844428820097 Published; business context3124765741050025. Legal ownership/business verification unverified. Existing broad config2961092884234131 only.",
+      "credentials": "Preview presence-only diagnostics: client ID/secret absent. No secret read or exported.",
+      "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback",
+      "generatedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback",
+      "registeredCallback": "MISMATCH: production callback and historical tunnel registered; exact fixed preview callback missing",
+      "minimumScopes": "pages_show_list; public_profile automatic; no publishing/Page token prerequisite for basic selection",
+      "requestedScopes": "Prepared new configuration: pages_show_list only. Existing broad publishing config preserved and not used for basic connection.",
+      "grantedScopes": null,
+      "accountRequirements": "Eligible Page and actual tasks; select Page, not person",
+      "publicReadiness": "NOT_APPROVED: pages_show_list and added Page permissions show Ready for testing/Add to App Review; Published is not Advanced Access proof.",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before consent: missing preview credentials/callback/minimal config and no verified external Page access approval.",
+      "blockerClass": "CONFIGURATION",
+      "owner": "James/operator + Meta",
+      "nextAction": "Approve exact prepared minimum preview settings in OPERATOR-PLAN.md; secure matching app secret handoff. Obtain genuine business/legal/review evidence before ordinary-user testing.",
+      "console": "https://developers.facebook.com/apps/",
+      "primarySource": "https://developers.facebook.com/docs/facebook-login/facebook-login-for-business/",
+      "evidenceRef": "../facebook-connection-20261008/CONFIGURATION.candidate.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Meta app inventory HTTP 500; exact Login for Business configuration/public access unverified",
+        "generatedCallback": "UNVERIFIED on deployment",
+        "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+        "blockerClass": "TOOL_ACCESS",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Verify exact minimum Business Login configuration, Page grant/tasks and callback. Configure scope-keyed LOGIN_CONFIGS_JSON only after evidence/approval.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "currentPreviewRuntime": {
+        "provider": "facebook",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/facebook/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "x",
+      "name": "X",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "Visible app 33504271 / Pay Per Use / OAuth2 Set up; runtime mapping remains unverified because normal-UI start fails before redirect",
+      "credentials": "Present; validity/app mapping UNVERIFIED",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/x/callback",
+      "generatedCallback": "UNVERIFIED on deployment",
+      "registeredCallback": "UNVERIFIED",
+      "minimumScopes": "users.read tweet.read offline.access",
+      "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+      "grantedScopes": null,
+      "accountRequirements": "X account; OAuth2 authorization code + S256 PKCE",
+      "publicReadiness": "NOT_VERIFIED",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Production identity OAuth start: HTTP 500 CheckViolation; live DB provider length minimum 2 rejects x",
+      "blockerClass": "ENGINEERING",
+      "owner": "James/operator",
+      "nextAction": "Validate/review migration101, map actual app, configure OAuth2 only after approval, then explicit current-price endpoint-limited spending policy and migration100.",
+      "console": "https://console.x.com/accounts/2107161751049371648/apps/33504271",
+      "primarySource": "https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "BILLING_AUTHORIZATION",
+        "UNVERIFIED",
+        "HUMAN_CONSENT",
+        "CONFIGURATION"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Visible app 33504271 active Development/Pay Per Use; OAuth2 says Set up. Mapping to runtime client unverified. USD5 displayed balance is not authorization.",
+        "failureStep": "Before external-user consent acceptance",
+        "blockerClass": "BILLING_AUTHORIZATION",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Match runtime client to existing app; inspect/approve client type/callback and bounded GET /2/users/me onboarding policy. No metered calls authorized yet.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "historicalBlockerClass": "CODE_SCHEMA",
+      "currentPreviewRuntime": {
+        "provider": "x",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/x/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "youtube",
+      "name": "YouTube",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "Rafii project rafii-509720; existing YouTube client/callback match production; External / Testing rechecked with 1 tester and 0 other users",
+      "credentials": "Present; client/callback match; exchange validity UNVERIFIED",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/youtube/callback",
+      "generatedCallback": "MATCH verified through normal UI",
+      "registeredCallback": "MATCH verified Google client console",
+      "minimumScopes": "https://www.googleapis.com/auth/youtube.readonly",
+      "requestedScopes": "https://www.googleapis.com/auth/youtube.readonly",
+      "grantedScopes": null,
+      "accountRequirements": "Actual YouTube channel, selected through Google consent",
+      "publicReadiness": "BLOCKED_TESTING",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before external-user consent acceptance",
+      "blockerClass": "PROVIDER_REVIEW",
+      "owner": "James/operator + Google",
+      "nextAction": "Review production-audience and applicable verification for this existing project, preserving unrelated declared scopes; genuine ordinary-user channel read acceptance.",
+      "console": "https://console.cloud.google.com/auth/audience?project=rafii-509720",
+      "primarySource": "https://developers.google.com/youtube/v3/docs/channels/list",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "HUMAN_CONSENT",
+        "CONFIGURATION"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Rafii project rafii-509720, Rafii YouTube client; External Testing; 1 tester and 0 other users observed",
+        "blockerClass": "PROVIDER_REVIEW",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Review minimum YouTube read scope and external production/verification requirements. Shared Google project also has upload/calendar/gmail scope declarations; do not delete unrelated scopes.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "currentPreviewRuntime": {
+        "provider": "youtube",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/youtube/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "tiktok",
+      "name": "TikTok",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "Rafii app 7689508412459370497 Production Draft; production key awwo14d0ftcdq56e. Runtime key sbaw5erc39q65ndb6r exactly matches sandbox 7689479552734136327, limited to one target account",
+      "credentials": "Present; production runtime demonstrably uses the existing sandbox client; no token exchange verified",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/tiktok/callback",
+      "generatedCallback": "MATCH verified through normal UI",
+      "registeredCallback": "Exact production callback registered in sandbox; production Login Kit unconfigured",
+      "minimumScopes": "user.info.basic",
+      "requestedScopes": "user.info.basic",
+      "grantedScopes": null,
+      "accountRequirements": "TikTok account; approved Login Kit",
+      "publicReadiness": "NOT_VERIFIED",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before external-user consent acceptance",
+      "blockerClass": "CONFIGURATION",
+      "owner": "James/operator + TikTok",
+      "nextAction": "Complete truthful production Login Kit metadata and minimum user.info.basic; record required genuine sandbox demo, approve review submission, then deliberate production credential switch after approval.",
+      "console": "https://developers.tiktok.com/apps/",
+      "primarySource": "https://developers.tiktok.com/doc/login-kit-overview/",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "PROVIDER_REVIEW",
+        "HUMAN_CONSENT",
+        "CONFIGURATION"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Visible Rafii app 7689508412459370497 Production Draft; blank required metadata/products. Do not assume this is runtime client until matched.",
+        "credentials": "Present; generated client key mapped only to runtime, console mapping UNVERIFIED",
+        "registeredCallback": "UNVERIFIED",
+        "blockerClass": "UNVERIFIED",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Match existing runtime key to correct app; complete Login Kit metadata/scopes and genuine authentication demo; approve submission separately.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "historicalBlockerClass": "SANDBOX_CONFIGURATION",
+      "currentPreviewRuntime": {
+        "provider": "tiktok",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/tiktok/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    },
+    {
+      "provider": "pinterest",
+      "name": "Pinterest",
+      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "appIdentityAndOwnership": "Existing Rafii app 1615884; signed-in console says Trial access pending / request still reviewed",
+      "credentials": "Production pair missing; console withholds secret while trial access pending",
+      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/pinterest/callback",
+      "generatedCallback": "UNVERIFIED on deployment",
+      "registeredCallback": "Editing disabled while access pending",
+      "minimumScopes": "user_accounts:read",
+      "requestedScopes": "Source baseline only; actual deployment request UNVERIFIED",
+      "grantedScopes": null,
+      "accountRequirements": "Eligible business account; no board permission for identity",
+      "publicReadiness": "NOT_VERIFIED",
+      "customerConnection": "NOT_RUN",
+      "featurePermission": "No capabilities promoted",
+      "tokenExchange": "NOT_RUN",
+      "identityAndDestination": "NOT_RUN",
+      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+      "disconnectReconnect": "Live NOT_RUN",
+      "failureStep": "Before external-user consent acceptance",
+      "blockerClass": "PROVIDER_REVIEW",
+      "owner": "James/operator + Pinterest",
+      "nextAction": "Await actual existing request outcome; configure credentials/callback when issued and prepare genuine applicable review demo. Do not create another app.",
+      "console": "https://developers.pinterest.com/apps/",
+      "primarySource": "https://developers.pinterest.com/docs/developer-tools/quickstart-tools/",
+      "evidenceRef": "evidence/operator-console-20261007.json",
+      "ordinaryExternalPass": false,
+      "additionalBlockers": [
+        "CONFIGURATION",
+        "HUMAN_CONSENT"
+      ],
+      "historicalObservationBeforeConsoleRecovery": {
+        "appIdentityAndOwnership": "Developer portal redirects account-setup/login; existing app/tier/public access unknown",
+        "credentials": "Missing client ID and secret",
+        "registeredCallback": "UNVERIFIED",
+        "blockerClass": "CONFIGURATION",
+        "additionalBlockers": [
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ],
+        "nextAction": "Sign in to existing operator account, identify existing app/tier and reuse credentials. Prepare genuine identity demo for access review; no sandbox-to-public promotion.",
+        "environment": "observed production; local recovery candidate not deployed"
+      },
+      "currentPreviewRuntime": {
+        "provider": "pinterest",
+        "configured": false,
+        "connectReady": false,
+        "publicConnectionReady": false,
+        "configurationState": "not_configured",
+        "reviewStatus": "not_confirmed",
+        "productionReviewed": false,
+        "liveVerified": false,
+        "executionPaused": false,
+        "credentialPresence": {
+          "clientId": false,
+          "clientSecret": false
+        },
+        "callbackUri": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/pinterest/callback"
+      },
+      "previewConfiguration": "NOT_CONFIGURED on exact b7 preview; runtime reports clientId/clientSecret absent and connection gates false. Last recorded app-console review/eligibility facts remain separate."
+    }
+  ],
+  "evidenceClasses": {
+    "synthetic": "cloud regression, disposable PostgreSQL and browser fixtures only",
+    "appRoleIntegration": "Tester A live preview identity observed; provider-app role unverified, so not counted as ordinary-external proof",
+    "ordinaryExternalLive": "LinkedIn B minimum live lifecycle evidence retained, owner-attested no provider-app role; actual write consent and7a4 reload persisted. No public post. Full acceptance0; other sevenNOT_RUN.",
+    "productionVerification": "source/UI/config inspected; no live acceptance",
+    "syntheticRegression": "Required GitHub7a4 domain/security/SQL/browser/build checks PASS; focusedd38 expired no-submit approval browser RED/GREEN in Depot1280/390. No real iPhone or live provider proof."
+  },
+  "requiredLiveAcceptance": [
+    "owner consent through normal UI",
+    "correct workspace and account/destination",
+    "navigation/reload/fresh-session persistence",
+    "accurate actual grants",
+    "real renewal when eligible or explicit reauthorization",
+    "authorized disconnect/reconnect",
+    "two users/workspaces tenant isolation",
+    "desktop and real iPhone Safari"
+  ],
+  "latestConsoleObservationAt": "2026-10-08T04:20:57.446Z",
+  "latestEvidenceRef": "../official-social-20261008/RECOVERY-01a114a0.json",
+  "latestLiveObservationAt": "2026-10-08T07:21:07.930091+00:00",
+  "ordinaryExternalConnectionObservedProviders": 1,
+  "countDefinitions": {
+    "ordinaryExternalConnectionObservedProviders": "At least one non-Founder user with attested no provider-app role completed real minimum consent/exchange/identity and reload on this preview.",
+    "verifiedOrdinaryExternalProviders": "Full required lifecycle, tenancy, desktop/iPhone and release acceptance; this count remains zero."
+  },
+  "latestPreviewObservationAtUtc": "2026-10-08T07:52:13.295Z",
+  "historicalProductionSourceBeforeConcurrentLibrary": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
+    "sourceSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "200 configured=true phase0=incomplete customerValidated=false"
+  },
+  "candidateMergeEvidence": "evidence/library-merge-validation-20261008.json",
+  "publishingRecoveryEvidence": "../linkedin-publishing-20261008/EVIDENCE.json",
+  "publishingExecution": "REAL_WRITE_GRANT_PERSISTED; NO_PROVIDER_POST; ORIGINAL_APPROVAL_EXPIRED; FOCUSED_RECOVERY_FIX_PASS",
+  "publishingCandidateSourceSha": "d38ec79284f17001a37f8d315d7d6fbeac254968",
+  "currentPreviewSource": {
+    "sha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+    "deploymentId": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "validationEvidence": "../linkedin-publishing-20261008/evidence/github-b7ee0e68.json",
+    "connectionEvidence": "../linkedin-publishing-20261008/evidence/connection-7a4cefba.json"
+  },
+  "historicalProductionBeforeLatestAdvance": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "deploymentId": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+    "sourceSha": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+    "canonicalOrigin": "https://postriff-phase2-private.vercel.app",
+    "backend": "Vercel postriff_api api.index:app; same project /api rewrite",
+    "health": "READY independently advanced; no connection-first production acceptance claimed"
+  }
+}

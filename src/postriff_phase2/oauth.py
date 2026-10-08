@@ -6,6 +6,7 @@ never exchanges) → authenticated `complete` (same member, same workspace, sing
 server-side connector worker; they never reach the browser, the agent, or a log.
 """
 import base64
+import copy
 import hashlib
 import hmac
 import json
@@ -69,6 +70,8 @@ class OAuthService:
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
         from .social_history import SocialHistoryService
         self.history = SocialHistoryService(self)
+        from .official_operations import SocialActionsService
+        self.native_social = SocialActionsService(self)
 
     def provider_catalog(self):
         """Secret-free deployment readiness; an unconfigured tile is never an adapter."""
@@ -107,6 +110,14 @@ class OAuthService:
             history = pid == 'instagram' or (pid == 'linkedin' and bool(getattr(adapter, 'history_approved', False)))
             connect_ready = adapter is not None and not issues and contract_verified
             reviewed = bool(adapter and adapter.production_reviewed)
+            from .connection_review import public_connection_review
+            public_ready = bool(adapter and connect_ready and public_connection_review(adapter, callback))
+            if pid == 'facebook' and adapter and hasattr(adapter, 'connection_review') and (not adapter.config_id or not getattr(adapter, 'login_configs', {}).get(tuple(sorted(adapter.capability_scopes('identity'))))):
+                issues.append('The operator must configure Facebook Login for Business for the exact basic Page connection permissions.')
+                connect_ready = False
+            if adapter and hasattr(adapter, 'connection_review') and not public_ready:
+                issues.append('Provider review pending: external-user access for the minimum connection permissions and this callback has not been verified.')
+                connect_ready = False
             normalized = cls.normalized_capabilities() if getattr(cls, 'wave', None) else None
             if normalized is None:
                 legacy = {cap: bool(adapter and adapter.capability_scopes(cap)) for cap in ('identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply')}
@@ -132,13 +143,15 @@ class OAuthService:
                 'analyticsPermission': bool(diagnostic.get('analyticsPermission')), 'commentsPermission': bool(diagnostic.get('commentsPermission')),
                 'productionEnabled': bool(diagnostic.get('productionEnabled')) and not paused,
             }
-            readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
+            readiness = configuration if adapter is None else 'paused' if paused else 'provider_review_pending' if adapter and hasattr(adapter, 'connection_review') and not public_ready and len(issues) == 1 else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if public_ready else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
-                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed, 'liveVerified': False,
+                            'readinessState': readiness, 'publicConnectionReady': public_ready, 'liveVerified': False,
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
+                            'memberPublishingApproved': bool(pid == 'linkedin' and adapter and getattr(adapter, 'member_publishing_approved', lambda: False)()),
+                            'memberPublishingStatus': getattr(adapter, 'member_publishing_status', lambda: None)() if pid == 'linkedin' and adapter else None,
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': cls.account_requirement,
@@ -153,6 +166,13 @@ class OAuthService:
                 entries.append({'id': pid, 'platform': adapter.platform, 'configured': True, 'productionReviewed': adapter.production_reviewed,
                                 'executionPaused': not getattr(adapter, 'execution_enabled', True),
                                 'capabilities': {cap: bool(adapter.capability_scopes(cap)) for cap in ('identity', 'publish', 'analytics', 'comments_read', 'reply')}})
+        from .official_social import CATALOG, capability_states
+        for entry in entries:
+            pid, adapter = entry['id'], self.providers.get(entry['id'])
+            if pid in CATALOG:
+                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, member_publishing_approved=entry.get('memberPublishingApproved', False), now=self.clock())
+                groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
+                entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
         return entries
 
     @staticmethod
@@ -177,11 +197,12 @@ class OAuthService:
             elif read_scope:
                 history = 'HISTORICAL_IMPORT_PERMISSION_UNAVAILABLE'
             if publish_scope and publish_scope in scopes:
-                if not provider.get('productionReviewed'):
+                member_product = platform == 'LinkedIn' and channel.get('accountType') == 'member' and provider.get('memberPublishingApproved')
+                if not provider.get('productionReviewed') and not member_product:
                     publishing = 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
                 elif channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct':
                     publishing = 'PUBLISHING_AVAILABLE'
-        return {'connection': 'CONNECTED' if connected else 'REAUTHORIZATION_REQUIRED' if channel.get('connectionState') in ('token_expired', 'reauthorization_required', 'scope_missing') else 'NOT_CONNECTED',
+        return {'connection': 'DESTINATION_REQUIRED' if platform == 'Facebook' and channel.get('accountType') == 'person' and channel.get('connectionState') in ('read_verified', 'publish_verified', 'identity_known') else 'CONNECTED' if connected else 'REAUTHORIZATION_REQUIRED' if channel.get('connectionState') in ('token_expired', 'reauthorization_required', 'scope_missing') else 'NOT_CONNECTED',
                 'history': history, 'publishing': publishing,
                 'fullyAvailable': history == 'HISTORICAL_IMPORT_AVAILABLE' and publishing == 'PUBLISHING_AVAILABLE',
                 'evidence': 'last_verified_grant', 'liveVerified': False}
@@ -210,8 +231,18 @@ class OAuthService:
             if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
-        if capability not in (*CAPABILITIES, 'posts_read') or capability in ("media_types", "webhooks"):
+        from .connection_review import public_connection_review
+        if hasattr(adapter, 'connection_review') and not public_connection_review(adapter, self.callback_uri(provider_id)):
+            raise AlphaError('Provider review pending for public account connection. The operator must verify this app and callback; customers do not need developer apps or tester roles.', 409)
+        from .official_social import CATALOG
+        feature_groups = {f.permission_group for f in CATALOG.get(provider_id, {}).values() if f.support == 'documented'}
+        if capability not in (*CAPABILITIES, 'posts_read', *feature_groups) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
+        if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+            # A connection starts before the account ID exists. A separate, narrow
+            # workspace OAuth budget must authorize its first paid identity lookup.
+            from .social_budget import XRequestBudget
+            XRequestBudget(self, workspace_id, 'oauth').available()
         scopes = adapter.capability_scopes(capability)
         if not scopes:
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
@@ -223,11 +254,27 @@ class OAuthService:
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else copy.deepcopy(row[1])
+            previous = next((c for c in workspace_state.get('phase2',{}).get('channels',[]) if c.get('id') == (inputs or {}).get('connectionId') and c.get('platform') == adapter.platform and not c.get('revoked')),None)
+            if (inputs or {}).get('connectionId') and previous is None:
+                raise AlphaError('The connection to reconnect is unavailable in this workspace.', 404)
+            groups = set(previous.get('enabledPermissionGroups') or (['publish'] if previous.get('capabilityVerified') else ['identity'])) if previous and capability != 'identity' else set()
+            groups.add(capability)
+            if previous and capability != 'identity':
+                retained = set(previous.get('scopes') or [])
+                allowed = {scope for group in groups for scope in adapter.capability_scopes(group)}
+                scopes = sorted(set(scopes) | (retained & allowed))
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             ciphertext, key_id = self.vault.encrypt(verifier)
-            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity'), redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
+            if provider_id in CATALOG:
+                requests = workspace_state.setdefault('phase2',{}).setdefault('oauthFeatureRequests',{})
+                requests = {key:value for key,value in requests.items() if self.clock()-value.get('createdAt',0) < TRANSACTION_TTL}
+                requests[transaction_id] = {'capability':capability,'groups':sorted(groups),'expectedAccountId':previous.get('providerAccountId') if previous else None,'createdAt':self.clock()}
+                workspace_state['phase2']['oauthFeatureRequests'] = requests
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(workspace_state),workspace_id))
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
             return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": list(scopes), "permissionExplanation": adapter.explain(capability), "authorizeUrl": adapter.authorize_url(redirect, state, challenge, scopes), "expiresAt": self.clock() + TRANSACTION_TTL}
 
@@ -260,7 +307,7 @@ class OAuthService:
         ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": verifier, **context}))
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
-            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, 'identity' if capability == 'posts_read' else capability, redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
+            cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, {'organization_publish': 'publish', 'organization_analytics': 'analytics'}.get(capability, capability if capability in CAPABILITIES else 'identity'), redirect, scopes, hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
             transaction_id = cur.fetchone()[0]
             audit(cur, workspace_id, principal, "oauth.started", transaction_id, {"provider": provider_id, "capability": capability})
         return {"transactionId": transaction_id, "provider": provider_id, "platform": adapter.platform, "capability": capability, "scopes": scopes,
@@ -274,6 +321,33 @@ class OAuthService:
         allowed = {k: clean(v, 512) for k, v in query.items() if k in ("state", "code", "error", "error_description", "iss")}
         allowed["provider"] = provider_id
         return f"{web_base_url.rstrip('/')}/channels/connect?{urlencode(allowed)}"
+
+    def completion_context(self, token, provider_id, state):
+        """Recover the initiating workspace after sign-in; state alone reveals nothing."""
+        if not isinstance(state, str) or not 20 <= len(state) <= 128:
+            raise AlphaError('Connection request unavailable.', 404)
+        principal = self.repository.verify_session(token)
+        with self.repository.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT t.workspace_id::text,extract(epoch from t.expires_at) FROM public.pr_oauth_transactions t JOIN public.pr_memberships m ON m.workspace_id=t.workspace_id AND m.user_id=t.member_id JOIN public.pr_profiles p ON p.user_id=t.member_id WHERE t.state_hash=%s AND t.provider=%s AND t.member_id=%s AND t.consumed_at IS NULL AND m.status='active' AND p.deleted_at IS NULL", (hashlib.sha256(state.encode()).hexdigest(), provider_id, principal))
+                row = cur.fetchone()
+                if not row or row[1] <= self.clock():
+                    raise AlphaError('This connection request is unavailable or expired. Sign in as the account that started it, or start again.', 404)
+                return {'workspaceId': row[0]}
+
+    def _claim_redirect(self, workspace_id, token, provider_id, state_hash):
+        """Commit single use before remote exchange, including unknown exchange outcomes."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from .hosted import _membership
+            require(_membership(row), 'manage_connections')
+            cur.execute("SELECT id::text,member_id::text,provider,capability,redirect_uri,scopes,verifier_ciphertext,key_id,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND workspace_id=%s FOR UPDATE", (state_hash, workspace_id))
+            txn = cur.fetchone()
+            if not txn or txn[1] != principal or txn[2] != provider_id or txn[9]:
+                raise AlphaError('Connection request unavailable.', 404)
+            if txn[8] <= self.clock():
+                raise AlphaError('This connection request expired. Start again.', 409)
+            cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome=NULL WHERE id::text=%s", (txn[0],))
+            return txn[0]
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
@@ -292,6 +366,7 @@ class OAuthService:
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
+        claimed = self._claim_redirect(workspace_id, token, provider_id, state_hash) if not bot_code and not device_code else None
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -300,7 +375,7 @@ class OAuthService:
             if not txn:
                 raise AlphaError("Connection request unavailable.", 404)
             transaction_id, member_id, provider, capability, redirect, scopes, verifier_ct, key_id, expires_at, consumed = txn
-            if consumed or provider != provider_id or member_id != principal:
+            if (consumed and transaction_id != claimed) or provider != provider_id or member_id != principal:
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=coalesce(consumed_at,now()),outcome=coalesce(outcome,'mismatch') WHERE id::text=%s", (transaction_id,))
                 audit(cur, workspace_id, principal, "oauth.rejected", transaction_id, {"reason": "mismatch_or_replay"})
                 raise AlphaError("Connection request unavailable.", 404)
@@ -344,7 +419,15 @@ class OAuthService:
                 grant = adapter.exchange(code, verifier, redirect, iss=iss)
             else:
                 grant = adapter.exchange(code, verifier, redirect)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, 'oauth', cursor=cur))
             identity = adapter.identity(grant["accessToken"])
+            workspace_state = json.loads(row[1]) if isinstance(row[1],str) else row[1]
+            intent = workspace_state.get('phase2',{}).get('oauthFeatureRequests',{}).get(transaction_id,{})
+            if intent.get('expectedAccountId') and intent['expectedAccountId'] != identity['providerAccountId']:
+                raise AlphaError('Feature authorization must use the connected account. Start a separate connection for another account.',409)
+            enabled_groups = intent.get('groups') or [capability]
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
             if reported is None and hasattr(adapter, 'inspect_scopes'):
@@ -363,17 +446,40 @@ class OAuthService:
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL,rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            if not missing:
+                for group in enabled_groups:
+                    scopes_for_group = adapter.capability_scopes(group)
+                    if scopes_for_group and set(scopes_for_group).issubset(granted):
+                        mapped = 'publish' if group in ('organization_publish','upload_inbox') else 'analytics' if group.startswith('organization_') and 'analytics' in group else 'comments_read' if group == 'organization_comments_read' else 'reply' if group == 'organization_reply' else group
+                        candidate = self._capabilities(adapter,mapped,granted,[],now,grant['accessToken'])
+                        for name,value in candidate.items():
+                            if value['level'] == 'Direct': matrix[name] = value
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
             from . import product_events
             # Product taxonomy (PRD §8.6): one event per completed connect flow (the OAuth transaction is the version).
             product_events.record(cur, workspace_id, principal, "channel.connected", connection_id, transaction_id, {"provider": provider_id})
-        # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
-        horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
-        channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
-        snapshot = self.repository.get(workspace_id, token)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
+            # A grant that never expires (bot-held access, Mastodon) keeps a far review date instead of a false 30-day expiry.
+            horizon = NON_EXPIRING_HORIZON if getattr(adapter, "non_expiring", False) else 86400 * 30
+            channel = {"id": connection_id, "platform": adapter.platform, "account": identity.get("handle") or identity["providerAccountId"], "accountType": identity.get("accountType", "member"), "enabledPermissionGroups": enabled_groups, "scopes": granted, "verifiedAt": now, "expiresAt": expires or now + horizon, "capabilityVersion": adapter.capability_version, "providerAccountId": identity["providerAccountId"]}
+            if provider_id == 'facebook':
+                page = adapter.session(grant['accessToken']).get('page') or {}
+                if page.get('id'):
+                    channel['destinationId'] = page['id']
+            # Credentials, capabilities and customer-visible state commit together.
+            # The workspace row is already locked; a second command transaction
+            # would allow an intervening edit to strand a successfully exchanged grant.
+            import copy
+            # Declining an optional LinkedIn read permission must not invalidate
+            # a separately verified member write grant. The denied operation
+            # retains its own non-Direct capability and missingScopes result.
+            publish_verified = matrix["publish"]["level"] == "Direct" and (not missing or provider_id == 'linkedin')
+            updated = self.commands.upsert_verified_channel(copy.deepcopy(workspace_state), principal, channel, capability_verified=publish_verified)
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(updated), workspace_id))
+            for effect in getattr(self.repository, 'effects', []):
+                effect(cur, workspace_id, workspace_state, updated, principal)
+            saved = {"revision": row[0] + 1}
         self._keep_picture(workspace_id, token, connection_id, identity)
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
@@ -419,9 +525,11 @@ class OAuthService:
         short-lived token (Pinterest, TikTok, YouTube) is renewed before Rafii asks the provider anything."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership
-            require(_membership(row), requirement)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
+            # Choosing a Facebook Page finishes connection; it does not require publishing authority.
+            permission = ('manage_connections' if stored and stored[0] == 'facebook' else 'approve') if requirement == 'destination_list' else requirement
+            require(_membership(row), permission)
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         adapter = self._provider(stored[0])
@@ -429,7 +537,7 @@ class OAuthService:
 
     def destinations(self, workspace_id, token, connection_id):
         """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
-        adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        adapter, grant = self._member_grant(workspace_id, token, connection_id, "destination_list")
         if not getattr(adapter, "has_destinations", False):
             raise AlphaError("This account has nothing to choose.", 409)
         return {"connectionId": connection_id, "scope": getattr(type(adapter), "destination_scope", "connection"),
@@ -460,6 +568,22 @@ class OAuthService:
             cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND access_ciphertext=%s AND revoked_at IS NULL", (ciphertext, key_id, workspace_id, connection_id, stored[1]))
             if cur.rowcount != 1:
                 raise AlphaError("This account changed meanwhile. Reload and choose again.", 409)
+            if adapter.id == "facebook":
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                channel = next((item for item in state['phase2']['channels'] if item['id'] == connection_id), None)
+                page = adapter.session(updated).get('page') or {}
+                if channel is None or page.get('id') != destination_id:
+                    raise AlphaError('Choose an eligible Facebook Page again.', 409)
+                channel.update(destinationId=destination_id, accountType='page', account=page['name'])
+                # A fresh authorized Page-list entry is connection evidence only. Optional write/read
+                # grants and Page tasks retain independent capability checks.
+                matrix = self._capabilities(adapter, 'identity', grant['scopes'], [], self.clock(), updated)
+                channel['capabilityVerified'] = matrix['publish']['level'] == 'Direct'
+                for name, value in matrix.items():
+                    cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()",
+                                (workspace_id, connection_id, name, value['level'], value['evidence'], value['capabilityVersion'], value['verifiedAt']))
+                self.commands.engine.invalidate(state)
+                cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if adapter.id == "google_business_profile":
                 state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 channel = next((item for item in state["phase2"]["channels"] if item["id"] == connection_id), None)
@@ -640,6 +764,11 @@ class OAuthService:
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
+        facebook_page = None
+        if getattr(adapter, 'id', None) == 'facebook' and access_token:
+            facebook_page = adapter.session(access_token).get('page')
+            direct_allowed = direct_allowed and isinstance(facebook_page, dict) and bool(facebook_page.get('id'))
+        member_product = bool(getattr(adapter, 'id', None) == 'linkedin' and getattr(adapter, 'member_publishing_approved', lambda: False)())
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))
@@ -650,7 +779,10 @@ class OAuthService:
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
         )
-        if publish_granted and direct_allowed and publisher_ready:
+        if getattr(adapter, 'id', None) == 'facebook':
+            publisher_ready = publisher_ready and bool(isinstance(facebook_page, dict) and facebook_page.get('token')
+                and {'CREATE_CONTENT', 'PROFILE_PLUS_CREATE_CONTENT', 'MANAGE', 'PROFILE_PLUS_FULL_CONTROL'} & set(facebook_page.get('tasks') or []))
+        if publish_granted and (direct_allowed or member_product) and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
             schedule_scopes = set(adapter.capability_scopes("schedule"))
@@ -665,7 +797,8 @@ class OAuthService:
             if missing:
                 set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", "Some permissions weren't granted, so you post the last step yourself.", now, adapter.capability_version)
             else:
-                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself.", now, adapter.capability_version)
+                message = 'Rafii member publishing access has not yet been verified/configured for this deployment. Your account connection is retained.' if getattr(adapter, 'id', None) == 'linkedin' else f"{adapter.platform} hasn't approved Rafii's publishing yet, so you post the last step yourself."
+                set_level(matrix, "publish", "Assisted" if adapter.assisted_fallback else "Unsupported", message, now, adapter.capability_version)
 
         for name in ("analytics", "comments_read", "reply", "moderate"):
             required = set(adapter.capability_scopes(name))
@@ -694,6 +827,21 @@ class OAuthService:
         views = [{**customer_view(c, matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
+            provider = by_platform.get(view['platform']) or {}
+            if provider.get('officialCapabilities') is not None:
+                from .official_social import capability_states
+                adapter = self.providers.get(provider['id'])
+                raw = next(c for c in snapshot['state']['phase2']['channels'] if c['id'] == view['id'])
+                key = str(raw.get('providerAccountId', '')) + ':' + str(raw.get('destinationId') or '')
+                qualification = getattr(adapter, 'official_evidence', {}).get(key, {})
+                trusted = {**raw, 'eligibility': qualification.get('eligibility', {})}
+                view['officialCapabilities'] = capability_states(provider['id'], trusted,
+                    approvals=getattr(adapter, 'official_approvals', {}), evidence=qualification.get('features', {}),
+                    implemented=getattr(adapter, 'official_implemented', ()),
+                    connection_approval=getattr(adapter, 'connection_review', {}) if provider.get('publicConnectionReady') else {},
+                    member_publishing_approved=provider.get('memberPublishingApproved', False), now=now)
+                # Compatibility summary never promotes an eight-platform connection to Full Access.
+                view['socialReadiness']['fullyAvailable'] = False
         return {'channels': views, 'providers': catalog}
 
     def token_for_worker(self, workspace_id, connection_id):
@@ -710,11 +858,11 @@ class OAuthService:
                     raise AlphaError("This platform is paused for now. Your post history stays available.", 503)
                 now = self.clock()
                 expired = bool(expires and expires <= now)
-                if provider == 'instagram' and expired:
-                    raise AlphaError('Instagram access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
+                if provider in ('instagram', 'threads') and expired:
+                    raise AlphaError('Access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
                 # Refresh requires a still-valid token at least 24 hours old.
                 # Unknown age never grants permission to renew; reconnect remains available.
-                renew_instagram = (provider == 'instagram' and expires and 0 < expires - now <= 7 * 86400
+                renew_instagram = (provider in ('instagram', 'threads') and expires and 0 < expires - now <= 7 * 86400
                                    and issued_at is not None and now - issued_at >= 86400
                                    and refresh_supported and refresh_ct)
                 # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
@@ -733,9 +881,14 @@ class OAuthService:
                     expires = self.clock() + float(grant.get("expiresIn") or 3600)
                     cur.execute("UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,access_expires_at=to_timestamp(%s),rotated_at=now(),updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (access_ct, new_refresh, key_id, expires, workspace_id, connection_id))
                 access_token = self.vault.decrypt(access_ct, key_id)
+                if provider == 'x' and getattr(self._provider(provider), 'budget_enforced', False):
+                    from .social_budget import BudgetedToken, XRequestBudget
+                    access_token = BudgetedToken(access_token, XRequestBudget(self, workspace_id, connection_id))
                 inspector = getattr(self._provider(provider), "inspect_scopes", None)
                 if inspector:
                     reported = inspector(access_token, account_id)
+                    if reported is None:
+                        raise AlphaError('Provider permission verification is temporarily unavailable. Try again.', 503)
                     scopes = reported if isinstance(reported, list) and all(isinstance(s, str) for s in reported) else []
                     cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                 return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires}
@@ -759,6 +912,9 @@ class OAuthService:
         lower_bound = False
         try:
             grant = self.token_for_worker(workspace_id, connection_id)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, connection_id))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")
@@ -771,7 +927,7 @@ class OAuthService:
                       "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed"}
         except AlphaError:
             # Do not leak provider responses, nor label a transient network failure as token expiry.
-            result = {"connectionId": connection_id, "identityVerified": False, "scopes": [], "state": "verification_unavailable"}
+            return {"connectionId": connection_id, "identityVerified": False, "scopes": list(scopes), "state": "verification_unavailable"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -855,6 +1011,9 @@ class OAuthService:
         try:
             adapter = self._provider(provider_id)
             grant = self.token_for_worker(workspace_id, connection_id)
+            if provider_id == 'x' and getattr(adapter, 'budget_enforced', False):
+                from .social_budget import BudgetedToken, XRequestBudget
+                grant['accessToken'] = BudgetedToken(grant['accessToken'], XRequestBudget(self, workspace_id, connection_id))
             identity = adapter.identity(grant["accessToken"])
             drift = identity["providerAccountId"] != account_id
             inspected = hasattr(adapter, "inspect_scopes")

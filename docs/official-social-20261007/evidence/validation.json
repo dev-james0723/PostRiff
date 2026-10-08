@@ -1,0 +1,32 @@
+{
+  "task": "ci",
+  "provider": "depot",
+  "repo": "/Users/ouxianxing/Documents/James-Au-Studio-social-connection-recovery",
+  "runner": "depot-ubuntu-24.04-16",
+  "orgId": "jf34f85hr0",
+  "sourceHead": "e46917952b7ad1e8813966997eabb3dc495531d3",
+  "startedAt": "2026-10-07T04:56:46.589464+00:00",
+  "runId": "8mgd0lt1tv",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8mgd0lt1tv",
+  "remoteExitCode": 0,
+  "exitCode": 0,
+  "elapsedSeconds": 116.7,
+  "snapshot": {
+    "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "sourceHead": "e46917952b7ad1e8813966997eabb3dc495531d3",
+    "sourceFingerprint": "73b22b3fd749d8eb61f725086f62d287c1b974dd1d2f2487291ebc5d1f5fb824",
+    "patchSha256": "76c5258da67cf47072c736e456c7f7ce794495707e56a47d2b5f578ee504935e",
+    "transportMode": "remote_patch"
+  },
+  "candidateSourceSha": "afda8f5186091351dab12d60fb05eeb46475fc1e",
+  "classification": "synthetic regression on cloud; no real provider calls",
+  "checks": {
+    "npmAuditHigh": "PASS 0 vulnerabilities",
+    "lint": "PASS 0 errors 3 inherited warnings",
+    "typecheck": "PASS",
+    "nodeTests": "672 PASS",
+    "pythonTests": "220 PASS",
+    "disposablePostgres": "PASS all three test programs including 8 official persistence cases",
+    "nextProductionBuild": "PASS"
+  }
+}

@@ -205,6 +205,8 @@ export function createApi(getToken: TokenSource) {
     snapshot: (w: string) => get<Snapshot>(ws(w)),
     act: (w: string, expectedRevision: number, action: string, payload: Record<string, unknown> = {}) =>
       send<Snapshot>('POST', `${ws(w)}/actions`, { expectedRevision, action, payload }),
+    executeJob: (w: string, jobId: string, approvalDigest: string) =>
+      send<{ processed: number; execution: string; jobId: string }>('POST', `${ws(w)}/jobs/${encodeURIComponent(jobId)}/execute`, { approvalDigest }),
     media: (w: string, assetId: string) => blob(`${ws(w)}/media/${encodeURIComponent(assetId)}`),
     /** A connected account's profile picture; the digest in the URL makes a changed picture a new request. */
     channelPicture: (w: string, channelId: string, digest: string) =>
@@ -234,6 +236,14 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    nativeSocialRead: (w: string, id: string, feature: string, target: string, options: Record<string, string> = {}) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-read`, { feature, target, options }),
+    nativeSocialPreview: (w: string, id: string, action: string, target: string, payload: Record<string, unknown>) =>
+      send<import('./types').NativeSocialPreview>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action`, { action, target, payload }),
+    nativeSocialApprove: (w: string, id: string, actionId: string, digest: string) =>
+      send<import('./types').NativeSocialReading>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/native-action/${encodeURIComponent(actionId)}/approve`, { digest, confirmed: true }),
+    oauthContext: (provider: string, state: string) =>
+      send<{ workspaceId: string }>('POST', `/api/oauth/${encodeURIComponent(provider)}/context`, { state }),
     oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, string>) =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>

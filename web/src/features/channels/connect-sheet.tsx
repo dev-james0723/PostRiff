@@ -106,7 +106,7 @@ export function ConnectSheet({
   const { copy: importCopy, lang: importLang } = historyImportCopy(locale);
   const isMobile = useIsMobile();
   const [providerId, setProviderId] = useState<string>('');
-  const [capability, setCapability] = useState<ConnectCapability>('publish');
+  const [capability, setCapability] = useState<ConnectCapability>('identity');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<OAuthStart | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +158,7 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
+      const input: Record<string, string> = { ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}), ...(reconnect ? { connectionId: reconnect.channelId } : {}) };
       const started = await api.oauthStart(workspaceId, provider.id, capability, input);
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
@@ -371,7 +371,7 @@ export function ConnectSheet({
                 )}
                 {provider && (provider.executionPaused || !provider.productionReviewed) && (
                   <p className='text-muted-foreground text-xs leading-relaxed'>
-                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Publishing awaits platform review. Test accounts can still connect.'}
+                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Connection and publishing permissions are reviewed separately. See the connection requirements above.'}
                   </p>
                 )}
               </section>

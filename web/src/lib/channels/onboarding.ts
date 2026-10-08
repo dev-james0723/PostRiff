@@ -4,7 +4,7 @@ import type { ConnectCapability } from './state';
 /** Least privilege for a new account; reconnect preserves an explicitly requested use. */
 export function defaultConnectCapability(provider: ProviderView | undefined, wanted?: ConnectCapability): ConnectCapability {
   if (wanted && provider?.capabilities[wanted]) return wanted;
-  const order: ConnectCapability[] = ['posts_read', 'identity', 'publish', 'analytics', 'comments_read', 'reply'];
+  const order: ConnectCapability[] = ['identity', 'posts_read', 'publish', 'analytics', 'comments_read', 'reply'];
   return order.find((key) => provider?.capabilities[key]) ?? 'identity';
 }
 
@@ -29,7 +29,8 @@ export function providerReadinessLabel(provider: ProviderView): string {
     provider.configured === false
   )
     return 'Coming soon';
+  if (provider.readinessState === 'provider_review_pending') return 'Provider review pending';
   if (provider.connectReady === false) return provider.wave ? 'Needs approval' : 'Coming soon';
   if (provider.executionPaused) return 'Limited';
-  return provider.productionReviewed ? 'Connect' : 'Limited';
+  return (provider.publicConnectionReady ?? provider.productionReviewed) ? 'Connect' : 'Limited';
 }

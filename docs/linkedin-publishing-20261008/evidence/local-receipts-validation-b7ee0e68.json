@@ -1,0 +1,14 @@
+{
+  "atUtc": "2026-10-08T05:52:53.250773+00:00",
+  "state": "PASS",
+  "checks": [
+    "All changed/new evidence JSON parses",
+    "205 CSV/JSON capability rows agree on2 PARTIAL/203 NOT_RUN; no untested feature promoted",
+    "196 live cases remain2 PARTIAL/194 NOT_RUN/0fullpasses",
+    "Eight-provider acceptance remains1 basic/0complete",
+    "Candidate remains unapplied, exact two preview-only variables, hash matches durable receipt",
+    "Source/cloud inputs unchanged from verified b7; git diff --check PASS after CSV LF repair"
+  ],
+  "heavySuiteExecutedLocally": false,
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8"
+}

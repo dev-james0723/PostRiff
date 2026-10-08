@@ -13,4 +13,11 @@ export function assertPreviewEnvironment(env) {
   if (env.NEXT_PUBLIC_APP_URL !== env.POSTRIFF_STAGING_PUBLIC_BASE_URL || !env.NEXT_PUBLIC_APP_URL?.startsWith('https://')) {
     throw new Error('Preview browser origin must match the approved staging origin.');
   }
+  const oauthConfigured = Object.entries(env).some(([name, value]) =>
+    name.startsWith('POSTRIFF_OAUTH_') && (name.endsWith('CLIENT_ID') || name.endsWith('CLIENT_SECRET')) && value
+  );
+  const candidateOrigins = [env.VERCEL_BRANCH_URL, env.VERCEL_URL].filter(Boolean).map((host) => `https://${host}`);
+  if (oauthConfigured && !candidateOrigins.includes(env.NEXT_PUBLIC_APP_URL)) {
+    throw new Error('OAuth preview browser origin must use this deployment URL or its own Git branch URL.');
+  }
 }

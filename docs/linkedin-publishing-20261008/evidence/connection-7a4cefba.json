@@ -1,0 +1,25 @@
+{
+  "schema": "rafii.connection-preview.v1",
+  "observedAtUtc": "2026-10-08T07:52:13.295Z",
+  "execution": "REAL_NORMAL_UI_RELOAD_AND_OWN_WORKSPACE_RESPONSE",
+  "sourceSha": "7a4cefbaba92ac65ca17da8082a208a092faf5ca",
+  "deploymentId": "dpl_HUGEcuSxUJCJYwxaP31XTpNV2mrQ",
+  "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+  "status": 200,
+  "sameApprovedJobConnection": true,
+  "provider": "LinkedIn",
+  "account": "James Au",
+  "accountType": "member",
+  "connectionState": "publish_verified",
+  "grantedScopes": [
+    "openid",
+    "profile",
+    "w_member_social"
+  ],
+  "fullyAvailable": false,
+  "liveVerified": false,
+  "publicPostSubmitted": false,
+  "realIPhoneSafari": "NOT_RUN",
+  "renewal": "GENUINE_ELAPSED_TEST_PENDING"
+}

@@ -14,7 +14,7 @@ function helpers() {
 test('new connections request read/identity before publishing; explicit reconnect is preserved', () => {
   const { defaultConnectCapability } = helpers();
   const p = { capabilities: { identity: true, posts_read: true, publish: true } };
-  assert.equal(defaultConnectCapability(p), 'posts_read');
+  assert.equal(defaultConnectCapability(p), 'identity');
   assert.equal(defaultConnectCapability(p, 'publish'), 'publish');
   assert.equal(defaultConnectCapability({ capabilities: { identity: true, publish: true } }), 'identity');
 });

@@ -1,0 +1,2 @@
+JCB doctor snapshot safe: 515129 patch bytes
+JCB doctor PASS: authenticated, repository access positive, scripts/runtime/workflow/snapshot validated

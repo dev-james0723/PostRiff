@@ -9,6 +9,7 @@ from postriff_alpha.domain import AlphaError, clean, uid
 from .contracts import digest
 from .permissions import require
 from .providers import GRAPH_VERSION
+from .official_social import THREADS_VERSION
 
 REPLY_LIMIT = 500
 COMMENT_READ_PROVIDERS = ("threads", "instagram")
@@ -38,7 +39,7 @@ class AudienceService:
             return {"availability": "unavailable", "reason": "comments_read is not Direct for this connection."}
         grant = self.oauth.token_for_worker(workspace_id, connection_id)
         if provider == "threads":
-            url = f"https://graph.threads.net/{GRAPH_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
+            url = f"https://graph.threads.net/{THREADS_VERSION}/{quote(provider_post_id)}/replies?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
         else:
             url = f"https://graph.instagram.com/{GRAPH_VERSION}/{quote(provider_post_id)}/comments?" + urlencode({"fields": "id,text,username,timestamp", "access_token": grant["accessToken"]})
         response = self.transport("GET", url)
@@ -172,10 +173,10 @@ class AudienceService:
                         outcome = {"state": "uncertain", "confirmed": "Instagram reply response was inconclusive; do not resend"}
                 else:
                     user = manifest["providerAccountId"]
-                    container = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads", form={"media_type": "TEXT", "text": manifest["text"], "reply_to_id": manifest["replyToCommentId"], "access_token": grant["accessToken"]})
+                    container = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads", form={"media_type": "TEXT", "text": manifest["text"], "reply_to_id": manifest["replyToCommentId"], "access_token": grant["accessToken"]})
                     cid = str(container.get("body", {}).get("id", ""))
                     if container.get("status") == 200 and cid.isdigit():
-                        publish = self.transport("POST", f"https://graph.threads.net/{GRAPH_VERSION}/{quote(user)}/threads_publish", form={"creation_id": cid, "access_token": grant["accessToken"]})
+                        publish = self.transport("POST", f"https://graph.threads.net/{THREADS_VERSION}/{quote(user)}/threads_publish", form={"creation_id": cid, "access_token": grant["accessToken"]})
                         mid = str(publish.get("body", {}).get("id", ""))
                         outcome = {"state": "submitted", "reference": mid, "confirmed": "Threads returned a reply id; verification pending"} if publish.get("status") == 200 and mid.isdigit() else {"state": "uncertain", "confirmed": f"Reply container {cid} inconclusive; do not resend"}
                     elif container.get("status") in (401, 403):

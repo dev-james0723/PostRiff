@@ -1,0 +1,24 @@
+{
+  "execution": "cloud Next/Playwright; synthetic provider responses; no live qualification",
+  "checks": [
+    {
+      "width": 1280,
+      "granularCapabilities": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    },
+    {
+      "width": 390,
+      "granularCapabilities": true,
+      "noReadyFromIdentity": true,
+      "readHierarchy": true,
+      "immutableApproval": true,
+      "noDuplicateAfterUnknown": true,
+      "horizontalOverflow": false
+    }
+  ],
+  "visualInspection": "Both 1280 and 390 PNGs inspected; capability qualification and native reply panel readable; mobile account tabs intentionally horizontally scrollable; existing onboarding nudge overlays part of panel."
+}

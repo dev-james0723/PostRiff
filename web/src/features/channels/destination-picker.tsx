@@ -44,7 +44,7 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     try {
       await api.chooseChannelDestination(workspaceId, channelId, id);
       setItems((current) => current?.map((item) => ({ ...item, selected: item.id === id })) ?? null);
-      toast.success(label === 'Location' ? 'Business Profile location selected' : 'Rafii will post in this channel');
+      toast.success(`${label} selected. Publishing requires its own permission and approval.`);
       void client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Try again in a moment.');
@@ -57,21 +57,21 @@ export function DestinationPicker({ channelId, platform, label = 'Channel', disa
     <>
       <Button variant='quiet' className={CONTROL_44} disabled={disabled} onClick={() => void load()}>
         <Icons.send className='size-4' aria-hidden />
-        {label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
+        {label === 'Page' ? 'Choose Facebook Page' : label === 'Channel' ? 'Posting channel' : `Posting ${label}`}
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side={isMobile ? 'bottom' : 'right'} className={cn(SHEET_ELEVATED, 'data-[side=bottom]:max-h-[80dvh] data-[side=right]:sm:max-w-md')}>
           <SheetHeader className='gap-1.5 px-5 pt-5 pr-14 pb-4'>
-            <SheetTitle className='text-xl font-medium tracking-tight'>{label === 'Location' ? 'Choose a business location' : 'Where Rafii posts'}</SheetTitle>
+            <SheetTitle className='text-xl font-medium tracking-tight'>{label === 'Page' ? 'Choose your Facebook Page' : label === 'Location' ? 'Choose a business location' : 'Where Rafii posts'}</SheetTitle>
             <SheetDescription>
-              {label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
+              {label === 'Page' ? 'Select the Page for this connection. Publishing, comments and analytics each need their own permissions.' : label === 'Location' ? 'Choose the exact Business Profile location for this connection.' : `Rafii posts on ${platform} only in the ${label === 'Channel' ? 'channel' : label} you choose.`}
             </SheetDescription>
           </SheetHeader>
           <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-5 pb-[max(1rem,env(safe-area-inset-bottom))]'>
-            {error && <StateMessage kind='error' layout='inline' title={label === 'Location' ? "Couldn't load locations" : "Couldn't load channels"} description={error} />}
-            {!items && !error && <StateMessage kind='loading' layout='inline' title={label === 'Location' ? 'Loading locations…' : 'Loading channels…'} />}
+            {error && <StateMessage kind='error' layout='inline' title={label === 'Page' ? "Couldn't load Pages" : label === 'Location' ? "Couldn't load locations" : "Couldn't load channels"} description={error} />}
+            {!items && !error && <StateMessage kind='loading' layout='inline' title={label === 'Page' ? 'Loading Pages…' : label === 'Location' ? 'Loading locations…' : 'Loading channels…'} />}
             {items?.length === 0 && (
-              <StateMessage kind='empty' layout='inline' title={label === 'Location' ? 'No Business Profile locations available to this Google account.' : label === 'Page' ? 'No Pages you can post to.' : 'No text channels the bot can post in.'} />
+              <StateMessage kind='empty' layout='inline' title={label === 'Location' ? 'No Business Profile locations available to this Google account.' : label === 'Page' ? 'No Facebook Pages were granted.' : 'No text channels the bot can post in.'} description={label === 'Page' ? 'Check that you signed in to the Facebook account with Page access. Reconnect and allow the intended Page, then return here to select it.' : undefined} />
             )}
             {items?.map((item) => (
               <Button

@@ -10,7 +10,7 @@ import json
 import re
 import ssl
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 from postriff_alpha.domain import AlphaError
 
@@ -22,12 +22,14 @@ class _NoRedirect(HTTPRedirectHandler):
         raise AlphaError("Provider redirects are not allowed.", 502)
 
 
-def http_transport(method, url, headers=None, form=None, body=None, data=None):
+def http_transport(method, url, headers=None, form=None, body=None, data=None, response_format="json"):
     """Bounded HTTPS transport: 20 s timeout, no redirects, 256 KB response cap; JSON, form or raw bytes.
 
     `data` is an upload body sent as-is; the caller names its Content-Type in `headers`."""
     if not url.startswith("https://"):
         raise AlphaError("Provider requests must use HTTPS.", 502)
+    if response_format not in ('json','csv'): raise AlphaError('Unsupported provider response format.',500)
+    response_limit = 512_000 if response_format == 'csv' else 262144
     raw_upload = data
     data = raw_upload if raw_upload is not None else urlencode(form).encode() if form is not None else (json.dumps(body).encode() if body is not None else None)
     request_headers = {"Accept": "application/json", **(headers or {})}
@@ -41,15 +43,29 @@ def http_transport(method, url, headers=None, form=None, body=None, data=None):
     request = Request(url, data=data, headers=request_headers, method=method)
     try:
         with build_opener(_NoRedirect(), HTTPSHandler(context=ssl.create_default_context())).open(request, timeout=20) as response:
-            raw = response.read(262145)
+            raw = response.read(response_limit+1)
             status, response_headers = response.status, dict(response.headers)
     except HTTPError as error:
         with error:
-            raw, status, response_headers = error.read(262145), error.code, dict(error.headers)
+            raw, status, response_headers = error.read(response_limit+1), error.code, dict(error.headers)
     except (URLError, TimeoutError, OSError) as error:
         raise AlphaError("The provider is temporarily unreachable.", 503) from error
-    if len(raw) > 262144:
+    if len(raw) > response_limit:
         raise AlphaError("Provider response limit exceeded.", 502)
+    if response_format == 'csv' and status == 200:
+        import csv, hashlib, io
+        try:
+            reader = csv.reader(io.StringIO(raw.decode('utf-8-sig')))
+            columns = next(reader, [])
+            if not columns or len(columns) > 200 or len(set(columns)) != len(columns): raise ValueError('Invalid CSV columns')
+            rows = []
+            for row in reader:
+                if len(row) != len(columns): raise ValueError('Invalid CSV row')
+                rows.append(row)
+                if len(rows) > 500: break
+            parsed = {'columns':columns, 'rows':rows[:500], 'truncated':len(rows)>500, 'bytes':len(raw), 'sha256':hashlib.sha256(raw).hexdigest()}
+        except (UnicodeError,ValueError,csv.Error) as error: raise AlphaError('Provider report is not valid bounded CSV.',502) from error
+        return {'status':status, 'headers':{k.lower():v for k,v in response_headers.items()}, 'body':parsed}
     try:
         parsed = json.loads(raw) if raw else {}
     except ValueError:
@@ -71,14 +87,128 @@ class LinkedInProvider(OAuthProvider):
     account_requirement = "LinkedIn member profile."
     read_scope, publish_scope = "r_member_social", "w_member_social"
     publish_required = frozenset({"w_member_social"})
+    server_schedule = True
     EXPLAIN = {"publish": "Rafii will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
 
     history_approved = False
+    has_destinations = True
+    destination_scope, destination_label = "post", "Member or Organization"
+    SCOPES = {**SCOPES,
+              "organization_identity": ["openid", "profile", "r_organization_admin"],
+              "organization_posts_read": ["openid", "profile", "r_organization_admin", "r_organization_social"],
+              "organization_publish": ["openid", "profile", "w_organization_social", "rw_organization_admin"],
+              "organization_comments_read": ["openid", "profile", "r_organization_admin", "r_organization_social_feed"], "organization_reply": ["openid", "profile", "r_organization_admin", "w_organization_social_feed"],
+              "organization_analytics": ["openid", "profile", "rw_organization_admin"],
+              'organization_video_analytics': ['openid','profile','r_organization_admin','r_organization_social'],
+              "analytics": ["openid", "profile", "r_member_postAnalytics"],
+              "comments_read": ["openid", "profile", "r_member_social_feed"],
+              "reply": ["openid", "profile", "w_member_social_feed"]}
+
+    def member_publishing_approved(self):
+        """Verified Share product access for this deployment, never Community Management.
+
+        The operator supplies evidence; a customer still needs a real write grant
+        and must approve each exact operation. Preview evidence cannot enable production.
+        """
+        return self.member_publishing_status()['approved']
+
+    def member_publishing_status(self):
+        """Actionable presence/configuration diagnostics; never credential values."""
+        from urllib.parse import urlparse
+        environment = getattr(self, 'deployment_environment', None)
+        runtime = {'runtimeEnvironmentVerified': environment in ('preview', 'production'),
+                   'runtimeEnvironment': environment if environment in ('preview', 'production') else None}
+        def blocked(code, action):
+            return {'approved': False, 'code': code, **runtime,
+                    'message': 'Rafii member publishing access is not verified for this deployment. ' + action}
+        approvals = getattr(self, 'official_approvals', {})
+        record = approvals.get('share_on_linkedin') if isinstance(approvals, dict) else None
+        if not isinstance(record, dict):
+            return blocked('share_evidence_missing', 'The operator must record the existing Share on LinkedIn product evidence; customers do not need a developer app.')
+        origin = getattr(self, 'public_origin', '')
+        try:
+            parsed = urlparse(origin)
+        except (ValueError, TypeError):
+            return blocked('callback_origin_invalid', 'The operator must configure the fixed public HTTPS origin.')
+        if environment not in ('preview', 'production'):
+            return blocked('runtime_environment_unverified', 'The operator must verify VERCEL_ENV in the backend runtime.')
+        if record.get('environment') != environment:
+            return blocked('environment_mismatch', 'The operator must bind product evidence to this deployment environment.')
+        if parsed.scheme != 'https' or not parsed.hostname or any((parsed.path, parsed.query, parsed.fragment, parsed.username, parsed.password)):
+            return blocked('callback_origin_invalid', 'The operator must configure the fixed public HTTPS origin.')
+        if record.get('callbackUri') != origin + '/api/oauth/linkedin/callback':
+            return blocked('callback_mismatch', 'The operator must reconcile the registered callback with the exact callback generated by this deployment.')
+        if record.get('appId') != self.client_id:
+            return blocked('oauth_client_mismatch', 'The operator must verify that product evidence belongs to the configured LinkedIn OAuth client.')
+        if record.get('state') != 'approved' or record.get('audience') != 'external':
+            return blocked('external_access_unverified', 'The operator must verify public external-user access for the Share on LinkedIn product.')
+        if not isinstance(record.get('evidenceRef'), str) or not record['evidenceRef'].strip():
+            return blocked('evidence_reference_missing', 'The operator must retain the redacted provider-console evidence reference.')
+        approved = record.get('approvedScopes')
+        if not isinstance(approved, list) or not all(isinstance(scope, str) for scope in approved) or not self.publish_required.issubset(approved):
+            return blocked('share_scope_unverified', 'The operator must verify w_member_social for this app; organization and read permissions are separate.')
+        return {'approved': True, 'code': 'share_access_verified', **runtime,
+                'message': 'Share on LinkedIn product evidence matches this deployment. Account consent and exact-operation approval remain required.'}
 
     def capability_scopes(self, capability):
         if capability == "posts_read":
             return ["openid", "profile", "r_member_social"] if self.history_approved else []
-        return super().capability_scopes(capability)
+        scopes = super().capability_scopes(capability)
+        restricted = set(scopes) - {"openid", "profile", "w_member_social"}
+        return scopes if restricted.issubset(getattr(self, "approved_scopes", ())) else []
+
+    def api(self, token, method, path, **kwargs):
+        from .official_publishers import OfficialPublishers
+        return self.transport(method, "https://api.linkedin.com/rest" + path,
+                              headers=OfficialPublishers.linkedin_headers(token), **kwargs)
+
+    def destinations(self, token):
+        member = self.identity(token)
+        items = [{"id": member["providerAccountId"], "name": member["handle"], "kind": "member", "selected": False}]
+        scopes = set(self.inspect_scopes(token, member["providerAccountId"]) or [])
+        if not scopes.intersection({"r_organization_admin", "rw_organization_admin"}):
+            return items
+        for start in range(0, 1000, 100):
+            response = self.api(token, "GET", "/organizationAcls?" + urlencode({"q": "roleAssignee", "state": "APPROVED", "start": start, "count": 100}))
+            body = self._ok(response)
+            elements = body.get("elements") or []
+            for item in elements:
+                urn = item.get("organization")
+                if item.get("state") != "APPROVED" or not isinstance(urn, str) or not re.fullmatch(r"urn:li:organization:\d+", urn): continue
+                identity = self._ok(self.api(token, "GET", "/organizations/"+urn.rsplit(":", 1)[1]))
+                items.append({"id": urn, "name": identity.get("localizedName") or urn,
+                              "kind": "organization", "role": item.get("role"), "selected": False})
+            if len(elements) < 100: break
+        return list({item["id"]: item for item in items}.values())
+
+    def organization_authorized(self, token, member, organization, action):
+        if not re.fullmatch(r"urn:li:person:[A-Za-z0-9_-]+", str(member)) or not re.fullmatch(r"urn:li:organization:\d+", str(organization)) or action not in ("CREATE", "UPDATE", "DELETE", "READ", 'SHARE_ANALYTICS', 'FOLLOWER_ANALYTICS', 'PAGE_ANALYTICS'):
+            return False
+        # Permission-based authorization, refreshed for the exact operation. Role
+        # discovery is account selection, not proof that the selected action is allowed.
+        action_type = {"CREATE": "ORGANIC_SHARE_CREATE", "UPDATE": "ORGANIC_SHARE_EDIT", "DELETE": "ORGANIC_SHARE_DELETE", "READ": "ORGANIC_SHARE_VIEW_AS_AUTHOR", 'SHARE_ANALYTICS':'UPDATE_ANALYTICS_READ', 'FOLLOWER_ANALYTICS':'FOLLOWER_ANALYTICS_READ', 'PAGE_ANALYTICS':'VISITOR_ANALYTICS_READ'}[action]
+        family = 'organizationAnalyticsAuthorizationAction' if action.endswith('ANALYTICS') else 'organizationContentAuthorizationAction'
+        key = f"(impersonator:{quote(member, safe='')},organization:{quote(organization, safe='')},action:({family}:(actionType:{action_type})))"
+        response = self.api(token, "GET", "/organizationAuthorizations/" + key)
+        return response.get("status") == 200 and response.get("body", {}).get("status", {}).get("com.linkedin.organization.Approved") == {}
+
+    def organization_feed_authorized(self, token, member, organization, *, write=False):
+        """Refresh the documented feed roles, independently of content authorization.
+
+        r_organization_admin enables the role finder. Never require the broader
+        rw_organization_admin/ORGANIC_SHARE_CREATE for a feed comment or reaction.
+        """
+        if not re.fullmatch(r"urn:li:person:[A-Za-z0-9_-]+", str(member)) or not re.fullmatch(r"urn:li:organization:\d+", str(organization)):
+            return False
+        roles = {"ADMINISTRATOR", "DIRECT_SPONSORED_CONTENT_POSTER"}
+        if write: roles.add("RECRUITING_POSTER")
+        for start in range(0, 1000, 100):
+            body = self._ok(self.api(token, "GET", "/organizationAcls?"+urlencode({"q":"roleAssignee", "state":"APPROVED", "start":start, "count":100})))
+            elements = body.get("elements") or []
+            if any(item.get("organization") == organization and item.get("state") == "APPROVED" and item.get("role") in roles and item.get("roleAssignee", member) == member for item in elements):
+                return True
+            if len(elements) < 100: break
+        return False
 
     def explain(self, capability):
         if capability == "identity":
@@ -122,11 +252,18 @@ class ThreadsProvider(OAuthProvider):
     TOKEN = "https://graph.threads.net/oauth/access_token"
     LONG_LIVED = "https://graph.threads.net/access_token"
     REFRESH = "https://graph.threads.net/refresh_access_token"
-    ME = f"https://graph.threads.net/{GRAPH_VERSION}/me"
+    from .official_social import THREADS_VERSION
+    ME = f"https://graph.threads.net/{THREADS_VERSION}/me"
     account_requirement = "Threads profile."
     publish_required = frozenset({"threads_basic", "threads_content_publish"})
     SCOPES = {"identity": ["threads_basic"], "publish": ["threads_basic", "threads_content_publish"], "schedule": ["threads_basic", "threads_content_publish"], "analytics": ["threads_basic", "threads_manage_insights"], "comments_read": ["threads_basic", "threads_read_replies"], "reply": ["threads_basic", "threads_manage_replies"]}
     EXPLAIN = {"publish": "Rafii will create Threads posts on this profile only when you approve each exact post.", "analytics": "Allows Rafii to read available views, likes, replies, reposts and quotes for this account's own posts. When History Import is available, you can separately confirm reading up to 90 days, 300 posts and 12 pages of historical metadata and analytics. Rafii retains post IDs, dates, media types, links and caption length, never caption text or caption hashes. Disconnecting removes imported metadata and its analytics; delayed purges retry and block further imports. Analytics permission alone does not start an import.", "comments_read": "Rafii will read replies to your posts.", "reply": "Rafii will post replies only after you approve the exact text."}
+    SCOPES = {**SCOPES, "posts_read": ["threads_basic"],
+              "reply": ["threads_basic", "threads_content_publish"],
+              "moderate": ["threads_basic", "threads_manage_replies"],
+              "delete": ["threads_basic", "threads_delete"],
+              "mentions": ["threads_basic", "threads_manage_mentions"]}
+    SCOPES = {**SCOPES, 'location':['threads_basic','threads_location_tagging']}
 
     def authorize_url(self, redirect, state, challenge, scopes):
         return self.AUTH + "?" + urlencode({"client_id": self.client_id, "redirect_uri": redirect, "scope": ",".join(scopes), "response_type": "code", "state": state})
@@ -142,7 +279,7 @@ class ThreadsProvider(OAuthProvider):
         response = self.transport('GET', 'https://graph.threads.net/debug_token?' + urlencode({'input_token':access_token}), headers={'Authorization':'Bearer ' + access_token})
         data = response.get('body', {}).get('data', {})
         scopes = data.get('scopes') if isinstance(data, dict) else None
-        if response.get('status') != 200 or data.get('is_valid') is not True or not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
+        if response.get('status') != 200 or data.get('is_valid') is not True or str(data.get('app_id')) != str(self.client_id) or not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
             return None
         if expected_account and str(data.get('user_id')) != str(expected_account):
             return None
@@ -177,10 +314,15 @@ class InstagramProvider(OAuthProvider):
     server_schedule = True
     SCOPES = {"identity": ["instagram_business_basic"], "publish": ["instagram_business_basic", "instagram_business_content_publish"], "schedule": ["instagram_business_basic", "instagram_business_content_publish"], "analytics": ["instagram_business_basic", "instagram_business_manage_insights"], "comments_read": ["instagram_business_basic", "instagram_business_manage_comments"], "reply": ["instagram_business_basic", "instagram_business_manage_comments"]}
     EXPLAIN = {"publish": "Rafii will publish image posts to this professional account only when you approve each exact post (limit 100 per 24 hours).", "analytics": "Allows Rafii to read available reach, views, likes, comments, saves and shares for this account's own posts. When History Import is available, you can separately confirm reading up to 90 days, 300 posts and 12 pages of historical metadata and analytics. Rafii retains post IDs, dates, media types, links and caption length, never caption text or caption hashes. Disconnecting removes imported metadata and its analytics; delayed purges retry and block further imports. Analytics permission alone does not start an import.", "comments_read": "Rafii will read comments on your posts.", "reply": "Rafii will reply only after you approve the exact text."}
+    SCOPES = {**SCOPES, "moderate": ["instagram_business_basic", "instagram_business_manage_comments"],
+              "messaging": ["instagram_business_basic", "instagram_business_manage_messages"]}
 
     def capability_scopes(self, capability):
         if capability == "posts_read":
             return ["instagram_business_basic"]
+        if capability == 'analytics':
+            from .official_social import CATALOG
+            if CATALOG['instagram']['insights'].support != 'documented': return []
         return super().capability_scopes(capability)
 
     def explain(self, capability):
@@ -274,6 +416,38 @@ def registry_from_environment(values, transport=None):
                                      and (enabled or not getattr(cls, "feature_flag_required", False))
                                      and (provider_verified or not getattr(cls, "provider_approval_required", False)))
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
+        adapter.approved_scopes = frozenset(approved_scopes)
+        from .official_social import CATALOG
+        def records(suffix):
+            try:
+                data = json.loads(values.get(prefix + suffix) or '{}')
+                return data if isinstance(data, dict) else {}
+            except (ValueError, TypeError):
+                return {}
+        adapter.official_approvals = records('PRODUCT_APPROVALS_JSON')
+        if provider_id == 'linkedin':
+            adapter.public_origin = values.get('POSTRIFF_PUBLIC_BASE_URL', '')
+            adapter.deployment_environment = values.get('VERCEL_ENV')
+        if provider_id in CATALOG:
+            adapter.connection_review = records('CONNECTION_REVIEW_JSON')
+        adapter.official_evidence = records('E2E_EVIDENCE_JSON')
+        if provider_id == 'x':
+            adapter.budget_enforced = True
+            adapter.budget_policies = records('BUDGET_POLICIES_JSON')
+            adapter.onboarding_budget_policy = records('ONBOARDING_BUDGET_JSON')
+        if provider_id == 'facebook':
+            configs = records('LOGIN_CONFIGS_JSON')
+            adapter.login_configs = {tuple(sorted(key.split(','))): value for key, value in configs.items()
+                                     if isinstance(key, str) and isinstance(value, str) and re.fullmatch(r'\d{5,25}', value)}
+        if provider_id == 'tiktok':
+            adapter.verified_media_domains = frozenset(str(values.get(prefix+'VERIFIED_MEDIA_DOMAINS', '')).split(',')) - {''}
+        from .official_social import IMPLEMENTED
+        adapter.official_implemented = tuple(IMPLEMENTED.get(provider_id, ()))
+        adapter.official_social_enabled = str(values.get("POSTRIFF_OFFICIAL_SOCIAL_ENABLED", "")).lower() == "true"
+        if provider_id == 'linkedin' and prefix + 'OFFICIAL_SOCIAL_ENABLED' in values:
+            # An independently approved LinkedIn rollout need not enable every
+            # provider behind the historical shared workflow switch.
+            adapter.official_social_enabled = str(values[prefix + 'OFFICIAL_SOCIAL_ENABLED']).lower() == 'true'
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,
             "operatorDisabled": operator_disabled,

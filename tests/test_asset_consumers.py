@@ -33,21 +33,21 @@ class ManifestMediaTest(unittest.TestCase):
         manifest = self.manifest(IMAGE)
         self.assertEqual([m["id"] for m in manifest["media"]], [IMAGE["id"]])
 
-    def test_a_verified_video_is_refused_on_an_image_channel(self):
+    def test_verified_linkedin_video_is_preserved_but_unverified_video_is_refused(self):
         verified_video = {**VIDEO, "durationSource": "container", "bucket": "private-videos",
                           "objectName": "b" * 32 + ".mp4", "etag": "etag-1",
                           "verified": {"container": True, "locationChecked": True}}
-        with self.assertRaises(AlphaError) as refused:
-            self.manifest(verified_video)
-        self.assertEqual((refused.exception.status, str(refused.exception)),
-                         (409, "This channel doesn't support video posts from Rafii."))
+        manifest = self.manifest(verified_video)
+        self.assertEqual(manifest['media'][0]['mime'], 'video/mp4')
+        with self.assertRaises(AlphaError):
+            self.manifest({**verified_video, 'verified': {'container': False}})
 
     def test_undecoded_or_deleted_images_are_refused(self):
         variant = self.draft()
         for asset in ({**IMAGE, "processing": "pending"}, {**IMAGE, "deleted": True}, {**IMAGE, "deletionPending": True}):
             with self.subTest(asset=asset), self.assertRaises(AlphaError) as refused:
                 self.manifest(asset, variant)
-            self.assertIn("Decoded media", str(refused.exception))
+            self.assertIn("Decoded image", str(refused.exception))
 
 
 class SuggestionAndLinkTest(unittest.TestCase):

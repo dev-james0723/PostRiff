@@ -1,0 +1,13 @@
+{
+  "execution": "read-only tracked delta boundary/pattern inspection; not comprehensive credential validity proof",
+  "sourceHead": "2e502b288a2562c48dcd5985515d35aba51e6f1d",
+  "baseSha": "07b3295eb5518f604760e507c0bbbb2d73c8e048",
+  "trackedDeltaFileCount": 150,
+  "patchBytes": 3204716,
+  "patchSha256": "75bbac0f403955aab01f2d5f8db4a4075d77106183361dbeabf6a0885d13bca2",
+  "forbiddenCredentialFiles": 0,
+  "credentialPatternFindings": [],
+  "untrackedFilesIncluded": false,
+  "environmentFilesIncluded": false,
+  "workflowSha256": "4d54e572641bda5d9ff11ab96da788c4daed9a8eb4357404de4b5c087f3e7295"
+}

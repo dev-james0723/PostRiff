@@ -31,7 +31,12 @@ def main(scripts: list[str]) -> int:
         data, log = Path(tmp) / "data", Path(tmp) / "postgres.log"
         # UTF8 explicitly: --no-locale alone yields SQL_ASCII, which rejects unicode draft text.
         subprocess.run([str(PG / "initdb"), "-D", str(data), "-A", "trust", "--no-locale", "-E", "UTF8"], check=True, stdout=subprocess.DEVNULL)
-        subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {PORT}", "-w", "start"], check=True, stdout=subprocess.DEVNULL)
+        # Own the Unix socket directory too. Cloud runners need not belong to
+        # the system postgres group that owns /var/run/postgresql.
+        started = subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {PORT} -k {tmp}", "-w", "start"], stdout=subprocess.DEVNULL)
+        if started.returncode:
+            print(log.read_text()[-4000:] if log.exists() else 'PostgreSQL startup log unavailable.', file=sys.stderr)
+            return started.returncode
         try:
             dsn = f"host=127.0.0.1 port={PORT} dbname=postgres"
             subprocess.run([str(PG / "psql"), dsn, "-v", "ON_ERROR_STOP=1", "-q", "-f", str(ROOT / "tests/phase2/rls.sql")], check=True, stdout=subprocess.DEVNULL)
@@ -46,7 +51,7 @@ def main(scripts: list[str]) -> int:
         finally:
             subprocess.run([str(PG / "pg_ctl"), "-D", str(data), "-m", "fast", "-w", "stop"], check=True, stdout=subprocess.DEVNULL)
     failed = [r["script"] for r in results if r["exit"]]
-    print(json.dumps({"status": "pass" if not failed else "fail", "execution": "disposable-local-postgres", "failed": failed}))
+    print(json.dumps({"status": "pass" if not failed else "fail", "execution": "disposable-cloud-postgres" if os.environ.get('CI') == 'true' and sys.platform == 'linux' else "disposable-local-postgres", "failed": failed}))
     return 1 if failed else 0
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 
 VIDEO_MIMES = ("video/mp4", "video/quicktime")
-READY = {"image": "decoded", "video": "ready"}
+READY = {"image": "decoded", "video": "ready", "document": "validated"}
 
 
 def kind_of(asset):
@@ -22,6 +22,8 @@ def kind_of(asset):
         return "video"
     if mime.startswith("image/"):
         return "image"
+    if mime == "application/pdf":
+        return "document"
     return None
 
 
@@ -62,4 +64,4 @@ def is_postable_video(asset):
 
 def is_library_asset(asset):
     """Photos and videos the Library lists (posters and frames live inside their video, never as assets)."""
-    return _live(asset) and kind_of(asset) in ("image", "video")
+    return _live(asset) and kind_of(asset) in ("image", "video", "document")

@@ -1,23 +1,24 @@
 {
-  "packageRoot": "web",
   "provider": "depot",
-  "packageManager": "npm",
+  "checkoutPersistCredentials": true,
+  "orgId": "jf34f85hr0",
+  "baseRef": "refs/remotes/origin/consumer-saas",
+  "packageRoot": "web",
   "nodeVersion": "24.15.0",
-  "installCommand": "npm ci",
-  "tasks": {
-    "lint": "lint",
-    "typecheck": "typecheck",
-    "build": "build",
-    "test": "test:library",
-    "ci": "ci:library"
-  },
+  "packageManager": "npm",
+  "packageManagerVersion": "11.12.1",
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
     "build": "depot-ubuntu-24.04-16"
   },
-  "outputs": [],
-  "envAllowlist": [],
-  "localFallback": false,
+  "tasks": {
+    "lint": "lint",
+    "typecheck": "typecheck",
+    "build": "build",
+    "test": "test:jcb",
+    "ci": "ci:jcb",
+    "e2e": "e2e:social"
+  },
   "environment": {
     "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
     "NEXT_PUBLIC_SUPABASE_URL": "",
@@ -27,24 +28,35 @@
     "POSTRIFF_DEV_SSR": "1",
     "LC_ALL": "C"
   },
-  "taskArgs": {},
+  "envAllowlist": [],
+  "localFallback": false,
+  "outputs": [],
   "inputExcludes": [
     "docs/**",
-    "desktop/**",
-    "vendor/**",
-    "studio/**",
-    "motion/**",
     "downloads/**",
+    "motion/**",
     "artifacts/**",
-    "*.zip"
+    "vendor/**",
+    ".preview/**",
+    "audio-reactive-fix/**",
+    "PostRiff_Research_2026-09-18/**",
+    "*.zip",
+    "desktop/**",
+    "studio/**"
   ],
-  "checkoutPersistCredentials": true,
+  "installCommand": "npm ci",
+  "taskArgs": {
+    "test": [
+      "--backend-only"
+    ],
+    "lint": [
+      "--format",
+      "json"
+    ]
+  },
   "framework": "next",
-  "transportMode": "remote_patch",
   "cacheScope": "e408bbcd8242",
-  "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "07c94c203c8ba4ed14ec71d9caae7e9c80bd3d8347977a112dcab67c85722cf7",
-  "orgId": "jf34f85hr0",
-  "baseRef": "refs/remotes/origin/consumer-saas"
+  "lockfileSha256": "9460a6ea4d9a6bb7dd1d9a15dbef03028ce10fed3bee61f75d362e0f609c15f4",
+  "transportMode": "remote_patch"
 }

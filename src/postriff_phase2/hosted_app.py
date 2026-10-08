@@ -190,6 +190,8 @@ def chat_media_from_environment(values):
 def runtime_from_environment(environ=None):
     from .deployment import isolated_environment
     values = isolated_environment(os.environ if environ is None else environ)
+    worker_binding = ({'environment': 'preview', 'origin': values['POSTRIFF_PUBLIC_BASE_URL'].rstrip('/')}
+                      if values.get('VERCEL_ENV') == 'preview' else None)
     database = postgres_factory(values.get("POSTRIFF_DATABASE_URL"))
     project_url = values.get("POSTRIFF_SUPABASE_URL")
     publishable = values.get("POSTRIFF_SUPABASE_PUBLISHABLE_KEY")
@@ -202,11 +204,12 @@ def runtime_from_environment(environ=None):
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
     # Adapters mount only with client credentials; live execution only when a provider is
-    # explicitly marked reviewed. Otherwise the worker stays fail-closed (DisabledHostedSocial).
+    # explicitly marked reviewed, or exact member Share product evidence is verified.
+    # Otherwise the worker stays fail-closed (DisabledHostedSocial).
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", worker_binding=worker_binding)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -215,7 +218,8 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+        p.production_reviewed or getattr(p, "account_scoped_direct", False)
+        or (getattr(p, 'id', None) == 'linkedin' and getattr(p, 'member_publishing_approved', lambda: False)()) for p in providers.values()
     ) else None
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
@@ -236,7 +240,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), worker_binding=worker_binding)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -732,6 +736,8 @@ class HostedApplication:
                 return self._json(start_response, 200, service.security_events(token))
             if path == "/api/me/invitations" and method == "GET":
                 return self._json(start_response, 200, service.my_invitations(token))
+            if len(oauth_parts) == 4 and oauth_parts[:2] == ['api', 'oauth'] and oauth_parts[3] == 'context' and method == 'POST':
+                return self._json(start_response, 200, service.oauth.completion_context(token, oauth_parts[2], self._body(environ).get('state')))
             if path == "/api/workspaces" and method == "GET":
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":
@@ -788,6 +794,14 @@ class HostedApplication:
                 return phone_http.handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] in coworker_http.RESOURCES:
                 return coworker_http.handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 6 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'jobs' and parts[5] == 'execute' and method == 'POST':
+                body = self._body(environ)
+                if set(body) != {'approvalDigest'}:
+                    raise AlphaError('Send only the exact stored approval for this post.')
+                if self.worker is None:
+                    raise AlphaError('The publishing worker is unavailable. Reload the post status before continuing.', 503)
+                return self._json(start_response, 202, self.worker.execute_job(service.repository, parts[2], token,
+                                                                             parts[4], body.get('approvalDigest')))
             if len(parts) >= 4 and parts[:2] == ['api','workspaces'] and parts[3]=='growth':
                 return growth_http.handle(self,environ,start_response,service,token,method,parts)
             if len(parts) == 5 and parts[:2] == ["api", "workspaces"] and parts[3:] == ["billing", "credit-packs"] and method == "GET":
@@ -849,6 +863,15 @@ class HostedApplication:
                     body = self._body(environ)
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
+                if len(parts) == 6 and parts[5] == 'native-read' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.read(parts[2], token, parts[4], body.get('feature'), body.get('target'), body.get('options')))
+                if len(parts) == 6 and parts[5] == 'native-action' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 201, oauth.native_social.preview(parts[2], token, parts[4], body.get('action'), body.get('target'), body.get('payload')))
+                if len(parts) == 8 and parts[5] == 'native-action' and parts[7] == 'approve' and method == 'POST':
+                    body = self._body(environ)
+                    return self._json(start_response, 200, oauth.native_social.approve(parts[2], token, parts[6], body.get('digest'), body.get('confirmed')))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
                     return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":

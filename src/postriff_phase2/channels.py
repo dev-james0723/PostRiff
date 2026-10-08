@@ -4,6 +4,8 @@ Levels: Direct (official API + production app/scopes verified), Assisted (export
 no execution claim), Bridge (reviewed device workflow), Unsupported. Catalog presence is
 never evidence; a level above Unsupported requires an evidence string and a verified_at.
 """
+import math
+
 from postriff_alpha.domain import AlphaError
 
 CAPABILITIES = ("identity", "publish", "schedule", "analytics", "comments_read", "reply", "moderate", "media_types", "webhooks")
@@ -42,6 +44,8 @@ def connection_state(channel, now):
         return "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"
+    if channel.get("platform") == "Facebook" and channel.get("accountType") != "page":
+        return "identity_known"
     if channel.get("capabilityVerified"):
         return "publish_verified"
     return "read_verified"
@@ -49,9 +53,18 @@ def connection_state(channel, now):
 
 def customer_view(channel, matrix, now):
     """What the Channels card shows: identity, then one row per capability, never a blended 'Ready'."""
+    # A successful identity re-check records channel.verifiedAt. Per-operation
+    # evidence keeps its own timestamp and is never renewed by an identity read.
+    identity_verified_at = channel.get("verifiedAt")
+    if (not channel.get("identityVerified") or channel.get("revoked")
+            or channel.get("evidenceSource") != "live_provider"
+            or type(identity_verified_at) not in (int, float)
+            or not math.isfinite(identity_verified_at) or not 0 < identity_verified_at <= now):
+        identity_verified_at = None
     return {
         "id": channel["id"], "platform": channel["platform"], "account": channel["account"], "accountType": channel.get("accountType"),
         "connectionState": connection_state(channel, now),
+        "identityVerifiedAt": identity_verified_at,
         "capabilities": {name: matrix.get(name, unsupported_matrix()[name]) for name in CAPABILITIES},
         "evidenceSource": channel.get("evidenceSource", "synthetic"),
         "scopes": list(channel.get("scopes", [])),

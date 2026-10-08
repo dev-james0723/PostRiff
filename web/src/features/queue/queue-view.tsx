@@ -644,6 +644,7 @@ function Queue() {
         jobs={allJobs}
         ready={loaded}
         nowSeconds={nowSeconds}
+        workerBinding={snapshot.data?.workerBinding}
         canApprove={canApprove}
         canSchedule={canSchedule}
         cancelPending={act.isPending}
