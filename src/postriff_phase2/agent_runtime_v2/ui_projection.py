@@ -246,7 +246,7 @@ def egress_decision(result: dict, *, scope: str = "workspace") -> dict:
             "inputs": "binding schemas, counts, kinds, states, rule labels and opaque references only", "privateText": False}
 
 
-def project_ui_context(cur, auth, verified_result, surface, selection_state):  # lane D
+def project_ui_context(cur, auth, verified_result, surface, selection_state, *, flags=None):  # lane D
     """The authorized projection of a completed turn for one artifact (see module docstring). It also carries the
     server manifest (`manifest`, never sent to a model or browser as is) built from the same journeys for this member."""
     from . import ui_capabilities
@@ -266,7 +266,7 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state):  #
                                       "selection": [r for r in refs if r in ((selection_state or {}).get("references") or [])][:12] if isinstance(selection_state, dict) else [],
                                       "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"]},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}
-    manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope)
+    manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope, flags=flags)
     projection.update({"manifest_id": manifest["manifestId"], "manifest": manifest,
                        "data_bindings": [{"name": q["name"], "description": q["description"], "argsSchema": q["argsSchema"], "refreshMinSeconds": q["refreshMinSeconds"],
                                           "pageSize": q["pageSize"], "dataShape": q.get("dataShape") or ui_domain.data_shape(q["name"]),

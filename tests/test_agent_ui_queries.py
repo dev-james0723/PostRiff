@@ -228,6 +228,13 @@ class FounderTest(unittest.TestCase):
         self.assertEqual(out["data"]["rows"], [{"value": None}], "a null cost stays null")
         self.assertEqual(out["sourceRefs"], ["receipt:r2"])
 
+    def test_only_a_founder_runtime_carries_founder_scope(self):
+        from postriff_phase2.agent_runtime_v2 import ui_queries as q
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace()))
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace(founder={"mode": "live"})))
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace(founder={"namespace": "workspace:x"})))
+        self.assertEqual(q.founder_scope_of(SimpleNamespace(founder={"namespace": "founder:live:prod"}))["namespace"], "founder:live:prod")
+
     def test_without_the_founder_scope_nothing_is_read(self):
         out = founder.founder_metrics(dctx(), {"metricIds": ["mrr"], "period": "30d"}, None)
         self.assertEqual(out["state"], "unavailable")

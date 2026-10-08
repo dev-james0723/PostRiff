@@ -88,7 +88,7 @@ def _journeys(projection: dict, scope: str) -> list[str]:
     return [j for j in dict.fromkeys(raw) if j in allowed]
 
 
-def build_manifest(cur, auth, projection, *, scope='workspace'):
+def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
     """The server record for one artifact: per-journey allowlisted query bindings and the action controls this member's
     role allows, with the server-only metadata (principal, scope, permission revision, egress, approved refs, query
     constraints, action targets, expiry). Never contains tokens, signed URLs or private text."""
@@ -108,7 +108,9 @@ def build_manifest(cur, auth, projection, *, scope='workspace'):
             constraints[name] = {"requirement": binding.requirement, "pageMax": ui_contracts.BOUNDS["queryPageMax"],
                                  "windowDays": ui_contracts.BOUNDS["queryWindowDays"], "search": binding.search}
     actions, targets = [], {}
-    if scope == "workspace":
+    # With the actions kill switch off (flags from RuntimeConfig.genui_for), the presenter is offered no write control at all;
+    # the action routes refuse independently either way.
+    if scope == "workspace" and (flags is None or flags.get("actions")):
         for journey in journeys:
             for action_id in ui_domain.JOURNEY_ACTIONS.get(journey, []):
                 binding = ui_domain.ACTIONS[action_id]
