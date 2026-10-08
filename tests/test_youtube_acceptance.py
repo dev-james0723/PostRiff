@@ -28,7 +28,9 @@ def doc(value):
 
 
 def bundle(selected=('identity',)):
-    template = read_document(ROOT / 'docs/youtube/real-e2e-matrix.json')
+    # The reviewed, hash-bound synthetic template travels with tests. JCB
+    # intentionally excludes deployment receipts and other docs from transport.
+    template = read_document(ROOT / 'tests/fixtures/youtube-real-e2e-matrix.json')
     matrix = copy.deepcopy(template.value)
     current = {'bindings': copy.deepcopy(BINDINGS), 'provider': 'youtube', 'providerAccountId': CHANNEL,
         'revoked': False, 'scopes': [MANAGE, READ], 'credentialUpdatedAt': VERIFIED,

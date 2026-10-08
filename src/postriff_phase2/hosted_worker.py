@@ -1,6 +1,7 @@
 """Bounded PostgreSQL worker for browser-independent Phase 2 schedules."""
 import copy
 import json
+import os
 import time
 import uuid
 
@@ -11,6 +12,36 @@ from .contracts import digest
 from .outcomes import normalize_result, unknown
 from .permissions import Membership
 from .learning_service import record_published
+from .youtube.agent import assert_job_authority
+
+
+def configured_worker_limits(values=None):
+    """Server-only tuning; existing cron defaults and safe per-invocation bounds."""
+    values = os.environ if values is None else values
+    try:
+        jobs = int(values.get('POSTRIFF_WORKER_MAX_JOBS', 10))
+        seconds = float(values.get('POSTRIFF_WORKER_MAX_SECONDS', 20))
+    except (ValueError, TypeError, OverflowError):
+        raise AlphaError('Worker budgets require one to 25 jobs and one to 45 seconds.', 503,
+                         code='worker_budget_configuration') from None
+    if not 1 <= jobs <= 25 or not 1 <= seconds <= 45:
+        raise AlphaError('Worker budgets require one to 25 jobs and one to 45 seconds.', 503,
+                         code='worker_budget_configuration')
+    return jobs, seconds
+
+
+def due_workspaces_sql(capacity_ready=True):
+    """The actual bounded selection, shared with disposable query-plan acceptance."""
+    dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
+    dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
+    return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
+        """ + dispatch_join + """
+        WHERE w.state ? 'phase2' AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
+          AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
+            WHERE coalesce(j->>'state','') NOT IN ('verified','failed','canceled','held')
+              AND coalesce((j->>'leaseUntil')::double precision,0)<=%s
+              AND coalesce((j->>'nextAt')::double precision,0)<=%s)
+        ORDER BY """ + dispatch_order + """ LIMIT 100 FOR UPDATE OF w SKIP LOCKED"""
 
 
 class DisabledHostedSocial:
@@ -32,6 +63,7 @@ class PostgresWorker:
         # Optional server-side hook (e.g. native insights ingestion) run in the same transaction once verified.
         self.on_verified = on_verified
         self.youtube_maintenance = youtube_maintenance
+        self.capacity_intervention = None
 
     def _event(self, job, state, message):
         job["state"] = state
@@ -42,6 +74,7 @@ class PostgresWorker:
         try:
             if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())
+            assert_job_authority(state, job, self.clock())
             manifest = job['manifest']
             channel = find(state['phase2']['channels'], manifest['channelId'])
             cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
@@ -56,6 +89,7 @@ class PostgresWorker:
                     and recovery['approvedAt'] < recovery['expiresAt'] <= recovery['approvedAt'] + 36 * 3600):
                 expires = max(expires, recovery['expiresAt'])
             return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve')
+                        and (not job.get('youtubeAgent') or member[0] == 'owner')
                         and job['approvalDigest'] == digest(manifest) and job['approvedBy'] == manifest['actor']
                         and self.commands.engine.current(state, manifest)
                         and self.commands.engine.channel_state(channel) == 'Ready for posting'
@@ -69,14 +103,23 @@ class PostgresWorker:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
                 if not cur.fetchone()[0]:
                     return None
+                cur.execute("SELECT to_regclass('public.pr_worker_tenants')")
+                capacity_ready = cur.fetchone()[0] is not None
+                self.capacity_intervention = None if capacity_ready else {
+                    'code': 'youtube_capacity_schema', 'youtubeDispatch': 'paused',
+                    'message': 'YouTube dispatch requires reviewed migration 097. No YouTube provider request is sent; other platforms continue.',
+                    'nextAction': 'Review and apply migration 097, then verify admission and worker execution.'}
                 # A founder account block freezes the workspace like a pending deletion; lifting it resumes the same jobs.
-                cur.execute("SELECT id::text,revision,state FROM public.pr_workspaces WHERE state ? 'phase2' AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock' ORDER BY id FOR UPDATE SKIP LOCKED")
+                # Select only tenants with due work, oldest dispatch first. The
+                # durable cursor survives cron/worker restarts; a busy tenant
+                # cannot monopolize every chunk lease by sorting before others.
+                cur.execute(due_workspaces_sql(capacity_ready), (self.clock(), self.clock()))
                 for workspace_id, revision, raw_state in cur.fetchall():
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
                     original = json.dumps(state, sort_keys=True)
                     self.commands.engine.invalidate(state)
                     selected = None
-                    for job in state["phase2"]["jobs"]:
+                    for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
                         now = self.clock()
                         if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
                             continue
@@ -90,6 +133,17 @@ class PostgresWorker:
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
                             self._event(job, "canceled", "Canceled before provider submission")
                             continue
+                        if job['manifest']['platform'] == 'YouTube' and not capacity_ready:
+                            # Preserve the operation, approval and journal. Once
+                            # the schema exists this same due job can resume;
+                            # no lease, provider attempt or replacement is made.
+                            if not job.get('capacityIntervention'):
+                                self._event(job, job['state'], self.capacity_intervention['message'])
+                            job['capacityIntervention'] = dict(self.capacity_intervention)
+                            job['nextAction'] = self.capacity_intervention['nextAction']
+                            job['nextAt'] = now + 60
+                            continue
+                        job.pop('capacityIntervention', None)
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
@@ -103,6 +157,7 @@ class PostgresWorker:
                             from .billing import require_publishing
                             try:
                                 require_publishing(cur, workspace_id, now)
+                                assert_job_authority(state, job, now)
                             except AlphaError as error:
                                 self._event(job, "held", str(error))
                                 continue
@@ -110,6 +165,7 @@ class PostgresWorker:
                             member = cur.fetchone()
                             # Re-authorize at claim time: the approver must still hold approve authority.
                             if (not member or not Membership.from_row(member[0], can_publish=member[1]).allows("approve")
+                                    or (job.get('youtubeAgent') and member[0] != 'owner')
                                     or job['approvalDigest'] != digest(job['manifest'])
                                     or job['approvedBy'] != job['manifest']['actor']):
                                 self._event(job, 'held', 'Approval authority changed; a new review is required')
@@ -123,6 +179,7 @@ class PostgresWorker:
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
                         job["leaseId"] = uuid.uuid4().hex
+                        job['lastDispatchedAt'] = now
                         if reconciliation:
                             job["checks"] = job.get("checks", 0) + 1
                         elif not forward:
@@ -145,6 +202,9 @@ class PostgresWorker:
                         if cur.rowcount != 1:
                             raise AlphaError("Worker claim lost its workspace revision.", 409)
                     if selected:
+                        if capacity_ready:
+                            cur.execute('''INSERT INTO public.pr_worker_tenants(workspace_id,last_claimed_at) VALUES(%s,to_timestamp(%s))
+                                ON CONFLICT(workspace_id) DO UPDATE SET last_claimed_at=excluded.last_claimed_at''', (workspace_id, now))
                         return selected
         return None
 
@@ -214,6 +274,8 @@ class PostgresWorker:
                     job["nextAction"] = "Inspect receipt"
                 else:
                     job["nextAction"] = "Await container processing; not published" if job['state'] == 'processing' else "Await provider reconciliation; do not resubmit"
+                if youtube_progress and progress.get('stage') == 'quota_delayed':
+                    job['nextAction'] = 'Publishing delayed by capacity controls; the same approved upload resumes after retryAt. Review the time if approval or publication time expires.'
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), claimed["workspaceId"], revision))
                 return cur.rowcount == 1
 
@@ -307,7 +369,11 @@ class PostgresWorker:
         self.complete(claimed, result)
         return True
 
-    def tick(self, max_jobs=10, max_seconds=20):
+    def tick(self, max_jobs=None, max_seconds=None):
+        if max_jobs is None or max_seconds is None:
+            configured_jobs, configured_seconds = configured_worker_limits()
+            max_jobs = configured_jobs if max_jobs is None else max_jobs
+            max_seconds = configured_seconds if max_seconds is None else max_seconds
         if type(max_jobs) is not int or not 1 <= max_jobs <= 25 or type(max_seconds) not in (int, float) or not 1 <= max_seconds <= 45:
             raise AlphaError("Use bounded worker limits.")
         started, processed = time.monotonic(), 0
@@ -316,4 +382,5 @@ class PostgresWorker:
         while processed < max_jobs and time.monotonic() - started < max_seconds and self.step():
             processed += 1
         return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
-                "youtubeMaintenance": maintenance}
+                "youtubeMaintenance": maintenance, "capacityIntervention": getattr(self, 'capacity_intervention', None),
+                "budget": {"maxJobs": max_jobs, "maxSeconds": max_seconds}}

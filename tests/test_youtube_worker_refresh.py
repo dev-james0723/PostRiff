@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.contracts import digest
-from postriff_phase2.hosted_worker import PostgresWorker
+from postriff_phase2.hosted_worker import PostgresWorker, configured_worker_limits
 from postriff_phase2.store import Phase2Store
 
 
@@ -16,8 +16,10 @@ NOW = 1_800_000_000
 
 
 class WorkerDatabase:
-    def __init__(self, channels=2):
+    def __init__(self, channels=2, capacity_ready=True):
         self.depth, self.result, self.rowcount = 0, None, 1
+        self.capacity_ready, self.tenant_dispatches = capacity_ready, 0
+        self.member_role = 'owner'
         self.state = {'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(channels):
             channel = {'id': f'connection-{index}', 'platform': 'YouTube', 'configured': True,
@@ -48,10 +50,16 @@ class WorkerDatabase:
     def execute(self, sql, params=()):
         if sql.startswith('SELECT pg_try_advisory_xact_lock'):
             self.result = (True,)
-        elif sql.startswith('SELECT id::text,revision,state FROM public.pr_workspaces'):
+        elif sql.startswith('SELECT to_regclass'):
+            self.result = ('pr_worker_tenants' if self.capacity_ready else None,)
+        elif sql.startswith('SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces'):
+            assert ('LEFT JOIN public.pr_worker_tenants' in sql) == self.capacity_ready
             self.result = [('workspace', 1, copy.deepcopy(self.state))]
+        elif sql.startswith('INSERT INTO public.pr_worker_tenants'):
+            assert self.capacity_ready
+            self.tenant_dispatches += 1
         elif sql.startswith('SELECT m.role,m.can_publish'):
-            self.result = ('owner', True)
+            self.result = (self.member_role, True)
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
@@ -102,6 +110,105 @@ def worker_for(channels=2):
 
 
 class YouTubeWorkerRefreshTests(unittest.TestCase):
+    def test_server_worker_budget_tuning_preserves_defaults_and_hard_bounds(self):
+        self.assertEqual(configured_worker_limits({}), (10, 20))
+        self.assertEqual(configured_worker_limits({'POSTRIFF_WORKER_MAX_JOBS': '25', 'POSTRIFF_WORKER_MAX_SECONDS': '45'}), (25, 45))
+        for values in ({'POSTRIFF_WORKER_MAX_JOBS': '26'}, {'POSTRIFF_WORKER_MAX_JOBS': '0'},
+                       {'POSTRIFF_WORKER_MAX_SECONDS': '46'}, {'POSTRIFF_WORKER_MAX_SECONDS': 'nan'},
+                       {'POSTRIFF_WORKER_MAX_JOBS': 'bad'}):
+            with self.subTest(values=values), self.assertRaises(AlphaError) as caught:
+                configured_worker_limits(values)
+            self.assertEqual(caught.exception.code, 'worker_budget_configuration')
+
+    @patch('postriff_phase2.billing.require_publishing')
+    def test_missing_capacity_migration_defers_youtube_but_claims_other_platform(self, _billing):
+        worker, db, now, _, _ = worker_for(2)
+        db.capacity_ready = False
+        youtube, other = db.state['phase2']['jobs']
+        # Provider readback is enough to cover the unaffected platform without
+        # replacing the real billing/approval coverage in its existing suite.
+        other['manifest']['platform'], other['state'] = 'LinkedIn', 'processing'
+        self.assertTrue(worker.step())
+        self.assertEqual((youtube := db.state['phase2']['jobs'][0])['state'], 'approved')
+        self.assertEqual((youtube['attempts'], youtube['nextAt']), ([], NOW + 60))
+        self.assertEqual(youtube['capacityIntervention']['code'], 'youtube_capacity_schema')
+        self.assertNotIn('leaseId', youtube)
+        self.assertEqual(db.tenant_dispatches, 0)
+        worker.social.youtube.oauth.reverify_for_worker.assert_not_called()
+        worker.social.submit.assert_not_called()
+        self.assertEqual(worker.social.reconcile.call_args.args[0]['platform'], 'LinkedIn')
+        # Applying the schema resumes the original operation, not a replacement.
+        db.capacity_ready, now[0] = True, NOW + 61
+        self.assertTrue(worker.step())
+        self.assertNotIn('capacityIntervention', db.state['phase2']['jobs'][0])
+        self.assertEqual(len(db.state['phase2']['jobs'][0]['attempts']), 1)
+        worker.social.submit.assert_called_once()
+
+    @patch('postriff_phase2.billing.require_publishing')
+    def test_missing_migration_is_visible_without_claiming_any_youtube_attempt(self, _billing):
+        worker, db, _, _, _ = worker_for(1)
+        db.capacity_ready = False
+        self.assertFalse(worker.step())
+        self.assertEqual(worker.capacity_intervention['youtubeDispatch'], 'paused')
+        self.assertEqual(db.state['phase2']['jobs'][0]['attempts'], [])
+        worker.social.youtube.oauth.reverify_for_worker.assert_not_called()
+        worker.social.submit.assert_not_called()
+        worker.social.reconcile.assert_not_called()
+
+    @patch('postriff_phase2.billing.require_publishing')
+    @patch('postriff_phase2.hosted_worker.assert_job_authority')
+    def test_autopilot_pause_before_claim_and_during_refresh_stops_forward_work(self, authority, _billing):
+        for during_refresh in (False, True):
+            with self.subTest(during_refresh=during_refresh):
+                worker, db, _, _, reverify = worker_for(1)
+                paused = AlphaError('Synthetic paused Autopilot.', 409, code='youtube_agent_authority_required')
+                authority.side_effect = None if during_refresh else paused
+                if during_refresh:
+                    def changed(workspace, connection):
+                        result = reverify(workspace, connection)
+                        authority.side_effect = paused
+                        return result
+                    worker.social.youtube.oauth.reverify_for_worker.side_effect = changed
+                worker.step()
+                self.assertEqual(db.state['phase2']['jobs'][0]['state'], 'held')
+                self.assertEqual(db.state['phase2']['jobs'][0]['attempts'], [])
+                worker.social.submit.assert_not_called()
+                worker.social.reconcile.assert_not_called()
+
+    @patch('postriff_phase2.hosted_worker.assert_job_authority', side_effect=AlphaError('Synthetic paused Autopilot.', 409))
+    def test_accepted_native_schedule_readback_survives_paused_autopilot(self, authority):
+        worker, db, _, order, _ = worker_for(1)
+        db.state['phase2']['jobs'][0].update(state='processing', progress={'stage': 'native_scheduled'},
+                                             youtubeAgent={'policyId': 'synthetic-paused-policy'})
+        self.assertTrue(worker.step())
+        self.assertEqual(order, [('reconcile', 'connection-0')])
+        authority.assert_not_called()
+        worker.social.submit.assert_not_called()
+
+    @patch('postriff_phase2.billing.require_publishing')
+    @patch('postriff_phase2.hosted_worker.assert_job_authority')
+    def test_queued_autopilot_owner_demotion_blocks_claim_and_forward_write(self, _authority, _billing):
+        # An approver/editor may retain manual publishing authority after losing
+        # ownership. That never preserves a former owner's standing authority.
+        for role in ('approver', 'editor'):
+            for during_refresh in (False, True):
+                with self.subTest(role=role, during_refresh=during_refresh):
+                    worker, db, _, _, reverify = worker_for(1)
+                    db.state['phase2']['jobs'][0]['youtubeAgent'] = {'policyId': 'synthetic-owner-policy'}
+                    if during_refresh:
+                        def demoted(workspace, connection):
+                            result = reverify(workspace, connection)
+                            db.member_role = role
+                            return result
+                        worker.social.youtube.oauth.reverify_for_worker.side_effect = demoted
+                    else:
+                        db.member_role = role
+                    worker.step()
+                    self.assertEqual(db.state['phase2']['jobs'][0]['state'], 'held')
+                    self.assertEqual(db.state['phase2']['jobs'][0]['attempts'], [])
+                    worker.social.submit.assert_not_called()
+                    worker.social.reconcile.assert_not_called()
+
     @patch('postriff_phase2.billing.require_publishing')
     def test_two_stale_connections_refresh_independently_before_forward_bytes(self, _billing):
         worker, db, _, order, _ = worker_for()

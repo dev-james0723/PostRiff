@@ -197,7 +197,7 @@ def runtime_from_environment(environ=None):
     verify = supabase_verifier(project_url, publishable, database)
     storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video", file_bucket=values.get("POSTRIFF_LIBRARY_BUCKET") or "postriff-library"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
-    from .oauth import CredentialVault
+    from .oauth import CredentialVault, OAuthService
     from .providers import registry_from_environment, http_transport
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
@@ -206,7 +206,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1")
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -503,7 +503,9 @@ class HostedApplication:
                 self._runtime().repository.api_tokens.authorize(self._token(environ), method, path.strip("/").split("/"), client_label(environ))
             if path == "/api/health" and method == "GET":
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
-                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False})
+                revision = os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
+                revision = revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None
+                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision})
             if path == "/api/catalog" and method == "GET":
                 provider = (self.public_auth or {}).get("provider", "supabase")
                 return self._json(start_response, 200, {"templates": catalog(), "routes": routes(), "profileMetadata": metadata(), "phase2": True, "authMode": "dev" if provider == "dev" else "supabase", "execution": (self.public_auth or {}).get("execution", "hosted")})
@@ -608,9 +610,13 @@ class HostedApplication:
                         raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
                     location = ProductivityConnectorService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 else:
-                    callback_config = OAuthService(None, None, None, {}, configured_base)
-                    callback_config.callback_uri(provider_id)  # fixed HTTPS origin validation; no provider call
-                    location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
+                    youtube_base = None
+                    if provider_id == 'youtube':
+                        youtube_base = (getattr(configured_service, 'youtube_public_base_url', None) if configured_service is not None
+                            else OAuthService.youtube_origin_from_environment(os.environ))
+                    callback_config = OAuthService(None, None, None, {}, configured_base, youtube_public_base_url=youtube_base)
+                    callback_base = callback_config.callback_base_url(provider_id)  # fixed HTTPS origin; no provider call
+                    location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
             if path == "/api/cron/worker" and method == "GET":
@@ -945,6 +951,8 @@ class HostedApplication:
                 uploads = service.video_uploads
                 if len(parts) == 5 and method == "POST":
                     return self._json(start_response, 201, uploads.begin(parts[2], token, self._body(environ)))
+                if len(parts) == 7 and parts[6] == "resume" and method == "POST":
+                    return self._json(start_response, 200, uploads.resume(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 7 and parts[6] == "commit" and method == "POST":
                     return self._json(start_response, 200, uploads.commit(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 6 and method == "DELETE":

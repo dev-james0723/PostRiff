@@ -8,7 +8,7 @@ from postriff_alpha.domain import AlphaError
 
 CAPABILITIES = ("identity", "publish", "schedule", "analytics", "comments_read", "reply", "moderate", "media_types", "webhooks")
 LEVELS = ("Direct", "Assisted", "Bridge", "Unsupported")
-CONNECTION_STATES = ("disconnected", "identity_known", "scope_missing", "token_expired", "reauthorization_required", "read_verified", "publish_verified")
+CONNECTION_STATES = ("disconnected", "identity_known", "scope_missing", "token_expired", "reauthorization_required", "client_binding_missing", "read_verified", "publish_verified")
 
 
 def unsupported_matrix():
@@ -37,6 +37,9 @@ def youtube_credential_status(cur, workspace_ids):
     cur.execute("SELECT workspace_id::text,connection_id,refresh_supported,refresh_ciphertext IS NOT NULL AND refresh_ciphertext<>'',extract(epoch from access_expires_at)::float8,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=ANY(%s::uuid[]) AND provider='youtube'", (list(workspace_ids),))
     return {(workspace, connection): {
         "refreshSupported": bool(supported and present and not revoked),
+        # An encrypted refresh retained but intentionally disabled needs new consent;
+        # it is not evidence that the customer revoked the Google grant.
+        "refreshBindingRequired": bool(present and not supported and not revoked),
         "accessTokenExpiresAt": float(expires) if expires is not None else None,
         "revoked": bool(revoked),
     } for workspace, connection, supported, present, expires, revoked in cur.fetchall()}
@@ -63,7 +66,7 @@ def connection_state(channel, now):
         return "identity_known" if channel.get("providerAccountId") else "disconnected"
     refreshable_youtube = channel.get("platform") == "YouTube" and channel.get("refreshSupported") is True
     if channel.get("expiresAt", 0) <= now and not refreshable_youtube:
-        return "token_expired"
+        return "client_binding_missing" if channel.get('refreshBindingRequired') else "token_expired"
     if not channel.get("scopes"):
         return "scope_missing"
     if channel.get("capabilityVerified"):
@@ -81,5 +84,7 @@ def customer_view(channel, matrix, now):
         "scopes": list(channel.get("scopes", [])),
         "expiresAt": channel.get("expiresAt"),
         "refreshSupported": channel.get("refreshSupported") is True,
+        "refreshBindingRequired": channel.get("refreshBindingRequired") is True,
+        "authorizationLane": channel.get("authorizationLane", "standard") if channel.get("platform") == "YouTube" else None,
         "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
     }

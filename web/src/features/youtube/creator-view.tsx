@@ -16,6 +16,7 @@ import { LiveCreatorControls, MetadataControls } from './creator-controls';
 import { CreatorReceipts } from './creator-receipts';
 import { UploadRecovery, StreamConfiguration } from './creator-recovery';
 import { YouTubeResourceList } from './resource-list';
+import { YouTubeAgentControls } from './agent-controls';
 
 const control = 'border-input bg-background w-full rounded-md border px-3 py-2 text-sm';
 const actionLabels: Record<string, string> = {
@@ -105,6 +106,26 @@ function videoSelectionId(item: YouTubeResource): string | undefined {
   return typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id) &&
     candidates.every((candidate) => candidate === id) ? id : undefined;
 }
+/** Preserve the selected grant; an Analytics upgrade never substitutes the manual OAuth client. */
+function creatorOAuthInput(
+  connection: { id: string; authorizationLane?: string } | undefined,
+  feature: string,
+  agenticAnalyticsConsent: boolean,
+  sensitive = false
+): Record<string, unknown> {
+  if (!connection) throw new Error('Select an available YouTube connection first.');
+  const lane = connection.authorizationLane ?? 'standard';
+  if (lane !== 'standard' && lane !== 'agentic') throw new Error('Reconnect this YouTube authorization before upgrading permissions.');
+  if (lane === 'agentic' && (feature !== 'analytics' || !agenticAnalyticsConsent)) {
+    throw new Error('Explicitly approve the separate agentic Analytics authorization before continuing. Other agentic permissions require their own consent flow.');
+  }
+  return {
+    connectionId: connection.id,
+    authorizationLane: lane,
+    ...(lane === 'agentic' ? { agenticConsent: true } : {}),
+    ...(sensitive ? { enableSensitive: true } : {})
+  };
+}
 function Items({ data, select }: { data?: YouTubeData; select: (x: YouTubeResource) => void }) {
   return (
     <ul className='grid gap-2'>
@@ -143,6 +164,7 @@ export function YouTubeCreatorView() {
   const yt = channels.data?.channels.filter((c) => c.platform === 'YouTube') ?? [];
   const [selected, setSelected] = useQueryState('channel', { defaultValue: '' });
   const channel = selected ? (yt.some((c) => c.id === selected) ? selected : '') : yt[0]?.id || '';
+  const agenticConnection = yt.find((c) => c.id === channel)?.authorizationLane === 'agentic';
   const overview = useQuery({
     queryKey: ['youtube', workspaceId, channel],
     queryFn: () => api.youtubeOverview(workspaceId, channel),
@@ -197,6 +219,7 @@ export function YouTubeCreatorView() {
   const [liveState, setLiveState] = useState('testing');
   const [reportType, setReportType] = useState('');
   const [includeFinancialReports, setIncludeFinancialReports] = useState(false);
+  const [agenticAnalyticsConsent, setAgenticAnalyticsConsent] = useState(false);
   const [jobId, setJobId] = useState('');
   const [reportId, setReportId] = useState('');
   const [streamActionId, setStreamActionId] = useState('');
@@ -229,6 +252,7 @@ export function YouTubeCreatorView() {
     setNotice('');
     setError('');
     setIncludeFinancialReports(false);
+    setAgenticAnalyticsConsent(false);
   }
   const capabilities = overview.data?.capabilities;
   const can = (key: string) => capabilities?.[key]?.canExecute === true;
@@ -283,10 +307,9 @@ export function YouTubeCreatorView() {
   }
   async function connect(feature: string, sensitive = false) {
     await run(async () => {
-      const grant = await api.oauthStart(workspaceId, 'youtube', feature, {
-        connectionId: channel,
-        ...(sensitive ? { enableSensitive: true } : {})
-      });
+      const input = creatorOAuthInput(yt.find((c) => c.id === channel), feature, agenticAnalyticsConsent, sensitive);
+      setAgenticAnalyticsConsent(false);
+      const grant = await api.oauthStart(workspaceId, 'youtube', feature, input);
       if (!grant.authorizeUrl) throw new Error('Google authorization is unavailable.');
       window.location.assign(grant.authorizeUrl);
     });
@@ -399,7 +422,7 @@ export function YouTubeCreatorView() {
             >
               {yt.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.account}
+                  {c.account} {c.authorizationLane === 'agentic' ? '(autopilot authorization)' : '(manual authorization)'}
                 </option>
               ))}
             </select>
@@ -410,6 +433,7 @@ export function YouTubeCreatorView() {
                   : 'Creator capabilities unavailable.'}
               </p>
             )}
+            <YouTubeAgentControls key={`youtube-agent:${channel}`} channel={channel} canPublic={Boolean(overview.data?.capabilities.schedule?.canExecute)} />
             {overview.data && (
               <Panel title={overview.data.identity.snippet?.title || 'Channel identity'}>
                 <p className='text-sm'>Channel ID: {overview.data.channelId}</p>
@@ -1522,6 +1546,13 @@ export function YouTubeCreatorView() {
                   </div>
                 </Panel>
                 <Panel title='Enable a creator permission'>
+                  {agenticConnection && (
+                    <label className='flex items-start gap-2 text-sm'>
+                      <input type='checkbox' aria-label='Approve separate agentic YouTube Analytics consent' checked={agenticAnalyticsConsent} disabled={busy || !owner}
+                        onChange={(event) => setAgenticAnalyticsConsent(event.target.checked)} />
+                      I authorize a separate Google consent flow to add read-only YouTube Analytics access to this selected autopilot authorization. This lets Rafii read authorized channel reports; it does not activate autopilot or grant revenue access.
+                    </label>
+                  )}
                   <div className='flex flex-wrap gap-2'>
                     {Object.entries({
                       publish: 'Video uploads',
@@ -1538,7 +1569,7 @@ export function YouTubeCreatorView() {
                       <Button
                         variant='outline'
                         key={feature}
-                        disabled={busy || !canManage}
+                        disabled={busy || !canManage || (agenticConnection && (feature !== 'analytics' || !owner || !agenticAnalyticsConsent))}
                         onClick={() => connect(feature)}
                       >
                         {label}
@@ -1548,6 +1579,7 @@ export function YouTubeCreatorView() {
                   <p className='text-xs text-muted-foreground'>
                     Google grants permissions incrementally. Revenue and memberships are
                     intentionally separate.
+                    {agenticConnection && ' Select manual authorization for the other creator permission controls.'}
                   </p>
                   {(['monetary', 'memberships'] as const).map((cap) => (
                     <div className='flex flex-wrap gap-2' key={cap}>
@@ -1576,7 +1608,7 @@ export function YouTubeCreatorView() {
                       {overview.data?.sensitiveAuthorizations[cap] && (
                         <Button
                           variant='outline'
-                          disabled={busy || !owner}
+                          disabled={busy || !owner || agenticConnection}
                           onClick={() =>
                             connect(cap === 'monetary' ? 'monetary_analytics' : 'memberships', true)
                           }
@@ -1668,7 +1700,7 @@ export function YouTubeCreatorView() {
                 </pre>
               </details>
             )}
-            <CreatorReceipts key={channel} channel={channel} />
+            <CreatorReceipts key={`youtube-receipts:${channel}`} channel={channel} />
           </>
         )}
       </div>

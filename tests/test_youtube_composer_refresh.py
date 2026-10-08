@@ -68,12 +68,21 @@ class ComposerDatabase:
         elif sql.startswith('SELECT access_ciphertext,key_id,scopes'):
             credential = self.credentials[params[1]]
             self.result = ((credential['token'], 'test', list(credential['scopes'])) if not credential['revoked'] else None)
+        elif sql.startswith('SELECT access_ciphertext,key_id FROM'):
+            credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
+            self.result = ((credential['token'], 'test') if credential and not credential['revoked'] else None)
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
             self.state, self.revision = json.loads(params[0]), self.revision + 1
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET scopes='):
             self.credentials[params[2]]['scopes'] = list(params[0])
+        elif sql.startswith('UPDATE public.pr_encrypted_credentials SET revoked_at='):
+            self.credentials[params[1]].update(revoked=True, token='', refresh=False, scopes=[])
+        elif sql == 'SELECT to_regclass(%s)':
+            self.result = (None,)  # This focused composer fixture has no optional creator journals.
+        elif sql.startswith('DELETE FROM public.pr_audience_threads'):
+            pass
         elif sql.startswith('UPDATE public.pr_channel_capabilities'):
             pass
         elif sql.startswith('INSERT INTO public.pr_audit_events'):
@@ -239,7 +248,18 @@ class YouTubeComposerRefreshTests(unittest.TestCase):
                 self.assertEqual(db.state['phase2']['reviews'][0]['status'], 'stale')
                 self.assertEqual(db.state['phase2']['reviews'][0]['manifest'], original_manifest)
                 self.assertEqual(db.state['phase2']['jobs'], [])
+                self.assertEqual(db.credentials['connection-0']['revoked'], change == 'identity')
                 service.repository.mutate.assert_not_called()
+
+    def test_stale_revocation_observation_cannot_purge_the_current_composer_grant(self):
+        _, oauth, db, _, _ = composer_for()
+        before = copy.deepcopy(db.credentials['connection-0'])
+        self.assertFalse(oauth.mark_youtube_revoked('workspace', 'connection-0', expected_access_token='older-grant'))
+        self.assertEqual(db.credentials['connection-0'], before)
+        self.assertEqual(db.audits, [])
+        self.assertTrue(oauth.mark_youtube_revoked('workspace', 'connection-0', expected_access_token=TOKEN))
+        self.assertTrue(db.credentials['connection-0']['revoked'])
+        self.assertEqual(db.credentials['connection-0']['token'], '')
 
     def test_missing_refresh_revocation_and_transient_rate_limits_fail_closed(self):
         for cause in ('missing_refresh', 'revoked'):

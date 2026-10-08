@@ -1,14 +1,20 @@
-/** Real local Next -> hosted Python -> disposable PostgreSQL; SYNTHETIC Google and identity. Never real E2E. */
+/** Cloud Next -> hosted Python -> disposable PostgreSQL; SYNTHETIC Google/identity. Never real Google E2E. */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { chromium } = require('playwright');
+assert.equal(process.platform, 'linux', 'Browser validation runs only on cloud Linux CI.');
+assert.match(process.env.CI || '', /^(1|true)$/i);
 const base = process.env.YOUTUBE_WEB_URL || 'http://127.0.0.1:4448';
 assert.equal(new URL(base).hostname, '127.0.0.1');
-const out = resolve(__dirname, '../../docs/youtube/evidence');
+const out = resolve(process.env.YOUTUBE_BROWSER_EVIDENCE_DIR || resolve(__dirname, '../../.jcb-artifacts/youtube-browser'));
 mkdirSync(out, { recursive: true });
 const results = [];
+let currentPage;
+const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWSER; NOT REAL GOOGLE E2E',
+  realGoogleE2E: false, productionAcceptance: false, capturedAt: new Date().toISOString(),
+  backend: 'loopback Python with disposable PostgreSQL; generated synthetic standard/agentic clients', results });
 (async () => {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -32,28 +38,98 @@ const results = [];
       const started = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, { capability: 'publish' });
       const connected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, { state: new URL(started.authorizeUrl).searchParams.get('state'), code: 'synthetic-code' });
       const cid = connected.connectionId;
+      const agentStarted = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, {
+        capability: 'autopilot', input: { authorizationLane: 'agentic', agenticConsent: true }
+      });
+      assert.notEqual(new URL(agentStarted.authorizeUrl).searchParams.get('client_id'), new URL(started.authorizeUrl).searchParams.get('client_id'));
+      const agentConnected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, {
+        state: new URL(agentStarted.authorizeUrl).searchParams.get('state'), code: 'synthetic-agentic-code'
+      });
+      assert.notEqual(agentConnected.connectionId, cid);
+      assert.equal(agentConnected.providerAccountId, connected.providerAccountId);
       const overview = await request('GET', `/api/workspaces/${wid}/youtube/${encodeURIComponent(cid)}`);
       assert.equal(Object.keys(overview.capabilities).length, 37);
       assert.equal(overview.readiness.production, 'NOT READY');
       assert.equal(overview.capabilities.community_posts.state, 'UNSUPPORTED BY OFFICIAL API');
       assert.ok(Object.values(overview.capabilities).every(cap => cap.state !== 'READY'));
       const page = await context.newPage();
+      currentPage = page;
       page.setDefaultTimeout(30000);
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => {
         if (message.type() === 'error' && /same key|Encountered two children|Hydration failed/.test(message.text())) errors.push('React reconciliation error');
       });
-      await page.goto(base + '/app/youtube');
+      await page.goto(base + '/app/youtube?channel=' + cid);
       await page.getByRole('heading', { name: 'YouTube creator', exact: true }).waitFor();
+      const channelSelect = page.getByLabel('YouTube channel', { exact: true });
+      // The heading renders before the authenticated channel request completes.
+      // Wait for both independently authorized connections, not just the shell.
+      await channelSelect.getByRole('option', { name: /\(manual authorization\)/ }).waitFor({ state: 'attached' });
+      await channelSelect.getByRole('option', { name: /\(autopilot authorization\)/ }).waitFor({ state: 'attached' });
+      const channelOptions = await page.getByLabel('YouTube channel', { exact: true }).locator('option').allTextContents();
+      assert.ok(channelOptions.some(text => text.includes('(manual authorization)')));
+      assert.ok(channelOptions.some(text => text.includes('(autopilot authorization)')));
+      const agent = page.getByRole('region', { name: 'YouTube publishing agent', exact: true });
+      await agent.getByRole('heading', { name: 'Library publishing plans', exact: true }).waitFor();
+      assert.equal(await agent.getByRole('button', { name: 'Prepare reviewable plan', exact: true }).isEnabled(), false);
+      const separate = agent.getByRole('button', { name: 'Prepare separate agentic Google consent', exact: true });
+      assert.equal(await separate.isEnabled(), false);
+      await agent.getByRole('checkbox', { name: 'Request separate Google authorization for owner-authorized Rafii publishing plans', exact: true }).check();
+      await separate.click();
+      const googleLink = agent.getByRole('link', { name: 'Continue to Google to select and authorize your channel', exact: true });
+      await googleLink.waitFor();
+      assert.equal(new URL(await googleLink.getAttribute('href')).searchParams.get('client_id'), 'local-agentic-synthetic.apps.googleusercontent.com');
+      // Never navigate to Google: all grants and channels in this fixture are synthetic.
+      await agent.getByLabel('Library video', { exact: true }).selectOption('b'.repeat(32));
+      const planTitle = 'Synthetic bounded Library plan ' + width;
+      await agent.getByLabel('Proposed title', { exact: true }).fill(planTitle);
+      await agent.getByLabel('Proposed description', { exact: true }).fill('Synthetic planning fixture; no real provider upload.');
+      await agent.getByLabel('Planned publication time', { exact: true }).fill(new Date(Date.now() + 2 * 3600000).toISOString().slice(0, 16));
+      await agent.getByLabel('IANA time zone', { exact: true }).fill('UTC');
+      await agent.getByLabel('Made for kids', { exact: true }).selectOption('no');
+      await agent.getByLabel('Realistic altered or synthetic media', { exact: true }).selectOption('no');
+      assert.deepEqual(await agent.getByLabel('Intended visibility', { exact: true }).locator('option').allTextContents(), ['Private (stays private)']);
+      await agent.getByRole('checkbox', { name: 'Confirm rights to this exact Library video and metadata', exact: true }).check();
+      const [planResponse] = await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/agent/drafts') && response.request().method() === 'POST'),
+        agent.getByRole('button', { name: 'Prepare reviewable plan', exact: true }).click()
+      ]);
+      assert.ok(planResponse.ok(), await planResponse.text());
+      const plan = await planResponse.json();
+      assert.equal(plan.executed, false);
+      assert.equal(plan.providerVerified, false);
+      assert.equal(plan.result.status, 'proposed');
+      await agent.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true }).check();
+      await agent.getByLabel('Maximum publications per day (1–20)', { exact: true }).fill('1');
+      await agent.getByLabel('Authority expires (ISO date with UTC offset)', { exact: true }).fill(new Date(Date.now() + 31 * 86400000).toISOString());
+      await agent.getByRole('button', { name: 'Review standing authority for 1 plans', exact: true }).click();
+      await agent.getByRole('alert').filter({ hasText: /within 30 days/ }).waitFor();
+      await agent.getByLabel('Authority expires (ISO date with UTC offset)', { exact: true }).fill(new Date(Date.now() + 86400000).toISOString());
+      await agent.getByRole('button', { name: 'Review standing authority for 1 plans', exact: true }).click();
+      const enableAutopilot = agent.getByRole('button', { name: 'Enable bounded autopilot', exact: true });
+      await enableAutopilot.waitFor();
+      assert.equal(await enableAutopilot.isEnabled(), false);
+      await agent.getByRole('checkbox', { name: 'Authorize only the reviewed exact publishing plans within their limits until expiry or revocation', exact: true }).check();
+      assert.equal(await enableAutopilot.isEnabled(), false, 'Missing Google/project approval must remain gated even after owner checkbox.');
+      const agentView = await request('GET', `/api/workspaces/${wid}/youtube/${cid}/agent`);
+      assert.equal(agentView.autopilotGate.canActivate, false);
+      assert.equal(agentView.executionState, 'IMPLEMENTED BUT UNVERIFIED');
+      assert.equal(agentView.policies[0].status, 'prepared');
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-agent-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Capabilities', exact: true }).click();
       await page.getByText('UNSUPPORTED BY OFFICIAL API', { exact: true }).first().waitFor();
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
       assert.equal(await page.getByLabel('Visibility', { exact: true }).count(), 0);
-      await page.screenshot({ path: resolve(out, `LOCAL-SYNTHETIC-capabilities-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-capabilities-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Videos', exact: true }).click();
       await page.getByLabel('Video ID', { exact: true }).fill('abcdefghijk');
-      await page.getByRole('button', { name: 'Inspect video processing', exact: true }).click();
+      const [inspection] = await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/read/videos') && response.request().method() === 'POST'),
+        page.getByRole('button', { name: 'Inspect video processing', exact: true }).click()
+      ]);
+      assert.ok(inspection.ok(), 'The existing video must be inspected before its metadata review.');
+      await page.locator('[data-youtube-resource-id="abcdefghijk"]').waitFor();
       const reviewedTitle = 'Exact reviewed local title ' + width + ' ' + principal.slice(0, 8);
       await page.getByLabel('Title', { exact: true }).fill(reviewedTitle);
       await page.getByLabel('Description', { exact: true }).fill('Exact reviewed local description\nhttps://example.com');
@@ -102,18 +178,24 @@ const results = [];
       const overflow = await page.evaluate(() => ({ width: window.innerWidth, document: document.documentElement.scrollWidth,
         elements: [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > window.innerWidth + 1 && el.getBoundingClientRect().width > 0).slice(-12).map(el => ({ tag: el.tagName, width: Math.round(el.getBoundingClientRect().width), text: el.textContent.slice(0, 80) })) }));
       assert.ok(overflow.document <= overflow.width + 1, JSON.stringify(overflow));
-      await page.screenshot({ path: resolve(out, `LOCAL-SYNTHETIC-live-${width}.png`), fullPage: true });
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-live-${width}.png`), fullPage: true });
       // An arbitrary URL connection cannot resolve an account or carry over the reviewed action.
       await page.goto(base + '/app/youtube?channel=foreign-connection');
       await page.getByRole('heading', { name: 'Connect your creator channel', exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
       assert.deepEqual(errors, []);
-      results.push({ width, execution: 'local-synthetic', realGoogleE2E: false, independentCapabilities: 37,
+      results.push({ width, execution: 'cloud-synthetic', realGoogleE2E: false, independentCapabilities: 37,
         productionNotReady: true, officialUnsupportedCommunity: true, publicGateHeld: true, humanReviewBeforeWrite: true,
+        distinctOAuthLaneConnections: true, explicitAgenticConsent: true, reviewableLibraryPlan: true,
+        finiteThirtyDayAuthority: true, policyPreviewNotExecution: true, unapprovedAutopilotHeld: true,
         metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, noHorizontalOverflow: true });
       await context.close();
     }
-    writeFileSync(resolve(out, 'LOCAL-SYNTHETIC-browser.json'), JSON.stringify({ status: 'PASS', execution: 'LOCAL SYNTHETIC; NOT REAL GOOGLE E2E', results }, null, 2) + '\n');
-    console.log(JSON.stringify({ status: 'PASS', execution: 'LOCAL SYNTHETIC; NOT REAL GOOGLE E2E', results }));
+    writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2) + '\n');
+    console.log(JSON.stringify(proof('PASS')));
+  } catch (error) {
+    await currentPage?.screenshot({ path: resolve(out, 'CLOUD-SYNTHETIC-failure.png'), fullPage: true }).catch(() => {});
+    writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify({ ...proof('FAIL'), error: error.message }, null, 2) + '\n');
+    throw error;
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

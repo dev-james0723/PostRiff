@@ -15,11 +15,33 @@ import { relativeTime } from '@/lib/time';
 export type ChannelStateInput = Pick<ChannelView, 'connectionState'> & {
   expiresAt?: number | null;
   refreshSupported?: boolean;
+  refreshBindingRequired?: boolean;
   capabilities?: Record<string, { evidence?: string } | undefined>;
 };
 
 /** The evidence `OAuthService.disconnect` writes on every capability row (`oauth.py`). */
 const DISCONNECTED_EVIDENCE = 'Disconnected by the customer.';
+
+/** The account owner must choose the Google account and application on Google's own page. */
+export const GOOGLE_PERMISSIONS_URL = 'https://myaccount.google.com/permissions';
+
+/** Keep the server's disconnect receipt visible even when the card leaves the list. */
+export function disconnectReceipt(platform: string, account: string, result: unknown) {
+  const receipt = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+  const note = typeof receipt.note === 'string' ? receipt.note.trim() : '';
+  const deferred = receipt.remoteRevocationDeferred === true;
+  const confirmed = receipt.remoteRevoked === true && !deferred;
+  const remote = deferred
+    ? 'Google authorization revocation was deferred because another Google connection may share it. Remove access in Google permissions if you intend to revoke the Google authorization.'
+    : confirmed
+      ? `${platform} confirmed the token revocation request.`
+      : `${platform} authorization revocation is not confirmed.`;
+  return {
+    title: platform.toLowerCase() === 'youtube' ? 'YouTube connection removed from Rafii' : `${platform} disconnected`,
+    description: [account, note, remote].filter(Boolean).join(' '),
+    remoteConfirmed: confirmed
+  };
+}
 
 /**
  * A disconnect only flags the snapshot channel as revoked (`store.py: channel_disconnect`), so the API
@@ -45,7 +67,7 @@ export const EXPIRING_SOON_SECONDS = 7 * 86400;
 export const VERIFIED_STATES: ReadonlySet<string> = new Set(['publish_verified', 'read_verified']);
 
 /** States the person has to act on: the token is gone, was revoked, or carries no scopes. */
-export const ATTENTION_STATES: ReadonlySet<string> = new Set(['token_expired', 'reauthorization_required', 'scope_missing']);
+export const ATTENTION_STATES: ReadonlySet<string> = new Set(['token_expired', 'reauthorization_required', 'scope_missing', 'client_binding_missing']);
 
 export const nowSeconds = () => Date.now() / 1000;
 
@@ -60,7 +82,7 @@ export function automaticallyRenews(channel: ChannelStateInput) {
 
 /** A verified channel whose access ends within `EXPIRING_SOON_SECONDS`. Expired access is `token_expired`, not "expiring". */
 export function expiringSoon(channel: ChannelStateInput, now = nowSeconds()) {
-  if (!isVerified(channel) || automaticallyRenews(channel) || !channel.expiresAt) return false;
+  if (!isVerified(channel) || channel.refreshBindingRequired || automaticallyRenews(channel) || !channel.expiresAt) return false;
   const left = channel.expiresAt - now;
   return left > 0 && left < EXPIRING_SOON_SECONDS;
 }
@@ -73,6 +95,7 @@ export interface ChannelBadge {
 /** Badge for one channel: the connection state in the shared status words (`STATUS`), expiry called out a week ahead. */
 export function channelBadge(channel: ChannelStateInput, now = nowSeconds()): ChannelBadge {
   const state = channel.connectionState;
+  if (channel.refreshBindingRequired || state === 'client_binding_missing') return { label: STATUS.reconnect, status: 'warning' };
   if (VERIFIED_STATES.has(state)) {
     if (expiringSoon(channel, now)) return { label: STATUS.expiringSoon, status: 'warning' };
     return { label: state === 'publish_verified' ? STATUS.connected : STATUS.readOnly, status: 'success' };
@@ -89,12 +112,12 @@ export function channelBadge(channel: ChannelStateInput, now = nowSeconds()): Ch
 export function needsAttention(channel: ChannelStateInput, now = nowSeconds(), heldJobs = 0) {
   if (heldJobs > 0) return true;
   if (disconnectedByCustomer(channel)) return false;
-  return ATTENTION_STATES.has(channel.connectionState) || expiringSoon(channel, now);
+  return channel.refreshBindingRequired === true || ATTENTION_STATES.has(channel.connectionState) || expiringSoon(channel, now);
 }
 
 /** Reconnect is offered only where the person holds manage_connections and the channel needs it. */
-export function needsReconnect(channel: Pick<MyChannel, 'connectionState' | 'canManage'>) {
-  return channel.canManage && ATTENTION_STATES.has(channel.connectionState);
+export function needsReconnect(channel: Pick<MyChannel, 'connectionState' | 'canManage' | 'refreshBindingRequired'>) {
+  return channel.canManage && (channel.refreshBindingRequired === true || ATTENTION_STATES.has(channel.connectionState));
 }
 
 function heldSentence(heldJobs: number) {
@@ -112,6 +135,7 @@ export function attentionSentence(channel: ChannelStateInput, now = nowSeconds()
   if (disconnectedByCustomer(channel)) {
     return heldJobs > 0 ? `Disconnected.${held}` : null;
   }
+  if (channel.refreshBindingRequired || state === 'client_binding_missing') return `Reconnect once to enable secure background access. Your Google grant was not classified as revoked.${held}`;
   if (state === 'token_expired') return `Access expired.${held}`;
   if (state === 'reauthorization_required') return `Access revoked.${held}`;
   if (state === 'scope_missing') return `No permissions granted.${held}`;

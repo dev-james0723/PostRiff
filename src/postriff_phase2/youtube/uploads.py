@@ -9,7 +9,19 @@ from urllib.parse import urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .model import METHODS, YouTubeError, api_error, resource_id, upload_body, validate_video, lifecycle
 
-CHUNK_SIZE = 1024 * 1024  # a multiple of the official protocol's 256 KiB alignment
+CHUNK_ALIGNMENT = 256 * 1024
+CHUNK_SIZE = 8 * 1024 * 1024  # matches the private-storage range ceiling; fixed memory per lease
+MAX_CHUNK_SIZE = CHUNK_SIZE
+
+
+def configured_chunk_size(value=None):
+    try:
+        result = CHUNK_SIZE if value is None else int(value)
+    except (ValueError, TypeError, OverflowError):
+        result = 0
+    if isinstance(value, bool) or not CHUNK_ALIGNMENT <= result <= MAX_CHUNK_SIZE or result % CHUNK_ALIGNMENT:
+        raise AlphaError('YouTube upload chunks must be aligned to 256 KiB and at most 8 MiB.', 503, code='youtube_chunk_configuration')
+    return result
 
 
 def session_url(url):
@@ -26,7 +38,7 @@ def session_url(url):
 
 def upload_view(state):
     return {key: copy.deepcopy(state.get(key)) for key in ('stage', 'bytesSent', 'totalBytes', 'videoId', 'publishAt',
-            'privacyStatus', 'processing', 'steps', 'errorCategory', 'retryAt', 'cancelRequested') if key in state}
+            'privacyStatus', 'processing', 'steps', 'errorCategory', 'retryAt', 'cancelRequested', 'quotaDelay') if key in state}
 
 
 class UploadEngine:
@@ -35,10 +47,11 @@ class UploadEngine:
     Each step sends at most one chunk, within the hosted worker's time budget. A crash after acceptance is
     recovered using the same session URL. No title/time heuristic can identify an ambiguous upload.
     """
-    def __init__(self, journal, api_factory, media_reader, *, clock=time.time, finalize=None, account_usage=None):
+    def __init__(self, journal, api_factory, media_reader, *, clock=time.time, finalize=None, account_usage=None, chunk_size=None):
         self.journal, self.api_factory, self.media_reader, self.clock = journal, api_factory, media_reader, clock
         self.finalize = finalize
         self.account_usage = account_usage
+        self.chunk_size = configured_chunk_size(chunk_size)
 
     def _save(self, key, state):
         state['updatedAt'] = self.clock()
@@ -59,6 +72,8 @@ class UploadEngine:
             result.update(state='canceled', confirmed='Upload canceled. Any video already accepted by YouTube remains private; deletion requires separate approval.')
         elif stage == 'held':
             result.update(state='held', confirmed='The creator operation is held. Review the permission, quota or independent post-upload step.')
+        elif stage == 'quota_delayed':
+            result.update(confirmed='Capacity controls delayed this operation before a provider request. Rafii will resume this same approved journal after the recorded retry time; it has not published.')
         elif stage == 'native_scheduled':
             result.update(confirmed='YouTube accepted the native publication schedule. The video is still private, not published.')
         elif stage in ('processed_private', 'published'):
@@ -125,6 +140,10 @@ class UploadEngine:
                 return self._receipt(state)
             if state.get('retryAt', 0) > self.clock():
                 return self._receipt(state)
+            if state['stage'] == 'quota_delayed':
+                state['stage'] = state.pop('resumeStage', 'validating')
+                state.pop('quotaDelay', None)
+                state.pop('errorCategory', None)
             api = None
             try:
                 api = self.api_factory(manifest)
@@ -148,13 +167,15 @@ class UploadEngine:
                         state['stage'] = 'outcome_unknown'
                         self._save(key, state)
                         return self._receipt(state)
-                    state['stage'] = 'session_open_attempted'
-                    self._save(key, state)  # committed before any remote initiation
                     body = upload_body(state['options'])
                     params = {'uploadType': 'resumable', 'part': ','.join(body),
                               'notifySubscribers': str(state['options'].get('notifySubscribers', True)).lower()}
                     rule = METHODS['videos.insert']
+                    # Admission may deny without a network request. Reserve first,
+                    # then commit the remote intent; a denial is not an ambiguous POST.
                     usage('videos.insert', rule['bucket'], rule['cost'])
+                    state['stage'] = 'session_open_attempted'
+                    self._save(key, state)  # committed before any remote initiation
                     response = api.provider.api(api.grant['accessToken'], 'POST', api.provider.UPLOAD + '?' + urlencode(params),
                         headers={'X-Upload-Content-Length': str(state['totalBytes']), 'X-Upload-Content-Type': state['mime']}, body=body)
                     if response.get('status') not in (200, 201):
@@ -189,7 +210,7 @@ class UploadEngine:
                     state.update(stage='outcome_unknown')  # await the final resource response; never restart
                     self._save(key, state)
                     return self._receipt(state)
-                size = min(CHUNK_SIZE, state['totalBytes'] - offset)
+                size = min(self.chunk_size, state['totalBytes'] - offset)
                 chunk = self.media_reader(manifest, offset, size)
                 if not isinstance(chunk, bytes) or len(chunk) != size:
                     raise AlphaError('The approved private video asset changed or is unavailable.', 409, code='youtube_media_changed')
@@ -214,7 +235,12 @@ class UploadEngine:
                     return {'state': 'held', 'confirmed': 'YouTube authorization was revoked. Authorized content was purged; reconnect and review.',
                             'progress': {'version': 2, 'stage': 'held', 'errorCategory': 'revoked_oauth'}}
                 state['errorCategory'] = category
-                if category in ('quota', 'upload_limit', 'scope_missing', 'revoked_oauth', 'channel_restriction', 'project_restriction', 'youtube_capability_blocked', 'youtube_revoked_oauth'):
+                if category == 'capacity_delay':
+                    state.update(resumeStage=state['stage'], stage='quota_delayed', retryAt=error.retry_at,
+                                 quotaDelay={'reason': getattr(error, 'capacity_reason', 'capacity'), 'source': 'Rafii pre-request admission control',
+                                             'providerRequestSent': False})
+                elif category in ('quota', 'upload_limit', 'scope_missing', 'revoked_oauth', 'channel_restriction', 'project_restriction', 'youtube_capability_blocked', 'youtube_revoked_oauth',
+                                   'youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
                     state['stage'] = 'held'
                     state['retryAt'] = getattr(error, 'retry_at', None)
                 elif (state.get('sessionCiphertext') or state.get('videoId')) and (getattr(error, 'ambiguous', False) or category in ('network', 'rate_limit')):

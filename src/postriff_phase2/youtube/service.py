@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -13,6 +14,7 @@ from .api import ACTION_CAPABILITY, DESTRUCTIVE, YouTubeApi, redacted, validate_
 from .journal import UploadJournal, purge_expired_data
 from .model import CAPABILITIES, READ, MANAGE, UPLOAD, capability_matrix, has_scopes, lifecycle, merged_update, project_public_gate, resource_id, validate_video, YouTubeError
 from .uploads import UploadEngine, upload_view
+from .capacity import CapacityController, CapacityPolicy
 
 
 def fingerprint(value):
@@ -31,9 +33,16 @@ class YouTubeCreatorService:
     def __init__(self, service):
         self.service, self.repository, self.oauth, self.clock = service, service.repository, service.oauth, service.clock
         self.journal = UploadJournal(service.connection_factory, service.oauth.vault)
-        self.engine = UploadEngine(self.journal, self.worker_api, self.video_chunk, clock=self.clock, finalize=self.finalize_upload)
+        self.capacity = CapacityController(service.connection_factory,
+            CapacityPolicy.from_environment(service.oauth.providers.get('youtube'), os.environ), clock=self.clock)
+        self._capacities = {}
+        self.oauth.identity_admission = lambda workspace, provider: self.capacity_for(provider).record_identity(workspace)
+        self.engine = UploadEngine(self.journal, self.worker_api, self.video_chunk, clock=self.clock, finalize=self.finalize_upload,
+                                   chunk_size=os.environ.get('POSTRIFF_YOUTUBE_UPLOAD_CHUNK_BYTES'))
         from .notifications import PushNotifications
         self.notifications = PushNotifications(self)
+        from .agent import YouTubePublishingAgent
+        self.agent = YouTubePublishingAgent(self)
 
     def maintenance(self):
         """One read-only grant/identity refresh and one approved notification renewal per tick."""
@@ -44,6 +53,11 @@ class YouTubeCreatorService:
             has_schema = cur.fetchone()[0] is not None
             if has_schema:
                 purge_expired_data(cur)
+                cur.execute("SELECT to_regclass('public.pr_youtube_quota_daily')")
+                if cur.fetchone()[0] is None:
+                    return {'enabled': False, 'dataCleanup': True, 'blocker': 'youtube_capacity_schema_097_required'}
+                cur.execute("DELETE FROM public.pr_youtube_rate_windows WHERE window_start<now()-interval '1 day'")
+                cur.execute("DELETE FROM public.pr_youtube_quota_daily WHERE quota_date<(now() AT TIME ZONE 'America/Los_Angeles')::date-90")
         if not provider or not getattr(provider, 'creator_enabled', False):
             return {'enabled': False, 'dataCleanup': has_schema}
         with self.service.connection_factory() as db, db.cursor() as cur:
@@ -57,7 +71,7 @@ class YouTubeCreatorService:
                 cur.execute("""INSERT INTO public.pr_youtube_cache(workspace_id,connection_id,cache_key,source,data,expires_at)
                     VALUES(%s,%s,'authorization-check','Rafii operational lease','{}'::jsonb,now()+interval '5 minutes')
                     ON CONFLICT(workspace_id,connection_id,cache_key) DO UPDATE SET expires_at=excluded.expires_at,refreshed_at=now()""", row)
-        checked = False
+        checked, intervention = False, None
         if row:
             workspace, connection = row
             try:
@@ -65,7 +79,11 @@ class YouTubeCreatorService:
                 # shared composer's one-hour trust window advance together.
                 result = self.oauth.reverify_for_worker(workspace, connection)
                 if result.get('state') == 'reauthorization_required':
-                    self.oauth.mark_youtube_revoked(workspace, connection)
+                    intervention = 'youtube_revoked_oauth'
+                elif result.get('state') == 'client_binding_missing':
+                    error = AlphaError('Reconnect this channel to bind its current OAuth client.', 409, code='youtube_oauth_binding_required')
+                    self.operational_error(workspace, connection, error, 'oauth.binding')
+                    intervention = error.code
                 elif result.get('state') == 'read_verified':
                     with self.service.connection_factory() as db, db.cursor() as cur:
                         cur.execute('SELECT extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL', (workspace, connection))
@@ -75,12 +93,19 @@ class YouTubeCreatorService:
                     checked = True
             except AlphaError as error:
                 if error.code == 'youtube_revoked_oauth':
-                    self.oauth.mark_youtube_revoked(workspace, connection)
+                    intervention = error.code
+                elif error.code in ('youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
+                    self.operational_error(workspace, connection, error, 'oauth.binding')
+                    intervention = error.code
         try:
             renewed = self.notifications.renew_one()
         except AlphaError:
             renewed = False
-        return {'enabled': True, 'authorizationChecked': checked, 'notificationLeaseRenewed': renewed}
+        result = {'enabled': True, 'authorizationChecked': checked, 'notificationLeaseRenewed': renewed,
+                  'publishingAgent': self.agent.dispatch_one()}
+        if intervention:
+            result['reconnectionRequired'] = intervention
+        return result
 
     def _member(self, workspace, token, connection, right='read', fresh=False):
         from ..hosted import _membership
@@ -101,10 +126,17 @@ class YouTubeCreatorService:
             row = cur.fetchone()
         return {'monetary': bool(row and row[0]), 'memberships': bool(row and row[1])}, (row[2] if row else {})
 
-    def account_usage(self, workspace, connection):
+    def capacity_for(self, provider):
+        policy = CapacityPolicy.from_environment(provider, os.environ)
+        key = (policy.project_key, getattr(provider, 'client_id', ''))
+        if key not in self._capacities:
+            self._capacities[key] = CapacityController(self.service.connection_factory, policy, clock=self.clock)
+        return self._capacities[key]
+
+    def account_usage(self, workspace, connection, provider=None):
+        capacity = self.capacity_for(provider) if provider is not None else self.capacity
         def record(method, bucket, units):
-            with self.service.connection_factory() as db, db.cursor() as cur:
-                cur.execute('INSERT INTO public.pr_youtube_usage(workspace_id,connection_id,method,bucket,estimated_units) VALUES(%s,%s,%s,%s,%s)', (workspace, connection, method, bucket, units))
+            capacity.record(workspace, connection, method, bucket, units)
         return record
 
     def _api(self, workspace, connection, channel=None):
@@ -121,17 +153,18 @@ class YouTubeCreatorService:
             if not found:
                 raise AlphaError('Connection unavailable.', 404)
             channel = found[0]
-        provider = self.oauth._provider('youtube')
-        return YouTubeApi(provider, grant, channel, clock=self.clock, account_usage=self.account_usage(workspace, connection),
+        provider = self.oauth.provider_for_grant(grant)
+        return YouTubeApi(provider, grant, channel, clock=self.clock, account_usage=self.account_usage(workspace, connection, provider),
                           chat_resource=lambda kind, ident, chat: self.chat_resource(workspace, connection, kind, ident, chat),
-                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method))
+                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method, expected_access_token=grant['accessToken']))
 
-    def operational_error(self, workspace, connection, error, method):
+    def operational_error(self, workspace, connection, error, method, *, expected_access_token=None):
         category = getattr(error, 'category', None) or getattr(error, 'code', '')
         if category in ('revoked_oauth', 'youtube_revoked_oauth'):
-            self.oauth.mark_youtube_revoked(workspace, connection)
+            self.oauth.mark_youtube_revoked(workspace, connection, expected_access_token=expected_access_token)
             return
-        if category not in ('quota', 'upload_limit', 'channel_restriction', 'project_restriction'):
+        if category not in ('quota', 'upload_limit', 'channel_restriction', 'project_restriction', 'capacity_delay',
+                            'youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
             return
         key = 'operational-alert:' + category + ':' + datetime.fromtimestamp(self.clock(), timezone.utc).date().isoformat()
         if self._cached(workspace, connection, key):
@@ -229,6 +262,7 @@ class YouTubeCreatorService:
                 'project': {k: proof.get(k, {'status': 'unverified'}) for k in ('projectId', 'oauthVerification', 'youtubeComplianceAudit', 'publicUploadEligibility', 'quota')},
                 'quota': {'source': 'Current official method contracts; Rafii attempts only', 'actualProjectRemaining': None,
                           'remainingState': 'UNVERIFIED', 'workspaceUsageToday': usage,
+                          'admission': self.capacity_for(api.provider).snapshot(workspace),
                           'officialDefaults': {'videoUploads': {'limit': 100, 'unitsPerInsert': 1}, 'search': {'limit': 100}, 'general': {'limit': 10000}},
                           'resetTimeZone': 'America/Los_Angeles', 'note': 'Defaults are not this project’s allocation. Other API clients and failed requests can consume project quota.'},
                 'readiness': {'implementation': 'IMPLEMENTED / E2E NOT PROVEN', 'googleApproval': 'verified' if project_public_gate(api.provider) else 'unverified',

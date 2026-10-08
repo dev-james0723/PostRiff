@@ -118,3 +118,52 @@ export interface YouTubeActionReceipt {
     verification?: { verified: boolean; note?: string };
   };
 }
+
+export interface YouTubeAgentDraft {
+  id: string;
+  digest: string;
+  connectionId: string;
+  channelId: string;
+  assetId: string;
+  variantId: string;
+  status: 'proposed' | 'queued';
+  uploadWorkflow: 'upload_now' | 'upload_later';
+  uploadAt: number;
+  timing: { local: string; timeZone: string; fold: number; timestamp: number };
+  publishOptions: { title: string; description: string; privacyStatus: string; mode?: string };
+  recommendations: string[];
+  jobId?: string;
+  approvalMode?: 'manual_approval' | 'authorized_autopilot';
+}
+
+export interface YouTubeAgentPolicy {
+  id: string;
+  digest: string;
+  channelId: string;
+  status: 'prepared' | 'active' | 'paused' | 'revoked';
+  drafts: { id: string; digest: string }[];
+  assetIds: string[];
+  timeZone: string;
+  startsAt: number;
+  endsAt: number;
+  maxDaily: number;
+  intervention?: { code: string; message: string; at: number };
+}
+
+export interface YouTubeAgentOverview {
+  channelId: string;
+  drafts: YouTubeAgentDraft[];
+  policies: YouTubeAgentPolicy[];
+  planningMode: string;
+  executionState: string;
+  autopilotGate: { canActivate: boolean; reason: string };
+  pauseNotice: string;
+}
+
+export interface YouTubeAgentMutation<T> {
+  revision: number;
+  result: T;
+  queued: boolean;
+  executed: false;
+  providerVerified: false;
+}

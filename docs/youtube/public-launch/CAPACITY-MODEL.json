@@ -1,0 +1,435 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-10-08T18:25:03Z",
+  "execution": "forecast_only",
+  "trafficObserved": false,
+  "forecastOwnerApproved": false,
+  "quotaRequestSubmitted": false,
+  "productionProjectId": "rafii-youtube-production",
+  "productionProjectNumber": "568838253270",
+  "actualApprovedQuota": null,
+  "source": {
+    "costs": "https://developers.google.com/youtube/v3/determine_quota_cost",
+    "audit": "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits",
+    "form": "https://support.google.com/youtube/contact/yt_api_form",
+    "observedDate": "2026-10-08",
+    "use": "current normative body and method table; not stale generated summary",
+    "documentedDefaultOnly": {
+      "videoUploadsPerDay": 100,
+      "searchCallsPerDay": 100,
+      "generalUnitsPerDay": 10000
+    },
+    "resetTimezone": "America/Los_Angeles"
+  },
+  "assumptions": {
+    "connectedChannelsPerCustomer": 1,
+    "dailyActivePublisherFraction": 0.3,
+    "uploadsPerActivePublisherPerDay": 1,
+    "dailyDashboardFraction": 0.3,
+    "identityReadsPerConnectedChannel": 48,
+    "inventoryReadsPerDailyDashboardUser": 2,
+    "processingStatusReadsPerUpload": 6,
+    "thumbnailFraction": 0.8,
+    "captionFraction": 0.2,
+    "captionVerificationReadsPerCaption": 1,
+    "playlistInsertionFraction": 0.5,
+    "postUploadMetadataEditFraction": 0.1,
+    "rescheduleFraction": 0.1,
+    "analyticsReportsPerDailyDashboardUser": 3,
+    "planningHeadroomFraction": 0.25,
+    "peakUploadFraction": 0.4,
+    "peakWindowMinutes": 120,
+    "averageVideoMiB": 500,
+    "resumableChunkMiB": 8,
+    "initialNativePublishAtIncludedInInsert": false,
+    "publicationFractions": {
+      "nativeScheduled": 0.7,
+      "immediatePublicOrUnlisted": 0.2,
+      "privateOnly": 0.1
+    },
+    "publicationFractionsNote": "Mutually exclusive forecast fractions sum to one; nativeScheduled includes its later public publication. Immediate includes public/unlisted; no separate unlisted volume is observed.",
+    "initialVisibilityOrScheduleUpdatePerNonPrivateUpload": 1,
+    "initialVisibilityOrScheduleReadbackPerNonPrivateUpload": 1,
+    "implementationBasis": "model.upload_body always sends private and never publishAt; service.finalize_upload applies future schedule or approved public/unlisted visibility with videos.update then videos.list. Separate post-upload metadata/reschedules remain additional operations.",
+    "dailyCommentUserFraction": 0.2,
+    "commentPageReadsPerDailyCommentUser": 4,
+    "approvedCommentRepliesPerDailyCommentUser": 0.25,
+    "identityCadenceForecast": "Engineering-selected planning scenario: 48 channels.list identity checks per connected channel/day, equivalent to one every 30 minutes. Not measured or currently achieved; shorter expiry/foreground/worker/reconnect checks can add calls.",
+    "publishingForecastNote": "Unmeasured forecast: 30% daily active publishers, one upload each; daily comment users are modeled separately at 20% of customers."
+  },
+  "generalWorkloadPer1000Customers": [
+    {
+      "purpose": "30-minute selected-channel identity planning cadence",
+      "method": "channels.list",
+      "calls": 48000,
+      "unitsPerCall": 1,
+      "units": 48000
+    },
+    {
+      "purpose": "dashboard playlist/video inventory",
+      "method": "playlistItems.list or videos.list",
+      "calls": 600,
+      "unitsPerCall": 1,
+      "units": 600
+    },
+    {
+      "purpose": "processing and publication readback",
+      "method": "videos.list",
+      "calls": 1800,
+      "unitsPerCall": 1,
+      "units": 1800
+    },
+    {
+      "purpose": "initial native schedule or public/unlisted visibility",
+      "method": "videos.update",
+      "calls": 270,
+      "unitsPerCall": 50,
+      "units": 13500
+    },
+    {
+      "purpose": "initial visibility/schedule update readback",
+      "method": "videos.list",
+      "calls": 270,
+      "unitsPerCall": 1,
+      "units": 270
+    },
+    {
+      "purpose": "initial thumbnails",
+      "method": "thumbnails.set",
+      "calls": 240,
+      "unitsPerCall": 50,
+      "units": 12000
+    },
+    {
+      "purpose": "timed captions",
+      "method": "captions.insert",
+      "calls": 60,
+      "unitsPerCall": 400,
+      "units": 24000
+    },
+    {
+      "purpose": "caption verification",
+      "method": "captions.list",
+      "calls": 60,
+      "unitsPerCall": 50,
+      "units": 3000
+    },
+    {
+      "purpose": "playlist placement",
+      "method": "playlistItems.insert",
+      "calls": 150,
+      "unitsPerCall": 50,
+      "units": 7500
+    },
+    {
+      "purpose": "post-upload metadata edits",
+      "method": "videos.update",
+      "calls": 30,
+      "unitsPerCall": 50,
+      "units": 1500
+    },
+    {
+      "purpose": "reschedules",
+      "method": "videos.update",
+      "calls": 30,
+      "unitsPerCall": 50,
+      "units": 1500
+    },
+    {
+      "purpose": "comment pages",
+      "method": "commentThreads.list",
+      "calls": 800,
+      "unitsPerCall": 1,
+      "units": 800
+    },
+    {
+      "purpose": "approved replies",
+      "method": "comments.insert",
+      "calls": 50,
+      "unitsPerCall": 50,
+      "units": 2500
+    }
+  ],
+  "scenarios": [
+    {
+      "customers": 1000,
+      "connectedChannels": 1000,
+      "dailyActivePublishers": 300,
+      "baselineUploadsPerDay": 300,
+      "baselineGeneralCallsPerDay": 52360,
+      "baselineGeneralUnitsPerDay": 116970,
+      "uploadsWithHeadroom": 375,
+      "generalUnitsWithHeadroom": 146213,
+      "proposedUploadAllocationPerDay": 400,
+      "proposedGeneralAllocationPerDay": 150000,
+      "modeledSearchCallsPerDay": 0,
+      "analyticsRequestsPerDaySeparateService": 900,
+      "peakUploadStartsPerMinute": 1,
+      "mediaGiBPerDayBeforeRetries": 146.484375,
+      "peakMediaMiBPerSecondBeforeRetries": 8.3333333333,
+      "publicationUploadsPerDay": {
+        "nativeScheduled": 210,
+        "immediatePublicOrUnlisted": 60,
+        "privateOnly": 30
+      },
+      "initialVisibilityOrScheduleUpdateCallsPerDay": 270,
+      "initialVisibilityOrScheduleGeneralUnitsPerDay": 13500,
+      "initialVisibilityOrScheduleReadbackCallsPerDay": 270,
+      "allUploadsNonPrivateSensitivity": {
+        "additionalVisibilityUpdatesPerDay": 300,
+        "visibilityUpdateUnitsPerDay": 15000,
+        "visibilityReadbackUnitsPerDay": 300,
+        "baselineGeneralUnitsPerDay": 118500,
+        "generalUnitsWithHeadroom": 148125,
+        "note": "Sensitivity replaces the forecast 90% nonprivate fraction with 100%; not an additional workload on top of the baseline."
+      },
+      "dailyCommentUsers": 200,
+      "oneDailyIdentityAlternative": {
+        "baselineGeneralCallsPerDay": 5360,
+        "baselineGeneralUnitsPerDay": 69970,
+        "generalUnitsWithHeadroom": 87463,
+        "proposedGeneralAllocationPerDay": 100000,
+        "primaryQuotaRequest": false,
+        "approved": false
+      },
+      "identityChecksPerDay": 48000,
+      "additionalIdentityGeneralUnitsVersusOneDailyCheck": 47000,
+      "quotaProposalApproved": false,
+      "maintenanceCadenceRequirement": {
+        "identityChecksPerDay": 48000,
+        "identityChecksPerMinute": 33.333333333333336,
+        "minimumOneCheckPerInvocationDispatchersAtOneInvocationPerMinute": 34,
+        "execution": "arithmetic_lower_bound_only",
+        "fleetProvisioned": false,
+        "sustainableThroughputAccepted": false
+      }
+    },
+    {
+      "customers": 10000,
+      "connectedChannels": 10000,
+      "dailyActivePublishers": 3000,
+      "baselineUploadsPerDay": 3000,
+      "baselineGeneralCallsPerDay": 523600,
+      "baselineGeneralUnitsPerDay": 1169700,
+      "uploadsWithHeadroom": 3750,
+      "generalUnitsWithHeadroom": 1462125,
+      "proposedUploadAllocationPerDay": 4000,
+      "proposedGeneralAllocationPerDay": 1500000,
+      "modeledSearchCallsPerDay": 0,
+      "analyticsRequestsPerDaySeparateService": 9000,
+      "peakUploadStartsPerMinute": 10,
+      "mediaGiBPerDayBeforeRetries": 1464.84375,
+      "peakMediaMiBPerSecondBeforeRetries": 83.3333333333,
+      "publicationUploadsPerDay": {
+        "nativeScheduled": 2100,
+        "immediatePublicOrUnlisted": 600,
+        "privateOnly": 300
+      },
+      "initialVisibilityOrScheduleUpdateCallsPerDay": 2700,
+      "initialVisibilityOrScheduleGeneralUnitsPerDay": 135000,
+      "initialVisibilityOrScheduleReadbackCallsPerDay": 2700,
+      "allUploadsNonPrivateSensitivity": {
+        "additionalVisibilityUpdatesPerDay": 3000,
+        "visibilityUpdateUnitsPerDay": 150000,
+        "visibilityReadbackUnitsPerDay": 3000,
+        "baselineGeneralUnitsPerDay": 1185000,
+        "generalUnitsWithHeadroom": 1481250,
+        "note": "Sensitivity replaces the forecast 90% nonprivate fraction with 100%; not an additional workload on top of the baseline."
+      },
+      "dailyCommentUsers": 2000,
+      "oneDailyIdentityAlternative": {
+        "baselineGeneralCallsPerDay": 53600,
+        "baselineGeneralUnitsPerDay": 699700,
+        "generalUnitsWithHeadroom": 874625,
+        "proposedGeneralAllocationPerDay": 1000000,
+        "primaryQuotaRequest": false,
+        "approved": false
+      },
+      "identityChecksPerDay": 480000,
+      "additionalIdentityGeneralUnitsVersusOneDailyCheck": 470000,
+      "quotaProposalApproved": false,
+      "maintenanceCadenceRequirement": {
+        "identityChecksPerDay": 480000,
+        "identityChecksPerMinute": 333.3333333333333,
+        "minimumOneCheckPerInvocationDispatchersAtOneInvocationPerMinute": 334,
+        "execution": "arithmetic_lower_bound_only",
+        "fleetProvisioned": false,
+        "sustainableThroughputAccepted": false
+      }
+    }
+  ],
+  "excluded": [
+    "Live",
+    "monetary or memberships",
+    "bulk Reporting",
+    "caption replacements",
+    "unusually large comment pagination",
+    "extra connected channels",
+    "customer-owned Google Cloud projects",
+    "unknown duplicate upload initialization"
+  ],
+  "limitations": [
+    "Not measured customer traffic",
+    "No production quota or throughput proof",
+    "Analytics quota/cost is a separate Console verification task",
+    "Headroom is not permission to retry uncertain writes",
+    "Storage, egress, worker and per-account eligibility require independent acceptance",
+    "No quota sharding or client/project cycling",
+    "500 MiB average-video forecast exceeds the currently verified Free storage 50 MB provider/bucket ceiling; billing approval and storage acceptance are unresolved.",
+    "Primary quota forecast uses engineering-selected 48 identity checks/channel/day. Actual shorter-expiry, worker/composer/manual revalidation and reconnect calls remain unmeasured and may exceed this planning scenario.",
+    "Current maintenance refreshes at most one channel per once-per-minute cron tick: ideal 1,440 checks/day across all channels. It cannot sustain 48 checks/day for 1,000 or 10,000 channels; required dispatcher batching/fleet is not provisioned or throughput-accepted."
+  ],
+  "updatedOn": "2026-10-08",
+  "storageGate": {
+    "status": "BLOCKED OWNER BILLING",
+    "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
+    "observedPlan": "Free",
+    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "productionVideoBucket": "postriff-video",
+    "bucketPublic": false,
+    "bucketFileSizeLimitBytes": 50000000,
+    "freeGlobalProviderFileLimitMB": 50,
+    "largeVideoAcceptance": false,
+    "ownerBillingDecision": "PENDING EXISTING QUESTION",
+    "pricingEstimateUSDPerMonth": {
+      "proBase": 25,
+      "secondActiveMicroProject": 10,
+      "totalBeforeUsageTax": 35,
+      "status": "PUBLIC PRICE ESTIMATE ONLY; actual owner checkout required",
+      "source": "https://supabase.com/pricing"
+    },
+    "limitsSource": "https://supabase.com/docs/guides/storage/uploads/file-limits",
+    "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
+  },
+  "identityFrequencySensitivity": {
+    "role": "primary_conservative_identity_scenario",
+    "checksPerChannelPerDay": 48,
+    "source": "src/postriff_phase2/youtube/service.py maintenance cache TTL is min(1800,max(30,expiry-now-300)); 30-minute planning cadence selected by engineering, not observed customer traffic or guaranteed runtime cadence.",
+    "additionalGeneralUnitsVersusOneCheckPerDay": {
+      "1000Customers": 47000,
+      "10000Customers": 470000
+    },
+    "baselineGeneralUnitsPerDay": {
+      "1000Customers": 116970,
+      "10000Customers": 1169700
+    },
+    "generalUnitsWith25PercentHeadroom": {
+      "1000Customers": 146213,
+      "10000Customers": 1462125
+    },
+    "roundedProposedGeneralAllocationPerDay": {
+      "1000Customers": 150000,
+      "10000Customers": 1500000
+    },
+    "approved": false,
+    "excludedAdditionalRevalidation": "Shorter token-expiry TTL, worker/composer/manual verification and reconnect frequency remain unmeasured; 48 is not an upper bound on all identity requests."
+  },
+  "oneDailyIdentityAlternative": {
+    "execution": "forecast_only_alternative",
+    "identityReadsPerConnectedChannelPerDay": 1,
+    "implementedCadence": false,
+    "note": "Lower-cost comparator only. Current <=30-minute maintenance freshness does not implement one daily identity check; do not use this alternative as the primary quota request without a separately implemented and accepted cadence change.",
+    "generalWorkloadPer1000Customers": [
+      {
+        "purpose": "one daily selected-channel identity (lower-cost alternative only)",
+        "method": "channels.list",
+        "calls": 1000,
+        "unitsPerCall": 1,
+        "units": 1000
+      },
+      {
+        "purpose": "dashboard playlist/video inventory",
+        "method": "playlistItems.list or videos.list",
+        "calls": 600,
+        "unitsPerCall": 1,
+        "units": 600
+      },
+      {
+        "purpose": "processing and publication readback",
+        "method": "videos.list",
+        "calls": 1800,
+        "unitsPerCall": 1,
+        "units": 1800
+      },
+      {
+        "purpose": "initial native schedule or public/unlisted visibility",
+        "method": "videos.update",
+        "calls": 270,
+        "unitsPerCall": 50,
+        "units": 13500
+      },
+      {
+        "purpose": "initial visibility/schedule update readback",
+        "method": "videos.list",
+        "calls": 270,
+        "unitsPerCall": 1,
+        "units": 270
+      },
+      {
+        "purpose": "initial thumbnails",
+        "method": "thumbnails.set",
+        "calls": 240,
+        "unitsPerCall": 50,
+        "units": 12000
+      },
+      {
+        "purpose": "timed captions",
+        "method": "captions.insert",
+        "calls": 60,
+        "unitsPerCall": 400,
+        "units": 24000
+      },
+      {
+        "purpose": "caption verification",
+        "method": "captions.list",
+        "calls": 60,
+        "unitsPerCall": 50,
+        "units": 3000
+      },
+      {
+        "purpose": "playlist placement",
+        "method": "playlistItems.insert",
+        "calls": 150,
+        "unitsPerCall": 50,
+        "units": 7500
+      },
+      {
+        "purpose": "post-upload metadata edits",
+        "method": "videos.update",
+        "calls": 30,
+        "unitsPerCall": 50,
+        "units": 1500
+      },
+      {
+        "purpose": "reschedules",
+        "method": "videos.update",
+        "calls": 30,
+        "unitsPerCall": 50,
+        "units": 1500
+      },
+      {
+        "purpose": "comment pages",
+        "method": "commentThreads.list",
+        "calls": 800,
+        "unitsPerCall": 1,
+        "units": 800
+      },
+      {
+        "purpose": "approved replies",
+        "method": "comments.insert",
+        "calls": 50,
+        "unitsPerCall": 50,
+        "units": 2500
+      }
+    ]
+  },
+  "maintenanceCapacity": {
+    "currentChecksPerTickMaximum": 1,
+    "currentCronTicksPerDay": 1440,
+    "currentIdealChecksPerDayMaximum": 1440,
+    "channelsSupportedAt48ChecksPerDayIdealMaximum": 30,
+    "measuredSustainedCadence": false,
+    "requiredFleetProvisioned": false,
+    "note": "Current cron cannot provide this scenario; arithmetic maxima omit latency, quota delays and failures. Extra invocations are not a proven safe fleet; a bounded dedicated/batched maintenance scheduler and cloud/provider capacity acceptance are required."
+  }
+}

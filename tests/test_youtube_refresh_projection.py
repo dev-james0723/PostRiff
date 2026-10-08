@@ -57,7 +57,7 @@ class YouTubeRefreshProjectionTests(unittest.TestCase):
             ({'expires': NOW - 1}, 'read_verified', True),
             ({'present': False}, 'read_verified', False),
             ({'present': False, 'expires': NOW - 1}, 'token_expired', False),
-            ({'refresh': False, 'expires': NOW - 1}, 'token_expired', False),
+            ({'refresh': False, 'expires': NOW - 1}, 'client_binding_missing', False),
             ({'revoked': True}, 'reauthorization_required', False),
             ({'scopes': []}, 'scope_missing', True),
         )
@@ -75,6 +75,7 @@ class YouTubeRefreshProjectionTests(unittest.TestCase):
                 for view in (channel, profile):
                     self.assertEqual(view['connectionState'], expected_state)
                     self.assertIs(view['refreshSupported'], expected_refresh)
+                    self.assertEqual(view.get('refreshBindingRequired', False), bool(repo.credential[3] and not repo.credential[2] and not repo.credential[5]))
                     self.assertEqual(view['accessTokenExpiresAt'], repo.credential[4])
                     self.assertEqual(view['expiresAt'], repo.credential[4])
                     self.assertNotIn('refresh_ciphertext', view)

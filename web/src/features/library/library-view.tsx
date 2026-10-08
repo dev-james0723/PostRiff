@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useDropzone, type FileRejection } from 'react-dropzone';
+import { useDropzone, type FileError, type FileRejection } from 'react-dropzone';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
@@ -25,14 +25,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { putSignedUpload } from '@/lib/api/upload';
-import { keys, useAct } from '@/lib/api/hooks';
+import { clearVideoResume, fingerprintVideo, loadVideoResume, ResumableUploadError, saveVideoResume, uploadResumableVideo, type VideoResumeRecord } from '@/lib/api/resumable-upload';
+import type { VideoUploadTicket } from '@/lib/api/types';
+import { keys, useAct, useModels } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { CollectionManager, useLibraryCollections } from './library-organizer';
-import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata } from '../agent/attachments/video-file';
+import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata, videoDurationLimit, videoPolicyFromCatalog, videoSizeLimit } from '../agent/attachments/video-file';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { STATUS } from '@/lib/status-labels';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -72,6 +74,12 @@ const FILTERS: { value: LibraryFilter; label: string }[] = [
 
 const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/quicktime']);
 const VIDEO_UPLOAD_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
+const LIBRARY_FILE_MAX_BYTES = 50 * 1024 * 1024;
+
+function isLibraryVideo(file: Pick<File, 'name' | 'type'>) {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return VIDEO_UPLOAD_MIMES.has(file.type.toLowerCase()) || VIDEO_UPLOAD_EXTENSIONS.has(extension);
+}
 
 const SORT_LABELS: Record<LibrarySort, string> = {
   newest: 'Newest first',
@@ -97,10 +105,8 @@ const ACTION = 'rafii-action h-12 rounded-[var(--rafii-radius-control)] px-5 tex
 
 function rejectionMessage({ file, errors }: FileRejection) {
   const code = errors[0]?.code;
-  if (code === 'file-too-large') return `${file.name} is over 50 MB`;
   if (code === 'file-too-small') return `${file.name} is empty`;
-  if (code === 'file-invalid-type') return `${file.name} isn’t a photo`;
-  return `Couldn’t add ${file.name}`;
+  return errors[0]?.message || `Couldn’t add ${file.name}`;
 }
 
 /** Waiting, reading, sending, uploaded, failed and not sent stay distinct states (DNA §21.9), in words. */
@@ -180,6 +186,15 @@ export function LibraryView() {
   const reduce = useReducedMotion();
   const client = useQueryClient();
   const { api, workspaceId } = useWorkspaceApi();
+  const models = useModels();
+  const videoPolicy = models.isPending || models.isError
+    ? null
+    : videoPolicyFromCatalog(models.data?.attachments?.video);
+  const videoUnavailable = models.isPending
+    ? 'Video upload limits are loading. Try again in a moment.'
+    : models.isError
+      ? 'Couldn’t load video upload limits. Retry video limits before adding a video.'
+      : 'Video uploads aren’t available for this workspace.';
   const act = useAct();
   const upload = useUploadQueue();
 
@@ -191,10 +206,14 @@ export function LibraryView() {
   const [tag, setTag] = useState('');
   const [collection, setCollection] = useState('');
   const collections = useLibraryCollections();
-  const pendingFile = useRef<{ file: File; assetId: string; put: boolean; video?: { frames: { at: number; data: string }[]; locationCleared: boolean } } | null>(null);
+  const pendingFile = useRef<{ file: File; assetId: string; put: boolean;
+    video?: { frames: { at: number; data: string }[]; locationCleared: boolean };
+    videoBlob?: Blob; videoMime?: 'video/mp4' | 'video/quicktime'; fingerprint?: string; resume?: VideoResumeRecord; ticket?: VideoUploadTicket['upload'];
+  } | null>(null);
   const [fileFailure, setFileFailure] = useState<string | null>(null);
   const [fileProgress, setFileProgress] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
+  const videoUploadAbort = useRef<AbortController | null>(null);
   const filePicker = useRef<HTMLInputElement>(null);
   const auth = useAuth();
   const library = useLibrary({ filter, kindFilter, sort, query, tag, collection });
@@ -212,9 +231,24 @@ export function LibraryView() {
   const markStorageMissing = useCallback(() => setMediaStorageMissing(true), []);
   const markPreviewLoaded = useCallback(() => setMediaStorageMissing(false), []);
 
+  function validateLibraryFile(file: File): FileError | null {
+    if (!file.size) return { code: 'file-too-small', message: `${file.name} is empty` };
+    if (isLibraryVideo(file)) {
+      if (!videoPolicy) return { code: 'video-unavailable', message: videoUnavailable };
+      if (file.size > videoPolicy.maxBytes) {
+        return { code: 'file-too-large', message: `${file.name} is over ${videoSizeLimit(videoPolicy.maxBytes)}` };
+      }
+    } else if (file.type.startsWith('image/')) {
+      if (file.size > MAX_PICK_BYTES) return { code: 'file-too-large', message: `${file.name} is over 30 MB` };
+    } else if (file.size > LIBRARY_FILE_MAX_BYTES) {
+      return { code: 'file-too-large', message: `${file.name} is over 50 MB` };
+    }
+    return null;
+  }
+
   const { getRootProps, getInputProps, isDragActive, isDragReject, open: openPicker } = useDropzone({
-    maxSize: 50 * 1024 * 1024,
     minSize: 1,
+    validator: validateLibraryFile,
     multiple: true,
     noClick: true,
     noKeyboard: true,
@@ -276,8 +310,9 @@ export function LibraryView() {
 
   async function uploadLibraryFile(file: File) {
     if (!canEdit) return;
-    if (!file.size || file.size > 50 * 1024 * 1024) {
-      toast.error('Choose a file up to 50 MB');
+    const rejected = validateLibraryFile(file);
+    if (rejected) {
+      toast.error(rejected.message);
       return;
     }
     setUploadingFile(true);
@@ -285,7 +320,7 @@ export function LibraryView() {
     setFileProgress(`Preparing ${file.name}…`);
     try {
       const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (VIDEO_UPLOAD_MIMES.has(file.type.toLowerCase()) || VIDEO_UPLOAD_EXTENSIONS.has(extension)) {
+      if (isLibraryVideo(file)) {
         await uploadLibraryVideo(file);
         return;
       }
@@ -319,6 +354,7 @@ export function LibraryView() {
       toast.error('Couldn’t add this file', { description: message });
     } finally {
       setUploadingFile(false);
+      videoUploadAbort.current = null;
       setFileProgress('');
       await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
       if (filePicker.current) filePicker.current.value = '';
@@ -326,29 +362,71 @@ export function LibraryView() {
   }
 
   async function uploadLibraryVideo(file: File) {
+    if (!videoPolicy) throw new Error(videoUnavailable);
+    const policy = videoPolicy;
     let pending = pendingFile.current;
     if (!pending || pending.file !== file) {
-      const policy = { maxBytes: 50_000_000, maxSeconds: 180 };
       const checked = await checkVideoFile(file, policy);
       if (!checked.ok || !checked.mime) throw new Error(checked.message || 'Choose an MP4 or MOV video');
       const metadata = await readVideoMetadata(file);
       const tooLong = checkDuration(metadata?.duration ?? null, policy);
       if (tooLong) throw new Error(tooLong);
       const blanked = await blankLocation(file);
+      setFileProgress(`Checking ${file.name} for safe resume…`);
+      const fingerprint = await fingerprintVideo(blanked.blob, { name: file.name, lastModified: file.lastModified }, undefined,
+        (fraction) => setFileProgress(`Checking ${file.name} · ${Math.round(fraction * 100)}%`));
       const frames = await extractFrames(blanked.blob);
       const encoded = await Promise.all(frames.map(async (frame) => ({ at: frame.at, data: await new Promise<string>((resolve, reject) => {
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] ?? ''); reader.onerror = () => reject(new Error('Could not prepare preview')); reader.readAsDataURL(frame.blob);
       }) })));
-      const ticket = await api.beginVideoUpload(workspaceId, { mime: checked.mime, bytes: blanked.blob.size, duration: metadata?.duration ?? null, width: metadata?.width ?? null, height: metadata?.height ?? null });
-      pending = { file, assetId: ticket.upload.assetId, put: false, video: { frames: encoded, locationCleared: blanked.locationCleared } };
+      const previous = loadVideoResume(workspaceId, fingerprint);
+      let ticket: VideoUploadTicket['upload'] | undefined;
+      let complete = false;
+      if (previous) {
+        pendingFile.current = { file, assetId: previous.assetId, put: false, video: { frames: encoded, locationCleared: blanked.locationCleared },
+          videoBlob: blanked.blob, videoMime: checked.mime, fingerprint, resume: previous };
+        const resumed = await api.resumeVideoUpload(workspaceId, previous.assetId, { mime: checked.mime, bytes: blanked.blob.size });
+        ticket = resumed.upload; complete = resumed.objectComplete;
+      } else {
+        ticket = (await api.beginVideoUpload(workspaceId, { mime: checked.mime, bytes: blanked.blob.size, duration: metadata?.duration ?? null,
+          width: metadata?.width ?? null, height: metadata?.height ?? null, transport: 'tus' })).upload;
+      }
+      const record: VideoResumeRecord = previous ?? { version: 1, assetId: ticket!.assetId, fingerprint, createdAt: Date.now() / 1000 };
+      pending = { file, assetId: record.assetId, put: complete, video: { frames: encoded, locationCleared: blanked.locationCleared },
+        videoBlob: blanked.blob, videoMime: checked.mime, fingerprint, resume: record, ticket };
       pendingFile.current = pending;
-      await putSignedUpload(ticket.upload.uploadUrl, blanked.blob, ticket.upload.headers, (fraction) => setFileProgress(`${file.name} · ${Math.round(fraction * 100)}%`));
-      pending.put = true;
+      saveVideoResume(workspaceId, record);
+    } else if (!pending.put && pending.videoBlob) {
+      // Renew only this creator's original upload intent; HEAD reconciliation may reveal an accepted final chunk.
+      const mime = pending.videoMime ?? (pending.videoBlob.type === 'video/quicktime' || /\.mov$/i.test(file.name) ? 'video/quicktime' : 'video/mp4');
+      const resumed = await api.resumeVideoUpload(workspaceId, pending.assetId, { mime, bytes: pending.videoBlob.size });
+      pending.ticket = resumed.upload; pending.put = resumed.objectComplete;
+    }
+    if (!pending.put && pending.videoBlob && pending.ticket && pending.fingerprint) {
+      if (pending.ticket.method !== 'TUS' || !pending.ticket.resumable) throw new Error('Signed resumable video uploads are unavailable. Retry after configuration is repaired.');
+      const current = pending;
+      videoUploadAbort.current = new AbortController();
+      try {
+        current.resume = await uploadResumableVideo(current.ticket!, current.videoBlob!, {
+          fingerprint: current.fingerprint!, previous: current.resume,
+          signal: videoUploadAbort.current.signal,
+          onCheckpoint: (record) => { current.resume = record; saveVideoResume(workspaceId, record); },
+          onProgress: (fraction) => setFileProgress(`${file.name} · ${Math.round(fraction * 100)}%`)
+        });
+        current.put = true;
+      } catch (reason) {
+        if (reason instanceof ResumableUploadError && reason.code === 'session_expired' && current.resume) {
+          // Retry rechecks the exact object's completion before creating another session for the same immutable path.
+          current.resume = { ...current.resume, url: undefined }; saveVideoResume(workspaceId, current.resume);
+        }
+        throw reason;
+      }
     }
     if (!pending.put || !pending.video) throw new Error('Remove this pending upload and choose the video again.');
     setFileProgress(`Verifying ${file.name}…`);
     await api.commitVideoUpload(workspaceId, pending.assetId, pending.video);
     await api.updateLibraryAsset(workspaceId, pending.assetId, { title: file.name });
+    if (pending.fingerprint) clearVideoResume(workspaceId, pending.fingerprint);
     pendingFile.current = null;
     await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
     toast.success('Video added to Library');
@@ -631,8 +709,16 @@ export function LibraryView() {
           }}
         />
 
-        {uploadingFile ? <p role='status' className='text-muted-foreground text-sm'>{fileProgress}</p> : null}
-        {fileFailure ? <StateMessage kind='error' layout='inline' title='Upload needs attention' description={fileFailure} action={pendingFile.current ? <div className='flex gap-2'><Button variant='glass' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>Retry</Button><Button variant='quiet' onClick={() => { const pending = pendingFile.current; if (pending) void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId)).then(() => { pendingFile.current = null; setFileFailure(null); void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }).catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload')); }}>Remove pending upload</Button></div> : undefined} /> : null}
+        {canEdit ? (
+          <p role='status' className='text-muted-foreground text-xs'>
+            {videoPolicy ? `MP4/MOV videos: up to ${videoSizeLimit(videoPolicy.maxBytes)} and ${videoDurationLimit(videoPolicy.maxSeconds)} per video. Workspace storage and daily limits also apply.` : videoUnavailable}
+            {models.isError ? <Button variant='quiet' size='sm' onClick={() => void models.refetch()} disabled={models.isFetching}>Retry video limits</Button> : null}
+          </p>
+        ) : null}
+        {uploadingFile ? <div className='flex flex-wrap items-center gap-2'><p role='status' className='text-muted-foreground text-sm'>{fileProgress}</p>
+          {pendingFile.current?.videoBlob && <Button variant='quiet' onClick={() => videoUploadAbort.current?.abort()}>Pause video upload</Button>}
+        </div> : null}
+        {fileFailure ? <StateMessage kind='error' layout='inline' title='Upload needs attention' description={fileFailure} action={pendingFile.current ? <div className='flex gap-2'><Button variant='glass' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>Retry</Button><Button variant='quiet' onClick={() => { const pending = pendingFile.current; if (pending) void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId)).then(() => { if (pending?.fingerprint) clearVideoResume(workspaceId, pending.fingerprint); pendingFile.current = null; setFileFailure(null); void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }).catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload')); }}>Remove pending upload</Button></div> : undefined} /> : null}
         <CollectionManager canEdit={canEdit} />
         {library.storage ? <p className='text-muted-foreground text-xs'>{formatBytes(library.storage.usedBytes)} of {formatBytes(library.storage.limitBytes)} workspace storage used</p> : null}
         {library.normalized.isError ? <StateMessage kind='error' layout='inline' title='Documents could not be loaded' description='Your media remains available. Retry to load the full Library.' action={<Button variant='glass' onClick={() => void library.normalized.refetch()}>Retry Library</Button>} /> : null}

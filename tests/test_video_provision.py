@@ -58,6 +58,19 @@ class VideoProvision(unittest.TestCase):
         self.assertEqual(provision.provision(environment(), send), {'status': 'verified', 'changed': False})
         self.assertEqual([call[0] for call in send.calls], ['GET'])
 
+    def test_reviewed_large_storage_ceiling_verifies_without_changing_existing_bucket(self):
+        send = Recording([(200, bucket(file_size_limit=1_000_000_000))])
+        env = {**environment(), 'POSTRIFF_VIDEO_STORAGE_MAX_BYTES': '1000000000'}
+        self.assertEqual(provision.provision(env, send), {'status': 'verified', 'changed': False})
+        self.assertEqual([call[0] for call in send.calls], ['GET'])
+
+    def test_invalid_storage_ceiling_never_contacts_provider(self):
+        for value in ('bad', '0', '-1', str(provision.PRODUCT_MAX_BYTES + 1)):
+            send = Recording([])
+            with self.subTest(value=value), self.assertRaises(provision.ProvisionError):
+                provision.provision({**environment(), 'POSTRIFF_VIDEO_STORAGE_MAX_BYTES': value}, send)
+            self.assertEqual(send.calls, [])
+
     def test_missing_or_wrong_target_credentials_make_no_request(self):
         for changes in ({'POSTRIFF_PRODUCTION_PROJECT_REF': ''}, {'POSTRIFF_SUPABASE_SECRET_KEY': ''},
                         {'POSTRIFF_SUPABASE_SECRET_KEY': fake_credential('publishable')},

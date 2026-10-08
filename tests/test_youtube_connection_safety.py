@@ -118,7 +118,7 @@ class YouTubeConnectionSafetyTests(unittest.TestCase):
         with self.assertRaises(AlphaError) as revoked:
             service.token_for_worker('workspace', 'connection')
         self.assertEqual(revoked.exception.code, 'youtube_revoked_oauth')
-        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection')
+        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection', expected_ciphertext=TOKEN)
 
         service, repo, provider = service_for({'status': 200, 'body': {'aud': 'test-client', 'scope': ' '.join(SCOPES)}})
         self.assertEqual(set(service.token_for_worker('workspace', 'connection')['scopes']), set(SCOPES))

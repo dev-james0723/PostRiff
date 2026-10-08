@@ -127,7 +127,18 @@ class YouTubeAdapter(unittest.TestCase):
         self.assertEqual(youtube.identity(grant["accessToken"])["handle"], "@jamesau")
         self.assertIn(YouTubeProvider.UPLOAD_SCOPE, youtube.inspect_scopes(grant["accessToken"]))
         self.assertIsNone(youtube.inspect_scopes(grant["accessToken"]))  # a token issued to another client proves nothing
-        self.assertEqual(youtube.refresh("RT")["refreshToken"], "RT")
+        bound_refresh = grant["refreshToken"]
+        self.assertEqual(json.loads(bound_refresh), {"v": 2, "clientId": youtube.client_id,
+            "authorizationLane": "standard", "rt": "RT"})
+        refreshed = youtube.refresh(bound_refresh)
+        self.assertEqual(refreshed["refreshToken"], bound_refresh)
+        self.assertEqual(youtube.transport.calls[-1]["form"]["refresh_token"], "RT")
+        self.assertEqual(json.loads(refreshed["accessToken"])["clientId"], youtube.client_id)
+        calls = len(youtube.transport.calls)
+        with self.assertRaises(AlphaError) as unbound:
+            youtube.refresh("RT")
+        self.assertEqual(unbound.exception.code, "youtube_oauth_binding_required")
+        self.assertEqual(len(youtube.transport.calls), calls, "Unbound refresh credentials must never reach Google.")
 
     def test_an_account_without_a_channel_cannot_connect(self):
         youtube = YouTubeProvider("c", "s", transport=Wire([ok({"items": []})]))

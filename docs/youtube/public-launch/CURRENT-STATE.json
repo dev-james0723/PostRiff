@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "observedOn": "2026-10-08",
+  "execution": "MISSION EVIDENCE RECORD; NO PUBLIC LAUNCH CLAIM",
+  "productionGoogleProject": {
+    "id": "rafii-youtube-production",
+    "number": "568838253270",
+    "name": "Rafii YouTube Production",
+    "status": "VERIFIED PROJECT CREATION ONLY",
+    "evidence": "Coordinating release agent observed successful project creation in Google Console during this mission on 2026-10-08.",
+    "oauthClientId": null,
+    "oauthConfiguration": "NOT CONFIGURED",
+    "apisEnabled": "UNVERIFIED / NOT CONFIGURED IN THIS MISSION",
+    "oauthAudience": null,
+    "oauthPublishingStatus": null,
+    "verificationStatus": "NOT SUBMITTED",
+    "consoleBlocker": "Console debugger ownership/unattached prevented subsequent configuration; no OAuth/API/verification configuration claimed.",
+    "existingReferenceProjectId": "rafii-509720"
+  },
+  "stagingGoogleProject": {
+    "id": "rafii-509720",
+    "number": "81579135390",
+    "audience": "External",
+    "publishingStatus": "Testing",
+    "evidence": "Prior same-day acceptance public-rollout-20261008/RECEIPT.md; prior source, not revalidated in this mission.",
+    "productionUse": false
+  },
+  "runningProduction": {
+    "url": "https://rafii.io",
+    "commit": "bb4ca5aa",
+    "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+    "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
+    "integrationBranchDeployed": false,
+    "youtubePublicLaunchReady": false,
+    "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+  },
+  "approvedProductionQuotas": {
+    "dailyUploads": null,
+    "searchCalls": null,
+    "generalUnits": null,
+    "analytics": null,
+    "status": "UNVERIFIED",
+    "note": "New project allocations have not been inspected. Prior staging/default figures are not a production quota approval."
+  },
+  "submissions": {
+    "googleOAuth": "NOT SUBMITTED",
+    "youtubeAudit": "NOT SUBMITTED",
+    "quotaExtension": "NOT SUBMITTED",
+    "applicationIds": []
+  },
+  "thisMissionProviderEffects": {
+    "googleProjectCreated": true,
+    "newAccountOAuthConsent": false,
+    "privateVideoUploaded": false,
+    "nativeScheduleCreated": false,
+    "publicVideoPublished": false,
+    "autopilotProviderExecuted": false
+  },
+  "releaseGate": "Cloud engineering validation passed (ftch52s5jv). PR regression checks, merge/deploy and running-version smoke remain pending in this pre-release record. Reviewed migrations 089/097 are applied. Only deploy with unapproved public/agentic publishing disabled.",
+  "ownerInputsPending": [
+    "verified operator/legal/contact facts",
+    "legal approval/required attestations",
+    "independent account OAuth consent",
+    "exact approved disposable private test asset",
+    "separate explicit public test-publication consent after eligibility"
+  ],
+  "storage": {
+    "status": "BLOCKED OWNER BILLING",
+    "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
+    "observedPlan": "Free",
+    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "productionVideoBucket": "postriff-video",
+    "bucketPublic": false,
+    "bucketFileSizeLimitBytes": 50000000,
+    "freeGlobalProviderFileLimitMB": 50,
+    "largeVideoAcceptance": false,
+    "ownerBillingDecision": "PENDING EXISTING QUESTION",
+    "pricingEstimateUSDPerMonth": {
+      "proBase": 25,
+      "secondActiveMicroProject": 10,
+      "totalBeforeUsageTax": 35,
+      "status": "PUBLIC PRICE ESTIMATE ONLY; actual owner checkout required",
+      "source": "https://supabase.com/pricing"
+    },
+    "limitsSource": "https://supabase.com/docs/guides/storage/uploads/file-limits",
+    "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
+  },
+  "databaseMigrations": {
+    "production": {
+      "089": {
+        "version": "20261008190651",
+        "status": "VERIFIED"
+      },
+      "097": {
+        "version": "20261008193806",
+        "status": "VERIFIED"
+      }
+    },
+    "staging": {
+      "089": {
+        "status": "PRIOR VERIFIED RECEIPT"
+      },
+      "097": {
+        "version": "20261008193754",
+        "status": "VERIFIED"
+      }
+    },
+    "verification": "Three capacity/worker tables enforce FORCE RLS; anon/authenticated SELECT denied; service_role allowed. Production eight creator tables similarly verified after 089.",
+    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls."
+  },
+  "recordScope": "Pre-release baseline and actual configuration actions in this mission. Running version must be verified again after release; this record alone never proves deployment.",
+  "productionEnvironmentChanges": {
+    "execution": "VERIFIED VERCEL CONFIGURATION; EFFECTIVE AFTER NEXT DEPLOYMENT",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "values": {
+      "NEXT_PUBLIC_APP_URL": "https://rafii.io",
+      "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "0",
+      "POSTRIFF_YOUTUBE_AGENTIC_ENABLED": "0"
+    },
+    "preserved": "Existing global POSTRIFF_PUBLIC_BASE_URL, Gmail/Calendar grants and credentials, customer data, and staging configuration untouched.",
+    "youtubeCallbackObserved": "GET rafii.io/api/oauth/youtube/callback?error=access_denied returned302 to postriff-phase2-private.vercel.app/channels/connect; canonical YouTube callback cutover requires dedicated registered client."
+  }
+}

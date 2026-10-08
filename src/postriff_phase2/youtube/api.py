@@ -5,7 +5,7 @@ import json
 import re
 import secrets
 import time
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import urlencode
 
 from postriff_alpha.domain import AlphaError
@@ -43,6 +43,11 @@ ACTION_CAPABILITY = {
     'reporting.create': 'reporting', 'reporting.delete': 'reporting',
 }
 DESTRUCTIVE = frozenset(name for name in ACTION_CAPABILITY if name.endswith(('.delete', '.remove', '.unban', '.remove_moderator')))
+
+# The production HTTPS transport has a 20-second timeout. Keep three times
+# that lead when dispatching publishAt: Google treats a past time as an
+# immediate publication. Quota admission can wait, so recheck after it commits.
+MIN_SCHEDULE_LEAD_SECONDS = 60
 
 
 def redacted(value):
@@ -93,6 +98,18 @@ class YouTubeApi:
         self.account_usage = account_usage or (lambda *_: None)
         self.chat_resource = chat_resource
         self.on_error = on_error or (lambda *_: None)
+
+    def _assert_schedule_dispatch(self, method, body):
+        if method not in ('videos.insert', 'videos.update') or not isinstance(body, dict):
+            return
+        status = body.get('status')
+        if not isinstance(status, dict) or status.get('publishAt') is None:
+            return  # Metadata-only updates and explicit schedule removal retain their behavior.
+        planned = datetime.fromisoformat(rfc3339(status['publishAt']).replace('Z', '+00:00')).timestamp()
+        if planned < self.clock() + MIN_SCHEDULE_LEAD_SECONDS:
+            raise AlphaError('Choose a publication time at least 60 seconds in the future when dispatched. '
+                             'Review a new exact schedule after a delay; nothing was sent to YouTube.',
+                             409, code='youtube_invalid_scheduling_state')
 
     def call(self, method, params=None, body=None, *, data=None, mime=None, headers=None):
         rule = METHODS.get(method)
@@ -147,8 +164,12 @@ class YouTubeApi:
             kwargs['body'] = body
         encoded = {k: str(v).lower() if type(v) is bool else v for k, v in params.items()}
         url = base + path + ('?' + urlencode(encoded, doseq=True) if params else '')
+        self._assert_schedule_dispatch(method, body)
         # Record attempted usage even on invalid/failed requests. This is app accounting, not the project's remaining quota.
         self.account_usage(method, rule['bucket'], rule['cost'])
+        # No blocking work between this clock check and transport dispatch.
+        # Preserve the conservative reservation if admission consumed the lead.
+        self._assert_schedule_dispatch(method, body)
         try:
             response = self.provider.api(self.grant['accessToken'], rule['httpMethod'], url, **kwargs)
         except AlphaError as error:

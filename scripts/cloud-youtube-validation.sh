@@ -33,11 +33,13 @@ suite = unittest.TestSuite()
 suite.addTests(loader.discover('tests', pattern='test_youtube*.py', top_level_dir='tests'))
 suite.addTests(loader.loadTestsFromNames([
     'test_hosted_wave3_connectors',
+    'test_productivity_connectors',
     'test_instagram_full_capabilities',
     'test_hosted_storage_video',
     'test_library_extract',
     'test_hosted_storage_library',
     'test_video_uploads',
+    'test_video_provision',
     'test_postriff_phase2',
     'test_postriff_phase2_hosted',
     'test_postriff_phase2_learning',
@@ -60,12 +62,20 @@ result = unittest.TextTestRunner(verbosity=1).run(suite)
 raise SystemExit(0 if result.wasSuccessful() else 1)
 PY
 
+# Preserve the current production Library's real parser regression. Its legacy
+# RTF/Office viewer cases need the same official Ubuntu tools as the existing
+# library-release-validation.sh; this installation runs only in cloud Linux CI.
+if ! command -v libreoffice >/dev/null || ! command -v ffmpeg >/dev/null; then
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  else
+    sudo -n apt-get -qq update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  fi
+fi
 bash "$jcb_youtube_repo_root/scripts/cloud-postgres-bootstrap.sh"
 
-# Preserve the existing ci:jcb checks while reusing the isolated Python runtime.
-# PostgreSQL above is disposable with synthetic providers; no deployed database is used.
-cd -- "$jcb_youtube_repo_root/web"
-npm run lint
-npm run typecheck
-node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs
-npm run build
+# The same frontend checks can be rerun after UI-only repairs without repeating
+# the unchanged successful backend/database checks.
+bash "$jcb_youtube_repo_root/scripts/cloud-youtube-frontend-validation.sh"

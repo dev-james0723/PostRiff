@@ -7,7 +7,23 @@ def handle(app, environ, start_response, service, token, method, parts):
     workspace, connection = parts[2], parts[4]
     youtube = service.youtube
     tail = parts[5:]
-    if method == 'GET' and tail == []:
+    if tail and tail[0] == 'agent':
+        from .agent import YouTubePublishingAgent
+        agent = YouTubePublishingAgent(youtube)
+        route = tail[1:]
+        if method == 'GET' and route == []:
+            data = agent.overview(workspace, token, connection)
+        elif method == 'POST' and route == ['drafts']:
+            data = agent.prepare(workspace, token, connection, app._body(environ))
+        elif method == 'POST' and len(route) == 3 and route[0] == 'drafts' and route[2] == 'approve':
+            data = agent.approve(workspace, token, connection, route[1], app._body(environ))
+        elif method == 'POST' and route == ['policies', 'preview']:
+            data = agent.policy_preview(workspace, token, connection, app._body(environ))
+        elif method == 'POST' and len(route) == 3 and route[0] == 'policies' and route[2] in ('activate', 'pause', 'revoke'):
+            data = agent.policy_action(workspace, token, connection, route[1], route[2], app._body(environ))
+        else:
+            raise AlphaError('This YouTube publishing-agent route is unavailable.', 404)
+    elif method == 'GET' and tail == []:
         data = youtube.overview(workspace, token, connection)
     elif method == 'GET' and tail == ['actions']:
         data = youtube.actions(workspace, token, connection)

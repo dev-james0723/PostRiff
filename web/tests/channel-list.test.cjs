@@ -72,3 +72,45 @@ test('missing refresh, expired, revoked and missing-permission warnings remain v
     assert.equal(channelBadge(channel, now).status, 'warning');
   }
 });
+
+test('legacy background binding requests reconnect once without claiming Google revoked the grant', () => {
+  const { attentionSentence, channelBadge, expiringSoon, needsAttention, needsReconnect } = state();
+  const now = 1800000000;
+  for (const connectionState of ['read_verified', 'client_binding_missing']) {
+    const channel = { connectionState, refreshSupported: false, refreshBindingRequired: true,
+      expiresAt: now + 3480, canManage: true };
+    assert.equal(expiringSoon(channel, now), false);
+    assert.deepEqual(channelBadge(channel, now), { label: 'Reconnect', status: 'warning' });
+    assert.equal(needsAttention(channel, now), true);
+    assert.equal(needsReconnect(channel), true);
+    assert.match(attentionSentence(channel, now), /Reconnect once to enable secure background access/);
+    assert.doesNotMatch(attentionSentence(channel, now), /Access expired|Access revoked|Access ends/);
+  }
+});
+
+test('disconnect receipts preserve the server note and distinguish deferred, confirmed and unknown remote revocation', () => {
+  const { disconnectReceipt, GOOGLE_PERMISSIONS_URL } = state();
+  assert.equal(GOOGLE_PERMISSIONS_URL, 'https://myaccount.google.com/permissions');
+  const note = 'Local execution access removed; approved jobs are held at the next claim.';
+  const deferred = disconnectReceipt('YouTube', 'My channel', { note, remoteRevoked: false, remoteRevocationDeferred: true });
+  assert.equal(deferred.title, 'YouTube connection removed from Rafii');
+  assert.ok(deferred.description.includes(note));
+  assert.match(deferred.description, /revocation was deferred/);
+  assert.equal(deferred.remoteConfirmed, false);
+  assert.equal(disconnectReceipt('YouTube', 'My channel', { note, remoteRevoked: true }).remoteConfirmed, true);
+  for (const result of [undefined, {}, { remoteRevoked: 'true' }, { remoteRevoked: true, remoteRevocationDeferred: true }]) {
+    assert.equal(disconnectReceipt('YouTube', 'My channel', result).remoteConfirmed, false);
+  }
+  assert.match(disconnectReceipt('YouTube', 'My channel', {}).description, /revocation is not confirmed/);
+});
+
+test('YouTube local removal and Google authorization controls retain distinct effects and actual result', () => {
+  const card = fs.readFileSync(path.resolve(__dirname, '../src/features/channels/channel-card.tsx'), 'utf8');
+  assert.match(card, /Remove from Rafii/);
+  assert.match(card, /Revoke Google authorization…/);
+  assert.match(card, /href=\{GOOGLE_PERMISSIONS_URL\}/);
+  assert.match(card, /Returning from Google does not confirm revocation: use Re-verify/);
+  assert.match(card, /does not cancel a native publication schedule already accepted by YouTube/);
+  assert.match(card, /disconnectReceipt\(channel.platform, channel.account, result\)/);
+  assert.match(card, /description: receipt.description/);
+});
