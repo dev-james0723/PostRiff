@@ -9,6 +9,8 @@
  * for anything a service result did not report, and "prepared" never reads as "applied".
  */
 
+import { DOMAIN_COPY, type DomainCopy } from './copy-domains';
+
 export const JOURNEY_LOCALES = ['en', 'zh-Hant', 'zh-Hans'] as const;
 /** Same values as lane C's `GenUiLanguage` (core/locale.tsx), which decides the language for the whole view. */
 export type JourneyLocale = (typeof JOURNEY_LOCALES)[number];
@@ -18,7 +20,7 @@ export const INTL_TAG: Readonly<Record<JourneyLocale, string>> = { en: 'en', 'zh
 
 type Count = (n: number) => string;
 
-export interface JourneyCopy {
+export interface BaseCopy {
   states: {
     loading: string;
     empty: string;
@@ -127,7 +129,7 @@ export interface JourneyCopy {
   };
 }
 
-const EN: JourneyCopy = {
+const EN: BaseCopy = {
   states: {
     loading: 'Getting the latest records…',
     empty: 'Nothing here yet.',
@@ -245,7 +247,7 @@ const EN: JourneyCopy = {
   },
 };
 
-const ZH_HANT: JourneyCopy = {
+const ZH_HANT: BaseCopy = {
   states: {
     loading: '正在讀取最新紀錄…',
     empty: '暫時未有內容。',
@@ -363,7 +365,7 @@ const ZH_HANT: JourneyCopy = {
   },
 };
 
-const ZH_HANS: JourneyCopy = {
+const ZH_HANS: BaseCopy = {
   states: {
     loading: '正在读取最新记录…',
     empty: '暂时没有内容。',
@@ -481,8 +483,14 @@ const ZH_HANS: JourneyCopy = {
   },
 };
 
-const COPY: Readonly<Record<JourneyLocale, JourneyCopy>> = { en: EN, 'zh-Hant': ZH_HANT, 'zh-Hans': ZH_HANS };
+export type JourneyCopy = BaseCopy & DomainCopy;
+
+const COPY: Readonly<Record<JourneyLocale, JourneyCopy>> = {
+  en: { ...EN, ...DOMAIN_COPY.en },
+  'zh-Hant': { ...ZH_HANT, ...DOMAIN_COPY['zh-Hant'] },
+  'zh-Hans': { ...ZH_HANS, ...DOMAIN_COPY['zh-Hans'] },
+};
 
 export function journeyCopy(locale: JourneyLocale): JourneyCopy {
-  return COPY[locale] ?? EN;
+  return COPY[locale] ?? COPY.en;
 }

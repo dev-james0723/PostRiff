@@ -16,6 +16,7 @@ import { useIsStreaming, useStateField } from '../core/openui';
 import { useGenUiLocale, type GenUiLocale } from '../core/locale';
 import { useBindingStatus as useBridgeBindingStatus, useRafiiActionBridge, useRafiiActionState } from '../bridges/context';
 import type { ActionState, BindingStatus } from '../bridges/types';
+import { useRecordSelection } from '../state/selection';
 import { journeyCopy, type JourneyCopy, type JourneyLocale } from './copy';
 
 // --- locale and zone ---------------------------------------------------------------------------------------------------
@@ -50,6 +51,31 @@ export function useBound<T>(name: string, prop: unknown): { value: T | undefined
 
 export function useStreaming(): boolean {
   return useIsStreaming();
+}
+
+// --- selection memory --------------------------------------------------------------------------------------------------
+export interface SelectedRef {
+  type: string;
+  id: string;
+  title?: string;
+}
+
+/**
+ * Report an ordered selection to lane F's view state (`@selection`), so a follow-up such as "the second draft" resolves
+ * against the order shown when the person picked, not a later re-sorted list. Ids come from bound data; titles are
+ * display text kept with the view (never sent to a model). No-op outside a generated view.
+ */
+export function useSelectionRecorder(listId: string): (picked: SelectedRef[], visible: SelectedRef[]) => void {
+  const record = useRecordSelection();
+  return useCallback(
+    (picked: SelectedRef[], visible: SelectedRef[]) =>
+      record(
+        listId,
+        picked.slice(0, 50).map((r) => ({ type: r.type, id: r.id, ...(r.title ? { title: r.title.slice(0, 120) } : {}) })),
+        visible.slice(0, 50).map((r) => ({ type: r.type, id: r.id })),
+      ),
+    [listId, record],
+  );
 }
 
 // --- query status ------------------------------------------------------------------------------------------------------

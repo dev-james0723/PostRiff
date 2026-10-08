@@ -139,19 +139,18 @@ export function QueryFrame<B extends BindingName>({ value, binding, label, title
 /** Pick / unpick one record. Selection only changes this view and the follow-up context; it never approves anything. */
 export function SelectToggle({ selected, label, onToggle, disabled }: { selected: boolean; label: string; onToggle: () => void; disabled?: boolean }) {
   return (
-    <button
+    <Button
       type='button'
+      variant={selected ? 'default' : 'outline'}
+      size='icon-xs'
       aria-pressed={selected}
       aria-label={label}
       disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        'rafii-focus flex size-5 shrink-0 items-center justify-center rounded-md border text-xs disabled:opacity-50',
-        selected ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background',
-      )}
+      onClick={() => onToggle()}
+      className='shrink-0'
     >
       {selected ? '✓' : ''}
-    </button>
+    </Button>
   );
 }
 

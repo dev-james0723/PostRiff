@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { formatCalendarDate, formatInstant } from '../../journeys/format';
-import { useBound, useJourneyEnvironment } from '../../journeys/runtime';
+import { useBound, useJourneyEnvironment, useSelectionRecorder } from '../../journeys/runtime';
 import type { AgendaEntry, QueueItem } from '../../journeys/views';
 import { CountValue, GuardedAction, Missing, Pill, QueryFrame, SelectToggle, type Tone } from './shared';
 import type { JourneyRendererProps } from './types';
@@ -44,7 +44,8 @@ export function CalendarAgenda({ props, statementId }: JourneyRendererProps) {
   const { copy, locale } = useJourneyEnvironment();
   const literal = titleProps.safeParse(props);
   const selection = useBound<string>(`${statementId ?? 'agenda'}Selected`, props.selected);
-  const selected = typeof selection.value === 'string' ? selection.value : null;
+  const selected = typeof selection.value === 'string' && selection.value ? selection.value : null;
+  const record = useSelectionRecorder(statementId ?? 'agenda');
   return (
     <QueryFrame value={props.data} binding='calendar_agenda' label={copy.calendar.title} title={literal.success ? literal.data.title : null}>
       {(data) => {
@@ -83,7 +84,13 @@ export function CalendarAgenda({ props, statementId }: JourneyRendererProps) {
                           <SelectToggle
                             selected={isSelected}
                             label={`${entry.platform ?? ''} ${entry.local ?? ''}`.trim() || entry.id}
-                            onToggle={() => selection.set(isSelected ? '' : entry.id)}
+                            onToggle={() => {
+                              selection.set(isSelected ? '' : entry.id);
+                              record(
+                                isSelected ? [] : [{ type: 'job', id: entry.id, title: [entry.platform, entry.local?.replace('T', ' ')].filter(Boolean).join(' · ') }],
+                                data.entries.filter((e) => e.kind === 'job').map((e) => ({ type: 'job', id: e.id })),
+                              );
+                            }}
                           />
                         ) : (
                           <span className='size-5 shrink-0' aria-hidden />
