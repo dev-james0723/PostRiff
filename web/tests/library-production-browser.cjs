@@ -132,7 +132,7 @@ const checks=[];
    for(const ext of thumbnailFormats){
     await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
    }
-   const wordThumbnail=page.locator('[data-library-thumbnail="docx"][data-thumbnail-preview="first-page"]').first();
+   const wordThumbnail=page.locator('[data-library-thumbnail="docx"][data-thumbnail-preview="extracted-text"]').first();
    await wordThumbnail.waitFor({timeout:15000});
    assert.match(await wordThumbnail.innerText(),/Rafii archive acceptance/,'DOCX thumbnail must show extracted content from the beginning of its first page');
    await search.fill('sample.pdf');

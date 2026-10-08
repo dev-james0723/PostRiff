@@ -342,7 +342,7 @@ export function createApi(getToken: TokenSource) {
 
     /* Universal Library: normalized documents/files use the same signed private-storage boundary as video. */
     library: (w: string, query = '', limit = 100, offset = 0, filters: { kind: string; tag: string; collection: string; sort: string } = { kind: 'all', tag: '', collection: '', sort: 'newest' }) =>
-      get<{ assets: Asset[]; query: string; nextOffset: number | null; storage: { usedBytes: number; limitBytes: number } }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit), offset: String(offset), ...filters })}`),
+      get<{ assets: Asset[]; query: string; nextOffset: number | null; total: number; storage: { usedBytes: number; limitBytes: number } }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit), offset: String(offset), ...filters })}`),
     beginLibraryFile: (w: string, body: { filename: string; mime: string; bytes: number }) =>
       send<{ upload: { assetId: string; url: string; mime: string; bytes: number; filename: string; expiresIn: number } }>('POST', `${ws(w)}/library/files`, body),
     commitLibraryFile: (w: string, assetId: string) =>

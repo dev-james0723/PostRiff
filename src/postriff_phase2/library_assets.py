@@ -376,19 +376,28 @@ class UniversalLibrary:
         order='a.bytes DESC,a.created_at DESC,a.id' if sort=='largest' else 'a.created_at DESC,a.id'
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
-            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s)) ORDER BY "+order+" LIMIT %s OFFSET %s",(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,query,query,'%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%',limit+1,offset))
+            where="FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s))"
+            like='%'+query.replace('%','\\%').replace('_','\\_')+'%'
+            params=(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,query,query,like,like,like)
+            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) "+where+" ORDER BY "+order+" LIMIT %s OFFSET %s",params+(limit+1,offset))
             rows=cur.fetchall();more=len(rows)>limit
+            # The server total for these filters (normalized rows); the client never treats loaded cards as the Library size.
+            cur.execute("SELECT count(*) "+where,params)
+            normalized_total=int(cur.fetchone()[0])
             assets=[_asset(r[0]) for r in rows[:limit]]
             state=self.service.ideas._state(row)
-            legacy=[{**a,'assetKind':'video' if str(a.get('mime') or '').startswith('video/') else 'image'} for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted') and not a.get('deletionPending')] if offset==0 else []
+            # Legacy photos/videos are filtered the same way on every page (for the total) but listed only on the first.
+            legacy=[{**a,'assetKind':'video' if str(a.get('mime') or '').startswith('video/') else 'image'} for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted') and not a.get('deletionPending')]
             self._decorate(cur,w,assets+legacy)
             legacy=[a for a in legacy if (kind=='all' or a['assetKind']==kind) and (not tag or tag in a.get('tags',[])) and (not collection or collection in a.get('collections',[]))]
             if query:
                 words=query.casefold().split()
                 legacy=[a for a in legacy if all(word in ' '.join(str(x) for x in [a.get('displayTitle',''),a.get('originalFilename',''),a.get('hash',''),*a.get('tags',[])]).casefold() for word in words)]
+            legacy_total=len(legacy)
+            legacy=legacy if offset==0 else []
             cur.execute("SELECT coalesce(sum(bytes),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
             used=int(cur.fetchone()[0])+sum(int(a.get('bytes') or 0) for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted'))
-        return {'assets':legacy+assets,'query':query,'nextOffset':offset+limit if more else None,'storage':{'usedBytes':used,'limitBytes':self.storage_limit},'capabilities':{'automaticTranscription':False,'transcriptImport':True}}
+        return {'assets':legacy+assets,'query':query,'nextOffset':offset+limit if more else None,'total':normalized_total+legacy_total,'storage':{'usedBytes':used,'limitBytes':self.storage_limit},'capabilities':{'automaticTranscription':False,'transcriptImport':True}}
 
     def sweep(self,connect,limit=100):
         s=self._store();removed=failed=processed=0

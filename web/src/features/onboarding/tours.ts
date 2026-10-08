@@ -539,8 +539,8 @@ export const PAGE_TOURS: Tour[] = [
         route: '/app/library',
         stop: 'Library',
         target: ['[data-tour="library-upload"]', '[data-tour="library-empty"]', ...heading('library')],
-        title: 'Add images',
-        body: 'JPEG or PNG. Drop several anywhere on the page.',
+        title: 'Add to your Library',
+        body: 'Use Add to upload files, paste a link or write a quick note. You can also drop files anywhere on the page.',
         when: (ctx) => ctx.canEdit
       },
       {

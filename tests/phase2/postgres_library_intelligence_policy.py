@@ -136,6 +136,10 @@ a1 = upload(service, storage, w1, "one", "recital-notes.md", "Brahms Op.118 æ¼”å
 a2 = upload(service, storage, w1, "one", "budget.md", b"Hall hire 1200 HKD")
 b1 = upload(service, storage, w2, "two", "other-tenant.md", b"Private to workspace two")
 
+listed_page = service.library.list(w1, "one", limit=1)
+check("list: server total counts every matching item, not the loaded page", listed_page["total"] == 2 and len(listed_page["assets"]) == 1, listed_page["total"])
+check("list: total respects filters", service.library.list(w1, "one", "Brahms")["total"] == 1)
+
 # --- isolation ---------------------------------------------------------------------------------------------------------
 with connection() as db, db.cursor() as cur:
     ctx = api.context(cur, ONE, w1)
