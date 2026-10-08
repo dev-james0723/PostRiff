@@ -1218,10 +1218,118 @@ class Surface(unittest.TestCase):
         self.assertEqual(lease_lost["state"], "blocked_permission", "without recheck, a lost heartbeat also stops the job")
 
     def test_cloud_scripts_compile(self):
-        for path in ("tests/phase2/postgres_library_intelligence_search.py", "scripts/library-intelligence-bench.py"):
+        for path in ("tests/phase2/postgres_library_intelligence_search.py", "scripts/library-intelligence-bench.py",
+                     "tests/phase2/postgres_library_intelligence_eval.py"):
             source = (ROOT / path).read_text(encoding="utf-8")
             compile(source, path, "exec")
             self.assertIn("LIBRARY_PG_PHASE" if "phase2" in path else "p95", source)
+
+
+class RetrievalEvaluation(unittest.TestCase):
+    """Pure helpers of scripts/library-intelligence-eval.py (A026/A027). The frozen corpus and judgments are only read."""
+    DISTRACTOR_DIGEST = "e696bda34cf9ec4ec10ad2dd6673d900f65ea46e3b457869c4828effd4062a5c"
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("library_eval", ROOT / "scripts/library-intelligence-eval.py")
+        cls.ev = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.ev)
+        cls.corpus = json.loads((ROOT / "tests/fixtures/library_intelligence/eval/corpus.json").read_text(encoding="utf-8"))["documents"]
+        cls.queries = json.loads((ROOT / "tests/fixtures/library_intelligence/eval/queries.json").read_text(encoding="utf-8"))["queries"]
+
+    def test_distractors_are_frozen_and_carry_no_judged_phrase(self):
+        first, again = self.ev.distractors(), self.ev.distractors()
+        self.assertEqual(first, again)
+        self.assertEqual(len(first), 940)
+        self.assertEqual(len(self.corpus) + len(first), 1004)
+        self.assertEqual(len({d["text"] for d in first}), 940, "every distractor is distinct (no duplicate rows)")
+        self.assertEqual({d["lang"] for d in first}, {"en", "zh-Hant", "zh-Hans", "yue", "yue-en"})
+        digest = hashlib.sha256(json.dumps(first, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        self.assertEqual(digest, self.DISTRACTOR_DIGEST, f"distractors changed: bump DISTRACTOR_VERSION ({self.ev.DISTRACTOR_VERSION}) and report a new set")
+        lexical = [q["query"].casefold() for q in self.queries if q["type"] == "lexical"]
+        self.assertFalse([q for q in lexical if any(q in d["text"].casefold() or q in d["title"].casefold() for d in first)])
+        self.assertFalse({d["id"] for d in first} & {d["id"] for d in self.corpus})
+
+    def test_recall_and_summary(self):
+        self.assertEqual(self.ev.recall_at(["a", "b", "c"], ["c", "z"]), 0.5)
+        self.assertEqual(self.ev.recall_at(["x"] * 9 + ["a"], ["a"]), 1.0)
+        self.assertEqual(self.ev.recall_at(["x"] * 10 + ["a"], ["a"]), 0.0, "only the top 10 count")
+        many = [f"d{i}" for i in range(12)]
+        self.assertEqual(self.ev.recall_at(many[:10], many), 1.0, "the denominator is min(10, relevant)")
+        rows = [{"type": "lexical", "relevant": ["a"], "r": ["a"]}, {"type": "semantic", "relevant": ["b"], "r": ["a"]}]
+        self.assertEqual(self.ev.summarize(rows, "r"), {"lexical": {"queries": 1, "recallAt10": 1.0}, "semantic": {"queries": 1, "recallAt10": 0.0},
+                                                        "all": {"queries": 2, "recallAt10": 0.5}})
+
+    def test_rankings_reuse_production_functions(self):
+        docs = self.corpus + self.ev.distractors()[:50]
+        items = self.ev.items_for(docs)
+        tokens = {d["id"]: self.ev.segment_tokens(d["text"]) for d in docs}
+        exact, lexical = self.ev.lexical_ranking("tote bag", docs, items, tokens)
+        self.assertEqual((exact, lexical[:1]), ([], ["d20"]))
+        self.assertEqual(self.ev.lexical_ranking("城市售票网", docs, items, tokens)[1][:1], ["d02"], "Simplified query, Traditional document")
+        self.assertEqual(self.ev.lexical_ranking("fact-sheet-bio.md", docs, items, tokens)[0], ["d64"], "an exact filename is an identity match")
+        self.assertEqual(self.ev.lexical_ranking("tote bag", docs, items)[1], lexical, "precomputed tokens change nothing")
+        self.assertEqual(self.ev.hybrid_ranking(["e"], ["a", "e", "b"], ["b", "c"]), ["e", "b", "a", "c"], "exact first, then RRF k=60")
+        with mock.patch.object(search, "rrf", wraps=search.rrf) as fused:
+            self.ev.hybrid_ranking([], ["a"], ["b"])
+        fused.assert_called_once()
+        vectors = {"a": [1.0, 0.0], "b": [0.6, 0.8], "c": [0.0, 1.0]}
+        self.assertEqual(self.ev.cosine_ranking([1.0, 0.1], vectors, 2), ["a", "b"])
+
+    def test_gate_credentials_and_budget(self):
+        import contextlib
+        import io as _io
+        import tempfile
+        ev = self.ev
+        ok = {ev.AUTH_ENV: ev.AUTH_VALUE}
+        self.assertEqual(ev.authorization(ok, confirmed=True, budget_usd=10, credentials={"AI_GATEWAY_API_KEY": "k"})["status"], "AUTHORIZED")
+        for environ, confirmed, budget, creds in ((ok, False, 10, {"AI_GATEWAY_API_KEY": "k"}), ({ev.AUTH_ENV: "james"}, True, 10, {"AI_GATEWAY_API_KEY": "k"}),
+                                                  (ok, True, 10.01, {"AI_GATEWAY_API_KEY": "k"}), (ok, True, 0, {"AI_GATEWAY_API_KEY": "k"}), (ok, True, 5, {})):
+            self.assertEqual(ev.authorization(environ, confirmed=confirmed, budget_usd=budget, credentials=creds)["status"], "BLOCKED", (environ, confirmed, budget))
+        guard = ev.BudgetGuard(0.00001)
+        self.assertTrue(guard.allows(10))
+        guard.record({"kind": "estimated", "usdMicro": 2}, estimate=6)
+        self.assertEqual(guard.spent_micro, 6, "an estimate below ours is charged at ours")
+        self.assertFalse(guard.allows(5))
+        secret = "sk-test-NEVER-PRINT-ME"
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / "provider.env"
+            env_file.write_text(f"# local\nexport AI_GATEWAY_API_KEY='{secret}'\nOPENAI_API_KEY=other-secret\nUNRELATED=1\n", encoding="utf-8")
+            os.chmod(env_file, 0o600)
+            self.assertEqual(ev.load_env_file(env_file), {"AI_GATEWAY_API_KEY": secret, "OPENAI_API_KEY": "other-secret"})
+            self.assertIsNone(ev.env_file_mode_warning(env_file))
+            environ = ev.provider_environ(ev.load_env_file(env_file), None)
+            self.assertEqual(environ["AI_GATEWAY_API_KEY"], secret)
+            self.assertNotIn("UNRELATED", environ)
+            out = Path(tmp) / "report.json"
+            with mock.patch.dict(os.environ, {ev.AUTH_ENV: "", "AI_GATEWAY_API_KEY": "process-env-is-ignored"}), contextlib.redirect_stdout(_io.StringIO()) as printed:
+                code = ev.main(["--out", str(out), "--budget-usd", "10", "--env-file", str(env_file)])
+            self.assertEqual(code, 3)
+            self.assertNotIn(secret, printed.getvalue())
+            self.assertIn("AI_GATEWAY_API_KEY", printed.getvalue(), "names may be listed, never values")
+            self.assertFalse(out.exists(), "a blocked run writes nothing and calls nothing")
+
+    def test_offline_rescoring_from_cached_vectors(self):
+        import contextlib
+        import io as _io
+        import tempfile
+        ev = self.ev
+        documents = self.corpus + ev.distractors()
+        doc_vectors = {d["id"]: unit(8, {int(hashlib.sha256(d["id"].encode()).hexdigest(), 16) % 8: 1.0}) for d in documents}
+        query_vectors = {q["id"]: doc_vectors[q["relevant"][0]] for q in self.queries}  # synthetic oracle vectors: exercises the plumbing only
+        with tempfile.TemporaryDirectory() as tmp:
+            cache, out = Path(tmp) / "vectors.json", Path(tmp) / "report.json"
+            cache.write_text(json.dumps({"model": "synthetic/test", "dims": 8, "documents": doc_vectors, "queries": query_vectors}), encoding="utf-8")
+            with contextlib.redirect_stdout(_io.StringIO()):
+                self.assertEqual(ev.main(["--out", str(out), "--from-cache", str(cache)]), 0)
+            report = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(report["execution"], "offline-cache")
+        self.assertEqual(set(report["recallAt10"]), {"lexicalOnly", "semanticOnly", "hybrid"})
+        self.assertEqual(report["recallAt10"]["lexicalOnly"]["all"]["queries"], 100)
+        self.assertEqual(report["documents"], 1004)
+        self.assertEqual(report["rankingVersion"], "rrf-60-v1")
+        self.assertNotIn("sk-", json.dumps(report))
 
 
 class AgentAdapter(unittest.TestCase):
