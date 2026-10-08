@@ -498,7 +498,7 @@ class FakeStore:
 
 
 # --- lane D and C fakes ------------------------------------------------------------------------------------------------------
-def fake_projection(cur, auth, verified_result, surface, selection_state):
+def fake_projection(cur, auth, verified_result, surface, selection_state, *, flags=None):
     return {"manifest_id": "m-1", "journey_ids": list((verified_result.get("ui") or {}).get("journeyIds") or ["J01"]), "component_group_ids": ["layout", "data"],
             "data_bindings": [{"name": "drafts_list"}], "action_bindings": [{"actionId": "draft_edit"}],
             "allowed_context": {"counts": {"drafts": 3}, "toolStates": {"drafts_list": "available"}, "refs": [{"type": "draft", "id": "d1"}],
@@ -506,7 +506,7 @@ def fake_projection(cur, auth, verified_result, surface, selection_state):
             "fallback_text": "Here are your drafts.", "egress_decision": {"allowed": True, "provider": "openai", "reason": None}}
 
 
-def fake_manifest(cur, auth, projection, *, scope="workspace"):
+def fake_manifest(cur, auth, projection, *, scope="workspace", flags=None):
     return {"manifestId": "m-1", "bindingVersion": 1, "journeyIds": list(projection["journey_ids"]), "componentGroups": ["layout", "data"],
             "library": "consumer", "queries": [{"name": "drafts_list", "description": "Drafts in this workspace", "argsSchema": {"type": "object"},
                                                 "refreshMinSeconds": 30, "pageSize": 50}],
@@ -619,7 +619,8 @@ def make_assets(root=None, *, tamper=False) -> str:
 
 
 def make_cfg(**extra):
-    values = {"OPENAI_API_KEY": "sk-test-not-a-real-key", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1"}
+    values = {"OPENAI_API_KEY": "sk-test-not-a-real-key", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1",
+              "RAFII_GENUI_ACTIONS_ENABLED": "1", "RAFII_GENUI_FOUNDER_ENABLED": "1"}
     values.update(extra)
     return config.RuntimeConfig.from_environment(values={k: v for k, v in values.items() if v is not None})
 

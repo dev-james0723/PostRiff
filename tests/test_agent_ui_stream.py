@@ -20,6 +20,8 @@ from test_agent_ui_stream_fakes import (GOOD_PROGRAM, ME, OTHER_TOKEN, PRIVATE_C
                                         parse, program_in_pieces, usage_final)
 
 KEY = "presentation-key-0001"
+FOUNDER_NAMESPACE = "founder:operator:production"
+REAL_PROJECTION, REAL_MANIFEST = ui_projection.project_ui_context, ui_capabilities.build_manifest
 
 
 class Base(unittest.TestCase):
@@ -126,6 +128,26 @@ class Generation(Base):
         self.assertIn("ToolBoundTable", call["policy"]["allowedComponents"])
         self.assertNotIn("ToolBoundChart", call["policy"]["allowedComponents"], "only the journey's groups")
         self.assertEqual(set(call["scope"]), {"workspaceId", "artifactId", "attemptId"})
+
+    def test_actions_kill_switch_keeps_write_controls_out_of_the_prompt_and_policy(self):
+        self.runtime.cfg = make_cfg(RAFII_GENUI_ACTIONS_ENABLED=None)
+        _, _, events = self.run_one(self.db.add_parent())
+        self.assertEqual(events[0]["payload"]["manifest"]["actions"], [])
+        self.assertEqual(self.validator.calls[-1]["policy"]["actionIds"], [])
+        self.assertNotIn("- draft_edit:", self.transport.calls[-1]["plan"].instructions)
+        self.assertEqual(events[-1]["kind"], "ui.ready", "reads still work while writes are switched off")
+
+    def test_real_manifest_honours_the_actions_kill_switch(self):
+        with mock.patch.object(ui_projection, "project_ui_context", REAL_PROJECTION), mock.patch.object(ui_capabilities, "build_manifest", REAL_MANIFEST):
+            self.runtime.ui_assets_dir = None
+            self.runtime.cfg = make_cfg(RAFII_GENUI_ACTIONS_ENABLED=None)
+            _, _, off = self.run_one(self.db.add_parent())
+            self.runtime.cfg = make_cfg()
+            _, _, on = self.run_one(self.db.add_parent(), key="presentation-key-actions-on")
+        self.assertEqual(off[0]["payload"]["manifest"]["actions"], [])
+        self.assertEqual(self.validator.calls[0]["policy"]["actionIds"], [])
+        self.assertTrue(on[0]["payload"]["manifest"]["actions"], "J01 offers its write controls when actions are on")
+        self.assertTrue(self.validator.calls[1]["policy"]["actionIds"])
 
     def test_started_frame_and_stream_carry_no_private_data(self):
         parent = self.db.add_parent()
@@ -476,6 +498,76 @@ class Replay(Base):
         self.assertTrue(any(e["kind"] == "ui.heartbeat" for e in events))
         self.assertEqual(len(self.transport.calls), 1)
         producer.close()
+
+
+class Founder(Base):
+    """J09 on the founder route family: the founder runtime's namespace makes ui_transaction yield founder-scope auth; the
+    real lane D projection and manifest are used (not fakes); the real generated founder library and prompts are used."""
+
+    def setUp(self):
+        super().setUp()
+        for patch in (mock.patch.object(ui_projection, "project_ui_context", REAL_PROJECTION), mock.patch.object(ui_capabilities, "build_manifest", REAL_MANIFEST)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.runtime.ui_assets_dir = None               # the real generated assets (consumer + founder libraries)
+
+    def founder_parent(self):
+        run_id = self.db.add_parent(journeys=("J09",), run_key=f"agent:{FOUNDER_NAMESPACE}:" + "k" * 12)
+        self.db.runs[run_id]["result"]["routes"] = [{"agent": "rafii_founder_manager", "provider": "openai", "model": "gpt-6-sol"}]
+        self.db.runs[run_id]["result"]["founder"] = True
+        return run_id
+
+    def founder_post(self, runtime, parent, key="founder-key-000000001"):
+        request = {"parentRunId": parent, "slot": "main", "surface": "founder", "idempotencyKey": key, "retryOfAttemptId": None, "conversationId": None}
+        return ui_stream.create_presentation(runtime, {}, Started(), WS, TOKEN, request)
+
+    def test_founder_presentation_is_ready_with_a_founder_manifest_and_library(self):
+        self.runtime.founder = {"namespace": FOUNDER_NAMESPACE}
+        events = parse(self.drain(self.founder_post(self.runtime, self.founder_parent())))
+        self.assertEqual([events[0]["kind"], events[-1]["kind"]], ["ui.started", "ui.ready"])
+        self.assertEqual(events[0]["payload"]["library"], "founder")
+        self.assertEqual(events[0]["payload"]["manifest"]["actions"], [], "founder views are read-only")
+        stored = self.db.artifacts[events[0]["artifactId"]]["manifest"]
+        self.assertEqual((stored["scope"], stored["scopeKey"]), ("founder", FOUNDER_NAMESPACE))
+        self.assertTrue(stored["queries"], "the founder manifest carries J09 read bindings")
+        self.assertTrue(self.validator.calls[-1]["policy"]["founder"])
+        self.assertNotIn("ActionButton", self.validator.calls[-1]["policy"]["allowedComponents"])
+        plan = self.transport.calls[-1]["plan"]
+        self.assertEqual((plan.library, plan.prompt_key), ("founder", "founder:J09:generate"))
+
+    def test_consumer_auth_cannot_present_a_founder_run_and_vice_versa(self):
+        founder_run = self.founder_parent()
+        with self.assertRaises(AlphaError) as raised:
+            self.founder_post(self.runtime, founder_run)                 # consumer runtime (no founder namespace)
+        self.assertEqual(raised.exception.status, 404)
+        with self.assertRaises(AlphaError) as raised:
+            self.post(founder_run)
+        self.assertEqual(raised.exception.status, 404)
+        self.runtime.founder = {"namespace": FOUNDER_NAMESPACE}
+        with self.assertRaises(AlphaError) as raised:
+            self.founder_post(self.runtime, self.db.add_parent(), key="founder-key-000000002")   # a consumer run under founder auth
+        self.assertEqual(raised.exception.status, 404)
+        other_namespace = self.db.add_parent(journeys=("J09",), run_key="agent:founder:operator:staging:" + "k" * 12)
+        with self.assertRaises(AlphaError) as raised:
+            self.founder_post(self.runtime, other_namespace, key="founder-key-000000003")         # another founder namespace
+        self.assertEqual(raised.exception.status, 404)
+        self.assertEqual(self.transport.calls, [])
+
+    def test_founder_artifact_is_404_to_consumer_cancel_and_edit(self):
+        self.runtime.founder = {"namespace": FOUNDER_NAMESPACE}
+        events = parse(self.drain(self.founder_post(self.runtime, self.founder_parent())))
+        artifact_id = events[0]["artifactId"]
+        self.db.artifacts[artifact_id].update(scope="founder", scopeKey=FOUNDER_NAMESPACE)    # what lane F stores for founder scope
+        consumer = FakeRuntime(self.db, self.runtime.cfg, self.transport, None)
+        with self.assertRaises(AlphaError) as raised:
+            ui_stream.cancel_http(consumer, WS, TOKEN, artifact_id)
+        self.assertEqual(raised.exception.status, 404)
+        request = contracts.validate_patch({"baseRevision": 1, "baseSourceHash": self.db.artifacts[artifact_id]["sourceHash"], "instruction": "Add revenue",
+                                            "idempotencyKey": "founder-edit-0000000001"}, founder=True)
+        with self.assertRaises(AlphaError) as raised:
+            ui_stream.create_edit(consumer, {}, Started(), WS, TOKEN, artifact_id, request)
+        self.assertEqual(raised.exception.status, 404)
+        self.assertFalse(ui_stream.cancel_http(self.runtime, WS, TOKEN, artifact_id)["canceled"], "the founder route reaches its own artifact")
 
 
 class Probe(Base):

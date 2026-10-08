@@ -891,6 +891,22 @@ def _deadline(started: float) -> float:
     return started + min(GENERATION_SECONDS, DEPLOYMENT_SECONDS - DEPLOYMENT_MARGIN_SECONDS)
 
 
+def _flags(runtime, workspace_id, scope) -> dict:
+    """The deployment's GenUI switches for this workspace (founder ones in founder scope); the routes re-check them independently."""
+    try:
+        return runtime.cfg.genui_for(workspace_id, founder=scope == "founder")
+    except Exception:  # noqa: BLE001 — unknown switches: no write controls
+        return {"enabled": True, "actions": False, "edits": False}
+
+
+def _without_disabled_actions(manifest, flags):
+    """With the actions kill switch off the presenter never composes a write control: no action ids in its prompt or in the
+    validator policy (an ActionButton is then rejected). The stored manifest of an existing artifact is not rewritten."""
+    if not isinstance(manifest, dict) or (flags or {}).get("actions"):
+        return manifest
+    return {**manifest, "actions": []}
+
+
 def _plan_or_refusal(build):
     try:
         return build(), None
@@ -945,9 +961,12 @@ def _start_presentation(runtime, tx, workspace_id, request, *, started, request_
             # Reopening an old answer shows its stored state; it never starts (or charges for) a new generation.
             raise AlphaError("This answer is too old to start an interactive view; ask again for a fresh one.", 409, code="ui_not_eligible")
         verified = {**result, "runId": parent["runId"], "conversationId": parent["conversationId"]}
-        projection = ui_projection.project_ui_context(cur, auth, verified, request["surface"], {})
+        flags = _flags(runtime, workspace_id, scope)
+        projection = _call(ui_projection.project_ui_context, cur, auth, verified, request["surface"], {}, flags=flags)
         # Lane D's projection carries the manifest it built from the same journeys for this member (deterministic per issue).
-        manifest = projection.get("manifest") if isinstance(projection.get("manifest"), dict) else ui_capabilities.build_manifest(cur, auth, projection, scope=scope)
+        manifest = projection.get("manifest") if isinstance(projection.get("manifest"), dict) else _call(ui_capabilities.build_manifest, cur, auth, projection,
+                                                                                                          scope=scope, flags=flags)
+        manifest = _without_disabled_actions(manifest, flags)
         plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind=kind, mode="generate"))
         lease = _call(store.create_or_resume_artifact, cur, auth, parent["runId"], request["slot"], key, surface=request["surface"], manifest=manifest,
                       projection=projection, kind=kind, retry_of=retry_of, lease_owner=owner, library=_library_info(plan))
@@ -1025,7 +1044,7 @@ def _start_edit(runtime, tx, workspace_id, artifact_id, request, *, started, req
         base_source = _revision_source(cur, workspace_id, head["artifactId"], head["revision"])
         if not base_source or contracts.sha256_text(base_source) != head["sourceHash"]:
             raise AlphaError("This view changed since the edit started. Nothing was overwritten or charged.", 409, code="ui_revision_conflict")
-        manifest = ui_capabilities.current(cur, auth, head["manifest"])
+        manifest = _without_disabled_actions(ui_capabilities.current(cur, auth, head["manifest"]), _flags(runtime, workspace_id, getattr(auth, "scope", "workspace")))
         projection = {"journey_ids": head["journeyIds"], "component_group_ids": list((manifest or {}).get("componentGroups") or []), "allowed_context": {}}
         plan, refusal = _plan_or_refusal(lambda: ui_presenter.build_plan(runtime.cfg, _assets(runtime), projection, manifest, kind="edit", mode="patch",
                                                                          base_source=base_source, base_revision=head["revision"],
