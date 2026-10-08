@@ -11,10 +11,19 @@ from . import contracts as c
 from .http import load_member
 
 
+_MOUNTED = {"service": None}
+
+
+def mount(service):
+    """The hosted service this process serves (set when LibraryIntelligence is mounted). In-process callers that do not pass
+    `service=` still get repository effects (e.g. voice revocation staling the growth genome) through it."""
+    _MOUNTED["service"] = service
+
+
 def context(cur, principal, workspace_id, *, service=None, now=None) -> c.LibraryContext:
     _, state, member = load_member(cur, str(principal), str(workspace_id))
     return c.LibraryContext(workspace_id=str(workspace_id), actor=str(principal), membership=member, state=state, cur=cur,
-                            now=now if now is not None else time.time(), service=service)
+                            now=now if now is not None else time.time(), service=service if service is not None else _MOUNTED["service"])
 
 
 def search(cur, principal, workspace_id, params, **kw) -> dict:

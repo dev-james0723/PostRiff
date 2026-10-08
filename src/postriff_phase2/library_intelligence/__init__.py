@@ -13,6 +13,8 @@ class LibraryIntelligence:
     def __init__(self, service, providers=None):
         self.service = service
         self._providers = providers
+        from . import api
+        api.mount(service)
 
     @property
     def providers(self):

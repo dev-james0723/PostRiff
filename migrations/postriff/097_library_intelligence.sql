@@ -252,7 +252,7 @@ create table if not exists public.pr_library_voice_samples (
   version_key text not null check (version_key ~ '^[0-9a-f]{32}$'),
   source_sha256 text not null check (source_sha256 ~ '^[0-9a-f]{64}$'),
   locator jsonb not null check (jsonb_typeof(locator) = 'object'),
-  text text not null check (length(text) between 1 and 4000),
+  text text check (text is null or length(text) between 1 and 4000),
   text_hash text not null check (text_hash ~ '^[0-9a-f]{64}$'),
   persona_id text not null check (length(persona_id) between 1 and 80),
   brand text check (brand is null or length(brand) <= 80),
@@ -265,7 +265,8 @@ create table if not exists public.pr_library_voice_samples (
   created_by uuid not null,
   created_at timestamptz not null default now(),
   revoked_at timestamptz,
-  revoked_by uuid
+  revoked_by uuid,
+  check (status = 'revoked' or text is not null)
 );
 create index if not exists pr_library_voice_samples_scope on public.pr_library_voice_samples(workspace_id, persona_id, language) where status = 'approved';
 
