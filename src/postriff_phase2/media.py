@@ -37,7 +37,7 @@ def _decode_ffmpeg(raw):
             codec = stream.get("codec_name")
             width, height = stream["width"], stream["height"]
             if codec not in ("mjpeg", "png") or not 320 <= width <= 4096 or not 320 <= height <= 4096 or width*height > 16_777_216:
-                raise AlphaError("Use a JPEG or PNG image, 320–4096 pixels per side. Video is unavailable in this release.")
+                raise AlphaError("Use a JPEG or PNG image, 320–4096 pixels per side.")
             # Full decode, including corrupt/truncated file detection. Do not preserve metadata.
             output = Path(directory)/"rendition.jpg"
             subprocess.run(["ffmpeg", "-v", "error", "-xerror", "-protocol_whitelist", "file", "-i", str(path), "-frames:v", "1", "-map_metadata", "-1", "-q:v", "2", str(output)], capture_output=True, timeout=15, check=True)
@@ -58,7 +58,7 @@ def _decode_pillow(raw):
                 raise ValueError("unsupported image container")
             width, height = image.size
             if not 320 <= width <= 4096 or not 320 <= height <= 4096 or width * height > 16_777_216:
-                raise AlphaError("Use a JPEG or PNG image, 320–4096 pixels per side. Video is unavailable in this release.")
+                raise AlphaError("Use a JPEG or PNG image, 320–4096 pixels per side.")
             image.load()  # Full decode catches truncated/corrupt input before storage.
             image = ImageOps.exif_transpose(image)
             width, height = image.size

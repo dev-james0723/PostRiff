@@ -15,6 +15,15 @@ class LibraryStorageTests(unittest.TestCase):
   h=FakeHTTPS(script);return SupabaseStorage(PROJECT,KEY,file_bucket="postriff-library",opener=build_opener(_NoRedirect(),h)),h
  def test_file_path_uses_separate_private_bucket(self):
   s,h=self.make([(200,{"Content-Length":"3","Content-Type":"application/pdf","ETag":"e"},b"")]);self.assertEqual(s.object_info(WS,"file",OBJ)["bytes"],3);self.assertIn("/postriff-library/",h.requests[0][1]);self.assertIn(f"/{WS}/file/{OBJ}",h.requests[0][1])
+ def test_html_safe_download_mime_keeps_declared_identity(self):
+  for ext in ("html","htm"):
+   with self.subTest(ext=ext):
+    obj="0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10."+ext
+    s,_=self.make([(200,{"Content-Length":"121","Content-Type":"text/plain","ETag":"e"},b"")])
+    self.assertEqual(s.object_info(WS,"file",obj),{"bytes":121,"mime":"text/html","etag":"e"})
+ def test_text_files_keep_plain_text_identity(self):
+  s,_=self.make([(200,{"Content-Length":"3","Content-Type":"text/plain","ETag":"e"},b"")])
+  self.assertEqual(s.object_info(WS,"file","0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10.txt")["mime"],"text/plain")
  def test_bounded_file_read(self):
   s,h=self.make([(200,{"Content-Length":"3"},b"abc")]);self.assertEqual(s.get_bounded(WS,"file",OBJ,10),b"abc")
  def test_invalid_file_object_name_fails_closed(self):

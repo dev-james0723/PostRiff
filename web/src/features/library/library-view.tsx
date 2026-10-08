@@ -70,6 +70,9 @@ const FILTERS: { value: LibraryFilter; label: string }[] = [
   { value: 'used', label: 'Used' }
 ];
 
+const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/quicktime']);
+const VIDEO_UPLOAD_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
+
 const SORT_LABELS: Record<LibrarySort, string> = {
   newest: 'Newest first',
   stored: 'Workspace order',
@@ -282,7 +285,7 @@ export function LibraryView() {
     setFileProgress(`Preparing ${file.name}…`);
     try {
       const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (file.type.startsWith('video/') || ['mp4', 'mov'].includes(extension)) {
+      if (VIDEO_UPLOAD_MIMES.has(file.type.toLowerCase()) || VIDEO_UPLOAD_EXTENSIONS.has(extension)) {
         await uploadLibraryVideo(file);
         return;
       }
