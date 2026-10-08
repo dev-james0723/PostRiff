@@ -54,11 +54,15 @@
   "physical_device_evidence": null,
   "model_attempt_and_cost_summary": null,
   "rollback_deployment": {
-    "deployment_id": "dpl_EVqE4ugSHbJoWkbmErhpqUDV48Cf",
+    "deployment_id": "dpl_HPRcYu9tsfvDDUwtHoZwiuES1xgy",
     "sha": "65b1ea83",
-    "recorded_at": "2026-10-08T20:00:00-04:00",
-    "note": "65b1ea83 + rafii.io env + RAFII_LEGACY_HOST_REDIRECT=temporary (domain-migration session)",
+    "recorded_at": "2026-10-08T21:00:00-04:00",
+    "note": "65b1ea83 + rafii.io env, legacy temporary redirect, FB/IG/YouTube/TikTok callback pins removed (domain-migration session)",
     "previous": [
+      {
+        "deployment_id": "dpl_EVqE4ugSHbJoWkbmErhpqUDV48Cf",
+        "sha": "65b1ea83"
+      },
       {
         "deployment_id": "dpl_9xGG8feQ6mxQHN8yQvm3Ygz6SpXd",
         "sha": "65b1ea83"
