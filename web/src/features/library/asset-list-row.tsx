@@ -100,7 +100,7 @@ export function AssetListRow({
           <button
             type='button'
             onClick={onOpen}
-            aria-label={`${kindLabel} ${title}${video ? ', video thumbnail' : pdfAsset ? ', first-page preview' : assetKind === 'document' ? `, ${asset.extension?.toUpperCase() || 'document'} preview` : ''}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
+            aria-label={`${kindLabel} ${title}${video ? ', video thumbnail' : pdfAsset || (assetKind === 'document' && ['doc', 'docx', 'odt', 'rtf'].includes((asset.extension || '').toLowerCase())) ? ', first-page preview' : assetKind === 'document' ? `, ${asset.extension?.toUpperCase() || 'document'} preview` : ''}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
             className='focus-visible:ring-ring/50 flex min-h-[76px] w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
             <span data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined} data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined} className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>

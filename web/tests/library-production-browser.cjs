@@ -9,6 +9,7 @@ const out=process.env.RAFII_LIBRARY_EVIDENCE||resolve(__dirname,'../../docs/cons
 mkdirSync(out,{recursive:true});
 const checks=[];
 (async()=>{
+ let generatedPoster=null;
  for(const [engine,browserType] of Object.entries({chromium,webkit})){
   const browser=await browserType.launch({headless:true});
   try{for(const width of [1440,390]){
@@ -70,10 +71,36 @@ const checks=[];
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    await page.locator('[data-library-thumbnail="md"]').first().waitFor({timeout:15000});
    const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4'));
-   await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
+   if(engine==='chromium'){
+    await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
+   }else{
+    assert.ok(generatedPoster, 'Chromium must extract a real video frame before WebKit can verify poster display');
+    const ticketResponse=await context.request.post(base+'/api/workspaces/'+ws+'/media/videos',{headers,data:{mime:'video/mp4',bytes:videoBytes.length,duration:8,width:896,height:560}});
+    assert.equal(ticketResponse.status(),201,await ticketResponse.text());
+    const ticket=(await ticketResponse.json()).upload;
+    const token=new URL(ticket.uploadUrl).searchParams.get('token');
+    assert.ok(token,'video upload ticket must contain a signed token');
+    const put=await context.request.put(base+'/dev/upload/'+token,{data:videoBytes,headers:{'Content-Type':'video/mp4'}});
+    assert.equal(put.status(),200,await put.text());
+    const committed=await context.request.post(base+'/api/workspaces/'+ws+'/media/videos/'+ticket.assetId+'/commit',{headers,data:{frames:[{at:1,data:generatedPoster.toString('base64')}],locationCleared:true}});
+    assert.ok(committed.ok(),await committed.text());
+    const titled=await context.request.patch(base+'/api/workspaces/'+ws+'/library/assets/'+ticket.assetId,{headers,data:{title:videoName}});
+    assert.ok(titled.ok(),await titled.text());
+    await page.reload();
+   }
    const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoCard.waitFor({timeout:30000});
    const videoPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await videoPoster.waitFor({state:'visible',timeout:15000});
    await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
+   if(engine==='chromium'){
+    const videoListing=await (await context.request.get(path,{headers})).json();
+    const videoAsset=videoListing.assets.find(asset=>asset.originalFilename===videoName);
+    assert.ok(videoAsset,`uploaded video missing from Library listing: ${JSON.stringify(videoListing)}`);
+    const posterResponse=await context.request.get(base+'/api/workspaces/'+ws+'/media/'+videoAsset.id,{headers});
+    assert.equal(posterResponse.status(),200,await posterResponse.text());
+    assert.match(posterResponse.headers()['content-type']||'','image/jpeg');
+    generatedPoster=await posterResponse.body();
+    assert.ok(generatedPoster.length>100,'video upload must produce a non-empty JPEG poster');
+   }
    thumbnailFormats.add('video');
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
@@ -105,6 +132,9 @@ const checks=[];
    for(const ext of thumbnailFormats){
     await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
    }
+   const wordThumbnail=page.locator('[data-library-thumbnail="docx"][data-thumbnail-preview="first-page"]').first();
+   await wordThumbnail.waitFor({timeout:15000});
+   assert.match(await wordThumbnail.innerText(),/Rafii archive acceptance/,'DOCX thumbnail must show extracted content from the beginning of its first page');
    await search.fill('sample.pdf');
    const pdfCard=page.getByRole('button',{name:/Document sample, first-page preview/}).first();await pdfCard.waitFor({timeout:15000});
    await pdfCard.scrollIntoViewIfNeeded();

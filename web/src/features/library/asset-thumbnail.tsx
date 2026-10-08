@@ -30,8 +30,9 @@ function DocumentCover({ asset, size }: { asset: Asset; size: AssetThumbnailSize
   const markdown = extension === 'md' || extension === 'markdown';
   const spreadsheet = ['csv', 'xls', 'xlsx', 'ods'].includes(extension);
   const presentation = ['ppt', 'pptx', 'odp'].includes(extension);
+  const wordDocument = ['doc', 'docx', 'odt', 'rtf'].includes(extension);
   const label = extension === 'pdf' ? 'PDF · FIRST PAGE' :
-    ['doc', 'docx', 'odt', 'rtf'].includes(extension) ? 'DOCUMENT · OPENING CONTENT' :
+    wordDocument ? `${extension === 'doc' || extension === 'docx' ? 'WORD' : 'DOCUMENT'} · FIRST PAGE` :
       spreadsheet ? 'SHEET PREVIEW' : presentation ? 'SLIDE PREVIEW' : markdown ? 'MARKDOWN' :
         ['txt', 'text'].includes(extension) ? 'TEXT PREVIEW' : `${extension.toUpperCase()} FILE`;
   const Icon = spreadsheet ? Icons.fileTypeXls :
@@ -39,7 +40,7 @@ function DocumentCover({ asset, size }: { asset: Asset; size: AssetThumbnailSize
       markdown ? Icons.code : extension === 'pdf' ? Icons.fileTypePdf : Icons.page;
 
   return (
-    <div aria-hidden='true' data-library-thumbnail={extension} data-thumbnail-preview={summary ? 'opening-content' : 'format-cover'} className={cn('rafii-quiet relative flex items-center justify-center overflow-hidden p-3', SIZE_CLASS[size])}>
+    <div aria-hidden='true' data-library-thumbnail={extension} data-thumbnail-preview={wordDocument ? 'first-page' : summary ? 'opening-content' : 'format-cover'} className={cn('rafii-quiet relative flex items-center justify-center overflow-hidden p-3', SIZE_CLASS[size])}>
       {spreadsheet ? (
         <div className='absolute inset-0 grid grid-cols-4 grid-rows-5 opacity-40' aria-hidden>
           {Array.from({ length: 20 }, (_, index) => <span key={index} className='border-foreground/15 border-r border-b' />)}

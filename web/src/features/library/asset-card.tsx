@@ -150,7 +150,8 @@ export function AssetCard({
   const dims = dimensionsOf(asset);
   const count = uses.length;
   const itemTitle = asset.displayTitle?.trim() || asset.originalFilename?.trim() || (assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo');
-  const previewLabel = assetKind === 'video' ? ', video thumbnail' : assetKind === 'document' ? (pdfAsset ? ', first-page preview' : `, ${asset.extension?.toUpperCase() || 'document'} preview`) : '';
+  const wordAsset = assetKind === 'document' && ['doc', 'docx', 'odt', 'rtf'].includes((asset.extension || '').toLowerCase());
+  const previewLabel = assetKind === 'video' ? ', video thumbnail' : assetKind === 'document' ? (pdfAsset || wordAsset ? ', first-page preview' : `, ${asset.extension?.toUpperCase() || 'document'} preview`) : '';
   const label = `${assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo'} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}`;
 
   return (
