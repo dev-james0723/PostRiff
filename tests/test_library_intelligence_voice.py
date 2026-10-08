@@ -436,6 +436,68 @@ class AdmissionTests(Base):
         recheck = max(i for i, s in enumerate(sqls) if s.startswith("SELECT grant_revision FROM public.pr_library_policy"))
         self.assertLess(hold, recheck, "the workspace row is locked before the final recheck (recheck itself takes no lock)")
 
+    def test_partial_quotation_refused_with_own_words_suggested(self):
+        """Spec §10 / review #11: a substantial quotation inside a passage is someone else's voice. Refused (English, 「」,
+        mixed and ‘’ quotes) with the person's own words offered as an exact sub-span; scare quotes and apostrophes pass."""
+        db = self.db
+        doc = "7c" * 16
+        paras = ['As Jobs said, "Stay hungry, stay foolish, and never stop learning new things." I agree with that, and it shapes how I practise every day.',
+                 "老師成日講：「慢慢練先至係最快嘅學習方法，千祈唔好心急」所以我每朝都會慢慢練琴。",
+                 "My teacher always told me “practise slowly, then play it once at tempo before you sleep” and I still do it.",
+                 "I tell students ‘play it slowly, then play it again, then once more at tempo’ every week.",
+                 'He said "go home now" to me.',
+                 'I call it "slow practice" and I do it every single morning before breakfast.',
+                 "I can’t stop practising, and I won’t pretend it’s easy."]
+        ref = db.asset(doc, title="Teaching notes")
+        db.add_segments(doc, [{**s, "language": "yue" if n == 1 else "en"} for n, s in enumerate(text_segments(*paras))])
+        db.grant("voice", doc)
+        for index, expected in ((0, "I agree with that, and it shapes how I practise every day."), (1, "所以我每朝都會慢慢練琴。"), (2, "and I still do it."),
+                                (3, None), (4, None)):
+            with self.assertRaises(voice.QuotedSpan, msg=paras[index]) as raised:
+                approve(db, ref, span(index, paras))
+            self.assertEqual((raised.exception.status, raised.exception.code), (403, "library_voice_quoted"))
+            self.assertIn("select only your own words", str(raised.exception))
+            if expected is not None:
+                suggestion = raised.exception.suggestion
+                self.assertEqual(suggestion["text"], expected)
+                start = span(index, paras)["start"]
+                self.assertEqual(paras[index][suggestion["locator"]["start"] - start:suggestion["locator"]["end"] - start], expected)
+        self.nothing_admitted()
+        for index in (5, 6):  # a scare-quoted term and apostrophes are the person's own phrasing
+            self.assertEqual(approve(db, ref, span(index, paras))["text"], paras[index])
+        # The suggested own words are approved as their own passage.
+        with self.assertRaises(voice.QuotedSpan) as raised:
+            approve(db, ref, span(0, paras))
+        own = approve(db, ref, raised.exception.suggestion["locator"])
+        self.assertEqual(own["text"], "I agree with that, and it shapes how I practise every day.")
+        self.assertNotIn("Stay hungry", json.dumps(db.state))
+        # Through the action route: not admitted, the own-words sub-span offered for confirmation.
+        payload = {"locator": span(1, paras), "attestation": WROTE, "uses": USES, "confirmed": True}
+        outcome = actions.apply(make_ctx(db), {"actionId": "quote1", "uiInstanceId": "ui", "actionType": "voice.approve_span", "targetRefs": [ref],
+                                               "idempotencyKey": "voice-quote-key-0001", "payload": payload})
+        self.assertEqual((outcome["status"], outcome["result"]["confirm"], outcome["result"]["suggestedText"]),
+                         ("requires_confirmation", "selectOwnWords", "所以我每朝都會慢慢練琴。"))
+        self.assertEqual(len([s for s in voice_samples(db.state) if s.get("active")]), 3)
+
+    def test_grant_written_only_after_every_refusal(self):
+        """Review #10 for direct (non-action) callers: a refused approval never leaves a voice grant behind."""
+        db, refs = self.db, self.refs
+        quoted = "7d" * 16
+        second = "A second paragraph I wrote."
+        text = 'Before the recital my teacher said "breathe out slowly and let the first phrase find its own pace" and walked away.'
+        ref = db.asset(quoted, title="Lesson diary")
+        db.add_segments(quoted, text_segments(text, second))
+        self.refused(lambda: approve(db, ref, span(0, [text, second]), grant_voice=True), "library_voice_quoted", 403)
+        self.refused(lambda: approve(db, ref, {"kind": "text", "start": 0, "end": len(text) + 2 + len(second)}, grant_voice=True),
+                     "library_voice_whole_document", 422)
+        self.refused(lambda: approve(db, refs["essay"], span(1, [P0, P1, P2]), grant_voice=True), "library_voice_quoted", 403)
+        self.assertEqual([g for g in db.grants if g["purpose"] == "voice"], [], "no grant was written for a refused approval")
+        self.assertEqual(db.grant_revision, 0)
+        self.nothing_admitted()
+        sample = approve(db, ref, span(1, [text, second]), grant_voice=True)
+        self.assertEqual(sample["status"], "approved")
+        self.assertEqual(len([g for g in db.grants if g["purpose"] == "voice"]), 1)
+
     def test_page_and_slide_locators(self):
         """Structural locators: part of a PDF page passage with exact offsets, a whole page, a slide; a page passage
         without trustworthy inner offsets must be taken whole."""
