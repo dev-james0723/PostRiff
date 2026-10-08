@@ -26,6 +26,9 @@ import { createImeGuard } from '@/lib/ime';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import { cn } from '@/lib/utils';
 import { FounderAnswer } from './answer';
+import { markFresh } from '@/features/agent/generative-ui/state/registry';
+import { FounderGeneratedSlot } from '@/features/agent/generative-ui/surfaces/founder-slot';
+import { useFounderUiTransport } from '@/features/agent/generative-ui/surfaces/founder-transport';
 import { suggestedPrompts } from './prompts';
 import { conversationKey, founderPanelStore, useFounderPanel, useFounderThread, type FounderThreadItem } from './store';
 import { FounderVoice } from './voice';
@@ -55,6 +58,9 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
   const sessionStatusId = useId();
   const pathname = usePathname() ?? '/founder';
   const { reduced } = useMotionPreference();
+  // Founder generated views (J09): founder-scoped transport (cookie + CSRF), scope = founder + data mode + environment.
+  const uiTransport = useFounderUiTransport();
+  const uiScope = uiTransport?.scopeKey ?? null;
   const key = conversationKey(mode, environment);
   const keyRef = useRef(key);
   keyRef.current = key;
@@ -160,6 +166,8 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         if (response.conversationId) founderPanelStore.setConversation(k, response.conversationId);
         founderPanelStore.update(k, assistantId, { runId: response.runId });
         const final = !TERMINAL.has(response.status) && response.runId ? await waitForRun(response, response.runId) : response;
+        // A founder turn answered here may build its one view; the founder routes refuse it when the feature is off.
+        if (uiScope && final.runId && final.status === 'completed' && final.result?.ui?.eligible) markFresh(uiScope, final.runId);
         founderPanelStore.update(k, assistantId, { pending: false, response: final, text: final.result?.answerText ?? '', runId: final.runId });
       } catch (error) {
         const notConnected = isFounderApiError(error) && error.status === 409 && error.blocker === 'ops_workspace_not_configured';
@@ -168,7 +176,7 @@ export function FounderChat({ onClose, onNavigate, autoFocus = true }: { onClose
         founderPanelStore.setBusy(k, false);
       }
     },
-    [api, environment, mode, pathname, sessionReady, waitForRun]
+    [api, environment, mode, pathname, sessionReady, uiScope, waitForRun]
   );
 
   const stop = useCallback(async () => {
@@ -346,7 +354,8 @@ function ThreadItem({ item, latest, busy, onAsk, onRetry, onNavigate, onStop }: 
     <li className='flex gap-2.5'>
       <RafiiAvatar size={24} className='mt-0.5' />
       <article className={cn('min-w-0 flex-1')} aria-label="Rafii's answer">
-        {item.response ? <FounderAnswer response={item.response} actions={{ onAsk, onNavigate, latest }} /> : <p className='text-muted-foreground text-sm'>{item.text}</p>}
+        {item.response ? <FounderAnswer response={item.response} actions={{ onAsk, onNavigate, latest }}
+          generated={<FounderGeneratedSlot response={item.response} latest={latest} onContinue={(request) => onAsk(request.message)} />} /> : <p className='text-muted-foreground text-sm'>{item.text}</p>}
       </article>
     </li>
   );
