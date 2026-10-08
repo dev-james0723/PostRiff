@@ -22,9 +22,12 @@ const checks=[];
    await context.route('https://devharness.supabase.co/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,POST,OPTIONS','Access-Control-Allow-Headers':'*'}});
-    const raw=req.postDataBuffer(),mime=req.headers()['content-type']||null;
+    let raw=req.postDataBuffer(),source='binary';const mime=req.headers()['content-type']||null;
+    // Playwright WebKit does not always expose XHR Blob bytes through postDataBuffer(); preserve
+    // the exact UTF-8 bytes for this text/Markdown UI upload via its text accessor.
+    if((!raw||raw.length===0)&&mime?.startsWith('text/')){const text=req.postData();if(typeof text==='string'){raw=Buffer.from(text,'utf8');source='text-fallback';}}
     const result=await context.request.put(base+'/dev/upload/'+u.searchParams.get('token'),{data:raw,headers:mime?{'Content-Type':mime}:{}});
-    storageTrace.push({bytes:raw?.length??0,mime,status:result.status(),object:u.pathname.split('/').slice(-2).join('/')});
+    storageTrace.push({bytes:raw?.length??0,mime,source,status:result.status(),object:u.pathname.split('/').slice(-2).join('/')});
     return route.fulfill({status:result.status(),body:await result.body(),headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
    });
    await context.route('https://dev.invalid/**',async route=>{
