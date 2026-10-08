@@ -116,8 +116,33 @@ def main(argv=None) -> None:
     dev.start_postgres = start_postgres
     install_expiring_verifier(dev)
     install_offline_weather()
+    install_asset_skew(args.state_file.resolve().parent / "skew-assets.flag")
     sys.argv = ["postriff_dev_hosted.py", "--port", str(args.port), "--pg-port", str(args.pg_port)] + (["--founder-fixture"] if args.founder_fixture else []) + rest
     dev.main()
+
+
+def install_asset_skew(flag: Path) -> None:
+    """Deploy-skew fault injection: while `flag` exists, lane B reads a copy of the generated assets whose library hashes
+    differ from what the deployed Node validator builds (an old Python bundle beside a new web build). The validator must
+    answer library_unsupported and B must stop there: no repair, no second reservation."""
+    import shutil
+    import tempfile
+    from postriff_phase2.agent_runtime_v2 import ui_presenter, ui_stream
+    source = ROOT / "src/postriff_phase2/agent_runtime_v2/generated"
+    if not (source / "openui-assets.json").exists():
+        return
+    skewed = Path(tempfile.mkdtemp(prefix="g-skew-assets-"))
+    shutil.copytree(source, skewed, dirs_exist_ok=True)
+    manifest = json.loads((skewed / "openui-assets.json").read_text(encoding="utf-8"))
+    for library in (manifest.get("libraries") or {}).values():
+        if isinstance(library, dict):
+            library["libraryHash"] = "e" * 64
+    (skewed / "openui-assets.json").write_text(json.dumps(manifest), encoding="utf-8")
+    original = ui_stream._assets
+
+    def assets(runtime):
+        return ui_presenter.load_assets(str(skewed)) if flag.exists() else original(runtime)
+    ui_stream._assets = assets
 
 
 def install_offline_weather() -> None:

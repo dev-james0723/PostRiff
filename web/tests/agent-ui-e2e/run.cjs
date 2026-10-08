@@ -66,6 +66,24 @@ async function main() {
         if (!ok) failures.push({ what, detail: detail === undefined ? undefined : JSON.stringify(detail).slice(0, 400) });
       },
       metric(name, value) { metrics[name] = typeof value === 'number' ? Math.round(value * 10) / 10 : value; },
+      /** A second workspace for this principal through the real invitation flow (another owner invites, this one accepts). */
+      async joinSecondWorkspace(role = 'editor') {
+        const other = randomUUID();
+        const ownerHeaders = { ...headers, Authorization: `Bearer dev:${other}` };
+        const call = async (method, url, hdrs, body) => {
+          const res = await fetch(base + url, { method, headers: hdrs, body: body === undefined ? undefined : JSON.stringify(body) });
+          const text = await res.text();
+          if (!res.ok) throw new Error(`${method} ${url} → ${res.status} ${text.slice(0, 160)}`);
+          return text ? JSON.parse(text) : null;
+        };
+        const second = await call('POST', '/api/auth/verify', ownerHeaders, {});
+        await call('POST', `/api/workspaces/${second.workspaceId}/invitations`, ownerHeaders, { email: `dev-${principal.slice(0, 8)}@postriff.invalid`, role });
+        const mine = await call('GET', '/api/me/invitations', headers);
+        const invitation = (mine.invitations || mine.items || mine || []).find?.((i) => (i.workspaceId || i.workspace?.id) === second.workspaceId) || null;
+        if (!invitation) throw new Error('the invitation did not reach the invitee');
+        await call('POST', `/api/me/invitations/${invitation.id}/accept`, headers, {});
+        return { workspaceId: second.workspaceId };
+      },
     };
     const started = Date.now();
     let status = 'pass';
