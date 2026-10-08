@@ -173,15 +173,18 @@ def implementation_revision():
     return hashlib.sha256(b"".join((root/f).read_bytes() for f in files if (root/f).exists())).hexdigest()
 
 
-def capability_states(provider, channel=None, *, approvals=None, evidence=None, implemented=None, now=0):
+def capability_states(provider, channel=None, *, approvals=None, evidence=None, implemented=None, connection_approval=None, now=0):
     """Release qualification from six independent dimensions; secrets never enter this result.
 
     approvals/evidence are server-owned records, not submitted by a customer's browser.
     Evidence is tied to account, destination, exact grant, implementation and app.
+    connection_approval is minimum-scope evidence validated against the adapter
+    and callback by public_connection_review; it cannot approve other products.
     """
     channel, approvals, evidence = channel or {}, approvals or {}, evidence or {}
     implemented = set(IMPLEMENTED.get(provider, ()) if implemented is None else implemented)
     scopes = set(channel.get("scopes") or [])
+    connection_approval = connection_approval or {}
     connected = (channel.get("evidenceSource") == "live_provider" and not channel.get("revoked")
                  and bool(channel.get("providerAccountId")) and channel.get("identityVerified") is True
                  and (channel.get("nonExpiring") is True or (channel.get("expiresAt") or 0) > now))
@@ -192,7 +195,20 @@ def capability_states(provider, channel=None, *, approvals=None, evidence=None, 
         proof = evidence.get(key) or {}
         approval = approvals.get(feature.product) or {}
         app_approved = approval.get("state") == "approved" and bool(approval.get("evidenceRef"))
-        eligible = channel.get("eligibility", {}).get(key) is True
+        member_identity = provider == "linkedin" and key in ("connected", "member_identity")
+        approved_connection_scopes = connection_approval.get("approvedScopes")
+        if (member_identity and not app_approved and connection_approval.get("state") == "approved"
+                and connection_approval.get("audience") == "external"
+                and isinstance(connection_approval.get("appId"), str) and connection_approval["appId"].strip()
+                and isinstance(connection_approval.get("evidenceRef"), str) and connection_approval["evidenceRef"].strip()
+                and isinstance(approved_connection_scopes, list)
+                and all(isinstance(scope, str) for scope in approved_connection_scopes)
+                and set(feature.scopes).issubset(approved_connection_scopes)):
+            approval, app_approved = connection_approval, True
+        # A verified /userinfo response proves member identity, not organization
+        # eligibility, publication approval or a complete live acceptance test.
+        eligible = (channel.get("eligibility", {}).get(key) is True
+                    or (member_identity and connected and channel.get("accountType") == "member"))
         built = feature.implemented or key in implemented
         live = (proof.get("state") == "passed" and proof.get("kind") == "live_api"
                 and proof.get("accountId") == channel.get("providerAccountId")

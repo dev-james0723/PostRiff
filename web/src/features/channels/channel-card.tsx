@@ -26,6 +26,7 @@ import { keys } from '@/lib/api/hooks';
 import { useChangeError } from '@/lib/auth/use-sign-in-again';
 import { ApiError } from '@/lib/api/client';
 import type { ChannelView, ProviderView } from '@/lib/api/types';
+import { connectionSummary } from '@/lib/channels/connection-status';
 import {
   ATTENTION_STATES,
   attentionSentence,
@@ -206,6 +207,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const expired = typeof channel.expiresAt === 'number' && channel.expiresAt <= nowSeconds();
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.capabilities.identity?.verifiedAt ?? null;
+  const connectionMessage = connectionSummary(channel);
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 
   async function refresh() {
@@ -322,7 +324,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} offered={provider?.capabilities} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
+      {!disconnected && connectionMessage && <p className='text-sm' aria-label='Connection status'>{connectionMessage}</p>}
+      {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} readiness={channel.socialReadiness} offered={provider?.capabilities} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
       {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
       {!disconnected && channel.platform === 'Facebook' && channel.accountType !== 'page' && <p className='text-sm'>Choose an eligible Page to finish connecting Facebook.</p>}
       {!disconnected && !channel.officialCapabilities && channel.socialReadiness && (

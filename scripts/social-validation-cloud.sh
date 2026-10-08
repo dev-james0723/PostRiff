@@ -36,7 +36,7 @@ case "${1:-}" in
   --connection-regression) jcb_social_connection_only=1 ;;
   '') node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs ;;
   # Deployment isolation spans Python and the browser build configuration.
-  --backend-only) node --test tests/deployment-env.test.mjs ;;
+  --backend-only) node --test tests/deployment-env.test.mjs src/lib/channels/connection-status.test.cjs src/lib/channels/onboarding.test.cjs ;;
   *) echo 'Unknown social validation mode.' >&2; exit 64 ;;
 esac
 cd -- "$jcb_social_root"

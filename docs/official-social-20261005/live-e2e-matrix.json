@@ -7,10 +7,10 @@
       "provider": "linkedin",
       "case": "oauth",
       "execution": "real provider API",
-      "state": "NOT_RUN",
-      "evidence": null,
-      "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
-      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "state": "PARTIAL",
+      "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+      "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case.",
+      "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
         "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
@@ -18,19 +18,29 @@
         "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
       },
       "blockerClass": [
-        "TOOL_ACCESS",
-        "HUMAN_CONSENT",
-        "UNVERIFIED"
-      ]
+        "UNVERIFIED",
+        "HUMAN_CONSENT"
+      ],
+      "historicalObservationBeforeTesterA": {
+        "state": "NOT_RUN",
+        "evidence": null,
+        "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
+        "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+        "blockerClass": [
+          "TOOL_ACCESS",
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ]
+      }
     },
     {
       "provider": "linkedin",
       "case": "member_identity",
       "execution": "real provider API",
-      "state": "NOT_RUN",
-      "evidence": null,
-      "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
-      "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+      "state": "PARTIAL",
+      "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+      "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case.",
+      "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
         "externalBlocker": "Actual member/eligible organization grant and LinkedIn Community Management/restricted permission approval unverified.",
@@ -38,10 +48,20 @@
         "publicationApproval": "No exact live destination/content/visibility/cost/cleanup manifest supplied."
       },
       "blockerClass": [
-        "TOOL_ACCESS",
-        "HUMAN_CONSENT",
-        "UNVERIFIED"
-      ]
+        "UNVERIFIED",
+        "HUMAN_CONSENT"
+      ],
+      "historicalObservationBeforeTesterA": {
+        "state": "NOT_RUN",
+        "evidence": null,
+        "externalBlocker": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed. Account-owner minimum read consent and ordinary-user acceptance pending.",
+        "toolingBlocker": "See ../official-social-20261007/evidence/observations.json; current Chrome works, Meta console HTTP500 and real iPhone Mirroring timeout remain.",
+        "blockerClass": [
+          "TOOL_ACCESS",
+          "HUMAN_CONSENT",
+          "UNVERIFIED"
+        ]
+      }
     },
     {
       "provider": "linkedin",
@@ -2195,5 +2215,9 @@
     }
   ],
   "connectionRecovery": "../official-social-20261007/CONNECTION-ACCEPTANCE.json",
-  "connectionRecoveryDate": "2026-10-07"
+  "connectionRecoveryDate": "2026-10-08",
+  "caseCounts": {
+    "PARTIAL": 2,
+    "NOT_RUN": 194
+  }
 }

@@ -250,6 +250,18 @@ class PublicConnectionReviewTests(unittest.TestCase):
         self.assertEqual(adapter.capability_scopes('organization_identity'), [])
         self.assertFalse(getattr(adapter, 'official_evidence', {}))
 
+    def test_catalog_reuses_oidc_review_only_after_callback_and_app_match(self):
+        adapter = providers.LinkedInProvider('app', 'secret')
+        adapter.connection_review = {'state': 'approved', 'audience': 'external', 'appId': 'app', 'callbackUri': 'https://app.example/api/oauth/linkedin/callback', 'approvedScopes': ['openid', 'profile'], 'evidenceRef': 'synthetic-unit-only'}
+        service = OAuthService(None, None, CredentialVault(CredentialVault.generate_key()), {'linkedin': adapter}, 'https://app.example')
+        entry = next(item for item in service.provider_catalog() if item['id'] == 'linkedin')
+        self.assertTrue(entry['officialCapabilities']['member_identity']['appApproved'])
+        self.assertFalse(entry['officialCapabilities']['member_publish']['appApproved'])
+        self.assertFalse(entry['officialCapabilities']['member_identity']['liveE2E'])
+        adapter.connection_review['callbackUri'] = 'https://other.example/api/oauth/linkedin/callback'
+        entry = next(item for item in service.provider_catalog() if item['id'] == 'linkedin')
+        self.assertFalse(entry['officialCapabilities']['member_identity']['appApproved'])
+
     def test_facebook_public_gate_requires_matching_minimum_business_configuration(self):
         from postriff_phase2.connection_review import public_connection_review
         from postriff_phase2.wave3_connectors import FacebookPagesProvider

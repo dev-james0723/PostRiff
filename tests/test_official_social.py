@@ -63,6 +63,24 @@ class CapabilityQualification(unittest.TestCase):
         rows = capability_states('threads', channel, now=1000)
         self.assertFalse(rows['publish']['granted']);self.assertFalse(rows['identity']['liveE2E'])
         self.assertTrue(all(row['state']!='READY' for row in rows.values()))
+    def test_linkedin_member_identity_uses_only_minimum_connection_review(self):
+        channel = {'evidenceSource': 'live_provider', 'providerAccountId': 'member-1', 'accountType': 'member', 'identityVerified': True, 'expiresAt': 5000, 'scopes': ['openid', 'profile', 'w_member_social']}
+        review = {'state': 'approved', 'audience': 'external', 'appId': 'APP', 'approvedScopes': ['openid', 'profile'], 'evidenceRef': 'synthetic-unit-only'}
+        rows = capability_states('linkedin', channel, connection_approval=review, now=1000)
+        for key in ('connected', 'member_identity'):
+            self.assertTrue(rows[key]['appApproved'])
+            self.assertTrue(rows[key]['eligible'])
+            self.assertTrue(rows[key]['granted'])
+            self.assertFalse(rows[key]['liveE2E'])
+            self.assertEqual(rows[key]['state'], 'BLOCKED')
+            self.assertEqual(rows[key]['blockers'], ['LIVE E2E NOT PROVEN'])
+        self.assertFalse(rows['member_publish']['appApproved'])
+        self.assertFalse(rows['organization_identity']['eligible'])
+        review['approvedScopes'] = ['openid']
+        self.assertFalse(capability_states('linkedin', channel, connection_approval=review, now=1000)['member_identity']['appApproved'])
+        channel['identityVerified'] = False
+        self.assertFalse(capability_states('linkedin', channel, now=1000)['member_identity']['eligible'])
+
     def test_six_dimensions_and_exact_account_grant_revision_evidence(self):
         channel = {'evidenceSource': 'live_provider', 'providerAccountId': '123', 'identityVerified': True, 'expiresAt': 5000, 'scopes': ['threads_basic'], 'eligibility': {'identity': True}}
         approval = {'threads': {'state': 'approved', 'appId': 'APP', 'evidenceRef': 'review'}}

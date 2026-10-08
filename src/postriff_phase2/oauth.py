@@ -168,7 +168,7 @@ class OAuthService:
         for entry in entries:
             pid, adapter = entry['id'], self.providers.get(entry['id'])
             if pid in CATALOG:
-                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), now=self.clock())
+                entry['officialCapabilities'] = capability_states(pid, approvals=getattr(adapter, 'official_approvals', {}), implemented=getattr(adapter, 'official_implemented', ()), connection_approval=getattr(adapter, 'connection_review', {}) if entry.get('publicConnectionReady') else {}, now=self.clock())
                 groups = {f.permission_group for f in CATALOG[pid].values() if f.support == 'documented'}
                 entry['capabilities'].update({group: bool(adapter and adapter.capability_scopes(group)) for group in groups})
         return entries
@@ -811,7 +811,8 @@ class OAuthService:
                 trusted = {**raw, 'eligibility': qualification.get('eligibility', {})}
                 view['officialCapabilities'] = capability_states(provider['id'], trusted,
                     approvals=getattr(adapter, 'official_approvals', {}), evidence=qualification.get('features', {}),
-                    implemented=getattr(adapter, 'official_implemented', ()), now=now)
+                    implemented=getattr(adapter, 'official_implemented', ()),
+                    connection_approval=getattr(adapter, 'connection_review', {}) if provider.get('publicConnectionReady') else {}, now=now)
                 # Compatibility summary never promotes an eight-platform connection to Full Access.
                 view['socialReadiness']['fullyAvailable'] = False
         return {'channels': views, 'providers': catalog}

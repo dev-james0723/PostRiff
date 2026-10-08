@@ -14,36 +14,39 @@
     {
       "provider": "linkedin",
       "name": "LinkedIn",
-      "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+      "environment": "Protected branch preview; actual source a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2; production unchanged",
       "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
-      "credentials": "Present; validity UNVERIFIED",
-      "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/linkedin/callback",
-      "generatedCallback": "MATCH: exact production callback from normal UI",
-      "registeredCallback": "MATCH: exact production callback registered",
+      "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
+      "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
+      "generatedCallback": "MATCH: exact branch preview callback in two consumed server transactions",
+      "registeredCallback": "MATCH: branch preview callback added under approved LinkedIn preview plan",
       "minimumScopes": "openid profile",
-      "requestedScopes": "openid profile (actual normal-UI authorization URL)",
-      "grantedScopes": null,
+      "requestedScopes": "Initial identity: openid profile; later user-selected publish permission extension: openid profile w_member_social",
+      "grantedScopes": [
+        "openid",
+        "profile",
+        "w_member_social"
+      ],
       "accountRequirements": "Member; no organization required",
-      "publicReadiness": "NOT_VERIFIED",
-      "customerConnection": "NOT_RUN",
-      "featurePermission": "No capabilities promoted",
-      "tokenExchange": "NOT_RUN",
-      "identityAndDestination": "NOT_RUN",
-      "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
-      "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
-      "disconnectReconnect": "Live NOT_RUN",
-      "failureStep": "Before external-user consent acceptance",
-      "blockerClass": "HUMAN_CONSENT",
-      "owner": "James/operator",
-      "nextAction": "Approve the prepared branch-only preview callback/environment action, then owner consent and two ordinary-user acceptance.",
+      "publicReadiness": "OIDC Standard Tier/app/callback observed; independent ordinary-user and full lifecycle acceptance still pending",
+      "customerConnection": "CONNECTED_TESTER_A_PROVIDER_APP_ROLE_UNVERIFIED",
+      "featurePermission": "Actual identity grant verified; no publishing/organization/read/analytics capability promoted",
+      "tokenExchange": "REAL_EXCHANGED: initial identity and later permission extension; both consumed single-use transactions",
+      "identityAndDestination": "VERIFIED member identity bound to originating user/workspace; intended profile confirmed by user",
+      "persistence": "Encrypted durable access token and same connection after browser reload observed; fresh-session test pending",
+      "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
+      "disconnectReconnect": "PENDING authorized live exercise",
+      "failureStep": "No current token-exchange failure; misleading capability labels repaired in validated candidate, preview update pending",
+      "blockerClass": "UNVERIFIED",
+      "owner": "Agent: preview/UI verification; account owners: independent profile and lifecycle consent",
+      "nextAction": "Deploy approved status fix, verify saved connection; Tester B then connects an intended personal LinkedIn profile with no provider-app role using Account only. Complete fresh session, two-workspace isolation, disconnect/reconnect and real iPhone acceptance.",
       "console": "https://www.linkedin.com/developers/apps",
       "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
-      "evidenceRef": "evidence/operator-console-20261007.json",
+      "evidenceRef": "evidence/linkedin-tester-a-20261008.json",
       "ordinaryExternalPass": false,
       "additionalBlockers": [
-        "CONFIGURATION",
-        "ORDINARY_USERS_REQUIRED",
-        "IPHONE_VALIDATION_UNAVAILABLE"
+        "HUMAN_CONSENT",
+        "UNVERIFIED"
       ],
       "historicalObservationBeforeConsoleRecovery": {
         "appIdentityAndOwnership": "Operator console requires sign-in; actual app/OIDC product unverified",
@@ -57,13 +60,48 @@
         ],
         "nextAction": "Sign in to existing app, verify Sign In with LinkedIn using OpenID Connect product, client mapping and callback. No Community Management or post manifest needed.",
         "environment": "observed production; local recovery candidate not deployed"
+      },
+      "historicalObservationBeforeTesterA": {
+        "provider": "linkedin",
+        "name": "LinkedIn",
+        "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
+        "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
+        "credentials": "Present; validity UNVERIFIED",
+        "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/linkedin/callback",
+        "generatedCallback": "MATCH: exact production callback from normal UI",
+        "registeredCallback": "MATCH: exact production callback registered",
+        "minimumScopes": "openid profile",
+        "requestedScopes": "openid profile (actual normal-UI authorization URL)",
+        "grantedScopes": null,
+        "accountRequirements": "Member; no organization required",
+        "publicReadiness": "NOT_VERIFIED",
+        "customerConnection": "NOT_RUN",
+        "featurePermission": "No capabilities promoted",
+        "tokenExchange": "NOT_RUN",
+        "identityAndDestination": "NOT_RUN",
+        "persistence": "Synthetic PostgreSQL only; live NOT_RUN",
+        "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
+        "disconnectReconnect": "Live NOT_RUN",
+        "failureStep": "Before external-user consent acceptance",
+        "blockerClass": "HUMAN_CONSENT",
+        "owner": "James/operator",
+        "nextAction": "Approve the prepared branch-only preview callback/environment action, then owner consent and two ordinary-user acceptance.",
+        "console": "https://www.linkedin.com/developers/apps",
+        "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
+        "evidenceRef": "evidence/operator-console-20261007.json",
+        "ordinaryExternalPass": false,
+        "additionalBlockers": [
+          "CONFIGURATION",
+          "ORDINARY_USERS_REQUIRED",
+          "IPHONE_VALIDATION_UNAVAILABLE"
+        ]
       }
     },
     {
       "provider": "threads",
       "name": "Threads",
       "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
-      "appIdentityAndOwnership": "James Au Studio — Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
+      "appIdentityAndOwnership": "James Au Studio \u2014 Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
       "credentials": "Missing client ID and secret",
       "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/threads/callback",
       "generatedCallback": "UNVERIFIED on deployment",
@@ -219,7 +257,7 @@
       "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
       "disconnectReconnect": "Live NOT_RUN",
       "failureStep": "Production identity OAuth start: HTTP 500 CheckViolation; live DB provider length minimum 2 rejects x",
-      "blockerClass": "CODE_SCHEMA",
+      "blockerClass": "ENGINEERING",
       "owner": "James/operator",
       "nextAction": "Validate/review migration101, map actual app, configure OAuth2 only after approval, then explicit current-price endpoint-limited spending policy and migration100.",
       "console": "https://console.x.com/accounts/2107161751049371648/apps/33504271",
@@ -241,7 +279,8 @@
         ],
         "nextAction": "Match runtime client to existing app; inspect/approve client type/callback and bounded GET /2/users/me onboarding policy. No metered calls authorized yet.",
         "environment": "observed production; local recovery candidate not deployed"
-      }
+      },
+      "historicalBlockerClass": "CODE_SCHEMA"
     },
     {
       "provider": "youtube",
@@ -308,7 +347,7 @@
       "renewal": "Provider-specific implementation inspected; live time-dependent behavior NOT_RUN",
       "disconnectReconnect": "Live NOT_RUN",
       "failureStep": "Before external-user consent acceptance",
-      "blockerClass": "SANDBOX_CONFIGURATION",
+      "blockerClass": "CONFIGURATION",
       "owner": "James/operator + TikTok",
       "nextAction": "Complete truthful production Login Kit metadata and minimum user.info.basic; record required genuine sandbox demo, approve review submission, then deliberate production credential switch after approval.",
       "console": "https://developers.tiktok.com/apps/",
@@ -330,7 +369,8 @@
         ],
         "nextAction": "Match existing runtime key to correct app; complete Login Kit metadata/scopes and genuine authentication demo; approve submission separately.",
         "environment": "observed production; local recovery candidate not deployed"
-      }
+      },
+      "historicalBlockerClass": "SANDBOX_CONFIGURATION"
     },
     {
       "provider": "pinterest",
@@ -381,8 +421,8 @@
   ],
   "evidenceClasses": {
     "synthetic": "cloud regression, disposable PostgreSQL and browser fixtures only",
-    "appRoleIntegration": "NOT_RUN",
-    "ordinaryExternalLive": "NOT_RUN for all eight",
+    "appRoleIntegration": "Tester A live preview identity observed; provider-app role unverified, so not counted as ordinary-external proof",
+    "ordinaryExternalLive": "0 full passes; LinkedIn partial live preview evidence only; other seven NOT_RUN",
     "productionVerification": "source/UI/config inspected; no live acceptance"
   },
   "requiredLiveAcceptance": [
@@ -396,5 +436,6 @@
     "desktop and real iPhone Safari"
   ],
   "latestConsoleObservationAt": "2026-10-07T07:26:52.475Z",
-  "latestEvidenceRef": "evidence/operator-console-20261007.json"
+  "latestEvidenceRef": "evidence/linkedin-tester-a-20261008.json",
+  "latestLiveObservationAt": "2026-10-08T01:15:02Z"
 }

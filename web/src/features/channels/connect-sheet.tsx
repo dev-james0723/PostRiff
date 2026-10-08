@@ -106,7 +106,7 @@ export function ConnectSheet({
   const { copy: importCopy, lang: importLang } = historyImportCopy(locale);
   const isMobile = useIsMobile();
   const [providerId, setProviderId] = useState<string>('');
-  const [capability, setCapability] = useState<ConnectCapability>('publish');
+  const [capability, setCapability] = useState<ConnectCapability>('identity');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<OAuthStart | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -14,7 +14,8 @@
     "audit:copy": "node scripts/copy-audit.mjs",
     "test:browser:durable": "node tests/consumer-durable-browser.cjs",
     "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/social-validation-cloud.sh",
-    "ci:jcb": "npm audit --audit-level=high && npm run lint && npm run typecheck && npm run test:jcb && npm run build",
+    "test:connections": "node --test src/lib/channels/connection-status.test.cjs src/lib/channels/onboarding.test.cjs",
+    "ci:jcb": "npm audit --audit-level=high && npm run lint && npm run typecheck && npm run test:connections && npm run test:jcb && npm run build",
     "e2e:social": "bash ../scripts/social-browser-cloud.sh"
   },
   "dependencies": {

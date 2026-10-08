@@ -15,7 +15,7 @@ const app=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','-p','
 app.stdout.on('data',chunk=>process.stdout.write(chunk));app.stderr.on('data',chunk=>process.stderr.write(chunk));
 const feature=(group,granted)=>({officialSupport:'documented',permission_group:group,implemented:true,appApproved:false,granted,eligible:false,liveE2E:false,state:'BLOCKED',blockers:['APP APPROVAL NOT VERIFIED','LIVE E2E NOT PROVEN'],limitation:''});
 const identity=feature('identity',true),publish=feature('publish',false),comments=feature('comments_read',true);
-const channel={id:'fixture-ig',platform:'Instagram',account:'Ordinary fixture creator',accountType:'professional',connectionState:'read_verified',evidenceSource:'fixture',providerAccountId:'1789',language:'English',capabilityVersion:1,scopes:['instagram_business_basic','instagram_business_manage_comments'],expiresAt:Date.now()/1000+864000,verifiedAt:Date.now()/1000,canManage:true,capabilities:{identity:{level:'Direct'},publish:{level:'Unsupported'},comments_read:{level:'Direct'},reply:{level:'Direct'}},officialCapabilities:{identity,publish,comments_read:comments}};
+const channel={id:'fixture-ig',platform:'Instagram',account:'Ordinary fixture creator',accountType:'professional',connectionState:'read_verified',evidenceSource:'fixture',providerAccountId:'1789',language:'English',capabilityVersion:1,scopes:['instagram_business_basic','instagram_business_manage_comments'],expiresAt:Date.now()/1000+864000,verifiedAt:Date.now()/1000,canManage:true,capabilities:{identity:{level:'Direct'},publish:{level:'Unsupported'},comments_read:{level:'Direct'},reply:{level:'Direct'}},officialCapabilities:{identity,publish,comments_read:comments},socialReadiness:{connection:'CONNECTED',publishing:'PUBLISHING_PERMISSION_UNAVAILABLE',history:'HISTORICAL_IMPORT_UNAVAILABLE',fullyAvailable:false,evidence:'last_verified_grant',liveVerified:false}};
 const provider={id:'instagram',platform:'Instagram',configured:true,connectReady:true,capabilities:{identity:true,publish:true,comments_read:true},officialCapabilities:channel.officialCapabilities};
 (async()=>{
  let browser;const checks=[];
@@ -26,7 +26,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
    await context.addCookies([{name:'postriff_dev',value:'1',url:base}]);
    await context.addInitScript(()=>{localStorage.setItem('postriff-dev-principal','00000000-0000-0000-0000-000000000001');localStorage.setItem('postriff-onboarding:00000000-0000-0000-0000-000000000001',JSON.stringify({completed:{},dismissed:{welcome:1},nudged:{}}));});
-   let sends=0,reads=0,completionWorkspace=null;const page=await context.newPage();page.setDefaultTimeout(30000);
+   let sends=0,reads=0,completionWorkspace=null,activeChannel=channel,activeProvider=provider;const page=await context.newPage();page.setDefaultTimeout(30000);
    await context.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url()),p=url.pathname;
     if(url.origin!==base)return route.abort();if(!p.startsWith('/api/'))return route.continue();
@@ -42,7 +42,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
     if(p==='/api/me')return send({userId:'00000000-0000-0000-0000-000000000001',displayName:'Fixture',preferences:{timeZone:'UTC',locale:'en'},mfa:{}});
     if(p===`/api/workspaces/${otherWid}`)return send({...fixture.snapshot,state:{...fixture.snapshot.state,workspace:{...fixture.snapshot.state.workspace,id:otherWid}}});
     if(p===`/api/workspaces/${wid}`)return send(fixture.snapshot);
-    if(p.endsWith('/channels'))return send({channels:[channel],providers:[provider]});
+    if(p.endsWith('/channels'))return send({channels:[activeChannel],providers:[activeProvider]});
     if(p.endsWith('/usage'))return send({entitlement:{planTermsId:'synthetic-studio',writingBatchesRemaining:1,mediaCreditsRemaining:0,connectedAccounts:10,members:1,storageMb:100,resetsAt:null,source:'fixture',version:1},subscription:null,budget:null,overage:'disabled',ledger:[],planTerms:[],note:'Synthetic browser acceptance',lifecycle:{status:'active',canPublish:false},membership:fixture.snapshot.membership});
     if(p.endsWith('/memory'))return send(fixture.memory);
     if(p.endsWith('/memory/proposals'))return send({pending:[],recent:[],learning:{items:[]}});
@@ -52,6 +52,8 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    await page.getByText('Ordinary fixture creator',{exact:true}).first().waitFor();
    await page.getByText('Individual capabilities and verification',{exact:true}).click();
    await page.getByRole('list',{name:'Official capabilities'}).waitFor();
+   await page.getByText('Connected — publishing not enabled.',{exact:true}).waitFor();
+   await page.getByText('Identity verified for this account',{exact:false}).waitFor();
    assert.equal(await page.getByText('Ready · live tested',{exact:false}).count(),0);
    assert.equal(await page.getByRole('button',{name:'Enable Publish',exact:true}).count(),1);
    await page.getByText('Read post metrics and conversations',{exact:true}).click();
@@ -70,11 +72,31 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    // JCB's reviewed workflow currently exports logs rather than arbitrary output
    // artifacts. This bounded fixture-only image is recovered from those logs.
    console.log('RAFII_BROWSER_IMAGE '+width+' '+pixels.toString('base64'));
+   // Observed preview incident shape, still entirely synthetic: saved member
+   // identity and verified OIDC product must not inherit publication blockers.
+   const memberIdentity={...identity,appApproved:true,eligible:true,blockers:['LIVE E2E NOT PROVEN']};
+   activeChannel={...channel,id:'fixture-li',platform:'LinkedIn',account:'LinkedIn identity fixture',accountType:'member',scopes:['openid','profile'],socialReadiness:{...channel.socialReadiness,publishing:'PUBLISHING_AWAITING_PROVIDER_REVIEW'},officialCapabilities:{connected:memberIdentity,member_identity:memberIdentity,member_publish:publish,organization_identity:{...identity,granted:false,permission_group:'organization_identity'}}};
+   activeProvider={...provider,id:'linkedin',platform:'LinkedIn',capabilities:{identity:true,publish:true},officialCapabilities:activeChannel.officialCapabilities};
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.getByText('LinkedIn identity fixture',{exact:true}).waitFor();
+   await page.getByText('Connected — publishing not enabled.',{exact:true}).waitFor();
+   await page.getByText('Individual capabilities and verification',{exact:true}).click();
+   assert.equal(await page.getByText('Identity verified for this account',{exact:false}).count(),2);
+   assert.equal(await page.getByText('Public release verification pending',{exact:true}).count(),2);
+   assert.equal(await page.getByText('Ready · live tested',{exact:false}).count(),0);
+   const publishRow=page.getByRole('list',{name:'Official capabilities'}).getByRole('listitem').filter({hasText:'Member publish'});
+   assert.match(await publishRow.innerText(),/Platform approval unverified/);
+   await page.getByRole('button',{name:'Connect another account',exact:true}).click();
+   assert.equal(await page.getByRole('radio',{name:'Account only',exact:false}).isChecked(),true);
+   assert.equal(await page.getByRole('radio',{name:'Publish',exact:false}).isChecked(),false);
+   await page.keyboard.press('Escape');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false);
+   activeChannel=channel;activeProvider=provider;
    await page.evaluate(id=>localStorage.setItem('postriff-workspace',id),otherWid);
    await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
    await page.waitForURL('**/app/channels?connected=fixture-ig');
    assert.equal(completionWorkspace,wid);
-   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,minimumIdentitySelected:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}
