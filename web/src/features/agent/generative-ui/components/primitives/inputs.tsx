@@ -238,11 +238,11 @@ export const DateRange: RafiiComponentRenderer = ({ props, statementId }) => {
       <div className="flex flex-wrap gap-2">
         <label className="grid min-w-[9rem] flex-1 gap-0.5 text-xs text-muted-foreground">
           {l.t('start')}
-          <input type="date" value={start} onChange={(event) => change({ start: event.target.value, end })} aria-invalid={error ? true : undefined} className={fieldClass} />
+          <input type="date" aria-label={l.t('start')} value={start} onChange={(event) => change({ start: event.target.value, end })} aria-invalid={error ? true : undefined} className={fieldClass} />
         </label>
         <label className="grid min-w-[9rem] flex-1 gap-0.5 text-xs text-muted-foreground">
           {l.t('end')}
-          <input type="date" value={end} onChange={(event) => change({ start, end: event.target.value })} aria-invalid={error ? true : undefined} className={fieldClass} />
+          <input type="date" aria-label={l.t('end')} value={end} onChange={(event) => change({ start, end: event.target.value })} aria-invalid={error ? true : undefined} className={fieldClass} />
         </label>
       </div>
       {error ? (

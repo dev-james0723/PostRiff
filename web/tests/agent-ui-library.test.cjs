@@ -135,7 +135,8 @@ test('only core/openui.ts imports @openuidev/react-lang and every Renderer opts 
         const text = fs.readFileSync(full, 'utf8');
         const rel = path.relative(root, full).split(path.sep).join('/');
         if (/from\s+['"]@openuidev\/react-lang['"]|import\(\s*['"]@openuidev\/react-lang['"]\s*\)|require\(\s*['"]@openuidev\/react-lang['"]\s*\)/.test(text) && rel !== 'features/agent/generative-ui/core/openui.ts') offenders.push(rel);
-        if (/<Renderer[\s>]/.test(text)) renderers.push({ rel, ok: /publishObservability=\{false\}/.test(text) });
+        const code = text.split('\n').filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line)).join('\n');
+        if (/<Renderer[\s>]/.test(code)) renderers.push({ rel, ok: /publishObservability=\{false\}/.test(code) });
       }
     }
   };
@@ -144,5 +145,6 @@ test('only core/openui.ts imports @openuidev/react-lang and every Renderer opts 
   assert.ok(renderers.length >= 1);
   for (const r of renderers) assert.ok(r.ok, `${r.rel} renders OpenUI without publishObservability={false}`);
   const facade = fs.readFileSync(path.join(root, 'features/agent/generative-ui/core/openui.ts'), 'utf8');
-  assert.ok(facade.indexOf("import './openui-optout'") < facade.indexOf('@openuidev/react-lang'), 'devtools opt-out is imported first');
+  assert.ok(facade.includes("import './openui-optout'"), 'facade imports the devtools opt-out');
+  assert.ok(facade.indexOf("import './openui-optout'") < facade.indexOf("from '@openuidev/react-lang'"), 'devtools opt-out is imported first');
 });
