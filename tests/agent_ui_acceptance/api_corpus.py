@@ -291,21 +291,36 @@ class Actions(Case):
 
 
 class Approvals(Case):
-    def proposal(self):
-        """A pending proposal on the ORIGINAL approval path: prepared from the generated view (schedule_prepare writes a new
-        assistant message with the proposal), read back from the conversation state like the native card does."""
+    def prepare(self, tag: str):
+        """Prepare one change from the generated view through a prepare-only action (J08 automation_change_prepare on the
+        seeded automation). Returns (activation json, result json, inputs, before-snapshot)."""
         owner = self.owner()
         art = self.ready()
-        if "schedule_prepare" not in {a.get("actionId") for a in (art.get("manifest") or {}).get("actions") or []}:
-            raise Blocked("BLOCKED lane D: no schedule_prepare in the ready artifact's manifest to create a proposal")
-        draft = self.w.seed().get("draftId")
-        if not draft:
-            raise Blocked("BLOCKED harness: the seed has no confirmed draft")
-        import datetime
-        inputs = {"draftId": draft, "local": (datetime.datetime.now() + datetime.timedelta(days=4)).strftime("%Y-%m-%dT09:30"), "zone": "Asia/Hong_Kong"}
-        activation = _activate(self, art, {"actionId": "schedule_prepare"}, inputs)
-        self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "schedule_prepare",
-                                              "inputs": inputs, "idempotencyKey": new_key("propose"), "activationId": activation["activationId"]}, route="actions")
+        actions = {a.get("actionId") for a in (art.get("manifest") or {}).get("actions") or []}
+        automation = self.w.seed().get("automationId")
+        if "automation_change_prepare" not in actions or not automation:
+            raise Blocked(f"BLOCKED lane D/harness: no automation_change_prepare in the manifest ({sorted(actions)[:8]}) or no seeded automation ({automation})")
+        inputs = {"automationId": automation, "request": f"Move it to Saturday at 10:00 instead ({tag})"}
+        activation = _activate(self, art, {"actionId": "automation_change_prepare"}, inputs)
+        before = self.snap()
+        done = self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "automation_change_prepare",
+                                                     "inputs": inputs, "idempotencyKey": new_key(f"prep-{tag}"), "activationId": activation["activationId"]}, route="actions")
+        return activation, (done.json() or {}), inputs, before
+
+    def automation_schedule(self):
+        snap = self.w.call(self.owner(), "GET", f"/api/workspaces/{self.owner().workspace_id}")
+        tasks = (((snap.get("state") or {}).get("raffi") or {}).get("campaignPlanning") or {}).get("recurringTasks") or []
+        task = next((t for t in tasks if t.get("id") == self.w.seed().get("automationId")), {})
+        return json.dumps(task.get("schedule"), sort_keys=True), task.get("status")
+
+    def proposal(self):
+        """A pending proposal on the ORIGINAL approval path, prepared from the generated view (a new assistant message carries
+        it, D-A14) and read back from the conversation state like the native proposal card."""
+        art = self.ready()
+        _activation, result, _inputs, _before = self.prepare("decide")
+        if result.get("outcome") != "prepared":
+            raise Blocked(f"BLOCKED lane D: automation_change_prepare answered {result.get('outcome')} ({(result.get('nextContext') or {}).get('code')})")
+        owner = self.owner()
         state = self.w.api.request("GET", f"/api/workspaces/{owner.workspace_id}/agent/conversations/{art['conversationId']}/state", owner.token).json() or {}
         found = [p for p in (state.get("pendingApprovals") or state.get("approvals") or []) if isinstance(p, dict) and p.get("digest")]
         if not found:
@@ -339,29 +354,33 @@ class Approvals(Case):
         """NC23: a UI 'prepare' action returns outcome prepared, verified false, and the domain record is not applied."""
         art = self.ready()
         owner = self.owner()
-        actions = {a.get("actionId"): a for a in (art.get("manifest") or {}).get("actions") or []}
-        if "schedule_prepare" not in actions:
-            raise Blocked(f"BLOCKED lane D: the ready artifact's manifest has no schedule_prepare (actions: {sorted(actions)[:8]})")
-        draft = self.w.seed().get("draftId")
-        if not draft:
-            raise Blocked(f"BLOCKED harness: the seed has no confirmed draft to prepare ({self.w.seed().get('seedError')})")
-        import datetime
-        when = (datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%Y-%m-%dT18:00")
-        inputs = {"draftId": draft, "local": when, "zone": "Asia/Hong_Kong"}
-        activation = self.w.ui(owner, "POST", "/actions/activate", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art),
-                                                                   "actionId": "schedule_prepare", "inputs": inputs}, route="activate")
-        self.assertEqual(activation.status, 201, activation.text(300))
-        confirmation = (activation.json() or {}).get("confirmation") or {}
-        self.assertEqual(confirmation.get("timeZone"), "Asia/Hong_Kong", "the native confirmation must state the exact zone")
-        before = self.snap()
-        done = self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "schedule_prepare",
-                                                     "inputs": inputs, "idempotencyKey": new_key("prep"), "activationId": activation.json()["activationId"]}, route="actions")
-        outcome = done.json() or {}
+        schedule_before = self.automation_schedule()
+        activation, outcome, _inputs, before = self.prepare("nc23")
+        confirmation = activation.get("confirmation") or {}
+        self.assertTrue(confirmation.get("title") and confirmation.get("summary"), "the native confirmation copy comes from the server")
         self.assertEqual(outcome.get("outcome"), "prepared", outcome)
         self.assertFalse(outcome.get("verified"), "a prepared proposal was reported verified")
         delta = Db.delta(before, self.snap())
-        self.assertNotIn("jobs", delta, "a prepared action scheduled a job")
-        return f"schedule_prepare → prepared, verified=false, zone stated, no job ({outcome.get('proposalRef')})"
+        self.assertNotIn("jobs", delta, "a prepared action ran a job")
+        self.assertEqual(self.automation_schedule(), schedule_before, "preparing a change changed the automation (prepared is not applied)")
+        # A prepare that the domain refuses (the dev harness's synthetic account never reaches 'Ready for posting') stays a
+        # refusal: not verified, nothing scheduled.
+        actions = {a.get("actionId") for a in (art.get("manifest") or {}).get("actions") or []}
+        refused = ""
+        draft = self.w.seed().get("draftId")
+        if "schedule_prepare" in actions and draft:
+            import datetime
+            inputs = {"draftId": draft, "local": (datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%Y-%m-%dT18:00"), "zone": "Asia/Hong_Kong"}
+            act = _activate(self, art, {"actionId": "schedule_prepare"}, inputs)
+            self.assertEqual((act.get("confirmation") or {}).get("timeZone"), "Asia/Hong_Kong", "the native schedule confirmation must state the exact zone")
+            pre = self.snap()
+            res = self.w.ui(owner, "POST", "/actions", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": "schedule_prepare",
+                                                        "inputs": inputs, "idempotencyKey": new_key("prep-sched"), "activationId": act["activationId"]}, route="actions").json() or {}
+            self.assertIn(res.get("outcome"), ("prepared", "conflict", "rejected"))
+            self.assertFalse(res.get("verified"))
+            self.assertNotIn("jobs", Db.delta(pre, self.snap()), "schedule_prepare scheduled a job")
+            refused = f"; schedule_prepare → {res.get('outcome')} (not verified, no job)"
+        return f"automation_change_prepare → prepared, verified=false, automation unchanged, no job{refused}"
 
 
 class Edits(Case):
