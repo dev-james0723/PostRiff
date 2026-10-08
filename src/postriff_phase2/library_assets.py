@@ -334,7 +334,7 @@ class UniversalLibrary:
 
     def viewer_page(self,w,t,i,page=1):
         from .library_preview import SUPPORTED, VERSION, render_isolated
-        if type(page) is not int or not 1<=page<=10000:
+        if type(page) is not int or not 1<=page<=2147483647:
             raise AlphaError('Choose a valid document page.',422)
         store = self._store()
         claim = uuid.uuid4().hex

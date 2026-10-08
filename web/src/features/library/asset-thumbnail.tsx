@@ -44,7 +44,7 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
     enabled: Boolean(workspaceId) && enabled && ready,
     staleTime: 3 * 60_000,
     refetchInterval: enabled && ready ? 4 * 60_000 : false,
-    retry: (count, error) => count < (error instanceof ApiError && [409,429].includes(error.status) ? 12 : 1),
+    retry: (count, error) => count < (error instanceof ApiError && [409,429].includes(error.status) ? 32 : 1),
     retryDelay: 3000
   });
   if (!query.data || imageFailed) return (

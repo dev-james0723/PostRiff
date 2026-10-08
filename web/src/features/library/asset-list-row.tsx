@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { badgeClass, copyHash, dimensionsOf, formatDuration, useAssetImage, usageLabel } from './asset-card';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 
 export interface AssetListRowProps {
   asset: LibraryAsset;
@@ -131,6 +132,7 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
+          {assetKind === 'audio' || video ? <div className='px-3 pb-3'><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
         </motion.div>
       </ContextMenuTrigger>
       <ContextMenuContent ariaLabel={`${kindLabel} actions`}>
