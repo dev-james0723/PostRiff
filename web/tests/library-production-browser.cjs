@@ -37,9 +37,29 @@ const checks=[];
     return route.fulfill({status:result.status(),body:await result.body(),headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
    });
    await context.route('https://dev.invalid/**',async route=>{
-    const u=new URL(route.request().url()),r=await context.request.get(base+'/dev/storage'+u.pathname);
-    storageTrace.push({method:'GET',status:r.status(),mime:r.headers()['content-type']||null,object:u.pathname.split('/').slice(-2).join('/')});
-    return route.fulfill({status:r.status(),body:await r.body(),headers:{'Content-Type':r.headers()['content-type'],'Access-Control-Allow-Origin':'*'}});
+    const request=route.request(),u=new URL(request.url());
+    const deliveryHeaders={'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'Content-Range,Accept-Ranges','Accept-Ranges':'bytes'};
+    if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{...deliveryHeaders,'Access-Control-Allow-Methods':'GET,HEAD,OPTIONS','Access-Control-Allow-Headers':'Range'}});
+    const r=await context.request.get(base+'/dev/storage'+u.pathname),body=await r.body(),mime=r.headers()['content-type']||'application/octet-stream';
+    const range=request.headers().range;
+    let status=r.status(),delivered=body,headers={...deliveryHeaders,'Content-Type':mime,'Content-Length':String(body.length)};
+    // Real Supabase signed delivery supports single byte ranges. Preserve this
+    // behavior at the synthetic storage boundary so native media can seek.
+    if(status===200&&range){
+     const match=/^bytes=(\d*)-(\d*)$/.exec(range);
+     let start=0,end=body.length-1;
+     if(match&&(match[1]||match[2])){
+      if(match[1]){start=Number(match[1]);if(match[2])end=Math.min(end,Number(match[2]));}
+      else start=Math.max(0,body.length-Number(match[2]));
+     }else start=NaN;
+     if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start>=body.length||start<0||end<start){
+      status=416;delivered=Buffer.alloc(0);headers={...headers,'Content-Range':`bytes */${body.length}`,'Content-Length':'0'};
+     }else{
+      status=206;delivered=body.subarray(start,end+1);headers={...headers,'Content-Range':`bytes ${start}-${end}/${body.length}`,'Content-Length':String(delivered.length)};
+     }
+    }
+    storageTrace.push({method:request.method(),status,mime,range:range||null,deliveredBytes:delivered.length,object:u.pathname.split('/').slice(-2).join('/')});
+    return route.fulfill({status,body:request.method()==='HEAD'?Buffer.alloc(0):delivered,headers});
    });
    const page=await context.newPage(),errors=[],uploadTrace=[];
    const relevantUploadUrl=value=>{try{const u=new URL(value);if(u.searchParams.has('token'))u.searchParams.set('token','[redacted]');return u.origin+u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch{return value}};
@@ -118,6 +138,17 @@ const checks=[];
      }
     };
     await waitForSilentVideo();
+    const rangeDelivery=await previewVideo.evaluate(async(video,totalBytes)=>{
+     const partial=await fetch(video.currentSrc,{headers:{Range:'bytes=4-7'}});
+     const bytes=Array.from(new Uint8Array(await partial.arrayBuffer()));
+     const invalid=await fetch(video.currentSrc,{headers:{Range:`bytes=${totalBytes}-`}});
+     return {status:partial.status,range:partial.headers.get('Content-Range'),bytes,invalidStatus:invalid.status,invalidRange:invalid.headers.get('Content-Range')};
+    },videoBytes.length);
+    assert.equal(rangeDelivery.status,206,'native playback delivery supports actual partial byte reads');
+    assert.equal(rangeDelivery.range,`bytes 4-7/${videoBytes.length}`);
+    assert.deepEqual(rangeDelivery.bytes,Array.from(videoBytes.subarray(4,8)),'Range response must contain those original MP4 bytes');
+    assert.equal(rangeDelivery.invalidStatus,416,'out-of-bounds byte range must be refused');
+    assert.equal(rangeDelivery.invalidRange,`bytes */${videoBytes.length}`);
     await page.emulateMedia({reducedMotion:'reduce'});
     await page.waitForFunction(()=>document.querySelector('[data-library-media-player="video"] video')?.paused===true,null,{timeout:5000});
     await page.emulateMedia({reducedMotion:'no-preference'});
@@ -125,17 +156,17 @@ const checks=[];
     await inlineVideo.getByRole('button',{name:'Pause video preview',exact:true}).click();
     const videoTimeline=inlineVideo.getByRole('slider',{name:'Video preview timeline',exact:true});
     const seekVideoHandle=await previewVideo.elementHandle();
-    await page.waitForFunction(video=>video.paused,seekVideoHandle,{timeout:5000});
+    await page.waitForFunction(video=>video.paused&&video.seekable.length>0,seekVideoHandle,{timeout:5000});
     await videoTimeline.focus();await videoTimeline.press('Home');
     await page.waitForFunction(video=>!video.seeking&&video.currentTime<0.075,seekVideoHandle,{timeout:5000});
     await previewVideo.evaluate(video=>{delete video.dataset.acceptanceSeeked;video.addEventListener('seeked',()=>{video.dataset.acceptanceSeeked='yes';},{once:true});});
     await videoTimeline.press('ArrowRight');
     await page.waitForFunction(video=>video.dataset.acceptanceSeeked==='yes'&&!video.seeking,seekVideoHandle,{timeout:5000});
-    assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4 after the native seeked event: '+JSON.stringify(await previewVideo.evaluate(video=>({time:video.currentTime,seeking:video.seeking,paused:video.paused,range:video.closest('[data-library-media-player]')?.querySelector('input[type="range"]')?.value}))));
+    assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4 after the native seeked event: '+JSON.stringify(await previewVideo.evaluate(video=>({time:video.currentTime,seeking:video.seeking,paused:video.paused,seekable:Array.from({length:video.seekable.length},(_,index)=>[video.seekable.start(index),video.seekable.end(index)]),buffered:Array.from({length:video.buffered.length},(_,index)=>[video.buffered.start(index),video.buffered.end(index)]),range:video.closest('[data-library-media-player]')?.querySelector('input[type="range"]')?.value}))));
     await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
     assert.equal(await previewVideo.evaluate(video=>video.playbackRate),1.5);
     await page.emulateMedia({reducedMotion:'reduce'});
-    checks.push({engine,width,format:'mp4',inline:'actual silent autoplay; reduced-motion pause; timeline; speed',execution:'real original MP4/UI; synthetic identity/storage'});
+    checks.push({engine,width,format:'mp4',inline:'actual silent autoplay; reduced-motion pause; byte-range206/416; native keyboard seek; speed',execution:'real original MP4/UI; synthetic identity/storage'});
    }else checks.push({engine,width,format:'mp4',inline:'actual captured poster verified; H264 playback unavailable in Linux WebKit harness',execution:'real captured Chromium source frame; synthetic identity/storage; no WebKit video-playback claim'});
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
