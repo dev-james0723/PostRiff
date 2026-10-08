@@ -31,6 +31,8 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
 import { AudioMomentPlayer } from './intelligence/audio-player';
 import { VersionsPanel } from './intelligence/versions-panel';
+import { UsagePanel } from './intelligence/usage-panel';
+import { VoicePanel } from './intelligence/voice-panel';
 import {
   CapabilityList,
   DangerArea,
@@ -40,8 +42,6 @@ import {
   SegmentList,
   SuggestedUses,
   UnderstandingSummary,
-  UsageEntries,
-  VoiceControl,
   useAssetIntelligence,
   type AssetIntelligence
 } from './intelligence/detail-sections';
@@ -285,7 +285,6 @@ function DetailBody({
   currentUserId,
   platforms,
   canEdit,
-  isOwner,
   deleting,
   onDelete,
   intel,
@@ -305,7 +304,7 @@ function DetailBody({
   const card = intel.card.data;
   const segments = intel.segments.data?.segments ?? [];
   const moments = segments.filter((segment) => segment.kind === 'moment');
-  const usage = intel.usage.data?.usage ?? [];
+  const usage = intel.usage.data ?? null;
   const title = assetTitle(asset);
   const textual = kind === 'document' || kind === 'file' || kind === 'audio';
   return (
@@ -320,7 +319,12 @@ function DetailBody({
           <p className='rafii-eyebrow'>What Rafii may use it for</p>
           <PurposeList card={card} />
         </div>
-        {textual ? <VoiceControl assetKey={intel.key} card={card} isOwner={isOwner} /> : null}
+        {textual && intelligence ? (
+          <div className='flex flex-col gap-1.5'>
+            <p className='rafii-eyebrow'>My voice</p>
+            <VoicePanel assetKey={intel.key} segments={segments} enabled />
+          </div>
+        ) : null}
         <SuggestedUses card={card} />
         {publishing && <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />}
         {canEdit ? (
@@ -343,16 +347,22 @@ function DetailBody({
       </DetailSection>
 
       <DetailSection prefix={prefix} id='usage' title='Usage'>
-        {uses.length === 0 && usage.length === 0 ? <p className='text-muted-foreground text-sm'>Not used yet</p> : null}
-        {uses.length ? (
-          <ul aria-label='Posts using this item' className='flex flex-col'>
-            {uses.map((use) => (
-              <UseRow key={`${use.kind}-${use.id}`} use={use} />
-            ))}
-          </ul>
-        ) : null}
-        <UsageEntries usage={usage} />
-        <p className='text-muted-foreground text-xs'>{intel.usage.data?.note || 'This shows where the item was used and the metrics that exist. Missing metrics say unknown; it doesn’t show that the item caused a result.'}</p>
+        {usage ? (
+          <UsagePanel usage={usage} />
+        ) : (
+          <>
+            {/* Without the usage service: the posts this workspace prepared with it, from the snapshot. */}
+            {uses.length === 0 ? <p className='text-muted-foreground text-sm'>Not used yet</p> : null}
+            {uses.length ? (
+              <ul aria-label='Posts using this item' className='flex flex-col'>
+                {uses.map((use) => (
+                  <UseRow key={`${use.kind}-${use.id}`} use={use} />
+                ))}
+              </ul>
+            ) : null}
+            <p className='text-muted-foreground text-xs'>Post metrics appear here when Library usage is available. Missing values read unknown.</p>
+          </>
+        )}
         <Link href='/app/queue?view=drafts' className={cn('t-learn min-h-11 self-start', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
           Drafts
           <LearnMoreChevron />
@@ -384,7 +394,7 @@ function DetailBody({
         </dl>
       </details>
 
-      {canEdit ? <DangerArea uses={uses.length} recorded={usage.length} publishing={publishing} deleting={deleting} onDelete={() => onDelete(asset)} /> : null}
+      {canEdit ? <DangerArea uses={uses.length} recorded={usage ? usage.uses.filter((entry) => entry.source !== 'post_job' && entry.source !== 'post_review').length : 0} publishing={publishing} deleting={deleting} onDelete={() => onDelete(asset)} /> : null}
     </div>
   );
 }

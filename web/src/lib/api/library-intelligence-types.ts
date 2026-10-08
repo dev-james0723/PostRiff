@@ -486,27 +486,113 @@ export interface LibraryGrant {
   grantedAt: number;
 }
 
+export type SuggestionCategory = 'outdated_source' | 'unused_relevant' | 'missing_input' | 'failed_processing' | 'organization' | 'permission' | 'source_integrity';
+export type SuggestionAction = 'open' | 'dismiss' | 'snooze' | 'apply' | 'disable_category';
+
+/** suggestions.py `_public`: what was found, what it affects, and the actions this item allows. */
 export interface LibrarySuggestion {
   id: string;
-  category: 'outdated_source' | 'unused_relevant' | 'missing_input' | 'failed_processing' | 'organization' | 'permission' | 'source_integrity';
+  category: SuggestionCategory;
+  /** Permission and source-integrity warnings: never capped, never switched off. */
   critical: boolean;
   reason: string;
-  candidateRefs: SourceRef[];
-  affected: { kind: string; id: string; label: string }[];
+  /** Affected work: {kind, key} for drafts, packs, posts, ideas and items; {kind: 'proposal', name, itemCount} for organization proposals. */
+  affected: { kind: string; key?: string; name?: string; itemCount?: number; citesVersion?: AssetRef; recipient?: string }[];
+  candidateRefs: AssetRef[];
+  why: Record<string, unknown> | null;
   state: 'new' | 'seen' | 'dismissed' | 'snoozed' | 'applied' | 'expired' | 'suppressed';
   snoozeUntil: number | null;
-  createdAt: number;
+  createdAt: number | null;
+  expiresAt: number | null;
+  actions: SuggestionAction[];
+  proposal?: { name: string; rule: SmartRule };
 }
 
+export interface SuggestionInbox {
+  suggestions: LibrarySuggestion[];
+  cap: { noncriticalPerDay: number; shownToday: number };
+  preferences: Record<SuggestionCategory, { disabled: boolean; snoozeDays: number; canDisable: boolean }>;
+  /** In-app only: channels ['in_app'], external false, with the server's own note. */
+  delivery: { channels: string[]; external: boolean; note: string };
+  proactiveEnabled: boolean;
+}
+
+/** usage.py `_metric`: a reading with its source time. A missing value is null and displays "unknown", never 0. */
+export interface MetricReading {
+  value: number | null;
+  display: string;
+  availability: string;
+  observedAt: number | null;
+  readOffset?: unknown;
+}
+
+/** usage.py `asset_usage` entries: library events, prepared posts, Ideas drafts and citations of this item's versions. */
 export interface UsageEntry {
-  eventType: 'source_pack' | 'draft_attached' | 'post_scheduled' | 'post_published' | 'agent_answer' | 'downloaded';
-  at: number;
+  source: 'library_event' | 'post_job' | 'post_review' | 'ideas_draft' | 'citation';
+  type: string;
+  version: AssetRef | null;
+  at?: number | null;
   draftId?: string | null;
   postId?: string | null;
+  jobId?: string | null;
+  reviewId?: string | null;
+  sourceId?: string | null;
   channel?: string | null;
-  versionId?: string | null;
-  metrics: Record<string, number | null> | null;
-  metricsAt: number | null;
+  account?: string | null;
+  state?: string | null;
+  kind?: string;
+  key?: string;
+  status?: string;
+  segmentId?: string;
+  metrics?: Record<string, MetricReading> | null;
+  metricsStatus: 'available' | 'partial' | 'unknown' | 'not_applicable';
+}
+
+export interface AssetUsage {
+  assetRef: AssetRef;
+  versions: AssetRef[];
+  uses: UsageEntry[];
+  summary: { uses: number; drafts: number; posts: number; channels: string[]; metricsStatus: string };
+  /** The server's own words: correlation, not causation; missing values stay unknown. */
+  note: string;
+  truncated: boolean;
+  warnings: string[];
+}
+
+/** voice.py `sample_contract`: one approved (or withdrawn) span with its provenance. No score. */
+export interface VoiceSample {
+  contractVersion: string;
+  sampleId: string;
+  voiceSourceId: string | null;
+  assetRef: AssetRef;
+  locator: Locator;
+  locatorLabel: string;
+  text: string | null;
+  textHash: string;
+  personaId: string;
+  brand: string | null;
+  language: string;
+  polarity: 'positive' | 'negative';
+  status: 'approved' | 'revoked' | 'blocked';
+  statusReason: string | null;
+  revision: number;
+  consentRevision: number;
+  attestation: { authoredByMe?: boolean; method?: string; speakerLabel?: string; generatedTextApproved?: boolean };
+  uses: { purpose: string; route: string }[];
+  selected: boolean;
+  createdAt: number | null;
+  revokedAt: number | null;
+}
+
+export interface AssetVoice {
+  contractVersion: string;
+  assetRef: AssetRef;
+  samples: VoiceSample[];
+  negatives: VoiceSample[];
+  voicePermission: { allowed: boolean; reason: string | null; message: string | null; grantRevision: number };
+  sourceRole: { role: 'generated' | 'reference' | 'own_note' | 'unattested'; detail: string };
+  admission: { enabled: boolean; canApprove: boolean; methods: ('written_by_me' | 'spoken_by_me' | 'published_by_me')[] };
+  explanation: string;
 }
 
 export interface LibraryIntelligenceStatus {

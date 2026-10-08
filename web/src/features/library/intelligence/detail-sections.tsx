@@ -1,15 +1,13 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useReducedMotion } from 'motion/react';
-import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import type { Annotation, CapabilityState, ContentSegment, Locator, UnderstandingCard, UsageEntry } from '@/lib/api/library-intelligence-types';
+import type { Annotation, CapabilityState, ContentSegment, Locator, UnderstandingCard } from '@/lib/api/library-intelligence-types';
 import { normalizeKey } from '@/lib/library/url-state';
 import { countLabel, locatorLabel, originLabel, purposeLines } from '@/lib/library/wording';
-import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { LibraryAsset } from '../use-library';
@@ -215,98 +213,6 @@ export function SuggestedUses({ card }: { card: UnderstandingCard | undefined })
   );
 }
 
-/**
- * "My voice" is a purpose with consequences, not a tag (UI spec §4, A048): it needs the owner, and the owner's
- * statement that they wrote or said this. No match scores or percentages — Rafii shows the sample, not a grade.
- */
-export function VoiceControl({ assetKey, card, isOwner }: { assetKey: string; card: UnderstandingCard | undefined; isOwner: boolean }) {
-  const { api, workspaceId } = useWorkspaceApi();
-  const client = useQueryClient();
-  const id = useId();
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const status = card?.sourceStatus?.voice;
-  if (!card || !status) return null;
-
-  async function refresh() {
-    await client.invalidateQueries({ queryKey: ['library-card', workspaceId, assetKey] });
-    await client.invalidateQueries({ queryKey: ['library-grants', workspaceId] });
-  }
-
-  async function grant() {
-    setBusy(true);
-    try {
-      await api.libraryGrant(workspaceId, { grantType: 'purpose', scope: { kind: 'asset', assetId: assetKey }, purpose: 'voice', attestation: { authoredByMe: true } });
-      setConfirmed(false);
-      await refresh();
-      toast.success('Rafii may learn your voice from this item.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Couldn’t change this permission');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function revoke() {
-    setBusy(true);
-    try {
-      const { grants } = await api.libraryGrants(workspaceId);
-      const match = grants.find((entry) => entry.purpose === 'voice' && entry.scopeKind === 'asset' && normalizeKey(entry.scopeKey) === assetKey);
-      if (!match) throw new Error('This item learns your voice through a wider permission. Change it in Memory.');
-      await api.libraryRevokeGrant(workspaceId, match.id);
-      await refresh();
-      toast.success('Rafii will stop learning your voice from this item.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Couldn’t change this permission');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className='rafii-quiet flex flex-col gap-2 rounded-[var(--rafii-radius-card)] p-3'>
-      <p className='text-sm font-medium'>My voice</p>
-      {status.allowed ? (
-        <>
-          <p className='text-muted-foreground text-xs'>Rafii may learn how you write from this item. Withdrawing stops future use; it doesn’t change drafts already written.</p>
-          {isOwner ? (
-            <Button variant='glass' size='control' className='self-start' disabled={busy} onClick={() => void revoke()}>
-              Stop using as my voice
-            </Button>
-          ) : null}
-        </>
-      ) : isOwner ? (
-        <>
-          <div className='flex items-start gap-3 text-sm'>
-            <input
-              id={`${id}-author`}
-              type='checkbox'
-              aria-label='I wrote or said this myself'
-              aria-describedby={`${id}-author-help`}
-              checked={confirmed}
-              onChange={(event) => setConfirmed(event.target.checked)}
-              className='accent-foreground mt-3 size-5 shrink-0'
-            />
-            <div className='flex flex-col gap-0.5'>
-              <label htmlFor={`${id}-author`} className='flex min-h-11 items-center'>
-                I wrote or said this myself
-              </label>
-              <p id={`${id}-author-help`} className='text-muted-foreground text-xs'>
-                Interviews, quotes and other people’s writing should not teach your voice.
-              </p>
-            </div>
-          </div>
-          <Button variant='glass' size='control' className='self-start' disabled={!confirmed || busy} onClick={() => void grant()}>
-            Use as my voice
-          </Button>
-        </>
-      ) : (
-        <p className='text-muted-foreground text-xs'>Only the workspace owner can let Rafii learn a voice from Library items.</p>
-      )}
-    </div>
-  );
-}
-
 /* --- content ---------------------------------------------------------------------------------------------------- */
 
 function sameLocator(a: Locator | null | undefined, b: Locator | null | undefined) {
@@ -342,51 +248,6 @@ export function SegmentList({ segments, focus }: { segments: ContentSegment[]; f
         );
       })}
     </ol>
-  );
-}
-
-/* --- usage ------------------------------------------------------------------------------------------------------ */
-
-const USAGE_EVENT: Record<UsageEntry['eventType'], string> = {
-  source_pack: 'Added to a source pack',
-  draft_attached: 'Attached to a draft',
-  post_scheduled: 'Scheduled in a post',
-  post_published: 'Published in a post',
-  agent_answer: 'Cited in a Rafii answer',
-  downloaded: 'Downloaded'
-};
-
-/** Recorded uses and whatever metrics exist. A missing value says "unknown"; nothing here claims a cause. */
-export function UsageEntries({ usage }: { usage: UsageEntry[] }) {
-  if (!usage.length) return null;
-  return (
-    <ul className='flex flex-col gap-2'>
-      {usage.map((entry, index) => (
-        <li key={`${entry.eventType}-${entry.at}-${index}`} className='rafii-quiet flex flex-col gap-1 rounded-[var(--rafii-radius-control)] p-3 text-sm'>
-          <span className='flex items-baseline justify-between gap-2'>
-            <span>
-              {USAGE_EVENT[entry.eventType] ?? entry.eventType}
-              {entry.channel ? <span className='text-muted-foreground'> · {entry.channel}</span> : null}
-            </span>
-            <span className='text-muted-foreground text-xs' title={formatDateTime(entry.at)}>
-              {relativeTime(entry.at)}
-            </span>
-          </span>
-          {entry.metrics ? (
-            <dl className='text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 text-xs'>
-              {Object.entries(entry.metrics).map(([name, value]) => (
-                <div key={name} className='contents'>
-                  <dt>{name.replaceAll('_', ' ')}</dt>
-                  <dd className='text-foreground tabular-nums'>{typeof value === 'number' ? value.toLocaleString('en-US') : 'unknown'}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <span className='text-muted-foreground text-xs'>Metrics: unknown</span>
-          )}
-        </li>
-      ))}
-    </ul>
   );
 }
 
