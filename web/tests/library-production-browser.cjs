@@ -365,6 +365,9 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:'Close asset details'}).waitFor();
    assert.ok(await page.locator('[data-library-thumbnail="pdf"][data-thumbnail-preview="first-page-raster"] img').count()>=2,'Actual PDF page must also appear in asset details');
    await page.getByRole('button',{name:'Close asset details'}).click();
+   // The open item lives in the address; closing must leave nothing to reopen on reload.
+   await page.getByRole('button',{name:'Close asset details'}).waitFor({state:'detached',timeout:15000});
+   await page.waitForFunction(()=>!new URL(location.href).searchParams.get('asset'),null,{timeout:5000});
    // Real two-page PDF: the reader must navigate source pages, not reuse its thumbnail.
    const viewerBytes=readFileSync(resolve(__dirname,'../../.codex/library-samples/archive-viewer.pdf'));
    const viewerTicketResponse=await context.request.post(path+'/files',{headers,data:{filename:'archive-viewer.pdf',mime:'application/pdf',bytes:viewerBytes.length}});
@@ -374,7 +377,13 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.ok((await context.request.post(path+'/files/'+viewerTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+viewerTicket.assetId);
    await settleBeforeNavigation('show uploaded multipage PDF');await page.reload();await search.fill('archive-viewer.pdf');
-   await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
+   try{await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click({timeout:15000});}
+   catch(error){
+    // Say what is covering the card instead of only timing out.
+    const open=await page.evaluate(()=>[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[data-slot="sheet-portal"]')].map(node=>(node.getAttribute('aria-label')||node.querySelector('h1,h2,[data-slot$="title"]')?.textContent||node.textContent||'').trim().slice(0,120)));
+    console.error(JSON.stringify({step:'open archive-viewer after reload',url:page.url(),open}));
+    throw error;
+   }
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
    const firstPage=reader.locator('img[data-document-page="1"]');await waitForLoadedRaster(firstPage,500,90000);
