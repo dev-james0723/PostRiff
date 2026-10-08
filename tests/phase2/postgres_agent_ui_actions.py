@@ -741,6 +741,46 @@ def _():
     return {"coverage": coverage["data"]["state"]}
 
 
+@scenario("A17", "NC18: a view whose library version this build can't draw refuses activate and execute (409 library_unsupported), with zero writes")
+def _():
+    art = make_artifact(["J01", "J05"])
+    rev = query("draft_read", {"draftId": DRAFT}, token=EDITOR, artifact=art)["data"]["revision"]
+    inputs = {"draftId": DRAFT, "revision": rev, "text": "Edit that must never land."}
+    issued = activate("draft_edit", inputs, token=EDITOR, artifact=art)            # while the view is drawable
+    old_hash = "f" * 64
+    with connection() as db:
+        db.execute("UPDATE public.pr_ui_artifacts SET library_hash=%s WHERE id=%s", (old_hash, art["artifactId"]))
+
+    def snapshot():
+        with connection() as db:
+            return {**counts(),
+                    "activations": db.execute("SELECT count(*) FROM public.pr_ui_activations WHERE workspace_id=%s", (wid,)).fetchone()[0],
+                    "used": db.execute("SELECT used_at IS NOT NULL FROM public.pr_ui_activations WHERE id=%s", (issued["activationId"],)).fetchone()[0],
+                    "text": next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == DRAFT)["text"],
+                    "campaigns": len(service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"])}
+    before = snapshot()
+    denied(lambda: activate("draft_edit", inputs, token=EDITOR, artifact=art), 409, "library_unsupported")
+    denied(lambda: execute("draft_edit", inputs, issued["activationId"], token=EDITOR, artifact=art), 409, "library_unsupported")
+    denied(lambda: activate("campaign_create", {"goal": "Never created", "audience": "Nobody"}, artifact=art), 409, "library_unsupported")
+    after = snapshot()
+    assert after == before, (before, after)
+    assert after["used"] is False and after["text"] != inputs["text"]
+    # The same rule as F's snapshot: a hash declared compatible (RAFII_GENUI_COMPATIBLE_LIBRARIES) is drawable again.
+    previous = os.environ.get("RAFII_GENUI_COMPATIBLE_LIBRARIES")
+    os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = old_hash
+    try:
+        result = execute("draft_edit", inputs, issued["activationId"], token=EDITOR, artifact=art)
+        assert result["outcome"] == "applied" and result["verified"] is True, result
+    finally:
+        if previous is None:
+            os.environ.pop("RAFII_GENUI_COMPATIBLE_LIBRARIES", None)
+        else:
+            os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = previous
+    from postriff_phase2.agent_runtime_v2 import ui_store
+    assert ui_store.compatibility({"revision": 1, "libraryHash": old_hash, "scope": "workspace"})["supported"] is False, "the override was scoped to this check"
+    return {}
+
+
 failed = [r for r in RESULTS if r["result"] != "PASS"]
 print(json.dumps({"script": "postgres_agent_ui_actions", "passed": len(RESULTS) - len(failed), "failed": len(failed),
                   "scenarios": [{k: r.get(k) for k in ("id", "result", "ms")} for r in RESULTS]}), flush=True)

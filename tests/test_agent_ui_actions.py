@@ -211,6 +211,57 @@ class Dispatcher(unittest.TestCase):
         again = self.run_action(pending, request=self.request("t_paid"))
         self.assertTrue(isinstance(again, ui_actions.Deferred) and again.reconcile, "a retry reconciles; it never calls the provider again")
 
+    # --- NC18: a view this build cannot draw has no controls ------------------------------------------------------------
+    def test_an_unsupported_library_version_is_refused_before_anything_runs(self):
+        old = "e" * 64
+        supported = {"workspace": {"a" * 64}, "founder": set()}
+        artifact = {**self.artifact, "library_hash": old, "scope": "workspace"}
+        for name, call in (("activate", lambda cur: ui_actions.activate_ui_action(cur, auth(), artifact, self.manifest,
+                                                                                   {"artifactRevision": 3, "actionId": "t_edit", "inputs": {"text": "hello"}},
+                                                                                   runtime=SimpleNamespace(service=SimpleNamespace()), supported=supported)),
+                           ("execute", lambda cur: ui_actions.execute_ui_action(cur, auth(), artifact, self.manifest, self.request(),
+                                                                                runtime=SimpleNamespace(service=SimpleNamespace()), supported=supported)),
+                           ("execute_paid", lambda cur: ui_actions.execute_ui_action(cur, auth(), artifact, self.manifest, self.request("t_paid"),
+                                                                                     runtime=SimpleNamespace(service=SimpleNamespace()), supported=supported))):
+            with self.subTest(call=name):
+                cur = self.script()
+                with self.assertRaises(AlphaError) as refused:
+                    call(cur)
+                self.assertEqual((refused.exception.status, refused.exception.code), (409, "library_unsupported"))
+                self.assertEqual(cur.statements, [], "no throttle, activation, receipt, savepoint or domain statement")
+        self.assertEqual(self.executed, [])
+
+    def test_a_supported_or_compatible_library_version_proceeds(self):
+        current, compatible = "a" * 64, "b" * 64
+        supported = {"workspace": {current, compatible}, "founder": set()}
+        for library_hash in (current, compatible, ""):
+            with self.subTest(library_hash=library_hash or "legacy"):
+                artifact = {**self.artifact, "library_hash": library_hash, "scope": "workspace"}
+                result = ui_actions.execute_ui_action(self.script(), auth(), artifact, self.manifest, self.request(),
+                                                      runtime=SimpleNamespace(service=SimpleNamespace()), supported=supported)
+                self.assertEqual(result["outcome"], "applied")
+        founder_only = {"workspace": set(), "founder": {current}}
+        with self.assertRaises(AlphaError) as other_scope:
+            ui_actions.execute_ui_action(self.script(), auth(), {**self.artifact, "library_hash": current, "scope": "workspace"}, self.manifest, self.request(),
+                                         runtime=SimpleNamespace(service=SimpleNamespace()), supported=founder_only)
+        self.assertEqual(other_scope.exception.code, "library_unsupported", "a founder library hash never draws a consumer view")
+
+    def test_the_rule_is_the_shared_store_rule(self):
+        from postriff_phase2.agent_runtime_v2 import ui_store
+        calls = []
+        original = ui_store.compatibility
+
+        def spy(record, supported=None):
+            calls.append(record)
+            return original(record, supported)
+        ui_store.compatibility = spy
+        try:
+            ui_actions.execute_ui_action(self.script(), auth(), {**self.artifact, "library_hash": "", "scope": "workspace"}, self.manifest, self.request(),
+                                         runtime=SimpleNamespace(service=SimpleNamespace()), supported={"workspace": set(), "founder": set()})
+        finally:
+            ui_store.compatibility = original
+        self.assertEqual(calls, [{"revision": 3, "libraryHash": "", "scope": "workspace"}])
+
     def test_activation_copy_is_server_built_and_bounded(self):
         cur = self.script()
         out = ui_actions.activate_ui_action(cur, auth(), self.artifact, self.manifest, {"artifactRevision": 3, "actionId": "t_edit", "inputs": {"text": "hello"}},
