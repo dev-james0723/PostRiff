@@ -87,7 +87,7 @@ def read(state: dict, *, member=None, cur=None, workspace_id=None, zone=None, lo
         if cur is not None and workspace_id:
             from ..learning_service import pending_proposals
             pending = [{"id": p.get("id"), "kind": "explicit" if p.get("source") == "chat" else "inferred", "origin": p.get("source"), "status": "pending",
-                        "confidence": "not_in_effect", **({"statement": p.get("statement")} if shared else {})} for p in pending_proposals(cur, workspace_id)][:10]
+                        "confidence": "not_in_effect", **({"statement": (p.get("body") or {}).get("statement")} if shared else {})} for p in pending_proposals(cur, workspace_id)][:10]
         out["layers"]["preferences"] = {"source": "learned_preferences", "items": views, "pending": pending, "shared": shared,
                                         "counts": {"active": sum(1 for v in views if v["status"] == "active"), "explicit": sum(1 for v in views if v["kind"] == "explicit"),
                                                    "inferred": sum(1 for v in views if v["kind"] == "inferred")}}
