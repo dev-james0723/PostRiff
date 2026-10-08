@@ -178,73 +178,7 @@ class FacebookPagesProvider(OAuthProvider):
 
 
 # --- YouTube ----------------------------------------------------------------------------------------------------
-class YouTubeProvider(OAuthProvider):
-    id, platform, capability_version = "youtube", "YouTube", 1
-    AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
-    TOKEN = "https://oauth2.googleapis.com/token"
-    REVOKE = "https://oauth2.googleapis.com/revoke"
-    TOKENINFO = "https://oauth2.googleapis.com/tokeninfo"
-    API = "https://www.googleapis.com/youtube/v3"
-    UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos"
-    UPLOAD_SCOPE, READ_SCOPE = "https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"
-    SCOPES = {"identity": [READ_SCOPE], "publish": [UPLOAD_SCOPE, READ_SCOPE], "schedule": [UPLOAD_SCOPE, READ_SCOPE]}
-    EXPLAIN = {"identity": "Connect your YouTube channel. Rafii reads only the channel's name.",
-               "publish": "Rafii will upload videos to this channel only when you approve each exact upload. Until Google audits Rafii, YouTube keeps every upload private."}
-    account_requirement = "A Google account with a YouTube channel."
-    read_scope, publish_scope = READ_SCOPE, UPLOAD_SCOPE
-    publish_required = frozenset({UPLOAD_SCOPE})
-    refresh_margin = 300  # Google access tokens last an hour
-
-    def authorize_url(self, redirect, state, challenge, scopes):
-        return self.AUTH + "?" + urlencode({"response_type": "code", "client_id": self.client_id, "redirect_uri": redirect, "scope": " ".join(scopes),
-                                            "state": state, "code_challenge": challenge, "code_challenge_method": "S256",
-                                            "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
-
-    @staticmethod
-    def _grant(body, refresh_token=None):
-        scopes = _scopes(body.get("scope"), r"\s+") or []
-        return {"accessToken": json.dumps({"v": 1, "at": body["access_token"], "scope": scopes}), "refreshToken": body.get("refresh_token") or refresh_token,
-                "expiresIn": body.get("expires_in"), "scopes": scopes}
-
-    def exchange(self, code, verifier, redirect):
-        body = self._ok(self.transport("POST", self.TOKEN, form={"code": code, "client_id": self.client_id, "client_secret": self.client_secret, "redirect_uri": redirect,
-                                                                 "grant_type": "authorization_code", "code_verifier": verifier}), "access_token")
-        return self._grant(body)
-
-    def refresh(self, refresh_token):
-        body = self._ok(self.transport("POST", self.TOKEN, form={"client_id": self.client_id, "client_secret": self.client_secret,
-                                                                 "refresh_token": refresh_token, "grant_type": "refresh_token"}), "access_token")
-        return self._grant(body, refresh_token)  # Google keeps the refresh token unless it sends a new one
-
-    @staticmethod
-    def bearer(access_token):
-        return _load(access_token)["at"]
-
-    def api(self, access_token, method, url, **kwargs):
-        headers = {"Authorization": "Bearer " + self.bearer(access_token), **kwargs.pop("headers", {})}
-        return self.transport(method, url, headers=headers, **kwargs)
-
-    def identity(self, access_token):
-        body = self._ok(self.api(access_token, "GET", f"{self.API}/channels?" + urlencode({"part": "snippet", "mine": "true"})))
-        items = body.get("items") if isinstance(body.get("items"), list) else []
-        if not items or not isinstance(items[0], dict) or not re.fullmatch(r"UC[A-Za-z0-9_-]{22}", str(items[0].get("id", ""))):
-            raise AlphaError("This Google account has no YouTube channel. Create one, then connect again.", 409)
-        snippet = items[0].get("snippet") if isinstance(items[0].get("snippet"), dict) else {}
-        thumbnail = ((snippet.get("thumbnails") or {}).get("default") or {}).get("url")
-        return {"providerAccountId": items[0]["id"], "handle": str(snippet.get("customUrl") or snippet.get("title") or items[0]["id"]),
-                "accountType": "channel", "pictureUrl": thumbnail if isinstance(thumbnail, str) else None}
-
-    def inspect_scopes(self, access_token, expected_account_id=None):
-        """Google's tokeninfo: the live grant, and proof it belongs to Rafii's client."""
-        response = self.transport("GET", self.TOKENINFO + "?" + urlencode({"access_token": self.bearer(access_token)}))
-        body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") != 200 or body.get("aud") != self.client_id or not isinstance(body.get("scope"), str):
-            return None
-        return sorted(set(_scopes(body["scope"], r"\s+")))
-
-    def revoke(self, token):
-        # Revoking an access token also revokes its refresh token (Google OAuth 2.0 for web server apps).
-        return self.transport("POST", self.REVOKE, form={"token": self.bearer(token)}).get("status") == 200
+from .youtube.provider import YouTubeProvider  # stable adapter import for the shared provider registry
 
 
 # --- TikTok -----------------------------------------------------------------------------------------------------

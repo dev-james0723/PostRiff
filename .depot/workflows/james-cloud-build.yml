@@ -283,7 +283,77 @@ jobs:
         run: "npm ci"
       - name: "JCB test"
         working-directory: "web"
-        run: "npm run test:library"
+        run: "npm run test:jcb"
+      - name: Observe cache after
+        if: always()
+        run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
+  build:
+    runs-on: "depot-ubuntu-24.04-16"
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: "."
+    env:
+      CI: "true"
+      LC_ALL: "C"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:4439"
+      NEXT_PUBLIC_SENTRY_DISABLED: "1"
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_TELEMETRY_DISABLED: "1"
+      NPM_CONFIG_CACHE: "/mnt/jcb-package-cache"
+      POSTRIFF_API_ORIGIN: "http://127.0.0.1:4438"
+      POSTRIFF_DEV_SSR: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Remove ephemeral checkout authorization
+        working-directory: "."
+        run: git config --local --unset-all http.https://github.com/.extraheader || true
+      - name: Verify JCB source snapshot
+        working-directory: "."
+        run: |
+          test -f .depot/jcb-source.json
+          printf 'JCB source snapshot: '
+          cat .depot/jcb-source.json
+          if [ -f .jcb-working-tree-proof.txt ]; then
+            printf 'JCB proof: '
+            cat .jcb-working-tree-proof.txt
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - name: Match repository npm runtime
+        working-directory: "web"
+        run: "JCB_RUNTIME_CACHE_DIR=\"${RUNNER_TEMP:-/tmp}/jcb-runtime-cache\"\nmkdir -p \"$JCB_RUNTIME_CACHE_DIR\"\nif [ \"$(npm --cache \"$JCB_RUNTIME_CACHE_DIR\" --version)\" != 11.12.1 ]; then\n  npm --cache \"$JCB_RUNTIME_CACHE_DIR\" install --global npm@11.12.1\nfi"
+      - name: Mount durable package cache
+        uses: depot/cache-mount@v1
+        with:
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-npm"
+          path: "/mnt/jcb-package-cache/_cacache"
+      - name: Mount durable Next.js cache
+        uses: depot/cache-mount@v1
+        with:
+          name: "jcb-e408bbcd8242-3f8771e7-c347e642-next-build"
+          path: "/mnt/jcb-framework-cache"
+      - name: Connect framework cache
+        working-directory: "web"
+        run: |
+          mkdir -p .next
+          if [ -e .next/cache ] && [ ! -L .next/cache ]; then
+            cp -a .next/cache/. /mnt/jcb-framework-cache/
+            rm -rf .next/cache
+          fi
+          ln -sfn /mnt/jcb-framework-cache .next/cache
+      - name: Observe cache before
+        run: "printf 'JCB cache before: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
+      - name: Frozen dependency install
+        working-directory: "web"
+        run: "npm ci"
+      - name: "JCB build"
+        working-directory: "web"
+        run: "npm run build"
       - name: Observe cache after
         if: always()
         run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"
@@ -356,7 +426,7 @@ jobs:
         run: "node node_modules/next/dist/bin/next typegen"
       - name: "JCB ci"
         working-directory: "web"
-        run: "npm run ci:library"
+        run: "npm run ci:youtube:jcb"
       - name: Observe cache after
         if: always()
         run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"

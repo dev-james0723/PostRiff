@@ -250,10 +250,10 @@ export const channels: Channel[] = [
     capability: 'assisted',
     reviewStatus: 'publishing in review',
     capabilities: { ...identityOnly },
-    description: 'Video uploads with the title, visibility and audience you choose.',
-    formats: ['Video'],
+    description: 'Videos, Shorts and Live with creator tools and separately verified permissions.',
+    formats: ['Video', 'Short', 'Live'],
     region: 'global',
-    notes: [hostedPending, 'Until Google audits Rafii, YouTube keeps every upload private.']
+    notes: [hostedPending, 'Public uploads require separate Google approval evidence. Community publishing has no official public write API.']
   },
   {
     slug: 'tiktok',

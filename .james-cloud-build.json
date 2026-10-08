@@ -8,8 +8,8 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:library",
-    "ci": "ci:library"
+    "test": "test:jcb",
+    "ci": "ci:youtube:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",

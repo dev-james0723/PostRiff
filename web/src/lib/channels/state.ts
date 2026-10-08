@@ -14,6 +14,7 @@ import { relativeTime } from '@/lib/time';
 /** The fields any channel-shaped record needs for these helpers. `capabilities` is optional (MyChannel has none). */
 export type ChannelStateInput = Pick<ChannelView, 'connectionState'> & {
   expiresAt?: number | null;
+  refreshSupported?: boolean;
   capabilities?: Record<string, { evidence?: string } | undefined>;
 };
 
@@ -52,9 +53,14 @@ export function isVerified(channel: Pick<ChannelStateInput, 'connectionState'>) 
   return VERIFIED_STATES.has(channel.connectionState);
 }
 
+/** A stored refresh grant renews access tokens; it does not establish a grant-expiry date. */
+export function automaticallyRenews(channel: ChannelStateInput) {
+  return channel.refreshSupported === true && isVerified(channel);
+}
+
 /** A verified channel whose access ends within `EXPIRING_SOON_SECONDS`. Expired access is `token_expired`, not "expiring". */
 export function expiringSoon(channel: ChannelStateInput, now = nowSeconds()) {
-  if (!isVerified(channel) || !channel.expiresAt) return false;
+  if (!isVerified(channel) || automaticallyRenews(channel) || !channel.expiresAt) return false;
   const left = channel.expiresAt - now;
   return left > 0 && left < EXPIRING_SOON_SECONDS;
 }

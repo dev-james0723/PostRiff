@@ -73,10 +73,27 @@ export default function PrivacyPage() {
 
       <h2 id='platforms'>5. Connected platforms</h2>
       <p>
-        Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold, shared with third parties, or combined across customers. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
+        Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold or combined across customers. Service providers process data needed to deliver enabled features, as described in the AI processing and Subprocessors sections. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
+      </p>
+
+      <h3 id='youtube'>YouTube</h3>
+      <p>
+        Rafii uses YouTube API Services for the creator features you enable. Connect through Google's authorization screen and select the intended channel. Rafii manages the application's Google configuration; you do not need your own Google Cloud project or OAuth client credentials. Read-only connection does not enable publishing.
+      </p>
+      <p>
+        Google supplies the selected channel identity, authorization tokens and permissions returned for the application, which may include permissions you previously granted to the same Rafii application. Access and refresh credentials are encrypted on the server in workspace-scoped connection records. When the relevant features are enabled and authorized, Rafii processes channel and video metadata, selected upload media and publication settings, caption tracks, playlists, comments and supported creator reports to perform the actions you review and approve, check their results and show enabled reports or Inbox information. Hosting, database and model processing are described in the AI processing and Subprocessors sections.
+      </p>
+      <p>
+        Remove a connection from Channels or manage data requests through Account → Privacy &amp; data and our <Link href={siteConfig.links.dataDeletion} className='underline'>data-deletion page</Link>. Removing Rafii's access does not delete content already on YouTube. Google-wide revocation may affect other channels or Google integrations using that account and project; Rafii may defer that remote step to protect other active connections and reports whether it was confirmed. You can review or remove access in <a href='https://security.google.com/settings/security/permissions' className='underline'>Google's permissions settings</a>.
+      </p>
+      <p>
+        Your use of YouTube is subject to the <a href='https://www.youtube.com/t/terms' className='underline'>YouTube Terms of Service</a>. Google's information practices are explained in the <a href='https://policies.google.com/privacy' className='underline'>Google Privacy Policy</a>.
       </p>
 
       <h2 id='retention'>6. Retention</h2>
+      <p>
+        For YouTube, the general table below has these exceptions: Inbox comment copies expire 30 days after their last fetch, and cached creator data, including analytics responses, expires at its configured time, no later than 30 days after refresh. Maintenance removes expired comment copies and caches, and downloaded reporting datasets ingested more than 30 days ago. These periods apply to Rafii's working copies; they do not delete the original content on YouTube.
+      </p>
       <table>
         <thead>
           <tr>

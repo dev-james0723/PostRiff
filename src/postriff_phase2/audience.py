@@ -70,7 +70,7 @@ class AudienceService:
     # --- customer surface ------------------------------------------------------------
     def threads(self, workspace_id, token):
         with self.repository.transaction(token, workspace_id) as (cur, row, _):
-            cur.execute("SELECT id::text,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,extract(epoch from ingested_at),tombstoned_at IS NOT NULL,extract(epoch from created_at_provider) FROM public.pr_audience_threads WHERE workspace_id=%s ORDER BY ingested_at DESC LIMIT 200", (workspace_id,))
+            cur.execute("SELECT id::text,connection_id,provider,provider_post_id,provider_comment_id,author_handle,text,extract(epoch from ingested_at),tombstoned_at IS NOT NULL,extract(epoch from created_at_provider) FROM public.pr_audience_threads WHERE workspace_id=%s AND (provider<>'youtube' OR ingested_at>now()-interval '30 days') ORDER BY ingested_at DESC LIMIT 200", (workspace_id,))
             items = []
             for r in cur.fetchall():
                 reply_level = self._capability(cur, workspace_id, r[1], "reply")
@@ -82,7 +82,7 @@ class AudienceService:
                 items.append({"threadId": r[0], "connectionId": r[1], "provider": r[2], "providerPostId": r[3], "commentId": r[4], "author": r[5], "text": r[6], "ingestedAt": float(r[7]), "tombstoned": bool(r[8]), "replyAvailable": reply_level == "Direct" and self._member(row).allows("reply"), "replyLevel": reply_level, "createdAtProvider": float(r[9]) if r[9] is not None else None, "replies": replies})
             cur.execute("SELECT connection_id,level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='comments_read'", (workspace_id,))
             capability = [{"connectionId": c, "commentsRead": l} for c, l in cur.fetchall()]
-            cur.execute("SELECT count(*),count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.workspace_id=t.workspace_id AND d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified','uncertain'))) FROM public.pr_audience_threads t WHERE workspace_id=%s", (workspace_id,))
+            cur.execute("SELECT count(*),count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.pr_reply_drafts d WHERE d.workspace_id=t.workspace_id AND d.thread_id=t.id AND d.status IN ('approved','submitting','submitted','verified','uncertain'))) FROM public.pr_audience_threads t WHERE workspace_id=%s AND (provider<>'youtube' OR ingested_at>now()-interval '30 days')", (workspace_id,))
             total, answered = cur.fetchone()
             return {"counts": {"all": total, "replied": answered, "unanswered": total - answered}, "replySendingEnabled": self.reply_sender_enabled, "threads": items, "capabilities": capability, "limits": "Automated or bulk replies and moderation are not available in this release; each reply is approved individually."}
 
@@ -105,24 +105,32 @@ class AudienceService:
             return {"draftId": draft_id, "origin": "copilot", "text": written["text"], "needs": written["needs"], "label": "Suggested by Rafii's AI writer"}
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
-            cur.execute("SELECT 1 FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL", (thread_id, workspace_id))
-            if not cur.fetchone():
+            cur.execute("SELECT provider FROM public.pr_audience_threads WHERE id::text=%s AND workspace_id=%s AND tombstoned_at IS NULL AND (provider<>'youtube' OR ingested_at>now()-interval '30 days')", (thread_id, workspace_id))
+            thread = cur.fetchone()
+            if not thread:
                 raise AlphaError("Thread unavailable.", 404)
-            text = clean(payload.get("text", ""), REPLY_LIMIT)
-            if not text:
+            text = payload.get('text', '') if thread[0] == 'youtube' else clean(payload.get('text', ''), REPLY_LIMIT)
+            if not isinstance(text, str) or len(text) > REPLY_LIMIT:
+                raise AlphaError('The reply exceeds the displayed length limit; shorten it explicitly.', 400)
+            if not text.strip():
                 raise AlphaError("Write a reply first.")
             cur.execute("INSERT INTO public.pr_reply_drafts(workspace_id,thread_id,author,origin,text,status) VALUES(%s,%s,%s,%s,%s,'draft') RETURNING id::text", (workspace_id, thread_id, principal, origin, text))
             return {"draftId": cur.fetchone()[0], "origin": origin, "text": text, "label": "Your reply"}
 
     def reply_preview(self, workspace_id, token, draft_id):
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
-            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s", (draft_id, workspace_id))
+            cur.execute("SELECT d.text,d.status,t.connection_id,t.provider,t.provider_post_id,t.provider_comment_id FROM public.pr_reply_drafts d JOIN public.pr_audience_threads t ON t.id=d.thread_id WHERE d.id::text=%s AND d.workspace_id=%s AND (t.provider<>'youtube' OR t.ingested_at>now()-interval '30 days')", (draft_id, workspace_id))
             r = cur.fetchone()
             if not r:
                 raise AlphaError("Draft unavailable.", 404)
             cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, r[2]))
             account = cur.fetchone()
             manifest = {"schema": "postriff.reply-approval.v1", "workspaceId": workspace_id, "draftId": draft_id, "connectionId": r[2], "providerAccountId": account[0] if account else None, "provider": r[3], "threadPostId": r[4], "replyToCommentId": r[5], "text": r[0], "textDigest": digest(r[0])}
+            if r[3] == 'youtube':
+                cur.execute('SELECT provider_parent_id FROM public.pr_audience_threads WHERE workspace_id=%s AND provider_comment_id=%s AND connection_id=%s', (workspace_id, r[5], r[2]))
+                parent = cur.fetchone()
+                if parent and parent[0]:
+                    manifest['replyToCommentId'] = parent[0]
             return {"manifest": manifest, "digest": digest(manifest), "action": f"Record approval for this reply as {account[0] if account else 'an unconnected account'}", "replyLevel": self._capability(cur, workspace_id, r[2], "reply")}
 
     def approve_reply(self, workspace_id, token, draft_id, manifest_digest, confirmed):
@@ -138,7 +146,17 @@ class AudienceService:
                 raise AlphaError("This draft was already approved or changed.", 409)
             from .hosted import audit
             audit(cur, workspace_id, principal, "reply.approved", draft_id, {"provider": preview["manifest"]["provider"]})
-            return {"draftId": draft_id, "status": "approved", "requiresReconfirmation": not self.reply_sender_enabled, "note": "Approval recorded. Sending is not enabled; confirm this reply again before it can be sent." if not self.reply_sender_enabled else "Approval recorded for sending; provider verification is separate."}
+            result = {"draftId": draft_id, "status": "approved", "requiresReconfirmation": not self.reply_sender_enabled, "note": "Approval recorded. Sending is not enabled; confirm this reply again before it can be sent." if not self.reply_sender_enabled else "Approval recorded for sending; provider verification is separate."}
+        if preview['manifest']['provider'] == 'youtube' and self.reply_sender_enabled and self._service:
+            youtube = self._service.youtube
+            manifest = preview['manifest']
+            review = youtube.preview(workspace_id, token, manifest['connectionId'], {'action': 'comment.reply', 'inputs': {'id': manifest['replyToCommentId'], 'text': manifest['text']}, 'operationKey': 'inbox:' + draft_id})
+            receipt = youtube.approve(workspace_id, token, manifest['connectionId'], review['id'], {'confirmed': True, 'digest': review['digest']})
+            status = {'verified': 'verified', 'accepted': 'submitted', 'outcome_unknown': 'uncertain', 'failed': 'failed'}.get(receipt['status'], 'failed')
+            with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                cur.execute('UPDATE public.pr_reply_drafts SET status=%s,provider_reference=%s,events=events||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id::text=%s', (status, receipt.get('receipt', {}).get('result', {}).get('id'), json.dumps([{'state': status, 'actionId': review['id'], 'at': self.clock()}]), workspace_id, draft_id))
+            result.update(status=status, creatorActionId=review['id'], note='Exact YouTube reply submitted; official read-back is recorded separately.')
+        return result
 
     # --- executor (worker path) -----------------------------------------------------
     def send_approved(self, cur, workspace_id, draft_id, now):

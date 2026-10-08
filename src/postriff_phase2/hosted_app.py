@@ -215,8 +215,10 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False) for p in providers.values()
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) or getattr(p, 'creator_enabled', False) for p in providers.values()
     ) else None
+    if social is not None:
+        social.youtube = service.youtube
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
@@ -236,7 +238,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings))
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -509,6 +511,9 @@ class HostedApplication:
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            if path.startswith('/api/youtube/notifications/') and method in ('GET', 'POST'):
+                from .youtube.http import notification_callback
+                return notification_callback(self, environ, start_response, self._runtime(), method, path.rsplit('/', 1)[-1])
             from .phone import http as phone_http
             if (routed := phone_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
@@ -837,6 +842,9 @@ class HostedApplication:
                 if len(parts) == 7 and parts[4] == "reply-drafts" and parts[6] == "reply" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, audience.approve_reply(parts[2], token, parts[5], body.get("digest"), body.get("confirmed")))
+            if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
+                from .youtube.http import handle as youtube_handle
+                return youtube_handle(self, environ, start_response, service, token, method, parts)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":

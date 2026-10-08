@@ -80,11 +80,12 @@ class VideoPolicy:
     @classmethod
     def from_environment(cls, values):
         values = values or {}
+        youtube_creator = _flag(values.get('POSTRIFF_YOUTUBE_CREATOR_ENABLED'))
         return cls(
             enabled=_flag(values.get("RAFII_VIDEO_UPLOADS_ENABLED")),
             bucket=str(values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video"),
-            max_bytes=_int(values, "POSTRIFF_VIDEO_MAX_BYTES", PHASE1_MAX_BYTES, 1, PHASE1_MAX_BYTES),
-            max_seconds=_int(values, "POSTRIFF_VIDEO_MAX_SECONDS", PHASE1_MAX_SECONDS, 1, PHASE1_MAX_SECONDS),
+            max_bytes=_int(values, 'POSTRIFF_YOUTUBE_VIDEO_MAX_BYTES', PHASE1_MAX_BYTES, 1, 256 * 1024**3) if youtube_creator else _int(values, "POSTRIFF_VIDEO_MAX_BYTES", PHASE1_MAX_BYTES, 1, PHASE1_MAX_BYTES),
+            max_seconds=_int(values, 'POSTRIFF_YOUTUBE_VIDEO_MAX_SECONDS', 43200, 1, 43200) if youtube_creator else _int(values, "POSTRIFF_VIDEO_MAX_SECONDS", PHASE1_MAX_SECONDS, 1, PHASE1_MAX_SECONDS),
             frames=_int(values, "POSTRIFF_VIDEO_FRAMES", 4, 1, 4),
             daily_bytes=_int(values, "POSTRIFF_VIDEO_DAILY_BYTES", 1_000_000_000, 1, 10**12),
             workspace_max_bytes=_int(values, "POSTRIFF_VIDEO_WORKSPACE_MAX_BYTES", 2_000_000_000, 1, 10**13),

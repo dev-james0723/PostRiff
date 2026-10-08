@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-05T14:31:26.478363+00:00",
+  "execution": "FINAL LOCAL/OFFICIAL AUDIT; NOT REAL CREATOR E2E",
+  "production": "NOT READY",
+  "checks": [
+    {
+      "check": "Only official public endpoints",
+      "state": "VERIFIED LOCAL",
+      "evidence": "71-method official contract and owned-resource router; official Google OAuth/Data/Analytics/Reporting/Live/Hub/gRPC hosts only."
+    },
+    {
+      "check": "No Studio automation to fill gaps",
+      "state": "VERIFIED LOCAL",
+      "evidence": "No Studio automation/private endpoint fallback in candidate."
+    },
+    {
+      "check": "Community marked unsupported",
+      "state": "VERIFIED OFFICIAL AUDIT + LOCAL",
+      "evidence": "Official catalog has no public creation method; UI and capability state remain unsupported."
+    },
+    {
+      "check": "No connected equals Full Access",
+      "state": "VERIFIED LOCAL",
+      "evidence": "37 independent support/scope/channel/project/implementation/real-evidence states."
+    },
+    {
+      "check": "Least-privilege OAuth requests",
+      "state": "VERIFIED LOCAL",
+      "evidence": "Identity/upload/manage/analytics granted incrementally; revenue/membership intentional and separate. Actual grant unproven."
+    },
+    {
+      "check": "Public-upload eligibility independently verified",
+      "state": "BLOCKED — GOOGLE APPROVAL",
+      "evidence": "Exact Rafii project/client/approval/public-upload evidence unavailable; public gate held."
+    },
+    {
+      "check": "Native scheduling uses current official behavior",
+      "state": "VERIFIED OFFICIAL AUDIT + LOCAL; REAL E2E BLOCKED",
+      "evidence": "Private, never-published, future publishAt, separate approvals, same ID and official reconciliation. Existing imported videos with no trustworthy never-published history are held."
+    },
+    {
+      "check": "Shorts use video upload path",
+      "state": "VERIFIED OFFICIAL AUDIT + LOCAL; REAL CLASSIFICATION BLOCKED",
+      "evidence": "videos.insert only; no fake endpoint/field; SHORTS from official creatorContentType."
+    },
+    {
+      "check": "Upload retries preserve original operation",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Encrypted durable session, byte-range probe, unknown-init/lost-journal/session-expiry holds; no replacement upload."
+    },
+    {
+      "check": "Upload completion differs from publication",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Private/processing/processed/scheduled/published/rejected/failed lifecycle and readback guards."
+    },
+    {
+      "check": "Analytics provenance is explicit",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Data API counters vs Analytics queries vs Reporting datasets; no geometry-inferred Shorts."
+    },
+    {
+      "check": "Revenue separately authorized",
+      "state": "VERIFIED LOCAL; NOT AUTHORIZED",
+      "evidence": "Owner/recent-auth flag plus monetary scope plus eligibility; financial/unclassified report types share gate."
+    },
+    {
+      "check": "Broadcast and stream IDs distinct",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Owned broadcast/stream/chat resources and binding; separate persisted IDs and archive readback."
+    },
+    {
+      "check": "Sensitive data and workspace isolation",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Server encrypted tokens/session/HMAC secrets; RLS/composite foreign keys; fresh-owner stream secret; purge on revocation. Key replacement requires reconnect."
+    },
+    {
+      "check": "Destructive operations audited",
+      "state": "VERIFIED LOCAL; REAL E2E BLOCKED",
+      "evidence": "Exact immutable target plus human approval, durable write intent and audit; uncertain/destructive writes never auto-retried."
+    },
+    {
+      "check": "Current quota verified instead of stale assumptions",
+      "state": "VERIFIED OFFICIAL AUDIT; PROJECT QUOTA UNKNOWN",
+      "evidence": "Current dated official tables distinguish Video Uploads/search/general and Analytics/Reporting; actual remaining quota never inferred."
+    },
+    {
+      "check": "Every READY has real evidence",
+      "state": "NO READY CLAIMED",
+      "evidence": "0 READY/0 real PASS. Model requires real PASS, same Channel ID, reference and fresh verifiedAt."
+    },
+    {
+      "check": "Every unavailable capability explicit",
+      "state": "VERIFIED LOCAL",
+      "evidence": "37 capability states plus 151 real acceptance cases expose blocked/not-authorized/unsupported instead of hiding gaps."
+    }
+  ]
+}
