@@ -14,6 +14,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
+    parser.add_argument('--library-intelligence',action='store_true',help='Library intelligence UI acceptance (search, detail, batch, a11y, viewports) on the same real API/database')
     parser.add_argument('--founder',action='store_true',help='consolidated Founder UI and synthetic identities against the real local API/database')
     parser.add_argument('--tour',action='store_true',help='record a short local Demo workflow instead of the full Founder acceptance suite')
     parser.add_argument('--customers',action='store_true',help='run only the Founder Customer 360 browser acceptance')
@@ -24,6 +25,7 @@ def main():
     parser.add_argument('--pg-port',type=int,default=55479)
     parser.add_argument('--evidence-dir',type=Path,default=OUT)
     args=parser.parse_args()
+    if args.library_intelligence:args.library=True
     ports=(args.api_port,args.web_port,args.pg_port)
     if any(not 1024<=port<=65535 for port in ports) or len(set(ports))!=3:parser.error('Three distinct loopback ports from 1024 to 65535 are required')
     if args.founder and args.performance:parser.error('Choose Founder or consumer performance acceptance')
@@ -68,7 +70,7 @@ def main():
     processes=[];logs=[]
     try:
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
-        fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
+        fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else ['--library-intelligence'] if args.library_intelligence else []
         commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
         if args.library:
             commands[1]=('frontend',['npm','--prefix','web','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])
@@ -84,7 +86,7 @@ def main():
                         if response.status==200:break
                 except Exception:time.sleep(.25)
             else:raise RuntimeError('Local server readiness deadline exceeded')
-        test = 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        test = 'library-intelligence-browser.cjs' if args.library_intelligence else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal

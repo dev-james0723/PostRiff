@@ -29,4 +29,7 @@ cd web
 npx playwright install --with-deps chromium webkit
 cd ..
 python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-ready/evidence/library
+if [ -f web/tests/library-intelligence-browser.cjs ]; then
+  python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser
+fi
 npm --prefix web audit --audit-level=high
