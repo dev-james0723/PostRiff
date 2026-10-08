@@ -41,7 +41,13 @@ const checks=[];
     const body=await page.locator('body').innerText().catch(()=>''),buttons=await page.getByRole('button').allTextContents({timeoutMs:3000}).catch(()=>[]);
     throw new Error(`${error.message}\nLibrary API ${response.status()}: ${listing.slice(0,3000)}\nVisible page: ${body.slice(0,2000)}\nButtons: ${JSON.stringify(buttons.slice(0,40))}`);
    }
-   let listing=await (await context.request.get(path,{headers})).json();let doc=listing.assets.find(a=>a.originalFilename==='rehearsal-'+width+'.md');assert.ok(doc);assert.equal(doc.indexingStatus,'ready');
+   let listing,doc;const indexDeadline=Date.now()+30000;
+   while(Date.now()<indexDeadline){
+    listing=await (await context.request.get(path,{headers})).json();doc=listing.assets.find(a=>a.originalFilename==='rehearsal-'+width+'.md');
+    if(doc&&doc.indexingStatus!=='pending')break;
+    await new Promise(resolve=>setTimeout(resolve,250));
+   }
+   assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}`);assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}`);
    await page.getByRole('button',{name:/Document rehearsal/}).first().click();
    await page.getByLabel('Title',{exact:true}).fill('Brahms browser notes');await page.getByLabel('Tags, separated by commas').fill('music, rehearsal');
    await page.getByRole('button',{name:'Save details',exact:true}).click();
