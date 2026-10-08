@@ -93,7 +93,7 @@ const checks=[];
    await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
    if(engine==='chromium'){
     const videoListing=await (await context.request.get(path,{headers})).json();
-    const videoAsset=videoListing.assets.find(asset=>asset.originalFilename===videoName);
+    const videoAsset=videoListing.assets.find(asset=>asset.originalFilename===videoName||asset.displayTitle===videoName);
     assert.ok(videoAsset,`uploaded video missing from Library listing: ${JSON.stringify(videoListing)}`);
     const posterResponse=await context.request.get(base+'/api/workspaces/'+ws+'/media/'+videoAsset.id,{headers});
     assert.equal(posterResponse.status(),200,await posterResponse.text());
