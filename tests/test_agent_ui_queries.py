@@ -73,14 +73,14 @@ def keys_match(test, binding, out):
     test.assertIn(out["state"], ui_contracts.DATA_STATES)
     if out["data"] is None:
         return
-    declared = shapes.SHAPES[binding]
-    if binding in shapes.OPEN_SHAPES:
-        test.assertLessEqual(set(declared["keys"]), set(out["data"]), binding)
-    else:
-        test.assertEqual(set(out["data"]), set(declared["keys"]), binding)
+    declared, needed = shapes.SHAPES[binding], shapes.required(binding)
+    test.assertLessEqual(set(needed["keys"]), set(out["data"]), binding)
+    if binding not in shapes.OPEN_SHAPES:
+        test.assertLessEqual(set(out["data"]), set(declared["keys"]), binding)
     for list_key, row_keys in declared["lists"].items():
         for row in out["data"].get(list_key) or []:
-            test.assertLessEqual(set(row_keys), set(row), (binding, list_key))
+            test.assertLessEqual(set(needed["lists"][list_key]), set(row), (binding, list_key))
+            test.assertLessEqual(set(row), set(row_keys), (binding, list_key, sorted(set(row) - set(row_keys))))
 
 
 class DraftsTest(unittest.TestCase):
@@ -228,6 +228,13 @@ class FounderTest(unittest.TestCase):
         self.assertEqual(out["data"]["rows"], [{"value": None}], "a null cost stays null")
         self.assertEqual(out["sourceRefs"], ["receipt:r2"])
 
+    def test_only_a_founder_runtime_carries_founder_scope(self):
+        from postriff_phase2.agent_runtime_v2 import ui_queries as q
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace()))
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace(founder={"mode": "live"})))
+        self.assertIsNone(q.founder_scope_of(SimpleNamespace(founder={"namespace": "workspace:x"})))
+        self.assertEqual(q.founder_scope_of(SimpleNamespace(founder={"namespace": "founder:live:prod"}))["namespace"], "founder:live:prod")
+
     def test_without_the_founder_scope_nothing_is_read(self):
         out = founder.founder_metrics(dctx(), {"metricIds": ["mrr"], "period": "30d"}, None)
         self.assertEqual(out["state"], "unavailable")
@@ -249,6 +256,18 @@ class QueryGateTest(unittest.TestCase):
         self.assertEqual(out["state"], "available")
         self.assertEqual(ctx.cur.statements[0], "SAVEPOINT ui_query_read")
         self.assertEqual(ctx.cur.statements[-2:], ["ROLLBACK TO SAVEPOINT ui_query_read", "RELEASE SAVEPOINT ui_query_read"])
+
+    def test_next_cursor_round_trips_through_the_query_gate(self):
+        ctx = dctx(cur=Cursor())
+        first = ui_queries.run_binding(ctx, ui_domain.QUERIES["drafts_list"], {"limit": 4}, None)
+        second = ui_queries.run_binding(dctx(cur=Cursor()), ui_domain.QUERIES["drafts_list"], {"limit": 4}, first["nextCursor"])
+        ids = [d["draftId"] for d in first["data"]["drafts"]] + [d["draftId"] for d in second["data"]["drafts"]]
+        self.assertEqual(len(ids), 6)
+        self.assertEqual(len(set(ids)), 6)
+        self.assertIsNone(second["nextCursor"])
+        self.assertEqual(second["data"]["offset"], 4)
+        with self.assertRaises(AlphaError):
+            ui_domain.validate(ui_domain.QUERIES["drafts_list"].args, {"cursor": first["nextCursor"]})
 
     def test_a_foreign_record_reads_as_unavailable_not_an_error_page(self):
         out = ui_queries.run_binding(dctx(), ui_domain.QUERIES["draft_read"], {"draftId": "elsewhere"}, None)

@@ -196,6 +196,7 @@ def counts():
     with connection() as db:
         return {"revision": db.execute("SELECT revision FROM public.pr_workspaces WHERE id=%s", (wid,)).fetchone()[0],
                 "audit": db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s", (wid,)).fetchone()[0],
+                "edits": db.execute("SELECT count(*) FROM public.pr_audit_events WHERE workspace_id=%s AND kind='agent.draft_edited'", (wid,)).fetchone()[0],
                 "actions": db.execute("SELECT count(*) FROM public.pr_ui_actions WHERE workspace_id=%s", (wid,)).fetchone()[0],
                 "messages": db.execute("SELECT count(*) FROM public.pr_messages WHERE workspace_id=%s", (wid,)).fetchone()[0]}
 
@@ -206,15 +207,15 @@ def check_shape(binding, out):
     if out["data"] is None:
         assert out["state"] in ("unavailable", "denied", "empty"), (binding, out["state"])
         return
-    declared = shapes.SHAPES[binding]
+    declared, needed = shapes.SHAPES[binding], shapes.required(binding)
     keys = set(out["data"])
-    if binding in shapes.OPEN_SHAPES:
-        assert set(declared["keys"]) <= keys, (binding, sorted(set(declared["keys"]) - keys))
-    else:
-        assert keys == set(declared["keys"]), (binding, "extra", sorted(keys - set(declared["keys"])), "missing", sorted(set(declared["keys"]) - keys))
+    assert set(needed["keys"]) <= keys, (binding, "missing", sorted(set(needed["keys"]) - keys))
+    if binding not in shapes.OPEN_SHAPES:
+        assert keys <= set(declared["keys"]), (binding, "undeclared", sorted(keys - set(declared["keys"])))
     for list_key, row_keys in declared["lists"].items():
         for row in out["data"].get(list_key) or []:
-            assert set(row_keys) <= set(row), (binding, list_key, sorted(set(row_keys) - set(row)))
+            assert set(needed["lists"][list_key]) <= set(row), (binding, list_key, "missing", sorted(set(needed["lists"][list_key]) - set(row)))
+            assert set(row) <= set(row_keys), (binding, list_key, "undeclared", sorted(set(row) - set(row_keys)))
 
 
 # ===========================================================================================================================
@@ -393,7 +394,7 @@ def _():
     saved = next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == DRAFT)
     assert saved["text"] == inputs["text"] and saved["revision"] == rev + 1 and saved["needsReview"] is True
     after = counts()
-    assert after["audit"] == before["audit"] + 1 and after["actions"] == before["actions"] + 1 and after["revision"] == before["revision"] + 1
+    assert after["edits"] == before["edits"] + 1 and after["actions"] == before["actions"] + 1 and after["revision"] == before["revision"] + 1, (before, after)
     assert one("SELECT state FROM public.pr_ui_actions WHERE workspace_id=%s AND idempotency_key=%s", wid, key)[0] == "done"
     STATE.update(edit_inputs=inputs, edit_key=key, edit_result=result, edit_activation=activation["activationId"])
     return {"revision": saved["revision"]}
@@ -463,7 +464,7 @@ def _():
     for t in threads:
         t.join()
     after = counts()
-    assert after["audit"] == before["audit"] + 1 and after["revision"] == before["revision"] + 1, (before, after)
+    assert after["edits"] == before["edits"] + 1 and after["revision"] == before["revision"] + 1 and after["actions"] == before["actions"] + 1, (before, after)
     assert len(outcomes) == 2 and outcomes[0] == outcomes[1] and not errors, (outcomes, errors)
     return {}
 
@@ -596,6 +597,148 @@ def _():
     denied(lambda: ui_http.handle(App(), {"CONTENT_LENGTH": "10", "test.body": {"artifactId": ART["artifactId"], "bindingId": "writers_list"}}, None, dark, OWNER, "POST",
                                   wid, ["queries"]), 404, "ui_disabled")
     return {}
+
+
+@scenario("A12", "Automations: list/detail/history read the real plan; a change is prepared as a proposal and applied only by the native decide")
+def _():
+    payload = {"name": "Weekly practice tip", "goal": "One practical piano practice tip", "audience": "Adult piano students",
+               "schedule": {"weekdays": ["Wednesday"], "localTime": "9:00", "timeZone": HK},
+               "destinations": [{"platform": "LinkedIn", "language": "en", "channelId": channel["id"]}],
+               "contentType": {"contentTypeId": "postriff:teach", "formatId": "short_text", "label": "How-to · Text post", "library": {"editorialId": "how-to", "nativeId": "text-post"}},
+               "route": "deterministic-preview", "reasoning": "standard", "maxCostUsdMicro": 250_000}
+    service.repository.mutate(wid, OWNER, service.get(wid, OWNER)["revision"], "raffi_recurrence_save", payload)
+    tasks = service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"]
+    task = next(t for t in tasks if t.get("name") == "Weekly practice tip")
+    art = make_artifact(["J08", "J05"])
+    for binding, inputs in (("automations_list", {}), ("automation_detail", {"automationId": task["id"]}), ("automation_history", {"automationId": task["id"]}),
+                            ("connections_status", {}), ("recovery_guides", {})):
+        out = query(binding, inputs, artifact=art, token=EDITOR)
+        check_shape(binding, out)
+    listed = query("automations_list", {}, artifact=art)["data"]["automations"]
+    assert any(a["automationId"] == task["id"] and a["timeZone"] == HK for a in listed), listed
+    request = {"automationId": task["id"], "request": "move it to Thursday at 10:00"}
+    act = activate("automation_change_prepare", request, token=EDITOR, artifact=art)
+    before = counts()
+    prepared = execute("automation_change_prepare", request, act["activationId"], token=EDITOR, artifact=art)
+    assert prepared["outcome"] == "prepared" and prepared["verified"] is False and prepared["proposalRef"], prepared
+    assert counts()["revision"] == before["revision"], "preparing changes no automation"
+    unchanged = next(t for t in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"] if t["id"] == task["id"])
+    assert unchanged["version"] == task["version"]
+    ctx = prepared["nextContext"]["proposal"]
+    decided = approvals.decide(service, wid, EDITOR, conversation_id=CONVERSATION, message_id=ctx["messageId"], proposal_id=ctx["proposalId"], digest=ctx["digest"],
+                               decision="apply")
+    assert decided["outcome"] == "applied" and decided["verified"] is True, decided
+    changed = next(t for t in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["recurringTasks"] if t["id"] == task["id"])
+    assert "Thursday" in json.dumps(changed["schedule"]), changed["schedule"]
+    return {"proposal": prepared["proposalRef"]}
+
+
+@scenario("A13", "Learned preferences: a pending proposal is decided only by the owner, through HostedLearning.decide; learned vs proposed read truthfully")
+def _():
+    from postriff_phase2 import learning_service
+    state = service.get(wid, OWNER)["state"]
+    with connection() as db, db.cursor() as cur:
+        created = learning_service.create_proposal(cur, wid, state, {"type": "writing_preference", "ruleKey": "emoji.use", "polarity": "avoid", "scope": {},
+                                                                     "statement": "Avoid emojis in posts", "source": "chat"}, time.time())
+    assert created is not None
+    prefs = query("voice_preferences")["data"]
+    assert any(p["id"] == created["id"] for p in prefs["pending"]) and not any(l.get("statement") == "Avoid emojis in posts" for l in prefs["learned"])
+    inputs = {"proposalId": created["id"], "decision": "remember"}
+    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 404, "ui_action")
+    decided = execute("preference_decide", inputs, activate("preference_decide", inputs)["activationId"])
+    assert decided["outcome"] == "applied" and decided["verified"] is True, decided
+    after = query("voice_preferences")["data"]
+    assert any(l.get("statement") == "Avoid emojis in posts" and l.get("status") == "active" for l in after["learned"]), after["learned"]
+    denied(lambda: activate("preference_decide", inputs), 409, "proposal_closed")
+    return {}
+
+
+@scenario("A14", "Campaign brief update is refused unless the campaign is still at the version the person saw; it names what pauses")
+def _():
+    campaign = next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
+    stale = {"campaignId": CAMPAIGN_ID, "expectedVersion": campaign["version"] + 5, "goal": "A different goal"}
+    denied(lambda: activate("campaign_update", stale, token=EDITOR), 409, "campaign_version_conflict")
+    good = {"campaignId": CAMPAIGN_ID, "expectedVersion": campaign["version"], "goal": "Autumn practice journal launch, week two"}
+    act = activate("campaign_update", good, token=EDITOR)
+    assert any("version" in line for line in act["confirmation"]["summary"]), act["confirmation"]
+    updated = execute("campaign_update", good, act["activationId"], token=EDITOR)
+    assert updated["outcome"] == "applied" and updated["verified"] is True, updated
+    saved = next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)
+    assert saved["version"] == campaign["version"] + 1 and saved["goal"] == good["goal"]
+    replay = execute("campaign_update", good, act["activationId"], updated["idempotencyKey"], token=EDITOR)
+    assert replay == updated
+    assert next(c for c in service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == CAMPAIGN_ID)["version"] == saved["version"]
+    return {}
+
+
+@scenario("A15", "Research: with research allowed, chosen pages are saved as web sources once (consent re-checked inside the command)")
+def _():
+    previous = os.environ.get("POSTRIFF_RESEARCH")
+    os.environ["POSTRIFF_RESEARCH"] = "1"
+    try:
+        result = {"composedBy": "manager", "usage": {"billing": "metered"}, "answerText": "x", "ui": {"journeyIds": ["J07"]},
+                  "toolActivity": [{"tool": "web_research", "status": "verified", "effect": "READ"}],
+                  "research": {"state": "available", "query": "slow practice", "warnings": [],
+                               "pages": [{"title": "Slow practice study", "url": "https://example.org/study", "host": "example.org", "published": "",
+                                          "fetchedAt": "2026-10-08T01:00:00Z", "facts": ["Slow practice improved accuracy in a small study."]}]}}
+        art = make_artifact(["J07"], result=result)
+        out = query("research_results", artifact=art)
+        assert out["data"]["recorded"] == "structured" and out["data"]["pages"][0]["publishedLabel"] == "no date", out["data"]
+        inputs = {"indexes": [0]}
+        saved = execute("research_save_sources", inputs, activate("research_save_sources", inputs, token=EDITOR, artifact=art)["activationId"], token=EDITOR, artifact=art)
+        assert saved["outcome"] == "applied" and saved["verified"] is True, saved
+        source_id = saved["nextContext"]["references"][0]["id"]
+        again = execute("research_save_sources", inputs, activate("research_save_sources", inputs, token=EDITOR, artifact=art)["activationId"], token=EDITOR, artifact=art)
+        assert again["nextContext"]["references"][0]["id"] == source_id, "the same page is one source"
+        listed = query("research_sources", {}, artifact=art)["data"]["sources"]
+        assert [s["sourceId"] for s in listed].count(source_id) == 1 and listed[0]["publishedLabel"] == "no date"
+    finally:
+        if previous is None:
+            os.environ.pop("POSTRIFF_RESEARCH", None)
+        else:
+            os.environ["POSTRIFF_RESEARCH"] = previous
+    return {}
+
+
+@scenario("A16", "Analytics on real observations: an unavailable metric is null (never 0), empty buckets are null, a 1-post comparison says insufficient sample")
+def _():
+    from postriff_phase2 import insights
+    job_id = "job-verified-" + uuid.uuid4().hex[:8]
+    published = time.time() - 86400
+
+    def add_job(s, actor):
+        s.setdefault("phase2", {}).setdefault("jobs", []).append({
+            "id": job_id, "state": "verified", "providerReference": "urn:li:share:1", "attempts": [], "events": [],
+            "manifest": {"platform": "LinkedIn", "account": "Studio page", "channelId": channel["id"], "variantId": DRAFT,
+                         "timing": {"timestamp": published, "local": "x", "timeZone": HK}, "payload": {"text": "Published post", "language": "en"}}})
+        return s
+    command(add_job)
+    with connection() as db:
+        for metric, value, availability in (("likes", 5, "available"), ("views", None, "unavailable")):
+            db.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,"
+                       "observed_at,source_endpoint) VALUES(%s,%s,'linkedin','urn:li:share:1',%s,%s,%s,%s,'count',%s,now(),'test')",
+                       (wid, channel["id"], job_id, metric, insights.DEFINITION_VERSION, value, availability))
+    art = make_artifact(["J06"])
+    posts = query("analytics_posts", {"zone": HK}, artifact=art)
+    check_shape("analytics_posts", posts)
+    row = next(p for p in posts["data"]["posts"] if p["jobId"] == job_id)
+    assert row["metrics"]["likes"]["value"] == 5 and row["metrics"]["views"]["value"] is None and row["metrics"]["views"]["availability"] == "unavailable", row["metrics"]
+    assert posts["coverage"]["known"] >= 1 and posts["data"]["definitionVersion"] == insights.DEFINITION_VERSION
+    series = query("analytics_series", {"metric": "views", "zone": HK, "bucket": "day"}, artifact=art)
+    check_shape("analytics_series", series)
+    points = [pt for line in series["data"]["series"] for pt in line["points"]]
+    assert points and all(pt["total"] is None and pt["mean"] is None for pt in points), "no reading is null, never 0"
+    assert any(pt["posts"] == 1 for pt in points)
+    likes = query("analytics_series", {"metric": "likes", "zone": HK, "bucket": "day"}, artifact=art)
+    assert any(pt["total"] == 5 for line in likes["data"]["series"] for pt in line["points"])
+    compare = query("analytics_compare", {"metric": "likes", "zone": HK}, artifact=art)
+    check_shape("analytics_compare", compare)
+    assert compare["data"]["comparisons"][0]["interpretation"] == "insufficient_sample" and compare["data"]["rules"]["causalityEstablished"] is False, compare["data"]
+    coverage = query("analytics_coverage", {}, artifact=art)
+    check_shape("analytics_coverage", coverage)
+    assert coverage["state"] == "available" and coverage["data"]["state"] == "unavailable", coverage   # LinkedIn shares no analytics: said so, with the link
+    assert coverage["data"]["connections"][0]["enableHref"].startswith("/app/channels")
+    return {"coverage": coverage["data"]["state"]}
 
 
 failed = [r for r in RESULTS if r["result"] != "PASS"]

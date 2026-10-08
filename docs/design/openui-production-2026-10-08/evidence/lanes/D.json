@@ -1,0 +1,255 @@
+{
+ "role": "D",
+ "branch": "claude/rafii-openui-d-data",
+ "base_sha": "31cbee09",
+ "head_sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb (code); this file is committed on top",
+ "owned_paths": [
+  "src/postriff_phase2/agent_runtime_v2/ui_projection.py",
+  "src/postriff_phase2/agent_runtime_v2/ui_capabilities.py",
+  "src/postriff_phase2/agent_runtime_v2/ui_queries.py",
+  "src/postriff_phase2/agent_runtime_v2/ui_actions.py",
+  "src/postriff_phase2/agent_runtime_v2/ui_domain/** (__init__, common, shapes, drafts J01, calendar J02, library J03, voice J04, campaigns J05, analytics J06, research J07, automations J08, founder J09)",
+  "src/postriff_phase2/agent_runtime_v2/domain_tools.py (narrow: _with_voice_choice in _writing_run, D-A20)",
+  "web/src/features/agent/generative-ui/bridges/{index.ts,query-bridge.ts,action-bridge.ts,context.tsx}",
+  "tests/test_agent_ui_projection.py",
+  "tests/test_agent_ui_queries.py",
+  "tests/test_agent_ui_actions.py",
+  "tests/phase2/postgres_agent_ui_actions.py",
+  "tests/phase2/postgres_agent_ui_isolation.py",
+  "tests/fixtures/agent_ui/coverage/cases.json",
+  "web/tests/agent-ui-bridges.test.cjs",
+  "web/tests/agent-ui-bridges-coverage.test.cjs",
+  "docs/design/openui-production-2026-10-08/evidence/lanes/D.json",
+  "docs/design/openui-production-2026-10-08/evidence/lanes/D-shared-patches/**"
+ ],
+ "completed_tasks": [
+  "ui_projection.eligibility: deterministic (metered Manager turns only; greeting/ack/plain answer excluded; journeys from verified toolActivity, pendingApprovals, changedEntities, references; explicit UI intents en/zh-Hant/zh-Hans; voice needs an explicit visual ask)",
+  "ui_projection.project_ui_context: opaque {type,id} refs, counts, tool states, rule labels, binding schemas + dataShape, egress_decision {allowed, provider, processorModel, reason}; presenter_view() = exactly what may reach a prompt (no fallback text, no server-only keys); optional flags= kill switch",
+  "ui_capabilities: per-journey explicit allowlists (consumer vs founder scope), role-filtered actions, tool tenant/effect checked by explicit name (never iterating REGISTRY), SERVER_ONLY_MANIFEST_KEYS, query TTL 30 d / action TTL 24 h, current() re-check (scope, workspace, scope key, expiry, role -> narrowed), load_artifact (same 404 for foreign/ghost/other-scope/founder-run ids), require_accepted",
+  "ui_queries: one ui_transaction, hosted.throttle ui-query:<principal>:<artifact> 60/60, exact input schemas, opaque HMAC cursors bound to binding+args, readers run in an always-rolled-back savepoint, result shape/size checked, founder route served by founder runtime (founder namespace scope)",
+  "ui_actions: static allowlist, 60 s single-use activations bound to principal/artifact revision/binding version/action/server digest with server-built confirmation copy, pr_ui_actions receipt in the same transaction as the domain command (service bound to the request cursor), same key+digest -> stored result, other digest -> 409, refusals stored as conflict/rejected, intent dedupe for creates/prepares (two tabs -> one effect), two-phase execution + reconcile for the paid voice analysis, prepared never applied, verified only from executor re-read",
+  "45 read bindings and 17 actions over the existing services for J01-J09 (see interfaces_produced); data shapes in ui_domain/shapes.py, catalog() for lanes C/E/G",
+  "J03 bound to the production UniversalLibrary (list/detail/collections/as_source) on the request transaction; legacy media re-bounded to the page size; previews only via existing authenticated routes (PR #134 /preview feature-detected); no signed URLs, createdBy, provenance or raw hashes",
+  "J06 coverage.ts ported to Python and checked against shared fixtures by both languages; unknown metrics null; buckets null; comparisons honour MIN_COMPARABLE and say causalityEstablished=false",
+  "Browser bridges: createUiBridges (D-A29/D-A40), read-only toolProvider (own-key prototype-free map, null until accepted), 4 concurrent / 60 per min / >=30 s per binding+args / 300 ms search debounce + superseded abort / backoff / hidden-historical-disposed zero network / scope-keyed cache / per-binding status / invalidation; action bridge activation -> native confirmation -> execute with one durable key, lost reply reconciled with the same key and activation; context hooks null outside a provider",
+  "D-A20: domain_tools._writing_run forwards ctx.voice_choice (voiceMode/voiceSourceIds) to every writing call",
+  "Shared patches 01 (memory_layers pending statement, R0 R-J04-1) and 02 (EffectLedger.research -> result.research for J07) written; A applied both at 5d6b8c68 and they are merged here",
+  "Lane E defects fixed: founder_costs reads current.*, drafts_list ids:[] -> empty, slot_check without a time -> empty 'Pick a time'",
+  "Cross-lane defect fixed: founder route queries (F calls ui_queries.query_http with the founder runtime) now resolve founder-scope artifacts"
+ ],
+ "interfaces_produced": {
+  "python": {
+   "ui_projection.eligibility(result, request_text, modality, *, flags) -> {eligible, slot, reason, journeyIds}": true,
+   "ui_projection.project_ui_context(cur, auth, verified_result, surface, selection_state, *, flags=None) -> {manifest_id, journey_ids, component_group_ids, data_bindings, action_bindings, allowed_context, fallback_text, egress_decision, manifest}": true,
+   "ui_projection.presenter_view(projection)": true,
+   "ui_capabilities.build_manifest(cur, auth, projection, *, scope='workspace', flags=None); query_binding; action_binding; current; load_artifact; require_accepted": true,
+   "ui_queries.query_ui_binding(cur, auth, artifact, manifest, request, *, runtime=None, now=None, founder=None); query_http(runtime, workspace_id, token, request)": true,
+   "ui_actions.activate_ui_action / execute_ui_action / activate_http / execute_http (Deferred for two-phase)": true,
+   "ui_domain.catalog() -> {journeys: {J0x: {queries:[{name, argsSchema, dataShape}], actions:[{actionId, inputSchema, effect}]}}, queries, actions}": true
+  },
+  "query_bindings": {
+   "J01": [
+    "task_progress",
+    "drafts_list",
+    "draft_read",
+    "draft_evidence",
+    "draft_revisions",
+    "writers_list",
+    "library_selection",
+    "research_sources"
+   ],
+   "J02": [
+    "calendar_agenda",
+    "queue_status",
+    "job_detail",
+    "slot_check",
+    "open_proposals",
+    "task_progress"
+   ],
+   "J03": [
+    "library_search",
+    "library_item",
+    "library_lineage",
+    "library_collections",
+    "library_selection"
+   ],
+   "J04": [
+    "voice_sources",
+    "voice_profile_state",
+    "voice_preferences",
+    "voice_consent",
+    "voice_learning_status"
+   ],
+   "J05": [
+    "automations_list",
+    "automation_detail",
+    "calendar_agenda",
+    "open_proposals",
+    "campaigns_list",
+    "campaign_detail",
+    "campaign_items",
+    "campaign_timeline",
+    "task_progress"
+   ],
+   "J06": [
+    "analytics_posts",
+    "analytics_compare",
+    "analytics_series",
+    "analytics_coverage",
+    "post_feedback"
+   ],
+   "J07": [
+    "research_state",
+    "research_results",
+    "research_sources",
+    "voice_consent"
+   ],
+   "J08": [
+    "automations_list",
+    "automation_detail",
+    "automation_history",
+    "connections_status",
+    "recovery_guides",
+    "queue_status",
+    "open_proposals",
+    "task_progress"
+   ],
+   "J09": [
+    "founder_metrics",
+    "founder_costs",
+    "founder_attention",
+    "founder_sources",
+    "founder_incident",
+    "founder_search",
+    "founder_entity"
+   ]
+  },
+  "actions": {
+   "J01": [
+    "campaign_link",
+    "draft_edit",
+    "library_use_as_source"
+   ],
+   "J02": [
+    "schedule_prepare"
+   ],
+   "J03": [
+    "library_use_as_source"
+   ],
+   "J04": [
+    "voice_sample_select",
+    "voice_sample_exclude",
+    "voice_profile_analyze_local",
+    "voice_samples_import",
+    "voice_sample_grant",
+    "voice_profile_approve",
+    "preference_decide",
+    "voice_profile_analyze_ai"
+   ],
+   "J05": [
+    "automation_change_prepare",
+    "schedule_prepare",
+    "campaign_create",
+    "campaign_update",
+    "campaign_link",
+    "campaign_unlink"
+   ],
+   "J06": [],
+   "J07": [
+    "research_save_sources"
+   ],
+   "J08": [
+    "automation_change_prepare"
+   ],
+   "J09": []
+  },
+  "browser": [
+   "bridges/index.ts createUiBridges + createQueryBridge, createActionBridge, newIdempotencyKey, localResult",
+   "bridges/context.tsx UiBridgesProvider, useUiBridges, useRafiiActionBridge, useRafiiQueryBridge, useRafiiActionState, useBindingStatus"
+  ],
+  "transport_contract_for_F": "bridges call transport.fetch(`${base}/queries|/actions/activate|/actions`, {method:'POST', body: JsonValue, signal}) with FULL paths; the transport adds auth headers and serializes the body"
+ },
+ "tests": [
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (agent-ui: Types)",
+   "conclusion": "success",
+   "test_counts": "tsc --noEmit",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (agent-ui: Lint)",
+   "conclusion": "success",
+   "test_counts": "oxlint src (0 errors)",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh unit: tests/test_agent_ui_*.py)",
+   "conclusion": "success",
+   "test_counts": "62 Python tests (projection 18, queries 15, actions 12, plus A's contracts)",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh unit: web/tests/agent-ui-*.test.cjs)",
+   "conclusion": "success",
+   "test_counts": "35 node tests (bridges 23, coverage parity 9, A's contracts)",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh database: postgres_agent_ui_actions)",
+   "conclusion": "success",
+   "test_counts": "23/23 scenarios Q01-Q07, A01-A16 on PostgreSQL 17",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826714292 (scripts/agent_ui_validation.sh database: postgres_agent_ui_isolation)",
+   "conclusion": "success",
+   "test_counts": "4/4 scenarios I01-I04",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  },
+  {
+   "command_or_ci_run_url": "local: .venv/bin/python -m unittest tests.test_agent_ui_projection tests.test_agent_ui_queries tests.test_agent_ui_actions",
+   "conclusion": "success",
+   "test_counts": "45",
+   "sha": "b2d30c70b53e7b20fda7772a8901bcaf22b63ceb"
+  }
+ ],
+ "blockers": [
+  {
+   "kind": "verification_outside_lane",
+   "exact_dependency": "Live normal-path runs of J01-J09 against real model output and real connected accounts on the production canary (G03/J0x evidence) — D's data paths are proven on disposable PostgreSQL with the real services only",
+   "independent_work_remaining": "none in lane D"
+  },
+  {
+   "kind": "verification_outside_lane",
+   "exact_dependency": "voice_profile_analyze_ai (paid managed model) end-to-end: two-phase dispatch and reconcile are unit-tested; a real run needs the production model credential and an owner's explicit cost confirmation",
+   "independent_work_remaining": "none in lane D"
+  },
+  {
+   "kind": "integration",
+   "exact_dependency": "B passes flags=runtime.cfg.genui_for(w) to project_ui_context and builds founder manifests with founder-scope auth; F's founder route already reaches founder artifacts through ui_queries.query_http (fixed in D)",
+   "independent_work_remaining": "none in lane D"
+  }
+ ],
+ "shared_patches": [
+  {
+   "file": "evidence/lanes/D-shared-patches/01-memory-layers-pending-statement.patch",
+   "target": "src/postriff_phase2/agent_runtime_v2/memory_layers.py",
+   "status": "applied by A at 5d6b8c68"
+  },
+  {
+   "file": "evidence/lanes/D-shared-patches/02-research-result-projection.patch",
+   "target": "context.py, specialists.py, service.py",
+   "status": "applied by A at 5d6b8c68"
+  }
+ ],
+ "next_action": "A: merge claude/rafii-openui-d-data into integration. B/F: pass flags=runtime.cfg.genui_for(w) to project_ui_context; build founder manifests with founder-scope auth (dataclasses.replace(auth, scope='founder', scope_key=namespace)). G: live verification of the J01-J09 normal paths on the production canary with real models/accounts (D's data paths are proven on disposable PostgreSQL only).",
+ "gate_evidence": {
+  "G05": "bridges test: filters re-read bounded data with zero model calls; dedupe/refresh>=30 s/debounce/abort/backoff/hidden zero network; PG Q01/Q06",
+  "G06": "PG Q02 (Query(writeName)/action ids reach no reader, zero writes), unit QueryGate (no SQL for a write name; readers in a rolled-back savepoint), bridges (write names denied locally, toolProvider null until accepted), activation copy built in a rolled-back savepoint",
+  "G07": "PG Q03/Q04/I01-I04: owner/editor/viewer/approver + second tenant + founder-scope artifact; foreign/ghost ids identical 404; authenticated role denied on all six UI tables; founder artifacts 404 on consumer routes; demotion/removal effective next request",
+  "G08": "PG A08/A12: schedule and automation changes prepared as proposals on a new assistant message (prepared, not applied); only approvals.decide applies; editor without approve refused; second apply 409; stale/expired/version refusals A04/A14",
+  "G09": "PG A03/A05/A06/A07/A14: same key+digest -> stored result, other digest -> 409, used/expired activation refused, two concurrent executes -> one domain effect, two tabs -> one campaign/proposal, lost reply -> same result; unit Dispatcher",
+  "G14": "presenter_view carries opaque refs/counts/states/schemas only (unit Projection), egress allowed only for the metered parent processor, no signed URLs/createdBy/provenance in Library rows, logs content-free",
+  "G21": "PG A16 + unit: unavailable metric null, empty buckets null, insufficient sample said, coverage 'unavailable' returned as data with enable links, research-off explicit, 'no date' stays no date, voice 'No model was trained', learning lastRun unrecorded says so, attention unavailable when its flags are off"
+ }
+}

@@ -42,8 +42,19 @@ def _summary(dctx, basis=None):
     return insights.summary(dctx.cur, dctx.workspace_id, _jobs(dctx.state), dctx.now, basis=basis)
 
 
+def _past_window(dctx, inputs):
+    """Performance looks back: without dates the window is the last 30 days up to today (inclusive) in the person's zone."""
+    if inputs.get("start") or inputs.get("end"):
+        if inputs.get("end") and not inputs.get("start"):
+            end = dt.date.fromisoformat(inputs["end"])
+            inputs = {**inputs, "start": (end - dt.timedelta(days=29)).isoformat()}
+        return common.window(inputs, dctx.zone, dctx.now, default_days=30)
+    today = dt.datetime.fromtimestamp(dctx.now, ZoneInfo(dctx.zone)).date()
+    return common.window({"start": (today - dt.timedelta(days=29)).isoformat(), "end": today.isoformat()}, dctx.zone, dctx.now)
+
+
 def _filtered(dctx, inputs, posts):
-    lo, hi = common.window(inputs, dctx.zone, dctx.now, default_days=30)
+    lo, hi = _past_window(dctx, inputs)
     jobs = {j.get("id"): j for j in _jobs(dctx.state)}
     kept, undated = [], 0
     for post in posts:
@@ -271,8 +282,9 @@ def analytics_coverage(dctx, _inputs, _cursor):
     data = {"state": state_name, "connections": rows, "unmatchedReadings": len(coverage["unmatchedPosts"]), "usesPlatformFallback": coverage["usesPlatformFallback"],
             "rule": "no Direct account → unavailable; Direct but nothing read → pending; some verified posts unread → partial; all read → ready"}
     direct = [r for r in rows if r["direct"]]
-    return ui_contracts.query_result({"ready": "available", "partial": "partial", "pending": "partial", "unavailable": "unavailable"}[state_name] if rows else "empty",
-                                     data if rows else data, as_of=common.iso(dctx.now), known=sum(r["readPosts"] for r in direct), total=sum(r["verifiedPosts"] for r in direct),
+    # The read succeeded: the coverage itself (including "unavailable": no account shares analytics) is the data, with the
+    # accounts and their enable links; it is never dropped as an unavailable read.
+    return ui_contracts.query_result("available" if rows else "empty", data, as_of=common.iso(dctx.now), known=sum(r["readPosts"] for r in direct), total=sum(r["verifiedPosts"] for r in direct),
                                      note=None if state_name == "ready" else {"unavailable": "No account shares analytics with Rafii directly.",
                                                                                "pending": "Waiting for the first reading.", "partial": "Some verified posts have no reading yet."}.get(state_name))
 

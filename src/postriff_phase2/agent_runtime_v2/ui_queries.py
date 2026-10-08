@@ -116,8 +116,21 @@ def query_ui_binding(cur, auth, artifact, manifest, request, *, runtime=None, no
     return result
 
 
+def founder_scope_of(runtime) -> dict | None:
+    """The verified founder scope of a founder runtime (rafii_control.founder_agent._prepare builds it after Boundary.authorize
+    at AAL2); None for every consumer runtime. Nothing a client sends can produce it."""
+    scope = getattr(runtime, "founder", None)
+    return scope if isinstance(scope, dict) and str(scope.get("namespace") or "").startswith("founder:") else None
+
+
 def query_http(runtime, workspace_id, token, request):
+    """Consumer route: workspace-scope artifacts only. Founder route (F's founder_agent_ui passes the founder runtime and its
+    capability): founder-scope artifacts of exactly that namespace, with the founder tools' scope."""
+    import dataclasses
     from .ui_http import ui_transaction
+    founder = founder_scope_of(runtime)
     with ui_transaction(runtime, token, workspace_id, "read") as (cur, auth):
+        if founder is not None:
+            auth = dataclasses.replace(auth, scope="founder", scope_key=founder["namespace"])
         artifact, manifest = ui_capabilities.load_artifact(cur, auth, request["artifactId"])
-        return query_ui_binding(cur, auth, artifact, manifest, request, runtime=runtime)
+        return query_ui_binding(cur, auth, artifact, manifest, request, runtime=runtime, founder=founder)

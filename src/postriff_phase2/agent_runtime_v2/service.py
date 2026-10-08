@@ -840,6 +840,11 @@ class AgentRuntimeService:
                 extra = {"traceHookError": getattr(hook, "__name__", "hook")}
             if isinstance(extra, dict):
                 trace.update({k: v for k, v in extra.items() if k not in trace})
+        if ledger.research:
+            # rafii-genui/1 J07: the pages this turn's research returned, for a generated view's research_results binding.
+            pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
+            result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
+                                  "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
         result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
