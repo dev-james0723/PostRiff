@@ -421,6 +421,9 @@ class Tooling(unittest.TestCase):
             self.assertEqual(by[("G09", "ci-harness")], "pass")
             self.assertEqual(by[("G16", "ci-browser-emulation")], "unverified", "no browser results: unverified, never pass")
             self.assertEqual(out["candidateSha"], SHA)
+            matrix = Path(tmp, "matrix.md").read_text()
+            self.assertIn("| G13 | ci-harness | **blocked** |", matrix)
+            self.assertIn("| G03 | *needs* live-provider + production-canary/production | unverified |", matrix)
 
     def test_scenes_never_count_as_tests_in_unit_mode(self):
         scenes = list((ROOT / "web/tests/agent-ui-e2e").glob("*.test.*"))

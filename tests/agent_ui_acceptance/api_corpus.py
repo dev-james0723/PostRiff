@@ -28,10 +28,14 @@ RANDOM = "7f0c2a4e-5b1d-4c3e-9a8f-0123456789ab"
 KNOWN_INPUTS = {"campaign_create": {"goal": "G acceptance: idempotency check", "audience": "Acceptance testers"}}
 
 
-def sample_inputs(action: dict) -> dict:
-    """Valid inputs for one manifest action: a known real input set, else the required fields of its schema filled minimally."""
+def sample_inputs(action: dict, tag: str = "") -> dict:
+    """Valid inputs for one manifest action: a known real input set, else the required fields of its schema filled minimally.
+    `tag` makes one check's inputs distinct from another's (create actions deduplicate by intent: same revision + inputs)."""
     if action.get("actionId") in KNOWN_INPUTS:
-        return dict(KNOWN_INPUTS[action["actionId"]])
+        known = dict(KNOWN_INPUTS[action["actionId"]])
+        if tag and "goal" in known:
+            known["goal"] = f"{known['goal']} ({tag})"
+        return known
     schema = action.get("inputSchema") or {}
     out = {}
     for key in schema.get("required") or []:
@@ -409,11 +413,12 @@ class Idempotency(Case):
         art = self.ready()
         action = self.action(art)
         key = new_key("dup")
-        first = self.execute(art, action, key, _activate(self, art, action)["activationId"])
+        inputs = sample_inputs(action, "dup-first")
+        first = self.execute(art, action, key, _activate(self, art, action, inputs)["activationId"], inputs)
         self.assertIn(first.status, (200, 201), first.text(200))
         before = self.snap()
-        different = {**sample_inputs(action), **({"goal": "G acceptance: a different goal"} if action["actionId"] == "campaign_create" else {})}
-        if different == sample_inputs(action):
+        different = sample_inputs(action, "dup-second")
+        if different == inputs:
             raise Blocked(f"BLOCKED: no second valid input set is known for {action['actionId']}")
         second = self.execute(art, action, key, _activate(self, art, action, different)["activationId"], different)
         self.assertEqual(second.status, 409, f"same key, different inputs → {second.status}")
@@ -426,13 +431,14 @@ class Idempotency(Case):
         art = self.ready()
         action = self.action(art)
         key = new_key("abort")
-        activation = _activate(self, art, action)["activationId"]
+        inputs = sample_inputs(action, "abort")
+        activation = _activate(self, art, action, inputs)["activationId"]
         before = self.snap()
-        body = {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": action["actionId"], "inputs": {}, "idempotencyKey": key,
+        body = {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "actionId": action["actionId"], "inputs": inputs, "idempotencyKey": key,
                 "activationId": activation}
         self.w.api.abort_after_send("POST", f"{self.w.base(self.owner())}/actions", self.owner().token, body, wait=0.05)
         time.sleep(2.0)
-        retry = self.execute(art, action, key, activation)
+        retry = self.execute(art, action, key, activation, inputs)
         self.assertIn(retry.status, (200, 201), f"retry after abort → {retry.status} {retry.text(200)}")
         after = self.snap()
         self.assertLessEqual(Db.delta(before, after).get("ui_actions_done", 0), 1, "more than one receipt for one key")
@@ -446,12 +452,13 @@ class Idempotency(Case):
         art = self.ready()
         action = self.action(art)
         key = new_key("tabs")
-        activation = _activate(self, art, action)["activationId"]
+        inputs = sample_inputs(action, "tabs")
+        activation = _activate(self, art, action, inputs)["activationId"]
         before = self.snap()
         answers = []
 
         def go():
-            answers.append(self.execute(art, action, key, activation))
+            answers.append(self.execute(art, action, key, activation, inputs))
         threads = [threading.Thread(target=go) for _ in range(2)]
         for t in threads:
             t.start()
@@ -469,6 +476,24 @@ class Idempotency(Case):
         return f"two concurrent executes → {statuses}; one receipt"
 
 
+    @check
+    def test_two_keys_same_intent_one_effect(self):
+        """G09/RF1: two tabs confirm the same create with different keys → the second gets the first result; one domain command."""
+        art = self.ready()
+        action = self.action(art)
+        if action.get("actionId") not in KNOWN_INPUTS:
+            raise Blocked(f"BLOCKED: no create action with known inputs in this manifest ({action.get('actionId')})")
+        inputs = sample_inputs(action, "intent")
+        before = self.snap()
+        first = self.execute(art, action, new_key("intentA"), _activate(self, art, action, inputs)["activationId"], inputs)
+        second = self.execute(art, action, new_key("intentB"), _activate(self, art, action, inputs)["activationId"], inputs)
+        self.assertIn(first.status, (200, 201), first.text(200))
+        self.assertIn(second.status, (200, 201, 409), second.text(200))
+        delta = Db.delta(before, self.snap())
+        self.assertEqual(delta.get("workspace_revision", 0), 1, f"two tabs ran {delta.get('workspace_revision')} commands for one intent")
+        return f"second tab → {second.status} {((second.json() or {}).get('nextContext') or {}).get('sameAs') and 'sameAs first'}; one command"
+
+
 class Durability(Case):
     @check
     def test_duplicate_create_reuses_attempt(self):
@@ -483,6 +508,25 @@ class Durability(Case):
             self.assertEqual(again.attempt_id, art["attemptId"])
         self.assertEqual(self.w.provider_requests() - provider, 0, "a duplicate create dispatched the provider again")
         return "same key → same artifact/attempt, provider delta 0"
+
+    @check
+    def test_presentation_key_reused_for_another_run_conflicts(self):
+        """NC09 (presentations): one idempotency key on a different parent run is 409, never a replay of the other view."""
+        art = self.ready()
+        owner = self.owner()
+        other = self.w.eligible_turn(owner)
+        provider = self.w.provider_requests()
+        stream = self.w.api.stream("POST", f"{self.w.base(owner)}/presentations", owner.token,
+                                   {"parentRunId": other["runId"], "slot": "main", "surface": "chat", "idempotencyKey": art["key"]})
+        body = stream.body_if_json
+        if body is None:
+            events = stream.drain(max_seconds=20)
+            stream.close()
+            self.fail(f"a reused key streamed {[e.get('event') for e in events][:5]} instead of a conflict")
+        self.assertEqual(stream.status, 409, body[:200])
+        self.assertNotIn(art["artifactId"].encode(), body, "the other view's id leaked in the conflict")
+        self.assertEqual(self.w.provider_requests() - provider, 0)
+        return "reused key on another run → 409, nothing replayed or dispatched"
 
     @check
     def test_old_library_version_falls_back_without_model(self):

@@ -62,6 +62,37 @@ def gate_record(gate: str, kind: str, checks: list, results: dict, origin: str |
                            data_scope="synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)")
 
 
+REQUIRED_ELSEWHERE = {
+    "G01": "A: git metadata, package probe, ownership register", "G03": "live: scripts/agent_ui_live.py ingest (30 real generations)",
+    "G20": "A: agent_ui_validation.sh regression on the integrated SHA", "G22": "A: migration rehearsal + route smoke", "G23": "A/G: deployed kill-switch drill",
+    "G24": "A: production release receipt", "G25": "release.py over the final matrix", **{f"J0{i}": "real-service journey (E/D/F) + live journey" for i in range(1, 10)},
+}
+
+
+def render_matrix(out: dict) -> str:
+    """The 04-ACCEPTANCE evidence record as a Markdown matrix (one row per gate and evidence kind)."""
+    lines = [f"# Lane G acceptance matrix — candidate `{out['candidateSha'][:12]}`", "",
+             f"Generated {out['generatedAt']} (UTC) by `scripts/agent_ui_acceptance.sh browser`. CI harness and browser-emulation evidence only: "
+             "rows marked *needs* list evidence no CI run can provide (live provider, deployment, physical device, release owner).", "",
+             "| Gate | Kind | Status | Actual | Origin | Run |", "|---|---|---|---|---|---|"]
+    by_gate: dict = {}
+    for record in out["records"]:
+        by_gate.setdefault(record["gate"], []).append(record)
+    for gate in corpus.GATES:
+        rows = by_gate.get(gate) or []
+        for record in rows:
+            env = record.get("environment") or {}
+            run = f"[{env.get('runId')}]({env.get('runUrl')})" if env.get("runUrl") else (env.get("runId") or "")
+            actual = str(record.get("actual") or "").replace("|", "/").replace("\n", " ")[:220]
+            lines.append(f"| {gate} | {env.get('kind')} | **{record['status']}** | {actual} | {env.get('origin') or ''} | {run} |")
+        needs = [g for g in corpus.GATES[gate]["kinds"] if not any((r.get("environment") or {}).get("kind") in g for r in rows)]
+        if needs:
+            lines.append(f"| {gate} | *needs* {' + '.join('/'.join(g) for g in needs)} | unverified | {REQUIRED_ELSEWHERE.get(gate, corpus.GATES[gate]['g'])} | | |")
+    lines += ["", "Command, actor and data scope for every CI row: `scripts/agent_ui_acceptance.sh browser`, actor G, synthetic disposable workspaces on the "
+              "CI acceptance stack (fixture provider, harness QA script for the Manager). Machine-readable records: `gate-records.json` (release mode input)."]
+    return "\n".join(lines) + "\n"
+
+
 def summarize(directory: Path) -> dict:
     results = load(directory)
     origin = os.environ.get("RAFII_WEB_URL") or os.environ.get("AGENT_UI_API_URL")
@@ -78,6 +109,7 @@ def summarize(directory: Path) -> dict:
     out = {"candidateSha": evidence.head_sha(), "generatedAt": evidence.now_iso(), "counts": counts, "records": records,
            "checks": {k: [r[0] for r in v] for k, v in sorted(results.items())}}
     (directory / "gate-records.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    (directory / "matrix.md").write_text(render_matrix(out))
     return out
 
 
