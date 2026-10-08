@@ -152,6 +152,8 @@ const calendarAgenda = z.object({
 });
 const queueItem = jobView.extend({ ref, atUtc: opt(iso) });
 export type QueueItem = z.infer<typeof queueItem>;
+// Attention rows (failed/held/uncertain jobs) carry no scheduled atUtc in lane D's queue_status shape.
+const attentionItem = jobView.extend({ ref });
 const queueStatus = z.object({
   statusCounts: opt(z.record(z.string(), z.number().int().nonnegative())),
   unknownStates: z.array(text(60)).max(30).optional().nullable(),
@@ -160,7 +162,7 @@ const queueStatus = z.object({
     .array(z.object({ reviewId: opt(id), ref, platform: opt(text(60)), account: opt(text(160)), local: opt(text(40)), timeZone: opt(text(64)), atUtc: opt(iso), expired: opt(z.boolean()) }))
     .max(100),
   upcoming: z.array(queueItem).max(100),
-  attention: z.array(queueItem).max(100),
+  attention: z.array(attentionItem).max(100),
   totals: z.object({ waitingApproval: z.number().int().nonnegative(), upcoming: z.number().int().nonnegative(), attention: z.number().int().nonnegative() }),
   href: opt(inAppHref),
 });
