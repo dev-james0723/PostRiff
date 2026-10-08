@@ -1,15 +1,20 @@
 """Lane G acceptance harness server: the real hosted app on a disposable loopback PostgreSQL, for cloud CI only.
 
-It runs `scripts/postriff_dev_hosted.py` unchanged (real HostedWorkspaceService, permissions, ledger, Agent Runtime with the
-RAFII_AGENT_HARNESS scripted Manager, the real UI routes) and adds, without editing any shared file:
+It runs `scripts/postriff_dev_hosted.py` unchanged (real HostedWorkspaceService, permissions, ledger, Agent Runtime, the real
+UI routes) and adds, without editing any shared file:
 
 * migration 102 (and 103 when A adds it) and 058 applied inline after tests/phase2/rls.sql, the D-A26 rule for UI tables;
 * an expiring-login switch: a principal listed in `agent_ui_acceptance_expired` gets 401 from the identity verifier
   (NC05), exactly like a lapsed Supabase session;
 * the fixture provider (fake_provider.py) as RAFII_AGENT_BASE_URL: lane B's real presenter/stream/metering code talks to a
   loopback OpenAI-compatible endpoint that streams deterministic valid source, counts provider requests and injects armed
-  faults (malformed, truncated, unpriced, slow, failing). Nothing past the network boundary is replaced. The harness
-  Manager stays the RAFII_AGENT_HARNESS ScriptedModel (labelled harness model, never live-quality evidence).
+  faults (malformed, truncated, unpriced, slow, failing). Nothing past the network boundary is replaced;
+* the METERED Manager path: the runtime is built as in production (no RAFII_AGENT_HARNESS model factory), so a turn reserves,
+  records usage and settles on the real ledger (`usage.billing == "metered"`), which is what lane D's eligibility and lane B's
+  admission require. The fixture provider answers the Manager's and specialists' requests with the existing QA script
+  (harness.manager_step), so turns stay deterministic. Budgets use the launch policy (POSTRIFF_BUDGET_POLICY), exactly as
+  production approves them. `--scripted-manager` restores the unbilled ScriptedModel Manager (then no turn is eligible).
+  Labelled fixture: never evidence of live model quality.
 
 Refuses to run on Vercel, outside CI unless AGENT_UI_ACCEPTANCE_LOCAL=1, or with what looks like a real provider key.
 
@@ -27,9 +32,11 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-FLAG_ENV = {"RAFII_AGENT_HARNESS": "1", "RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_ACTIONS_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1",
+FIXTURE_KEY = "fixture-provider-placeholder-not-a-key"   # loopback only; RAFII_AGENT_BASE_URL is the fixture provider
+FLAG_ENV = {"RAFII_GENUI_ENABLED": "1", "RAFII_GENUI_ACTIONS_ENABLED": "1", "RAFII_GENUI_EDITS_ENABLED": "1",
             "RAFII_GENUI_FOUNDER_ENABLED": "1", "RAFII_AGENT_V2_ENABLED": "1", "POSTRIFF_RESEARCH": "0", "OPENUI_TELEMETRY_DISABLED": "1",
-            "RAFII_AGENT_BASE_URL": "http://127.0.0.1:9/v1", "OPENAI_AGENTS_DISABLE_TRACING": "1", "RAFII_AGENT_OPENAI_TRACING": "0"}
+            "RAFII_AGENT_BASE_URL": "http://127.0.0.1:9/v1", "OPENAI_AGENTS_DISABLE_TRACING": "1", "RAFII_AGENT_OPENAI_TRACING": "0",
+            "RAFII_SPECIALISTS_ENABLED": "1", "POSTRIFF_BUDGET_POLICY": "launch-2026-09-24", "RAFII_AGENT_PROVIDER": "openai"}
 
 
 def refuse(reason: str) -> None:
@@ -79,8 +86,14 @@ def main(argv=None) -> None:
     parser.add_argument("--founder-fixture", action="store_true")
     parser.add_argument("--provider-port", type=int, default=4540)
     parser.add_argument("--provider-delay", type=float, default=0.35, help="seconds between fixture deltas (progressive rendering)")
+    parser.add_argument("--scripted-manager", action="store_true", help="unbilled RAFII_AGENT_HARNESS Manager (no turn is UI-eligible)")
     args, rest = parser.parse_known_args(argv)
     guard_environment()
+    if args.scripted_manager:
+        os.environ["RAFII_AGENT_HARNESS"] = "1"
+    else:
+        os.environ.pop("RAFII_AGENT_HARNESS", None)
+        os.environ["OPENAI_API_KEY"] = FIXTURE_KEY
     sys.path.insert(0, str(ROOT / "src"))
     sys.path.insert(0, str(ROOT / "tests"))
     from agent_ui_acceptance import fake_provider   # noqa: E402
@@ -102,8 +115,19 @@ def main(argv=None) -> None:
 
     dev.start_postgres = start_postgres
     install_expiring_verifier(dev)
+    install_offline_weather()
     sys.argv = ["postriff_dev_hosted.py", "--port", str(args.port), "--pg-port", str(args.pg_port)] + (["--founder-fixture"] if args.founder_fixture else []) + rest
     dev.main()
+
+
+def install_offline_weather() -> None:
+    """The weather tool's Open-Meteo calls use the QA stand-in (nothing leaves the runner)."""
+    from postriff_phase2.agent_runtime_v2 import harness, live_tools
+    original = live_tools.Weather.__init__
+
+    def init(self, transport=None, *rest, **kw):
+        original(self, transport or harness.weather_transport, *rest, **kw)
+    live_tools.Weather.__init__ = init
 
 
 def install_expiring_verifier(dev) -> None:

@@ -423,7 +423,8 @@ def api_case(api: Api, token: str, workspace: str, case: dict, budget: Budget) -
     turn = api.request("POST", f"/api/workspaces/{workspace}/agent/turns", token, {"message": case["prompt"], "idempotencyKey": new_key("live"),
                                                                                     "modality": "text"}, timeout=180)
     t_turn = time.monotonic()
-    result = turn.json() or {}
+    raw = turn.json() or {}
+    result = {**(raw.get("result") if isinstance(raw.get("result"), dict) else {}), **{k: raw[k] for k in ("runId", "conversationId", "messageId") if raw.get(k)}}
     turn_cost = ((result.get("usage") or {}).get("costUsdMicro"))
     if turn.status not in (200, 201) or not (result.get("ui") or {}).get("eligible"):
         budget.charge(turn_cost)
@@ -483,7 +484,8 @@ def concurrency(api: Api, token_factory, workspace_factory, levels, prompt) -> l
             workspace = workspace_factory(token)
             t0 = time.monotonic()
             turn = api.request("POST", f"/api/workspaces/{workspace}/agent/turns", token, {"message": prompt, "idempotencyKey": new_key("cc")}, timeout=180)
-            body = turn.json() or {}
+            raw = turn.json() or {}
+            body = {**(raw.get("result") if isinstance(raw.get("result"), dict) else {}), "runId": raw.get("runId")}
             status = "turn_failed" if turn.status not in (200, 201) else "not_eligible"
             artifact = None
             if (body.get("ui") or {}).get("eligible"):

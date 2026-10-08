@@ -331,23 +331,53 @@ class FixtureProvider(unittest.TestCase):
         self.assertEqual(stats["faultsUsed"], ["no_usage", "error", "truncated", "malformed"])
 
     def test_patch_mode_redeclares_a_statement_and_markers_are_detectable(self):
-        events = self.stream("/v1/responses", {"input": 'Current source:\nroot = RafiiRoot([t1])\nt1 = Text("old")\nInstruction: change it G-MARK-1'})
+        user = ('<context kind="UI_PROJECTION">\n{}\n</context>\n\n<source kind="CURRENT_UI" revision="1" hash="x">\nroot = RafiiRoot([t1, f1])\n'
+                't1 = Text("old")\nf1 = TextField("g_note", "Note", $g_note)\n</source>\n\n<request kind="USER_EDIT">\nchange it G-MARK-1\n</request>')
+        events = self.stream("/v1/responses", {"input": [{"role": "user", "content": [{"type": "input_text", "text": user}]}]})
         text = "".join(e["data"].get("delta", "") for e in events if isinstance(e["data"], dict))
         self.assertTrue(text.startswith("t1 = Text("), text)
         seen = self.api.request("POST", "/__seen", body={"markers": ["G-MARK-1", "absent-marker"]}).json()["seen"]
         self.assertEqual(seen, {"G-MARK-1": 1, "absent-marker": 0})
 
+    def test_kinds_are_counted_separately(self):
+        self.stream("/v1/responses", {"input": "projection"})
+        structured = self.api.request("POST", "/v1/responses", body={"input": "x", "text": {"format": {"type": "json_schema", "schema": {
+            "type": "object", "properties": {"followUps": {"type": "array"}, "tone": {"enum": ["a", "b"]}}, "required": ["followUps", "tone"]}}}})
+        payload = structured.json()["output"][0]["content"][0]["text"]
+        self.assertEqual(json.loads(payload), {"followUps": [], "tone": "a"})
+        stats = self.api.request("GET", "/__stats").json()
+        self.assertEqual((stats["presenterRequests"], stats["byKind"].get("structured")), (1, 1))
+
     def test_build_source_without_and_with_a_schema(self):
         with mock.patch.object(fake_provider, "_schema", return_value=({}, {})):
             self.assertEqual(fake_provider.build_source(), "root = RafiiRoot([])\n")
         defs = {"RafiiRoot": {"properties": {"children": {"type": "array"}, "title": {"type": "string"}}, "required": ["children"]},
-                "Text": {"properties": {"text": {"type": "string"}, "tone": {"enum": ["plain", "muted"]}}, "required": ["text"]}}
+                "Text": {"properties": {"content": {"type": "string"}, "variant": {"enum": ["body", "muted"]}}, "required": ["content"]},
+                "TextField": {"properties": {"name": {"type": "string"}, "label": {"type": "string"}}, "required": ["name", "label"]}}
         with mock.patch.object(fake_provider, "_schema", return_value=({"root": "RafiiRoot"}, defs)):
-            source = fake_provider.build_source()
+            source = fake_provider.build_source(with_input=True)
+            plain = fake_provider.build_source(allowed={"RafiiRoot", "Text"}, with_input=True)
+            body = {"instructions": "x\n\n## Components for this view\nUse only these components: RafiiRoot, Text.", "input": '<source kind="REJECTED_UI">\nbad\n</source>'}
+            repaired = fake_provider.presenter_source(body)
         lines = source.strip().split("\n")
-        self.assertEqual(lines[0], "root = RafiiRoot([t1, t2, t3])")
-        self.assertTrue(all(line.startswith(f"t{i} = Text(\"") for i, line in enumerate(lines[1:], 1)))
+        self.assertEqual(lines[0], "root = RafiiRoot([t1, t2, t3, f1])")
+        self.assertIn('$g_note = ""', lines)
+        self.assertEqual(lines[-1], 'f1 = TextField("g_note", "Fixture note", $g_note)')
+        self.assertTrue(all(line.startswith(f"t{i} = Text(\"") for i, line in enumerate(lines[2:5], 1)))
         self.assertTrue(any(ord(ch) > 0xFFFF for ch in source), "the fixture carries 4-byte characters (emoji) for UTF-8 splits")
+        self.assertNotIn("TextField", plain, "a component outside the view's allowed list is never used")
+        self.assertNotIn("TextField", repaired, "a repair answers with the plain text view")
+        self.assertEqual(fake_provider.allowed_components(body["instructions"]), {"RafiiRoot", "Text"})
+
+    @unittest.skipUnless(importlib.util.find_spec("agents"), "the Agents SDK runs in cloud CI (requirements.txt); this Mac's venv lacks it")
+    def test_agent_requests_are_answered_by_the_qa_script(self):
+        body = {"model": "gpt-6-sol", "tools": [{"type": "function", "name": "ask_campaign"}, {"type": "function", "name": "pending_approvals"}],
+                "input": [{"role": "user", "content": [{"type": "input_text", "text": "<request>\nWhat's missing in the campaign?\n</request>"}]}]}
+        answer = self.api.request("POST", "/v1/responses", body=body).json()
+        self.assertEqual(answer["output"][0]["type"], "function_call")
+        self.assertEqual(answer["output"][0]["name"], "ask_campaign")
+        self.assertGreater(answer["usage"]["input_tokens"], 0)
+        self.assertEqual(self.api.request("GET", "/__stats").json()["byKind"], {"agent": 1})
 
 
 class Tooling(unittest.TestCase):

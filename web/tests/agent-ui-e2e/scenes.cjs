@@ -18,7 +18,8 @@ const blocked = (why) => { throw new Blocked(why); };
 
 const GENERATED = '[data-rafii-generated]';
 const UI_PATH = /\/api\/workspaces\/[0-9a-f-]{36}\/agent\/ui\//;
-const ELIGIBLE = "Show what's still left in a table I can filter";
+// A harness Manager flow that reads journey data (campaign specialist → campaign_list, J05) with an explicit UI intent.
+const ELIGIBLE = "Chart what's missing in the campaign by status";
 
 async function providerStats(t) {
   if (!t.providerBase) blocked('harness: no fixture provider URL');

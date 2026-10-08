@@ -34,7 +34,12 @@ ROUTE_OWNER = {"presentations": "B (ui_stream.create_presentation)", "events": "
 TERMINAL = ("ui.ready", "ui.failed", "ui.canceled", "ui.interrupted")
 # Harness Manager prompts (agent_runtime_v2/harness.manager_step) that make it call a read tool, phrased with an explicit
 # UI intent (table/compare/chart/timeline) so lane D's deterministic eligibility can choose a journey.
-ELIGIBLE_PROMPTS = ("Show what's still left in a table I can filter", "Compare my drafts side by side in a table", "Chart what's missing in the campaign by status")
+ELIGIBLE_PROMPTS = ("Chart what's missing in the campaign by status", "Compare my campaigns side by side in a table", "Show what's still left in a table I can filter")
+
+
+def turn_view(body: dict) -> dict:
+    result = body.get("result") if isinstance(body.get("result"), dict) else {}
+    return {**result, **{k: body[k] for k in ("runId", "conversationId", "messageId", "status") if body.get(k) is not None}}
 
 
 class Blocked(unittest.SkipTest):
@@ -109,15 +114,22 @@ class World:
 
     # --- provider boundary (fixture provider) -------------------------------------------------------------------------
     def provider_requests(self) -> int:
+        """Every request that reached the provider boundary (agent, helper and presenter)."""
         if not self.provider:
             raise Blocked("BLOCKED harness: no fixture provider URL in the stack state")
         return int((self.provider.request("GET", "/__stats").json() or {}).get("requests") or 0)
 
+    def presenter_requests(self) -> int:
+        """Presenter requests only (no tools, free text): one per physical presentation attempt."""
+        if not self.provider:
+            raise Blocked("BLOCKED harness: no fixture provider URL in the stack state")
+        return int((self.provider.request("GET", "/__stats").json() or {}).get("presenterRequests") or 0)
+
     def arm(self, fault: str | None, count: int = 1):
         self.provider.request("POST", "/__fault", body={"fault": fault, "count": count})
 
-    def seen(self, markers) -> dict:
-        return (self.provider.request("POST", "/__seen", body={"markers": list(markers)}).json() or {}).get("seen") or {}
+    def seen(self, markers, kinds=("presenter",)) -> dict:
+        return (self.provider.request("POST", "/__seen", body={"markers": list(markers), "kinds": list(kinds)}).json() or {}).get("seen") or {}
 
     # --- actors ---------------------------------------------------------------------------------------------------------
     def actor(self, name: str) -> Actor:
@@ -177,11 +189,14 @@ class World:
 
     # --- turns and presentations ----------------------------------------------------------------------------------------
     def turn(self, actor: Actor, message: str, **extra) -> dict:
-        body = {"message": message, "idempotencyKey": new_key("turn"), "timeZone": "Asia/Hong_Kong", "modality": "text", **extra}
+        """One real agent turn. Returns the stored result merged with the run identity (POST turns answers
+        {conversationId, runId, status, messageId, result: {..., ui, usage, speakableSummary}})."""
+        body = {"message": message, "idempotencyKey": new_key("turn"), "timeZone": "Asia/Hong_Kong", "modality": "text",
+                **{k: v for k, v in extra.items() if v is not None}}
         answer = self.api.request("POST", f"/api/workspaces/{actor.workspace_id}/agent/turns", actor.token, body, timeout=180)
         if answer.status not in (200, 201):
             raise AssertionError(f"agent turn failed: {answer.status} {answer.text(300)}")
-        return answer.json() or {}
+        return turn_view(answer.json() or {})
 
     def eligible_turn(self, actor: Actor) -> dict:
         if "eligible" in self._blocked:
@@ -192,7 +207,9 @@ class World:
             ui = result.get("ui") or {}
             if ui.get("eligible") and result.get("runId"):
                 return result
-            reasons.append(f"{prompt!r} → ui={json.dumps(ui)[:160]}")
+            usage = result.get("usage") or {}
+            reasons.append(f"{prompt!r} → ui={json.dumps(ui)[:120]} composedBy={result.get('composedBy')} billing={usage.get('billing')} "
+                           f"tools={[a.get('tool') for a in (result.get('toolActivity') or [])][:6]}")
         self._blocked["eligible"] = ("BLOCKED lane D (ui_projection.eligibility) or the turn seam: no harness Manager turn was eligible; "
                                      + "; ".join(reasons)[:500])
         raise Blocked(self._blocked["eligible"])

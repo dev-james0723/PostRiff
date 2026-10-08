@@ -46,7 +46,8 @@ def _schema(library="consumer"):
 
 
 def _defs(schema):
-    return schema.get("$defs") or schema.get("definitions") or {}
+    # C's generator keys components under top-level `properties` (D-A30); older shapes used $defs.
+    return schema.get("$defs") or schema.get("definitions") or schema.get("properties") or {}
 
 
 def _literal(prop, defs, statements, depth=0):
