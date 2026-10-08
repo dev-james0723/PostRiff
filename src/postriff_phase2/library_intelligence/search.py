@@ -696,6 +696,12 @@ def _clean(text: str) -> str:
     return SPACE.sub(" ", text).strip()
 
 
+def plain_text(text: str) -> str:
+    """Public form of the snippet sanitiser: markup, control and bidi characters removed, whitespace collapsed. Answers
+    verify quotations against exactly this text."""
+    return _clean(text)
+
+
 def _match_position(text: str, query: str) -> int | None:
     folded, positions = [], []
     for i, ch in enumerate(text):
