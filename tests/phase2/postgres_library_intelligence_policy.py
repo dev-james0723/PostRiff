@@ -20,7 +20,7 @@ from postriff_phase2.library_intelligence import api, contracts as c, policy, ve
 DSN = os.environ.get("POSTRIFF_TEST_DSN", "host=127.0.0.1 port=55438 dbname=postgres")
 PHASE = os.environ.get("LIBRARY_PG_PHASE", "no_vector")
 ONE = "00000000-0000-0000-0000-000000000001"
-TWO = "00000000-0000-0000-0000-000000000002"
+TWO = "00000000-0000-0000-0000-000000000066"  # rls.sql marks …0002 deleted
 EDITOR = "00000000-0000-0000-0000-000000000044"
 VIEWER = "00000000-0000-0000-0000-000000000055"
 TOKENS = {"one": ONE, "two": TWO, "editor": EDITOR, "viewer": VIEWER}
@@ -119,7 +119,7 @@ with connection() as db:
     # Existing rows keep working with additive columns and defaults.
     cols = {r[0] for r in db.execute("SELECT column_name FROM information_schema.columns WHERE table_name='pr_library_assets'").fetchall()}
     check("schema: version columns added", {"lineage_id", "version_no", "source_kind", "media"} <= cols, cols)
-    for user in (EDITOR, VIEWER):
+    for user in (TWO, EDITOR, VIEWER):
         db.execute("INSERT INTO auth.users VALUES(%s) ON CONFLICT DO NOTHING", (user,))
 
 storage = Storage()
