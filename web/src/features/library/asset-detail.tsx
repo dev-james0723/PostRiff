@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -14,11 +14,14 @@ import { LearnMoreChevron } from '@/components/ui/learn-more-chevron';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
+import type { Locator } from '@/lib/api/library-intelligence-types';
 import { formatBytes, formatDateTime, relativeTime } from '@/lib/time';
 import { STATUS } from '@/lib/status-labels';
 import { cn } from '@/lib/utils';
+import { openerSelector } from '@/lib/library/url-state';
+import { formatClock } from '@/lib/library/wording';
 import { AssetOrganizer } from './library-organizer';
-import { badgeClass, copyHash, dimensionsOf, useAssetImage } from './asset-card';
+import { assetTitle, badgeClass, copyHash, dimensionsOf, kindLabel, useAssetImage } from './asset-card';
 import { imageRuleChecks } from './image-rules';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { toast } from 'sonner';
@@ -26,6 +29,22 @@ import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { AudioMomentPlayer } from './intelligence/audio-player';
+import {
+  CapabilityList,
+  DangerArea,
+  DetailSection,
+  PurposeList,
+  RelatedList,
+  SectionNav,
+  SegmentList,
+  SuggestedUses,
+  UnderstandingSummary,
+  UsageEntries,
+  VoiceControl,
+  useAssetIntelligence,
+  type AssetIntelligence
+} from './intelligence/detail-sections';
 
 interface AssetDetailProps {
   asset: LibraryAsset | null;
@@ -36,11 +55,18 @@ interface AssetDetailProps {
   canEdit: boolean;
   /** Preparing a post (`p2_review`) needs approve permission. */
   canApprove: boolean;
+  /** Voice and other workspace-wide purposes are the owner's decision. */
+  isOwner?: boolean;
   deleting: boolean;
   currentUserId: string | null;
   /** Platforms of the workspace's connected accounts, for the image rules. */
   platforms: string[];
   onDelete: (asset: LibraryAsset) => void;
+  /** Library intelligence answers in this build; per-item reads are attempted only then. */
+  intelligence?: boolean;
+  /** The passage or moment a search result pointed at. */
+  focusLocator?: Locator | null;
+  onAnnounce?: (message: string) => void;
 }
 
 /**
@@ -68,8 +94,8 @@ function whenOf(use: AssetUse) {
   return Number.isNaN(parsed) ? { text: `${use.timing.local} (${use.timing.timeZone})`, exact: undefined } : { text: relativeTime(parsed / 1000), exact: formatDateTime(parsed / 1000) };
 }
 
-/* Elevated glass on the existing overlay primitives (DNA §12.2). */
-const SHEET_CLASS = 'rafii-elevated gap-0 border-0 bg-transparent data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-[480px]';
+/* Elevated glass on the existing overlay primitives (DNA §12.2). The global material falls back to an opaque fill. */
+const SHEET_CLASS = 'rafii-elevated gap-0 border-0 bg-transparent data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-[520px]';
 const DRAWER_CLASS = 'rafii-elevated bg-transparent data-[swipe-direction=down]:rounded-t-[var(--rafii-radius-mobile-dialog)] data-[swipe-direction=down]:border-t-0 data-[swipe-axis=y]:[--drawer-content-max-height:85dvh]';
 
 function Fact({ term, children, className }: { term: string; children: ReactNode; className?: string }) {
@@ -86,7 +112,7 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
     <Fact term={term}>
       <span className='flex items-start gap-1'>
         <code className='min-w-0 flex-1 font-mono text-xs break-all'>{hash}</code>
-        <Button variant='quiet' size='icon-lg' className='-mt-2 rounded-full' aria-label={`Copy ${term.toLowerCase()}`} onClick={() => void copyHash(hash)}>
+        <Button variant='quiet' size='icon-control' className='-mt-2 rounded-full' aria-label={`Copy ${term.toLowerCase()}`} onClick={() => void copyHash(hash)}>
           <Icons.copy aria-hidden />
         </Button>
       </span>
@@ -94,29 +120,26 @@ function HashFact({ term, hash }: { term: string; hash: string }) {
   );
 }
 
-/** The real image in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
-function LargeImage({ asset }: { asset: LibraryAsset }) {
+/** The real preview in its own colours (DNA §21.9); broken media says why and offers Retry, never a blank box. */
+function LargeImage({ asset, peaks }: { asset: LibraryAsset; peaks?: number[] | null }) {
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
   const image = useAssetImage(asset.id, mediaAsset);
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = assetKind === 'video';
-  if (assetKind === 'audio') {
-    return <div className='flex flex-col items-center gap-3'>
-      <AssetFileThumbnail asset={asset} size='detail' />
-      <p className='text-muted-foreground text-sm'>Private audio · {asset.extension?.toUpperCase()}</p>
-      <Button variant='glass' size='control' disabled={!['ready', 'unsupported'].includes(asset.processing ?? '')} onClick={() => void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ kind: 'audio', workspaceId, assetId: asset.id, title: asset.displayTitle || asset.originalFilename || 'Audio', url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Audio unavailable'))}>Play audio in Now Playing</Button>
-    </div>;
-  }
   if (!mediaAsset) {
-    return <AssetFileThumbnail asset={asset} size='detail' />;
+    return <AssetFileThumbnail asset={asset} size='detail' peaks={peaks} />;
   }
   if (isVideo) {
     return (
       <div data-library-thumbnail='video' data-thumbnail-preview='video-poster' className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
-        <button type='button' className='rafii-focus relative flex w-full items-center justify-center'
-          onClick={() => void api.mediaUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ workspaceId, assetId: asset.id, title: `Video ${asset.id.slice(0, 8)}`, url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Video unavailable'))}>
-          {image.data ? <Image src={image.data} alt='' width={asset.width ?? 480} height={asset.height ?? 270} unoptimized className='h-auto max-h-[40vh] w-auto max-w-full md:max-h-[50vh]' /> : <span className='h-40 w-full' />}
+        {/* The poster is a picture; playback is the one Rafii player, started only by this press. */}
+        <button
+          type='button'
+          className='rafii-focus relative flex min-h-11 w-full items-center justify-center'
+          onClick={() => void api.mediaUrl(workspaceId, asset.id).then(({ url }) => useNowPlaying.getState().open({ workspaceId, assetId: asset.id, title: assetTitle(asset), url })).catch((error) => toast.error(error instanceof Error ? error.message : 'Video unavailable'))}
+        >
+          {image.data ? <Image src={image.data} alt='' width={asset.width ?? 480} height={asset.height ?? 270} unoptimized className='h-auto max-h-[40vh] w-auto max-w-full object-contain md:max-h-[50vh]' /> : <span className='h-40 w-full' />}
           <span className='rafii-glass absolute rounded-full px-4 py-2 text-sm'>Play video in Now Playing</span>
         </button>
       </div>
@@ -126,19 +149,10 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
   return (
     <div className='rafii-quiet flex max-h-[40vh] items-center justify-center overflow-hidden rounded-[var(--rafii-radius-card)] md:max-h-[50vh]'>
       {image.data ? (
-        <Image
-          src={image.data}
-          alt=''
-          width={asset.width ?? 800}
-          height={asset.height ?? 800}
-          unoptimized
-          className='h-auto max-h-[40vh] w-auto max-w-full object-contain md:max-h-[50vh]'
-        />
+        <Image src={image.data} alt='' width={asset.width ?? 800} height={asset.height ?? 800} unoptimized className='h-auto max-h-[40vh] w-auto max-w-full object-contain md:max-h-[50vh]' />
       ) : image.isError ? (
         <div className='text-muted-foreground flex aspect-video w-full flex-col items-center justify-center gap-3 p-4 text-center text-sm'>
-          <span>
-            {image.errorStatus === 404 ? 'Image file missing' : image.storageNotConfigured ? 'Previews aren’t available yet' : 'Preview unavailable'}
-          </span>
+          <span>{image.errorStatus === 404 ? 'Image file missing' : image.storageNotConfigured ? 'Previews aren’t available yet' : 'Preview unavailable'}</span>
           {image.canRetry && (
             <Button size='control' variant='glass' disabled={image.isFetching} onClick={() => void image.refetch()}>
               <Icons.refresh className={cn(image.isFetching && 'animate-spin')} aria-hidden />
@@ -153,26 +167,35 @@ function LargeImage({ asset }: { asset: LibraryAsset }) {
   );
 }
 
+/** The deterministic extracted text, used when structural passages with locators are not available. */
 function DocumentText({ asset }: { asset: LibraryAsset }) {
   const { api, workspaceId } = useWorkspaceApi();
   const detail = useQuery({
     queryKey: ['library-file-detail', workspaceId, asset.id],
     queryFn: () => api.libraryFile(workspaceId, asset.id),
     enabled: Boolean(workspaceId),
-    refetchInterval: (query) => ['pending', 'queued', 'processing'].includes(query.state.data?.asset.processing ?? '') ? 3000 : false,
+    refetchInterval: (query) => (['pending', 'queued', 'processing'].includes(query.state.data?.asset.processing ?? '') ? 3000 : false),
     staleTime: 10_000
   });
   return (
     <section aria-labelledby='asset-extracted-text' className='flex flex-col gap-2'>
-      <h3 id='asset-extracted-text' className='rafii-eyebrow'>Extracted text</h3>
+      <h4 id='asset-extracted-text' className='rafii-eyebrow'>
+        Extracted text
+      </h4>
       {detail.isPending ? (
         <Skeleton className='h-24 w-full' />
       ) : detail.isError ? (
-        <Button variant='glass' size='control' onClick={() => void detail.refetch()}>Retry text preview</Button>
+        <Button variant='glass' size='control' onClick={() => void detail.refetch()}>
+          Retry text preview
+        </Button>
       ) : detail.data.extractedText ? (
-        <pre className='rafii-quiet max-h-72 overflow-auto whitespace-pre-wrap rounded-[var(--rafii-radius-card)] p-3 text-xs leading-relaxed'>{detail.data.extractedText}</pre>
+        <pre className='rafii-quiet max-h-72 overflow-auto rounded-[var(--rafii-radius-card)] p-3 text-xs leading-relaxed whitespace-pre-wrap'>{detail.data.extractedText}</pre>
       ) : (
-        <p role='status' className='text-muted-foreground text-sm'>{['pending', 'queued', 'processing'].includes(asset.processing ?? '') ? 'Extracting and indexing in the background…' : asset.extractionError || (kindOf(asset) === 'audio' ? 'Add a transcript below to make this audio searchable. Automatic transcription is unavailable.' : 'No extractable text. Scanned PDFs need a text layer. The original is stored privately.')}</p>
+        <p role='status' className='text-muted-foreground text-sm'>
+          {['pending', 'queued', 'processing'].includes(asset.processing ?? '')
+            ? 'Extracting and indexing in the background…'
+            : asset.extractionError || (kindOf(asset) === 'audio' ? 'Add a transcript below to make this audio searchable. Automatic transcription is unavailable.' : 'No extractable text. Scanned PDFs need a text layer. The original is stored privately.')}
+        </p>
       )}
     </section>
   );
@@ -197,11 +220,7 @@ function UseRow({ use }: { use: AssetUse }) {
           </span>
         </span>
       </div>
-      <Link
-        href='/app/queue'
-        className={cn('t-learn shrink-0', buttonVariants({ variant: 'quiet', size: 'lg' }))}
-        aria-label={`Open the ${use.platform} ${use.kind === 'review' ? 'review' : 'post'} in the Queue`}
-      >
+      <Link href='/app/queue' className={cn('t-learn min-h-11 shrink-0', buttonVariants({ variant: 'quiet', size: 'lg' }))} aria-label={`Open the ${use.platform} ${use.kind === 'review' ? 'review' : 'post'} in the Queue`}>
         Queue
         <LearnMoreChevron />
       </Link>
@@ -213,9 +232,9 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
   const checks = imageRuleChecks(platforms, asset.width, asset.height);
   return (
     <section aria-labelledby='asset-rules' className='flex flex-col gap-1'>
-      <h3 id='asset-rules' className='rafii-eyebrow'>
+      <h4 id='asset-rules' className='rafii-eyebrow'>
         Image rules
-      </h3>
+      </h4>
       {checks.length === 0 ? (
         <p className='text-muted-foreground py-2 text-sm'>Connect an account to check platform rules.</p>
       ) : (
@@ -240,39 +259,115 @@ function ImageRules({ asset, platforms }: { asset: LibraryAsset; platforms: stri
   );
 }
 
+/** "PDF document · 2.1 MB", "Audio · 3:12 · MP3": what this is, before anything else. */
+function whatItIs(asset: LibraryAsset, media?: { durationMs?: number; pages?: number; slides?: number } | null) {
+  const extension = (asset.extension || asset.originalFilename?.split('.').pop() || '').toUpperCase();
+  const seconds = typeof media?.durationMs === 'number' ? media.durationMs / 1000 : typeof asset.duration === 'number' && asset.duration > 0 ? asset.duration : null;
+  return [
+    kindLabel(asset),
+    extension && kindOf(asset) !== 'image' ? extension : null,
+    seconds ? formatClock(seconds * 1000) : null,
+    typeof media?.pages === 'number' ? `${media.pages} ${media.pages === 1 ? 'page' : 'pages'}` : null,
+    typeof media?.slides === 'number' ? `${media.slides} ${media.slides === 1 ? 'slide' : 'slides'}` : null,
+    dimensionsOf(asset),
+    typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function DetailBody({
   asset,
   uses,
   publishing,
   currentUserId,
   platforms,
-  canEdit
-}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit'> & { asset: LibraryAsset }) {
+  canEdit,
+  isOwner,
+  deleting,
+  onDelete,
+  intel,
+  focusLocator,
+  onAnnounce
+}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit' | 'deleting' | 'onDelete' | 'focusLocator' | 'onAnnounce'> & {
+  asset: LibraryAsset;
+  isOwner: boolean;
+  intel: AssetIntelligence;
+}) {
+  const prefix = useId().replace(/:/g, '');
   const dims = dimensionsOf(asset);
   const reencoded = asset.mime === 'image/jpeg' && asset.processing === 'decoded';
+  const kind = kindOf(asset);
+  const card = intel.card.data;
+  const segments = intel.segments.data?.segments ?? [];
+  const moments = segments.filter((segment) => segment.kind === 'moment');
+  const usage = intel.usage.data?.usage ?? [];
+  const title = assetTitle(asset);
+  const textual = kind === 'document' || kind === 'file' || kind === 'audio';
   return (
     <div className='flex flex-col gap-6'>
-      <LargeImage asset={asset} />
-      {!['image', 'video'].includes(kindOf(asset) ?? '') ? <DocumentText asset={asset} /> : null}
-      <AssetOrganizer key={asset.id} asset={asset} canEdit={canEdit} />
+      <SectionNav prefix={prefix} />
 
-      {publishing && (
-        <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />
-      )}
+      <DetailSection prefix={prefix} id='overview' title='Overview'>
+        <p className='text-muted-foreground text-sm'>{whatItIs(asset, card?.media)}</p>
+        <UnderstandingSummary asset={asset} card={card} />
+        {card?.capabilityStates?.length ? <CapabilityList states={card.capabilityStates} /> : null}
+        <div className='flex flex-col gap-1.5'>
+          <p className='rafii-eyebrow'>What Rafii may use it for</p>
+          <PurposeList card={card} />
+        </div>
+        {textual ? <VoiceControl assetKey={intel.key} card={card} isOwner={isOwner} /> : null}
+        <SuggestedUses card={card} />
+        {publishing && <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />}
+        {canEdit ? (
+          <div className='flex flex-col gap-2'>
+            <p className='rafii-eyebrow'>Edit details</p>
+            <AssetOrganizer key={asset.id} asset={asset} canEdit={canEdit} />
+          </div>
+        ) : null}
+      </DetailSection>
 
-      {/* Provenance and rights are inspectable facts (DNA §21.9), read as quiet rows without dividers. */}
-      <section aria-labelledby='asset-facts' className='flex flex-col gap-1'>
-        <h3 id='asset-facts' className='rafii-eyebrow'>
-          Details
-        </h3>
-        <dl className='flex flex-col'>
+      <DetailSection prefix={prefix} id='content' title='Content'>
+        <LargeImage asset={asset} peaks={card?.media?.peaks ?? null} />
+        {kind === 'audio' ? <AudioMomentPlayer asset={asset} title={title} assetRef={card?.assetRef ?? null} durationMs={card?.media?.durationMs ?? null} moments={moments} canEdit={canEdit} onAnnounce={onAnnounce} /> : null}
+        {segments.some((segment) => segment.kind !== 'moment') ? <SegmentList segments={segments} focus={focusLocator} /> : textual ? <DocumentText asset={asset} /> : null}
+        {kind === 'image' ? <ImageRules asset={asset} platforms={platforms} /> : null}
+      </DetailSection>
+
+      <DetailSection prefix={prefix} id='related' title='Related'>
+        <RelatedList card={card} related={intel.related.data} />
+      </DetailSection>
+
+      <DetailSection prefix={prefix} id='usage' title='Usage'>
+        {uses.length === 0 && usage.length === 0 ? <p className='text-muted-foreground text-sm'>Not used yet</p> : null}
+        {uses.length ? (
+          <ul aria-label='Posts using this item' className='flex flex-col'>
+            {uses.map((use) => (
+              <UseRow key={`${use.kind}-${use.id}`} use={use} />
+            ))}
+          </ul>
+        ) : null}
+        <UsageEntries usage={usage} />
+        <p className='text-muted-foreground text-xs'>{intel.usage.data?.note || 'This shows where the item was used and the metrics that exist. Missing metrics say unknown; it doesn’t show that the item caused a result.'}</p>
+        <Link href='/app/queue?view=drafts' className={cn('t-learn min-h-11 self-start', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
+          Drafts
+          <LearnMoreChevron />
+        </Link>
+      </DetailSection>
+
+      {/* Provenance and rights stay inspectable (DNA §21.9), but hashes and formats are secondary. */}
+      <details className='group/technical rafii-quiet rounded-[var(--rafii-radius-card)] px-3'>
+        <summary className='rafii-focus flex min-h-11 cursor-pointer items-center justify-between gap-2 text-sm font-medium'>
+          Technical details
+          <Icons.chevronDown className='size-4 transition-transform group-open/technical:rotate-180 motion-reduce:transition-none' aria-hidden />
+        </summary>
+        <dl className='flex flex-col pb-2'>
           {dims ? <Fact term='Dimensions'>{dims} px</Fact> : null}
           <Fact term='Processing'>{(asset.processing ?? 'unknown').replaceAll('_', ' ')}</Fact>
           {asset.extractionError ? <Fact term='Issue'>{asset.extractionError}</Fact> : null}
           <Fact term='Size'>{typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : 'Not recorded'}</Fact>
           {asset.originalFilename ? <Fact term='Original file'>{asset.originalFilename}</Fact> : null}
           <Fact term='Format'>{reencoded ? 'JPEG · metadata removed' : asset.mime}</Fact>
-          {asset.aiSummary ? <Fact term='Summary'>{asset.aiSummary}</Fact> : null}
           {asset.aiTags?.length ? <Fact term='Tags'>{asset.aiTags.join(' · ')}</Fact> : null}
           <HashFact term='Stored hash' hash={asset.hash} />
           {asset.sourceHash && <HashFact term='Source hash' hash={asset.sourceHash} />}
@@ -283,43 +378,15 @@ function DetailBody({
             </Fact>
           )}
         </dl>
-      </section>
+      </details>
 
-      <section aria-labelledby='asset-uses' className='flex flex-col gap-1'>
-        <div className='flex items-center justify-between gap-2'>
-          <h3 id='asset-uses' className='rafii-eyebrow'>
-            Used in
-          </h3>
-          <Link href='/app/queue?view=drafts' className={cn('t-learn', buttonVariants({ variant: 'quiet', size: 'lg' }))}>
-            Drafts
-            <LearnMoreChevron />
-          </Link>
-        </div>
-        {uses.length === 0 ? (
-          <p className='text-muted-foreground py-2 text-sm'>Not used yet</p>
-        ) : (
-          <ul className='flex flex-col'>
-            {uses.map((use) => (
-              <UseRow key={`${use.kind}-${use.id}`} use={use} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {kindOf(asset) === 'image' ? <ImageRules asset={asset} platforms={platforms} /> : null}
+      {canEdit ? <DangerArea uses={uses.length} recorded={usage.length} publishing={publishing} deleting={deleting} onDelete={() => onDelete(asset)} /> : null}
     </div>
   );
 }
 
-/** One inverted commitment (Use in a post), quiet glass for the rest; Delete keeps its destructive weight (DNA §10.1). */
-function DetailActions({
-  asset,
-  publishing,
-  canEdit,
-  canApprove,
-  deleting,
-  onDelete
-}: Pick<AssetDetailProps, 'publishing' | 'canEdit' | 'canApprove' | 'deleting' | 'onDelete'> & { asset: LibraryAsset }) {
+/** One context-specific commitment, quiet glass for the rest (DNA §10.1). Delete lives in its own danger area. */
+function DetailActions({ asset, canEdit, canApprove }: Pick<AssetDetailProps, 'canEdit' | 'canApprove'> & { asset: LibraryAsset }) {
   const { api, workspaceId } = useWorkspaceApi();
   const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
   return (
@@ -341,25 +408,47 @@ function DetailActions({
           <Button
             variant='glass'
             size='control'
-            onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to open the original.'); }).catch(() => { target?.close(); toast.error('File unavailable'); }); }}
+            onClick={() => {
+              const target = window.open('about:blank', '_blank');
+              if (target) target.opener = null;
+              void api
+                .libraryFileUrl(workspaceId, asset.id)
+                .then(({ url }) => {
+                  if (target) target.location.href = url;
+                  else toast.error('Allow a new tab to open the original.');
+                })
+                .catch(() => {
+                  target?.close();
+                  toast.error('File unavailable');
+                });
+            }}
           >
             Open original
           </Button>
         ) : null}
-        {!mediaAsset ? <Button variant='quiet' size='control' onClick={() => { const target = window.open('about:blank', '_blank'); if (target) target.opener = null; void api.libraryFileUrl(workspaceId, asset.id, true).then(({ url }) => { if (target) target.location.href = url; else toast.error('Allow a new tab to download the file.'); }).catch(() => { target?.close(); toast.error('Download unavailable'); }); }}>Download</Button> : null}
-        {canEdit && (
+        {!mediaAsset ? (
           <Button
-            variant='destructive'
+            variant='quiet'
             size='control'
-            className='rounded-[var(--rafii-radius-control)] sm:ml-auto'
-            disabled={deleting || publishing}
-            title={publishing ? 'A post using this asset is publishing' : undefined}
-            onClick={() => onDelete(asset)}
+            onClick={() => {
+              const target = window.open('about:blank', '_blank');
+              if (target) target.opener = null;
+              void api
+                .libraryFileUrl(workspaceId, asset.id, true)
+                .then(({ url }) => {
+                  if (target) target.location.href = url;
+                  else toast.error('Allow a new tab to download the file.');
+                })
+                .catch(() => {
+                  target?.close();
+                  toast.error('Download unavailable');
+                });
+            }}
           >
-            {deleting ? <Icons.spinner className='animate-spin' aria-hidden /> : <Icons.trash aria-hidden />}
-            {deleting ? 'Deleting…' : 'Delete…'}
+            <Icons.download aria-hidden />
+            Download original
           </Button>
-        )}
+        ) : null}
       </div>
     </>
   );
@@ -368,16 +457,35 @@ function DetailActions({
 export function AssetDetail(props: AssetDetailProps) {
   const { asset, open, onOpenChange } = props;
   const isMobile = useIsMobile();
-  const dims = asset ? dimensionsOf(asset) : null;
-  const assetKind = asset ? kindOf(asset) : null;
-  const fallbackTitle = assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo';
-  const title = asset?.displayTitle?.trim() || asset?.originalFilename?.trim() || (dims ? `${fallbackTitle} ${dims}` : fallbackTitle);
+  const intel = useAssetIntelligence(open ? asset : null, Boolean(props.intelligence));
+  const title = asset ? assetTitle(asset) : '';
   const description = props.uses.length === 0 ? 'Not used in a post yet' : `Used in ${props.uses.length} ${props.uses.length === 1 ? 'post' : 'posts'}`;
+  // Closing returns focus to the card that opened the panel, found again even if the list re-rendered meanwhile.
+  const finalFocus = () => {
+    const selector = asset ? openerSelector(asset.id) : null;
+    return (selector ? document.querySelector<HTMLElement>(selector) : null) ?? true;
+  };
+  const body = asset ? (
+    <DetailBody
+      asset={asset}
+      uses={props.uses}
+      publishing={props.publishing}
+      currentUserId={props.currentUserId}
+      platforms={props.platforms}
+      canEdit={props.canEdit}
+      isOwner={Boolean(props.isOwner)}
+      deleting={props.deleting}
+      onDelete={props.onDelete}
+      intel={intel}
+      focusLocator={props.focusLocator}
+      onAnnounce={props.onAnnounce}
+    />
+  ) : null;
 
   if (isMobile) {
     return (
       <Drawer open={open && asset !== null} onOpenChange={onOpenChange}>
-        <DrawerContent className={DRAWER_CLASS}>
+        <DrawerContent className={DRAWER_CLASS} finalFocus={finalFocus}>
           {asset && (
             <>
               <DrawerHeader className='flex-row items-start gap-3 text-left'>
@@ -389,18 +497,9 @@ export function AssetDetail(props: AssetDetailProps) {
                   <Icons.close aria-hidden />
                 </DrawerClose>
               </DrawerHeader>
-              <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4'>
-                <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} canEdit={props.canEdit} />
-              </div>
+              <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4'>{body}</div>
               <DrawerFooter className='pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]'>
-                <DetailActions
-                  asset={asset}
-                  publishing={props.publishing}
-                  canEdit={props.canEdit}
-                  canApprove={props.canApprove}
-                  deleting={props.deleting}
-                  onDelete={props.onDelete}
-                />
+                <DetailActions asset={asset} canEdit={props.canEdit} canApprove={props.canApprove} />
               </DrawerFooter>
             </>
           )}
@@ -411,28 +510,19 @@ export function AssetDetail(props: AssetDetailProps) {
 
   return (
     <Sheet open={open && asset !== null} onOpenChange={onOpenChange}>
-      <SheetContent side='right' showCloseButton={false} className={SHEET_CLASS}>
+      <SheetContent side='right' showCloseButton={false} className={SHEET_CLASS} finalFocus={finalFocus}>
         {asset && (
           <>
-            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' className='absolute top-3 right-3 z-10' />}>
+            <SheetClose render={<Button variant='glass' size='icon-control' aria-label='Close asset details' className='absolute top-3 right-3 z-20' />}>
               <Icons.close aria-hidden />
             </SheetClose>
             <SheetHeader className='pr-16'>
               <SheetTitle>{title}</SheetTitle>
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>
-            <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4'>
-              <DetailBody asset={asset} uses={props.uses} publishing={props.publishing} currentUserId={props.currentUserId} platforms={props.platforms} canEdit={props.canEdit} />
-            </div>
+            <div className='min-h-0 flex-1 overflow-y-auto px-4 pb-4'>{body}</div>
             <SheetFooter className='pt-3'>
-              <DetailActions
-                  asset={asset}
-                  publishing={props.publishing}
-                  canEdit={props.canEdit}
-                  canApprove={props.canApprove}
-                  deleting={props.deleting}
-                  onDelete={props.onDelete}
-                />
+              <DetailActions asset={asset} canEdit={props.canEdit} canApprove={props.canApprove} />
             </SheetFooter>
           </>
         )}

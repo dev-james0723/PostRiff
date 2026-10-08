@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion, useInView, useReducedMotion } from 'motion/react';
@@ -19,8 +19,9 @@ import { kindOf } from '@/lib/media/asset-kinds';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
-import { badgeClass, copyHash, dimensionsOf, formatDuration, useAssetImage, usageLabel } from './asset-card';
-import { AssetFileThumbnail } from './asset-thumbnail';
+import { assetTitle, badgeClass, cardStatus, copyHash, dimensionsOf, formatDuration, kindLabel, useAssetImage, usageLabel, type LibraryDensity } from './asset-card';
+import { AssetFileThumbnail, documentPreviewSuffix, isPdfAsset } from './asset-thumbnail';
+import { SelectToggle } from './intelligence/select-toggle';
 
 export interface AssetListRowProps {
   asset: LibraryAsset;
@@ -34,11 +35,15 @@ export interface AssetListRowProps {
   onDelete: () => void;
   onStorageMissing?: () => void;
   onPreviewLoaded?: () => void;
+  selected?: boolean;
+  selecting?: boolean;
+  onSelect?: (selected: boolean, extend: boolean) => void;
+  density?: LibraryDensity;
+  footer?: ReactNode;
 }
 
 export function libraryAssetTitle(asset: LibraryAsset) {
-  const kind = kindOf(asset);
-  return asset.displayTitle?.trim() || asset.originalFilename?.trim() || (kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : kind === 'document' ? 'Document' : kind === 'file' ? 'File' : 'Photo');
+  return assetTitle(asset);
 }
 
 export function AssetListRow({
@@ -52,7 +57,12 @@ export function AssetListRow({
   onOpen,
   onDelete,
   onStorageMissing,
-  onPreviewLoaded
+  onPreviewLoaded,
+  selected = false,
+  selecting = false,
+  onSelect,
+  density = 'comfortable',
+  footer
 }: AssetListRowProps) {
   const reduce = useReducedMotion();
   const router = useRouter();
@@ -60,13 +70,15 @@ export function AssetListRow({
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
   const mediaAsset = assetKind === 'image' || assetKind === 'video';
-  const pdfAsset = assetKind === 'document' && (asset.extension?.toLowerCase() === 'pdf' || asset.originalFilename?.toLowerCase().endsWith('.pdf'));
+  const pdfAsset = isPdfAsset(asset);
   const preview = useAssetImage(asset.id, nearView && mediaAsset);
   const video = assetKind === 'video';
-  const title = libraryAssetTitle(asset);
+  const title = assetTitle(asset);
   const dims = dimensionsOf(asset);
   const count = uses.length;
-  const kindLabel = assetKind === 'video' ? 'Video' : assetKind === 'audio' ? 'Audio' : assetKind === 'document' ? 'Document' : assetKind === 'file' ? 'File' : 'Photo';
+  const kindWord = kindLabel(asset);
+  const status = cardStatus(asset);
+  const compact = density === 'compact';
 
   useEffect(() => {
     if (preview.storageNotConfigured) onStorageMissing?.();
@@ -76,7 +88,7 @@ export function AssetListRow({
   }, [preview.data, onPreviewLoaded]);
 
   const meta = [
-    video && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null,
+    (video || assetKind === 'audio') && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null,
     dims,
     typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null,
     asset.mime || null
@@ -89,25 +101,38 @@ export function AssetListRow({
           ref={ref}
           role='listitem'
           data-tour={first ? 'library-card' : undefined}
+          data-library-item={asset.id}
           aria-busy={deleting || undefined}
           layout={reduce ? false : 'position'}
           initial={reduce ? false : { opacity: 0, y: 4 }}
-          animate={{ opacity: deleting ? 0.55 : 1, y: 0, transition: { duration: 0.2, ease: EASE_OUT } }}
-          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, transition: { duration: 0.15, ease: EASE_OUT } }}
+          animate={{ opacity: deleting ? 0.55 : 1, y: 0, transition: { duration: reduce ? 0 : 0.2, ease: EASE_OUT } }}
+          exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -4, transition: { duration: 0.15, ease: EASE_OUT } }}
           transition={{ layout: SPRING_LAYOUT }}
-          className='bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]'
+          className={cn(
+            'group/asset bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]',
+            selected && 'ring-foreground ring-2 ring-inset'
+          )}
         >
           <button
             type='button'
             onClick={onOpen}
-            aria-label={`${kindLabel} ${title}${video ? ', video thumbnail' : pdfAsset || (assetKind === 'document' && ['doc', 'docx', 'odt', 'rtf'].includes((asset.extension || '').toLowerCase())) ? ', first-page preview' : assetKind === 'document' ? `, ${asset.extension?.toUpperCase() || 'document'} preview` : ''}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}`}
-            className='focus-visible:ring-ring/50 flex min-h-[76px] w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
+            data-library-open={asset.id}
+            aria-label={`${kindWord} ${title}${video ? ', video thumbnail' : documentPreviewSuffix(asset)}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}${status ? `, ${status.toLowerCase()}` : ''}`}
+            className={cn(
+              'focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-3 py-2.5 pr-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset',
+              onSelect ? 'pl-14' : 'pl-3',
+              compact ? 'min-h-14 py-1.5' : 'min-h-[76px]'
+            )}
           >
-            <span data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined} data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined} className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
+            <span
+              data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined}
+              data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined}
+              className={cn('rafii-quiet relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]', compact ? 'size-10' : 'size-14')}
+            >
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='row' loadPreview={false} />
               ) : preview.data ? (
-                <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-cover' />
+                <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-contain' />
               ) : preview.isError ? (
                 video ? <Icons.video className='text-muted-foreground size-5' aria-hidden /> : <Icons.media className='text-muted-foreground size-5' aria-hidden />
               ) : (
@@ -117,9 +142,9 @@ export function AssetListRow({
             </span>
             <span className='flex min-w-0 flex-1 flex-col gap-1'>
               <span className='truncate text-sm font-medium'>{title}</span>
-              {!mediaAsset ? <span className='text-muted-foreground text-xs'>{asset.processing === 'unsupported' ? 'Stored privately' : (asset.processing ?? 'unknown').replaceAll('_', ' ')}</span> : null}
-              {asset.aiSummary ? <span className='text-muted-foreground line-clamp-1 text-xs'>{asset.aiSummary}</span> : null}
-              <span className='text-muted-foreground truncate text-xs tabular-nums'>{meta || 'Metadata not recorded'}</span>
+              {status ? <span className='text-muted-foreground text-xs'>{status}</span> : null}
+              {!compact && asset.aiSummary ? <span className='text-muted-foreground line-clamp-1 text-xs'>{asset.aiSummary}</span> : null}
+              {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{meta || 'Metadata not recorded'}</span> : null}
             </span>
             <AnimatedBadge
               size='sm'
@@ -131,18 +156,26 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute top-2.5 left-3 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]'>
+          {footer ? <div className={cn('flex min-w-0 flex-col gap-1.5 pr-3 pb-2.5', onSelect ? 'pl-14' : 'pl-3')}>{footer}</div> : null}
+          {pdfAsset && nearView && !compact ? (
+            <div className={cn('pointer-events-none absolute top-2.5 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]', onSelect ? 'left-14' : 'left-3')}>
               <AssetFileThumbnail asset={asset} size='row' loadPreview />
             </div>
           ) : null}
+          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-1.5', compact ? 'top-1.5' : 'top-4')} /> : null}
         </motion.div>
       </ContextMenuTrigger>
-      <ContextMenuContent ariaLabel={`${kindLabel} actions`}>
+      <ContextMenuContent ariaLabel={`${kindWord} actions`}>
         <ContextMenuItem onSelect={onOpen}>
           <Icons.eye className='text-muted-foreground size-4' aria-hidden />
           Open
         </ContextMenuItem>
+        {onSelect ? (
+          <ContextMenuItem onSelect={() => onSelect(!selected, false)}>
+            <Icons.check className='text-muted-foreground size-4' aria-hidden />
+            {selected ? 'Deselect' : 'Select'}
+          </ContextMenuItem>
+        ) : null}
         {canApprove && mediaAsset ? (
           <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
             <Icons.send className='text-muted-foreground size-4' aria-hidden />
