@@ -1,0 +1,9 @@
+# Remote validation runs (James Cloud Build → Depot)
+
+Each row is an observed remote run. `sourceHead` is the candidate commit whose working tree JCB transported. Receipts are under `/Users/ouxianxing/Documents/James-Cloud-Build/receipts/`. Logs are kept in the session scratchpad and summarised here; the PASS/FAIL column records the remote exit code only.
+
+| When (UTC) | Task | sourceHead | Run | Remote exit | What ran / notes |
+|---|---|---|---|---|---|
+| 2026-10-08 16:52 | test | 0958f184 | [vhhpvcxtx7](https://depot.dev/orgs/jf34f85hr0/workflows/vhhpvcxtx7) | 1 (FAIL) | Passed: existing Library unit (38), `postgres_library_lifecycle` with migration 097 applied, T01 unit (21). Then failed on `xargs basename` with an empty suite glob, a bug in the new validation script (fixed in 03774eae). |
+| 2026-10-08 17:00 | test | 345365a7 | (receipt 20261008T170020629515Z-test.json) | 1 (FAIL) | New `postgres_library_intelligence_policy` failed at bootstrap: fixture user …0002 is a deleted account in `rls.sql`. All schema/RLS checks before that line passed. Fixed in da77672c. |
+| 2026-10-08 17:05 | test | da77672c | [2ms07nf4k4](https://depot.dev/orgs/jf34f85hr0/workflows/2ms07nf4k4) | **0 (PASS)** | Existing Library unit (38 OK). `postgres_library_lifecycle` with 097 (pass). T01 unit (21 OK). `postgres_library_intelligence_policy` PASS in **no_vector** and in **vector** (pgvector, PostgreSQL 16). Adjacent PG regressions `postgres_agent_runtime`, `postgres_agent_style` (pass). Web node tests 675/675 pass. Full Python unit discovery 3,781 OK (371 skipped). 242 s. |
