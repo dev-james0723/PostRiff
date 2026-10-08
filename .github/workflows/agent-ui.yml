@@ -136,14 +136,54 @@ jobs:
           CI: 'true'
         run: |
           if compgen -G 'tests/phase2/postgres_agent_ui_*.py' >/dev/null; then bash scripts/agent_ui_validation.sh database; else echo 'no agent-ui PG scenarios yet'; fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: agent-ui-evidence-${{ github.sha }}
+          path: agent-ui-evidence
+          retention-days: 14
+
+  # Browser acceptance (lane G) runs in its own job and budget so a long browser stack never cancels the unit/PG gates.
+  agent-ui-browser:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-ui-lock]') && hashFiles('scripts/agent_ui_acceptance.sh') != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      AGENT_UI_EVIDENCE_DIR: ${{ github.workspace }}/agent-ui-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and validation tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+          test ! -e "$HOME/.config/openui/telemetry.json"
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
       - name: Browser acceptance (lane G)
-        if: ${{ !cancelled() && hashFiles('scripts/agent_ui_acceptance.sh') != '' }}
         env:
           CI: 'true'
         run: bash scripts/agent_ui_validation.sh browser
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: agent-ui-evidence-${{ github.sha }}
+          name: agent-ui-browser-evidence-${{ github.sha }}
           path: agent-ui-evidence
           retention-days: 14
