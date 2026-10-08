@@ -24,6 +24,10 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
   const [title, setTitle] = useState(asset.displayTitle ?? asset.originalFilename ?? '');
   const [tags, setTags] = useState((asset.tags ?? asset.aiTags ?? []).join(', '));
   const [selected, setSelected] = useState(asset.collections ?? []);
+  // Only manual collections are edited here; smart collections follow their criteria (and overrides in the Library).
+  const manual = (collections.data?.collections ?? []).filter((c) => c.kind !== 'smart');
+  const manualIds = new Set(manual.map((c) => c.id));
+  const smartIn = (collections.data?.collections ?? []).filter((c) => c.kind === 'smart' && (asset.collections ?? []).includes(c.id));
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [source, setSource] = useState<string | null>(asset.sourceId ?? null);
@@ -37,10 +41,11 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
   const normalized = ['document','file','audio'].includes(asset.assetKind ?? '');
   const ready = ['ready','unsupported'].includes(asset.processing ?? '');
   return <section aria-label='Organize asset' className='space-y-4'>
-    <form className='space-y-3' onSubmit={(e) => { e.preventDefault(); void change(() => api.updateLibraryAsset(workspaceId, asset.id, { ...(title.trim() ? { title } : {}), tags: tags.split(',').map((t) => t.trim()).filter(Boolean), collections: selected })); }}>
+    <form className='space-y-3' onSubmit={(e) => { e.preventDefault(); void change(() => api.updateLibraryAsset(workspaceId, asset.id, { ...(title.trim() ? { title } : {}), tags: tags.split(',').map((t) => t.trim()).filter(Boolean), ...(collections.data ? { collections: selected.filter((id) => manualIds.has(id)) } : {}) })); }}>
       <label htmlFor={'library-title-'+asset.id} className='block text-xs'>Title<Input id={'library-title-'+asset.id} aria-label='Title' value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} className='mt-1' /></label>
       <label htmlFor={'library-tags-'+asset.id} className='block text-xs'>Tags, separated by commas<Input id={'library-tags-'+asset.id} aria-label='Tags, separated by commas' value={tags} maxLength={1200} onChange={(e) => setTags(e.target.value)} className='mt-1' /></label>
-      {collections.data?.collections.length ? <fieldset><legend className='text-xs'>Collections</legend><div className='mt-1 flex flex-wrap gap-3'>{collections.data.collections.map((c) => {
+      {smartIn.length ? <p className='text-muted-foreground text-xs'>In smart {smartIn.length === 1 ? 'collection' : 'collections'} by their criteria: {smartIn.map((c) => c.name).join(', ')}</p> : null}
+      {manual.length ? <fieldset><legend className='text-xs'>Collections</legend><div className='mt-1 flex flex-wrap gap-3'>{manual.map((c) => {
         const id = `library-collection-${asset.id}-${c.id}`;
         return <label key={c.id} htmlFor={id} className='flex min-h-10 items-center gap-2 text-sm'>
           <input id={id} type='checkbox' aria-label={`Add to collection ${c.name}`} checked={selected.includes(c.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))} />{c.name}

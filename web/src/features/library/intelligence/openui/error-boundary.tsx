@@ -12,19 +12,23 @@ import { LibraryTaskHostContext, SourceScope, type LibraryOnAction, type Library
 import { LIBRARY_OPENUI_DESCRIPTORS, libraryDescriptor, type LibraryOpenUiDescriptor } from './descriptors';
 
 /** Catches a renderer or component failure and shows the deterministic view of the same validated data instead. */
-export class LibraryOpenUiErrorBoundary extends Component<{ fallback: ReactNode; resetKey?: string; onError?: (error: Error) => void; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+export class LibraryOpenUiErrorBoundary extends Component<
+  { fallback: ReactNode; resetKey?: string; onError?: (error: Error) => void; children: ReactNode },
+  { failed: boolean; resetKey?: string }
+> {
+  state: { failed: boolean; resetKey?: string } = { failed: false, resetKey: this.props.resetKey };
 
   static getDerivedStateFromError() {
     return { failed: true };
   }
 
-  componentDidCatch(error: Error, _info: ErrorInfo) {
-    this.props.onError?.(error);
+  /** A new input (another task, revision or node) gets a fresh attempt; the same input stays on its fallback. */
+  static getDerivedStateFromProps(props: { resetKey?: string }, state: { failed: boolean; resetKey?: string }) {
+    return props.resetKey !== state.resetKey ? { failed: false, resetKey: props.resetKey } : null;
   }
 
-  componentDidUpdate(previous: { resetKey?: string }) {
-    if (previous.resetKey !== this.props.resetKey && this.state.failed) this.setState({ failed: false });
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    this.props.onError?.(error);
   }
 
   render() {

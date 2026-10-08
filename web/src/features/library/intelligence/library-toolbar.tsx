@@ -11,7 +11,7 @@ import { AnimatedCount } from './animated-count';
  * The prominent search (UI spec §1, §5). The scope is always written out under the field in plain words — "Entire
  * permitted Library", "This collection" or "Selected N items" — and an exact query needs no conversation.
  */
-export function LibrarySearchField({ value, onChange, scope, searching }: { value: string; onChange: (value: string) => void; scope: ScopeDescription; searching: boolean }) {
+export function LibrarySearchField({ value, onChange, scope, searching, aside }: { value: string; onChange: (value: string) => void; scope: ScopeDescription; searching: boolean; aside?: ReactNode }) {
   const id = useId();
   const label = scopeLabel(scope);
   return (
@@ -37,10 +37,13 @@ export function LibrarySearchField({ value, onChange, scope, searching }: { valu
           </button>
         ) : null}
       </label>
-      <p id={`${id}-scope`} data-library-scope={scope.kind} className='text-muted-foreground min-w-0 truncate px-1 text-xs' title={scopeDetail(scope)}>
-        Searching <span className='text-foreground font-medium'>{label}</span>
-        {scope.kind === 'collection' && scope.collectionName ? <span> · {scope.collectionName}</span> : null}
-      </p>
+      <div className='flex min-w-0 items-center justify-between gap-2'>
+        <p id={`${id}-scope`} data-library-scope={scope.kind} className='text-muted-foreground min-w-0 truncate px-1 text-xs' title={scopeDetail(scope)}>
+          Searching <span className='text-foreground font-medium'>{label}</span>
+          {scope.kind === 'collection' && scope.collectionName ? <span> · {scope.collectionName}</span> : null}
+        </p>
+        {aside}
+      </div>
     </div>
   );
 }

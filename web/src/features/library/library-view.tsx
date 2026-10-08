@@ -50,6 +50,8 @@ import { AnimatedCount } from './intelligence/animated-count';
 import { BatchBar, type SelectedItem } from './intelligence/batch-bar';
 import { CollectionRail } from './intelligence/collection-rail';
 import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewControls } from './intelligence/library-toolbar';
+import { AskLibraryPanel } from './intelligence/ask-library';
+import { SmartCollectionPanel } from './intelligence/smart-collections';
 import { HitDetails, resolveHitAsset } from './intelligence/search-results';
 import { useBatchActions } from './intelligence/use-batch-actions';
 import { groupHits, useLibraryIntelligence, useLibrarySearch } from './intelligence/use-library-search';
@@ -272,7 +274,8 @@ function LibraryPage() {
 
   /* --- batch, overlay and selection ---------------------------------------------------------------------------- */
 
-  const batch = useBatchActions({ assets: assetsById, onAnnounce: announce });
+  const manualCollectionIds = useMemo(() => new Set(collectionList.filter((collection) => collection.kind !== 'smart').map((collection) => collection.id)), [collectionList]);
+  const batch = useBatchActions({ assets: assetsById, manualCollectionIds, onAnnounce: announce });
   const applyOverlay = batch.apply;
   const shown = useMemo(
     () =>
@@ -364,7 +367,8 @@ function LibraryPage() {
     toast.info('That item is no longer available.');
   }, [detailGone, update]);
   const current = detailAsset ? (assetsById.get(detailAsset.id) ?? detailAsset) : null;
-  const detailOpen = Boolean(url.asset) && current !== null && normalizeKey(current.id) === normalizeKey(url.asset);
+  // Stays open while another item (a related version, a suggestion) is being fetched into the same panel.
+  const detailOpen = Boolean(url.asset) && current !== null;
 
   const openDetail = useCallback(
     (asset: LibraryAsset, locator: Locator | null = null) => {
@@ -642,6 +646,11 @@ function LibraryPage() {
 
   /* --- render ------------------------------------------------------------------------------------------------------ */
 
+  const activeSmart = scopeKind === 'collection' && activeCollection?.kind === 'smart';
+  // Ask only where the service answers; otherwise the Library stays on its results.
+  const asking = url.panel === 'ask' && intel.reachable;
+  const llm = intel.status.data?.providers?.llm;
+  const summariesAvailable = typeof llm?.available === 'boolean' ? llm.available : null;
   const defaultSort: LibrarySortParam = library.hasTimestamps ? 'newest' : 'stored';
   const sortOptions: LibrarySortParam[] = [...(library.hasTimestamps ? (['newest'] as const) : []), 'stored', 'largest'];
   const exactCounts = library.complete && !intelligent;
@@ -690,6 +699,7 @@ function LibraryPage() {
     selecting: selection.length > 0,
     onSelect: (on: boolean, extend: boolean) => toggle(asset.id, on, extend),
     density,
+    onExclude: activeSmart && canEdit ? () => void batch.execute('collection-exclude', [asset.id], { collectionId: url.collection, collectionName: activeCollection?.name }) : undefined,
     footer
   });
 
@@ -842,7 +852,27 @@ function LibraryPage() {
 
         <div className={cn('grid min-w-0 gap-3 lg:gap-x-8', railCollapsed && wide ? 'lg:grid-cols-[2.75rem_minmax(0,1fr)]' : 'lg:grid-cols-[13.5rem_minmax(0,1fr)]')}>
           <div className='min-w-0 lg:col-start-2 lg:row-start-1'>
-            <LibrarySearchField value={query} onChange={setQuery} scope={scope} searching={intelligent && search.loading} />
+            <LibrarySearchField
+              value={query}
+              onChange={setQuery}
+              scope={scope}
+              searching={intelligent && search.loading}
+              aside={
+                intel.reachable ? (
+                  <SegmentedControl
+                    label='Library mode'
+                    size='sm'
+                    widths='content'
+                    value={url.panel}
+                    onChange={(value) => update({ panel: value })}
+                    options={[
+                      { value: 'search', label: 'Search' },
+                      { value: 'ask', label: 'Ask' }
+                    ]}
+                  />
+                ) : undefined
+              }
+            />
           </div>
 
           <CollectionRail
@@ -853,6 +883,8 @@ function LibraryPage() {
             collapsed={railCollapsed && wide}
             onCollapsedChange={collapseRail}
             storage={library.storage ?? null}
+            smartCollections={intel.reachable}
+            onAnnounce={announce}
           />
 
           <div className='flex min-w-0 flex-col gap-3 lg:col-start-2 lg:row-start-2'>
@@ -975,9 +1007,26 @@ function LibraryPage() {
               )}
             </AnimatePresence>
 
-            {content}
+            {activeSmart ? <SmartCollectionPanel collectionId={url.collection} canEdit={canEdit} enabled={intel.reachable} onAnnounce={announce} /> : null}
 
-            {!intelligent && library.normalized.hasNextPage ? (
+            {asking ? (
+              <AskLibraryPanel
+                scope={searchScope}
+                scopeDescription={scope}
+                canEdit={canEdit}
+                isOwner={isOwner}
+                enabled={intel.reachable}
+                summariesAvailable={summariesAvailable}
+                onAnnounce={announce}
+              />
+            ) : null}
+
+            {/* Asking never discards the search: the results stay mounted, only hidden. */}
+            <div hidden={asking} className='flex min-w-0 flex-col gap-4'>
+              {content}
+            </div>
+
+            {!asking && !intelligent && library.normalized.hasNextPage ? (
               <Button variant='glass' size='control' className='self-center' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>
                 Load more assets
               </Button>
@@ -1046,6 +1095,10 @@ function LibraryPage() {
         intelligence={intel.reachable}
         focusLocator={focusLocator}
         onAnnounce={announce}
+        onOpenAsset={(assetId) => {
+          setFocusLocator(null);
+          update({ asset: assetId });
+        }}
       />
 
       <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>

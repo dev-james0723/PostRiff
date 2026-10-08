@@ -139,6 +139,8 @@ interface AssetCardProps {
   selecting?: boolean;
   onSelect?: (selected: boolean, extend: boolean) => void;
   density?: LibraryDensity;
+  /** Exclude this item from the smart collection being viewed (an override, undoable from the collection). */
+  onExclude?: () => void;
   /** Search context under the caption: why it matched, passages and moments (outside the open button). */
   footer?: ReactNode;
 }
@@ -164,6 +166,7 @@ export function AssetCard({
   selecting = false,
   onSelect,
   density = 'comfortable',
+  onExclude,
   footer
 }: AssetCardProps) {
   const reduce = useReducedMotion();
@@ -308,6 +311,12 @@ export function AssetCard({
           <ContextMenuItem onSelect={() => router.push('/app/ideas')}>
             <Icons.sparkles className='text-muted-foreground size-4' aria-hidden />
             Open Ideas
+          </ContextMenuItem>
+        ) : null}
+        {onExclude ? (
+          <ContextMenuItem onSelect={onExclude}>
+            <Icons.minus className='text-muted-foreground size-4' aria-hidden />
+            Exclude from this collection
           </ContextMenuItem>
         ) : null}
         <ContextMenuItem onSelect={() => void copyHash(asset.hash)}>

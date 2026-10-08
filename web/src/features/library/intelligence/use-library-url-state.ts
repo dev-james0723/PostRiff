@@ -6,6 +6,7 @@ import {
   DEFAULT_LIBRARY_STATE,
   LIBRARY_DENSITIES,
   LIBRARY_KINDS,
+  LIBRARY_PANELS,
   LIBRARY_SCOPES,
   LIBRARY_SORTS,
   LIBRARY_USAGE,
@@ -32,7 +33,8 @@ const PARAMS = {
   mode: parseAsStringLiteral(LIBRARY_VIEW_MODES).withDefault(DEFAULT_LIBRARY_STATE.mode),
   density: parseAsStringLiteral(LIBRARY_DENSITIES).withDefault(DEFAULT_LIBRARY_STATE.density),
   sel: parseAsArrayOf(parseAsString).withDefault([]),
-  asset: parseAsString.withDefault('')
+  asset: parseAsString.withDefault(''),
+  panel: parseAsStringLiteral(LIBRARY_PANELS).withDefault(DEFAULT_LIBRARY_STATE.panel)
 };
 
 const VIEW_KEY = 'rafii-library-view';
@@ -74,7 +76,8 @@ export function useLibraryUrlState() {
       mode: raw.mode,
       density: raw.density,
       sel: sanitizeIds(raw.sel),
-      asset: isSafeId(raw.asset) ? raw.asset : ''
+      asset: isSafeId(raw.asset) ? raw.asset : '',
+      panel: raw.panel
     }),
     [raw]
   );

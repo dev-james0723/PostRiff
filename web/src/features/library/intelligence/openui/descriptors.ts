@@ -12,7 +12,8 @@
  */
 import type { ComponentType } from 'react';
 import type { z } from 'zod';
-import { LIBRARY_OPENUI_SCHEMAS, LIBRARY_OPENUI_VERSION, parseLibraryProps, type LibraryOpenUiName } from '@/lib/library/openui-schemas';
+import { LIBRARY_ACTION_TYPES, LIBRARY_OPENUI_SCHEMAS, LIBRARY_OPENUI_VERSION, parseLibraryProps, type LibraryOpenUiName } from '@/lib/library/openui-schemas';
+import { manifestActionId } from '@/lib/library/openui-policy';
 import {
   AssetCandidateCard,
   CollectionProposal,
@@ -67,6 +68,14 @@ const BY_NAME = new Map(LIBRARY_OPENUI_DESCRIPTORS.map((descriptor) => [descript
 export function libraryDescriptor(name: string): LibraryOpenUiDescriptor | undefined {
   return BY_NAME.get(name);
 }
+
+/**
+ * The runtime's manifest id for each server action type: `library_` plus the type in snake case
+ * (collection.save → library_collection_save; ^[a-z][a-z0-9_]{1,63}$). library.select and library.open stay host-only.
+ */
+export const LIBRARY_OPENUI_ACTION_IDS: Readonly<Record<(typeof LIBRARY_ACTION_TYPES)[number], string>> = Object.fromEntries(
+  LIBRARY_ACTION_TYPES.map((type) => [type, manifestActionId(type)])
+) as Record<(typeof LIBRARY_ACTION_TYPES)[number], string>;
 
 /** Props validation for task results (unknown component → null). */
 export const parseLibraryTaskProps = parseLibraryProps;

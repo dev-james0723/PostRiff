@@ -19,7 +19,7 @@ import type {
   SuggestionReviewProps,
   VersionComparisonProps
 } from '@/lib/library/openui-schemas';
-import type { DispatchOutcome } from '@/lib/library/openui-policy';
+import { resolveActionHandler, type DispatchOutcome } from '@/lib/library/openui-policy';
 import { countLabel, formatCount, scopeLabel } from '@/lib/library/wording';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -29,14 +29,21 @@ import { CapabilityList } from '../detail-sections';
 
 /**
  * Library task components for generated (OpenUI) results (UI spec §7). They render validated server data with the
- * Library's own pieces, and every control only calls the injected `onAction(actionId, inputs)`: nothing writes on
+ * Library's own pieces, and every control only calls the injected onAction handler (action id and inputs): nothing writes on
  * mount, render or effect. Selection and drafts belong to the host (LibraryTaskSurface or the runtime's adapter),
  * so a streamed update never resets them.
  */
 
 export type LibraryOnAction = (actionId: string, inputs: Record<string, unknown>) => void;
 export interface HostInjected {
-  onAction: LibraryOnAction;
+  /** Injected by the host (the runtime's bridge or LibraryTaskSurface). Missing: controls render disabled. */
+  onAction?: LibraryOnAction | null;
+}
+type ActionHandle = ReturnType<typeof resolveActionHandler<LibraryOnAction>>;
+
+/** Shown when no action handler was injected: the content stays readable, nothing can be pressed. */
+function Unavailable({ act }: { act: ActionHandle }) {
+  return act.available ? null : <p className='text-muted-foreground text-xs'>Actions aren’t available in this view.</p>;
 }
 
 export interface LibraryTaskHost {
@@ -87,7 +94,7 @@ function Frame({ title, eyebrow, children, className }: { title: ReactNode; eyeb
 }
 
 /** The server's offered actions. Labels and effects are the server's words; the outcome is shown as it came back. */
-function ActionButtons({ actions, onAction }: { actions: readonly ProposedAction[]; onAction: LibraryOnAction }) {
+function ActionButtons({ actions, act }: { actions: readonly ProposedAction[]; act: ActionHandle }) {
   const host = useLibraryTaskHost();
   const id = useId();
   if (!actions.length) return null;
@@ -101,8 +108,8 @@ function ActionButtons({ actions, onAction }: { actions: readonly ProposedAction
             size='control'
             className='h-11'
             aria-describedby={`${id}-${index}`}
-            disabled={!host.writesEnabled || host.busyActionId !== null}
-            onClick={() => onAction(action.envelope.actionType, { actionId: action.envelope.actionId })}
+            disabled={!act.available || !host.writesEnabled || host.busyActionId !== null}
+            onClick={() => act.call(action.envelope.actionType, { actionId: action.envelope.actionId })}
           >
             {host.busyActionId === action.envelope.actionId ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
             {action.label}
@@ -123,14 +130,14 @@ function ActionButtons({ actions, onAction }: { actions: readonly ProposedAction
           </p>
         );
       })}
-      {!host.writesEnabled ? <p className='text-muted-foreground text-xs'>Actions unlock when the result has finished and been checked.</p> : null}
+      {act.available && !host.writesEnabled ? <p className='text-muted-foreground text-xs'>Actions unlock when the result has finished and been checked.</p> : null}
     </div>
   );
 }
 
-function OpenButton({ label, assetRef, locator, onAction }: { label: string; assetRef: LibraryAssetRef; locator?: LibraryLocator; onAction: LibraryOnAction }) {
+function OpenButton({ label, assetRef, locator, act }: { label: string; assetRef: LibraryAssetRef; locator?: LibraryLocator; act: ActionHandle }) {
   return (
-    <Button variant='quiet' size='lg' className='h-11 self-start' onClick={() => onAction('library.open', { assetRef, ...(locator ? { locator } : {}) })}>
+    <Button variant='quiet' size='lg' className='h-11 self-start' disabled={!act.available} onClick={() => act.call('library.open', { assetRef, ...(locator ? { locator } : {}) })}>
       {label}
     </Button>
   );
@@ -142,6 +149,7 @@ function stubAsset(assetRef: LibraryAssetRef, title: string, kind: AssetCandidat
 
 /** A candidate item: real preview, title, why it matched, and select/open — selection is the host's. */
 export function AssetCandidateCard({ assetRef, title, kind, mime, snippet, locatorLabel, matchReasons, onAction }: AssetCandidateCardProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   const host = useLibraryTaskHost();
   const selected = host.isSelected(assetRef);
   const media = kind === 'image' || kind === 'video';
@@ -163,12 +171,13 @@ export function AssetCandidateCard({ assetRef, title, kind, mime, snippet, locat
         {locatorLabel ? <p className='text-xs font-medium'>{locatorLabel}</p> : null}
         {snippet ? <p className='text-muted-foreground line-clamp-3 text-xs'>{snippet}</p> : null}
         <div className='flex flex-wrap gap-2'>
-          <Button variant={selected ? 'action' : 'glass'} size='control' className='h-11' aria-pressed={selected} onClick={() => onAction('library.select', { assetRef, selected: !selected })}>
+          <Button variant={selected ? 'action' : 'glass'} size='control' className='h-11' aria-pressed={selected} disabled={!act.available} onClick={() => act.call('library.select', { assetRef, selected: !selected })}>
             {selected ? <Icons.check aria-hidden /> : null}
             {selected ? 'Selected' : 'Select'}
           </Button>
-          <OpenButton label='Open' assetRef={assetRef} onAction={onAction} />
+          <OpenButton label='Open' assetRef={assetRef} act={act} />
         </div>
+        <Unavailable act={act} />
       </div>
     </article>
   );
@@ -182,6 +191,7 @@ const SUPPORT: Record<SourceCitationProps['support'], { label: string; icon: key
 
 /** A citation that opens the original at its locator. Support is said in words and an icon, not colour. */
 export function SourceCitation({ sourceRef, title, support, quote, locatorLabel, onAction }: SourceCitationProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   const word = SUPPORT[support];
   const Icon = Icons[word.icon];
   return (
@@ -191,7 +201,8 @@ export function SourceCitation({ sourceRef, title, support, quote, locatorLabel,
         {word.label}
       </p>
       {quote ? <blockquote className='border-foreground/20 border-l-2 pl-3 text-sm'>{quote}</blockquote> : null}
-      <OpenButton label={locatorLabel ? `Open at ${locatorLabel}` : 'Open original'} assetRef={sourceRef.assetRef} locator={sourceRef.locator} onAction={onAction} />
+      <OpenButton label={locatorLabel ? `Open at ${locatorLabel}` : 'Open original'} assetRef={sourceRef.assetRef} locator={sourceRef.locator} act={act} />
+      <Unavailable act={act} />
     </Frame>
   );
 }
@@ -215,6 +226,7 @@ function approvalWord(approved: boolean | null) {
 
 /** Two specific versions side by side. Each keeps its own version identity; nothing is replaced from here silently. */
 export function VersionComparison({ title, before, after, differences, affectedDrafts, actions, onAction }: VersionComparisonProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   return (
     <Frame title={title} eyebrow='Compare versions'>
       <div className='grid gap-3 sm:grid-cols-2'>
@@ -228,7 +240,7 @@ export function VersionComparison({ title, before, after, differences, affectedD
             <span className='text-muted-foreground text-xs' title={formatDateTime(side.createdAt)}>
               {relativeTime(side.createdAt)} · {approvalWord(side.approved)}
             </span>
-            <OpenButton label='Open this version' assetRef={side.ref} onAction={onAction} />
+            <OpenButton label='Open this version' assetRef={side.ref} act={act} />
           </div>
         ))}
       </div>
@@ -263,13 +275,15 @@ export function VersionComparison({ title, before, after, differences, affectedD
         <p className='text-muted-foreground text-sm'>No differences were reported for this type of item.</p>
       )}
       <p className='text-sm'>{affectedDrafts > 0 ? `${countLabel(affectedDrafts, 'draft')} ${affectedDrafts === 1 ? 'uses' : 'use'} the earlier version.` : 'No draft uses the earlier version.'}</p>
-      <ActionButtons actions={actions} onAction={onAction} />
+      <Unavailable act={act} />
+      <ActionButtons actions={actions} act={act} />
     </Frame>
   );
 }
 
 /** A proposed collection, before and after: who joins, who leaves, and what saving does. */
 export function CollectionProposal({ name, ruleSummary, before, after, effect, actions, onAction }: CollectionProposalProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   const was = new Set(before.map((item) => `${item.assetRef.assetId}:${item.assetRef.versionId}`));
   const will = new Set(after.map((item) => `${item.assetRef.assetId}:${item.assetRef.versionId}`));
   const joining = after.filter((item) => !was.has(`${item.assetRef.assetId}:${item.assetRef.versionId}`));
@@ -315,7 +329,8 @@ export function CollectionProposal({ name, ruleSummary, before, after, effect, a
       </div>
       {effect ? <p className='text-sm'>{effect}</p> : null}
       <p className='text-muted-foreground text-xs'>Collections hold references, never copies of files.</p>
-      <ActionButtons actions={actions} onAction={onAction} />
+      <Unavailable act={act} />
+      <ActionButtons actions={actions} act={act} />
     </Frame>
   );
 }
@@ -325,6 +340,7 @@ export function CollectionProposal({ name, ruleSummary, before, after, effect, a
  * rights; the words below say so, and the schema refuses any action that would.
  */
 export function SourcePackReview({ goal, evidence, style, gaps, rightsWarnings, actions, onAction }: SourcePackReviewProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   return (
     <Frame title={goal || 'Source pack'} eyebrow='Source pack'>
       <div className='flex flex-col gap-1'>
@@ -336,7 +352,7 @@ export function SourcePackReview({ goal, evidence, style, gaps, rightsWarnings, 
                 <span className='font-medium'>{entry.title}</span>
                 {entry.rationale ? <span className='text-muted-foreground text-xs'>{entry.rationale}</span> : null}
                 {entry.rights ? <span className='text-muted-foreground text-xs'>Rights: {entry.rights}</span> : null}
-                <OpenButton label='Open source' assetRef={entry.sourceRef.assetRef} locator={entry.sourceRef.locator} onAction={onAction} />
+                <OpenButton label='Open source' assetRef={entry.sourceRef.assetRef} locator={entry.sourceRef.locator} act={act} />
               </li>
             ))}
           </ul>
@@ -380,13 +396,15 @@ export function SourcePackReview({ goal, evidence, style, gaps, rightsWarnings, 
         </div>
       ) : null}
       <p className='text-muted-foreground text-xs'>Rafii can’t approve facts or rights. Check them yourself before anything is published.</p>
-      <ActionButtons actions={actions} onAction={onAction} />
+      <Unavailable act={act} />
+      <ActionButtons actions={actions} act={act} />
     </Frame>
   );
 }
 
 /** A draft and its sources. The text is the person's to edit and is kept by the host while results update. */
 export function DraftWorkspace({ title, body, sources, draftId, actions, onAction }: DraftWorkspaceProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   const host = useLibraryTaskHost();
   const id = useId();
   const key = draftId ?? `draft:${title}`;
@@ -405,19 +423,21 @@ export function DraftWorkspace({ title, body, sources, draftId, actions, onActio
             {sources.map((source) => (
               <li key={`${source.sourceRef.assetRef.assetId}-${source.sourceRef.segmentId ?? ''}`} className='flex flex-wrap items-center justify-between gap-2 text-sm'>
                 <span className='min-w-0 truncate'>{source.title}</span>
-                <OpenButton label='Open' assetRef={source.sourceRef.assetRef} locator={source.sourceRef.locator} onAction={onAction} />
+                <OpenButton label='Open' assetRef={source.sourceRef.assetRef} locator={source.sourceRef.locator} act={act} />
               </li>
             ))}
           </ul>
         </div>
       ) : null}
-      <ActionButtons actions={actions ?? []} onAction={onAction} />
+      <Unavailable act={act} />
+      <ActionButtons actions={actions ?? []} act={act} />
     </Frame>
   );
 }
 
 /** Processing as the server reports it, capability by capability; never a narrated guess. */
 export function ProcessingStatus({ assetRef, title, capabilities, onAction }: ProcessingStatusProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   return (
     <Frame title={title} eyebrow='Processing'>
       {capabilities.length ? (
@@ -425,7 +445,8 @@ export function ProcessingStatus({ assetRef, title, capabilities, onAction }: Pr
       ) : (
         <p className='text-muted-foreground text-sm'>Nothing has been requested for this item.</p>
       )}
-      <OpenButton label='Open item' assetRef={assetRef} onAction={onAction} />
+      <OpenButton label='Open item' assetRef={assetRef} act={act} />
+      <Unavailable act={act} />
     </Frame>
   );
 }
@@ -442,6 +463,7 @@ const CATEGORY: Record<SuggestionReviewProps['category'], string> = {
 
 /** One suggestion with its reason. No urgency it doesn't have; dismiss and snooze come from the server's actions. */
 export function SuggestionReview({ category, reason, state, critical, candidates, affected, actions, onAction }: SuggestionReviewProps & HostInjected) {
+  const act = resolveActionHandler(onAction);
   return (
     <Frame title={CATEGORY[category]} eyebrow={critical ? 'Needs attention' : 'Suggestion'}>
       <p className='text-sm'>{reason}</p>
@@ -455,13 +477,14 @@ export function SuggestionReview({ category, reason, state, critical, candidates
           {candidates.map((candidate) => (
             <li key={`${candidate.sourceRef.assetRef.assetId}-${candidate.sourceRef.segmentId ?? ''}`} className='flex flex-wrap items-center justify-between gap-2 text-sm'>
               <span className='min-w-0 truncate'>{candidate.title}</span>
-              <OpenButton label='Open' assetRef={candidate.sourceRef.assetRef} locator={candidate.sourceRef.locator} onAction={onAction} />
+              <OpenButton label='Open' assetRef={candidate.sourceRef.assetRef} locator={candidate.sourceRef.locator} act={act} />
             </li>
           ))}
         </ul>
       ) : null}
       {state !== 'new' && state !== 'seen' ? <p className='text-muted-foreground text-xs'>Current state: {state}</p> : null}
-      <ActionButtons actions={actions} onAction={onAction} />
+      <Unavailable act={act} />
+      <ActionButtons actions={actions} act={act} />
     </Frame>
   );
 }

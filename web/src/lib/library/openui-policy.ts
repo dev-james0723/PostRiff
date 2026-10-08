@@ -107,6 +107,30 @@ export function walkNodes(nodes: readonly ValidatedTaskNode[], visit: (node: Val
   }
 }
 
+/* --- the runtime's action ids ---------------------------------------------------------------------------------------- */
+
+/** Manifest ids the site-wide runtime accepts. */
+export const MANIFEST_ACTION_ID = /^[a-z][a-z0-9_]{1,63}$/;
+
+/** collection.save → library_collection_save. Descriptors keep their dotted action types. */
+export function manifestActionId(actionType: string): string {
+  return `library_${actionType.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+}
+
+/**
+ * The injected action handler, or an honest "unavailable" state when a component is mounted without one (for example a
+ * runtime bridge that is not ready): controls render disabled and calling does nothing.
+ */
+export function resolveActionHandler<T extends (actionId: string, inputs: Record<string, unknown>) => void>(onAction: T | null | undefined) {
+  const available = typeof onAction === 'function';
+  return {
+    available,
+    call(actionId: string, inputs: Record<string, unknown>) {
+      if (typeof onAction === 'function') onAction(actionId, inputs);
+    }
+  };
+}
+
 /* --- identities issued by the server -------------------------------------------------------------------------------- */
 
 export interface RefLike {
@@ -226,6 +250,10 @@ export function outcomeFromResult(result: ActionResultLike | null | undefined): 
   return { status: 'failed', message: warning ?? 'No result came back.', retryable: true };
 }
 
+function refuse(message: string): DispatchOutcome {
+  return { status: 'refused', message, retryable: false };
+}
+
 /**
  * The single gate between a generated control and the server. `send` is the host's transport (api.libraryAction);
  * `newKey` makes a fresh idempotency key. Nothing here loops: a failure is reported, and only an explicit retry of
@@ -236,7 +264,6 @@ export function createLibraryDispatcher(deps: { send: (envelope: IssuedEnvelopeL
   const records = new Map<string, { key: string; digest: string; state: 'sent' | 'failed' | 'settled' }>();
   let inFlight: string | null = null;
   let activations = 0;
-  const refuse = (message: string): DispatchOutcome => ({ status: 'refused', message, retryable: false });
 
   function activate({ userActivation, phase }: { userActivation: boolean; phase: SurfacePhase }): ActivationResult {
     if (phase === 'hydrating') return { ok: false, reason: 'hydration' };

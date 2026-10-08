@@ -30,12 +30,12 @@ import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
 import { AudioMomentPlayer } from './intelligence/audio-player';
+import { VersionsPanel } from './intelligence/versions-panel';
 import {
   CapabilityList,
   DangerArea,
   DetailSection,
   PurposeList,
-  RelatedList,
   SectionNav,
   SegmentList,
   SuggestedUses,
@@ -67,6 +67,8 @@ interface AssetDetailProps {
   /** The passage or moment a search result pointed at. */
   focusLocator?: Locator | null;
   onAnnounce?: (message: string) => void;
+  /** Open another item (a related version or a suggestion) in this panel. */
+  onOpenAsset?: (assetId: string) => void;
 }
 
 /**
@@ -288,8 +290,10 @@ function DetailBody({
   onDelete,
   intel,
   focusLocator,
-  onAnnounce
-}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit' | 'deleting' | 'onDelete' | 'focusLocator' | 'onAnnounce'> & {
+  onAnnounce,
+  intelligence,
+  onOpenAsset
+}: Pick<AssetDetailProps, 'uses' | 'publishing' | 'currentUserId' | 'platforms' | 'canEdit' | 'deleting' | 'onDelete' | 'focusLocator' | 'onAnnounce' | 'intelligence' | 'onOpenAsset'> & {
   asset: LibraryAsset;
   isOwner: boolean;
   intel: AssetIntelligence;
@@ -335,7 +339,7 @@ function DetailBody({
       </DetailSection>
 
       <DetailSection prefix={prefix} id='related' title='Related'>
-        <RelatedList card={card} related={intel.related.data} />
+        <VersionsPanel assetKey={intel.key} canEdit={canEdit} enabled={Boolean(intelligence)} onOpenAsset={(assetId) => onOpenAsset?.(assetId)} onAnnounce={(message) => onAnnounce?.(message)} />
       </DetailSection>
 
       <DetailSection prefix={prefix} id='usage' title='Usage'>
@@ -479,6 +483,8 @@ export function AssetDetail(props: AssetDetailProps) {
       intel={intel}
       focusLocator={props.focusLocator}
       onAnnounce={props.onAnnounce}
+      intelligence={props.intelligence}
+      onOpenAsset={props.onOpenAsset}
     />
   ) : null;
 

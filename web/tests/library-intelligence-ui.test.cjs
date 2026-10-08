@@ -67,6 +67,9 @@ const W = load(path.join(LIB, 'wording.ts'));
 const B = load(path.join(LIB, 'batch.ts'));
 const U = load(path.join(LIB, 'url-state.ts'));
 const L = load(path.join(LIB, 'layout.ts'));
+const R = load(path.join(LIB, 'smart-rules.ts'));
+const V = load(path.join(LIB, 'versions.ts'));
+const A = load(path.join(LIB, 'answers.ts'));
 
 test('test_single_add_entry: one Add menu (upload, link, note) and no competing upload button', () => {
   const view = feature('library-view.tsx');
@@ -103,7 +106,7 @@ test('test_scope_visible: the scope is always written out beside search, and sea
   assert.match(toolbar, /type='search'/);
 
   const view = feature('library-view.tsx');
-  assert.match(view, /<LibrarySearchField value=\{query\} onChange=\{setQuery\} scope=\{scope\}/);
+  assert.match(view, /<LibrarySearchField\s+value=\{query\}\s+onChange=\{setQuery\}\s+scope=\{scope\}/);
   assert.match(view, /useLibrarySearch\(\{ enabled: intel\.retrieval,/, 'intelligent search only when the status route says retrieval is on');
   assert.match(view, /query: intelligent \? '' : query/, 'the deterministic list takes the query whenever the intelligent search is not answering');
 
@@ -403,3 +406,147 @@ test('now playing: seek moves the loaded track in place and refuses other items'
   assert.equal(W.hitTotalLabel({ value: 1, relation: 'eq' }), '1 matching item');
   assert.equal(W.hitTotalLabel(null), null);
 });
+
+const HEX = (character) => character.repeat(32);
+const REF = (character, version = character) => ({ assetId: HEX(character), versionId: HEX(version), sha256: '' });
+
+test('smart rule builder: only the server allowlist of fields, operators and value types', () => {
+  assert.deepEqual(Object.keys(R.RULE_FIELDS), ['kind', 'tag', 'title_contains', 'filename_contains', 'created_after', 'created_before', 'mime_prefix', 'language', 'capability', 'source_kind', 'duration_ms', 'orientation', 'usage', 'text_matches']);
+  assert.equal(R.isRuleField('sql'), false);
+  assert.equal(R.validateRow({ field: 'sql', op: 'raw', value: 'DROP TABLE x' }), 'Choose a criterion from the list.');
+  assert.match(R.validateRow({ field: 'tag', op: 'like', value: 'x' }), /Choose how tag should match/);
+  assert.match(R.validateRow({ field: 'title_contains', op: 'contains', value: 'see https://evil.example' }), /plain words/);
+  assert.match(R.validateRow({ field: 'text_matches', op: 'matches', value: 'select name from users' }), /plain words/);
+  assert.equal(R.validateRow({ field: 'kind', op: 'in', value: ['audio', 'video'] }), null);
+  assert.match(R.validateRow({ field: 'kind', op: 'in', value: ['spreadsheet'] }), /Choose from the listed types/);
+  assert.match(R.validateRow({ field: 'duration_ms', op: 'gte', value: 1.5 }), /24 hours/);
+  assert.match(R.validateRow({ field: 'created_after', op: 'on_or_after', value: '08/10/2026' }), /2026-10-08/);
+  assert.match(R.validateRow({ field: 'title_contains', op: 'contains', value: 'a\u0000b' }), /characters/);
+  assert.match(R.validateRow({ field: 'capability', op: 'in', value: ['ready'] }), /processing step/);
+  assert.equal(R.validateRow({ field: 'capability', op: 'in', value: ['ready'], capability: 'transcribe' }), null);
+
+  const built = R.buildRule({ join: 'any', rows: [{ field: 'tag', op: 'has', value: ' recital ' }, { field: 'created_after', op: 'on_or_after', value: '2026-09-01', timeZone: 'Asia/Hong_Kong' }] });
+  assert.deepEqual(built, { ok: true, rule: { any: [{ field: 'tag', op: 'has', value: 'recital', origin: 'user' }, { field: 'created_after', op: 'on_or_after', value: '2026-09-01', timeZone: 'Asia/Hong_Kong' }] } });
+  assert.equal(R.buildRule({ join: 'all', rows: [] }).ok, false);
+  assert.equal(R.buildRule({ join: 'all', rows: [{ field: 'usage', op: 'eq', value: 'maybe' }] }).ok, false);
+  assert.deepEqual(R.draftFromRule(built.rule), { join: 'any', rows: [{ field: 'tag', op: 'has', value: 'recital', origin: 'user' }, { field: 'created_after', op: 'on_or_after', value: '2026-09-01', timeZone: 'Asia/Hong_Kong' }] });
+  assert.equal(R.draftFromRule({ all: [{ any: [{ field: 'tag', op: 'has', value: 'x' }] }] }), null, 'nested groups stay as saved');
+  assert.deepEqual(R.parseList('yue, en ,yue,'), ['yue', 'en']);
+
+  const builder = fs.readFileSync(path.join(FEATURE, 'intelligence', 'smart-collections.tsx'), 'utf8');
+  assert.doesNotMatch(builder, /<textarea/, 'no free-form rule text');
+  assert.match(builder, /Object\.entries\(RULE_FIELDS\)\.map/, 'the field picker lists the allowlist only');
+  assert.match(builder, /\{preview\.result\.explanation\}/, 'the explanation is the server’s');
+  assert.match(builder, /disabled=\{busy !== null \|\| !previewCurrent\}/, 'saving needs a preview of the current criteria');
+});
+
+test('smart collection preview, save, override and undo use the server revision', () => {
+  const summary = R.previewSummary({ count: 14, changes: { added: { count: 3 }, removed: { count: 1 } }, coverage: { partial: false, notYetProcessed: 2 } });
+  assert.equal(summary.line, '14 items · 3 joining · 1 leaving · 2 still processing');
+  assert.equal(R.previewSummary({ count: 1, changes: null }).line, '1 item', 'a new collection has no before');
+  const save = R.saveEnvelope({ all: [] }, { name: 'Recital', collectionId: null, revision: 5, actionId: 'a1' });
+  assert.equal(save.actionType, 'collection.save');
+  assert.equal(save.expectedRevision, null, 'a new collection sends no revision');
+  assert.deepEqual(save.payload, { rule: { all: [] }, name: 'Recital' });
+  const edit = R.saveEnvelope({ all: [] }, { collectionId: HEX('c'), revision: 5, actionId: 'a2' });
+  assert.equal(edit.expectedRevision, 5);
+  assert.deepEqual(edit.payload, { rule: { all: [] }, collectionId: HEX('c') });
+  const exclude = R.overrideEnvelope(HEX('c'), 'exclude', [REF('a')], 6, 'a3');
+  assert.deepEqual([exclude.actionType, exclude.expectedRevision, exclude.payload], ['collection.override', 6, { collectionId: HEX('c'), mode: 'exclude' }]);
+  const undo = R.undoEnvelope(HEX('c'), 7, 'a4');
+  assert.deepEqual([undo.actionType, undo.expectedRevision, undo.targetRefs, undo.payload], ['collection.undo', 7, [], { collectionId: HEX('c') }]);
+
+  const panel = fs.readFileSync(path.join(FEATURE, 'intelligence', 'smart-collections.tsx'), 'utf8');
+  assert.match(panel, /undoEnvelope\(collection\.id, collection\.revision,/);
+  assert.match(panel, /\{canUndo \? \(/, 'undo only when the server says there is something to restore');
+  assert.match(panel, /Re-evaluating membership…/);
+  assert.match(panel, /evaluationCurrent \? 4000 : false|!query\.state\.data\.collection\.evaluationCurrent \? 4000 : false/);
+  const hook = fs.readFileSync(path.join(FEATURE, 'intelligence', 'use-batch-actions.ts'), 'utf8');
+  assert.match(hook, /overrideEnvelope\(collectionId, kind === 'collection-include' \? 'include' : 'exclude'/);
+  assert.match(hook, /\(asset\.collections \?\? \[\]\)\.filter\(\(id\) => manualCollectionIds\.has\(id\)\)/, 'item edits never send smart collection ids');
+  const organizer = fs.readFileSync(path.join(FEATURE, 'library-organizer.tsx'), 'utf8');
+  assert.match(organizer, /filter\(\(c\) => c\.kind !== 'smart'\)/);
+});
+
+test('version comparison is honest about unsupported pairs, and replacement always needs confirmation', () => {
+  assert.deepEqual(V.comparisonHeadline({ mode: 'unsupported', supported: false, message: 'Comparison of these two formats is not supported. Their details are compared below.' }), {
+    supported: false,
+    line: 'Comparison of these two formats is not supported. Their details are compared below.'
+  });
+  assert.equal(V.comparisonHeadline({ mode: 'unsupported', supported: false }).line, V.UNSUPPORTED_COMPARISON);
+  assert.equal(V.comparisonHeadline({ mode: 'text', supported: true, text: { summary: { added: 2, removed: 1, changed: 0, unchanged: 9 }, available: true, truncated: false } }).line, '2 lines added · 1 line removed');
+  assert.equal(V.comparisonHeadline({ mode: 'text', supported: true, text: { summary: { added: 0, removed: 0, changed: 0, unchanged: 9 }, available: true, truncated: false } }).line, 'No text differences.');
+  assert.match(V.comparisonHeadline({ mode: 'image', supported: true, image: { sameDimensions: false } }).line, /does not judge which is better/);
+  assert.equal(V.comparisonHeadline({ mode: 'media', supported: true, media: { durationDeltaMs: -4000 } }).line, 'The newer version is 4 s shorter.');
+  assert.deepEqual(V.diffRows([{ op: 'equal', count: 3 }, { op: 'replace', left: [{ text: 'old' }], right: [{ text: 'new' }], clipped: true }]), [
+    { type: 'same', count: 3 },
+    { type: 'removed', text: 'old', locator: undefined },
+    { type: 'added', text: 'new', locator: undefined },
+    { type: 'clipped' }
+  ]);
+
+  const entry = { kind: 'source_pack', key: HEX('p'), label: 'Spring pack', citesVersion: REF('a', 'a'), currentVersion: REF('a', 'b'), flagged: true };
+  const plan = V.replacementPlan(entry, [{ versionNo: 1, assetRef: REF('a', 'a') }, { versionNo: 2, assetRef: REF('a', 'b') }]);
+  assert.equal(plan.requiresConfirmation, true);
+  assert.equal(plan.title, 'Use version 2 instead of version 1 in “Spring pack”?');
+  assert.equal(plan.revisionSource, 'source_pack');
+  assert.ok(plan.consequences.some((line) => /Approval of the old version does not carry over/.test(line)));
+  assert.equal(V.replacementEnvelope(plan, { confirmed: false, expectedRevision: 3, actionId: 'r1' }), null, 'never without confirmation');
+  assert.equal(V.replacementEnvelope(plan, { confirmed: true, expectedRevision: null, actionId: 'r1' }), null, 'never without the revision it was checked against');
+  const envelope = V.replacementEnvelope(plan, { confirmed: true, expectedRevision: 3, actionId: 'r1' });
+  assert.deepEqual([envelope.actionType, envelope.expectedRevision, envelope.targetRefs, envelope.payload], ['version.accept_replacement', 3, [REF('a', 'a'), REF('a', 'b')], { dependentKind: 'source_pack', dependentKey: HEX('p') }]);
+  assert.equal(V.replacementPlan({ ...entry, kind: 'draft' }, []).revisionSource, 'organization');
+  assert.equal(V.linkVersionEnvelope(REF('a'), REF('a'), 1, 'l1'), null, 'an item is not its own version');
+  assert.deepEqual(V.linkVersionEnvelope(REF('b'), REF('a'), 4, 'l1').payload, { relation: 'version_of' });
+
+  const panel = fs.readFileSync(path.join(FEATURE, 'intelligence', 'versions-panel.tsx'), 'utf8');
+  assert.match(panel, /replacementEnvelope\(confirmed, \{ confirmed: true,/);
+  const confirmCalls = panel.split('\n').filter((line) => line.includes('confirmReplacement('));
+  assert.ok(confirmCalls.some((line) => /if \(plan\) void confirmReplacement\(plan\)/.test(line)), 'replacement runs from the confirmation button');
+  assert.equal(confirmCalls.filter((line) => !/async function confirmReplacement|if \(plan\) void confirmReplacement\(plan\)/.test(line)).length, 0, 'and from nowhere else');
+  assert.doesNotMatch(panel, /merge|deleteLibraryFile|Delete/, 'near duplicates offer no merge or delete');
+  assert.match(panel, /<OriginBadge origin='ai_suggested' \/>/, 'near duplicates are labelled as suggestions');
+});
+
+test('ask library: explicit scope, explicit permission, honest abstention, fresh citation links', () => {
+  assert.deepEqual(A.answerRequest('  When is the recital? ', { kind: 'collection', collectionId: HEX('c') }), { question: 'When is the recital?', search: { query: '', scope: { kind: 'collection', collectionId: HEX('c') } } });
+  const grants = [{ grantType: 'purpose', scopeKind: 'collection', scopeKey: HEX('c'), purpose: 'answer', location: null, category: null }];
+  assert.deepEqual(A.answerPermission(grants, { kind: 'collection', collectionId: HEX('c') }), { answers: true, summaries: false });
+  assert.deepEqual(A.answerPermission(grants, { kind: 'workspace' }), { answers: false, summaries: false }, 'a collection grant does not open the whole Library');
+  assert.deepEqual(A.answerPermission([{ grantType: 'processing', scopeKind: 'workspace', scopeKey: '*', purpose: null, location: 'cloud', category: 'llm' }], { kind: 'workspace' }), { answers: false, summaries: true });
+  assert.deepEqual(A.SUMMARY_GRANT, { grantType: 'processing', scope: { kind: 'workspace' }, location: 'cloud', category: 'llm' });
+  assert.equal(A.answerModeLabel('extractive'), 'Verbatim quotations from the sources (no AI summary)');
+  const coverage = { scopeDescription: 'This collection', accessibleAssetCount: 4, pendingAssetCount: 2, failedAssetCount: 1 };
+  assert.deepEqual(A.abstentionLines({ scope: 'This collection', coverage, scopeCoverage: { ...coverage, pendingAssetCount: 3 } }), [
+    'The selected material doesn’t support an answer.',
+    'Searched: This collection.',
+    '3 items are still being processed and may help later.',
+    '1 item could not be read fully.'
+  ]);
+  assert.equal(A.supportLabel({ support: 'conflicting', kind: 'conflict' }), 'Sources disagree');
+  assert.equal(A.supportLabel({ support: 'supported', kind: 'quotation' }), 'Quotation');
+  const cited = { assetRef: REF('a', 'b'), segmentId: HEX('s'), locator: { kind: 'page', page: 3 }, quoteHash: 'f'.repeat(64), displayTitle: 'Programme', excerpt: 'Doors at 7', locatorLabel: 'Page 3' };
+  assert.deepEqual(Object.keys(A.sourceRefOnly(cited)), ['assetRef', 'segmentId', 'locator', 'quoteHash'], 'only identity fields go to the viewer');
+  assert.equal(A.citationKey(REF('a', 'b'), { page: 3, kind: 'page' }), A.citationKey(REF('a', 'b'), { kind: 'page', page: 3 }));
+
+  const old = { isCurrentVersion: false, versionNo: 1, mime: 'application/pdf', kind: 'document', locator: { kind: 'page', page: 3 }, target: { kind: 'signedUrl', url: 'https://storage.example/obj?sig=1', expiresAt: 2000 } };
+  const plan = A.viewerOpenPlan(old, 1000);
+  assert.equal(plan.href, 'https://storage.example/obj?sig=1#page=3');
+  assert.equal(plan.newerVersion, true);
+  assert.match(plan.versionNote, /version 1\. A newer version exists; this view stays on the cited version/);
+  assert.equal(A.viewerOpenPlan(old, 3000).href, null, 'an expired link is never used');
+  assert.equal(A.viewerOpenPlan({ ...old, mime: 'audio/mpeg', kind: 'audio', locator: { kind: 'time', startMs: 83000, endMs: 90000 } }, 1000).playFrom, 83);
+
+  const panel = fs.readFileSync(path.join(FEATURE, 'intelligence', 'ask-library.tsx'), 'utf8');
+  assert.match(panel, /api\.libraryAnswer\(workspaceId, answerRequest\(question, scope\), abort\.signal\)/);
+  assert.match(panel, /const \{ target, \.\.\.info \} = data;/, 'the viewer link is not kept in state');
+  assert.match(panel, /<SourceCitation key=/, 'citations render with the deterministic OpenUI component');
+  assert.match(panel, /<SourceScope /);
+  const view = feature('library-view.tsx');
+  assert.match(view, /<div hidden=\{asking\} className=/, 'switching to Ask keeps the search results mounted');
+  assert.match(view, /label='Library mode'/);
+  const client = read('lib', 'api', 'client.ts');
+  assert.match(client, /search: LibrarySearchRequest & \{ scope: LibraryScope \}/, 'the client type requires a scope');
+  assert.match(client, /intelligence<ViewerResult>\(w, 'POST', 'viewer', \{\s*sourceRef:/);
+});
+
