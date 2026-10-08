@@ -44,6 +44,8 @@ def apply(ctx, envelope: dict) -> dict:
         return c.action_result("denied", warnings=["Your role can't do this."])
     request_hash = digest({k: envelope[k] for k in ("actionType", "targetRefs", "expectedRevision", "payload")})
     if envelope["actionType"] not in READ_ONLY:
+        # Concurrent in-process callers with the same key serialize here (HTTP calls already hold the workspace lock).
+        ctx.cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"library-action:{ctx.workspace_id}:{envelope['idempotencyKey']}",))
         ctx.cur.execute("SELECT actor::text,request_hash,status,result FROM public.pr_library_action_receipts WHERE workspace_id=%s AND idempotency_key=%s",
                         (ctx.workspace_id, envelope["idempotencyKey"]))
         prior = ctx.cur.fetchone()

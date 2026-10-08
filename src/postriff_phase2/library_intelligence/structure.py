@@ -400,7 +400,10 @@ def _xml(archive, name, *, required=True):
     data = _read(archive, name, required=required)
     if data is None:
         return None
-    if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)", data, re.I):
+    # OOXML parts are UTF-8. Anything else (UTF-16/32 BOMs, NUL-interleaved text) could hide a DOCTYPE from the byte check.
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff") or data[:4] in (b"\x00\x00\xfe\xff", b"\xff\xfe\x00\x00") or b"\x00" in data[:4096]:
+        unsafe("Office document parts must be UTF-8 XML.")
+    if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)", data, re.I) or re.search(r"<!\s*(?:DOCTYPE|ENTITY)", data.decode("utf-8", "ignore"), re.I):
         unsafe("Office documents with XML entity declarations are not accepted.")
     try:
         return ET.fromstring(data)

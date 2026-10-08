@@ -123,11 +123,13 @@ def active_grants(ctx) -> list[dict]:
 
 
 def _covers(grant: dict, key: str) -> bool:
+    """`key` is always a version key. Asset grants cover exactly the versions that existed when granted (snapshotted in
+    member_keys): linking another item into the lineage later never broadens an owner's grant. Collection grants are
+    likewise fixed to the members captured when granted."""
     if grant["scopeKind"] == "workspace":
         return True
     if grant["scopeKind"] == "asset":
-        return grant["scopeKey"] == key
-    # Collection grants are fixed to the members captured when granted; later additions are not silently covered.
+        return key in grant["memberKeys"] if grant["memberKeys"] else grant["scopeKey"] == key
     return key in grant["memberKeys"]
 
 
@@ -152,7 +154,9 @@ def _ideas_source(ctx, version: dict):
 ideas_source = _ideas_source  # public name for comparison/relations; the private one stays for existing callers
 
 
-def _legacy_denial(ctx, version: dict) -> str | None:
+def _legacy_denial(ctx, version: dict, location: str | None = None) -> str | None:
+    """Existing Ideas source decisions stay authoritative: retracted/prohibited deny everything beyond browsing, and for
+    any cloud location an unreviewed policy or missing per-source cloud sharing denies too."""
     source = _ideas_source(ctx, version)
     if source is None:
         return None
@@ -160,6 +164,11 @@ def _legacy_denial(ctx, version: dict) -> str | None:
         return "retracted"
     if source.get("sourcePolicy") == "prohibited":
         return "legacy_denied"
+    if location == "cloud":
+        if source.get("sourcePolicy") is None:
+            return "policy_review_required"
+        if "cloud" not in (source.get("egressConsent") or []):
+            return "egress_consent_required"
     return None
 
 
@@ -173,13 +182,14 @@ def authorize_processing(ctx, version: dict, location: str, category: str) -> De
     if version.get("status") in ("deleting", "duplicate", "missing"):
         base.reason = "unavailable"
         return base
-    if _legacy_denial(ctx, version):
-        base.reason = "legacy_denied"
+    denial = _legacy_denial(ctx, version, location)
+    if denial:
+        base.reason = denial
         return base
     if (location, category) in LOCAL_DEFAULTS:
         base.allowed = True
         return base
-    grants = processing_grants(ctx, location, category, key) or processing_grants(ctx, location, category, version["assetId"])
+    grants = processing_grants(ctx, location, category, key)
     if not grants:
         base.reason = "processing_grant_required"
         return base
@@ -203,9 +213,11 @@ def authorize_source(ctx, version: dict, purpose: str, processing: dict | None =
     if version.get("status") in ("deleting", "duplicate", "missing"):
         decision.reason = "unavailable"
         return decision
-    if purpose == "browse":
+    if purpose == "browse" and (processing is None or processing["location"] == "local"):
         decision.allowed = True
         return decision
+    # Showing an item's content to a cloud model is not browsing: it needs the same answer + processing grants.
+    effective = "answer" if purpose == "browse" else purpose
     if version.get("status") not in ("ready", "unsupported", "legacy"):
         decision.reason = "not_ready"
         return decision
@@ -245,7 +257,7 @@ def authorize_source(ctx, version: dict, purpose: str, processing: dict | None =
             return decision
         decision.reason = "public_use_requires_approval"
         return decision
-    grants = purpose_grants(ctx, purpose, key) or purpose_grants(ctx, purpose, version["assetId"])
+    grants = purpose_grants(ctx, effective, key)
     if not grants:
         decision.reason = "grant_required"
         return decision
@@ -254,7 +266,7 @@ def authorize_source(ctx, version: dict, purpose: str, processing: dict | None =
         return decision
     decision.allowed, decision.grant_ids = True, decision.grant_ids + [g["id"] for g in grants]
     # A private answer may attribute what a source says; it never turns those statements into approved facts.
-    decision.attribution_only = purpose in ("answer", "memory")
+    decision.attribution_only = effective in ("answer", "memory")
     return decision
 
 
@@ -325,6 +337,8 @@ def grant(ctx, body: dict) -> dict:
         c.fail("Keep the attestation short.")
     if purpose == "voice" and attestation.get("authoredByMe") is not True:
         c.fail("Confirm that you wrote this material before it can teach your voice.", 422, "library_voice_attestation")
+    if purpose == "voice" and scope["kind"] != "asset":
+        c.fail("Voice can only be allowed one item at a time, after you confirm you wrote it.", 422, "library_voice_scope")
     revs = revisions(ctx, fresh=True)
     expected = body.get("expectedRevision")
     if expected is not None and expected != revs["grantRevision"]:
@@ -334,6 +348,13 @@ def grant(ctx, body: dict) -> dict:
         from . import versions
         version = versions.get(ctx, c.asset_key(scope.get("assetId")))
         scope_key = version["assetId"]
+        # Pin the grant to the versions that exist now; a later version or a linked item needs its own decision.
+        members = [version["versionId"]]
+        if not version.get("legacy"):
+            try:
+                members = list(dict.fromkeys([v["versionId"] for v in versions.stack(ctx, version["assetId"])] + members))
+            except AlphaError:
+                pass  # no stack row visible: the grant covers exactly the resolved version
     elif scope["kind"] == "collection":
         scope_key = c.asset_key(scope.get("collectionId"))
         ctx.cur.execute("SELECT 1 FROM public.pr_library_collections WHERE workspace_id=%s AND id=%s", (ctx.workspace_id, uuid.UUID(hex=scope_key)))

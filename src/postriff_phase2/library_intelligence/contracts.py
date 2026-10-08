@@ -489,6 +489,8 @@ class LibraryContext:
     # Opens a fresh read context for the same verified identity (multi-phase handlers: retrieve, call a provider
     # outside the transaction, then recheck and record). None outside HTTP.
     reopen: Any = None
+    # Opens the locked workspace write transaction for the same verified identity (read-mode handlers only). None elsewhere.
+    open_write: Any = None
 
     def allows(self, requirement: str) -> bool:
         return bool(self.membership.allows(requirement))

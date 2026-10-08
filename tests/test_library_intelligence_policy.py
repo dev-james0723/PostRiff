@@ -135,6 +135,50 @@ class Purposes(unittest.TestCase):
         self.assertEqual(attest.exception.code, "library_voice_attestation")
 
 
+class ReviewFindings(unittest.TestCase):
+    """Regressions for the 2026-10-08 shared review (findings 1, 2, 6, 8)."""
+
+    def test_version_link_does_not_widen_asset_grants(self):
+        # The owner granted cloud LLM + answer + voice for version A only (snapshot of its stack).
+        grants = [grant("answer", scope="asset", key="a" * 32, members=["a" * 32]),
+                  grant(location="cloud", category="llm", scope="asset", key="a" * 32, members=["a" * 32], gid="d" * 32),
+                  grant("voice", scope="asset", key="a" * 32, members=["a" * 32], gid="e" * 32)]
+        context = ctx(grants=grants)
+        original = version("a" * 32)
+        linked = version("b" * 32, asset="a" * 32)  # an editor linked B into A's lineage afterwards
+        self.assertTrue(policy.authorize_source(context, original, "answer", {"location": "cloud", "category": "llm"}).allowed)
+        for purpose in ("answer", "voice"):
+            self.assertFalse(policy.authorize_source(context, linked, purpose).allowed, purpose)
+        self.assertFalse(policy.authorize_processing(context, linked, "cloud", "llm").allowed)
+
+    def test_cloud_processing_honours_per_source_cloud_sharing(self):
+        context = ctx(state={"sources": [source(egress=("local",))], "phase2": {"assets": []}},
+                      grants=[grant("answer"), grant(location="cloud", category="embedding", gid="d" * 32), grant(location="cloud", category="llm", gid="f" * 32)])
+        v = version(source_id="src1")
+        embed = policy.authorize_processing(context, v, "cloud", "embedding")
+        self.assertEqual((embed.allowed, embed.reason), (False, "egress_consent_required"))
+        self.assertFalse(policy.authorize_source(context, v, "answer", {"location": "cloud", "category": "llm"}).allowed)
+        self.assertTrue(policy.authorize_source(context, v, "answer").allowed, "a local private answer is still possible")
+        unreviewed = ctx(state={"sources": [source(policy_name=None, egress=("local", "cloud"))], "phase2": {"assets": []}},
+                         grants=[grant(location="cloud", category="embedding")])
+        unreviewed.state["sources"][0]["createdAt"] = 1.0  # legacy: no policy stamped
+        self.assertEqual(policy.authorize_processing(unreviewed, version(source_id="src1"), "cloud", "embedding").reason, "policy_review_required")
+
+    def test_browse_with_cloud_processing_needs_answer_grants(self):
+        v = version()
+        bare = ctx()
+        self.assertTrue(policy.authorize_source(bare, v, "browse").allowed)
+        self.assertFalse(policy.authorize_source(bare, v, "browse", {"location": "cloud", "category": "llm"}).allowed)
+        granted = ctx(grants=[grant("answer"), grant(location="cloud", category="llm", gid="d" * 32)])
+        self.assertTrue(policy.authorize_source(granted, v, "browse", {"location": "cloud", "category": "llm"}).allowed)
+
+    def test_voice_grants_are_per_item_only(self):
+        owner = ctx(FakeCursor().on(r"SELECT grant_revision,index_generation", [(0, 1, 0)]))
+        with self.assertRaises(AlphaError) as wide:
+            policy.grant(owner, {"grantType": "purpose", "purpose": "voice", "scope": {"kind": "workspace"}, "attestation": {"authoredByMe": True}})
+        self.assertEqual(wide.exception.code, "library_voice_scope")
+
+
 class Revocation(unittest.TestCase):
     def test_revocation_before_delivery(self):
         cur = FakeCursor()

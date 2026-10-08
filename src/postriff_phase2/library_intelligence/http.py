@@ -107,6 +107,9 @@ def read_context(service, token, workspace_id):
         ctx = c.LibraryContext(workspace_id=workspace_id, actor=str(principal), membership=member, state=state, cur=cur,
                                now=service.clock() if callable(getattr(service, "clock", None)) else time.time(), service=service)
         ctx.reopen = lambda: read_context(service, token, workspace_id)
+        # A read-mode handler that must do slow network work first (link capture) opens the locked write transaction only
+        # for the short store step, so a slow remote server can never hold the workspace lock.
+        ctx.open_write = lambda: write_context(service, token, workspace_id)
         yield ctx
 
 

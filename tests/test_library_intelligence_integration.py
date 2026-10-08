@@ -51,5 +51,20 @@ class WriterOrder(unittest.TestCase):
         self.assertTrue(written["media"])
 
 
+class OfficeXmlGuard(unittest.TestCase):
+    def test_utf16_part_cannot_hide_a_doctype(self):
+        import io
+        import zipfile
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.library_intelligence import structure
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("[Content_Types].xml", "<?xml version=\"1.0\"?><Types/>")
+            z.writestr("word/document.xml", '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE x [<!ENTITY a "b">]><w/>'.encode("utf-16"))
+        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as archive:
+            with self.assertRaises(AlphaError):
+                structure._xml(archive, "word/document.xml")
+
+
 if __name__ == "__main__":
     unittest.main()
