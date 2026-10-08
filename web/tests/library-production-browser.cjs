@@ -61,13 +61,36 @@ const checks=[];
     storageTrace.push({method:request.method(),status,mime,range:range||null,deliveredBytes:delivered.length,object:u.pathname.split('/').slice(-2).join('/')});
     return route.fulfill({status,body:request.method()==='HEAD'?Buffer.alloc(0):delivered,headers});
    });
-   const page=await context.newPage(),errors=[],uploadTrace=[];
+   const page=await context.newPage(),errors=[],uploadTrace=[],rscFailures=[],activeRsc=new Set();
+   let navigationPhase='initial library load',lastRscActivity=Date.now();
+   const isRscRequest=request=>new URL(request.url()).searchParams.has('_rsc');
+   const finishRsc=request=>{if(activeRsc.delete(request))lastRscActivity=Date.now()};
+   // Let real RSC prefetches finish before the harness destroys their document.
+   // Track current requests explicitly; an earlier load-state event is not readiness.
+   // Ignore periodic Library polling here, while keeping every runtime error below.
+   const settleBeforeNavigation=async phase=>{
+    navigationPhase='settling before '+phase;
+    const deadline=Date.now()+15000;
+    while(activeRsc.size||Date.now()-lastRscActivity<500){
+     assert.ok(Date.now()<deadline,`RSC did not settle before ${phase}: ${JSON.stringify([...activeRsc].map(request=>request.url()))}`);
+     await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    navigationPhase=phase;
+   };
    const relevantUploadUrl=value=>{try{const u=new URL(value);if(u.searchParams.has('token'))u.searchParams.set('token','[redacted]');return u.origin+u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch{return value}};
    const isUploadRequest=request=>/\/library\/files(?:\/|\?|$)|devharness\.supabase\.co|\/dev\/upload\//.test(request.url());
    page.on('pageerror',error=>errors.push(error.message));
-   page.on('request',request=>{if(isUploadRequest(request))uploadTrace.push({event:'request',method:request.method(),url:relevantUploadUrl(request.url())})});
+   page.on('request',request=>{
+    if(isUploadRequest(request))uploadTrace.push({event:'request',method:request.method(),url:relevantUploadUrl(request.url())});
+    if(isRscRequest(request)){activeRsc.add(request);lastRscActivity=Date.now()}
+   });
+   page.on('requestfinished',finishRsc);
    page.on('response',response=>{if(isUploadRequest(response.request()))uploadTrace.push({event:'response',method:response.request().method(),url:relevantUploadUrl(response.url()),status:response.status()})});
-   page.on('requestfailed',request=>{if(isUploadRequest(request))uploadTrace.push({event:'requestfailed',method:request.method(),url:relevantUploadUrl(request.url()),failure:request.failure()?.errorText})});
+   page.on('requestfailed',request=>{
+    if(isUploadRequest(request))uploadTrace.push({event:'requestfailed',method:request.method(),url:relevantUploadUrl(request.url()),failure:request.failure()?.errorText});
+    finishRsc(request);
+    if(isRscRequest(request))rscFailures.push({url:relevantUploadUrl(request.url()),method:request.method(),prefetch:request.headers()['next-router-prefetch']||null,failure:request.failure()?.errorText,phase:navigationPhase});
+   });
    await page.goto(base+'/app/library');
    const welcome=page.getByRole('button',{name:'Not now',exact:true});
    try{await welcome.waitFor({state:'visible',timeout:5000});await welcome.click();await welcome.waitFor({state:'hidden',timeout:5000});}
@@ -106,7 +129,7 @@ const checks=[];
     assert.ok(committed.ok(),await committed.text());
     const titled=await context.request.patch(base+'/api/workspaces/'+ws+'/library/assets/'+ticket.assetId,{headers,data:{title:videoName}});
     assert.ok(titled.ok(),await titled.text());
-    await page.reload();
+    await settleBeforeNavigation('show uploaded WebKit video');await page.reload();
    }
    const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoCard.waitFor({timeout:30000});
    const videoPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await videoPoster.waitFor({state:'visible',timeout:15000});
@@ -192,7 +215,7 @@ const checks=[];
    await page.getByText(doc.sha256,{exact:true}).waitFor();
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
-   await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
+   await settleBeforeNavigation('return from source review');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).click();
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
@@ -215,7 +238,7 @@ const checks=[];
     if(d.asset.processing==='ready')assert.match(d.extractedText,/Rafii archive acceptance/);
     checks.push({engine,width,format:ext,status:d.asset.processing,execution:'real file/API/DB; synthetic identity/storage'});
    }
-   await page.reload();
+   await settleBeforeNavigation('show uploaded sample formats');await page.reload();
    for(const ext of thumbnailFormats){
     await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
    }
@@ -246,7 +269,7 @@ const checks=[];
    assert.equal((await context.request.put(base+'/dev/upload/'+new URL(viewerTicket.url).searchParams.get('token'),{data:viewerBytes,headers:{'Content-Type':'application/pdf'}})).status(),200);
    assert.ok((await context.request.post(path+'/files/'+viewerTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+viewerTicket.assetId);
-   await page.reload();await search.fill('archive-viewer.pdf');
+   await settleBeforeNavigation('show uploaded multipage PDF');await page.reload();await search.fill('archive-viewer.pdf');
    await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
@@ -305,7 +328,7 @@ const checks=[];
    assert.equal((await context.request.put(base+'/dev/upload/'+new URL(audioTicket.url).searchParams.get('token'),{data:audioBytes,headers:{'Content-Type':'audio/wav'}})).status(),200);
    assert.ok((await context.request.post(path+'/files/'+audioTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+audioTicket.assetId);
-   await page.reload();await search.fill('inline-preview.wav');
+   await settleBeforeNavigation('show uploaded waveform WAV');await page.reload();await search.fill('inline-preview.wav');
    await view.getByRole('radio',{name:'Gallery'}).click();
    const inlineAudio=page.locator('[data-library-media-player="audio"]').first();
    await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
@@ -402,7 +425,7 @@ const checks=[];
    await page.getByRole('button',{name:/Document Brahms browser notes/}).waitFor({state:'detached',timeout:15000});
    const afterDelete=await context.request.get(path+'/files/'+doc.id,{headers});
    assert.equal(afterDelete.status(),404,`deleted asset ${doc.id} still resolves: ${await afterDelete.text()}`);
-   assert.deepEqual(errors,[],'browser runtime errors');
+   assert.deepEqual(errors,[],`browser runtime errors (${engine} ${width}); RSC request failures: ${JSON.stringify(rscFailures)}`);
    checks.push({engine,width,status:'pass',flows:['upload','rename','tags','collection','search','source-review','audio-player','transcript','delete','responsive'],execution:'real UI/API/DB; synthetic storage/identity'});
    await context.close();
   }}finally{await browser.close();}
