@@ -23,6 +23,7 @@ import { ExpandedArtifact } from './expanded';
 import { QuietButton } from './frame';
 import { presentationPlan } from './plan';
 import { loadMessageViews, startPresentation, type ArtifactSession } from './session';
+import { bundledLibraryHashes } from './renderer-adapter';
 import { useConsumerUiTransport } from './transport';
 
 export function GeneratedAnswerSlot({ message, conversationId, surface, latest, onContinue }: {
@@ -49,11 +50,11 @@ export function GeneratedAnswerSlot({ message, conversationId, surface, latest, 
     if (!transport) return;
     let alive = true;
     if (plan.kind === 'load') {
-      void loadMessageViews(transport, message.messageId, conversationId).then((loaded) => {
+      void loadMessageViews(transport, message.messageId, conversationId, bundledLibraryHashes('consumer')).then((loaded) => {
         if (alive) setSessions(loaded);
       });
     } else if (plan.kind === 'post' && message.runId) {
-      void startPresentation({ transport, runId: message.runId, conversationId, surface }).then((started) => {
+      void startPresentation({ transport, runId: message.runId, conversationId, surface, supportedLibraryHashes: bundledLibraryHashes('consumer') }).then((started) => {
         if (!alive) return;
         if (started.session) setSessions([started.session]);
         else if (started.status && started.status !== 404 && started.code !== 'ui_disabled') {

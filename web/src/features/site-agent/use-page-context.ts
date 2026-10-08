@@ -294,8 +294,8 @@ export function buildPageOutline(roots: readonly (OutlineNode | null | undefined
  * never come back as page context, so their boundary, expanded dialog and native action confirmation are skipped too (kept in
  * step with generative-ui/surfaces/selectors.ts OUTLINE_SKIP_SELECTORS; inlined so this module stays dependency-free).
  */
-const OWN_SURFACES = '#rafii-panel, [data-guide-overlay], [data-slot="tour-overlay"], [data-rafii-generated], [data-rafii-generated-dialog], '
-  + '[data-rafii-ui-confirmation], [data-rafii-action-confirmation]';
+const OWN_SURFACES = '#rafii-panel, [data-guide-overlay], [data-slot="tour-overlay"], [data-rafii-generated], [data-rafii-genui-message], '
+  + '[data-rafii-generated-host], [data-rafii-generated-dialog], [data-rafii-genui-confirmation]';
 
 /** The roots in reading order: open dialogs and sheets (the one on top first), then `main`. */
 export function outlineRoots(doc: Pick<Document, 'querySelectorAll' | 'querySelector'>): Element[] {

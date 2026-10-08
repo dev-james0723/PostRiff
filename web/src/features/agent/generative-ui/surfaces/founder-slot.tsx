@@ -14,6 +14,7 @@ import { isFresh } from '../state/registry';
 import { GeneratedArtifact } from './artifact';
 import { useFounderUiTransport } from './founder-transport';
 import { presentationPlan } from './plan';
+import { bundledLibraryHashes } from './renderer-adapter';
 import { loadMessageViews, startFounderPresentation, type ArtifactSession } from './session';
 
 export function FounderGeneratedSlot({ response, onContinue }: { response: FounderAgentTurnResponse; latest?: boolean; onContinue?: (request: ContinueRequest) => void }) {
@@ -28,9 +29,9 @@ export function FounderGeneratedSlot({ response, onContinue }: { response: Found
     if (!transport || !response.messageId) return;
     let alive = true;
     if (plan.kind === 'load') {
-      void loadMessageViews(transport, response.messageId, response.conversationId).then((loaded) => alive && setSessions(loaded));
+      void loadMessageViews(transport, response.messageId, response.conversationId, bundledLibraryHashes('founder')).then((loaded) => alive && setSessions(loaded));
     } else if (plan.kind === 'post' && response.runId) {
-      void startFounderPresentation({ transport, runId: response.runId, messageId: response.messageId, conversationId: response.conversationId }).then((started) => {
+      void startFounderPresentation({ transport, runId: response.runId, messageId: response.messageId, conversationId: response.conversationId, supportedLibraryHashes: bundledLibraryHashes('founder') }).then((started) => {
         if (alive && started.session) setSessions([started.session]);
       });
     }
