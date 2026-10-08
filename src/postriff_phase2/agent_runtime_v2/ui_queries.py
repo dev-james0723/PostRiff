@@ -68,7 +68,7 @@ def _checked(result) -> dict:
     if not isinstance(result, dict) or result.get("state") not in ui_contracts.DATA_STATES or set(result) != {"state", "data", "asOf", "sourceRefs", "revision",
                                                                                                             "nextCursor", "coverage", "warnings"}:
         raise AlphaError("This data couldn't be read in a form Rafii can show.", 500, code="ui_query_shape")
-    if len(ui_contracts.canonical_json(json.loads(json.dumps(result, default=str))).encode("utf-8")) > MAX_RESULT_BYTES:
+    if len(ui_contracts.canonical_json(json.loads(json.dumps(result, default=str)), max_depth=None).encode("utf-8")) > MAX_RESULT_BYTES:
         raise AlphaError("This data is too large to show at once. Narrow the filters.", 413, code="ui_query_too_large")
     return result
 

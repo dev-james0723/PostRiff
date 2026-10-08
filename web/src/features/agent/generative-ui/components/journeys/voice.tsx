@@ -369,10 +369,10 @@ export function VoiceSampleImport({ props, statementId }: JourneyRendererProps) 
         {copy.voice.importTitleField}
         <Input id={`${fieldId}-title`} value={titleValue} maxLength={160} onChange={(e) => title.set(e.target.value)} />
       </label>
-      <div className='flex items-start gap-2 text-xs'>
+      <label className='flex items-start gap-2 text-xs' htmlFor={`${fieldId}-confirm`}>
         <input id={`${fieldId}-confirm`} type='checkbox' className='mt-0.5' checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-        <label htmlFor={`${fieldId}-confirm`}>{copy.voice.importConfirm}</label>
-      </div>
+        <span>{copy.voice.importConfirm}</span>
+      </label>
       <p className='text-muted-foreground text-xs'>{copy.voice.importHint}</p>
       <GuardedAction
         actionId={literal.data.actionId}
