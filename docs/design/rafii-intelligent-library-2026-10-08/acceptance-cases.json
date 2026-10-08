@@ -1,0 +1,1148 @@
+{
+  "schema_version": 1,
+  "prepared": "2026-10-08",
+  "requirements": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+    "R18",
+    "R19",
+    "R20"
+  ],
+  "cases": [
+    {
+      "id": "A001",
+      "requirements": [
+        "R01"
+      ],
+      "owner_task": "T02",
+      "title": "Mixed files retain originals and existing photo/video behavior",
+      "expected": "Upload representative PDF/DOCX/XLSX/PPTX/TXT/MD/HTML/JSON/CSV, supported images/audio/video and a generic file; compare stored hash/bytes and authorized downloads; no original lost.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A002",
+      "requirements": [
+        "R01"
+      ],
+      "owner_task": "T02",
+      "title": "Validation and limits remain enforced",
+      "expected": "Reject oversized, MIME-mismatched and corrupted input; preserve configured quota and per-file limits; no silent limit increase.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A003",
+      "requirements": [
+        "R01"
+      ],
+      "owner_task": "T02",
+      "title": "Upload retry is recoverable",
+      "expected": "Interrupt and retry supported upload flow; no duplicate registration/charge; partial failures do not discard successful items.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A004",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T01",
+      "title": "Workspace isolation",
+      "expected": "Attempt browse/search/read/preview/count/suggestion/pack/mutation across two workspaces; all unauthorized paths denied without identity or count leakage.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A005",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T01",
+      "title": "Browse does not authorize AI egress",
+      "expected": "Storage-only asset remains browsable; cloud transcription, embeddings, summaries and Agent retrieval remain blocked without appropriate grants.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A006",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T01",
+      "title": "Private reading is not public fact approval",
+      "expected": "Explicit private answer grant yields source-attributed answer; cannot mark facts approved or publish from that grant.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A007",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T01",
+      "title": "Purpose, author and provider grants remain separate",
+      "expected": "Inspiration, Memory, voice, processing location and public-use purposes do not become enabled through unrelated settings.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A008",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T12",
+      "title": "Revocation wins an in-flight race",
+      "expected": "Revoke after retrieval/job/action begins but before delivery/finalization; server rechecks revision and blocks delivery/write.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A009",
+      "requirements": [
+        "R02"
+      ],
+      "owner_task": "T12",
+      "title": "Cached views and references are revoked",
+      "expected": "Invalidate authorized app caches, pack actions and future voice retrieval; document any residual signed-URL expiry rather than claiming instant recall.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A010",
+      "requirements": [
+        "R03"
+      ],
+      "owner_task": "T03",
+      "title": "Understanding has evidence and provenance",
+      "expected": "Every summary/annotation/segment suggestion can be traced to a source/version; AI suggestions and human confirmations remain distinct.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A011",
+      "requirements": [
+        "R03"
+      ],
+      "owner_task": "T03",
+      "title": "Manual correction survives reprocessing",
+      "expected": "Correct title/annotation, rerun processor with new version; original filename and user override persist, new suggestion is not silently accepted.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A012",
+      "requirements": [
+        "R03"
+      ],
+      "owner_task": "T02",
+      "title": "Capability status is truthful",
+      "expected": "Exercise queued/processing/ready/partial/unsupported/failed/cancelled/permission/budget states separately; stored/playable is not mislabelled understood.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A013",
+      "requirements": [
+        "R04"
+      ],
+      "owner_task": "T03",
+      "title": "Digital extraction precedes OCR",
+      "expected": "Digital text fixture is parsed without unnecessary OCR; scanned pages use bounded labelled OCR; blank/garbled text is not silently accepted.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A014",
+      "requirements": [
+        "R04"
+      ],
+      "owner_task": "T03",
+      "title": "Document locators are real",
+      "expected": "Known paragraph/slide/sheet/cell is retrieved; locator opens correct source and version; unknown pagination never creates fake page numbers.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A015",
+      "requirements": [
+        "R04"
+      ],
+      "owner_task": "T03",
+      "title": "Conversion is sandboxed",
+      "expected": "Malformed archive, macro-bearing Office and hostile HTML cannot execute scripts, fetch private resources or exhaust unbounded resources.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A016",
+      "requirements": [
+        "R04"
+      ],
+      "owner_task": "T09",
+      "title": "Preview naming matches rendering",
+      "expected": "Text cover says Extracted text preview; genuine page/slide rendition can say first page/slide; unsupported formats remain honest.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A017",
+      "requirements": [
+        "R05"
+      ],
+      "owner_task": "T03",
+      "title": "ASR works on real permitted audio",
+      "expected": "Run at least one authorized real-provider transcription and retain timestamped evidence; mocks alone cannot pass automatic transcription.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A018",
+      "requirements": [
+        "R05"
+      ],
+      "owner_task": "T03",
+      "title": "Mixed-language transcription is evaluated",
+      "expected": "Use labelled Cantonese/Traditional Chinese/English code-switch clips; report CER/WER per language and segment, errors and processor identity; confirm usable retrieval moments.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A019",
+      "requirements": [
+        "R05"
+      ],
+      "owner_task": "T03",
+      "title": "Waveform comes from samples",
+      "expected": "Different decoded signals produce corresponding different peaks; no hash-derived bars presented as a real analysis timeline.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A020",
+      "requirements": [
+        "R05"
+      ],
+      "owner_task": "T03",
+      "title": "Corrections and speakers are handled honestly",
+      "expected": "Correct a timed segment and an anonymous speaker label; preserve history/alignment; no inferred real-world identity.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A021",
+      "requirements": [
+        "R05"
+      ],
+      "owner_task": "T09",
+      "title": "Playback and Save moment work",
+      "expected": "Play/pause/seek and save an in-bounds interval; reopen same version and interval; no autoplay on detail open.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A022",
+      "requirements": [
+        "R06"
+      ],
+      "owner_task": "T03",
+      "title": "Video understanding is bounded and useful",
+      "expected": "Real permitted video produces poster, duration, timed transcript and bounded scene/frame evidence; missing capabilities displayed accurately.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A023",
+      "requirements": [
+        "R06"
+      ],
+      "owner_task": "T04",
+      "title": "Visual similarity is not caption-only",
+      "expected": "Labelled image/frame query exercises a compatible visual index and finds expected visual candidates; report applied modality and fallback.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A024",
+      "requirements": [
+        "R06"
+      ],
+      "owner_task": "T03",
+      "title": "Visual annotation does not infer identity",
+      "expected": "No automatic person identification/sensitive trait inference; scene suggestions and crops remain separate from approved outputs.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A025",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "Old assets remain findable",
+      "expected": "With at least 1,001 assets find known assets at positions 201 and 1,001 and an old segment by exact query; no newest-200/global age cutoff.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A026",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "Lexical and semantic strengths coexist",
+      "expected": "Exact filename/id/phrase/dimension tests pass; independently labelled semantic queries reach Recall@10 >= 0.90 on the agreed 100-query set.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A027",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "Multilingual query behavior is tested",
+      "expected": "Traditional/Simplified Chinese, Cantonese expressions, English and mixed queries evaluated; language normalization cannot erase meaningful content.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A028",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "UI and Agent share retrieval policy",
+      "expected": "Same user/scope/purpose query yields consistent eligibility and coverage through both routes; any presentation difference is documented.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A029",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "Pagination and totals are trustworthy",
+      "expected": "Page through deterministic fixtures without skips/duplicates; counts are server scoped, not loaded-card length; stale cursor prompts safe refresh.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A030",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T04",
+      "title": "Degraded search is explicit",
+      "expected": "Vector/provider outage retains labelled lexical results, modesApplied and coverage; no false semantic-complete badge.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A031",
+      "requirements": [
+        "R07"
+      ],
+      "owner_task": "T13",
+      "title": "Search latency meets candidate budget",
+      "expected": "At 10,000 mixed assets/8 concurrent scoped searches, 100 warm measured requests: lexical p95 <= 2 s, hybrid p95 <= 3 s; report hardware/network/cold results separately.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A032",
+      "requirements": [
+        "R08"
+      ],
+      "owner_task": "T05",
+      "title": "Answers are grounded",
+      "expected": "On agreed benchmark, >=95% of evaluated factual claims are supported by cited passages; report denominator and human review, not just model self-scoring.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A033",
+      "requirements": [
+        "R08"
+      ],
+      "owner_task": "T05",
+      "title": "Unanswerable questions abstain",
+      "expected": "All deliberately unanswerable/security trap cases abstain or state insufficient source support; no invented asset, fact or locator.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A034",
+      "requirements": [
+        "R08"
+      ],
+      "owner_task": "T05",
+      "title": "Citations deep-link accurately",
+      "expected": "100% of deterministic page/time/slide/cell fixtures open exact referenced version and location; signed-link expiry refresh respects grants.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A035",
+      "requirements": [
+        "R08"
+      ],
+      "owner_task": "T05",
+      "title": "Conflicts and scope are visible",
+      "expected": "Two contradictory sources are attributed and contrasted; selected scope and partial indexing are shown, not silently broadened.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A036",
+      "requirements": [
+        "R08"
+      ],
+      "owner_task": "T05",
+      "title": "Prompt injection cannot control tools",
+      "expected": "Malicious source instructions cannot authorize retrieval of other sources, exfiltration, mutation or override system/tool boundaries.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A037",
+      "requirements": [
+        "R09"
+      ],
+      "owner_task": "T06",
+      "title": "Smart Collections save criteria, not SQL",
+      "expected": "Allowlisted rule AST preview and save succeed; arbitrary SQL/code/prompt-as-execution is rejected.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A038",
+      "requirements": [
+        "R09"
+      ],
+      "owner_task": "T06",
+      "title": "Membership updates without file copies",
+      "expected": "New matching asset joins after processing; collection adds no duplicate blob; missed event reconciliation repairs membership.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A039",
+      "requirements": [
+        "R09"
+      ],
+      "owner_task": "T06",
+      "title": "Overrides and undo remain safe",
+      "expected": "Exclude beats automatic inclusion; manual includes respect access; undo restores prior organization revision but never revoked consent.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A040",
+      "requirements": [
+        "R10"
+      ],
+      "owner_task": "T06",
+      "title": "Version lineage is explicit and acyclic",
+      "expected": "Original -> excerpt -> rendition -> draft/post relations resolve; a cycle insertion fails; bounded explorer does not recurse forever.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A041",
+      "requirements": [
+        "R10"
+      ],
+      "owner_task": "T06",
+      "title": "Duplicates are handled conservatively",
+      "expected": "Exact duplicates preserve reference-count deletion safety; near duplicates are suggestions, never auto-merged/deleted.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A042",
+      "requirements": [
+        "R10"
+      ],
+      "owner_task": "T06",
+      "title": "Comparison and approvals are clear",
+      "expected": "Text/metadata/image/media appropriate comparison displays version identity and approval status; unsupported compare says so.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A043",
+      "requirements": [
+        "R10"
+      ],
+      "owner_task": "T06",
+      "title": "Source update warns rather than overwrites",
+      "expected": "Dependent draft flagged on new version; old citation remains old; applying replacement checks revision and requires intended user action.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A044",
+      "requirements": [
+        "R11"
+      ],
+      "owner_task": "T07",
+      "title": "Voice admission is explicit",
+      "expected": "Third-party inspiration, quoted guest, generated draft and storage-only document do not become voice examples automatically.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A045",
+      "requirements": [
+        "R11"
+      ],
+      "owner_task": "T07",
+      "title": "Span-level and negative examples work",
+      "expected": "Approve one passage and a negative example; only permitted spans influence the specified persona/style, not the whole file.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A046",
+      "requirements": [
+        "R11"
+      ],
+      "owner_task": "T07",
+      "title": "Persona/brand/language isolation",
+      "expected": "Two distinct voice sets cannot leak across selected persona/brand or unpermitted language contexts; adopted examples are explainable.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A047",
+      "requirements": [
+        "R11"
+      ],
+      "owner_task": "T07",
+      "title": "Revocation rebuilds derived profile",
+      "expected": "Remove a voice sample; future retrieval and persistent derived profile summary cease using it; show evidence of rebuild/invalidation.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A048",
+      "requirements": [
+        "R11"
+      ],
+      "owner_task": "T09",
+      "title": "No misleading voice score",
+      "expected": "Show examples/provenance and sample coverage; do not present an unvalidated match percentage or claim a trained model was erased.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A049",
+      "requirements": [
+        "R12"
+      ],
+      "owner_task": "T08",
+      "title": "Source packs carry context",
+      "expected": "Selection enters actual Agent/Ideas/Draft with asset/version/segments, evidence/style purposes, rationale, gaps and rights warnings.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A050",
+      "requirements": [
+        "R12"
+      ],
+      "owner_task": "T08",
+      "title": "Task recommendations respect intent and access",
+      "expected": "Rank permitted candidates by task/format/currency/diversity; unknown rights do not become cleared and missing evidence is named.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A051",
+      "requirements": [
+        "R12"
+      ],
+      "owner_task": "T09",
+      "title": "Navigation restores state",
+      "expected": "Return from draft/detail to same query/scope/filter/sort/density/selection/scroll; inaccessible refs are removed without leaking them.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A052",
+      "requirements": [
+        "R13"
+      ],
+      "owner_task": "T08",
+      "title": "Final artifacts auto-register exactly once",
+      "expected": "Successful final output with verified bytes appears once with producing run/output/source pack after duplicate completion events.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A053",
+      "requirements": [
+        "R13"
+      ],
+      "owner_task": "T08",
+      "title": "Scratch and loops are excluded",
+      "expected": "Temporary files, tool logs and ingestion-generated previews do not recursively register as final assets; failed registration remains retryable.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A054",
+      "requirements": [
+        "R14"
+      ],
+      "owner_task": "T11",
+      "title": "Suggestions are actionable and low noise",
+      "expected": "Trigger stale source, unused relevant asset, missing input and failed processing; show reason/affected work and max 3 noncritical suggestions per 24 h.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A055",
+      "requirements": [
+        "R14"
+      ],
+      "owner_task": "T11",
+      "title": "Dismiss/snooze/disable persist",
+      "expected": "Dedup replayed trigger; dismissed identity suppressed; editable 7-day default snooze and category disable survive refresh/session.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A056",
+      "requirements": [
+        "R14"
+      ],
+      "owner_task": "T11",
+      "title": "No unsolicited external side effects",
+      "expected": "In-app default only; no email/push/schedules/publication without explicit corresponding opt-in and existing quiet-hour rules.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A057",
+      "requirements": [
+        "R15"
+      ],
+      "owner_task": "T11",
+      "title": "Usage traces are real",
+      "expected": "Link asset/version/segment to actual draft/post/channel events; show metric source time and distinguish available from unavailable values.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A058",
+      "requirements": [
+        "R15"
+      ],
+      "owner_task": "T11",
+      "title": "Recommendations are not causal or popularity-only",
+      "expected": "Missing metrics stay null/unknown; no claim an asset caused engagement; diversity/freshness prevents always repeating the top-like item.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A059",
+      "requirements": [
+        "R16"
+      ],
+      "owner_task": "T09",
+      "title": "One clear Add and prominent content",
+      "expected": "Overview has one Add entry, visible search/scope, compact filters/collections and quiet storage indicator; first asset meaningful at 390 x 844 target.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A060",
+      "requirements": [
+        "R16"
+      ],
+      "owner_task": "T09",
+      "title": "Existing visual identity remains intact",
+      "expected": "Before/after review shows same Rafii design tokens/global navigation; unrelated pages and styles are not redesigned.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A061",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T09",
+      "title": "Type-aware previews and density work",
+      "expected": "Image/video/audio/document/generic cases have useful honest previews at each density without eager full players/PDF frames in every grid card.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A062",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T09",
+      "title": "Detail organization and safe deletion",
+      "expected": "Overview/Content/Related/Usage accessible; technical details secondary; delete separated, permission checked, dependency impact and confirmation retained.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A063",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T09",
+      "title": "Batch actions report partial failures",
+      "expected": "Mixed permission/format selection gives per-item outcomes; idempotent retry does not repeat succeeded mutations.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A064",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T13",
+      "title": "Keyboard and accessibility verified",
+      "expected": "Keyboard operation/focus trap/restore/live regions/non-drag alternatives tested; automated scan plus manual WCAG 2.2 AA review, contrast and 200% reflow.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A065",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T13",
+      "title": "Responsive behavior verified",
+      "expected": "Capture 390x844, 768x1024, 1440x900, landscape and reduced-motion; no clipped controls, inaccessible content or misleading duplicate count names.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A066",
+      "requirements": [
+        "R17"
+      ],
+      "owner_task": "T13",
+      "title": "Actual iPhone Safari smoke passes",
+      "expected": "Real device upload/playback/seek/drawer/selection/back navigation; safe-area/player/navigation never cover required actions. Desktop WebKit is separately labelled.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A067",
+      "requirements": [
+        "R18"
+      ],
+      "owner_task": "T10",
+      "title": "Reuse the existing OpenUI runtime",
+      "expected": "Compatible pinned integration and versioned Rafii registry; no duplicate site-wide renderer/framework or generated permanent navigation shell.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A068",
+      "requirements": [
+        "R18"
+      ],
+      "owner_task": "T10",
+      "title": "All task surfaces work with real data",
+      "expected": "Compare, candidate selection, classification preview, source-pack review and drafting workspace use actual server refs; fixtures alone insufficient.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A069",
+      "requirements": [
+        "R18"
+      ],
+      "owner_task": "T10",
+      "title": "Forged actions and replay are denied",
+      "expected": "Cross-tenant refs, arbitrary URLs/code/tools, stale revision, mutation during hydration and duplicate action replay are rejected server-side.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A070",
+      "requirements": [
+        "R18"
+      ],
+      "owner_task": "T10",
+      "title": "Streaming and fallback preserve work",
+      "expected": "Partial/invalid stream retains scope/selection; one repair maximum; component/depth/action caps enforced; deterministic fallback still works.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A071",
+      "requirements": [
+        "R19"
+      ],
+      "owner_task": "T12",
+      "title": "Operational resilience is measured",
+      "expected": "Worker restart, lease timeout, retry storm, model timeout and budget denial produce recoverable capability states without duplicate billing or silent failures.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A072",
+      "requirements": [
+        "R19"
+      ],
+      "owner_task": "T12",
+      "title": "Deletion reaches every derivative",
+      "expected": "Delete/revoke across segments, vectors, previews, sources, packs, suggestions and voice summaries; preserve sibling canonical references and document retention limits.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A073",
+      "requirements": [
+        "R19"
+      ],
+      "owner_task": "T12",
+      "title": "Observability and costs are truthful",
+      "expected": "Feature/provider/version/usage/latency/retry metrics emitted; actual vs estimated vs unknown cost distinguished; secrets/content absent from normal logs.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A074",
+      "requirements": [
+        "R19"
+      ],
+      "owner_task": "T12",
+      "title": "Model index/backfill can resume and roll back",
+      "expected": "Versioned index generations and bounded backfill survive interruption; pause/cost admission works; rollback preserves originals and honest fallback search.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A075",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T00",
+      "title": "Current branch is reconciled before code",
+      "expected": "Record real origin/base SHA/worktrees/lease/Library/OpenUI branches and baseline; no stale shared-root modifications or duplicate implementations.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A076",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T13",
+      "title": "Legacy and adjacent flows regressions pass",
+      "expected": "Existing photo/video/doc/audio ingest/delete/source consent plus Agent/Memory/Drafts/Queue/Now Playing regression commands pass on same candidate.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A077",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T13",
+      "title": "Quality gates bind to the candidate SHA",
+      "expected": "Typecheck, lint, build, focused tests, disposable Postgres lifecycle/RLS, dependency/security checks and browser evidence all name the same candidate.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A078",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T14",
+      "title": "Migration and rollback are rehearsed",
+      "expected": "New migration IDs reserved once; legacy fixtures migrate safely in disposable DB; backfill dry-run and rollback/canary playbook include actual environment requirements.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A079",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T14",
+      "title": "No fake complete status",
+      "expected": "Required cases remain UNVERIFIED/FAILED/BLOCKED until actual evidence; a disabled feature, fixture, PR merge or config file cannot pass a user-flow case.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    },
+    {
+      "id": "A080",
+      "requirements": [
+        "R20"
+      ],
+      "owner_task": "T14",
+      "title": "Production authority is separate",
+      "expected": "Document explicit release authority, if supplied. Without it stop at release-ready candidate; production migration/push/merge/deploy/smoke stays awaiting authorization, never falsely PASS.",
+      "status": "UNVERIFIED",
+      "candidate_sha": null,
+      "environment": null,
+      "command": null,
+      "evidence": []
+    }
+  ]
+}

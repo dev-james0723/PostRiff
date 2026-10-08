@@ -427,6 +427,9 @@ class HostedWorkspaceService:
         from .library_assets import UniversalLibrary
         library_storage = getattr(assets, 'storage', None) if assets is not None else None
         self.library = UniversalLibrary(self, storage=library_storage, clock=clock, bucket=getattr(library_storage, "file_bucket", "postriff-library"))
+        from .library_intelligence import LibraryIntelligence
+        # Library intelligence (2026-10-08 package): search, understanding, organization and source packs over the same assets.
+        self.library_intelligence = LibraryIntelligence(self)
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is

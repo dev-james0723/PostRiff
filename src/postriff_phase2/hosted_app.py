@@ -649,6 +649,12 @@ class HostedApplication:
                         result["librarySweep"] = library.sweep(service.repository.connection_factory)
                     except Exception:
                         result["librarySweep"] = {"status": "unavailable"}
+                intelligence = getattr(service, "library_intelligence", None)
+                if intelligence is not None:
+                    try:
+                        result["libraryIntelligence"] = intelligence.tick(service.repository.connection_factory)
+                    except Exception:
+                        result["libraryIntelligence"] = {"status": "unavailable"}
                 from .coworker import runtime as coworker_runtime
                 result["coworker"] = coworker_runtime.cron(service)
                 from .phone.runtime import cron as phone_cron
@@ -887,6 +893,11 @@ class HostedApplication:
             if len(parts) == 4 and parts[:3] == ["api", "auth", "sessions"] and method == "DELETE":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_session(token, parts[3]))
+            if len(parts) >= 5 and parts[:2] == ["api", "workspaces"] and parts[3] == "library" and parts[4] == "intelligence":
+                from urllib.parse import parse_qs
+                query = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True).items()}
+                status, payload = service.library_intelligence.route(method, parts[2], parts[5:], query, lambda: self._body(environ), token)
+                return self._json(start_response, status, payload)
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "library":
                 library = service.library
                 workspace_id = parts[2]

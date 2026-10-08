@@ -1,4 +1,8 @@
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
+import type {
+  ActionEnvelope, ActionResult, AnswerResult, AssetRef, CapabilityState, ContentSegment, LibraryCapability, LibraryGrant, LibraryIntelligenceStatus,
+  LibrarySearchRequest, LibrarySuggestion, Locator, SearchResponse, SourcePack, SourceRef, TaskContext, UnderstandingCard, UsageEntry
+} from './library-intelligence-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
 /**
@@ -130,6 +134,19 @@ export function createApi(getToken: TokenSource) {
   async function send<T>(method: string, path: string, body: unknown = {}, timeoutMs?: number): Promise<T> {
     return parse<T>(
       await fetch(path, { method, headers: await headers(), body: JSON.stringify(body), ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) })
+    );
+  }
+
+  /** Library intelligence: abortable so a newer search cancels the obsolete one (UI spec §5). */
+  async function intelligence<T>(w: string, method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return parse<T>(
+      await fetch(`${ws(w)}/library/intelligence/${path}`, {
+        method,
+        headers: await headers(),
+        cache: 'no-store',
+        ...(method === 'GET' ? {} : { body: JSON.stringify(body ?? {}) }),
+        ...(signal ? { signal } : {})
+      })
     );
   }
 
@@ -346,6 +363,40 @@ export function createApi(getToken: TokenSource) {
     retryLibraryFile: (w: string, id: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/retry`, {}),
     libraryTranscript: (w: string, id: string, text: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/transcript`, { text }),
     librarySource: (w: string, id: string, expectedRevision: number) => send<{ sourceId: string; revision?: number; clipped: boolean; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/source`, { expectedRevision }),
+
+    /* Library intelligence (rafii-library/1): the same permission-aware service the Agent uses. */
+    librarySearch: (w: string, body: LibrarySearchRequest, signal?: AbortSignal) => intelligence<SearchResponse>(w, 'POST', 'search', body, signal),
+    libraryAnswer: (w: string, body: { question: string; search: LibrarySearchRequest }, signal?: AbortSignal) =>
+      intelligence<AnswerResult>(w, 'POST', 'answer', body, signal),
+    libraryViewer: (w: string, ref: SourceRef) => intelligence<{ target: { assetRef: AssetRef; locator: Locator | null; locatorLabel: string; url: string | null; mime: string; expiresIn: number } }>(w, 'POST', 'viewer', ref),
+    libraryCard: (w: string, key: string) => intelligence<UnderstandingCard>(w, 'GET', `assets/${encodeURIComponent(key)}`),
+    librarySegments: (w: string, key: string, cursor = '') =>
+      intelligence<{ segments: ContentSegment[]; nextCursor: string | null; history?: ContentSegment[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/segments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    libraryCapabilities: (w: string, key: string) => intelligence<{ capabilities: CapabilityState[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/capabilities`),
+    libraryProcess: (w: string, key: string, body: { capabilities: LibraryCapability[]; idempotencyKey: string }) =>
+      intelligence<{ capabilities: CapabilityState[] }>(w, 'POST', `assets/${encodeURIComponent(key)}/process`, body),
+    libraryCancel: (w: string, key: string, body: { capability: LibraryCapability }) => intelligence<{ capabilities: CapabilityState[] }>(w, 'POST', `assets/${encodeURIComponent(key)}/cancel`, body),
+    libraryWaveform: (w: string, key: string, body: { sha256: string; peaks: number[]; durationMs: number; sampleRate: number }) =>
+      intelligence<{ status: string }>(w, 'POST', `assets/${encodeURIComponent(key)}/waveform`, body),
+    libraryRelated: (w: string, key: string) => intelligence<{ relations: unknown[]; nearDuplicates: unknown[]; versions: unknown[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/related`),
+    libraryVersions: (w: string, key: string) => intelligence<{ versions: unknown[]; affectedDrafts: unknown[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/versions`),
+    libraryUsage: (w: string, key: string) => intelligence<{ usage: UsageEntry[]; note: string }>(w, 'GET', `assets/${encodeURIComponent(key)}/usage`),
+    libraryAssetVoice: (w: string, key: string) => intelligence<{ samples: unknown[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/voice`),
+    libraryCompare: (w: string, refs: AssetRef[]) => intelligence<Record<string, unknown>>(w, 'POST', 'compare', { refs }),
+    libraryAction: <T = unknown>(w: string, envelope: ActionEnvelope) => intelligence<ActionResult<T>>(w, 'POST', 'actions', envelope),
+    libraryGrants: (w: string) => intelligence<{ grants: LibraryGrant[]; revisions: LibraryIntelligenceStatus['revisions']; flags: Record<string, boolean> }>(w, 'GET', 'grants'),
+    libraryGrant: (w: string, body: Record<string, unknown>) => intelligence<{ grantId: string; grantRevision: number }>(w, 'POST', 'grants', body),
+    libraryRevokeGrant: (w: string, id: string, expectedRevision?: number) =>
+      intelligence<{ grantId: string; grantRevision: number; propagation: Record<string, number>; residual: string }>(w, 'DELETE', `grants/${encodeURIComponent(id)}`, { expectedRevision }),
+    libraryIngestLink: (w: string, body: { url: string; idempotencyKey: string }) => intelligence<{ asset: Asset; status: string }>(w, 'POST', 'ingest/link', body),
+    libraryIngestNote: (w: string, body: { title: string; text: string; authoredByMe: boolean; idempotencyKey: string }) => intelligence<{ asset: Asset; status: string }>(w, 'POST', 'ingest/note', body),
+    libraryCollectionPreview: (w: string, body: { rule: unknown; overrides?: unknown; collectionId?: string }) => intelligence<Record<string, unknown>>(w, 'POST', 'collections/preview', body),
+    libraryCollection: (w: string, id: string) => intelligence<Record<string, unknown>>(w, 'GET', `collections/${encodeURIComponent(id)}`),
+    librarySourcePack: (w: string, id: string) => intelligence<SourcePack>(w, 'GET', `source-packs/${encodeURIComponent(id)}`),
+    libraryRecommendSources: (w: string, task: TaskContext) => intelligence<SourcePack>(w, 'POST', 'source-packs', task),
+    librarySuggestions: (w: string) => intelligence<{ suggestions: LibrarySuggestion[]; cap: { noncriticalPerDay: number; shownToday: number } }>(w, 'GET', 'suggestions'),
+    libraryVoiceSummary: (w: string) => intelligence<Record<string, unknown>>(w, 'GET', 'voice'),
+    libraryIntelligenceStatus: (w: string) => intelligence<LibraryIntelligenceStatus>(w, 'GET', 'status'),
 
     /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
     mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),
