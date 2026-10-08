@@ -1,0 +1,123 @@
+{
+  "observedAt": "2026-10-08T02:44:03.580154+00:00",
+  "execution": "REAL approved disconnect PASS; two over-ten-minute callback returns safely rejected; no new grant saved",
+  "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+  "deploymentId": "dpl_3DTXnHyuRyjMVLqVhAGiSE92C6Hh",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+  "provider": "linkedin",
+  "appId": "263833009",
+  "tester": "B",
+  "memberRefMd5": "f278edef7611535718d32e2018648710",
+  "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "intendedAccountRefMd5": "62c2c6ce86976d46e6c446e3ecefce46",
+  "originalConnectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+  "authorization": {
+    "source": "Direct user response APPROve to exact prepared Tester B disconnect/reconnect test",
+    "scopes": [
+      "openid",
+      "profile"
+    ],
+    "effect": "One-time normal-UI disconnect and same-account reconnect; owner completes official consent",
+    "exclusions": "No production, other users grants, publishing, broader permission, X spending or provider settings"
+  },
+  "preflight": {
+    "importedPosts": 0,
+    "historyImportRecords": 0,
+    "importedWritingSamples": 0,
+    "allPublishJobs": 0,
+    "liveConnectionsForSameProviderSubject": 1
+  },
+  "disconnect": {
+    "state": "PASS",
+    "at": "2026-10-08T02:01:59.018935Z",
+    "auditRefMd5": "56b3c9cb9572e9f26eaa2adfa9c70f73",
+    "auditKind": "channel.disconnected",
+    "remoteRevoked": true,
+    "encryptedAccessPresentAfter": false,
+    "encryptedRefreshPresentAfter": false,
+    "ui": "No accounts connected",
+    "screenshot": {
+      "localPath": "/private/tmp/rafii-linkedin-b-disconnected.jpg",
+      "sha256": "05e0704ace717afb20fb55d3352e53a90f2d881f6dba6102cb1c359be2cd518e",
+      "redaction": "Sidebar collapsed; no credential, OAuth code/state, cookie or email visible."
+    }
+  },
+  "testerAAfterBDisconnect": {
+    "state": "PASS",
+    "grantPreserved": true,
+    "differentUserWorkspaceProviderSubject": true,
+    "liveIdentityRecheck": "read_verified",
+    "at": "2026-10-08T02:05:07.171633Z",
+    "auditRefMd5": "7423acf917fb3136c77635339b92bb86",
+    "limits": "Normal authorized identity re-check succeeded; this is not a live unauthorized cross-tenant request test.",
+    "screenshot": {
+      "localPath": "/private/tmp/rafii-linkedin-a-after-b-disconnect.jpg",
+      "sha256": "f88f801e4334c4bbfb037460d6e6ff002504323329d4f25792a8478a7532f58f",
+      "redaction": "Sidebar collapsed; no credential, OAuth code/state, cookie or email visible."
+    }
+  },
+  "reconnectAttempts": [
+    {
+      "transactionRefMd5": "788f3951c4f517350ff31ff12dfbf86a",
+      "createdAt": "2026-10-08T02:02:42.510028Z",
+      "expiresAt": "2026-10-08T02:12:42.510028Z",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "state": "EXPIRED_CALLBACK_REJECTED",
+      "consumedAt": null,
+      "outcome": null,
+      "redactedError": "This connection request is unavailable or expired. Sign in as the account that started it, or start again.",
+      "credentialStillRevoked": true,
+      "tokenSaved": false,
+      "recovery": "Back to Channels retained B session/workspace, then fresh normal-UI Account only attempt",
+      "screenshot": {
+        "localPath": "/private/tmp/rafii-linkedin-b-expired-callback.jpg",
+        "sha256": "52076c57736b0d174aabdea83f067ada4ede7911135fc037a1267ad81134194f",
+        "redaction": "Sidebar collapsed; no credential, OAuth code/state, cookie or email visible."
+      }
+    },
+    {
+      "transactionRefMd5": "2f9477eb8ddff84696f7b94775600e2e",
+      "createdAt": "2026-10-08T02:14:29.090820Z",
+      "expiresAt": "2026-10-08T02:24:29.090820Z",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "state": "EXPIRED_CALLBACK_REJECTED",
+      "callbackMatchesApprovedPreview": true,
+      "profileCheck": "LinkedIn consent does not clearly display the selected profile name; AX image alt identifies James Au but is not reliable subject evidence. Owner must confirm B intended profile, use Not you if wrong, and complete consent. Agent did not accept consent.",
+      "nextAction": "Owner selects B intended LinkedIn account and completes consent; verify same original subject/workspace and actual grants before passing reconnect.",
+      "handoffScreenshot": {
+        "localPath": "/private/tmp/rafii-linkedin-b-reconnect-consent.jpg",
+        "sha256": "8ba37372c2157f7a8796ec17518902465dc3fa2274e8d55ebcdf4589e6f970e0",
+        "redaction": "No email, credential, code, state or verifier visible."
+      },
+      "observedAt": "2026-10-08T02:44:03.580154+00:00",
+      "consumedAt": null,
+      "outcome": null,
+      "tokenSaved": false,
+      "credentialStillRevoked": true,
+      "redactedError": "This connection request is unavailable or expired. Sign in as the account that started it, or start again.",
+      "recovery": "Back to Channels preserved B Rafii session/workspace. Do not start the next transaction before owner is ready.",
+      "screenshot": {
+        "localPath": "/private/tmp/rafii-linkedin-b-expired-return-2.jpg",
+        "sha256": "a2dc7157e27d5319d44d76b73e6a7d1475553dd65f28d33f53a2905f5586f420",
+        "redaction": "Collapsed sidebar; no email, credential, code, state or verifier visible."
+      }
+    }
+  ],
+  "currentCustomerConnection": "DISCONNECTED_OWNER_START_REQUIRED",
+  "fullAcceptance": "PARTIAL",
+  "pending": [
+    "same-account reconnect completion",
+    "live unauthorized tenant rejection",
+    "real iPhone Safari",
+    "genuine expiry/reauthorization"
+  ],
+  "security": "No token, code, state, verifier, password, cookie, email or raw customer identifier retained.",
+  "nextAction": "Finish validated preview update, leave normal Account only selection before OAuth start; owner clicks Continue when ready and completes LinkedIn consent within ten minutes. Same-account/workspace proof remains required."
+}

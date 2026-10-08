@@ -1,0 +1,143 @@
+{
+  "observedAt": "2026-10-08T01:48:24.313877+00:00",
+  "execution": "real ordinary-user normal-UI LinkedIn connection on protected preview; full lifecycle acceptance PARTIAL",
+  "environment": {
+    "project": "postriff-phase2-private",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "deploymentId": "dpl_3DTXnHyuRyjMVLqVhAGiSE92C6Hh",
+    "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "origin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "callback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
+    "databaseProject": "oxacvkhpfgytkepxcaqh"
+  },
+  "provider": {
+    "id": "linkedin",
+    "appId": "263833009",
+    "appName": "James Studio",
+    "product": "Sign In with LinkedIn using OpenID Connect",
+    "tier": "Standard Tier observed in operator console",
+    "minimumScopes": [
+      "openid",
+      "profile"
+    ]
+  },
+  "testSubject": {
+    "label": "Tester B",
+    "memberRefMd5": "f278edef7611535718d32e2018648710",
+    "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "accountRefMd5": "62c2c6ce86976d46e6c446e3ecefce46",
+    "connectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+    "workspaceRole": "owner",
+    "membershipStatus": "active",
+    "activeRafiiFounderRole": false,
+    "anyRafiiOperatorRecord": false,
+    "founderRoleEvidence": "Targeted read of rafii_control.platform_operators, the current server authorization store, found no record for Tester B. Tester A also has no record.",
+    "providerAppRole": "Owner attested Connected; no provider-app role in this conversation. This attestation is not an independently queried LinkedIn role audit.",
+    "ownerConsent": "User reported completed Account only flow in Chrome; consumed server transaction and live verified grant corroborate completion.",
+    "intendedProfile": "Owner response to request to connect their own personal profile; different provider subject from Tester A; display names alone are not used to establish identity."
+  },
+  "oauthTransactions": [
+    {
+      "refMd5": "1f8342a81be15ad851b3767e56345e9e",
+      "capability": "identity",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "createdAt": "2026-10-08T01:36:24.899633Z",
+      "consumedAt": null,
+      "outcome": null,
+      "classification": "Earlier unconsumed attempt observed; not evidence of cancellation, denial or an exercised expired-callback rejection."
+    },
+    {
+      "refMd5": "c9ab5cacc2cb8431af1649fb31005b20",
+      "capability": "identity",
+      "requestedScopes": [
+        "openid",
+        "profile"
+      ],
+      "createdAt": "2026-10-08T01:39:18.577229Z",
+      "consumedAt": "2026-10-08T01:39:31.171685Z",
+      "outcome": "exchanged",
+      "singleUseConsumed": true,
+      "callbackMatchesRegisteredPreviewOrigin": true,
+      "sameUserAndWorkspaceAsSavedConnection": true
+    }
+  ],
+  "savedConnection": {
+    "evidenceSource": "live_provider",
+    "identityVerified": true,
+    "accountType": "member",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "grantEvidence": "Persisted server-verified grant; LinkedIn adapter requires token-response scope or validated active introspection/client match, not a fallback to requested scopes.",
+    "encryptedAccessPresent": true,
+    "encryptedRefreshPresent": false,
+    "refreshSupported": false,
+    "revoked": false,
+    "createdAt": "2026-10-08T01:39:31.171685Z",
+    "updatedAt": "2026-10-08T01:39:31.171685Z",
+    "accessExpiresAt": "2026-12-07T01:39:31.030464Z",
+    "chromeReload": "PASS: logged-in Tester B workspace retained the saved identity after explicit reload",
+    "freshRafiiSession": "PASS: owner report, new server auth session and retained original credential/Chrome UI corroborated",
+    "renewal": "No refresh supported for this grant; explicit reauthorization at expiry. Real expiry/reauthorization has not yet been observed.",
+    "observationState": "Historical pre-disconnect grant/persistence evidence; current token cleared by authorized lifecycle test"
+  },
+  "browser": {
+    "surface": "Chrome user tab",
+    "connectionMessage": "Connected — publishing not enabled.",
+    "connectedAndMemberIdentity": "Identity verified for this account",
+    "visibleActualPermissions": [
+      "openid",
+      "profile"
+    ],
+    "publishing": "Not enabled; operation-specific blockers retained",
+    "screenshotLocal": "/private/tmp/rafii-linkedin-tester-b-a2723673.jpg",
+    "screenshotSha256": "9bb4a37941f69dca41b4a2ef8a2d0ae7d1f3e0435feac4f0add8119dee3464e4",
+    "screenshotRedaction": "Sidebar collapsed; no email, token, secret, state or verifier visible."
+  },
+  "tenancy": {
+    "twoDistinctRafiiUsers": true,
+    "twoDistinctWorkspaces": true,
+    "twoDistinctProviderSubjects": true,
+    "eachConnectionMatchesItsOriginatingTransaction": true,
+    "unauthorizedCrossTenantRequestTest": "NOT_RUN live; synthetic security coverage is separate"
+  },
+  "qualification": {
+    "ordinaryExternalBasicConnectionObserved": true,
+    "fullConnectionAcceptance": "PARTIAL",
+    "ordinaryExternalFullPass": false,
+    "livePassed": 0,
+    "publication": "NOT_RUN",
+    "disconnectReconnect": "Approved disconnect PASS; two callback returns expired safely without token saving; owner must start fresh Account only flow when ready",
+    "realIPhoneSafari": "validation_unavailable: supported device access pending",
+    "realRefresh": "NOT_RUN; not supported for this grant",
+    "production": "NOT_RELEASED"
+  },
+  "secretSafety": "No token, secret, state, PKCE verifier, password, cookie, email or raw customer identifier exported in this receipt.",
+  "latestObservedAt": "2026-10-08T02:44:03.580154+00:00",
+  "freshSessionEvidence": {
+    "state": "PASS",
+    "ownerReported": "still connected after requested sign-out/sign-in",
+    "serverLastSignInAt": "2026-10-08T01:52:28.752045Z",
+    "serverNewSessionCreatedAt": "2026-10-08T01:52:28.752140Z",
+    "browser": "Chrome, authenticated Tester B, same preview Channels and saved connection",
+    "credentialCreatedAtUnchanged": "2026-10-08T01:39:31.171685Z",
+    "credentialUpdatedAtUnchanged": "2026-10-08T01:39:31.171685Z",
+    "workspaceRefMd5": "249fd4ac7489aafd15b4fe6c6cc0b216",
+    "connectionRefMd5": "247a97cd88669d3bd8f327b71bac18c2",
+    "actualScopes": [
+      "openid",
+      "profile"
+    ],
+    "encryptedAccessPresent": true,
+    "revoked": false,
+    "observedAt": "2026-10-08T01:56:40.330906+00:00",
+    "limits": "Fresh Rafii authentication and retained connection verified; no provider renewal/expiry simulation or live cross-tenant negative test claimed."
+  },
+  "disconnectReconnectPlan": "linkedin-tester-b-fresh-session-20261008.json",
+  "currentCustomerConnection": "DISCONNECTED_OWNER_START_REQUIRED",
+  "lifecycleEvidence": "linkedin-tester-b-lifecycle-20261008.json"
+}

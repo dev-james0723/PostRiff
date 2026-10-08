@@ -14,35 +14,34 @@
     {
       "provider": "linkedin",
       "name": "LinkedIn",
-      "environment": "Protected branch preview; actual source a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2; production unchanged",
+      "environment": "Protected branch preview; exact source a27236736fe524caf842be5a1dc6c91fc34e1baa; production unchanged",
       "appIdentityAndOwnership": "James Studio app 263833009 / client 86761m831bhyiu; OIDC Added / Standard Tier; runtime client exactly matches console",
       "credentials": "Client/token exchange verified through real normal-UI identity consent; no secrets exported",
       "expectedCallback": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app/api/oauth/linkedin/callback",
-      "generatedCallback": "MATCH: exact branch preview callback in two consumed server transactions",
+      "generatedCallback": "MATCH: exact branch preview callback in consumed Tester A and Tester B server transactions",
       "registeredCallback": "MATCH: branch preview callback added under approved LinkedIn preview plan",
       "minimumScopes": "openid profile",
-      "requestedScopes": "Initial identity: openid profile; later user-selected publish permission extension: openid profile w_member_social",
+      "requestedScopes": "Tester B Account only: openid profile. Tester A initially identity, later user-selected publishing-permission extension.",
       "grantedScopes": [
         "openid",
-        "profile",
-        "w_member_social"
+        "profile"
       ],
       "accountRequirements": "Member; no organization required",
-      "publicReadiness": "OIDC Standard Tier/app/callback observed; independent ordinary-user and full lifecycle acceptance still pending",
-      "customerConnection": "CONNECTED_TESTER_A_PROVIDER_APP_ROLE_UNVERIFIED",
-      "featurePermission": "Actual identity grant verified; no publishing/organization/read/analytics capability promoted",
-      "tokenExchange": "REAL_EXCHANGED: initial identity and later permission extension; both consumed single-use transactions",
-      "identityAndDestination": "VERIFIED member identity bound to originating user/workspace; intended profile confirmed by user",
-      "persistence": "Encrypted durable access token and same connection after browser reload observed; fresh-session test pending",
+      "publicReadiness": "OIDC Standard Tier/app/callback verified; ordinary Tester B minimum connection and Chrome reload observed. Full lifecycle/iPhone/live isolation and production acceptance remain pending.",
+      "customerConnection": "DISCONNECTED_OWNER_START_REQUIRED",
+      "featurePermission": "Tester B actual identity-only grant verified; publishing not enabled. No publishing/organization/read/analytics capability promoted.",
+      "tokenExchange": "REAL_EXCHANGED: Tester B Account only transaction consumed; Tester A identity/extension history retained separately.",
+      "identityAndDestination": "VERIFIED: two distinct member subjects bound to two distinct originating Rafii users/workspaces; B owner attested no provider-app role; neither Rafii user has any Founder operator record.",
+      "persistence": "PASS: encrypted durable connection, reload and genuinely new Rafii session retained the original Tester B credential and workspace binding. A survives deployment/reload separately.",
       "renewal": "No refresh token/refresh support for this grant; explicit reauthorization at expiry. Real expiry behavior pending",
-      "disconnectReconnect": "PENDING authorized live exercise",
-      "failureStep": "No current token-exchange failure; misleading capability labels repaired in validated candidate, preview update pending",
-      "blockerClass": "UNVERIFIED",
-      "owner": "Agent: preview/UI verification; account owners: independent profile and lifecycle consent",
-      "nextAction": "Deploy approved status fix, verify saved connection; Tester B then connects an intended personal LinkedIn profile with no provider-app role using Account only. Complete fresh session, two-workspace isolation, disconnect/reconnect and real iPhone acceptance.",
+      "disconnectReconnect": "Approved remote revocation/local token removal PASS. Two expired callback returns rejected safely; reconnect incomplete.",
+      "failureStep": "Two callbacks returned after their ten-minute transaction windows. No token saved. Owner-controlled start of fresh flow needed.",
+      "blockerClass": "HUMAN_CONSENT",
+      "owner": "Account owner: confirm intended B profile and complete consent; agent: same-subject/workspace proof and remaining regression",
+      "nextAction": "After validated preview update, owner starts Account only when ready, confirms intended B LinkedIn profile and completes official consent within ten minutes. Agent verifies same subject/workspace and actual grant; no repeated disconnect approval.",
       "console": "https://www.linkedin.com/developers/apps",
       "primarySource": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
-      "evidenceRef": "evidence/linkedin-tester-a-20261008.json",
+      "evidenceRef": "evidence/linkedin-tester-b-20261008.json",
       "ordinaryExternalPass": false,
       "additionalBlockers": [
         "HUMAN_CONSENT",
@@ -95,13 +94,44 @@
           "ORDINARY_USERS_REQUIRED",
           "IPHONE_VALIDATION_UNAVAILABLE"
         ]
-      }
+      },
+      "historicalObservationBeforeTesterB": {
+        "environment": "Protected branch preview; actual source a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2; production unchanged",
+        "publicReadiness": "OIDC Standard Tier/app/callback observed; independent ordinary-user and full lifecycle acceptance still pending",
+        "customerConnection": "CONNECTED_TESTER_A_PROVIDER_APP_ROLE_UNVERIFIED",
+        "grantedScopes": [
+          "openid",
+          "profile",
+          "w_member_social"
+        ],
+        "persistence": "Encrypted durable access token and same connection after browser reload observed; fresh-session test pending",
+        "failureStep": "No current token-exchange failure; misleading capability labels repaired in validated candidate, preview update pending",
+        "nextAction": "Deploy approved status fix, verify saved connection; Tester B then connects an intended personal LinkedIn profile with no provider-app role using Account only. Complete fresh session, two-workspace isolation, disconnect/reconnect and real iPhone acceptance.",
+        "evidenceRef": "evidence/linkedin-tester-a-20261008.json"
+      },
+      "ordinaryExternalBasicConnectionObserved": true,
+      "providerAppIndependenceEvidence": "Tester B owner attestation in conversation; not an independently queried LinkedIn role audit.",
+      "evidenceRefs": [
+        "evidence/linkedin-tester-a-20261008.json",
+        "evidence/linkedin-tester-b-20261008.json",
+        "evidence/preview-status-a2723673.json",
+        "evidence/linkedin-tester-b-fresh-session-20261008.json",
+        "evidence/linkedin-tester-b-lifecycle-20261008.json"
+      ],
+      "freshSessionEvidence": "evidence/linkedin-tester-b-fresh-session-20261008.json",
+      "historicalObservationBeforeAuthorizedDisconnect": {
+        "customerConnection": "CONNECTED_TESTER_B_ORDINARY_USER_BASIC_OBSERVED",
+        "disconnectReconnect": "PREPARED; exact Tester B disconnect/reconnect approval pending, no action performed",
+        "nextAction": "Approve prepared Tester B disconnect/reconnect test; owner performs any provider consent. Then live cross-tenant negative checks and real iPhone Safari. Keep genuine token aging pending. No repeat initial consent or preview approval required.",
+        "failureStep": "Original false identity BLOCKED status repaired and verified on exact preview source; no current exchange failure."
+      },
+      "lifecycleEvidence": "evidence/linkedin-tester-b-lifecycle-20261008.json"
     },
     {
       "provider": "threads",
       "name": "Threads",
       "environment": "Production source 91f6572 inspected; protected recovery preview deployed, provider configuration not applied",
-      "appIdentityAndOwnership": "James Au Studio \u2014 Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
+      "appIdentityAndOwnership": "James Au Studio — Threads app 2284812538978484, product app ID 1431031092226762; Testing / Unpublished; threads_basic Ready for testing",
       "credentials": "Missing client ID and secret",
       "expectedCallback": "https://postriff-phase2-private.vercel.app/api/oauth/threads/callback",
       "generatedCallback": "UNVERIFIED on deployment",
@@ -422,7 +452,7 @@
   "evidenceClasses": {
     "synthetic": "cloud regression, disposable PostgreSQL and browser fixtures only",
     "appRoleIntegration": "Tester A live preview identity observed; provider-app role unverified, so not counted as ordinary-external proof",
-    "ordinaryExternalLive": "0 full passes; LinkedIn partial live preview evidence only; other seven NOT_RUN",
+    "ordinaryExternalLive": "Historical LinkedIn minimum ordinary-user connection/reload/fresh session observed. B deliberately disconnected; two expired callbacks rejected, fresh reconnect remains pending. Full acceptance zero; other seven NOT_RUN.",
     "productionVerification": "source/UI/config inspected; no live acceptance"
   },
   "requiredLiveAcceptance": [
@@ -436,6 +466,11 @@
     "desktop and real iPhone Safari"
   ],
   "latestConsoleObservationAt": "2026-10-07T07:26:52.475Z",
-  "latestEvidenceRef": "evidence/linkedin-tester-a-20261008.json",
-  "latestLiveObservationAt": "2026-10-08T01:15:02Z"
+  "latestEvidenceRef": "evidence/linkedin-tester-b-lifecycle-20261008.json",
+  "latestLiveObservationAt": "2026-10-08T02:44:03.580154+00:00",
+  "ordinaryExternalConnectionObservedProviders": 1,
+  "countDefinitions": {
+    "ordinaryExternalConnectionObservedProviders": "At least one non-Founder user with attested no provider-app role completed real minimum consent/exchange/identity and reload on this preview.",
+    "verifiedOrdinaryExternalProviders": "Full required lifecycle, tenancy, desktop/iPhone and release acceptance; this count remains zero."
+  }
 }

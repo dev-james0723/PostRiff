@@ -8,8 +8,8 @@
       "case": "oauth",
       "execution": "real provider API",
       "state": "PARTIAL",
-      "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
-      "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case.",
+      "evidence": "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+      "externalBlocker": "Historical ordinary B minimum connection/reload/fresh session PASS retained. Approved disconnect/revocation passed and A remains connected. Two callbacks expired safely; B must start fresh Account only when ready and complete consent within ten minutes. Live tenant-negative/iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
       "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
@@ -31,15 +31,30 @@
           "HUMAN_CONSENT",
           "UNVERIFIED"
         ]
-      }
+      },
+      "historicalObservationBeforeTesterB": {
+        "state": "PARTIAL",
+        "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+        "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case."
+      },
+      "evidenceRefs": [
+        "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json"
+      ],
+      "ordinaryExternalBasicConnectionObserved": true,
+      "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
+      "freshSessionEvidence": "../official-social-20261007/evidence/linkedin-tester-b-fresh-session-20261008.json",
+      "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
+      "disconnectReconnect": "APPROVED_DISCONNECT_PASS_OWNER_START_REQUIRED",
+      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session"
     },
     {
       "provider": "linkedin",
       "case": "member_identity",
       "execution": "real provider API",
       "state": "PARTIAL",
-      "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
-      "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case.",
+      "evidence": "../official-social-20261007/evidence/linkedin-tester-b-20261008.json",
+      "externalBlocker": "Historical ordinary B minimum connection/reload/fresh session PASS retained. Approved disconnect/revocation passed and A remains connected. Two callbacks expired safely; B must start fresh Account only when ready and complete consent within ten minutes. Live tenant-negative/iPhone and genuine expiry remain pending. No publication/organization prerequisite.",
       "toolingBlocker": "Desktop browser works. Real iPhone Safari validation pending supported device access.",
       "publicationApproval": "NOT_REQUIRED for this connection-only case. No post/reply/delete/upload authorized.",
       "historicalBlockers20261005": {
@@ -61,7 +76,22 @@
           "HUMAN_CONSENT",
           "UNVERIFIED"
         ]
-      }
+      },
+      "historicalObservationBeforeTesterB": {
+        "state": "PARTIAL",
+        "evidence": "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+        "externalBlocker": "Real normal-UI exchange/member identity/reload observed on preview. Provider-app independence, fresh session, lifecycle, two tenants and real iPhone remain pending. No organization or public-post prerequisites for this identity case."
+      },
+      "evidenceRefs": [
+        "../official-social-20261007/evidence/linkedin-tester-a-20261008.json",
+        "../official-social-20261007/evidence/linkedin-tester-b-20261008.json"
+      ],
+      "ordinaryExternalBasicConnectionObserved": true,
+      "freshRafiiSession": "PASS: new server session, unchanged original credential and authenticated Chrome UI",
+      "freshSessionEvidence": "../official-social-20261007/evidence/linkedin-tester-b-fresh-session-20261008.json",
+      "lifecycleEvidence": "../official-social-20261007/evidence/linkedin-tester-b-lifecycle-20261008.json",
+      "disconnectReconnect": "APPROVED_DISCONNECT_PASS_OWNER_START_REQUIRED",
+      "expiredCallback": "PASS: two real over-ten-minute returns rejected, no token saved; Back to Channels retained B workspace/session"
     },
     {
       "provider": "linkedin",
