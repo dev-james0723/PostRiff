@@ -26,6 +26,9 @@ class LibraryStorageTests(unittest.TestCase):
   self.assertEqual(s.object_info(WS,"file","0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10.txt")["mime"],"text/plain")
  def test_bounded_file_read(self):
   s,h=self.make([(200,{"Content-Length":"3"},b"abc")]);self.assertEqual(s.get_bounded(WS,"file",OBJ,10),b"abc")
+ def test_immutable_file_put_targets_library_bucket(self):
+  s,h=self.make([(200,{},b"{}")]);s.put_immutable(WS,"file","0f3c0e3a9d5b4c1e8f7a6b5c4d3e2f10.md",b"note","text/markdown")
+  self.assertIn("/storage/v1/object/postriff-library/",h.requests[0][1]);self.assertIn(f"/{WS}/file/",h.requests[0][1])
  def test_invalid_file_object_name_fails_closed(self):
   s,_=self.make([])
   with self.assertRaises(Exception):s.object_info(WS,"file","../evil.pdf")

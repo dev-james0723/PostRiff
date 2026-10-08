@@ -104,7 +104,7 @@ class SupabaseStorage:
         path = self._path(workspace_id, category, object_name)
         if not isinstance(raw, bytes) or not 1 <= len(raw) <= 8 * 1024 * 1024:
             raise AlphaError("Decoded media is missing or too large.")
-        url = f"{self.project_url}/storage/v1/object/{quote(self.bucket)}/{quote(path, safe='/')}"
+        url = self._object_url(category, path)  # file objects belong in the private Library bucket, media in the media bucket
         headers = self._headers(content_type)
         headers["x-upsert"] = "false"
         status, _, _ = self.send("POST", url, headers, raw)
