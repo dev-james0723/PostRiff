@@ -103,7 +103,7 @@ const checks=[];
    }
    thumbnailFormats.add('video');
    const inlineVideo=page.locator('[data-library-media-player="video"]').first();
-   const previewVideo=inlineVideo.locator('video');
+   const previewVideo=inlineVideo.locator('video');await inlineVideo.scrollIntoViewIfNeeded();
    if(engine==='chromium'){
     // Reduced motion never starts moving previews. The same actual MP4 must start
     // silently when the user allows motion, without a click on its card.

@@ -82,9 +82,12 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   const title = asset.displayTitle || asset.originalFilename || (video ? 'Video' : 'Audio');
   const ready = !asset.processing || ['ready', 'unsupported'].includes(asset.processing);
   const active = enabled && ready && (activated || visible);
-  const source = useQuery({
+  const source = useQuery<{ url: string; mime: string }>({
     queryKey: ['library-inline-source', workspaceId, asset.id, video],
-    queryFn: () => video ? api.mediaUrl(workspaceId, asset.id) : api.libraryFileUrl(workspaceId, asset.id),
+    queryFn: async () => {
+      const result = await (video ? api.mediaUrl(workspaceId, asset.id) : api.libraryFileUrl(workspaceId, asset.id));
+      return { url: result.url, mime: result.mime };
+    },
     enabled: Boolean(workspaceId) && active,
     staleTime: 3 * 60_000,
     refetchInterval: active ? 4 * 60_000 : false,

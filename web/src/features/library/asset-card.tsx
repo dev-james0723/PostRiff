@@ -183,7 +183,7 @@ export function AssetCard({
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
-                <div data-library-thumbnail={assetKind === 'video' ? 'video' : 'image'} data-thumbnail-preview={assetKind === 'video' ? 'video-poster' : 'image'} className='relative'>
+                <div data-library-thumbnail='image' data-thumbnail-preview='image' className='relative'>
                   <Image src={image.data} alt='' width={400} height={400} unoptimized className='aspect-square w-full object-cover' />
                   {kindOf(asset) === 'video' && (
                     <span className='bg-background/80 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
