@@ -898,7 +898,7 @@ class Links(Base):
         self.blocked("https://news.example.org/story", net, "library_link_scheme")
         for url in ("http://localhost/", "http://[::1]/", "http://10.0.0.5/", "http://2130706433/", "http://metadata.google.internal/",
                     "http://meta.example.net/", "http://ula.example.net/", "http://cgnat.example.net/", "http://mapped.example.net/",
-                    "http://nat64.example.net/", "http://zero.example.net/", "http://user:pw@news.example.org/", "http://news.example.org:8080/"):
+                    "http://nat64.example.net/", "http://zero.example.net/", "http://user:pw@news.example.org/", "http://news.example.org:8080/"):  # pragma: allowlist secret -- synthetic example.org URL proving credentialed links are refused
             net = Net()
             with self.assertRaises(AlphaError) as caught:
                 self.fetch(url, net)

@@ -829,7 +829,7 @@ class Cursors(unittest.TestCase):
             ctx.actor = "00000000-0000-0000-0000-000000000099"
             run(ctx, limit=20, cursor=token)
         self.assertEqual(other_actor.exception.code, "library_cursor_stale")
-        with mock.patch.dict(os.environ, {"RAFII_LIBRARY_CURSOR_SECRET": "another-secret-value-for-tests-only"}):
+        with mock.patch.dict(os.environ, {"RAFII_LIBRARY_CURSOR_SECRET": "another-secret-value-for-tests-only"}):  # pragma: allowlist secret -- test-only cursor signing value
             with self.assertRaises(AlphaError) as rotated:
                 run(make_ctx(db), limit=20, cursor=token)
         self.assertEqual(rotated.exception.code, "library_cursor_stale")
@@ -1227,7 +1227,7 @@ class Surface(unittest.TestCase):
 
 class RetrievalEvaluation(unittest.TestCase):
     """Pure helpers of scripts/library-intelligence-eval.py (A026/A027). The frozen corpus and judgments are only read."""
-    DISTRACTOR_DIGEST = "e696bda34cf9ec4ec10ad2dd6673d900f65ea46e3b457869c4828effd4062a5c"
+    DISTRACTOR_DIGEST = "e696bda34cf9ec4ec10ad2dd6673d900f65ea46e3b457869c4828effd4062a5c"  # pragma: allowlist secret -- SHA-256 of a frozen fixture document, not a secret
 
     @classmethod
     def setUpClass(cls):
@@ -1292,18 +1292,18 @@ class RetrievalEvaluation(unittest.TestCase):
         guard.record({"kind": "estimated", "usdMicro": 2}, estimate=6)
         self.assertEqual(guard.spent_micro, 6, "an estimate below ours is charged at ours")
         self.assertFalse(guard.allows(5))
-        secret = "sk-test-NEVER-PRINT-ME"
+        secret = "sk-test-NEVER-PRINT-ME"  # pragma: allowlist secret -- placeholder proving the eval loader never prints keys
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / "provider.env"
             env_file.write_text(f"# local\nexport AI_GATEWAY_API_KEY='{secret}'\nOPENAI_API_KEY=other-secret\nUNRELATED=1\n", encoding="utf-8")
             os.chmod(env_file, 0o600)
-            self.assertEqual(ev.load_env_file(env_file), {"AI_GATEWAY_API_KEY": secret, "OPENAI_API_KEY": "other-secret"})
+            self.assertEqual(ev.load_env_file(env_file), {"AI_GATEWAY_API_KEY": secret, "OPENAI_API_KEY": "other-secret"})  # pragma: allowlist secret -- placeholder values in a temporary env file
             self.assertIsNone(ev.env_file_mode_warning(env_file))
             environ = ev.provider_environ(ev.load_env_file(env_file), None)
             self.assertEqual(environ["AI_GATEWAY_API_KEY"], secret)
             self.assertNotIn("UNRELATED", environ)
             out = Path(tmp) / "report.json"
-            with mock.patch.dict(os.environ, {ev.AUTH_ENV: "", "AI_GATEWAY_API_KEY": "process-env-is-ignored"}), contextlib.redirect_stdout(_io.StringIO()) as printed:
+            with mock.patch.dict(os.environ, {ev.AUTH_ENV: "", "AI_GATEWAY_API_KEY": "process-env-is-ignored"}), contextlib.redirect_stdout(_io.StringIO()) as printed:  # pragma: allowlist secret -- placeholder proving process variables are ignored
                 code = ev.main(["--out", str(out), "--budget-usd", "10", "--env-file", str(env_file)])
             self.assertEqual(code, 3)
             self.assertNotIn(secret, printed.getvalue())

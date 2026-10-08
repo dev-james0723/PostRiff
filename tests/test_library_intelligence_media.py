@@ -33,7 +33,7 @@ def mod(name):
 
 
 ENV = {"RAFII_LIBRARY_ENRICHMENT_ENABLED": "1", "RAFII_LIBRARY_ASR_ENABLED": "1", "RAFII_LIBRARY_VISION_ENABLED": "1",
-       "OPENAI_API_KEY": "contract-test-not-a-key", "AI_GATEWAY_API_KEY": "contract-test-not-a-key"}
+       "OPENAI_API_KEY": "contract-test-not-a-key", "AI_GATEWAY_API_KEY": "contract-test-not-a-key"}  # pragma: allowlist secret -- placeholder provider variables; contract tests never call a provider
 
 
 class Transport:

@@ -351,7 +351,7 @@ test('test_animated_counts_single_accessible_name: digits are hidden, one label 
 });
 
 test('navigation state: stable ids only, defaults omitted, signed links never reach the address', () => {
-  const state = { ...U.DEFAULT_LIBRARY_STATE, q: 'Brahms rehearsal', scope: 'selection', use: 'unused', kind: 'audio', mode: 'list', density: 'compact', sel: ['2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'], asset: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' };
+  const state = { ...U.DEFAULT_LIBRARY_STATE, q: 'Brahms rehearsal', scope: 'selection', use: 'unused', kind: 'audio', mode: 'list', density: 'compact', sel: ['2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6'], asset: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' };  // pragma: allowlist secret -- synthetic asset UUIDs
   const params = U.serializeLibraryState(state);
   assert.deepEqual(Object.keys(params), ['q', 'scope', 'use', 'kind', 'mode', 'density', 'sel', 'asset']);
   assert.deepEqual(U.parseLibraryState(new URLSearchParams(params)), state);
@@ -364,7 +364,7 @@ test('navigation state: stable ids only, defaults omitted, signed links never re
   assert.equal(U.parseLibraryState({ mode: 'carousel' }).mode, 'gallery');
   assert.deepEqual(U.reconcileSelection(['a1b2c3d4', 'gone1234'], ['A1B2-C3D4'], true), { kept: ['a1b2c3d4'], dropped: 1 });
   assert.deepEqual(U.reconcileSelection(['a1b2c3d4', 'notloaded'], ['a1b2c3d4'], false), { kept: ['a1b2c3d4', 'notloaded'], dropped: 0 }, 'an incomplete list cannot prove absence');
-  assert.deepEqual(U.assetRefFor('2F0C6C1E-5A1B-4C6A-9D0E-3B2A1C0D9E8F'), { assetId: '2f0c6c1e5a1b4c6a9d0e3b2a1c0d9e8f', versionId: '', sha256: '' });
+  assert.deepEqual(U.assetRefFor('2F0C6C1E-5A1B-4C6A-9D0E-3B2A1C0D9E8F'), { assetId: '2f0c6c1e5a1b4c6a9d0e3b2a1c0d9e8f', versionId: '', sha256: '' });  // pragma: allowlist secret -- synthetic asset UUID
   assert.ok(!U.scrollKey('ws', state).includes('sel='), 'scroll is kept per view, not per selection');
 });
 
