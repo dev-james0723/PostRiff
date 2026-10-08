@@ -34,7 +34,8 @@ const PARAMS = {
   density: parseAsStringLiteral(LIBRARY_DENSITIES).withDefault(DEFAULT_LIBRARY_STATE.density),
   sel: parseAsArrayOf(parseAsString).withDefault([]),
   asset: parseAsString.withDefault(''),
-  panel: parseAsStringLiteral(LIBRARY_PANELS).withDefault(DEFAULT_LIBRARY_STATE.panel)
+  panel: parseAsStringLiteral(LIBRARY_PANELS).withDefault(DEFAULT_LIBRARY_STATE.panel),
+  pack: parseAsString.withDefault('')
 };
 
 const VIEW_KEY = 'rafii-library-view';
@@ -77,27 +78,35 @@ export function useLibraryUrlState() {
       density: raw.density,
       sel: sanitizeIds(raw.sel),
       asset: isSafeId(raw.asset) ? raw.asset : '',
-      panel: raw.panel
+      panel: raw.panel,
+      pack: isSafeId(raw.pack) ? raw.pack : ''
     }),
     [raw]
   );
 
+  const patchFor = useCallback((patch: Partial<LibraryUrlState>) => {
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === 'q') next.q = safeQuery(value) || null;
+      else if (key === 'sel') {
+        const ids = sanitizeIds(value);
+        next.sel = ids.length ? ids : null;
+      } else if (key === 'collection' || key === 'asset' || key === 'pack') next[key] = isSafeId(value) ? value : null;
+      else if (key === 'tag') next.tag = typeof value === 'string' && value ? value.slice(0, 80) : null;
+      else next[key] = value === DEFAULT_LIBRARY_STATE[key as keyof LibraryUrlState] ? null : value;
+    }
+    return next as Parameters<typeof setRaw>[0];
+  }, []);
+
   const update = useCallback(
     (patch: Partial<LibraryUrlState>) => {
-      const next: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(patch)) {
-        if (key === 'q') next.q = safeQuery(value) || null;
-        else if (key === 'sel') {
-          const ids = sanitizeIds(value);
-          next.sel = ids.length ? ids : null;
-        } else if (key === 'collection' || key === 'asset') next[key] = isSafeId(value) ? value : null;
-        else if (key === 'tag') next.tag = typeof value === 'string' && value ? value.slice(0, 80) : null;
-        else next[key] = value === DEFAULT_LIBRARY_STATE[key as keyof LibraryUrlState] ? null : value;
-      }
-      void setRaw(next as Parameters<typeof setRaw>[0]);
+      void setRaw(patchFor(patch));
     },
-    [setRaw]
+    [setRaw, patchFor]
   );
+
+  /** The same change, resolved once the address carries it (for a caller about to navigate away). */
+  const commit = useCallback((patch: Partial<LibraryUrlState>) => setRaw(patchFor(patch)), [setRaw, patchFor]);
 
   // The remembered view applies once, only when the address does not already say.
   const restored = useRef(false);
@@ -115,5 +124,5 @@ export function useLibraryUrlState() {
     if (restored.current) writeViewPreference(state.mode, state.density);
   }, [state.mode, state.density]);
 
-  return { state, update };
+  return { state, update, commit };
 }

@@ -191,14 +191,41 @@ export const CollectionProposalSchema = z.strictObject({
 /** Words in a source-pack action that would approve something only a person can approve. */
 const APPROVING = /approv|rights|fact|public/i;
 
+/** Rights are a constraint to check: nothing in a pack may call them cleared. */
+const CLEARED = /\b(?:cleared|clearance|all clear|rights[- ]free|copyright[- ]free)\b/i;
+const notCleared = (max: number) => text(max).refine((value) => !CLEARED.test(value), 'Rights are never “cleared”');
+
 export const SourcePackReviewSchema = z.strictObject({
   packId: assetKeySchema,
   revision: count,
   goal: text(300),
-  evidence: z.array(z.strictObject({ sourceRef: SourceRefSchema, title, rationale: text(400), rights: text(120) })).max(50),
-  style: z.array(z.strictObject({ sourceRef: SourceRefSchema, title, rationale: text(400) })).max(20),
-  gaps: z.array(text(200)).max(20),
-  rightsWarnings: z.array(text(240)).max(20),
+  evidence: z
+    .array(
+      z.strictObject({
+        sourceRef: SourceRefSchema,
+        title,
+        rationale: text(400),
+        /** A rights code (approved_public | needs_review | internal | unknown); shown in fixed words, anything else reads unknown. */
+        rights: notCleared(120),
+        locatorLabel: text(80).optional(),
+        warnings: z.array(notCleared(240)).max(6).optional()
+      })
+    )
+    .max(50),
+  style: z
+    .array(
+      z.strictObject({
+        sourceRef: SourceRefSchema,
+        title,
+        rationale: text(400),
+        locatorLabel: text(80).optional(),
+        polarity: z.enum(['positive', 'negative']).optional(),
+        sampleId: z.string().regex(ACTION_ID).optional()
+      })
+    )
+    .max(20),
+  gaps: z.array(notCleared(200)).max(20),
+  rightsWarnings: z.array(notCleared(240)).max(20),
   actions: actionsOf(['source_pack.create', 'source_pack.attach'], 3).refine(
     (actions) => actions.every((action) => !strings(action.envelope.payload).some((key) => APPROVING.test(key))),
     'A source pack cannot approve facts or rights'

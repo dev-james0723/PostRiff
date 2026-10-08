@@ -1,7 +1,7 @@
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type {
   ActionEnvelope, ActionResult, AnswerResult, AssetRef, CapabilityState, CollectionDetail, CollectionPreview, ComparisonResult, ContentSegment,
-  AssetUsage, AssetVoice, LibraryCapability, LibraryGrant, LibraryIntelligenceStatus, LibraryScope, LibrarySearchRequest, RelatedResult, SearchResponse,
+  AssetUsage, AssetVoice, LibraryCapability, LibraryGrant, LibraryIntelligenceStatus, LibraryReturnTo, LibraryScope, LibrarySearchRequest, RelatedResult, SearchResponse,
   SmartRule, SourcePack, SourceRef, SuggestionInbox, TaskContext, UnderstandingCard, VersionStack, ViewerResult
 } from './library-intelligence-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
@@ -400,7 +400,9 @@ export function createApi(getToken: TokenSource) {
       intelligence<CollectionPreview>(w, 'POST', 'collections/preview', body),
     libraryCollection: (w: string, id: string) => intelligence<CollectionDetail>(w, 'GET', `collections/${encodeURIComponent(id)}`),
     librarySourcePack: (w: string, id: string) => intelligence<SourcePack>(w, 'GET', `source-packs/${encodeURIComponent(id)}`),
-    libraryRecommendSources: (w: string, task: TaskContext) => intelligence<SourcePack>(w, 'POST', 'source-packs', task),
+    /** A persisted pack (revision 1) recommended for the task; `returnTo` is the Library state to come back to. */
+    libraryRecommendSources: (w: string, task: TaskContext, returnTo?: LibraryReturnTo | null) =>
+      intelligence<SourcePack>(w, 'POST', 'source-packs', returnTo ? { ...task, returnTo } : task),
     librarySuggestions: (w: string) => intelligence<SuggestionInbox>(w, 'GET', 'suggestions'),
     libraryVoiceSummary: (w: string) => intelligence<Record<string, unknown>>(w, 'GET', 'voice'),
     libraryIntelligenceStatus: (w: string) => intelligence<LibraryIntelligenceStatus>(w, 'GET', 'status'),

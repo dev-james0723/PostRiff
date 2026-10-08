@@ -31,7 +31,8 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { bottomClearance } from '@/lib/library/layout';
 import { MAX_SELECTED, assetRefFor, normalizeKey, reconcileSelection, scrollKey, type LibraryKindParam, type LibrarySortParam } from '@/lib/library/url-state';
-import { countLabel, coverageLabel, hitTotalLabel, processingLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
+import { libraryGates, removedNotice, restoreLibraryState } from '@/lib/library/source-pack';
+import { countLabel, coverageLabel, hitTotalLabel, processingLabel, scopeLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { formatBytes } from '@/lib/time';
@@ -52,6 +53,7 @@ import { CollectionRail } from './intelligence/collection-rail';
 import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewControls } from './intelligence/library-toolbar';
 import { AskLibraryPanel } from './intelligence/ask-library';
 import { SmartCollectionPanel } from './intelligence/smart-collections';
+import { SourcePackFlow, type PackRequest } from './intelligence/source-pack-flow';
 import { SuggestionsPanel } from './intelligence/suggestions-panel';
 import { HitDetails, resolveHitAsset } from './intelligence/search-results';
 import { useBatchActions } from './intelligence/use-batch-actions';
@@ -221,8 +223,10 @@ function LibraryPage() {
   const auth = useAuth();
   const isMobile = useIsMobile();
   const wide = useWideLayout();
-  const { state: url, update } = useLibraryUrlState();
+  const { state: url, update, commit } = useLibraryUrlState();
   const intel = useLibraryIntelligence();
+  // What this environment switched on (GET …/status): entry points that are off are hidden or explained.
+  const gates = libraryGates(intel.flags, intel.reachable);
   const collections = useLibraryCollections();
   const [announcement, announce] = useAnnouncer();
 
@@ -234,6 +238,40 @@ function LibraryPage() {
     const timer = window.setTimeout(() => update({ q: query }), 300);
     return () => window.clearTimeout(timer);
   }, [query, update]);
+
+  // Back from a draft: the source pack's saved Library state (query, scope, filters, sort, view, selection and open
+  // item), with items that became inaccessible already left out by the server and explained without naming them.
+  const latestUrl = useRef(url);
+  useEffect(() => {
+    latestUrl.current = url;
+  });
+  const restoredPack = useRef('');
+  useEffect(() => {
+    const packId = url.pack;
+    if (!packId || restoredPack.current === packId) return;
+    if (!intel.reachable) {
+      if (intel.status.isFetched) update({ pack: '' });
+      return;
+    }
+    restoredPack.current = packId;
+    let cancelled = false;
+    void api
+      .librarySourcePack(workspaceId, packId)
+      .then((pack) => {
+        if (cancelled) return;
+        const patch = restoreLibraryState(pack.returnTo, latestUrl.current);
+        if (typeof patch.q === 'string') setQuery(patch.q);
+        update({ ...patch, pack: '' });
+        const notice = removedNotice(pack.returnToRemoved);
+        if (notice) toast.info(notice);
+      })
+      .catch(() => {
+        if (!cancelled) update({ pack: '' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url.pack, intel.reachable, intel.status.isFetched, api, workspaceId, update]);
 
   const collectionList = useMemo(() => collections.data?.collections ?? [], [collections.data]);
   const activeCollection = url.collection ? (collectionList.find((collection) => collection.id === url.collection) ?? null) : null;
@@ -648,8 +686,9 @@ function LibraryPage() {
   /* --- render ------------------------------------------------------------------------------------------------------ */
 
   const activeSmart = scopeKind === 'collection' && activeCollection?.kind === 'smart';
-  // Ask only where the service answers; otherwise the Library stays on its results.
-  const asking = url.panel === 'ask' && intel.reachable;
+  // Ask only where the service answers and its search is on; otherwise the Library stays on its results.
+  const asking = url.panel === 'ask' && gates.ask.enabled;
+  const askOff = url.panel === 'ask' && intel.reachable && !gates.ask.enabled ? gates.ask.reason : null;
   const llm = intel.status.data?.providers?.llm;
   const summariesAvailable = typeof llm?.available === 'boolean' ? llm.available : null;
   const defaultSort: LibrarySortParam = library.hasTimestamps ? 'newest' : 'stored';
@@ -683,6 +722,15 @@ function LibraryPage() {
     return { id, asset, title: asset ? assetTitle(asset) : 'An item not loaded on this page', ref: assetRefFor(id) };
   });
   const selectedUsed = selectedItems.filter((item) => item.asset && library.usesOf(item.asset.id).length > 0).length;
+
+  // One source-pack flow for the page: from the selection (batch bar) or from one item ("Use in draft"). It keeps the
+  // Library state of this moment, which the draft carries and hands back.
+  const [packRequest, setPackRequest] = useState<PackRequest | null>(null);
+  const packCount = useRef(0);
+  const askForPack = (origin: PackRequest['origin'], refs: PackRequest['refs'], titles: string[]) => {
+    packCount.current += 1;
+    setPackRequest({ id: packCount.current, origin, refs, titles, state: { ...url, q: query } });
+  };
 
   const cardProps = (asset: LibraryAsset, index: number, footer?: ReactNode) => ({
     asset,
@@ -859,7 +907,7 @@ function LibraryPage() {
               scope={scope}
               searching={intelligent && search.loading}
               aside={
-                intel.reachable ? (
+                gates.ask.enabled ? (
                   <SegmentedControl
                     label='Library mode'
                     size='sm'
@@ -1020,6 +1068,8 @@ function LibraryPage() {
               />
             ) : null}
 
+            {askOff ? <StateMessage kind='unsupported' layout='inline' title={askOff} /> : null}
+
             {activeSmart ? <SmartCollectionPanel collectionId={url.collection} canEdit={canEdit} enabled={intel.reachable} onAnnounce={announce} /> : null}
 
             {asking ? (
@@ -1060,9 +1110,18 @@ function LibraryPage() {
               canSelectMore={orderedIds.some((id) => !selectedSet.has(id))}
               searchWithin={scopeKind === 'selection'}
               onSearchWithin={(on) => update({ scope: on ? 'selection' : url.collection ? 'collection' : 'all' })}
-              sourcePacks={intel.reachable}
+              onBuildPack={
+                canEdit && gates.packs.enabled
+                  ? () =>
+                      askForPack(
+                        'batch',
+                        selectedItems.map((item) => item.ref),
+                        selectedItems.map((item) => item.title)
+                      )
+                  : null
+              }
+              packNote={gates.recommendations.reason}
               stickyBottom={clearance.stickyBottom}
-              onAnnounce={announce}
             />
           </div>
         </div>
@@ -1111,6 +1170,34 @@ function LibraryPage() {
         onOpenAsset={(assetId) => {
           setFocusLocator(null);
           update({ asset: assetId });
+        }}
+        onUseInDraft={
+          canEdit && gates.packs.enabled
+            ? (asset, ref) => {
+                askForPack('detail', [ref], [assetTitle(asset)]);
+                // The open item travels in the pack's return state, so coming back opens it again.
+                update({ asset: '' });
+              }
+            : undefined
+        }
+        voiceEnabled={gates.voice.enabled}
+        voiceNote={gates.voice.reason}
+      />
+
+      <SourcePackFlow
+        request={packRequest}
+        onClose={() => setPackRequest(null)}
+        currentScope={{ scope: searchScope, label: scopeLabel(scope) }}
+        gates={gates}
+        titleOf={(assetId) => {
+          const asset = library.byKey.get(normalizeKey(assetId));
+          return asset ? assetTitle(asset) : null;
+        }}
+        onAnnounce={announce}
+        onLeave={(packId) => {
+          // Leaving now: this visit doesn't restore its own pack; the return visit does.
+          restoredPack.current = packId;
+          return commit({ pack: packId });
         }}
       />
 

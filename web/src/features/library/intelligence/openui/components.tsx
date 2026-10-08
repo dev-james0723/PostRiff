@@ -19,7 +19,8 @@ import type {
   SuggestionReviewProps,
   VersionComparisonProps
 } from '@/lib/library/openui-schemas';
-import { resolveActionHandler, type DispatchOutcome } from '@/lib/library/openui-policy';
+import { actionControl, actionLabel, resolveActionHandler, type ActivationEventLike, type DispatchOutcome } from '@/lib/library/openui-policy';
+import { reviewEntryKey, rightsLabel } from '@/lib/library/source-pack';
 import { countLabel, formatCount, scopeLabel } from '@/lib/library/wording';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -29,12 +30,12 @@ import { CapabilityList } from '../detail-sections';
 
 /**
  * Library task components for generated (OpenUI) results (UI spec §7). They render validated server data with the
- * Library's own pieces, and every control only calls the injected onAction handler (action id and inputs): nothing writes on
- * mount, render or effect. Selection and drafts belong to the host (LibraryTaskSurface or the runtime's adapter),
+ * Library's own pieces, and every control only calls the injected onAction handler (action id, inputs and the press that
+ * triggered it): nothing writes on mount, render or effect. Selection and drafts belong to the host (LibraryTaskSurface or the runtime's adapter),
  * so a streamed update never resets them.
  */
 
-export type LibraryOnAction = (actionId: string, inputs: Record<string, unknown>) => void;
+export type LibraryOnAction = (actionId: string, inputs: Record<string, unknown>, event?: ActivationEventLike | null) => void;
 export interface HostInjected {
   /** Injected by the host (the runtime's bridge or LibraryTaskSurface). Missing: controls render disabled. */
   onAction?: LibraryOnAction | null;
@@ -47,7 +48,12 @@ function Unavailable({ act }: { act: ActionHandle }) {
 }
 
 export interface LibraryTaskHost {
-  isSelected: (ref: LibraryAssetRef) => boolean;
+  /** `key` names one entry when a ref can appear more than once (a source pack's evidence vs style). */
+  isSelected: (ref: LibraryAssetRef, key?: string) => boolean;
+  /** The host lets the person leave entries out (a source pack being reviewed before it is saved). */
+  pickable?: boolean;
+  /** "Retry" after a failure: the same activation and key, from a press on that control. */
+  retry?: (actionId: string, event: ActivationEventLike) => void;
   /** False while streaming, hydrating or replaying: controls stay visible but cannot write. */
   writesEnabled: boolean;
   busyActionId: string | null;
@@ -93,7 +99,11 @@ function Frame({ title, eyebrow, children, className }: { title: ReactNode; eyeb
   );
 }
 
-/** The server's offered actions. Labels and effects are the server's words; the outcome is shown as it came back. */
+/**
+ * The server's offered actions. The visible label comes from the action type (a fixed table), so generated words can't
+ * front a write; the generated label and effect are only the description. After a failure the control becomes Retry
+ * (same press, same key); after it applied it is done and disabled.
+ */
 function ActionButtons({ actions, act }: { actions: readonly ProposedAction[]; act: ActionHandle }) {
   const host = useLibraryTaskHost();
   const id = useId();
@@ -101,25 +111,34 @@ function ActionButtons({ actions, act }: { actions: readonly ProposedAction[]; a
   return (
     <div className='flex flex-col gap-2'>
       <div className='flex flex-wrap gap-2'>
-        {actions.map((action, index) => (
-          <Button
-            key={action.envelope.actionId}
-            variant={index === 0 ? 'action' : 'glass'}
-            size='control'
-            className='h-11'
-            aria-describedby={`${id}-${index}`}
-            disabled={!act.available || !host.writesEnabled || host.busyActionId !== null}
-            onClick={() => act.call(action.envelope.actionType, { actionId: action.envelope.actionId })}
-          >
-            {host.busyActionId === action.envelope.actionId ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
-            {action.label}
-          </Button>
-        ))}
+        {actions.map((action, index) => {
+          const { actionId, actionType, payload } = action.envelope;
+          const control = actionControl(host.outcomeOf(actionId));
+          const label = actionLabel(actionType, payload);
+          return (
+            <Button
+              key={actionId}
+              data-library-action={actionId}
+              variant={index === 0 ? 'action' : 'glass'}
+              size='control'
+              className='h-11'
+              aria-describedby={`${id}-${index}`}
+              aria-label={control.mode === 'retry' ? `Retry: ${label}` : undefined}
+              disabled={!act.available || !host.writesEnabled || host.busyActionId !== null || control.disabled || (control.mode === 'retry' && !host.retry)}
+              onClick={(event) => (control.mode === 'retry' ? host.retry?.(actionId, event) : act.call(actionType, { actionId }, event))}
+            >
+              {host.busyActionId === actionId ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : control.mode === 'done' ? <Icons.check aria-hidden /> : null}
+              {control.mode === 'retry' ? 'Retry' : label}
+            </Button>
+          );
+        })}
       </div>
       {actions.map((action, index) => {
         const outcome = host.outcomeOf(action.envelope.actionId);
+        const label = actionLabel(action.envelope.actionType, action.envelope.payload);
         return (
           <p key={action.envelope.actionId} id={`${id}-${index}`} className='text-muted-foreground text-xs'>
+            {action.label !== label ? `${action.label} · ` : ''}
             {action.effect}
             {outcome ? (
               <span className={cn('ml-1 font-medium', outcome.status === 'applied' ? 'text-foreground' : 'text-destructive')}>
@@ -137,7 +156,7 @@ function ActionButtons({ actions, act }: { actions: readonly ProposedAction[]; a
 
 function OpenButton({ label, assetRef, locator, act }: { label: string; assetRef: LibraryAssetRef; locator?: LibraryLocator; act: ActionHandle }) {
   return (
-    <Button variant='quiet' size='lg' className='h-11 self-start' disabled={!act.available} onClick={() => act.call('library.open', { assetRef, ...(locator ? { locator } : {}) })}>
+    <Button variant='quiet' size='lg' className='h-11 self-start' disabled={!act.available} onClick={(event) => act.call('library.open', { assetRef, ...(locator ? { locator } : {}) }, event)}>
       {label}
     </Button>
   );
@@ -171,7 +190,7 @@ export function AssetCandidateCard({ assetRef, title, kind, mime, snippet, locat
         {locatorLabel ? <p className='text-xs font-medium'>{locatorLabel}</p> : null}
         {snippet ? <p className='text-muted-foreground line-clamp-3 text-xs'>{snippet}</p> : null}
         <div className='flex flex-wrap gap-2'>
-          <Button variant={selected ? 'action' : 'glass'} size='control' className='h-11' aria-pressed={selected} disabled={!act.available} onClick={() => act.call('library.select', { assetRef, selected: !selected })}>
+          <Button variant={selected ? 'action' : 'glass'} size='control' className='h-11' aria-pressed={selected} disabled={!act.available} onClick={(event) => act.call('library.select', { assetRef, selected: !selected }, event)}>
             {selected ? <Icons.check aria-hidden /> : null}
             {selected ? 'Selected' : 'Select'}
           </Button>
@@ -335,65 +354,113 @@ export function CollectionProposal({ name, ruleSummary, before, after, effect, a
   );
 }
 
+/** Leave an entry in or out of the pack being reviewed (the host keeps the choice; nothing is sent from here). */
+function KeepToggle({ assetRef, entryKey, title, act }: { assetRef: LibraryAssetRef; entryKey: string; title: string; act: ActionHandle }) {
+  const host = useLibraryTaskHost();
+  const kept = host.isSelected(assetRef, entryKey);
+  return (
+    <Button
+      variant={kept ? 'action' : 'glass'}
+      size='control'
+      className='h-11 shrink-0'
+      aria-pressed={kept}
+      aria-label={`Use “${title}”`}
+      disabled={!act.available}
+      onClick={(event) => act.call('library.select', { assetRef, selected: !kept, key: entryKey }, event)}
+    >
+      {kept ? <Icons.check aria-hidden /> : null}
+      Use
+    </Button>
+  );
+}
+
 /**
- * A source pack: evidence and style samples kept apart, with gaps and rights to check. It cannot approve a fact or
- * rights; the words below say so, and the schema refuses any action that would.
+ * A source pack: evidence and style samples kept apart, each with where it points (its locator), why it is there,
+ * its rights in fixed words (never "cleared") and its own notes, plus the named gaps. It cannot approve a fact or
+ * rights; the words below say so, and the schema refuses any action that would. In a host that reviews a pack before
+ * saving it, each entry can be left out.
  */
 export function SourcePackReview({ goal, evidence, style, gaps, rightsWarnings, actions, onAction }: SourcePackReviewProps & HostInjected) {
   const act = resolveActionHandler(onAction);
+  const host = useLibraryTaskHost();
   return (
     <Frame title={goal || 'Source pack'} eyebrow='Source pack'>
-      <div className='flex flex-col gap-1'>
+      <section aria-label='Evidence' className='flex flex-col gap-1'>
         <p className='rafii-eyebrow'>Evidence ({evidence.length})</p>
+        <p className='text-muted-foreground text-xs'>Facts a draft may rely on once they’re reviewed.</p>
         {evidence.length ? (
           <ul className='flex flex-col gap-2'>
-            {evidence.map((entry) => (
-              <li key={`${entry.sourceRef.assetRef.assetId}-${entry.sourceRef.segmentId ?? ''}`} className='flex flex-col gap-0.5 text-sm'>
-                <span className='font-medium'>{entry.title}</span>
-                {entry.rationale ? <span className='text-muted-foreground text-xs'>{entry.rationale}</span> : null}
-                {entry.rights ? <span className='text-muted-foreground text-xs'>Rights: {entry.rights}</span> : null}
-                <OpenButton label='Open source' assetRef={entry.sourceRef.assetRef} locator={entry.sourceRef.locator} act={act} />
-              </li>
-            ))}
+            {evidence.map((entry) => {
+              const entryKey = reviewEntryKey('evidence', entry.sourceRef);
+              return (
+                <li key={entryKey} data-pack-purpose='evidence' className='flex flex-wrap items-start justify-between gap-2 text-sm'>
+                  <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                    <span className='font-medium break-words'>{entry.title}</span>
+                    <span className='text-xs font-medium'>{entry.locatorLabel ?? 'whole item'}</span>
+                    {entry.rationale ? <span className='text-muted-foreground text-xs'>{entry.rationale}</span> : null}
+                    <span className='text-muted-foreground text-xs'>Rights: {rightsLabel(entry.rights)}</span>
+                    {entry.warnings?.length ? (
+                      <ul className='flex flex-col gap-0.5'>
+                        {entry.warnings.map((warning) => (
+                          <li key={warning} className='flex items-start gap-1 text-xs'>
+                            <Icons.warning className='mt-0.5 size-3 shrink-0' aria-hidden />
+                            {warning}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                  {host.pickable ? <KeepToggle assetRef={entry.sourceRef.assetRef} entryKey={entryKey} title={entry.title} act={act} /> : <OpenButton label='Open source' assetRef={entry.sourceRef.assetRef} locator={entry.sourceRef.locator} act={act} />}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className='text-muted-foreground text-sm'>No evidence selected.</p>
         )}
-      </div>
-      <div className='flex flex-col gap-1'>
+      </section>
+      <section aria-label='Style samples' className='flex flex-col gap-1'>
         <p className='rafii-eyebrow'>Style samples ({style.length})</p>
+        <p className='text-muted-foreground text-xs'>How you write, never facts: style samples are not evidence.</p>
         {style.length ? (
           <ul className='flex flex-col gap-2'>
-            {style.map((entry) => (
-              <li key={`${entry.sourceRef.assetRef.assetId}-${entry.sourceRef.segmentId ?? ''}`} className='flex flex-col gap-0.5 text-sm'>
-                <span className='font-medium'>{entry.title}</span>
-                {entry.rationale ? <span className='text-muted-foreground text-xs'>{entry.rationale}</span> : null}
-              </li>
-            ))}
+            {style.map((entry) => {
+              const entryKey = reviewEntryKey('style', entry.sourceRef, entry.sampleId);
+              return (
+                <li key={entryKey} data-pack-purpose='style' className='flex flex-wrap items-start justify-between gap-2 text-sm'>
+                  <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                    <span className='font-medium break-words'>{entry.title}</span>
+                    {entry.locatorLabel ? <span className='text-xs font-medium'>{entry.locatorLabel}</span> : null}
+                    {entry.rationale ? <span className='text-muted-foreground text-xs'>{entry.rationale}</span> : null}
+                  </div>
+                  {host.pickable ? <KeepToggle assetRef={entry.sourceRef.assetRef} entryKey={entryKey} title={entry.title} act={act} /> : null}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className='text-muted-foreground text-sm'>No style samples. Drafts won’t imitate anyone’s voice.</p>
         )}
-      </div>
+      </section>
       {gaps.length ? (
-        <div className='flex flex-col gap-1'>
+        <section aria-label='Missing' className='flex flex-col gap-1'>
           <p className='rafii-eyebrow'>Missing</p>
           <ul className='flex list-disc flex-col gap-1 pl-5 text-sm'>
             {gaps.map((gap) => (
               <li key={gap}>{gap}</li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
       {rightsWarnings.length ? (
-        <div className='flex flex-col gap-1'>
+        <section aria-label='Rights to check' className='flex flex-col gap-1'>
           <p className='rafii-eyebrow'>Rights to check</p>
           <ul className='flex list-disc flex-col gap-1 pl-5 text-sm'>
             {rightsWarnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
       <p className='text-muted-foreground text-xs'>Rafii can’t approve facts or rights. Check them yourself before anything is published.</p>
       <Unavailable act={act} />

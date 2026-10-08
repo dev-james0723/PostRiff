@@ -3,12 +3,14 @@
  * (contract agreed with the "Rafii × OpenUI" runtime owner; their registry is features/agent/generative-ui/library.tsx).
  *
  *   { name: PascalCase, version, propsSchema: zod v4 strict object with a stable (positional) key order,
- *     component: React component taking the validated props plus an injected `onAction(actionId, inputs)`,
+ *     component: React component taking the validated props plus an injected `onAction(actionId, inputs, event)`
+ *       (`event` is the press itself; the Library's own host requires it, trusted and from the issuing component),
  *     actions: action ids only }
  *
  * This file adds no OpenUI dependency. OpenUI composes only the task-result region; the Library shell stays the
  * deterministic app. Components never write on mount or in effects: their controls call `onAction`, which the host
- * routes through `useLibraryActionAdapter` (user activation, issued targets, fresh idempotency key, one at a time).
+ * routes through `useLibraryActionAdapter` (the trusted press on that action's own control, issued targets, a fresh
+ * idempotency key per press and the same key on Retry, one at a time). Visible labels come from the action type.
  */
 import type { ComponentType } from 'react';
 import type { z } from 'zod';

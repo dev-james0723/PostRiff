@@ -4,7 +4,9 @@
  *
  *   - only allowlisted components with validated props; at most 100 components and nesting depth 12;
  *   - at most 5 read actions per render cycle; no parallel mutations; one parser-repair attempt; no automatic retry;
- *   - a mutation needs a fresh user activation while the result is live — never during hydration, replay or streaming;
+ *   - a mutation needs the person's own trusted press on the control that offers it, inside the component that owns
+ *     the action, while the result is live — never during hydration, replay or streaming;
+ *   - a control's visible label comes from its action type (a fixed table), never from generated text;
  *   - every target must be a ref the server issued in this result; a stale expected revision is a conflict;
  *   - each activation gets its own idempotency key, reused only by an explicit retry of that same activation;
  *   - a stream never resets scope, selection or the person's draft.
@@ -121,14 +123,94 @@ export function manifestActionId(actionType: string): string {
  * The injected action handler, or an honest "unavailable" state when a component is mounted without one (for example a
  * runtime bridge that is not ready): controls render disabled and calling does nothing.
  */
-export function resolveActionHandler<T extends (actionId: string, inputs: Record<string, unknown>) => void>(onAction: T | null | undefined) {
+export function resolveActionHandler<T extends (actionId: string, inputs: Record<string, unknown>, event?: ActivationEventLike | null) => void>(onAction: T | null | undefined) {
   const available = typeof onAction === 'function';
   return {
     available,
-    call(actionId: string, inputs: Record<string, unknown>) {
-      if (typeof onAction === 'function') onAction(actionId, inputs);
+    /** `event` is the press that triggered the call; a write is refused without it. */
+    call(actionId: string, inputs: Record<string, unknown>, event?: ActivationEventLike | null) {
+      if (typeof onAction === 'function') onAction(actionId, inputs, event ?? null);
     }
   };
+}
+
+/* --- the press that may write ------------------------------------------------------------------------------------------ */
+
+/** The parts of a click or key event the gate reads (a React or DOM event both fit). */
+export interface ActivationEventLike {
+  isTrusted?: boolean;
+  currentTarget?: unknown;
+}
+
+interface ElementLike {
+  getAttribute(name: string): string | null;
+  closest(selector: string): ElementLike | null;
+}
+
+function isElementLike(value: unknown): value is ElementLike {
+  return Boolean(value) && typeof (value as ElementLike).getAttribute === 'function' && typeof (value as ElementLike).closest === 'function';
+}
+
+/** Attribute on a control naming the issued action it raises, and on each rendered node naming its path. */
+export const ACTION_ATTRIBUTE = 'data-library-action';
+export const NODE_ATTRIBUTE = 'data-task-node';
+
+/**
+ * A write counts only from the person's own press on the control that offers it: a trusted event (synthetic events
+ * from generated code are not), whose currentTarget is that action's control, inside the component (node) that was
+ * issued the action. A recent press anywhere else on the page does not count.
+ */
+export function checkActivation(event: ActivationEventLike | null | undefined, actionId: string, owner: string | null | undefined): { ok: true } | { ok: false; reason: 'no-user-activation' | 'not-owner' } {
+  if (!event || event.isTrusted !== true) return { ok: false, reason: 'no-user-activation' };
+  const target = event.currentTarget;
+  if (!isElementLike(target) || target.getAttribute(ACTION_ATTRIBUTE) !== actionId) return { ok: false, reason: 'not-owner' };
+  const node = target.closest(`[${NODE_ATTRIBUTE}]`);
+  if (!owner || !node || node.getAttribute(NODE_ATTRIBUTE) !== owner) return { ok: false, reason: 'not-owner' };
+  return { ok: true };
+}
+
+/* --- labels: the action type decides the words ------------------------------------------------------------------------ */
+
+/** The visible label of every action type. Generated `label` text is only ever a secondary description. */
+export const ACTION_LABELS: Record<string, string> = {
+  'collection.save': 'Save collection',
+  'collection.override': 'Include/Exclude',
+  'collection.undo': 'Undo collection change',
+  'collection.preview': 'Preview collection',
+  'sources.select': 'Check sources',
+  'source_pack.create': 'Save source pack',
+  'source_pack.attach': 'Attach to draft',
+  'version.link': 'Link versions',
+  'version.accept_replacement': 'Use newer version',
+  'annotation.correct': 'Save correction',
+  'suggestion.set_state': 'Update suggestion',
+  'moment.save': 'Save moment',
+  'voice.approve_span': 'Approve voice example',
+  'voice.revoke': 'Remove voice example',
+  'metadata.update': 'Save details'
+};
+
+const OVERRIDE_WORDS: Record<string, string> = { include: 'Include', exclude: 'Exclude', clear: 'Clear override' };
+const SUGGESTION_WORDS: Record<string, string> = { dismissed: 'Dismiss', snoozed: 'Snooze', seen: 'Mark as seen', applied: 'Mark as done' };
+
+/** The fixed label for an issued envelope: from its type, refined only by a known enum value in its payload. */
+export function actionLabel(actionType: string, payload: Record<string, unknown> = {}): string {
+  if (actionType === 'collection.override' && typeof payload.mode === 'string' && OVERRIDE_WORDS[payload.mode]) return OVERRIDE_WORDS[payload.mode];
+  if (actionType === 'suggestion.set_state' && typeof payload.state === 'string' && SUGGESTION_WORDS[payload.state]) return SUGGESTION_WORDS[payload.state];
+  return ACTION_LABELS[actionType] ?? 'Unavailable action';
+}
+
+/**
+ * What a write control is after its last outcome: pressable, "Retry" after a failure (the same key and press, never
+ * a new activation), or done and disabled after it applied. Conflicts and denials stay disabled: pressing again
+ * cannot help until the result is refreshed.
+ */
+export function actionControl(outcome: { status: string; retryable?: boolean } | null | undefined): { mode: 'act' | 'retry' | 'done' | 'blocked'; disabled: boolean } {
+  if (!outcome) return { mode: 'act', disabled: false };
+  if (outcome.status === 'applied') return { mode: 'done', disabled: true };
+  if (outcome.status === 'failed') return outcome.retryable ? { mode: 'retry', disabled: false } : { mode: 'blocked', disabled: true };
+  if (outcome.status === 'conflict' || outcome.status === 'denied' || outcome.status === 'requires_confirmation') return { mode: 'blocked', disabled: true };
+  return { mode: 'act', disabled: false };
 }
 
 /* --- identities issued by the server -------------------------------------------------------------------------------- */
@@ -171,6 +253,20 @@ export interface IssuedEnvelopeLike {
   targetRefs: RefLike[];
   expectedRevision: number | null;
   payload: Record<string, unknown>;
+}
+
+/** Which node offered each issued action (its path): the only component whose control may raise it. */
+export function collectIssuedOwners(nodes: readonly ValidatedTaskNode[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  walkNodes(nodes, (node) => {
+    const actions = node.props.actions;
+    if (!Array.isArray(actions)) return;
+    for (const action of actions) {
+      const envelope = action && typeof action === 'object' ? (action as { envelope?: { actionId?: unknown } }).envelope : undefined;
+      if (envelope && typeof envelope.actionId === 'string') owners.set(envelope.actionId, node.path);
+    }
+  });
+  return owners;
 }
 
 /** The server-issued envelopes in the result, by actionId. A control can only name one of these. */
@@ -216,7 +312,7 @@ export interface ActivationToken {
   id: string;
 }
 
-export type ActivationResult = { ok: true; token: ActivationToken } | { ok: false; reason: 'hydration' | 'replay' | 'streaming' | 'no-user-activation' };
+export type ActivationResult = { ok: true; token: ActivationToken } | { ok: false; reason: 'hydration' | 'replay' | 'streaming' | 'no-user-activation' | 'not-owner' };
 
 export interface ActionResultLike {
   status: string;
@@ -265,11 +361,13 @@ export function createLibraryDispatcher(deps: { send: (envelope: IssuedEnvelopeL
   let inFlight: string | null = null;
   let activations = 0;
 
-  function activate({ userActivation, phase }: { userActivation: boolean; phase: SurfacePhase }): ActivationResult {
+  /** A press becomes an activation only on a live result, from the trusted event on that action's own control. */
+  function activate({ event, actionId, owner, phase }: { event: ActivationEventLike | null | undefined; actionId: string; owner: string | null | undefined; phase: SurfacePhase }): ActivationResult {
     if (phase === 'hydrating') return { ok: false, reason: 'hydration' };
     if (phase === 'replaying') return { ok: false, reason: 'replay' };
     if (phase === 'streaming') return { ok: false, reason: 'streaming' };
-    if (!userActivation) return { ok: false, reason: 'no-user-activation' };
+    const pressed = checkActivation(event, actionId, owner);
+    if (!pressed.ok) return { ok: false, reason: pressed.reason };
     activations += 1;
     return { ok: true, token: { id: `activation-${activations}` } };
   }

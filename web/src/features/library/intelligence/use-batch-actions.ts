@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { ApiError } from '@/lib/api/client';
 import { keys as queryKeys, useAct } from '@/lib/api/hooks';
-import type { Snapshot } from '@/lib/api/types';
+import type { Asset, Snapshot } from '@/lib/api/types';
 import { idempotencyKeyFor, mergeOutcomes, newIdempotencyKey, outcomeFromActionResult, outcomeFromError, reduceBatchOutcomes, type BatchOutcome, type BatchSummary } from '@/lib/library/batch';
 import { overrideEnvelope } from '@/lib/library/smart-rules';
-import { assetRefFor } from '@/lib/library/url-state';
+import { assetRefFor, normalizeKey } from '@/lib/library/url-state';
 import { kindOf } from '@/lib/media/asset-kinds';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { LibraryAsset } from '../use-library';
+import { isCapabilityUnavailable } from './use-library-search';
 
 /** collection-add/remove edit manual collections; collection-include/exclude are overrides on a smart collection. */
 export type BatchKind = 'collection-add' | 'collection-remove' | 'collection-include' | 'collection-exclude' | 'tag-add' | 'delete';
@@ -53,15 +54,18 @@ function randomKey() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function tagsOf(asset: LibraryAsset) {
-  return asset.tags ?? asset.aiTags ?? [];
+/** The person's own tags only. AI-suggested tags are never written back as if someone had chosen them. */
+export function userTagsOf(asset: Pick<LibraryAsset, 'tags'>) {
+  return asset.tags ?? [];
 }
 
 /**
  * Batch actions over the selection (UI spec §5, A063). Items run one at a time and each gets its own outcome. Every
  * item of a run has its own idempotency key, and Retry re-sends only the failed items of the same run with the same
- * keys. The deterministic routes used here write absolute values (a membership list, a tag list, a deletion), so a
- * repeat cannot apply twice either. The optimistic view is rolled back for each item that did not apply.
+ * keys. Lists are never computed from the page's possibly stale copy: each item is read again right before its write
+ * (a document's own record, or the Library list fetched at the start of the run for photos and videos). Tags go through
+ * `metadata.update` with the item's key; a manual collection's membership has only the item PATCH, which takes no key
+ * but writes the list just read. The optimistic view is rolled back for each item that did not apply.
  */
 export function useBatchActions({
   assets,
@@ -100,27 +104,72 @@ export function useBatchActions({
     [act, client, workspaceId]
   );
 
+  /** The Library list as the server holds it now, by id (photos and videos have no single-item read). */
+  const listedNow = useCallback(async () => {
+    await client.refetchQueries({ queryKey: ['library-assets', workspaceId] });
+    const byId = new Map<string, Asset>();
+    for (const [, data] of client.getQueriesData<InfiniteData<{ assets: Asset[] }>>({ queryKey: ['library-assets', workspaceId] })) {
+      for (const page of data?.pages ?? []) for (const item of page.assets) byId.set(item.id, item);
+    }
+    return byId;
+  }, [client, workspaceId]);
+
+  /** The item as stored right now: its own record for documents, files and audio; the fresh list otherwise. */
+  const readFresh = useCallback(
+    async (asset: LibraryAsset, listed: ReadonlyMap<string, Asset> | null): Promise<LibraryAsset | null> => {
+      if (kindOf(asset) !== 'image') {
+        try {
+          return (await api.libraryFile(workspaceId, asset.id)).asset;
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error;
+        }
+      }
+      // Without a fresh read nothing is written from the page's copy: the item fails and can be retried.
+      if (!listed) throw new Error('Couldn’t read this item again before changing it.');
+      return listed.get(asset.id) ?? null;
+    },
+    [api, workspaceId]
+  );
+
   const performOne = useCallback(
-    async (kind: BatchKind, asset: LibraryAsset, params: BatchParams, _key: string): Promise<BatchOutcome> => {
+    async (kind: BatchKind, asset: LibraryAsset, params: BatchParams, key: string, listed: ReadonlyMap<string, Asset> | null): Promise<BatchOutcome> => {
       const id = asset.id;
       // Smart-collection overrides go through performOverride as one action; never fall through to a delete.
       if (kind === 'collection-include' || kind === 'collection-exclude') return { id, status: 'failed', message: 'Use the collection override.', retryable: false };
       try {
-        if (kind === 'collection-add' || kind === 'collection-remove') {
+        if (kind === 'collection-add' || kind === 'collection-remove' || kind === 'tag-add') {
+          const fresh = await readFresh(asset, listed);
+          if (!fresh) return { id, status: 'denied', message: 'This item is no longer available.', retryable: false };
+          if (kind === 'tag-add') {
+            const tag = (params.tag ?? '').trim();
+            const tags = userTagsOf(fresh);
+            if (!tag || tags.includes(tag)) return { id, status: 'skipped', message: 'Already has this tag', retryable: false };
+            // Revalidated by the server and keyed per item: a retry after a lost answer is answered, not applied twice.
+            try {
+              const result = await api.libraryAction(workspaceId, {
+                actionId: `tag-${normalizeKey(id)}`,
+                uiInstanceId: 'library-batch',
+                actionType: 'metadata.update',
+                targetRefs: [assetRefFor(id)],
+                expectedRevision: null,
+                idempotencyKey: key,
+                payload: { tags: [...tags, tag] }
+              });
+              return outcomeFromActionResult(id, result);
+            } catch (error) {
+              // Without the Library intelligence routes, the item PATCH writes the same list just read.
+              if (!isCapabilityUnavailable(error)) throw error;
+              await api.updateLibraryAsset(workspaceId, id, { tags: [...tags, tag] });
+              return { id, status: 'applied' };
+            }
+          }
           const collectionId = params.collectionId ?? '';
-          const current = (asset.collections ?? []).filter((id) => manualCollectionIds.has(id));
+          const current = (fresh.collections ?? []).filter((value) => manualCollectionIds.has(value));
           const member = current.includes(collectionId);
           if (kind === 'collection-add' && member) return { id, status: 'skipped', message: 'Already in this collection', retryable: false };
           if (kind === 'collection-remove' && !member) return { id, status: 'skipped', message: 'Not in this collection', retryable: false };
           const collections = kind === 'collection-add' ? [...current, collectionId] : current.filter((value) => value !== collectionId);
           await api.updateLibraryAsset(workspaceId, id, { collections });
-          return { id, status: 'applied' };
-        }
-        if (kind === 'tag-add') {
-          const tag = (params.tag ?? '').trim();
-          const tags = tagsOf(asset);
-          if (!tag || tags.includes(tag)) return { id, status: 'skipped', message: 'Already has this tag', retryable: false };
-          await api.updateLibraryAsset(workspaceId, id, { tags: [...tags, tag] });
           return { id, status: 'applied' };
         }
         const assetKind = kindOf(asset);
@@ -131,7 +180,7 @@ export function useBatchActions({
         return outcomeFromError(id, error instanceof ApiError ? error : { message: error instanceof Error ? error.message : undefined }, kind === 'delete' ? 'delete' : 'update');
       }
     },
-    [api, workspaceId, deleteMedia, manualCollectionIds]
+    [api, workspaceId, deleteMedia, manualCollectionIds, readFresh]
   );
 
   /**
@@ -156,7 +205,7 @@ export function useBatchActions({
 
   const optimistic = useCallback((kind: BatchKind, asset: LibraryAsset, params: BatchParams): OverlayPatch => {
     if (kind === 'delete') return { hidden: true };
-    if (kind === 'tag-add') return { tags: [...new Set([...tagsOf(asset), params.tag ?? ''])].filter(Boolean) };
+    if (kind === 'tag-add') return { tags: [...new Set([...userTagsOf(asset), params.tag ?? ''])].filter(Boolean) };
     const current = asset.collections ?? [];
     const collectionId = params.collectionId ?? '';
     const joining = kind === 'collection-add' || kind === 'collection-include';
@@ -187,10 +236,11 @@ export function useBatchActions({
         outcomes = mergeOutcomes(outcomes, override.outcomes);
         publish(true);
       } else {
+        const listed = kind === 'delete' ? null : await listedNow().catch(() => null);
         for (const asset of targets) {
           const slot = idempotencyKeyFor(itemKeys.current, runId, asset.id, () => newIdempotencyKey('lib-batch', randomKey));
           itemKeys.current = slot.keys;
-          const outcome = await performOne(kind, asset, params, slot.key);
+          const outcome = await performOne(kind, asset, params, slot.key, listed);
           outcomes = mergeOutcomes(outcomes, [outcome]);
           publish(true);
         }
@@ -215,7 +265,7 @@ export function useBatchActions({
         return next;
       });
     },
-    [assets, client, onAnnounce, optimistic, performOne, performOverride, workspaceId]
+    [assets, client, listedNow, onAnnounce, optimistic, performOne, performOverride, workspaceId]
   );
 
   const retry = useCallback(() => {

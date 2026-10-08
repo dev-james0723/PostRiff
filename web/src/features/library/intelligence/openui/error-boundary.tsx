@@ -45,7 +45,7 @@ function PlainItems({ nodes, onAction }: { nodes: readonly ValidatedTaskNode[]; 
       {items.map((item) => (
         <li key={`${item.path}-${item.ref.assetId}-${item.ref.versionId}`} className='flex min-h-11 items-center justify-between gap-2 text-sm'>
           <span className='min-w-0 truncate'>{item.title}</span>
-          <Button variant='quiet' size='lg' className='h-11 shrink-0' onClick={() => onAction('library.open', { assetRef: { assetId: item.ref.assetId, versionId: item.ref.versionId, sha256: item.ref.sha256 ?? '' } })}>
+          <Button variant='quiet' size='lg' className='h-11 shrink-0' onClick={(event) => onAction('library.open', { assetRef: { assetId: item.ref.assetId, versionId: item.ref.versionId, sha256: item.ref.sha256 ?? '' } }, event)}>
             Open
           </Button>
         </li>
@@ -56,7 +56,8 @@ function PlainItems({ nodes, onAction }: { nodes: readonly ValidatedTaskNode[]; 
 
 /**
  * The deterministic renderer: each validated node through its descriptor's component (the Library's own pieces),
- * each behind its own boundary so one failing part falls back to plain items while the rest stays usable.
+ * each behind its own boundary so one failing part falls back to plain items while the rest stays usable. Each node's
+ * wrapper names its path, so a write only counts from a control inside the node that was issued the action.
  */
 export function DeterministicTaskView({ nodes, onAction }: { nodes: readonly ValidatedTaskNode[]; onAction: LibraryOnAction }) {
   return (
@@ -66,7 +67,7 @@ export function DeterministicTaskView({ nodes, onAction }: { nodes: readonly Val
         if (!descriptor) return null;
         const Rendered = descriptor.component;
         return (
-          <div key={node.path} data-task-component={node.component} className='flex min-w-0 flex-col gap-3'>
+          <div key={node.path} data-task-component={node.component} data-task-node={node.path} className='flex min-w-0 flex-col gap-3'>
             <LibraryOpenUiErrorBoundary resetKey={node.path} fallback={<PlainItems nodes={[node]} onAction={onAction} />}>
               <Rendered {...node.props} onAction={onAction} />
             </LibraryOpenUiErrorBoundary>
@@ -111,7 +112,8 @@ export function LibraryTaskSurface({
   replay = false,
   renderer: Renderer,
   onRepair,
-  onAnnounce
+  onAnnounce,
+  generated = true
 }: {
   result: LibraryTaskResult | null;
   scope: TaskSurfaceState['scope'];
@@ -124,6 +126,8 @@ export function LibraryTaskSurface({
   renderer?: ComponentType<LibraryTaskRendererProps>;
   onRepair?: () => void;
   onAnnounce?: (message: string) => void;
+  /** The task_ui flag: when off, a mounted renderer is not used and the result shows in the standard view. */
+  generated?: boolean;
 }) {
   const [state, setState] = useState<TaskSurfaceState>(() => initialSurfaceState(scope, [...selection]));
   const [hydrated, setHydrated] = useState(false);
@@ -165,6 +169,7 @@ export function LibraryTaskSurface({
 
   const host: LibraryTaskHost = {
     isSelected: (ref) => selected.has(normalizeKey(ref.assetId)),
+    retry: adapter.retry,
     writesEnabled: adapter.writesEnabled,
     busyActionId: adapter.busyActionId,
     outcomeOf: (actionId) => adapter.outcomes[actionId],
@@ -193,7 +198,7 @@ export function LibraryTaskSurface({
             <Skeleton className='h-24 w-full rounded-[var(--rafii-radius-card)]' />
             <Skeleton className='h-24 w-full rounded-[var(--rafii-radius-card)]' />
           </div>
-        ) : Renderer && !rendererFailed ? (
+        ) : Renderer && generated && !rendererFailed ? (
           <LibraryOpenUiErrorBoundary resetKey={taskId} fallback={deterministic} onError={() => setRendererFailed(true)}>
             <Renderer nodes={state.nodes} descriptors={LIBRARY_OPENUI_DESCRIPTORS} onAction={adapter.onAction} streaming={streaming} />
           </LibraryOpenUiErrorBoundary>

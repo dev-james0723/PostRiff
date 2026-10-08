@@ -242,8 +242,10 @@ test('test_batch_partial_failure: per-item outcomes, reused keys and rollback', 
   assert.match(bar, /OUTCOME_TEXT\[outcome\.status\]/, 'each item reports its own result');
   assert.match(bar, /Delete selected…/);
   assert.match(bar, /<AlertDialog open=\{confirmDelete\}/, 'delete keeps its own confirmation');
-  assert.match(bar, /actionType: 'source_pack\.create'/);
-  assert.match(bar, /api\.libraryRecommendSources\(/);
+  assert.match(bar, /onClick=\{onBuildPack\}/, 'the batch bar opens the one source-pack flow');
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /api\.libraryRecommendSources\(/);
+  assert.match(fs.readFileSync(path.join(LIB, 'source-pack.ts'), 'utf8'), /actionType: 'source_pack\.create'/);
 });
 
 test('test_drawer_focus_restore: the sheet and drawer trap focus, close on Escape and return focus to the opener', () => {
@@ -639,3 +641,295 @@ test('usage: unknown is never 0, readings carry their time, and nothing claims a
   assert.doesNotMatch(fs.readFileSync(path.join(LIB, 'proactive.ts'), 'utf8').replace(/export const CAUSAL_WORDING[^\n]*\n/, ''), P2.CAUSAL_WORDING);
 });
 
+
+/* --- T08: task source packs in the Library (A049–A051) ---------------------------------------------------------- */
+
+const SP = load(path.join(LIB, 'source-pack.ts'));
+const S = load(path.join(LIB, 'openui-schemas.ts'));
+const SHA = 'c'.repeat(64);
+const SREF = (character, version = character) => ({ assetId: HEX(character), versionId: HEX(version), sha256: SHA });
+
+/** A pack as `source_packs._build` returns it. */
+function serverPack(overrides = {}) {
+  return {
+    contractVersion: 'rafii-library/1',
+    packId: HEX('9'),
+    revision: 1,
+    status: 'draft',
+    taskContext: { userGoal: 'Announce my Brahms recital', scope: { kind: 'workspace' }, purpose: 'draft_evidence', channels: ['Instagram'], selectedSourceRefs: [] },
+    returnTo: { query: 'brahms', scope: { kind: 'workspace' }, selection: [HEX('a')] },
+    evidenceRefs: [
+      { purpose: 'evidence', selection: 'user', assetRef: SREF('a'), title: 'Programme', kind: 'document', locatorLabel: 'Page 2', segmentId: HEX('5'), locator: { kind: 'page', page: 2 }, review: 'approved', reviewReason: null, rights: 'approved_public', current: true, why: ['You selected this.', 'Facts approved for drafts.'] },
+      { purpose: 'evidence', selection: 'recommended', assetRef: SREF('b'), title: 'Hall booking', kind: 'document', locatorLabel: 'whole item', review: 'needs_review', reviewReason: 'facts_unreviewed', rights: 'unknown', current: false, why: ['Matches: recital'] }
+    ],
+    styleRefs: [
+      { purpose: 'style', polarity: 'positive', sampleId: 'sample-1', voiceSourceId: 'vs-1', assetRef: SREF('d'), locator: { kind: 'text', start: 0, end: 120 }, locatorLabel: 'characters 0–120', language: 'en' },
+      { purpose: 'style', polarity: 'negative', sampleId: 'sample-2', voiceSourceId: 'vs-2', assetRef: SREF('d'), locator: { kind: 'text', start: 200, end: 260 }, locatorLabel: 'characters 200–260', language: 'en' }
+    ],
+    rationale: [{ code: 'scope', message: 'Looked only in your whole Library.' }],
+    gaps: [
+      { code: 'missing_fact_venue', message: 'No approved fact gives the recital venue.' },
+      { code: 'missing_public_image', message: 'No image approved for public use for Instagram.' }
+    ],
+    rightsWarnings: [
+      { code: 'rights_unknown', assetRef: SREF('b'), message: 'Rights for “Hall booking” are unknown. Confirm you may use it before publishing.' },
+      { code: 'older_version', assetRef: SREF('b'), message: '“Hall booking” cites an older version. Review the newer version before relying on it.' },
+      { code: 'excluded_by_policy', assetRef: SREF('e'), message: '“Old flyer” can’t be used: its source was withdrawn or its use policy doesn’t allow it.' }
+    ],
+    grantRevision: 4,
+    draftId: null,
+    style: { personaId: 'workspace', language: 'en' },
+    limits: { maxEvidence: 20, maxRecommended: 8 },
+    warnings: [],
+    ...overrides
+  };
+}
+
+test('test_pack_evidence_style_separate: two lists in the review, two fields in the request, nothing crosses over', () => {
+  const pack = serverPack();
+  const props = SP.packReviewProps(pack, (id) => (id === HEX('d') ? 'My spring newsletter' : null));
+  assert.equal(S.parseLibraryProps('SourcePackReview', props).ok, true, 'the deterministic props pass the same strict schema as generated ones');
+  assert.deepEqual(props.evidence.map((entry) => entry.title), ['Programme', 'Hall booking']);
+  assert.deepEqual(props.style.map((entry) => [entry.title, entry.rationale]), [['My spring newsletter', 'Write like this'], ['My spring newsletter', 'Don’t write like this']]);
+  assert.ok(props.style.every((entry) => !('rights' in entry)), 'style samples carry no evidence fields');
+  assert.equal(props.evidence[0].locatorLabel, 'Page 2', 'each ref shows where it points');
+  assert.deepEqual(props.evidence[0].sourceRef, { assetRef: SREF('a'), segmentId: HEX('5'), locator: { kind: 'page', page: 2 } });
+  assert.equal(props.evidence[0].rationale, 'You selected this. · Facts approved for drafts.');
+  assert.equal(props.evidence[1].warnings.length, 2, 'rights and currency notes sit on their own ref');
+  assert.deepEqual(props.rightsWarnings, ['“Old flyer” can’t be used: its source was withdrawn or its use policy doesn’t allow it.'], 'notes about items not in the lists stay pack-level');
+
+  // Leave out the recommendation and the negative example: only what is kept is sent, evidence and style apart.
+  const kept = new Set(SP.allEntryKeys(pack));
+  kept.delete(SP.packEntryKey(pack.evidenceRefs[1]));
+  kept.delete(SP.packEntryKey(pack.styleRefs[1]));
+  const envelope = SP.createPackEnvelope(pack, kept, pack.returnTo);
+  assert.equal(envelope.actionType, 'source_pack.create');
+  assert.deepEqual(envelope.payload.evidence, [{ assetRef: SREF('a'), segmentId: HEX('5'), locator: { kind: 'page', page: 2 } }]);
+  assert.deepEqual(envelope.payload.styleSampleIds, ['sample-1']);
+  assert.deepEqual(envelope.targetRefs, [SREF('a')], 'every chosen evidence ref is a target; style refs are not evidence');
+  assert.deepEqual(Object.keys(envelope.payload).toSorted(), ['evidence', 'returnTo', 'styleSampleIds', 'taskContext'], 'exactly the create_action payload keys');
+  assert.deepEqual(envelope.payload.taskContext.selectedSourceRefs, []);
+  assert.equal(S.isSafePayload(envelope.payload), true);
+  // Two passages of one item are two entries; two samples of one span are two entries.
+  assert.notEqual(SP.packEntryKey(pack.styleRefs[0]), SP.packEntryKey(pack.styleRefs[1]));
+
+  const components = feature('intelligence', 'openui', 'components.tsx');
+  assert.match(components, /<section aria-label='Evidence'/);
+  assert.match(components, /<section aria-label='Style samples'/);
+  assert.match(components, /style samples are not evidence/);
+  assert.match(components, /reviewEntryKey\('evidence', entry\.sourceRef\)/);
+  assert.match(components, /reviewEntryKey\('style', entry\.sourceRef, entry\.sampleId\)/);
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /<SourcePackReview\s+\{\.\.\.\(packReviewProps\(recommended, titleOf\)/, 'the review is the SourcePackReview component, deterministic');
+  assert.match(flow, /pickable: true/);
+  assert.match(flow, /createPackEnvelope\(recommended, kept, buildReturnTo\(request\.state\)\)/, 'create sends exactly the kept entries');
+});
+
+test('test_no_cleared_rights_wording: rights read as approved, not approved, internal or unknown — never cleared', () => {
+  for (const code of ['approved_public', 'needs_review', 'internal', 'unknown', 'cleared', '', null, 'something_new']) {
+    assert.doesNotMatch(SP.rightsLabel(code), SP.CLEARED_WORDING, String(code));
+  }
+  assert.equal(SP.rightsLabel('cleared'), 'Rights unknown', 'an unknown code can never claim more');
+  assert.equal(SP.rightsLabel('approved_public'), 'Public use approved in Ideas');
+  const props = SP.packReviewProps(serverPack());
+  const bad = (patch) => S.parseLibraryProps('SourcePackReview', { ...props, ...patch }).ok;
+  assert.equal(bad({ rightsWarnings: ['Rights cleared for all uses'] }), false, 'the schema refuses “cleared”');
+  assert.equal(bad({ evidence: [{ ...props.evidence[0], rights: 'cleared' }] }), false);
+  assert.equal(bad({ gaps: ['All clear'] }), false);
+  const literals = (text) => (text.match(/'[^'\n]*'|>[^<{}\n]+</g) || []).join('\n');
+  for (const file of [['intelligence', 'openui', 'components.tsx'], ['intelligence', 'source-pack-flow.tsx']]) assert.doesNotMatch(literals(feature(...file)), SP.CLEARED_WORDING, file.join('/'));
+  assert.doesNotMatch(literals(fs.readFileSync(path.join(LIB, 'source-pack.ts'), 'utf8')), SP.CLEARED_WORDING);
+  assert.match(feature('intelligence', 'openui', 'components.tsx'), /Rights: \{rightsLabel\(entry\.rights\)\}/, 'rights are shown through the fixed words');
+});
+
+test('test_gaps_rendered: named gaps say what is missing, in review and after saving', () => {
+  const pack = serverPack();
+  assert.deepEqual(SP.gapMessages(pack), ['No approved fact gives the recital venue.', 'No image approved for public use for Instagram.']);
+  assert.deepEqual(SP.packReviewProps(pack).gaps, SP.gapMessages(pack));
+  const components = feature('intelligence', 'openui', 'components.tsx');
+  assert.match(components, /<section aria-label='Missing'[\s\S]*?\{gaps\.map\(\(gap\) => \(\s*<li key=\{gap\}>\{gap\}<\/li>/);
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /Still missing/);
+  assert.match(flow, /saved\.gaps\.map\(\(gap\) =>/);
+});
+
+test('test_attach_expected_revision_conflict_no_auto_retry: attach names the pack revision; a conflict is shown, never re-sent', () => {
+  const pack = serverPack({ revision: 3 });
+  const envelope = SP.attachEnvelope(pack, HEX('f'));
+  assert.deepEqual([envelope.actionType, envelope.expectedRevision, envelope.targetRefs, envelope.payload], ['source_pack.attach', 3, [], { packId: HEX('9'), draftId: HEX('f') }]);
+  assert.notEqual(SP.envelopeDigest(envelope), SP.envelopeDigest(SP.attachEnvelope({ ...pack, revision: 4 }, HEX('f'))), 'a new revision is a new request (new key)');
+
+  const conflict = SP.readAttachResult(
+    {
+      status: 'conflict',
+      warnings: ['Permissions or sources changed since this pack was made. Review the changes.'],
+      result: {
+        status: 'conflict',
+        changes: [
+          { purpose: 'evidence', assetRef: SREF('a'), change: 'permission_narrowed', after: { allowed: false, reason: 'egress_consent_required', message: 'Cloud processing needs your consent.' } },
+          { purpose: 'style', assetRef: SREF('d'), change: 'voice_example_withdrawn' },
+          { purpose: 'evidence', assetRef: SREF('x'), change: 'unavailable' }
+        ]
+      }
+    },
+    (versionId) => (versionId === HEX('a') ? 'Programme' : null)
+  );
+  assert.equal(conflict.kind, 'conflict');
+  assert.deepEqual(conflict.changes, [
+    'Source “Programme”: its permission was narrowed. Cloud processing needs your consent.',
+    'Voice example: the voice example was withdrawn.',
+    'Source: it is no longer available.'
+  ]);
+  const revoked = SP.readAttachResult({ status: 'conflict', result: { changes: [{ purpose: 'pack', assetRef: {}, change: 'pack_revoked', message: 'A permission this pack relied on was withdrawn.' }] } });
+  assert.deepEqual(revoked.changes, ['A permission this pack relied on was withdrawn.']);
+  const applied = SP.readAttachResult({ status: 'applied', warnings: [], result: { composer: { draftId: HEX('f'), sourcePackId: HEX('9'), sourceIds: ['src-1'], voiceMode: 'neutral', voiceSourceIds: [] }, alreadyAttached: false, warnings: ['Some voice examples aren’t selected.'] } });
+  assert.equal(applied.kind, 'applied');
+  assert.deepEqual(applied.warnings, ['Some voice examples aren’t selected.']);
+
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /const envelope = attachEnvelope\(saved, draft\.id\);/);
+  assert.match(flow, /if \(!attachKey\.current \|\| attachKey\.current\.digest !== digest\)/, 'the same attach keeps its key');
+  assert.equal((flow.match(/void attach\(\)/g) || []).length, 1, 'attach is only ever sent from its button');
+  assert.match(flow, /onClick=\{\(\) => void attach\(\)\}/);
+  assert.match(flow, /conflict \? \(\s*<Button[^>]*onClick=\{refreshPack\}>[\s\S]*?Refresh pack/, 'a conflict offers Refresh pack instead of Attach');
+  const refresh = flow.slice(flow.indexOf('function refreshPack()'), flow.indexOf('async function savePack()'));
+  assert.doesNotMatch(refresh, /attach\(/, 'refreshing never attaches by itself');
+  assert.match(flow, /Nothing was attached\. Refresh the pack/);
+});
+
+test('test_return_to_no_url_or_secret: the Library state a draft carries is stable keys only', () => {
+  const state = {
+    ...U.DEFAULT_LIBRARY_STATE,
+    q: 'see https://cdn.example/a.jpg?X-Amz-Signature=abc&token=xyz',
+    scope: 'selection',
+    kind: 'document',
+    tag: 'https://evil.example',
+    sel: ['2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f', HEX('a'), '../etc/passwd', 'legacy-1'],
+    asset: HEX('a')
+  };
+  const back = SP.buildReturnTo(state);
+  const text = JSON.stringify(back);
+  assert.doesNotMatch(text, /:\/\/|token=|signature|bearer|workspace[I_]?d|actor/i);
+  assert.equal(back.query, undefined, 'a query that looks like a link is left out, not sent');
+  assert.equal(back.filters.tags, undefined);
+  assert.deepEqual(back.filters.kinds, ['document']);
+  assert.deepEqual(back.selection, ['2f0c6c1e5a1b4c6a9d0e3b2a1c0d9e8f', HEX('a')], 'only 32-hex keys');
+  assert.equal(back.scope.kind, 'selection');
+  assert.equal(back.anchor, HEX('a'));
+  for (const key of Object.keys(back)) assert.ok(['query', 'scope', 'filters', 'sort', 'density', 'selection', 'anchor', 'view'].includes(key), key);
+  assert.equal(SP.buildReturnTo({ ...U.DEFAULT_LIBRARY_STATE, q: 'select pieces from brahms' }).query, undefined, 'text the server refuses as code is not sent');
+  const many = SP.buildReturnTo({ ...U.DEFAULT_LIBRARY_STATE, scope: 'selection', sel: Array.from({ length: 200 }, (_, index) => index.toString(16).padStart(32, '0')) });
+  assert.ok(SP.serverLength(many) <= 4000, 'bounded like the server, which measures with spaces after separators');
+  assert.ok(many.selection.length > 0 && many.scope.assetRefs.length === many.selection.length, 'the selection gives way, consistently');
+  // The address keeps the pack id only as a stable id, and scroll is kept without it.
+  assert.equal(U.parseLibraryState({ pack: 'https://x/y' }).pack, '');
+  assert.equal(U.parseLibraryState({ pack: HEX('9') }).pack, HEX('9'));
+  assert.ok(!U.scrollKey('ws', { pack: HEX('9') }).includes('pack='), 'scroll is kept per view, not per pack');
+  assert.equal(SP.taskProblem({ goal: 'Post about https://example.com', selected: [] }) !== null, true, 'a goal with a link is refused before sending');
+  assert.equal(SP.taskProblem({ goal: 'Announce the recital', selected: [] }), null);
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /buildReturnTo\(request\.state\)/, 'returnTo is built from the Library state only');
+});
+
+test('test_round_trip_restores_selection: back from the draft, the same view and selection, minus what became inaccessible', () => {
+  const dashed = '2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f';
+  const state = { ...U.DEFAULT_LIBRARY_STATE, q: 'Brahms rehearsal', scope: 'selection', kind: 'audio', tag: 'spring', use: 'unused', sort: 'largest', mode: 'list', density: 'compact', sel: [dashed, HEX('a'), HEX('b')], asset: HEX('a') };
+  const back = SP.buildReturnTo(state);
+  // The server drops what the person can no longer reach and says how many, never which.
+  const served = { ...back, selection: back.selection.filter((key) => key !== HEX('b')) };
+  const current = { ...state, sel: [dashed, HEX('a'), HEX('b')] };
+  const patch = SP.restoreLibraryState(served, current);
+  assert.deepEqual(patch.sel, [dashed, HEX('a')], 'kept ids keep their own spelling; the inaccessible one is gone');
+  assert.equal(patch.scope, 'selection');
+  assert.deepEqual([patch.q, patch.kind, patch.tag, patch.use, patch.sort, patch.mode, patch.density, patch.asset], ['Brahms rehearsal', 'audio', 'spring', 'unused', 'largest', 'list', 'compact', HEX('a')]);
+  const restored = U.parseLibraryState(new URLSearchParams(U.serializeLibraryState({ ...current, ...patch })));
+  assert.deepEqual(restored.sel, [dashed, HEX('a')]);
+  assert.equal(SP.removedNotice(1), 'One selected item is no longer available, so it was removed from your selection.');
+  assert.equal(SP.removedNotice(0), null);
+  assert.doesNotMatch(SP.removedNotice(2), /[0-9a-f]{32}/, 'never names the item');
+  assert.deepEqual(SP.restoreLibraryState(null, current), {});
+  assert.equal(SP.restoreLibraryState({ query: 'javascript:alert(1)' }, current).q, undefined);
+
+  const view = feature('library-view.tsx');
+  assert.match(view, /api\s*\.librarySourcePack\(workspaceId, packId\)/);
+  assert.match(view, /const patch = restoreLibraryState\(pack\.returnTo, latestUrl\.current\);/);
+  assert.match(view, /update\(\{ \.\.\.patch, pack: '' \}\);/);
+  assert.match(view, /const notice = removedNotice\(pack\.returnToRemoved\);/);
+  assert.match(view, /return commit\(\{ pack: packId \}\);/, 'leaving for the composer records the pack in the address first');
+  assert.match(view, /state: \{ \.\.\.url, q: query \}/, 'the pack keeps the Library state of the moment it was asked for');
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /await onLeave\(saved\.packId\);\s*router\.push\(`\/app\/agent\/\$\{encodeURIComponent\(run\.conversationId\)\}`\);/);
+  assert.match(flow, /\.\.\.composerTurn\(composer, target, saved\.taskContext\.userGoal\)/, 'the writer gets the composer fields');
+  const turn = SP.composerTurn({ draftId: HEX('f'), sourceIds: ['src-1', 'src-2'], voiceMode: 'personalized', voiceSourceIds: ['vs-1'] }, { id: HEX('f'), platform: 'Instagram', language: 'English', channelId: 'acct-1' }, 'Announce the recital');
+  assert.deepEqual(turn.sourceIds, ['src-1', 'src-2']);
+  assert.deepEqual(turn.references, [{ kind: 'post', id: HEX('f'), role: 'rework' }], 'the draft the pack is attached to is the one reworked');
+  assert.deepEqual([turn.voiceMode, turn.voiceSourceIds], ['personalized', ['vs-1']]);
+  assert.deepEqual(turn.destinations, [{ platform: 'Instagram', channelId: 'acct-1', language: 'English' }]);
+  assert.equal(SP.composerTurn({ draftId: HEX('f'), sourceIds: [], voiceMode: 'personalized', voiceSourceIds: [] }, { id: HEX('f'), platform: 'LinkedIn', language: 'English' }, 'x').voiceMode, 'neutral', 'no usable sample, no personalized voice');
+});
+
+test('status flags: entry points that are off are hidden or explained; the deterministic Library still works', () => {
+  const off = SP.libraryGates({ retrieval: false, voice: false, artifacts: false, task_ui: false }, true);
+  assert.equal(off.packs.enabled, true, 'a pack still works from chosen items');
+  for (const name of ['ask', 'recommendations', 'voice', 'artifacts', 'taskUi']) {
+    assert.equal(off[name].enabled, false, name);
+    assert.match(off[name].reason, /\w/, `${name}: a plain explanation`);
+  }
+  const on = SP.libraryGates({ retrieval: true, voice: true, artifacts: true, task_ui: true }, true);
+  for (const name of ['packs', 'ask', 'recommendations', 'voice', 'artifacts', 'taskUi']) assert.deepEqual(on[name], { enabled: true, reason: null }, name);
+  const unreachable = SP.libraryGates({ retrieval: true }, false);
+  assert.equal(unreachable.packs.enabled, false);
+  assert.equal(unreachable.ask.enabled, false);
+
+  const view = feature('library-view.tsx');
+  assert.match(view, /const gates = libraryGates\(intel\.flags, intel\.reachable\);/);
+  assert.match(view, /const asking = url\.panel === 'ask' && gates\.ask\.enabled;/);
+  assert.match(view, /gates\.ask\.enabled \? \(\s*<SegmentedControl/, 'Ask is offered only where its search is on');
+  assert.match(view, /canEdit && gates\.packs\.enabled\s*\?/);
+  assert.match(view, /voiceEnabled=\{gates\.voice\.enabled\}/);
+  assert.match(feature('asset-detail.tsx'), /\{voiceEnabled \? <VoicePanel[^:]*: <p[^>]*>\{voiceNote/);
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /gates\.recommendations\.reason/);
+  assert.match(flow, /gates\.voice\.reason/);
+  assert.match(flow, /gates\.artifacts\.enabled \?/);
+  assert.match(feature('intelligence', 'openui', 'error-boundary.tsx'), /Renderer && generated && !rendererFailed/, 'task_ui off: no generated renderer');
+  assert.match(feature('asset-detail.tsx'), /Use in draft/);
+});
+
+test('batch edits: re-read before writing, user tags only, and each item’s key is sent', () => {
+  const hook = feature('intelligence', 'use-batch-actions.ts');
+  assert.match(hook, /export function userTagsOf\(asset: Pick<LibraryAsset, 'tags'>\) \{\s*return asset\.tags \?\? \[\];/);
+  assert.doesNotMatch(hook, /aiTags/, 'AI-suggested tags are never written back as the person’s');
+  assert.match(hook, /const fresh = await readFresh\(asset, listed\);/, 'each item is read again right before its write');
+  assert.match(hook, /api\.libraryFile\(workspaceId, asset\.id\)/);
+  assert.match(hook, /await client\.refetchQueries\(\{ queryKey: \['library-assets', workspaceId\] \}\);/);
+  assert.match(hook, /const tags = userTagsOf\(fresh\);/);
+  assert.match(hook, /const current = \(fresh\.collections \?\? \[\]\)/, 'membership comes from the fresh read');
+  assert.match(hook, /actionType: 'metadata\.update',[\s\S]{0,120}idempotencyKey: key,/, 'the per-item key is sent');
+  assert.doesNotMatch(hook, /_key\b/, 'no unused key parameter');
+  assert.match(hook, /if \(!listed\) throw new Error/, 'without a fresh read nothing is written from the page’s copy');
+  const bar = feature('intelligence', 'batch-bar.tsx');
+  assert.match(bar, /const unresolved = Boolean\(run && !run\.running && run\.summary\.retryIds\.length > 0\);/, 'a run that didn’t finish waits for its own Retry');
+  assert.match(bar, /Retry or dismiss the last change before starting another\./);
+});
+
+test('host writes: a failed press becomes Retry with the same key; an applied one is done', () => {
+  const flow = feature('intelligence', 'source-pack-flow.tsx');
+  assert.match(flow, /if \(!createKey\.current \|\| createKey\.current\.digest !== digest\) createKey\.current = \{ digest, key: newIdempotencyKey\('lib-pack-create', randomKey\) \};/);
+  assert.match(flow, /\{lost === 'create' \? 'Retry' : 'Save source pack'\}/);
+  assert.match(flow, /\{lost === 'attach' \? 'Retry' : 'Attach to draft'\}/);
+  assert.match(flow, /\{lost === 'write' \? 'Retry' : 'Rework this draft with these sources'\}/);
+  assert.match(flow, /write\.current \?\?= \{ conversationId: null, key: newIdempotencyKey\('lib-pack-write', randomKey\) \};/, 'the same turn and conversation on Retry');
+  assert.match(flow, /const attempt = write\.current;/);
+  assert.match(flow, /idempotencyKey: attempt\.key/);
+  // After saving, the step moves on: the Save control is gone, and the pack is not saved twice from here.
+  assert.match(flow, /setSaved\(result\.result\);\s*setStep\('saved'\);/);
+  // Detail actions key by request digest, so pressing again after a lost answer is the same request.
+  for (const [file, pattern] of [
+    ['versions-panel.tsx', /replaceKey\.current\.plan !== digest/],
+    ['audio-player.tsx', /momentKey\.current\.digest !== digest/],
+    ['voice-panel.tsx', /keys\.current\[digest\] \?\?= newIdempotencyKey/],
+    ['smart-collections.tsx', /saveKey\.current\.digest !== requestDigest/]
+  ])
+    assert.match(feature('intelligence', file), pattern, file);
+});

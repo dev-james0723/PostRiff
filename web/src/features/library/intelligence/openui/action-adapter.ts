@@ -5,11 +5,14 @@ import type { ActionEnvelope } from '@/lib/api/library-intelligence-types';
 import { newIdempotencyKey } from '@/lib/library/batch';
 import { READ_ONLY_ACTION_TYPES, type LibraryAssetRef, type LibraryLocator } from '@/lib/library/openui-schemas';
 import {
+  checkActivation,
   collectIssuedActions,
+  collectIssuedOwners,
   collectServerRefs,
   createLibraryDispatcher,
   createReadBudget,
   refKey,
+  type ActivationEventLike,
   type ActivationToken,
   type DispatchOutcome,
   type IssuedEnvelopeLike,
@@ -23,9 +26,6 @@ function randomKey() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** A trusted pointer or key press within this window counts as the person's activation (fallback for older engines). */
-const ACTIVATION_WINDOW_MS = 1500;
-
 function isRef(value: unknown): value is LibraryAssetRef {
   return Boolean(value) && typeof value === 'object' && typeof (value as LibraryAssetRef).assetId === 'string' && typeof (value as LibraryAssetRef).versionId === 'string';
 }
@@ -33,8 +33,10 @@ function isRef(value: unknown): value is LibraryAssetRef {
 /**
  * The host side of a generated Library task result (UI spec §8). `onAction` is what the descriptors' components call:
  *   - library.select / library.open stay in the browser and only accept refs this result was issued;
- *   - server actions must name an envelope this result carries, need a fresh user activation on a finished result,
- *     get a new idempotency key per activation, run one at a time, and are never retried automatically.
+ *   - server actions must name an envelope this result carries and need the person's trusted press on that action's
+ *     own control, inside the component that was issued it, on a finished result. Each activation gets a new
+ *     idempotency key; after a failure the control becomes "Retry", which re-sends the same activation (same key);
+ *     they run one at a time and are never retried automatically.
  * `dispatchLibraryAction(envelope, token)` is the single path to `api.libraryAction`.
  */
 export function useLibraryActionAdapter({
@@ -65,29 +67,16 @@ export function useLibraryActionAdapter({
   );
   const serverRefs = useMemo(() => collectServerRefs(nodes), [nodes]);
   const issued = useMemo(() => collectIssuedActions(nodes), [nodes]);
+  const owners = useMemo(() => collectIssuedOwners(nodes), [nodes]);
   const readBudget = useRef(createReadBudget());
   const [outcomes, setOutcomes] = useState<Record<string, DispatchOutcome>>({});
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const tokens = useRef<Record<string, ActivationToken>>({});
-  const lastTrustedPress = useRef(0);
 
   // A new result is a new render cycle for the read budget.
   useEffect(() => {
     readBudget.current.reset();
   }, [nodes]);
-
-  // Trusted presses only (synthetic events from generated code have isTrusted === false).
-  useEffect(() => {
-    const mark = (event: Event) => {
-      if (event.isTrusted) lastTrustedPress.current = Date.now();
-    };
-    document.addEventListener('pointerdown', mark, true);
-    document.addEventListener('keydown', mark, true);
-    return () => {
-      document.removeEventListener('pointerdown', mark, true);
-      document.removeEventListener('keydown', mark, true);
-    };
-  }, []);
 
   const record = useCallback(
     (actionId: string, outcome: DispatchOutcome) => {
@@ -96,11 +85,6 @@ export function useLibraryActionAdapter({
     },
     [onOutcome]
   );
-
-  const userActivation = useCallback(() => {
-    const live = typeof navigator !== 'undefined' && navigator.userActivation ? navigator.userActivation.isActive : false;
-    return live || Date.now() - lastTrustedPress.current < ACTIVATION_WINDOW_MS;
-  }, []);
 
   const dispatchLibraryAction = useCallback(
     async (envelope: IssuedEnvelopeLike, token: ActivationToken | null, retry = false) => {
@@ -117,7 +101,7 @@ export function useLibraryActionAdapter({
   );
 
   const onAction: LibraryOnAction = useCallback(
-    (actionId: string, inputs: Record<string, unknown>) => {
+    (actionId: string, inputs: Record<string, unknown>, event?: ActivationEventLike | null) => {
       if (actionId === 'library.select' || actionId === 'library.open') {
         const ref = inputs.assetRef;
         if (!isRef(ref) || !serverRefs.has(refKey(ref))) {
@@ -135,10 +119,17 @@ export function useLibraryActionAdapter({
       }
       let token: ActivationToken | null = null;
       if (!READ_ONLY_ACTION_TYPES.includes(envelope.actionType)) {
-        const activation = dispatcher.activate({ userActivation: userActivation(), phase });
+        // Only the trusted press on this action's own control, inside the component that was issued it, counts.
+        const activation = dispatcher.activate({ event, actionId: envelope.actionId, owner: owners.get(envelope.actionId), phase });
         if (!activation.ok) {
           const message =
-            activation.reason === 'streaming' ? 'Wait until the result has finished.' : activation.reason === 'no-user-activation' ? 'Changes need a press from you.' : 'Refresh the result to act on it.';
+            activation.reason === 'streaming'
+              ? 'Wait until the result has finished.'
+              : activation.reason === 'no-user-activation'
+                ? 'Changes need a press from you.'
+                : activation.reason === 'not-owner'
+                  ? 'Use the button on this result to make this change.'
+                  : 'Refresh the result to act on it.';
           record(envelope.actionId, { status: 'refused', message, retryable: false });
           return;
         }
@@ -147,18 +138,25 @@ export function useLibraryActionAdapter({
       }
       void dispatchLibraryAction(envelope, token);
     },
-    [dispatcher, dispatchLibraryAction, issued, onOpen, onSelect, phase, record, serverRefs, userActivation]
+    [dispatcher, dispatchLibraryAction, issued, onOpen, onSelect, owners, phase, record, serverRefs]
   );
 
-  /** An explicit retry of the same activation after a failure: same idempotency key, never automatic. */
+  /**
+   * "Retry" on the control after a failure: the same activation and idempotency key, so a write that committed while
+   * its response was lost is answered from its receipt instead of applied twice. Still needs a press on that control.
+   */
   const retry = useCallback(
-    (actionId: string) => {
+    (actionId: string, event?: ActivationEventLike | null) => {
       const envelope = issued.get(actionId);
       const token = tokens.current[actionId];
       if (!envelope || !token || outcomes[actionId]?.status !== 'failed') return;
+      if (!checkActivation(event, actionId, owners.get(actionId)).ok) {
+        record(actionId, { status: 'failed', message: 'Press Retry on this result to send it again.', retryable: true });
+        return;
+      }
       void dispatchLibraryAction(envelope, token, true);
     },
-    [dispatchLibraryAction, issued, outcomes]
+    [dispatchLibraryAction, issued, outcomes, owners, record]
   );
 
   return { onAction, dispatchLibraryAction, retry, outcomes, busyActionId, writesEnabled: phase === 'live' };

@@ -39,6 +39,8 @@ export interface LibraryUrlState {
   sel: string[];
   asset: string;
   panel: LibraryPanelParam;
+  /** A source pack whose saved Library state to restore on the way back from a draft (A051); cleared once applied. */
+  pack: string;
 }
 
 export const DEFAULT_LIBRARY_STATE: LibraryUrlState = {
@@ -53,7 +55,8 @@ export const DEFAULT_LIBRARY_STATE: LibraryUrlState = {
   density: 'comfortable',
   sel: [],
   asset: '',
-  panel: 'search'
+  panel: 'search',
+  pack: ''
 };
 
 /** Asset and collection ids: UUIDs, 32-hex keys or legacy media ids. No dots, slashes, colons or query characters. */
@@ -105,6 +108,7 @@ export function parseLibraryState(params: URLSearchParams | Record<string, strin
   const d = DEFAULT_LIBRARY_STATE;
   const collection = read(params, 'collection') ?? '';
   const asset = read(params, 'asset') ?? '';
+  const pack = read(params, 'pack') ?? '';
   const tag = (read(params, 'tag') ?? '').slice(0, 80);
   return {
     q: safeQuery(read(params, 'q') ?? ''),
@@ -118,7 +122,8 @@ export function parseLibraryState(params: URLSearchParams | Record<string, strin
     density: literal(LIBRARY_DENSITIES, read(params, 'density'), d.density),
     sel: sanitizeIds(read(params, 'sel') ?? ''),
     asset: isSafeId(asset) ? asset : '',
-    panel: literal(LIBRARY_PANELS, read(params, 'panel'), d.panel)
+    panel: literal(LIBRARY_PANELS, read(params, 'panel'), d.panel),
+    pack: isSafeId(pack) ? pack : ''
   };
 }
 
@@ -140,6 +145,7 @@ export function serializeLibraryState(state: Partial<LibraryUrlState>): Record<s
   if (sel.length) out.sel = sel.join(',');
   if (isSafeId(full.asset)) out.asset = full.asset;
   if (full.panel !== DEFAULT_LIBRARY_STATE.panel) out.panel = full.panel;
+  if (isSafeId(full.pack)) out.pack = full.pack;
   return out;
 }
 
@@ -181,7 +187,7 @@ export function openerSelector(id: string): string | null {
   return isSafeId(id) ? `[data-library-open="${id}"]` : null;
 }
 
-/** Where a view's scroll position is kept for the return trip (per workspace, per view, without selection). */
+/** Where a view's scroll position is kept for the return trip (per workspace, per view, without selection or pack). */
 export function scrollKey(workspaceId: string, state: Partial<LibraryUrlState>): string {
-  return `rafii-library-scroll:${workspaceId}:${libraryHref({ ...state, sel: [], asset: '' })}`;
+  return `rafii-library-scroll:${workspaceId}:${libraryHref({ ...state, sel: [], asset: '', pack: '' })}`;
 }
