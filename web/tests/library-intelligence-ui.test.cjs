@@ -466,7 +466,8 @@ test('smart collection preview, save, override and undo use the server revision'
   assert.match(panel, /evaluationCurrent \? 4000 : false|!query\.state\.data\.collection\.evaluationCurrent \? 4000 : false/);
   const hook = fs.readFileSync(path.join(FEATURE, 'intelligence', 'use-batch-actions.ts'), 'utf8');
   assert.match(hook, /overrideEnvelope\(collectionId, kind === 'collection-include' \? 'include' : 'exclude'/);
-  assert.match(hook, /\(asset\.collections \?\? \[\]\)\.filter\(\(id\) => manualCollectionIds\.has\(id\)\)/, 'item edits never send smart collection ids');
+  assert.match(hook, /\(fresh\.collections \?\? \[\]\)\.filter\(\(value\) => manualCollectionIds\.has\(value\)\)/, 'item edits never send smart collection ids');
+  assert.match(hook, /const fresh = await readFresh\(/, 'collection edits start from the item as re-read, not a cached copy');
   const organizer = fs.readFileSync(path.join(FEATURE, 'library-organizer.tsx'), 'utf8');
   assert.match(organizer, /filter\(\(c\) => c\.kind !== 'smart'\)/);
 });

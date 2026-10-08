@@ -30,7 +30,11 @@ npx playwright install --with-deps chromium webkit
 cd ..
 python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-ready/evidence/library
 if [ -f web/tests/library-intelligence-browser.cjs ]; then
-  python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser
+  browser_exit=0
+  python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser || browser_exit=$?
+  # Screenshots return through the log (JCB keeps logs, not artifacts); exported on failure too, then the real exit stands.
+  python scripts/library-evidence-export.py emit docs/design/rafii-intelligent-library-2026-10-08/evidence/browser || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
+  if [ "$browser_exit" -ne 0 ]; then exit "$browser_exit"; fi
 fi
 # A031 search latency at 10,000 mixed assets, 8 concurrent scoped searches (pgvector installed by the intelligence stage).
 # Informational: the JSON receipt is the evidence; an over-budget result is reported, never hidden.
