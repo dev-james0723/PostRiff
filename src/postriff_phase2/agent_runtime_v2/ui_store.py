@@ -764,6 +764,10 @@ def commit_ui_revision(cur, auth, patch, validation):
     if not set(validation.get("queryNames") or []) <= allowed_queries or not set(validation.get("actionIds") or []) <= allowed_actions:
         # A revision never reaches data or controls outside the server manifest (no query/action expansion by an edit).
         raise AlphaError("This view asks for data or controls it isn't allowed.", 422, code="parse_rejected")
+    if record["scope"] == "founder" and validation.get("actionIds"):
+        raise AlphaError("Founder views are read-only.", 422, code="parse_rejected")      # D-A22: no actions in the founder manifest
+    if int(validation.get("statementCount") or 0) > contracts.BOUNDS["statements"]:
+        raise AlphaError("This view is too large.", 413, code="source_too_large")
     revision = record["revision"] + 1
     stored_validation = {k: v for k, v in validation.items() if k != "canonicalSource"}
     library_version = str(validation.get("libraryVersion") or record["libraryVersion"] or "")[:40]
