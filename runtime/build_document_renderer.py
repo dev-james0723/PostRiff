@@ -189,7 +189,7 @@ def main():
     # archive is verified by SHA-256 before use and extracted into /tmp lazily.
     compressed = package_archive.with_name(package_archive.name + '.new')
     try:
-        with tarfile.open(compressed, mode='w:xz', preset=3) as tar:
+        with tarfile.open(compressed, mode='w:xz', preset=6) as tar:
             tar.add(root, arcname='.', recursive=True)
         archive_bytes = compressed.stat().st_size
         if archive_bytes > 160_000_000:
