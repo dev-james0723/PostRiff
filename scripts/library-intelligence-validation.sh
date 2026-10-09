@@ -43,6 +43,11 @@ stage pg_adjacent python scripts/postriff_pg_suite.py postgres_agent_runtime pos
 web_tests=(web/tests/*.test.cjs web/tests/*.test.mjs)
 stage web_node node --test "${web_tests[@]}"
 # Every Python unit test in the repository (fast; no providers, no network).
+# Full discovery includes media tests that call ffmpeg; GitHub's runner image has none (Depot's does).
+if ! command -v ffmpeg >/dev/null; then
+  sudo -n apt-get -qq update
+  sudo -n apt-get -y -qq install ffmpeg
+fi
 stage python_all python -m unittest discover -s tests -p 'test_*.py'
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "LIBRARY_INTELLIGENCE_FAILED_STAGES=${failed[*]}"
