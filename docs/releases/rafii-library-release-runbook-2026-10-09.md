@@ -45,6 +45,16 @@ James approved a **full release** on 2026-10-09: migration 104 to staging, then 
   - `vector` 0.8.2 is available but not installed.
   - 104 is absent; there are 48 asset rows.
 
+## Branch preview retrieval (2026-10-09, at James's request)
+
+- Two variables are set in Vercel, scoped to **Preview, branch `claude/rafii-intelligent-library-20261008` only**:
+  - `RAFII_LIBRARY_RETRIEVAL_ENABLED=1`;
+  - `RAFII_LIBRARY_CURSOR_SECRET`, a random value marked sensitive, so search cursors verify across serverless instances.
+- Production, staging and every other branch are unchanged.
+- Preview `qr3ge3qmp` (`dpl_BmC9jRHqvszvPMUnE4G4F8BFj6Vb`) is a redeploy of code head `7737d63c` with these variables. Its health check reports `sourceRevision` `7737d63c`.
+- Search on fresh uploads uses the legacy text index, which is filled synchronously at upload, so passages and the "why it matched" reason work without enrichment jobs. Vercel crons don't run on previews, so enrichment and segmentation jobs would not run there anyway.
+- **Undo:** `vercel env rm RAFII_LIBRARY_RETRIEVAL_ENABLED preview claude/rafii-intelligent-library-20261008` and `vercel env rm RAFII_LIBRARY_CURSOR_SECRET preview claude/rafii-intelligent-library-20261008`, then redeploy the preview.
+
 ## Steps
 
 Run every step on staging first, then repeat it on production.
