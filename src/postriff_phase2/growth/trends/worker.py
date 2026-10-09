@@ -321,7 +321,7 @@ class TrendWorker:
                             next_allowed_at=iso(instant(self.clock()) + timedelta(seconds=stall_cooldown)),
                             clear_pause=False, cursor=cur)
                     else:
-                        # A committed, progressing batch is the only path that clears a pause.
+                        # A committed batch below the stall threshold is the only path that clears a pause.
                         source_health.record(self.store, claim['scope_key'], cap.provider_id,
                             status='gap' if completeness == 'gap' else 'partial',
                             reason_code=batch.reason_code or 'bounded_sample', clear_pause=True, cursor=cur)
