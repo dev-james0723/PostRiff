@@ -29,7 +29,7 @@ from postriff_phase2.contracts import digest
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.oauth import CredentialVault
-from postriff_phase2.youtube import workspace_provider_data as private
+from postriff_phase2.youtube import privacy_erasure as identity_private, workspace_provider_data as private
 from postriff_phase2.youtube.journal import UploadJournal, purge_authorized_data
 from postriff_phase2.youtube.provider import YouTubeProvider
 from postriff_phase2.youtube.uploads import UploadEngine
@@ -167,15 +167,25 @@ def journal_state(workspace=ONE, connection_id=CONNECTION):
 def assert_removed(saved):
     assert saved[private.REMOVED] and saved['state'] == 'held' and saved['leaseOwner'] is None and saved['leaseUntil'] == 0
     assert 'providerReference' not in saved and 'url' not in saved and 'videoId' not in saved['progress']
-    assert 'provider-caption-id' not in json.dumps(saved) and 'not canceled' in saved['nextAction']
+    assert 'provider-caption-id' not in json.dumps(saved) and 'leaseId' not in saved and saved['nextAt'] == 0
+    # Identity erasure replaces nextAction after runtime cleanup, while the
+    # accepted-schedule notice must survive in the provider notice and timeline.
+    assert saved['providerConfirmed'] == private.NOTICE and 'not canceled' in saved['providerConfirmed']
+    assert any(event.get('execution') == 'server-data-cleanup' and event.get('state') == 'held'
+               and event.get('message') == saved['providerConfirmed']
+               and event.get('dataRemovalReason') == saved['youtubeDataRemovalReason']
+               for event in saved['events'])
     if saved.get('privacyErased'):
+        assert saved['nextAction'] == identity_private.NOTICE and saved['cancelRequested'] is True
         original = make_job(saved['manifest']['workspaceId'], saved['manifest']['channelId'], actor=saved['approvedBy'])
         assert saved['approvalDigest'] == original['approvalDigest'], 'Preserve the ORIGINAL digest; never re-sign redacted data.'
         assert saved['manifest']['privacyErased'] and 'account' not in saved['manifest'] and 'providerAccountId' not in saved['manifest']
+        assert digest(saved['manifest']) != saved['approvalDigest'], 'The erased approval must remain unusable.'
         assert saved['approvedBy'] == original['approvedBy'] and saved['approvedAt'] == original['approvedAt']
         for field in ('actor', 'payload', 'media', 'publishOptions', 'idempotencyKey'):
             assert saved['manifest'][field] == original['manifest'][field]
     else:
+        assert saved['nextAction'] == private.NOTICE
         assert digest(saved['manifest']) == saved['approvalDigest'], 'Runtime-only cleanup does not rewrite approvals.'
 
 

@@ -153,9 +153,12 @@ def seed(workspace, *, created=NOW):
 BEFORE, ACTION, ACTION_MANIFEST = seed(ONE)
 FOREIGN, FOREIGN_ACTION, _ = seed(TWO)
 with connection() as db:
-    # Deliberately ambiguous historical provenance remains visible as a limit.
+    # Commit the independent historical fixture before testing purge rollback.
+    # Deliberately ambiguous provenance remains visible as a limit.
     db.execute("INSERT INTO public.pr_audit_events(workspace_id,kind,subject,meta) VALUES(%s,'youtube.action_result','orphan-application-id',%s::jsonb),(%s,'youtube.stream_secret_viewed','legacy-api-stream-id','{}')",
                (ONE, json.dumps({'resourceId': 'ambiguous-api-id'}), ONE))
+    AUDIT_BEFORE = db.execute('SELECT kind,subject,meta FROM public.pr_audit_events WHERE workspace_id=%s ORDER BY id', (ONE,)).fetchall()
+with connection() as db:
     generation = db.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (ONE, CONNECTION)).fetchone()[0]
     db.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (ONE,))
     db.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL WHERE workspace_id=%s AND connection_id=%s", (ONE, CONNECTION))
@@ -165,6 +168,7 @@ with connection() as db:
 assert snapshot() == BEFORE, 'A rolled-back erasure must not persist partial state.'
 with connection() as db:
     assert db.execute('SELECT provider_account_id,revoked_at IS NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (ONE, CONNECTION)).fetchone() == (CHANNEL, True)
+    assert db.execute('SELECT kind,subject,meta FROM public.pr_audit_events WHERE workspace_id=%s ORDER BY id', (ONE,)).fetchall() == AUDIT_BEFORE
 CHECKS.append('atomic rollback preserves approval, credential, policy binding and audit source')
 
 before_calls = len(google.calls)
@@ -190,8 +194,8 @@ with connection() as db:
     assert db.execute('SELECT count(*) FROM public.pr_youtube_policy_bindings WHERE workspace_id=%s AND connection_id=%s', (ONE, CONNECTION)).fetchone()[0] == 0
     rows = db.execute("SELECT kind,subject,meta FROM public.pr_audit_events WHERE workspace_id=%s AND kind LIKE 'youtube.%%'", (ONE,)).fetchall()
     assert sum(meta.get('privacyErased') is True for _, _, meta in rows) == 3
-    assert any(subject == 'orphan-application-id' and meta['resourceId'] == 'ambiguous-api-id' for _, subject, meta in rows)
-    assert any(subject == 'legacy-api-stream-id' for _, subject, _ in rows)
+    assert ('youtube.action_result', 'orphan-application-id', {'resourceId': 'ambiguous-api-id'}) in rows
+    assert ('youtube.stream_secret_viewed', 'legacy-api-stream-id', {}) in rows
     assert db.execute('SELECT meta FROM public.pr_audit_events WHERE workspace_id=%s AND subject=%s', (TWO, FOREIGN_ACTION)).fetchone()[0]['channelId'] == CHANNEL
 CHECKS.append('journal hook erases exact identities and audit keys while original digests/user content/foreign tenant survive')
 

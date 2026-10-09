@@ -58,7 +58,9 @@ def connection():
 
 def png(color):
     output = io.BytesIO()
-    Image.new('RGB', (2, 2), color).save(output, format='PNG')
+    # The actual decoder intentionally rejects pictures smaller than 32px.
+    # Use a valid synthetic image so these races exercise durable picture I/O.
+    Image.new('RGB', (32, 32), color).save(output, format='PNG')
     return output.getvalue()
 
 
