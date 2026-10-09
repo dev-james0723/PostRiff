@@ -162,8 +162,9 @@ def registry_entries(adapters=None, decisions=None):
         requirements = []
         for kind in app['kinds']:
             recorded = decisions.get((app['provider'], app['appRef'], app['environment'], kind)) or {}
-            requirements.append({'kind': kind, 'requestedScopes': list(recorded.get('requestedScopes') or app['requestedScopes']),
-                                 'documentationRef': DOCUMENTATION.get(app['provider'], {}).get(kind), **recorded})
+            requirements.append({'kind': kind, 'requestedScopes': sorted(set(app['requestedScopes']) | set(recorded.get('requestedScopes') or ())),
+                                 'documentationRef': DOCUMENTATION.get(app['provider'], {}).get(kind),
+                                 **{key: value for key, value in recorded.items() if key not in ('requestedScopes', 'kind')}})
         launch = LAUNCH_SCOPE.get(app['provider']) if app['appRef'] == app['provider'] else None
         entries.append({key: app[key] for key in ('provider', 'appRef', 'environment', 'product', 'lane')} | {'requirements': requirements,
                                                                                                          'launchScope': launch is not None, 'launch': launch})
@@ -217,7 +218,15 @@ def evaluate_registry(entries, now):
     Separate apps never merge (a Google sign-in brand approval says nothing about a YouTube or Gmail client)."""
     out = []
     for entry in entries:
-        rows = [evaluate_requirement(req, now, environment=entry['environment']) for req in entry['requirements']]
+        rows = []
+        for req in entry['requirements']:
+            try:
+                rows.append(evaluate_requirement(req, now, environment=entry['environment']))
+            except ValueError:
+                rows.append({'kind': str(req.get('kind')), 'status': 'invalid', 'standing': 'blocked', 'blockers': ['invalid_registry_entry'], 'requestedScopes': [],
+                             'approvedScopes': [], 'missingScopes': [], 'providerReceiptRef': None, 'documentationRef': None,
+                             'freshness': freshness(now=now, observed_at=None, stale_after=REGISTRY_STALE_SECONDS, source='founder_connections.RECORDED_DECISIONS'),
+                             'nextAction': {'kind': 'fix_registry_entry', 'label': 'Correct the malformed registry entry in a reviewed change.', 'requiresHuman': True}})
         standings = {row['standing'] for row in rows}
         readiness = 'ready' if rows and standings == {'satisfied'} else 'blocked' if 'blocked' in standings else 'check_required' if 'check_required' in standings else 'pending' if 'pending' in standings else 'stale'
         out.append({key: entry.get(key) for key in ('provider', 'appRef', 'environment', 'product', 'lane', 'launchScope', 'launch')}
@@ -301,9 +310,11 @@ CONNECTION_ATTENTION = {
 RECONNECT_ACTION = {'kind': 'request_account_holder_reconnect', 'label': 'Ask the account holder to reconnect through the normal Channels flow. Founder cannot consent for them.',
                     'targetRef': None, 'requiresHuman': True, 'blockedBy': ['account_holder_consent']}
 COVERAGE_SQL = f'SELECT max(h."refreshedAt") AS latest, count(*) AS total FROM {CONNECTION_VIEW} h WHERE {excluded(H_WORKSPACE)}'
-ATTENTION_SQL = (f'SELECT h."workspaceId" AS wid, h."connectionId" AS cid, h.provider, h."connectionState" AS cstate, h."refreshedAt" AS at FROM {CONNECTION_VIEW} h '
+# One row per connection (the projection has one row per capability). The freshness envelope may use max("refreshedAt")
+# because connection_health_stage deletes every row it did not refresh in the same transaction.
+ATTENTION_SQL = (f'SELECT DISTINCT h."workspaceId" AS wid, h."connectionId" AS cid, h.provider, h."connectionState" AS cstate FROM {CONNECTION_VIEW} h '
                  f'WHERE h."connectionState" = ANY(%s) AND {excluded(H_WORKSPACE)} '
-                 'ORDER BY h.provider, h."connectionState", h."workspaceId", h."connectionId" LIMIT %s')
+                 'ORDER BY h."workspaceId", h."connectionId" LIMIT %s')
 
 
 def connection_items(rows, coverage, now, environment, *, truncated=False):
@@ -336,19 +347,26 @@ def connection_items(rows, coverage, now, environment, *, truncated=False):
     return out, envelope
 
 
+def _unobserved(now, environment, state):
+    envelope = freshness(now=now, observed_at=None, stale_after=CONNECTION_STALE_SECONDS, cadence=CONNECTION_CADENCE_SECONDS, source=CONNECTION_VIEW)
+    return [item(category='stale_telemetry', priority='P3', environment=environment, title='Connection health is not observed', reason='connection_health_' + state,
+                 summary='The connection projection could not be read. Affected connections are unknown, not zero.', owner_lane='ops', envelope=envelope,
+                 next_action={'kind': 'restore_observation', 'label': 'Check the connection health projection (migration 066) and the reader role.', 'targetRef': CONNECTION_VIEW,
+                              'requiresHuman': True, 'blockedBy': ['operator_configuration']})], envelope, state
+
+
 def read_connection_health(service, now, environment):
-    """(items, envelope, sourceState) through the restricted reader. A missing projection is source_not_configured: one P3 item
-    with unknown impact, never an empty 'all clear'."""
-    coverage = live_metrics.execute(service, MetricStatement('connections_attention:coverage', COVERAGE_SQL), (), limit=1)
-    if coverage is None:
-        envelope = freshness(now=now, observed_at=None, stale_after=CONNECTION_STALE_SECONDS, cadence=CONNECTION_CADENCE_SECONDS, source=CONNECTION_VIEW)
-        return [item(category='stale_telemetry', priority='P3', environment=environment, title='Connection health is not observed', reason='connection_health_source_not_configured',
-                     summary='The connection projection is not installed or not readable. Affected connections are unknown.', owner_lane='ops', envelope=envelope,
-                     next_action={'kind': 'restore_observation', 'label': 'Install or grant the connection health projection (migration 066).', 'targetRef': CONNECTION_VIEW,
-                                  'requiresHuman': True, 'blockedBy': ['operator_configuration']})], envelope, 'source_not_configured'
+    """(items, envelope, sourceState) through the restricted reader. A missing projection is source_not_configured and any other
+    read failure is unavailable: one P3 item with unknown impact, never an empty 'all clear' and never a failed queue."""
+    try:
+        coverage = live_metrics.execute(service, MetricStatement('connections_attention:coverage', COVERAGE_SQL), (), limit=1)
+        rows = None if coverage is None else live_metrics.execute(service, MetricStatement('connections_attention:rows', ATTENTION_SQL),
+                                                                  (sorted(CONNECTION_ATTENTION), MAX_CONNECTION_ROWS + 1), limit=MAX_CONNECTION_ROWS + 1)
+    except Exception:   # noqa: BLE001 - timeouts or lost connections degrade this source only
+        return _unobserved(now, environment, 'unavailable')
+    if coverage is None or rows is None:
+        return _unobserved(now, environment, 'source_not_configured')
     coverage = coverage[0] if coverage else {}
-    rows = live_metrics.execute(service, MetricStatement('connections_attention:rows', ATTENTION_SQL), (sorted(CONNECTION_ATTENTION), MAX_CONNECTION_ROWS + 1),
-                                limit=MAX_CONNECTION_ROWS + 1) or []
     truncated = len(rows) > MAX_CONNECTION_ROWS
     items, envelope = connection_items(rows[:MAX_CONNECTION_ROWS], coverage, now, environment, truncated=truncated)
     return items, envelope, 'not_instrumented' if not coverage.get('latest') else 'connected'

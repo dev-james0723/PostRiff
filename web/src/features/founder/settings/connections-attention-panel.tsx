@@ -8,7 +8,7 @@ import { useFounderScope } from '../customers/kit/api';
 import { Panel } from '../customers/kit/page-frame';
 
 type Count = { value: number | null; countState: 'exact' | 'estimated' | 'lower_bound' | 'unknown' };
-type Freshness = { freshness: 'fresh' | 'stale' | 'unknown' | 'not_applicable'; observedAt: string | null; lastCheckedAt: string | null; reason: string | null };
+type Freshness = { freshness: 'fresh' | 'stale' | 'unknown' | 'not_applicable'; coverage?: string | null; observedAt: string | null; lastCheckedAt: string | null; reason: string | null };
 type Item = {
   id: string; priority: string; category: string; state: string; title: string; summary: string; launchBlocker: boolean;
   affected: { users: Count; tenants: Count; connections: Count; jobs: Count };
@@ -34,7 +34,7 @@ export function formatCount(count: Count, noun: string): string {
 
 /** Green only for fresh evidence; stale shows the last-known time, unknown asks for a check. */
 export function freshnessLabel(envelope: Freshness): string {
-  if (envelope.freshness === 'fresh') return 'Current';
+  if (envelope.freshness === 'fresh') return envelope.coverage === 'complete' ? 'Current' : 'Current (partial coverage)';
   if (envelope.freshness === 'stale') return envelope.observedAt ? `Stale · last good ${new Date(envelope.observedAt).toLocaleString()}` : 'Stale';
   if (envelope.freshness === 'not_applicable') return 'Episode record';
   return 'Check required';

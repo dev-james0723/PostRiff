@@ -777,8 +777,16 @@ def connection_health_stage(fstore, service, values, now):
                 youtube = None
                 youtube_workspaces = sorted({row[0] for row in channels if row[2] == 'YouTube'})
                 if youtube_workspaces and _table_exists(cur, 'public.pr_encrypted_credentials'):
+                    # Booleans, an expiry and the revoked flag reach Python; ciphertext presence is tested in SQL only. A savepoint keeps
+                    # this optional overlay from ever aborting the refresh: on any error the projection falls back to channel state.
                     from postriff_phase2.channels import youtube_credential_status
-                    youtube = youtube_credential_status(cur, youtube_workspaces)   # metadata columns only, never ciphertext
+                    cur.execute('SAVEPOINT youtube_overlay')
+                    try:
+                        youtube = youtube_credential_status(cur, youtube_workspaces)
+                        cur.execute('RELEASE SAVEPOINT youtube_overlay')
+                    except Exception:   # noqa: BLE001
+                        cur.execute('ROLLBACK TO SAVEPOINT youtube_overlay')
+                        youtube = None
                 rows = list(project_connections(channels, levels, now, connection_state, youtube).values())
                 if rows:
                     columns = list(zip(*rows))

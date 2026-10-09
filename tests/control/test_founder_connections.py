@@ -253,6 +253,52 @@ class StaleTelemetryTests(unittest.TestCase):   # A30
             self.assertNotIn('pr_encrypted_credentials', sql)
 
 
+class ReviewFindingTests(unittest.TestCase):
+    """Independent review of PR #150: partial failures, scope narrowing, malformed registry rows, per-connection counting."""
+
+    def test_reader_errors_degrade_connection_health_only(self):
+        class Broken(ReaderStub):
+            def metric_rows(self, statement, params, limit=1000):
+                raise psycopg.errors.QueryCanceled('statement timeout')
+        items, envelope, state = fc.read_connection_health(types.SimpleNamespace(store=Broken()), NOW, 'production')
+        self.assertEqual((state, envelope['freshness'], [i['safeReasonCode'] for i in items]), ('unavailable', 'unknown', ['connection_health_unavailable']))
+        out = fc.attention(app_for(Broken(), FounderStoreStub()), PRINCIPAL, {'mode': 'live', 'now': NOW})
+        self.assertEqual(out['sources']['connectionHealth']['state'], 'unavailable')
+        self.assertEqual(out['summary']['tenants']['countState'], 'lower_bound')
+
+    def test_rows_query_missing_after_coverage_is_not_an_all_clear(self):
+        class HalfMissing(ReaderStub):
+            def metric_rows(self, statement, params, limit=1000):
+                if statement.metric_id.endswith(':rows'):
+                    raise psycopg.errors.UndefinedColumn('connectionState')
+                return super().metric_rows(statement, params, limit)
+        items, _, state = fc.read_connection_health(types.SimpleNamespace(store=HalfMissing(coverage={'latest': fc._iso(NOW - 60), 'total': 3})), NOW, 'production')
+        self.assertEqual(state, 'source_not_configured')
+        self.assertEqual([i['category'] for i in items], ['stale_telemetry'])
+
+    def test_rows_are_distinct_connections_without_provider_ordering(self):
+        reader = ReaderStub(coverage={'latest': fc._iso(NOW - 60), 'total': 1}, rows=[row('w1', 'c1', 'youtube', 'token_expired')])
+        fc.read_connection_health(types.SimpleNamespace(store=reader), NOW, 'production')
+        sql = reader.statements[1][1]
+        self.assertIn('SELECT DISTINCT', sql)
+        self.assertNotIn('ORDER BY h.provider', sql)
+
+    def test_recorded_scopes_never_narrow_the_adapter_request(self):
+        adapters = {'youtube': types.SimpleNamespace(documented_scopes=('scope.read', 'scope.upload'), SCOPES={})}
+        decision = approved('sensitive_scope', ['scope.read'], requestedScopes=['scope.read'])
+        entry = [e for e in fc.registry_entries(adapters, {('youtube', 'youtube', 'production', 'sensitive_scope'): decision}) if e['provider'] == 'youtube']
+        req = next(r for r in fc.evaluate_registry(entry, NOW)[0]['requirements'] if r['kind'] == 'sensitive_scope')
+        self.assertEqual((req['standing'], req['missingScopes']), ('blocked', ['scope.upload']))
+
+    def test_malformed_registry_row_blocks_only_that_row(self):
+        adapters = {'youtube': types.SimpleNamespace(documented_scopes=('s',), SCOPES={})}
+        decisions = {('youtube', 'youtube', 'production', 'api_audit'): {'status': 'green'}}
+        app = fc.evaluate_registry([e for e in fc.registry_entries(adapters, decisions) if e['provider'] == 'youtube'], NOW)[0]
+        bad = next(r for r in app['requirements'] if r['kind'] == 'api_audit')
+        self.assertEqual((bad['standing'], bad['blockers']), ('blocked', ['invalid_registry_entry']))
+        self.assertEqual(app['readiness'], 'blocked')
+
+
 class RouteTests(unittest.TestCase):
     def setUp(self):
         slices.load()

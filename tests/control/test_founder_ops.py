@@ -732,6 +732,27 @@ class StageTests(unittest.TestCase):
         legacy = ops.project_connections(channels, {}, now, connection_state)
         self.assertEqual({key[1]: row[5] for key, row in legacy.items()}, {'yt-refresh': 'expired', 'yt-binding': 'expired', 'yt-none': 'expired', 'li': 'expired'})
 
+    def test_youtube_overlay_failure_never_aborts_the_refresh(self):
+        """The optional vault overlay runs in a savepoint: a privilege error rolls back to it and the refresh still commits
+        with the plain channel classification; on success the overlay reaches the projection."""
+        now = local_epoch('2026-10-01T08:05:30')
+        wid = '11111111-1111-1111-1111-111111111111'
+        channels = [(wid, 'yt', 'YouTube', True, False, True, True, now - 60, 3, False, None)]
+        script = [('max(refreshed_at)', [(None,)]), ('pg_try_advisory_xact_lock', [(True,)]), ('FROM public.pr_workspaces w CROSS JOIN LATERAL', channels),
+                  ('FROM public.pr_encrypted_credentials', [(wid, 'yt', True, True, now - 60, False)])]
+        tables = {'public.pr_connection_health', 'public.pr_encrypted_credentials'}
+        failing = ScriptedDB(script, tables=tables, fail=('FROM public.pr_encrypted_credentials', psycopg.errors.InsufficientPrivilege('denied')))
+        result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: failing), {}, now)
+        self.assertEqual((result['status'], result['rows'], failing.commits), ('ok', 1, 1))
+        self.assertTrue(any(sql == 'ROLLBACK TO SAVEPOINT youtube_overlay' for sql, _ in failing.statements))
+        upsert = next(params for sql, params in failing.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
+        self.assertEqual(upsert[6], ['expired'], 'without vault facts the classification is the previous one')
+        working = ScriptedDB(script, tables=tables)
+        ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: working), {}, now)
+        upsert = next(params for sql, params in working.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
+        self.assertEqual((upsert[6], upsert[7]), (['ok'], ['read_verified']), 'a refreshable YouTube grant is not an expired connection')
+        self.assertTrue(any(sql == 'RELEASE SAVEPOINT youtube_overlay' for sql, _ in working.statements))
+
     def test_connection_health_refreshes_hourly_and_removes_vanished_connections(self):
         now = local_epoch('2026-10-01T08:05:30')
         channels = [('11111111-1111-1111-1111-111111111111', 'c-ok', 'LinkedIn', True, False, True, True, now + 30 * 86400, 2, True, now - 100)]
