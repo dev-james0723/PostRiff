@@ -36,6 +36,10 @@ Run locally on `11_Full_20min_Teaching_Script.pdf` (18 pages):
 - Automatic tags fill the tags field only when it is empty, are listed separately (`aiTags`), and show dashed in the inspector.
 - The summary is labelled "Extracted".
 - On your teaching script it produced: leading-tone seventh chords, minor, a-flat, diminished, major.
+- Documents up to 8 MB are read during their own upload, so tags and the sentence are there when the upload finishes.
+- Files read before this existed are described from their stored text when someone opens them, and by the worker (20 per minute). A person's own tags are never replaced, and the summary is replaced only while it is still the old 360-character default.
+
+**Staging caveat (2026-10-09).** The separate `rafii-consumer-staging` project runs a cron every minute against the same staging database. It runs older code from a CLI deploy on 2026-10-08. It processed James's queued PDFs with its old reader and failed them, which is why they never got tags. Uploads now finish documents up to 8 MB themselves. Anything left queued on staging (larger files) is still read by that old worker until the project is redeployed or its cron is paused.
 
 
 1. **Free layer (built, see above).** James asked for tags to appear automatically, so they do; they never overwrite tags a person set, and they stay visibly marked as automatic.
