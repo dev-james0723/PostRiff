@@ -35,6 +35,29 @@ const VIEWPORTS = [
   { id: 'mobile-390-landscape', width: 844, height: 390, surface: 'mobile' },
 ];
 const AGENT_PATH = /\/api\/workspaces\/[0-9a-f-]{36}\/agent\/(turns|status|ui\/.*|conversations\/.*|runs\/.*)$/;
+/** Runner memory at one instant (Linux CI): MemAvailable, resident size of the browser engines' processes, /dev/shm use. */
+function memorySample() {
+  const out = { memAvailableMb: null, webkitRssMb: null, chromiumRssMb: null, shmUsedMb: null };
+  try {
+    const info = fs.readFileSync('/proc/meminfo', 'utf8');
+    const avail = /MemAvailable:\s+(\d+) kB/.exec(info);
+    if (avail) out.memAvailableMb = Math.round(Number(avail[1]) / 1024);
+    const ps = execFileSync('ps', ['-eo', 'rss=,comm='], { encoding: 'utf8', timeout: 5000 });
+    let webkit = 0;
+    let chromium = 0;
+    for (const line of ps.split('\n')) {
+      const m = /^\s*(\d+)\s+(.+)$/.exec(line);
+      if (!m) continue;
+      if (/WebKit|MiniBrowser|pw_run/i.test(m[2])) webkit += Number(m[1]);
+      if (/chrom/i.test(m[2])) chromium += Number(m[1]);
+    }
+    out.webkitRssMb = Math.round(webkit / 1024);
+    out.chromiumRssMb = Math.round(chromium / 1024);
+    const df = execFileSync('df', ['-k', '/dev/shm'], { encoding: 'utf8', timeout: 5000 }).trim().split('\n').pop().split(/\s+/);
+    out.shmUsedMb = Math.round(Number(df[2]) / 1024);
+  } catch { /* diagnostics only: a missing tool never fails a scene */ }
+  return out;
+}
 const shortPath = (url) => new URL(url).pathname.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, ':id');
 
 async function main() {
@@ -55,8 +78,17 @@ async function main() {
     const failures = [];
     const consoleLines = [];
     const agentCalls = [];
+    const steps = [];
+    const sceneStarted = Date.now();
     const t = {
       base, providerBase, viewports: VIEWPORTS, workspaceId: boot.workspaceId, principal, shared, browser: browserName,
+      /** Diagnostics only: name the step (e.g. the viewport id) and sample the runner's memory, so a crash says where it was. */
+      step(label) {
+        const sample = { t: Date.now() - sceneStarted, label, ...memorySample() };
+        steps.push(sample);
+        process.stdout.write(`STEP    ${browserName} ${id} ${label} memAvailableMb=${sample.memAvailableMb} webkitRssMb=${sample.webkitRssMb} `
+          + `chromiumRssMb=${sample.chromiumRssMb} shmUsedMb=${sample.shmUsedMb}\n`);
+      },
       async page({ surface = 'panel', viewport, locale = 'en-US', reducedMotion = 'no-preference', mobile } = {}) {
         const vp = viewport || (surface === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 900 });
         const isMobile = mobile ?? vp.width < 768;
@@ -127,7 +159,8 @@ async function main() {
       if (providerBase) await fetch(`${providerBase}/__fault`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"fault":null}' }).catch(() => {});
       for (const ctx of contexts) await ctx.close().catch(() => {});
     }
-    items.push({ check: `e2e:${id}`, status, detail: detail.slice(0, 600), metrics, ms: Date.now() - started, ...(diagnostics ? { diagnostics } : {}) });
+    items.push({ check: `e2e:${id}`, status, detail: detail.slice(0, 600), metrics, ms: Date.now() - started, ...(diagnostics ? { diagnostics } : {}),
+                 ...(steps.length ? { steps, lastStep: steps[steps.length - 1].label } : {}) });
     process.stdout.write(`${status.toUpperCase().padEnd(7)} ${browserName} ${id} — ${detail.slice(0, 200)}\n`);
   }
   await browser.close();
