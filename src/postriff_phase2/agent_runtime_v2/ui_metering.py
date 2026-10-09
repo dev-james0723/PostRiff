@@ -7,10 +7,11 @@ edit) reserves its own hold on the existing usage ledger BEFORE the provider is 
   feature attribution (LEDGER_FEATURES) and the parent run keeps the turn's lineage; no new ledger feature;
 - the parent turn's credit authority is inherited (``AgentRuntimeService._reservation_approval``); a credit-mode workspace
   without one is refused by the ledger exactly like a text turn, never run unbilled;
-- the combined admission plan: a presentation chain (initial + repair + explicit retries) must fit in the room the person's
-  original turn left — its reserved ceiling minus its settled spend minus what earlier UI attempts used or still hold. An
-  explicit edit is a new request with the same per-request allowance as the turn, shared only with its own repair. An
-  unknown parent or attempt spend is never treated as zero: the presenter is refused (native answer, no call);
+- the combined admission plan: a turn admitted with a presentation allowance (D-A47, James's decision 2026-10-09) gives its
+  presentation chain (initial + repair + explicit retries) exactly that portion minus what earlier UI attempts used or still
+  hold; a turn without one keeps the original rule (its reserved ceiling minus its settled spend minus earlier UI attempts).
+  An explicit edit is a new request with the same per-request allowance as the turn's own estimate, shared only with its own
+  repair. An unknown parent or attempt spend is never treated as zero: the presenter is refused (native answer, no call);
 - no hidden retries: one reservation is one physical request (the presenter client uses ``max_retries=0``);
 - settlement: known usage → ``completed`` at the priced cost; a provider refusal before any work (4xx/429) or an attempt
   that was never dispatched → ``failed``/0 (released); anything uncertain (timeout, 5xx, a cut stream, a cancel after
@@ -72,18 +73,43 @@ USAGE_ROWS_SQL = (
     "(SELECT s.actual_usd_micro FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id "
     "AND s.cost_state IN ('actual','released') ORDER BY s.at LIMIT 1), "
     "EXISTS (SELECT 1 FROM public.pr_usage_ledger u WHERE u.workspace_id=r.workspace_id AND u.reservation_id=r.id AND u.cost_state='estimated_unknown'), "
-    "coalesce(r.meta->>'chain','') "
+    "coalesce(r.meta->>'chain',''), coalesce(r.meta->>'uiAllowanceUsdMicro','') "
     "FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND (r.idempotency_key=%s OR r.idempotency_key LIKE %s)")
+
+# The presentation part of a turn's admission plan (D-A47): one initial attempt and its single repair, each at the worst-case
+# input (the largest prompt asset, the full context block, a full-size rejected or base source and an edit instruction) and the
+# fixed output cap. It is an admission-time check: the turn's reservation includes it (so a turn that could not also afford its
+# view is known when it starts), it is released with the turn's settlement, and each presenter attempt then reserves its own
+# hold against the workspace, person-day, founder and credit limits. How the Manager's share settles no longer takes the view's
+# room away. Turns that cannot present, phone/credit turns and founder turns with founder views off reserve no allowance.
+ALLOWANCE_ATTEMPTS = 2
+ALLOWANCE_PROMPT_BYTES = 64 * 1024 + 24 * 1024 + 128 * 1024 + 2 * 1024
+
+
+def presentation_allowance(cfg) -> int | None:
+    """The micro-USD a GenUI-eligible turn reserves for its presentation chain, or None when the presenter route is unpriced
+    (the turn then reserves only its own estimate and the original combined rule applies)."""
+    from .ui_presenter import MAX_OUTPUT_TOKENS, WORKLOAD
+    route = cfg.route(WORKLOAD, reason="presentation allowance")
+    if not getattr(route, "available", False) or not route.model:
+        return None
+    per_attempt = cfg.estimate_usd_micro(route.model, -(-ALLOWANCE_PROMPT_BYTES // 3) + 16, MAX_OUTPUT_TOKENS)
+    return ALLOWANCE_ATTEMPTS * per_attempt if type(per_attempt) is int and per_attempt > 0 else None
 
 
 def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTATION_CHAIN) -> dict:
     """{ceiling, parentSpent, chainUsed, room}: the room left for one more presenter attempt on `chain`. `room` is None when a
-    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered."""
+    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered. A turn admitted with a
+    presentation allowance (D-A47, James's decision of 2026-10-09) gives its presentation chain exactly that portion: the
+    Manager's own share settling above its estimate no longer takes the view's room, while every attempt is still reserved on
+    the ledger against the workspace, person-day, founder and credit limits. An unknown parent spend still refuses the view.
+    Other turns keep the original rule (turn ceiling minus the turn's settled spend)."""
     cur.execute(USAGE_ROWS_SQL, (workspace_id, parent_key(parent_run_id), parent_key(parent_run_id) + ":ui:%"))
-    ceiling, parent_spent, used = None, None, 0
-    for key, estimate, actual, _unknown, row_chain in cur.fetchall() or []:
+    ceiling, parent_spent, used, ui_allowance = None, None, 0, None
+    for key, estimate, actual, _unknown, row_chain, row_allowance in cur.fetchall() or []:
         if key == parent_key(parent_run_id):
             ceiling, parent_spent = int(estimate or 0), (int(actual) if actual is not None else None)
+            ui_allowance = int(row_allowance) if isinstance(row_allowance, str) and row_allowance.isdigit() else None
             continue
         if (row_chain or PRESENTATION_CHAIN) != chain:
             continue
@@ -93,9 +119,14 @@ def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTAT
         return {"ceiling": None, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_unmetered"}
     if chain == PRESENTATION_CHAIN:
         if parent_spent is None:
-            return {"ceiling": ceiling, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_spend_unknown"}
+            return {"ceiling": ceiling, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_spend_unknown",
+                    **({"allowance": ui_allowance} if ui_allowance is not None else {})}
+        if ui_allowance is not None:
+            return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ui_allowance - used, "reason": None,
+                    "allowance": ui_allowance}
         return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - parent_spent - used, "reason": None}
-    return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - used, "reason": None}
+    # An explicit edit has the same per-request allowance as the turn's own estimate (the presentation portion is not added).
+    return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - (ui_allowance or 0) - used, "reason": None}
 
 
 # --- reserve ---------------------------------------------------------------------------------------------------------------
