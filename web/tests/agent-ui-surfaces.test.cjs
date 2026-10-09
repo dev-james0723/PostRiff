@@ -259,7 +259,7 @@ test('the edit field: localized chrome, live-selection chips in a labelled group
   const session = sessions.sessionFor(t, id, 'c1');
   session.adopt(j01View(id));
   // Two drafts picked in this tab (saving is off for this person): the snapshot's @selection is still empty.
-  session.stateController().recordSelection('$selectedDrafts', [{ type: 'draft', id: 'd1', title: 'Secret recital 2026' }, { type: 'draft', id: 'd2', title: 'Spring launch' }],
+  session.stateController().recordSelection('$selectedDrafts', [{ type: 'draft', id: 'd1', title: 'Private recital 2026' }, { type: 'draft', id: 'd2', title: 'Spring launch' }],
     [{ type: 'draft', id: 'd1' }, { type: 'draft', id: 'd2' }, { type: 'draft', id: 'd3' }]);
   assert.deepEqual(session.getState().view.artifact.safeState, {});
   assert.ok(await artifactView.preloadEditSuggestions(), 'the deriver loads on demand');
@@ -279,7 +279,7 @@ test('the edit field: localized chrome, live-selection chips in a labelled group
   assert.match(html, /rafii-decorative-motion/, 'Rafii’s own reduced-motion setting stops the fade too');
   assert.match(html, /<button type="submit" disabled=""[^>]*>Update view<\/button>/, 'Update view is the only submit, off until there is text');
   assert.equal([...html.matchAll(/type="submit"/g)].length, 1);
-  assert.doesNotMatch(html, /Secret recital|Spring launch|PRIVATE|drafts_list|RafiiRoot|Query\(/);
+  assert.doesNotMatch(html, /Private recital|Spring launch|PRIVATE|drafts_list|RafiiRoot|Query\(/);
   assert.equal(t.calls.length, 0, 'opening the field and computing the chips make no request');
 
   // An older revision on screen: no chips, a note, and Update view stays off.

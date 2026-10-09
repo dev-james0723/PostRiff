@@ -26,7 +26,7 @@ const read = (file) => fs.readFileSync(path.join(EXAMPLES, file), 'utf8').trim()
 // 2026-10-09 12:00 in Hong Kong.
 const NOW = Date.UTC(2026, 9, 9, 4, 0, 0);
 const HK = 'Asia/Hong_Kong';
-const SECRET = 'Secret recital 2026';
+const PRIVATE_TITLE = 'Private recital 2026';
 
 /** The journey's manifest bindings (lane D's catalog), each with a private-looking description that must never show. */
 function manifest(journey) {
@@ -47,7 +47,7 @@ function chipsFor(journey, over = {}) {
   });
 }
 
-const selection = (type, n) => ({ items: Array.from({ length: n }, (_, i) => ({ type, id: `${type}_${i + 1}`, title: i === 0 ? SECRET : `Item ${i + 1}` })),
+const selection = (type, n) => ({ items: Array.from({ length: n }, (_, i) => ({ type, id: `${type}_${i + 1}`, title: i === 0 ? PRIVATE_TITLE : `Item ${i + 1}` })),
   visible: Array.from({ length: n + 1 }, (_, i) => ({ type, id: `${type}_${i + 1}` })), listId: '$picked' });
 
 const labels = (chips) => chips.map((c) => c.label);
@@ -158,7 +158,7 @@ test('privacy and copy: no titles, descriptions, binding names, DSL or implement
   for (const chip of views) {
     for (const text of [chip.label, chip.instruction]) {
       assert.ok(text && text.trim(), `${chip.id}: non-empty`);
-      assert.ok(!text.includes(SECRET) && !text.includes('Item 2'), `${chip.id}: no selection title`);
+      assert.ok(!text.includes(PRIVATE_TITLE) && !text.includes('Item 2'), `${chip.id}: no selection title`);
       assert.ok(!/PRIVATE DESCRIPTION/.test(text), `${chip.id}: no manifest description`);
       assert.ok(!/Query\(|RafiiRoot|\$|[{}]/.test(text), `${chip.id}: no DSL or unfilled placeholder: ${text}`);
       for (const name of bindings) assert.ok(!text.includes(name), `${chip.id}: no binding name (${name})`);
