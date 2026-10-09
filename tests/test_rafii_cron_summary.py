@@ -31,6 +31,18 @@ class CronSummaryTest(unittest.TestCase):
         for secret in ("secret-ws", "r1", "Ms Chan", "piano", "budget is used up", "a message"):
             self.assertNotIn(secret, logged)
 
+    def test_generative_ui_recovery_is_counts_or_an_error_class(self):
+        from postriff_phase2.hosted_app import genui_cron_summary
+        ok = {"uiRecovery": {"interrupted": 2, "providerRequests": 0}, "uiHolds": {"settledUnknown": 1, "providerRequests": 0, "note": "ws 4f1c"}}
+        self.assertEqual(genui_cron_summary(ok), ({"uiRecovery": {"interrupted": 2, "providerRequests": 0},
+                                                  "uiHolds": {"settledUnknown": 1, "providerRequests": 0}}, False))
+        failed = {"uiRecovery": {"status": "unavailable", "error": "ImportError"}, "uiHolds": {"status": "unavailable", "error": "relation pr_ui x"}}
+        summary, is_failed = genui_cron_summary(failed)
+        self.assertTrue(is_failed)
+        self.assertEqual(summary, {"uiRecovery": {"status": "unavailable", "error": "ImportError"}, "uiHolds": {"status": "unavailable", "error": "error"}})
+        self.assertEqual(genui_cron_summary({"operations": {"status": "ok"}}), ({}, False))
+        self.assertNotIn("4f1c", json.dumps(genui_cron_summary(ok)[0]))
+
     def test_nothing_to_summarize(self):
         self.assertEqual(runtime.summary(None), {})
         self.assertEqual(runtime.summary({"status": "disabled"}), {"status": "disabled"})
