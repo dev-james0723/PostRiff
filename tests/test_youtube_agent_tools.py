@@ -164,6 +164,39 @@ class DraftToolTests(EnabledYouTubeToolsTest):
         ctx.service.youtube.read.assert_not_called()
         ctx.service.youtube.oauth.token_for_worker.assert_not_called()
 
+    def test_chat_provenance_is_derived_only_from_the_server_context(self):
+        ctx = context()
+        ctx.run_id, ctx.specialist, ctx.writer_model = 'real-agent-run', 'content', 'chosen-but-not-invoked-writer'
+        result = agent_tools.plan_prepare(ctx, prepare_args())
+        repo = ctx.service.repository
+        draft, variant = repo.state['youtubeAgent']['drafts'][0], repo.state['variants'][-1]
+        expected = {'origin': 'chat_model_proposal_requires_video_review', 'traceId': ctx.trace_id,
+                    'agentRunId': 'real-agent-run', 'specialist': 'content',
+                    'selectedWriterInvoked': False, 'contentUnderstanding': 'not_analyzed'}
+        self.assertEqual(result['metadataOrigin'], expected['origin'])
+        self.assertEqual(draft['metadataProvenance'], expected)
+        self.assertEqual(variant['metadataProvenance'], expected)
+        self.assertEqual(variant['origin'], expected['origin'])
+        self.assertNotIn(ctx.writer_model, json.dumps(draft))
+        self.assertEqual(draft['digest'], agent_tools.draft_digest(draft))
+        self.assertFalse(result['queued'])
+
+    def test_public_prepare_cannot_claim_chat_model_or_selected_writer_provenance(self):
+        ctx = context()
+        forged = body() | {'revision': 1, 'metadataOrigin': 'chat_model_proposal_requires_video_review',
+            'metadataProvenance': {'traceId': 'fake', 'model': 'invented', 'selectedWriterInvoked': True}}
+        ctx.service.youtube.agent.prepare('workspace-one', 'session', CONNECTION, forged)
+        draft = ctx.service.repository.state['youtubeAgent']['drafts'][0]
+        self.assertEqual(draft['metadataOrigin'], 'user_or_filename_suggestion')
+        self.assertEqual(draft['metadataProvenance'], {'origin': 'user_or_filename_suggestion'})
+        self.assertNotIn('invented', json.dumps(draft))
+        with self.assertRaises(AlphaError):
+            ctx.service.youtube.agent.prepare_from_chat(SimpleNamespace(service=ctx.service), CONNECTION, forged)
+        other = context()
+        with self.assertRaises(AlphaError):
+            ctx.service.youtube.agent.prepare_from_chat(other, CONNECTION, forged)
+        self.assertEqual(len(ctx.service.repository.commands), 1)
+
     def test_context_projects_only_inspected_technical_assets_and_exact_channels(self):
         ctx = context()
         repo = ctx.service.repository
@@ -229,12 +262,12 @@ class DraftToolTests(EnabledYouTubeToolsTest):
 
     def test_save_return_without_authoritative_matching_plan_is_not_verified(self):
         ctx = context()
-        original = ctx.service.youtube.agent.prepare
+        original = ctx.service.youtube.agent.prepare_from_chat
         def changed(*args):
             result = original(*args)
             ctx.service.repository.state['youtubeAgent']['drafts'][0]['status'] = 'queued'
             return result
-        ctx.service.youtube.agent.prepare = changed
+        ctx.service.youtube.agent.prepare_from_chat = changed
         result = agent_tools.plan_prepare(ctx, prepare_args())
         self.assertFalse(result['verified'])
         self.assertFalse(result['ok'])

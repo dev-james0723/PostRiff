@@ -66,6 +66,12 @@ class Phase2Store(Store):
 
     def _present(self, state, revision):
         result = super()._present(state, revision)
+        # Creator uses scoped bounded endpoints. Internal authority/leases and
+        # model attribution must not escape through ordinary workspace payloads.
+        result["state"].pop("youtubeAgent", None)
+        for variant in result["state"].get("variants", []):
+            if isinstance(variant, dict) and variant.get("platform") == "YouTube":
+                variant.pop("metadataProvenance", None)
         ensure_content_state(result["state"])
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")

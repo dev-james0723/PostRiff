@@ -57,6 +57,16 @@ class PagingTests(unittest.TestCase):
         for limit in (0, 51, True, '25'):
             with self.assertRaises(AlphaError): live_page([], 'w', CONNECTION, 'draft', NOW, limit=limit)
 
+    def test_only_known_proposal_origin_is_public_without_private_provenance(self):
+        record = self.records()[0] | {'metadataOrigin': 'chat_model_proposal_requires_video_review',
+            'metadataProvenance': {'traceId': 'server-private-trace', 'agentRunId': 'server-private-run'}}
+        projected = projection(record, 'draft', NOW)
+        self.assertEqual(projected['metadataOrigin'], 'chat_model_proposal_requires_video_review')
+        self.assertNotIn('metadataProvenance', projected)
+        self.assertNotIn('server-private', str(projected))
+        record['metadataOrigin'] = 'unknown-origin'
+        self.assertNotIn('metadataOrigin', projection(record, 'draft', NOW))
+
     def test_policy_preview_rejects_changed_off_page_selection(self):
         value = state(); draft, _ = draft_and_policy(value)
         body = {'draftIds': [draft['id']], 'draftDigests': {draft['id']: 'changed-off-page'},

@@ -150,6 +150,7 @@ export interface YouTubeAgentDraft {
   variantId: string;
   status: 'proposed' | 'queued';
   readOnly?: boolean;
+  metadataOrigin?: 'user_or_filename_suggestion' | 'chat_model_proposal_requires_video_review';
   uploadWorkflow: 'upload_now' | 'upload_later';
   uploadAt: number;
   timing: { local: string; timeZone: string; fold: number; timestamp: number };

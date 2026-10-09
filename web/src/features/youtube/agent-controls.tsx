@@ -227,6 +227,7 @@ export function YouTubeAgentControls({ channel, canPublic }: { channel: string; 
               <p className='text-muted-foreground'>{draft.timing.local.replace('T', ' ')} · {draft.timing.timeZone} · {draft.publishOptions.privacyStatus} · {draft.status}</p></div>
           </div>
           <p className='whitespace-pre-wrap'>{draft.publishOptions.description || '(Empty description)'}</p>
+          {draft.metadataOrigin && <p className='text-muted-foreground'>{draft.metadataOrigin === 'chat_model_proposal_requires_video_review' ? 'AI chat proposal. Review it against the actual video before approval.' : 'Metadata from your inputs or the Library filename. Review it against the actual video before approval.'}</p>}
           <p>Channel: {draft.channelId} · Library video: {draft.assetId}</p>
           <p>{draft.uploadWorkflow === 'upload_now' ? 'Upload privately after approval.' : `Upload begins ${new Date(draft.uploadAt * 1000).toISOString()}.`} {draft.publishOptions.privacyStatus === 'private' ? 'There is no automatic public transition.' : 'YouTube applies the native future publication schedule.'}</p>
           {!canReviewYouTubeAgentDraft(draft, now) && <p className='text-muted-foreground'>Read-only plan record. This view grants no new publishing approval.</p>}

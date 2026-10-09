@@ -99,7 +99,21 @@ def _asset(state, identifier):
     return asset
 
 
-def prepare_draft(state, connection, body, actor, now):
+def _chat_provenance(context):
+    """Only the server's real tool context can identify a chat proposal.
+
+    The chosen writer is not necessarily the model that produced tool arguments;
+    do not claim it was invoked or accept provenance from a request body.
+    """
+    from ..agent_runtime_v2.context import RafiiRunContext
+    if not isinstance(context, RafiiRunContext):
+        raise AlphaError('A server-owned Rafii tool context is required.', 403, code='youtube_tool_context_required')
+    return {'origin': 'chat_model_proposal_requires_video_review', 'traceId': context.trace_id,
+            'agentRunId': context.run_id, 'specialist': context.specialist,
+            'selectedWriterInvoked': False, 'contentUnderstanding': 'not_analyzed'}
+
+
+def prepare_draft(state, connection, body, actor, now, *, chat_context=None):
     channel, asset = _channel(state, connection), _asset(state, body.get('assetId'))
     if body.get('rightsConfirmed') is not True:
         raise AlphaError('Confirm the rights to this Library video before preparing its plan.', 400)
@@ -132,6 +146,8 @@ def prepare_draft(state, connection, body, actor, now):
     elif options['privacyStatus'] == 'private':
         # Private upload has no automatic future public transition.
         upload_at = now
+    provenance = _chat_provenance(chat_context) if chat_context is not None else {'origin': 'user_or_filename_suggestion'}
+    origin = provenance['origin']
     identifier, variant_id = uuid.uuid4().hex, uuid.uuid4().hex
     text = options['description'] or options['title']
     variant = {'id': variant_id, 'platform': 'YouTube', 'channelId': connection, 'language': body.get('language', 'en'),
@@ -140,7 +156,8 @@ def prepare_draft(state, connection, body, actor, now):
                'styleRevision': learning.revision(state), 'speakerId': state['speaker']['id'],
                'briefRevision': state['brief']['revision'], 'openings': [options['title']] * 3, 'selectedOpening': 0,
                'customized': True, 'runId': 'youtube-library-plan:' + identifier,
-               'origin': 'user_or_filename_suggestion', 'revisions': [{'revision': 1, 'text': text, 'at': now, 'origin': 'youtube_library_plan'}]}
+               'origin': origin, 'metadataProvenance': copy.deepcopy(provenance),
+               'revisions': [{'revision': 1, 'text': text, 'at': now, 'origin': origin}]}
     state.setdefault('variants', []).append(variant)
     draft = {'id': identifier, 'connectionId': connection, 'channelId': channel['providerAccountId'],
              'assetId': asset['id'], 'assetHash': asset['hash'], 'variantId': variant_id, 'variantRevision': 1,
@@ -149,7 +166,8 @@ def prepare_draft(state, connection, body, actor, now):
              'goal': str(body.get('goal') or '')[:1000], 'recommendations': [
                  'Review the title and description against the actual video before approval.',
                  'Allow extra upload and processing time; the selected time is your choice, not an audience-performance prediction.'
-             ], 'execution': 'local_planning_only', 'metadataOrigin': 'user_or_filename_suggestion'}
+             ], 'execution': 'local_planning_only', 'metadataOrigin': origin,
+             'metadataProvenance': copy.deepcopy(provenance)}
     draft['digest'] = draft_digest(draft)
     root(state)['drafts'].append(draft)
     return draft
@@ -397,6 +415,16 @@ class YouTubePublishingAgent:
     def prepare(self, workspace, token, connection, body):
         return self._write(workspace, token, connection, {**body, '_event': 'draft_prepared'},
             lambda state, actor: prepare_draft(state, connection, body, actor, self.clock()))
+
+    def prepare_from_chat(self, context, connection, body):
+        # This callable is internal to the authenticated tool runtime. The public
+        # creator route always calls prepare(), which ignores body provenance.
+        _chat_provenance(context)
+        if context.service is not self.service:
+            raise AlphaError('The tool belongs to a different workspace service.', 403, code='youtube_tool_context_required')
+        context.check_cancelled()
+        return self._write(context.workspace_id, context.token, connection, {**body, '_event': 'draft_prepared'},
+            lambda state, actor: prepare_draft(state, connection, body, actor, self.clock(), chat_context=context))
 
     def approve(self, workspace, token, connection, identifier, body):
         if body.get('confirmed') is not True:

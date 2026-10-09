@@ -26,6 +26,9 @@ def projection(record, kind, now):
     fields = DRAFT_PUBLIC if kind == 'draft' else POLICY_PUBLIC
     value = {key: copy.deepcopy(record[key]) for key in fields if key in record}
     if kind == 'draft':
+        origin = record.get('metadataOrigin')
+        if origin in ('user_or_filename_suggestion', 'chat_model_proposal_requires_video_review'):
+            value['metadataOrigin'] = origin
         timing = record.get('timing')
         at = timing.get('timestamp') if isinstance(timing, dict) else None
         value['readOnly'] = record.get('status') != 'proposed' or not finite(at) or at <= now

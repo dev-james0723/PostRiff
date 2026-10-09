@@ -19,7 +19,7 @@
     "verificationStatus": "NOT SUBMITTED",
     "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
     "existingReferenceProjectId": "rafii-509720",
-    "domainOwnership": "CURRENT READBACK REQUIRED: earlier candidate was unverified; concurrent PR138 reports verification, but current mission browser policy failure prevents confirmation. Do not resubmit DNS blindly."
+    "domainOwnership": "Google verification TXT is present in live DNS and the canonical Vercel binding is verified (2026-10-09). Google property ownership and OAuth domain approval still require current Console readback; do not infer approval from TXT or resubmit DNS blindly."
   },
   "stagingGoogleProject": {
     "id": "rafii-509720",
@@ -69,7 +69,7 @@
     "youtubeDataApiEnabled": true,
     "youtubeAnalyticsApiEnabled": true
   },
-  "releaseGate": "Current production4a0bd786. Dirty-source JCB cknkhlfd0c passed499 Python/845 Node tests,10 disposable PostgreSQL modules, production build and synthetic Chromium1440/390/320 checks; sourceFingerprint8cb2e295de73dbde3c0fbf2d344f8fdbc87204cbdec8f7cb903cc6cb80c3d574. GitHub exact-head CI, merge and deployment remain pending. Public/agentic/fleet flags remain off.",
+  "releaseGate": "Current production4a0bd786. Prior dirty-source JCB cknkhlfd0c passed499 Python/845 Node tests,10 disposable PostgreSQL modules, build and Chromium1440/390/320. Follow-up t5grdmf94r passed195 proposal/calendar contracts,845 Node tests, source scanner and frontend/browser checks. Calendar/presentation fixes:252 unchanged contracts passed in brphvmtnft; its2 failed test assumptions were corrected and2 projection contracts passed in0nbxg1jm9g. Exact-head GitHub release checks, merge and deployment remain pending. No Google provider acceptance; public/agentic/fleet flags remain off.",
   "ownerInputsPending": [
     "verified operator/legal/contact facts",
     "legal approval/required attestations",
@@ -77,8 +77,9 @@
     "exact approved disposable private test asset",
     "separate explicit public test-publication consent after eligibility",
     "storage and runtime/egress budget approval",
-    "browser reconnect and Google DNS ownership action",
-    "exact Rafii Stripe sandbox identity for webhook bypass rotation"
+    "browser reconnect for Google verified-domain and OAuth configuration readback",
+    "exact Rafii Stripe sandbox identity for webhook bypass rotation",
+    "reconnect the Rafii database Supabase write session or securely provision an exact-target authorized connection"
   ],
   "storage": {
     "status": "BLOCKED OWNER BILLING",
@@ -128,7 +129,7 @@
       "purpose": "Additive inert private agent history; no live authority migration or customer asset deletion",
       "productionTableObserved": false,
       "stagingTableObserved": false,
-      "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. Existing Supabase CLI account has no Rafii projects; exact configured-credential fallback is under review."
+      "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. The authenticated Supabase CLI account has no Rafii projects. Exact Rafii Vercel database variables are Secret and not decrypted; safe direct credential binding cannot be established. Reconnect or exact-target credentials remain required."
     }
   },
   "recordScope": "Dated observations; current production4a0bd786 verified2026-10-09T17:17:09Z. Exact-SHA final receipt supersedes this snapshot. No public launch claim.",
@@ -178,7 +179,7 @@
     "oldReplayDenialVerified": 2,
     "oldReplayDenialUnverified": 1,
     "newSelectedBypassLoadedInCurrentProduction": true,
-    "stripeBypassStatus": "STILL PENDING EXACT RAFII SANDBOX CONTEXT",
+    "stripeBypassStatus": "BLOCKED EXACT RAFII SANDBOX IDENTITY: pinned preview key resolves to excluded D Festival account identity/site; stopped before webhook discovery. No Stripe mutation or original fourth bypass revocation.",
     "protectionPreserved": "all_except_custom_domains",
     "valuesLoggedOrSaved": false
   },
@@ -195,5 +196,13 @@
     "status": "WRITE ACCEPTANCE/RESOURCE OBSERVATION SEPARATE FROM IMAGE CONTENT",
     "stableUrlsVerifyReplacementContent": false,
     "newContentProviderAcceptance": "UNVERIFIED"
+  },
+  "aiProposalPath": {
+    "status": "IMPLEMENTED; INJECTED CLOUD CONTRACTS VERIFIED; PROVIDER ACCEPTANCE UNVERIFIED",
+    "generation": "Existing customer-invoked metered Rafii Manager/content chat may propose titles and descriptions; manual Creator form remains user/filename suggestions.",
+    "selectedWriterInvoked": false,
+    "videoContentUnderstanding": "NOT ANALYZED BY THE PLANNER",
+    "privateAttribution": "Server provenance retained in storage; scoped Creator and ordinary workspace presentation exclude internal attribution/authority.",
+    "calendar": "At most 100 current future unqueued exact-bound plans are projected as awaiting approval. No publishing authority is created."
   }
 }
