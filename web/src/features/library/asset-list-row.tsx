@@ -111,8 +111,7 @@ export function AssetListRow({
             data-library-open={asset.id}
             aria-label={`${kindWord} ${title}${video ? ', video thumbnail' : documentPreviewSuffix(asset)}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}${status && !status.startsWith('Used') ? `, ${status.toLowerCase()}` : ''}`}
             className={cn(
-              'focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-3 pr-12 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset',
-              onSelect ? 'pl-12' : 'pl-3',
+              'focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-3 pr-12 pl-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset',
               compact ? 'min-h-12 py-1.5' : 'min-h-16 py-2'
             )}
           >
@@ -142,9 +141,10 @@ export function AssetListRow({
               <CardStatusLine status={status} publishing={publishing} />
             </span>
           </button>
-          {assetKind === 'audio' || video ? <div className={cn('pr-3 pb-2', onSelect ? 'pl-12' : 'pl-3')}><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
-          {footer ? <div className={cn('flex min-w-0 flex-col gap-1.5 pr-3 pb-2.5', onSelect ? 'pl-12' : 'pl-3')}>{footer}</div> : null}
-          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-2', compact ? 'top-2' : 'top-4')} /> : null}
+          {assetKind === 'audio' || video ? <div className='px-3 pb-2'><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
+          {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-3 pb-2.5'>{footer}</div> : null}
+          {/* Over the thumbnail's corner, so the row keeps no empty gutter for it. */}
+          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-1.5', compact ? 'top-1' : 'top-1.5')} /> : null}
           <div className={cn('absolute right-2 z-20 transition-opacity duration-150', compact ? 'top-2' : 'top-4', 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 has-[[data-popup-open]]:opacity-100 pointer-coarse:opacity-100', selecting && 'opacity-100')}>
             <AssetMoreMenu title={title} actions={actions} />
           </div>
