@@ -14,7 +14,7 @@ import { RichText } from '@/features/site-agent/answer';
 import { ReceiptChips } from '@/features/founder/shared/receipt-chip';
 import { founderSafeHref } from '@/features/founder/shared/safe-href';
 import { useEvidence } from '@/features/founder/shared/evidence-state';
-import type { FounderAgentSection, FounderAgentTurnResponse, FounderLink } from '@/lib/founder/types';
+import { founderSectionOf, type FounderAgentSection, type FounderAgentTurnResponse, type FounderLink } from '@/lib/founder/types';
 import type { SiteAgentBlock } from '@/lib/site-agent/types';
 import { cn } from '@/lib/utils';
 
@@ -45,13 +45,24 @@ function FounderLinkRow({ link, onNavigate }: { link: FounderLink; onNavigate?: 
   );
 }
 
-function Section({ title, items, tone = 'default' }: { title: string; items: string[]; tone?: 'default' | 'muted' }) {
+/** A fact or recommendation as text (the server sends objects; older answers sent strings). */
+function itemText(item: unknown): string {
+  if (typeof item === 'string') return item;
+  if (item && typeof item === 'object' && typeof (item as { text?: unknown }).text === 'string') {
+    const value = item as { text: string; metric?: string | null; period?: string | null; success?: string | null };
+    const experiment = [value.metric, value.period].filter(Boolean).join(', ');
+    return [value.text, experiment && `(${experiment})`, value.success && `Success: ${value.success}`].filter(Boolean).join(' ');
+  }
+  return '';
+}
+
+function Section({ title, items, tone = 'default' }: { title: string; items: unknown[]; tone?: 'default' | 'muted' }) {
   if (!items.length) return null;
   return (
     <section className='flex flex-col gap-1' aria-label={title}>
       <h4 className='rafii-eyebrow'>{title}</h4>
       <ul className={cn('flex list-disc flex-col gap-1 pl-5 text-sm leading-relaxed', tone === 'muted' && 'text-muted-foreground')}>
-        {items.map((item, index) => (
+        {items.map(itemText).filter(Boolean).map((item, index) => (
           <li key={index} className='break-words'>
             {item}
           </li>
@@ -182,18 +193,20 @@ function Checked({ response }: { response: FounderAgentTurnResponse }) {
   );
 }
 
-export function FounderAnswer({ response, actions }: { response: FounderAgentTurnResponse; actions: FounderAnswerActions }) {
+/** `generated` (rafii-genui/1, J09): the founder's interactive view, after native warnings/errors and before "What Rafii checked". */
+export function FounderAnswer({ response, actions, generated }: { response: FounderAgentTurnResponse; actions: FounderAnswerActions; generated?: ReactNode }) {
+  const founder = founderSectionOf(response);
   const blocks = response.result?.blocks ?? [];
   const answerText = response.result?.answerText ?? '';
   const warnings = response.result?.warnings ?? [];
   const errors = response.result?.errors ?? [];
-  const empty = blocks.length === 0 && !answerText && !response.founder && errors.length === 0;
+  const empty = blocks.length === 0 && !answerText && !founder && errors.length === 0;
   const body: ReactNode = empty ? <p className='text-muted-foreground text-sm'>Rafii returned no answer for this turn (status: {response.status}).</p> : null;
   return (
     <div className='flex min-w-0 flex-col gap-3'>
       {body}
       {blocks.length > 0 ? blocks.map((block, index) => <Block key={`${block.type}-${index}`} block={block} actions={actions} />) : answerText ? <RichText text={answerText} /> : null}
-      {response.founder && <FounderSectionView founder={response.founder} onNavigate={actions.onNavigate} />}
+      {founder && <FounderSectionView founder={founder} onNavigate={actions.onNavigate} />}
       {warnings.map((warning) => (
         <p key={warning.code} role='note' className='text-muted-foreground flex items-start gap-2 text-xs'>
           <Icons.info className='mt-0.5 size-3.5 shrink-0' aria-hidden />
@@ -206,6 +219,7 @@ export function FounderAnswer({ response, actions }: { response: FounderAgentTur
           <span>{error.message}</span>
         </p>
       ))}
+      {generated}
       <Checked response={response} />
     </div>
   );

@@ -120,7 +120,7 @@ before = snapshot()
 check("setup: duplicate recorded the pre-097 way", any(r[9] == "duplicate" for r in before[0]), before[0])
 
 # --- re-apply 097 twice (production may retry a deploy); the database owner runs migrations ----------------------------------
-sql = (ROOT / "migrations/postriff/097_library_intelligence.sql").read_text()
+sql = (ROOT / "migrations/postriff/104_library_intelligence.sql").read_text()
 for attempt in (1, 2):
     with connection() as db:
         db.execute(sql)

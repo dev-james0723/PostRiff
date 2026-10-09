@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-05T14:23:16.037929+00:00",
+  "execution": "LOCAL CANDIDATE VALIDATION — NO REAL GOOGLE E2E",
+  "sourceBase": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+  "realGoogleCallsInAcceptance": 0,
+  "remoteMigrationApplied": false,
+  "deployed": false,
+  "checks": [
+    {
+      "name": "Focused Python regression suite",
+      "state": "PASS",
+      "tests": 220,
+      "command": "PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python -m unittest test_youtube_creator test_hosted_wave3_connectors test_instagram_full_capabilities test_hosted_storage_video test_video_uploads test_postriff_phase2 test_postriff_phase2_hosted test_postriff_phase2_learning test_wave4_hosted_publish test_asset_kinds test_postriff_audience_contract test_postriff_content_types test_postriff_receipt_contract",
+      "coverage": "Current quota/contract, incremental scopes, approval freshness, 36-hour exact recovery guard, Video/Short declarations, owned resources, partial update preservation, resumable offsets/network/expiry/ambiguous outcomes, financial-report separation, shared connector/worker/composer behavior.",
+      "limitation": "Unit/injected transports; not real creator acceptance."
+    },
+    {
+      "name": "Creator PostgreSQL acceptance",
+      "state": "PASS",
+      "groups": 19,
+      "command": "PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_disposable_postgres.py tests/phase2/postgres_youtube_creator.py",
+      "coverage": "Migration applied twice; state consumed before exchange; encrypted refresh tokens; two-workspace isolation; service-role RLS/FKs; committed write intent; exact destructive target; ambiguous write holds; bounded authorization maintenance; signed push; conservative project/account-wide revocation; authorized-data purge.",
+      "limitation": "Real disposable PostgreSQL with synthetic Google/identity."
+    },
+    {
+      "name": "Shared video PostgreSQL acceptance",
+      "state": "PASS",
+      "checks": 24,
+      "command": "PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_disposable_postgres.py tests/phase2/postgres_video.py",
+      "coverage": "Upload reservations, authorization, commit idempotency, abort, storage sweep and workspace purge.",
+      "limitation": "Real local PostgreSQL; fake storage."
+    },
+    {
+      "name": "Shared campaign worker PostgreSQL regression",
+      "state": "PASS",
+      "command": "PYTHONPATH=src:tests /Users/ouxianxing/Documents/James-Au-Studio/.venv/bin/python scripts/postriff_disposable_postgres.py tests/phase2/postgres_consumer_campaign_worker.py",
+      "coverage": "Restart/lease/idempotency, cancellation/budget guards, no double spend, per-account drafts and no publishing effects.",
+      "limitation": "Synthetic agent runtime; no paid/provider calls."
+    },
+    {
+      "name": "TypeScript",
+      "state": "PASS",
+      "command": "cd web && PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run typecheck"
+    },
+    {
+      "name": "Production build",
+      "state": "PASS",
+      "command": "cd web && PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run build",
+      "framework": "Next.js 16.3.8; Node 24; Turbopack",
+      "limitation": "Build is local, not a deployment."
+    },
+    {
+      "name": "Lint",
+      "state": "PASS",
+      "command": "cd web && PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run lint",
+      "errors": 0,
+      "warnings": 3,
+      "warningFiles": [
+        "web/src/features/founder/settings/contact-policy.ts",
+        "web/src/features/context-navigation/thread-navigator.tsx",
+        "web/src/features/channels/connect-sheet.tsx"
+      ],
+      "limitation": "Three existing warnings in unchanged files."
+    },
+    {
+      "name": "Desktop/mobile browser acceptance",
+      "state": "PASS",
+      "command": "cd web && PATH=/opt/homebrew/opt/node@24/bin:$PATH node tests/youtube-creator-browser.cjs",
+      "viewports": [
+        1440,
+        390,
+        320
+      ],
+      "evidence": "evidence/LOCAL-SYNTHETIC-browser.json",
+      "coverage": "Actual local Next/Python/PostgreSQL route: 37 gates, no READY, public hold, unsupported Community, human exact approval, omitted metadata preservation, destructive ID guard, fresh-owner-only private stream-key read/clear, foreign connection rejected, no horizontal overflow/React duplicate-key/hydration/page errors.",
+      "limitation": "Google and identity are synthetic; Webpack dev used after Turbopack dev font resolver failure. Production Turbopack build passed."
+    },
+    {
+      "name": "Official gRPC stubs",
+      "state": "PASS",
+      "environment": "/private/tmp/rafii-youtube-grpc-build",
+      "coverage": "Generated official Apache-licensed proto imports and protobuf cursor request round-trip.",
+      "limitation": "No active real Live Chat stream was opened."
+    },
+    {
+      "name": "Real creator acceptance",
+      "state": "BLOCKED",
+      "cases": 151,
+      "evidence": "real-e2e-matrix.json",
+      "realPassCount": 0,
+      "readyCount": 0,
+      "reason": "Exact Rafii Google project, ordinary creator connection, Google approval and action-specific eligibility remain unverified."
+    },
+    {
+      "name": "Scoped YouTube formatting",
+      "state": "PASS",
+      "command": "cd web && PATH=/opt/homebrew/opt/node@24/bin:$PATH ./node_modules/.bin/oxfmt --check src/features/youtube src/lib/youtube src/app/app/youtube",
+      "files": 8
+    },
+    {
+      "name": "Structured real-E2E schema and official-source consistency",
+      "state": "PASS",
+      "coverage": "Draft 2020-12 schema, 151 unique cases, 37 canonical capability keys, 71 official methods, 72 URL/timestamp/hash records, no real PASS/READY, Python AST parsing and no Community/Article whitelist method."
+    }
+  ],
+  "tokenPilotCheckpoint": {
+    "state": "BLOCKED",
+    "registryRevision": 469,
+    "entries": 256,
+    "error": "More than 256 durable items; consolidate explicitly",
+    "fallback": "HANDOFF.md",
+    "globalRegistryConsolidated": false
+  }
+}

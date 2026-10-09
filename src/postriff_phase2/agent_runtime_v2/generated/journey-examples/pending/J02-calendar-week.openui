@@ -1,0 +1,8 @@
+root = RafiiRoot([agenda, queue])
+$period = "this_week"
+$zone = "Asia/Hong_Kong"
+$selectedEntry = null
+cal = Query("calendar_agenda", {period: $period, zone: $zone}, null)
+q = Query("queue_status", {}, null, 60)
+agenda = CalendarAgenda(cal, $period, $selectedEntry, "This week")
+queue = QueueStatus(q)

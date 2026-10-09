@@ -176,6 +176,8 @@ export interface Manifest {
   styleRevision?: number;
   payloadDigest?: string;
   providerAccountId?: string;
+  publishOptions?: Record<string, unknown>;
+  youtubeAssets?: { id: string; hash: string; mime: string; bytes: number; width?: number; height?: number; objectName?: string }[];
   expiresAt: number;
   idempotencyKey: string;
   execution: string;
@@ -1148,10 +1150,18 @@ export interface VideoUploadBegin {
   duration: number | null;
   width: number | null;
   height: number | null;
+  transport?: 'tus';
 }
 
 export interface VideoUploadTicket {
-  upload: { assetId: string; method: 'PUT'; uploadUrl: string; headers: Record<string, string>; expiresAt: number; maxBytes: number };
+  upload: { assetId: string; method: 'PUT' | 'TUS'; uploadUrl: string; headers: Record<string, string>; expiresAt: number; maxBytes: number;
+    resumable?: import('./resumable-upload').SignedResumableUpload };
+}
+
+export interface VideoResumeTicket {
+  assetId: string;
+  objectComplete: boolean;
+  upload?: VideoUploadTicket['upload'];
 }
 
 export interface VideoCommitBody {
@@ -1406,6 +1416,13 @@ export interface ChannelView {
   evidenceSource: string;
   scopes: string[];
   expiresAt?: number;
+  /** True only when the server vault has a usable refresh token for this connection. */
+  refreshSupported?: boolean;
+  /** Reconnect once to bind legacy background access; the Google grant was not classified as revoked. */
+  refreshBindingRequired?: boolean;
+  authorizationLane?: 'standard' | 'agentic';
+  /** Access-token deadline; this does not establish the Google grant's expiry. */
+  accessTokenExpiresAt?: number | null;
   /** SHA-256 of the account's stored profile picture; null when the provider gave none. */
   pictureDigest?: string | null;
 }
@@ -1834,6 +1851,10 @@ export interface MyChannel {
   accountType?: string | null;
   connectionState: string;
   expiresAt?: number | null;
+  refreshSupported?: boolean;
+  refreshBindingRequired?: boolean;
+  authorizationLane?: 'standard' | 'agentic';
+  accessTokenExpiresAt?: number | null;
   verifiedAt?: number | null;
   evidenceSource: string;
   /** Whether the user holds `manage_connections` in that workspace. */

@@ -21,7 +21,7 @@ from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
-from .channels import connection_state
+from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
 from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
@@ -233,6 +233,7 @@ class HostedPhase2Commands:
         if state.get("workspace", {}).get("sample"):
             raise AlphaError("Hosted sample workspaces are read-only.", 403)
         ensure_content_state(state)
+        previous_jobs = {job["id"] for job in state.get("phase2", {}).get("jobs", [])}
         if source_policy.apply_policy_action(state, action, payload, principal, self.clock()):
             source_policy.stamp(state)
             self.engine.invalidate(state)
@@ -263,6 +264,7 @@ class HostedPhase2Commands:
         if action == "raffi_run_commit":
             from . import publisher
             publisher.commit(self.engine, state, principal, payload, self.clock())
+            self._check_youtube_queue(state, previous_jobs)
             source_policy.stamp(state)
             self.engine.invalidate(state)
             return state
@@ -291,9 +293,18 @@ class HostedPhase2Commands:
                 variant["needsReview"] = True
                 previous = variant.pop("uncertaintyReview", {})
                 variant["unknowns"] = previous.get("excludedFromDraft", variant["unknowns"])
+        self._check_youtube_queue(state, previous_jobs)
         source_policy.stamp(state)
         self.engine.invalidate(state)
         return state
+
+    def _check_youtube_queue(self, state, previous_jobs):
+        capacity = getattr(self, "youtube_capacity", None)
+        if capacity is not None and any(job.get("id") not in previous_jobs and
+                (job.get("manifest") or {}).get("platform") == "YouTube"
+                for job in state.get("phase2", {}).get("jobs", [])):
+            # Inside repository.command: a rejected bulk approval rolls back every new job.
+            capacity.assert_queue_capacity(state, additional=0)
 
     @staticmethod
     def _require_mutable_media(state):
@@ -338,8 +349,10 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
+        if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
+            raise AlphaError("A server-bound YouTube authorization lane is required.")
         saved = copy.deepcopy(channel)
         # identityVerified comes from the provider identity endpoint; capabilityVerified only when
         # publish scopes were granted to a production-reviewed app (see OAuthService._capabilities).
@@ -356,7 +369,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -380,7 +393,7 @@ class HostedWorkspaceService:
         from .privacy import DataRequests
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
-        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock)
+        self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, youtube_public_base_url=youtube_public_base_url)
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,
@@ -402,6 +415,9 @@ class HostedWorkspaceService:
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
+        from .youtube.service import YouTubeCreatorService
+        self.youtube = YouTubeCreatorService(self)
+        self.commands.youtube_capacity = self.youtube.capacity
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)
@@ -769,6 +785,8 @@ class HostedWorkspaceService:
         return self._present(self.repository.get(workspace_id, token))
 
     def mutate(self, workspace_id, token, revision, action, payload):
+        if action in ('p2_review', 'p2_approve', 'p2_approve_many'):
+            self.oauth.refresh_for_composer(workspace_id, token, revision, action, payload)
         if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
             from .voice_ai import HostedVoiceAnalysis
             return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
@@ -891,6 +909,7 @@ class HostedWorkspaceService:
                 # Who connected each channel: the newest channel.connected audit event names the actor.
                 cur.execute("SELECT DISTINCT ON (e.subject) e.subject,e.actor::text,coalesce(p.display_name,''),extract(epoch from e.at) FROM public.pr_audit_events e LEFT JOIN public.pr_profiles p ON p.user_id=e.actor WHERE e.kind='channel.connected' AND e.workspace_id=ANY(%s::uuid[]) ORDER BY e.subject,e.at DESC", ([row[0] for row in rows],))
                 connected = {item[0]: {"userId": item[1], "displayName": item[2], "at": float(item[3])} for item in cur.fetchall()}
+                credentials = youtube_credential_status(cur, [row[0] for row in rows])
         channels = []
         for row in rows:
             membership = Membership.from_row(*row[1:6])
@@ -898,10 +917,12 @@ class HostedWorkspaceService:
             for channel in items:
                 if not isinstance(channel, dict) or not channel.get("configured"):
                     continue
+                channel = with_youtube_credential_status(channel, credentials.get((row[0], channel.get("id"))))
                 channels.append({
                     "workspaceId": row[0], "workspaceName": row[6] or "My workspace",
                     "id": channel.get("id"), "platform": channel.get("platform"), "account": channel.get("account"), "accountType": channel.get("accountType"),
                     "connectionState": connection_state(channel, now), "expiresAt": channel.get("expiresAt"), "verifiedAt": channel.get("verifiedAt"),
+                    "refreshSupported": channel.get("refreshSupported") is True, "authorizationLane": channel.get("authorizationLane", "standard"), "refreshBindingRequired": channel.get("refreshBindingRequired") is True, "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
                     "evidenceSource": channel.get("evidenceSource", "synthetic"), "canManage": membership.allows("manage_connections"),
                     "connectedBy": connected.get(channel.get("id")),
                 })

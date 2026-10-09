@@ -1,0 +1,9 @@
+root = RafiiRoot([note, picker, review, prefs])
+$selectedSamples = []
+samples = Query("voice_sources", {purpose: "analysis", route: "local-rules"}, null)
+profile = Query("voice_profile", {}, null)
+learned = Query("voice_preferences", {}, null)
+note = Commentary("The approved voice is what Rafii writes with now. A proposed profile changes nothing until an owner approves it.")
+picker = VoiceSourcePicker(samples, $selectedSamples, ["voice_sample_select", "voice_profile_analyze"])
+review = VoiceProfileReview(profile, ["voice_profile_approve"])
+prefs = VoicePreferenceList(learned, ["voice_preference_decide"])

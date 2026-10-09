@@ -1,4 +1,5 @@
 'use client';
+import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 
 import { toast } from 'sonner';
 import { ChannelIcon } from '@/components/channel-icon';
@@ -84,6 +85,7 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
             const passed = (epochOf(manifest.timing.utc) ?? Infinity) < nowSeconds;
             return (
               <li key={review.id} className='flex flex-col gap-0.5 rounded-[var(--rafii-radius-micro)] px-3 py-2'>
+                <YouTubeManifestDetails manifest={manifest} />
                 <span className='flex min-w-0 items-center gap-2'>
                   <ChannelIcon platform={manifest.platform} name={manifest.platform} size='xs' />
                   <span className='truncate'>
@@ -91,7 +93,7 @@ export function ApproveManyDialog({ open, onOpenChange, reviews, jobs, revision,
                   </span>
                 </span>
                 <span className='text-muted-foreground flex flex-wrap gap-x-2 text-xs' title={`${manifest.timing.timeZone} · ${review.digest.slice(0, 12)}`}>
-                  <span>{formatDateTime(epochOf(manifest.timing.utc))}</span>
+                  <span>{manifest.platform === 'YouTube' && manifest.publishOptions?.publicationMode === 'now' ? 'After upload and verified processing' : formatDateTime(epochOf(manifest.timing.utc))}</span>
                   {passed && (
                     <span className='inline-flex items-center gap-1'>
                       <Icons.warning aria-hidden className='size-3' />

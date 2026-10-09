@@ -1,0 +1,3 @@
+root = RafiiRoot([saved])
+sources = Query("research_sources", {q: "chopin"}, null)
+saved = SavedSources(sources)

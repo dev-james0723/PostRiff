@@ -73,7 +73,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals, the Sentry tunnel, the Python API and static files.
-    '/((?!_next/static|_next/image|api/|monitoring|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest|woff2?|ttf|css|js)$).*)'
+    // Skip Next.js internals, the Sentry tunnel, the Python API, the internal server-to-server routes and static files.
+    '/((?!_next/static|_next/image|api/|internal/|monitoring|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest|woff2?|ttf|css|js)$).*)'
   ]
 };

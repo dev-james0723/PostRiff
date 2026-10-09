@@ -1,0 +1,68 @@
+# Rafii quota-extension candidate
+
+Prepared 2026-10-08. **FORECAST; NOT SUBMITTED; NO APPROVED INCREASE.** [CAPACITY-MODEL.json](CAPACITY-MODEL.json) contains reproducible assumptions and arithmetic. Connected-account counts do not themselves consume upload quota; active operation mix does.
+
+## Quota source and actual allocation
+
+Current [quota-table body](https://developers.google.com/youtube/v3/determine_quota_cost) and [audit guidance](https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits) use independent daily buckets: `videos.insert` defaults to 100 calls at one Video Uploads unit each; `search.list` defaults to 100 calls at one search unit each; other Data API methods share 10,000 general units. Quotas reset at midnight Pacific Time, including daylight saving changes. Older auto-generated summaries mentioning 1,600 units are stale; general capacity cannot be converted into extra uploads. Failed/invalid requests also consume quota. Current method costs used below are reads 1, thumbnails/video edits/playlist insert/comment insert 50, captions insert 400 and captions list 50.
+
+Prior same-day Console evidence in the acceptance packet reported the default allocations for `rafii-509720`. **Current production allocation, usage, remaining quota, per-minute limits, Analytics and Reporting quotas remain UNVERIFIED here** and must be captured by the live Console workstream for the newly created production project `rafii-youtube-production` (number `568838253270`). Project creation is not evidence of its allocation or an approved extension. Other clients and manual provider calls can consume project capacity; application attempts alone do not prove remaining Google quota. Do not substitute Google Analytics limits for YouTube Analytics limits.
+
+## Forecast assumptions
+
+This unmeasured planning model assumes one connected channel per customer, **30% daily active publishers and one upload per active publisher**: 300/3,000 uploads per day at 1,000/10,000 customers. Multiple connected channels increase relevant reads and reports; recompute with measured channel/customer ratios before submission. 30% of customers view dashboards daily. Each upload averages six bounded processing/status reads; 80% adds a thumbnail, 20% a timed caption with verification, 50% a playlist insertion, 10% a post-upload metadata edit and 10% a reschedule. Comment activity is a separate assumption: 20% of customers read four comment pages and average 0.25 approved replies daily. These are forecasts, not observed customer demand or approved quota.
+
+The candidate upload body always starts private and omits `publishAt`. This forecast assumes mutually exclusive fractions of 70% native scheduled, 20% immediate public/unlisted and 10% private-only uploads, summing to 100%. Each scheduled or public/unlisted upload therefore needs one initial `videos.update` (50 general units) and one `videos.list` readback (1 unit) after processing. At 300/3,000 uploads this adds 270/2,700 updates, 13,500/135,000 update units and 270/2,700 readback units. Later metadata edits and reschedules remain additional operations; private-only uploads need no visibility update. The primary engineering scenario counts **48 identity reads per connected channel daily**, equivalent to a 30-minute planning cadence, and two inventory reads per daily dashboard user. The prior one-check/day scenario is retained only as a lower-cost comparator; it is not the current maintenance policy. It does not assume batch reads when ownership prevents sharing, zero-cost retries or unlimited processing polling. Analytics is modeled separately at three reports per daily dashboard user; its actual cost and quota must be confirmed.
+
+| Forecast | 1,000 customers | 10,000 customers |
+| --- | ---: | ---: |
+| Daily active publishers, forecast 30% | 300 | 3,000 |
+| Daily comment users, separate forecast 20% | 200 | 2,000 |
+| Successful baseline uploads/day | 300 | 3,000 |
+| Identity checks/day, planning cadence 48/channel | 48,000 | 480,000 |
+| Initial schedule/visibility update calls/day | 270 | 2,700 |
+| Initial update general units/day | 13,500 | 135,000 |
+| Initial update readback units/day | 270 | 2,700 |
+| General calls/day | 52,360 | 523,600 |
+| General units/day | 116,970 | 1,169,700 |
+| Upload attempts budget with 25% headroom | 375 | 3,750 |
+| General units with 25% headroom, rounded up | 146,213 | 1,462,125 |
+| Rounded proposal for upload allocation/day | 400 | 4,000 |
+| Rounded **unapproved** proposal for general allocation/day | **150,000** | **1,500,000** |
+| YouTube Analytics report requests/day, separate service | 900 | 9,000 |
+
+If all uploads instead require a schedule/visibility update, the initial updates alone add 15,000/150,000 general units plus 300/3,000 readback units. This sensitivity replaces the 90% nonprivate baseline: total general demand becomes 118,500/1,185,000, or 148,125/1,481,250 with 25% headroom under the 48-check identity scenario. It must not be added a second time to the baseline.
+
+Engineering has selected the 48-check/channel/day scenario for this quota forecast. Replacing one check/day adds 47,000/470,000 general units to the old 69,970/699,700 totals, yielding 116,970/1,169,700. With 25% headroom and ceiling, the request basis is 146,213/1,462,125, rounded to **150,000/1,500,000 general units/day**. The retained one-check/day alternative would require 87,463/874,625 units with headroom and rounded proposals of 100,000/1,000,000, but it does not match the implemented freshness window and is not the primary request. Neither proposal has been approved or submitted.
+
+The current maintenance cache TTL is at most 1,800 seconds and may be shorter near token expiry; foreground, worker, manual verification and reconnect calls can add identity requests. Thus 48 is a conservative planning scenario relative to one check/day, **not an upper bound on total identity traffic**. Actual operation frequency must be metered during the controlled rollout and the model revised if higher.
+
+Current maintenance dispatches at most **one identity refresh per tick**, and the existing once-per-minute cron has an ideal maximum of 1,440 checks/day across all tenants. It cannot deliver 48,000/480,000 checks/day; even without latency or failure, the arithmetic requires at least 34/334 one-check dispatcher invocations per minute for 1,000/10,000 channels. A dedicated bounded/batched maintenance scheduler or fleet with the same project admission and authorization fences is required. No such fleet has been provisioned or accepted, and the synthetic database benchmark does not prove this cadence. This engineering limitation is recorded explicitly rather than asking the owner to choose a different security-check cadence.
+
+The 25% planning reserve covers recoverable errors, additional polls and normal forecast variation; it is not authorization to reinitialize uncertain uploads. Baseline figures omit Live, revenue, memberships, caption replacements, thumbnail re-edits, unusually large comment pagination and bulk Reporting. Enable these only after recalculating actual costs. Caption features alone account for 27,000/270,000 general units, illustrating why an upload-only forecast understates creator capacity.
+
+If 40% of uploads land in a two-hour peak, baseline traffic is 120/1,200 uploads or 1/10 starts per minute. This is a burst assumption, not a measured throughput or Google per-minute allowance. At 500 MiB per average upload and 8 MiB chunks, total daily transferred media is about 146.5 GiB/1.43 TiB before retries; peak average egress is about 8.3/83.3 MiB per second. Storage, bandwidth, worker leases and product file/account eligibility remain independent limits. No storage purchase or paid capacity increase is authorized by this arithmetic.
+
+## Verified storage blocker
+
+The coordinating release agent verified Supabase organization `gztpsyvraqdcoklwpvdo` is on Free and production bucket `postriff-video` is private with `file_size_limit=50000000` bytes. Supabase’s Free global file limit cannot exceed 50 MB, and bucket limits cannot exceed it. Resumable chunks and a larger Rafii environment limit do not override this provider ceiling. The 500 MiB forecast is hypothetical; large-video storage acceptance remains **BLOCKED**, with the existing owner billing question pending. [Storage limits](https://supabase.com/docs/guides/storage/uploads/file-limits)
+
+Published Pro pricing starts at US$25/month, with additional active projects from US$10/month. For two Micro projects the planning estimate is about US$35/month before usage, tax and add-ons; this is not an actual checkout quote or billing approval. The owner must review the actual checkout before a plan change. A paid plan alone does not raise the configured project/bucket limits or prove a large upload. [Supabase pricing](https://supabase.com/pricing)
+
+## Prepared justification field
+
+> Rafii is a public SaaS client for independent channel owners. Each customer independently authorizes the intended channel, prepares creator content, and approves publication or expressly enables a bounded policy. We request separate daily upload and general allocations for the attached forecast. The 10,000-customer scenario assumes 30% daily active publishers, one upload each and 3,000 uploads/day, with itemized thumbnails, timed captions, playlist inserts, metadata/rescheduling, comment operations and bounded readback. It includes a 48-check/channel/day identity planning scenario; measured foreground and worker traffic may require revision. We propose 4,000 Video Uploads and 1,500,000 general units daily for this stated forecast, subject to your review; search needs no increase. The media and maintenance worker fleet required to sustain this forecast has not been provisioned or throughput-accepted. These are unmeasured, unapproved planning assumptions pending owner approval and controlled rollout evidence. We will enforce the allocation actually granted, preserve per-workspace fairness and stop/reconcile uncertain writes instead of creating duplicate uploads. We do not distribute one production client's traffic across projects or require customer Cloud credentials to evade limits.
+
+Owner must confirm the intended 1,000/10,000 rollout stage and business forecast before submitting. Engineering has selected the 48-check identity planning scenario; no owner decision about that technical cadence is pending. Verified operator identity, final legal attestations, actual live Google allocation and the independent storage billing decision remain external gates. Retain actual allocations and conditions from Google's decision; a higher numerical request is not an entitlement. Additional quota requires a compliant audit via the [official form](https://support.google.com/youtube/contact/yt_api_form), whose final attestations need the owner.
+
+## Engineering acceptance for quota controls
+
+- Read actual approved project/bucket limits into configuration with provenance, timestamp and freshness checks. Fail closed on unknown usable capacity; never manufacture a default remaining balance.
+- Meter attempted methods by project, quota-reset date, workspace and bucket. Reserve upload/general cost before admission; reconcile unknown calls conservatively. Aggregate counters must not expose other customers' content.
+- Apply a per-workspace pending-job/byte budget, member rate limits and round-robin or deficit fairness. A heavy workspace cannot monopolize ready work. Preserve admission order and deadlines across worker crashes.
+- Separate upload-at times from native publication times. Exhaustion before upload may make a schedule infeasible: warn the user, hold expired work and request a new explicit plan. Never convert an expired schedule into immediate public publication.
+- Classify 403/429 quota failures separately from auth, account upload limits and invalid metadata. Honor bounded provider backoff/Retry-After; daily exhaustion holds the affected bucket through Pacific reset or verified increased capacity. Do not blindly retry writes.
+- Dashboard/alerts show configured allocation, metered attempts, provider-observed exhaustion, queue ages and schedule risk with source labels. Mark project remaining unknown if external usage is unavailable. Notify users of held/delayed jobs without asserting a new publishing time.
+- Verify fairness under concurrent tenants, reservation races, midnight/DST rollover, worker restart, external usage, exhausted upload/general/Analytics buckets and unknown upload sessions. Retain cloud test/run IDs and redacted operational receipts.
+
+These are acceptance criteria, not a claim that the current candidate implements or has load-tested every control. The integration agent must bind implemented controls and real/load evidence before release.

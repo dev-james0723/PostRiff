@@ -53,6 +53,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
+\ir ../../migrations/postriff/089_youtube_creator.sql
 \ir ../../migrations/postriff/093_universal_library.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
@@ -142,7 +143,8 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 \ir ../../migrations/postriff/094_universal_library_lifecycle.sql
 \ir ../../migrations/postriff/095_universal_library_storage.sql
 \ir ../../migrations/postriff/096_universal_library_duplicate_index.sql
-\ir ../../migrations/postriff/097_library_intelligence.sql
+\ir ../../migrations/postriff/097_youtube_capacity.sql
+\ir ../../migrations/postriff/104_library_intelligence.sql
 do $$ begin
  if not exists (
   select 1 from pg_indexes

@@ -397,6 +397,25 @@ def _skills_used(ctx: RafiiRunContext, events: dict, result: dict) -> list[dict]
     return skills
 
 
+def _with_voice_choice(ctx: RafiiRunContext, request: dict) -> dict:
+    """The voice the person chose for this turn (turn payload voiceMode/voiceSourceIds → ctx.voice_choice), never swapped by the
+    model: like the writer, it goes to every writing call of the turn. The pipeline still checks each sample's exact
+    generation grant for the chosen writer route and writes neutrally (saying so) when none may be used."""
+    choice = getattr(ctx, "voice_choice", None)
+    if not isinstance(choice, dict):
+        return request
+    mode = choice.get("mode")
+    ids = [i for i in choice.get("sourceIds") or [] if isinstance(i, str) and 0 < len(i) <= 80][:20]
+    if mode not in ("neutral", "personalized"):
+        mode = "personalized" if ids else None
+    if mode is None:
+        return request
+    out = {**request, "voiceMode": mode}
+    if mode == "personalized" and ids:
+        out["voiceSourceIds"] = ids
+    return out
+
+
 def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tuple[str, dict, list[dict]]:
     """Run the writing pipeline in this conversation and save its candidates, as the panel's Save does. Returns the run,
     the re-read state and the product skills the run bound."""
@@ -405,6 +424,7 @@ def _writing_run(ctx: RafiiRunContext, request: dict, *, separate: bool) -> tupl
     request = _forward_chips(ctx, request)
     if ctx.writer_model:
         request["model"] = ctx.writer_model
+    request = _with_voice_choice(ctx, request)
     result = ideas.turn(ctx.workspace_id, ctx.token, ctx.conversation_id, request)
     run_id = result.get("runId")
     if not run_id:
@@ -611,7 +631,7 @@ def proposal_apply(ctx: RafiiRunContext, args: dict) -> dict:
 
 
 # Optional packages that extend the runtime (their `register()` registers tools, scopes and hooks; idempotent).
-EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools",)
+EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools", "postriff_phase2.youtube.agent_tools")
 
 
 def ensure_registered() -> None:
