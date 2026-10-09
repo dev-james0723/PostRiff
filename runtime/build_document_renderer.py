@@ -60,11 +60,11 @@ def main():
     if os.uname().sysname != 'Linux' or not shutil.which('dnf'):
         raise SystemExit('Renderer bundling requires the cloud Amazon Linux build image.')
     root = Path(__file__).resolve().parents[1] / '.document-runtime'
-    archive = root.parent / '.document-runtime.tar.xz'
+    package_archive = root.parent / '.document-runtime.tar.xz'
     manifest = root.parent / '.document-runtime.tar.xz.sha256'
     # Retain only the compressed artifact in the deployed function; the
     # expanded native runtime is too large for the standard Python Lambda.
-    if archive.exists() and manifest.exists() and not root.exists():
+    if package_archive.exists() and manifest.exists() and not root.exists():
         return
     if root.exists():
         shutil.rmtree(root)
@@ -187,7 +187,7 @@ def main():
     # The function bundle must not contain the expanded 375MB Office tree.
     # Python stdlib xz is available in both build and Lambda; the immutable
     # archive is verified by SHA-256 before use and extracted into /tmp lazily.
-    compressed = archive.with_name(archive.name + '.new')
+    compressed = package_archive.with_name(package_archive.name + '.new')
     try:
         with tarfile.open(compressed, mode='w:xz', preset=3) as tar:
             tar.add(root, arcname='.', recursive=True)
@@ -196,7 +196,7 @@ def main():
             raise SystemExit('Compressed renderer exceeds 160MB function budget')
         with compressed.open('rb') as opened:
             archive_sha = hashlib.file_digest(opened, 'sha256').hexdigest()
-        os.replace(compressed, archive)
+        os.replace(compressed, package_archive)
         manifest.write_text(archive_sha + '\n')
         shutil.rmtree(root)
         print('Renderer compressed bytes', archive_bytes)
