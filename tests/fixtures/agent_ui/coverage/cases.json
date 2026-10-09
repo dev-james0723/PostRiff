@@ -1,0 +1,512 @@
+[
+ {
+  "name": "no_direct_account",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "LinkedIn",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Assisted",
+      "evidence": "",
+      "verifiedAt": null
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "LinkedIn",
+     "account": "acct"
+    }
+   }
+  ],
+  "posts": [],
+  "expected": {
+   "state": "unavailable",
+   "unread": 1,
+   "unmatched": 0,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "direct_nothing_read",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   }
+  ],
+  "posts": [],
+  "expected": {
+   "state": "pending",
+   "unread": 1,
+   "unmatched": 0,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "some_unread",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   },
+   {
+    "id": "j2",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p2"
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "p1",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "connectionId": "c1",
+    "platform": "Threads"
+   }
+  ],
+  "expected": {
+   "state": "partial",
+   "unread": 1,
+   "unmatched": 0,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "all_read",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   },
+   {
+    "id": "j0",
+    "state": "approved",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    }
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "p1",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "connectionId": "c1",
+    "platform": "Threads"
+   }
+  ],
+  "expected": {
+   "state": "ready",
+   "unread": 0,
+   "unmatched": 0,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "matched_by_platform",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "p1",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "platform": "Threads"
+   }
+  ],
+  "expected": {
+   "state": "ready",
+   "unread": 0,
+   "unmatched": 0,
+   "platformFallback": true
+  }
+ },
+ {
+  "name": "removed_account_stays_unmatched",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "p9",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "connectionId": "gone",
+    "platform": "Threads"
+   }
+  ],
+  "expected": {
+   "state": "pending",
+   "unread": 1,
+   "unmatched": 1,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "ambiguous_platform_unmatched",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   },
+   {
+    "id": "c2",
+    "platform": "Threads",
+    "account": "other",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    },
+    "providerReference": "p1"
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "p1",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "platform": "Threads"
+   }
+  ],
+  "expected": {
+   "state": "pending",
+   "unread": 1,
+   "unmatched": 1,
+   "platformFallback": false
+  }
+ },
+ {
+  "name": "read_by_job_id_without_reference",
+  "channels": [
+   {
+    "id": "c1",
+    "platform": "Threads",
+    "account": "acct",
+    "capabilities": {
+     "analytics": {
+      "level": "Direct",
+      "evidence": "e",
+      "verifiedAt": 1.0
+     }
+    }
+   }
+  ],
+  "providers": [
+   {
+    "id": "threads",
+    "platform": "Threads",
+    "capabilities": {
+     "analytics": true
+    }
+   },
+   {
+    "id": "linkedin",
+    "platform": "LinkedIn",
+    "capabilities": {
+     "analytics": false
+    }
+   }
+  ],
+  "jobs": [
+   {
+    "id": "j1",
+    "state": "verified",
+    "manifest": {
+     "channelId": "c1",
+     "platform": "Threads",
+     "account": "acct"
+    }
+   }
+  ],
+  "posts": [
+   {
+    "provider": "threads",
+    "providerPostId": "zz",
+    "freshness": {
+     "observedAt": 100.0,
+     "ingestedAt": 100.0
+    },
+    "connectionId": "c1",
+    "platform": "Threads",
+    "jobId": "j1"
+   }
+  ],
+  "expected": {
+   "state": "ready",
+   "unread": 0,
+   "unmatched": 0,
+   "platformFallback": false
+  }
+ }
+]

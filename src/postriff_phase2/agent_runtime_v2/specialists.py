@@ -124,6 +124,9 @@ def web_research(ctx: RafiiRunContext, args: dict) -> dict:
               "facts": [str(f)[:400] for f in p.get("facts") or []][:6]} for p in found.get("pages") or []]
     for page in pages:
         ctx.ledger.facts.append({"text": f"Web source: {page['title']} ({page['url']}, fetched {page['fetchedAt']})", "kind": "external", "rule": "web research"})
+    # The structured record a generated view reads back (rafii-genui/1 J07): titles, addresses, source dates ("" stays no
+    # date), fetch times and the bounded facts, persisted on the turn's result as result.research. Never re-fetched.
+    ctx.ledger.research.append({"query": found.get("query"), "pages": pages[:6], "warnings": [str(w)[:240] for w in found.get("warnings") or []][:5]})
     return {"ok": True, "verified": bool(pages), "data": {"query": found.get("query"), "pages": pages, "warnings": found.get("warnings") or []}}
 
 

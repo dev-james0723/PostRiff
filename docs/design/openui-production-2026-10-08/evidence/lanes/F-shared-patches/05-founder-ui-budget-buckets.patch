@@ -1,0 +1,12 @@
+--- a/src/rafii_control/http.py
++++ b/src/rafii_control/http.py
+@@ -180,6 +180,9 @@
+     @staticmethod
+     def budget_purpose(path, method):
+         """Founder agent turns/cancels and test calls get their own per-minute buckets; everything else keeps the capability's."""
++        # Generative UI (rafii-genui/1): reactive reads and debounced view-state saves get the metric-read bucket (240/min), so a
++        # filter change or typing never exhausts the 20/min turn budget; presentations, edits and cancels stay on the turn bucket.
++        if method == 'POST' and (path == '/agent/ui/queries' or re.fullmatch(f'/agent/ui/presentations/{ID}/state', path)): return 'metrics.query'
+         if method == 'POST' and path.startswith('/agent/'): return 'founder.agent.turn'
+         if method == 'POST' and path == '/calls/test': return 'founder.call.request'
+         return None

@@ -83,7 +83,8 @@ class AgentRuntimeService:
                 "voice": {"available": voice.available and self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") and member.allows("edit"),
                           "blocker": voice.blocker if not voice.available else
                           (None if self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") else "Voice Mode is not enabled on this deployment.")},
-                "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker}}
+                "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker},
+                "genui": self.cfg.genui_for(workspace_id)}
 
     # --- turn --------------------------------------------------------------------------------------------------------
     def turn(self, workspace_id, token, payload) -> dict:
@@ -465,17 +466,25 @@ class AgentRuntimeService:
             from .live import recent_transcript
             spoken = recent_transcript(cur, workspace_id, conversation_id)
             style = agent_style.load(cur, principal)
+            ui_context, ui_selection = ui_turn_context(self.cfg, cur, workspace_id, principal, member, payload.get("uiContext"))
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, page=page, zone=zone, locale=payload.get("locale") if isinstance(payload.get("locale"), str) else None,
                               writer_model=payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None, attachments=attachments,
                               conversation_assets=images, focus=focus, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
                               vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
-                              style=style, command=commands.parse(payload.get("command")))
+                              style=style, command=commands.parse(payload.get("command")), ui_context=ui_context, ui_selection=ui_selection,
+                              voice_choice=voice_choice(payload))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
         ctx.thinking("working", "run", "run_open")
         holder["ctx"] = ctx
+        if ui_selection and ui_selection.get("references"):
+            # What the person selected in a generated view, as stored when they selected it (not the live table's order).
+            resolved_chips = resolved_chips + [r for r in ui_selection["references"] if isinstance(r, dict) and r.get("id")][:12]
+            refs_note = list(refs_note or []) + [{"phrase": "selection in the interactive view", "source": "generated view",
+                                                  "resolvedTo": [{"type": r.get("type"), "id": r.get("id")} for r in ui_selection["references"] if isinstance(r, dict)][:12],
+                                                  "note": ui_selection.get("note") or ""}]
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
                            **({"attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]} if attachments else {})}
@@ -844,6 +853,12 @@ class AgentRuntimeService:
                 extra = {"traceHookError": getattr(hook, "__name__", "hook")}
             if isinstance(extra, dict):
                 trace.update({k: v for k, v in extra.items() if k not in trace})
+        if ledger.research:
+            # rafii-genui/1 J07: the pages this turn's research returned, for a generated view's research_results binding.
+            pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
+            result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
+                                  "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
+        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
@@ -1296,3 +1311,57 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
             if len(out) < MAX_EVIDENCE_BLOCKS:
                 out.append(block)
     return out
+
+
+# --- Generative UI seams (A-owned; rafii-genui/1) ----------------------------------------------------------------------
+_NOT_ELIGIBLE = {"eligible": False, "slot": "main", "reason": "not_eligible", "journeyIds": []}
+
+
+def ui_handoff(cfg, workspace_id, result, request_text, modality) -> dict:
+    """result.ui: whether this completed Manager turn may get a generated view (deterministic predicate in ui_projection).
+    A failure here never fails the turn; the answer stays native."""
+    flags = cfg.genui_for(workspace_id)
+    if not flags.get("enabled"):
+        return {**_NOT_ELIGIBLE, "reason": "disabled"}
+    try:
+        from . import ui_projection
+        decided = ui_projection.eligibility(result, request_text, modality, flags=flags)
+    except Exception:  # noqa: BLE001 — presentation is optional; the business answer is already complete
+        return {**_NOT_ELIGIBLE, "reason": "not_eligible"}
+    if not isinstance(decided, dict):
+        return dict(_NOT_ELIGIBLE)
+    return {"eligible": bool(decided.get("eligible")), "slot": "main", "reason": str(decided.get("reason") or "")[:64],
+            "journeyIds": [j for j in decided.get("journeyIds") or [] if isinstance(j, str)][:9]}
+
+
+def ui_turn_context(cfg, cur, workspace_id, principal, member, raw):
+    """The validated uiContext of a turn and the selection F re-resolves from persisted UI state (None when absent/disabled).
+    A stale or foreign artifact simply yields no selection; it never errors the turn."""
+    if raw is None or not cfg.genui_for(workspace_id).get("enabled"):
+        return None, None
+    from . import ui_contracts
+    try:
+        context = ui_contracts.validate_ui_context(raw)
+    except AlphaError:
+        return None, None   # a malformed reference to a view is ignored, never a failed turn
+    try:
+        from . import ui_store
+        from .ui_http import UiAuth
+        auth = UiAuth(workspace_id=workspace_id, principal=str(principal), member=member, role=getattr(member, "role", "") or "")
+        selection = ui_store.selection_context(cur, auth, context)
+    except AlphaError:
+        selection = None
+    return context, selection if isinstance(selection, dict) else None
+
+
+def voice_choice(payload) -> dict | None:
+    """The writer voice the person chose for this turn (Library/voice-aware drafting). Ids only; validated by the domain tool."""
+    mode = payload.get("voiceMode")
+    ids = payload.get("voiceSourceIds")
+    if mode is None and ids is None:
+        return None
+    if mode is not None and (not isinstance(mode, str) or len(mode) > 40):
+        mode = None
+    if ids is not None and (not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(i, str) and 0 < len(i) <= 80 for i in ids)):
+        ids = None
+    return {"mode": mode, "sourceIds": list(ids or [])} if (mode or ids) else None

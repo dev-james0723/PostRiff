@@ -1,0 +1,31 @@
+--- a/src/postriff_phase2/agent_runtime_v2/ui_http.py	2026-10-08 13:40:56
++++ b/src/postriff_phase2/agent_runtime_v2/ui_http.py	2026-10-08 13:40:57
+@@ -54,8 +54,12 @@
+     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+         member = runtime.service.ideas._member(row)
+         require(member, need)
++        # Founder scope is decided by server code only: the founder route family runs with a FounderAgentRuntime whose
++        # `.founder` namespace (founder:<mode>:<env>) it built from the verified control principal. Never from a client field.
++        founder = getattr(runtime, "founder", None)
++        scope, scope_key = ("founder", str(founder.get("namespace") or "")) if isinstance(founder, dict) and founder.get("namespace") else ("workspace", "")
+         yield cur, UiAuth(workspace_id=workspace_id, principal=str(principal), member=member, role=getattr(member, "role", "") or "",
+-                          workspace_revision=row[0] if row else None)
++                          scope=scope, scope_key=scope_key, workspace_revision=row[0] if row else None)
+ 
+ 
+ def flags_for(runtime, workspace_id) -> dict:
+@@ -114,8 +118,12 @@
+                 _require_enabled(runtime, workspace_id, "edits")
+                 return ui_stream.create_edit(runtime, environ, start_response, workspace_id, token, artifact_id, contracts.validate_patch(_body(app, environ)))
+             if tail == ["state"] and method == "POST":
+-                return app._json(start_response, 200, ui_store.persist_state_http(runtime, workspace_id, token, artifact_id,
+-                                                                                contracts.validate_state_patch(_body(app, environ))))
++                try:
++                    saved = ui_store.persist_state_http(runtime, workspace_id, token, artifact_id, contracts.validate_state_patch(_body(app, environ)))
++                except ui_store.StateConflict as conflict:
++                    # 409 with the stored state so the other tab merges its dirty fields (02-CONTRACTS §5); nothing was overwritten.
++                    return app._json(start_response, 409, {"error": str(conflict), "code": conflict.code, "current": conflict.current})
++                return app._json(start_response, 200, saved)
+     if head == ["messages"] and len(rest) == 2 and method == "GET":
+         if not contracts.valid_uuid(rest[1]):
+             raise AlphaError("That message is unavailable.", 404, code="ui_message")

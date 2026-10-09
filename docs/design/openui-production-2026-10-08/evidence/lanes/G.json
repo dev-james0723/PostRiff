@@ -1,0 +1,63 @@
+{
+  "role": "G — independent acceptance, fault, security and performance harness (R6 preparation)",
+  "branch": "claude/rafii-openui-g-acceptance",
+  "base_sha": "31cbee09",
+  "head_sha": "PENDING_FINAL_PUSH",
+  "merged_for_testing": {
+    "note": "Lane heads merged into this branch (git merge --no-edit) to run the corpus against real code; G never edited their files.",
+    "production-20261008": "f79ada42",
+    "b-runtime": "0883296f",
+    "c-renderer": "5737e016",
+    "d-data": "f2e637af",
+    "e-journeys": "dfc41598",
+    "f-surfaces": "1940f6b8"
+  },
+  "owned_paths": [
+    "tests/agent_ui_acceptance/**",
+    "web/tests/agent-ui-e2e/**",
+    "scripts/agent_ui_acceptance.sh",
+    "scripts/agent_ui_live.py",
+    "docs/design/openui-production-2026-10-08/evidence/g/**",
+    "docs/design/openui-production-2026-10-08/evidence/lanes/G.json"
+  ],
+  "completed_tasks": [
+    "1 negative corpus: tests/agent_ui_acceptance/api_corpus.py (all 23 NC items + G05/G09/G11/G12/G13/G19/G21 checks, DB/audit/ledger before-and-after counters, provider-boundary request counts), validator_corpus.py (signed parser seam), test_agent_ui_acceptance_contract.py (A seam)",
+    "CI acceptance stack: serve.py (real WSGI app, disposable PG 17 + migration 102, metered Manager path, expiring login, deploy-skew injection) + fake_provider.py (loopback OpenAI Responses/Chat stand-in: Manager via harness QA script, presenter source from C's schema, armed faults, per-kind counts)",
+    "2 browser scenes: web/tests/agent-ui-e2e/scenes.cjs (16 scenes) + run.cjs, Chromium and WebKit, emulation labelled, viewports 1440/360/768/390 portrait+landscape",
+    "3 scripts/agent_ui_acceptance.sh browser|api|live|release wired into agent-ui.yml's lane G step; red production build fails the run but backend corpora still run on next dev",
+    "4 scripts/agent_ui_live.py: plan, browser-snippet (in-browser measurement: rafii-genui marks + resource timing + in-page G04 probe + G05/G18 counts), server-sql (read-only attempt export), ingest (evidence + release records), API mode with env-only RAFII_LIVE_SESSION_TOKEN, 1/5/20 concurrency against the loopback harness",
+    "5 release mode: tests/agent_ui_acceptance/release.py (exact candidate SHA, evidence-only descendants, accepted evidence kinds per gate, stale/blocked/absent/unverified fail)",
+    "6 evidence/g/review-focus.md, evidence/g/live-runbook.md, evidence/g/README.md; matrix.md generated per CI run (summarize.py)"
+  ],
+  "interfaces_produced": [
+    "scripts/agent_ui_acceptance.sh browser|api|live|release (AGENT_UI_REQUIRE_COMPLETE=1 or a PR to consumer-saas makes blocked fail)",
+    "scripts/agent_ui_live.py plan | browser-snippet | server-sql | ingest | run | stream | concurrency",
+    "tests/agent_ui_acceptance/release.py --candidate <sha> (python -m agent_ui_acceptance.release)",
+    "CI artifact agent-ui-evidence-<sha>: api-corpus.json, validator-corpus.json, e2e-chromium.json, e2e-webkit.json, concurrency.json, bundle-devtools.json, gate-records.json, matrix.md",
+    "fixture provider control: GET /__stats, POST /__fault {fault,count}, POST /__seen {markers,kinds}, POST /__reset (loopback CI only)",
+    "browser contract relied on: [data-rafii-generated][data-artifact-id][data-generation-state], [data-rafii-generated-host], marks rafii-genui:first-component / rafii-genui:ready {artifactId, revision}, [data-rafii-dirty-conflict][role=alertdialog], data-genui on primitives, 'Build interactive view' button"
+  ],
+  "tests": [
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37822732285", "conclusion": "success", "test_counts": "unit-python incl. G modules; api-corpus 35 (33 blocked on stubs); validator 10 blocked; e2e 16/16 per engine (15 blocked, devtools-not-shipped pass)", "sha": "413ea17f"},
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37825772181", "conclusion": "failure (integrated lanes: E TS errors, asset drift, lint)", "test_counts": "unit-python 213/213; PG F-S01..S16 pass; G stack blocked by next build", "sha": "17e0eecd"},
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37827417525", "conclusion": "failure (integrated lanes)", "test_counts": "api-corpus 37 (2 pass incl. G04 probe harness part, 35 blocked: validator library_unsupported from asset drift)", "sha": "a802b05b"},
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37829246266", "conclusion": "cancelled (superseded; production build OK; scenes ran)", "test_counts": "api-corpus 38; concurrency 1/5/20 no cross-tenant reads; e2e native-fallback pass", "sha": "7bc3d4e7"},
+    {"command_or_ci_run_url": "local: .venv python -m unittest agent_ui_acceptance.test_agent_ui_acceptance_release / _contract", "conclusion": "pass", "test_counts": "28 (1 SDK case runs in CI only) / 32", "sha": "bfc31efb"}
+  ],
+  "blockers": [
+    {"kind": "integration", "exact_dependency": "A: one [agent-ui-assets] regeneration on the integrated tree (committed consumer libraryHash 986c280c… vs specs 4fd44318…); until then every validation answers library_unsupported, so every positive control is BLOCKED", "independent_work_remaining": "none in G; rerun browser mode on A's final integration SHA"},
+    {"kind": "external-evidence", "exact_dependency": "A: live browser-mode sample on the production canary (G03/G04/G05/G10/G17/G18 live parts) per evidence/g/live-runbook.md", "independent_work_remaining": "ingest + commit evidence when A provides results"},
+    {"kind": "external-evidence", "exact_dependency": "physical iPhone Safari run (G15) and manual screen-reader pass (G16)", "independent_work_remaining": "none in CI; emulation never stands in"},
+    {"kind": "harness", "exact_dependency": "founder stack (--founder-fixture) with a founder-scoped artifact for api_corpus.Founder", "independent_work_remaining": "add a founder stack run to browser mode"}
+  ],
+  "shared_patches": [],
+  "defects_reported": [
+    "B ui_stream.py:467 library_unsupported triggered a paid repair (fixed by B: NOT_REPAIRABLE); regression check api_corpus.Faults.test_library_skew_is_terminal_without_repair",
+    "E journeys/shared.tsx:125-127 + journeys/runtime.ts:46 TS errors on the integrated tree (next build failed)",
+    "C/E generated-asset drift on the integrated tree",
+    "C renderer.tsx:313 UiBridges.dispose missing from types.ts (fixed: D-A45)",
+    "C/E a11y lint (labels, tabIndex, <a> vs Link)",
+    "Finding: scripted harness turns are never UI-eligible (billing 'scripted'); solved inside G's harness only"
+  ],
+  "next_action": "Merge A's final integration SHA (with regenerated assets), rerun scripts/agent_ui_acceptance.sh browser in CI, copy gate-records.json to evidence/g/results/ci-<sha>.json and matrix.md, report remaining defects; then drive release mode on the candidate."
+}

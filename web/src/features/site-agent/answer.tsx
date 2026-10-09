@@ -92,7 +92,11 @@ export interface AnswerActions {
   latest?: boolean;
 }
 
-export function SiteAgentAnswer({ body, actions }: { body: SiteAgentBody; actions: AnswerActions }) {
+/**
+ * `generated` (rafii-genui/1, D-A21): an optional interactive view of this answer, rendered after the native blocks (text,
+ * warnings, review cards) and before follow-ups and provenance, so every native approval and receipt stays outside it.
+ */
+export function SiteAgentAnswer({ body, actions, generated }: { body: SiteAgentBody; actions: AnswerActions; generated?: ReactNode }) {
   const blocks = body.blocks ?? [];
   return (
     <div className='flex min-w-0 flex-col gap-3'>
@@ -111,6 +115,7 @@ export function SiteAgentAnswer({ body, actions }: { body: SiteAgentBody; action
       {blocks.map((block, index) => block.type === 'proposal_diff' ?
         <section key={`${block.type}-${index}`} className='flex flex-col gap-2' aria-label='Result for review' data-rafii-review><h3 className='text-sm font-semibold'>Ready for your review</h3><AnswerBlock block={block} actions={actions} /></section>
         : <AnswerBlock key={`${block.type}-${index}`} block={block} actions={actions} />)}
+      {generated}
       {body.status === 'completed' && <AnswerMeta body={body} actions={actions} />}
     </div>
   );
