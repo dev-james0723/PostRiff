@@ -220,6 +220,12 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       assert.deepEqual(crossPagePreview.request().postDataJSON().draftIds, [plan.result.id]);
       assert.deepEqual(crossPagePreview.request().postDataJSON().draftDigests, { [plan.result.id]: plan.result.digest });
       assert.ok(crossPagePreview.ok());
+      // This POST continues to the native synthetic backend; only list/history
+      // responses above are mocked. Retain both exact authority IDs for erasure.
+      const crossPagePolicy = await crossPagePreview.json();
+      assert.equal(crossPagePolicy.result.status, 'prepared');
+      assert.notEqual(crossPagePolicy.result.id, policy.id);
+      const nativePolicies = [policy, crossPagePolicy.result];
       const exactPolicyScope = agent.locator(`[data-youtube-policy-scope-draft="${plan.result.id}"]`);
       await exactPolicyScope.waitFor();
       assert.ok((await exactPolicyScope.textContent()).includes(plan.result.digest));
@@ -333,13 +339,48 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
         state: new URL(reconnectStart.authorizeUrl).searchParams.get('state'), code: 'synthetic-reconnect-code'
       });
       assert.equal(reconnected.connectionId, cid);
+      // Pagination fixtures were removed before disconnect. Verify the real
+      // tombstones and page bounds, so absence cannot be mistaken for archiving
+      // or an off-page record. The fixture owns one draft and two native policies.
+      const erasedView = await request('GET', `/api/workspaces/${wid}/youtube/${encodeURIComponent(cid)}/agent?limit=25`);
+      assert.deepEqual(erasedView.drafts.map(draft => draft.id), [plan.result.id]);
+      assert.deepEqual(erasedView.policies.map(policy => policy.id).sort(), nativePolicies.map(policy => policy.id).sort());
+      assert.deepEqual(erasedView.pagination, {
+        drafts: { hasMore: false, nextCursor: null }, policies: { hasMore: false, nextCursor: null }
+      });
+      const erasedDraft = erasedView.drafts[0];
+      assert.equal(erasedDraft.status, 'privacy_erased');
+      assert.equal(erasedDraft.privacyErased, true);
+      assert.equal(erasedDraft.readOnly, true);
+      assert.equal(erasedDraft.channelId, '');
+      assert.equal(erasedDraft.digest, plan.result.digest);
+      assert.equal(erasedDraft.assetId, plan.result.assetId);
+      assert.deepEqual(erasedDraft.publishOptions, plan.result.publishOptions);
+      for (const nativePolicy of nativePolicies) {
+        const erasedPolicy = erasedView.policies.find(policy => policy.id === nativePolicy.id);
+        assert.equal(erasedPolicy.status, 'revoked');
+        assert.equal(erasedPolicy.privacyErased, true);
+        assert.equal(erasedPolicy.channelId, '');
+        assert.equal(erasedPolicy.digest, nativePolicy.digest);
+      }
       await page.goto(base + '/app/youtube?channel=' + cid);
       const erasedPlans = page.getByRole('region', { name: 'YouTube publishing agent', exact: true });
-      await erasedPlans.getByText('Data removed. This plan cannot run again.', { exact: false }).waitFor();
-      await erasedPlans.getByText(planTitle, { exact: true }).waitFor();
+      const erasedPlan = erasedPlans.locator(`[data-youtube-agent-draft="${plan.result.id}"]`);
+      await erasedPlan.getByText('Data removed. This plan cannot run again.', { exact: false }).waitFor();
+      await erasedPlan.getByText(planTitle, { exact: true }).waitFor();
+      await erasedPlan.getByText('Read-only plan record. This view grants no new publishing approval.', { exact: true }).waitFor();
+      assert.equal(await erasedPlans.locator('[data-youtube-agent-draft]').count(), 1);
+      assert.equal(await erasedPlans.locator('[data-youtube-agent-policy]').count(), nativePolicies.length);
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Next publishing plans', exact: true }).isEnabled(), false);
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Next authority records', exact: true }).isEnabled(), false);
       assert.equal(await erasedPlans.getByRole('button', { name: 'Approve and queue this plan', exact: true }).count(), 0);
       assert.equal(await erasedPlans.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true }).count(), 0);
-      await erasedPlans.getByText('Channel data was removed and this authority cannot restart.', { exact: false }).waitFor();
+      for (const nativePolicy of nativePolicies) {
+        const erasedAuthority = erasedPlans.locator(`[data-youtube-agent-policy="${nativePolicy.id}"]`);
+        await erasedAuthority.getByText('Channel data was removed and this authority cannot restart.', { exact: false }).waitFor();
+        await erasedAuthority.getByText('Read-only authority record. Prepare new authority to approve different future plans.', { exact: true }).waitFor();
+        assert.equal(await erasedAuthority.getByRole('button').count(), 0);
+      }
       await page.getByText('Creator receipts and official change notifications', { exact: true }).click();
       await page.getByText('YouTube data was removed. This operation cannot run again.', { exact: false }).first().waitFor();
       assert.equal(await page.getByRole('button', { name: 'Read back the accepted result', exact: true }).count(), 0);

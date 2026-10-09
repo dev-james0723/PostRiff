@@ -67,6 +67,27 @@ class PagingTests(unittest.TestCase):
         record['metadataOrigin'] = 'unknown-origin'
         self.assertNotIn('metadataOrigin', projection(record, 'draft', NOW))
 
+    def test_erased_tombstone_markers_survive_display_without_private_erasure_details(self):
+        value = state(); draft, policy = draft_and_policy(value)
+        for record, kind in ((draft, 'draft'), (policy, 'policy')):
+            with self.subTest(kind=kind):
+                record.update(privacyErased=True, privacyErasedAt=NOW,
+                              privacyErasureReason='disconnect',
+                              privateErasureEvidence={'authorizationGeneration': 'server-private'})
+                before = copy.deepcopy(record)
+                projected = live_page([record], 'workspace', CONNECTION, kind, NOW)['items'][0]
+                self.assertIs(projected['privacyErased'], True)
+                if kind == 'draft':
+                    self.assertTrue(projected['readOnly'], 'Erasure fences a plan even before its status changes.')
+                for key in ('privacyErasedAt', 'privacyErasureReason', 'privateErasureEvidence', 'authorizationGeneration',
+                            'createdBy', 'grantedBy'):
+                    self.assertNotIn(key, projected)
+                self.assertNotIn('server-private', str(projected))
+                self.assertEqual(record, before)
+                record['privacyErased'] = {'private': 'server-private'}
+                self.assertNotIn('privacyErased', projection(record, kind, NOW),
+                                 'Only the canonical content-free boolean is public.')
+
     def test_policy_preview_rejects_changed_off_page_selection(self):
         value = state(); draft, _ = draft_and_policy(value)
         body = {'draftIds': [draft['id']], 'draftDigests': {draft['id']: 'changed-off-page'},

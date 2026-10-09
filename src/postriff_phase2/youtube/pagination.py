@@ -25,13 +25,15 @@ def finite(value):
 def projection(record, kind, now):
     fields = DRAFT_PUBLIC if kind == 'draft' else POLICY_PUBLIC
     value = {key: copy.deepcopy(record[key]) for key in fields if key in record}
+    if record.get('privacyErased') is True:
+        value['privacyErased'] = True
     if kind == 'draft':
         origin = record.get('metadataOrigin')
         if origin in ('user_or_filename_suggestion', 'chat_model_proposal_requires_video_review'):
             value['metadataOrigin'] = origin
         timing = record.get('timing')
         at = timing.get('timestamp') if isinstance(timing, dict) else None
-        value['readOnly'] = record.get('status') != 'proposed' or not finite(at) or at <= now
+        value['readOnly'] = record.get('privacyErased') is True or record.get('status') != 'proposed' or not finite(at) or at <= now
     else:
         end = record.get('endsAt')
         if record.get('status') in ('prepared', 'active', 'paused') and finite(end) and end <= now:
