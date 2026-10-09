@@ -17,6 +17,7 @@ from postriff_phase2.youtube.service import YouTubeCreatorService
 CHANNEL, VIDEO, NOW = 'UC' + 'a' * 22, 'abcdefghijk', 1_800_000_000
 SCOPES = [READ, UPLOAD, MANAGE]
 TOKEN = json.dumps({'v': 1, 'at': 'synthetic-access'})
+GENERATION = '00000000-0000-0000-0000-000000000098'
 
 
 class Repository:
@@ -38,7 +39,7 @@ class Repository:
         elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
             self.result = (True,)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
-            self.result = ('00000000-0000-0000-0000-000000000098',)
+            self.result = (GENERATION,)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', CHANNEL, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id,scopes'):
@@ -51,7 +52,7 @@ class Repository:
             self.scopes = list(params[0])
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET youtube_identity_ingested_at='):
             observed_at, workspace, connection, generation, account = params
-            assert (workspace, connection, generation, account) == ('workspace', 'connection', '00000000-0000-0000-0000-000000000098', CHANNEL)
+            assert (workspace, connection, generation, account) == ('workspace', 'connection', GENERATION, CHANNEL)
             self.identity_ingested_at = observed_at
             self.rowcount = 1
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
@@ -132,7 +133,8 @@ class YouTubeConnectionSafetyTests(unittest.TestCase):
         with self.assertRaises(AlphaError) as revoked:
             service.token_for_worker('workspace', 'connection')
         self.assertEqual(revoked.exception.code, 'youtube_revoked_oauth')
-        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection', expected_ciphertext=TOKEN)
+        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection',
+                                                           expected_ciphertext=TOKEN, expected_generation=GENERATION)
 
         service, repo, provider = service_for({'status': 200, 'body': {'aud': 'test-client', 'scope': ' '.join(SCOPES)}})
         self.assertEqual(set(service.token_for_worker('workspace', 'connection')['scopes']), set(SCOPES))

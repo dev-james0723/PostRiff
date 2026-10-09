@@ -179,6 +179,37 @@ except ImportError:
 
 @unittest.skipUnless(HAVE_SDK, 'Agents SDK is required for metered model adapter coverage.')
 class ModelContextFenceTests(unittest.TestCase):
+    def test_stream_checks_context_before_dispatch_and_preserves_usage_metering(self):
+        rt = runtime()
+        dispatched = []
+        completed = SimpleNamespace(type='response.completed', response=SimpleNamespace(
+            usage=SimpleNamespace(input_tokens=7, output_tokens=3)))
+
+        async def stream_response():
+            dispatched.append(True)
+            yield completed
+
+        ctx = context(rt)
+        ctx.ledger.youtube_provider_context.append(SOURCE)
+        wrapped = manager.metered(SimpleNamespace(stream_response=stream_response), ctx,
+                                  agent='rafii_manager', workload='standard_reasoning', route={})
+
+        async def collect():
+            return [event async for event in wrapped.stream_response()]
+
+        rt.service.youtube.journal.assert_authorized.side_effect = AlphaError('Synthetic revocation.', 409)
+        with self.assertRaises(manager.ModelNotDispatched):
+            asyncio.run(collect())
+        self.assertEqual(dispatched, [])
+        self.assertEqual(ctx.ledger.model_requests, 0)
+        self.assertEqual(ctx.ledger.calls, [])
+        rt.service.youtube.journal.assert_authorized.side_effect = None
+        self.assertEqual(asyncio.run(collect()), [completed])
+        self.assertEqual(len(dispatched), 1)
+        self.assertEqual(ctx.ledger.model_requests, 1)
+        self.assertEqual(ctx.ledger.spans[0]['inputTokens'], 7)
+        self.assertEqual(ctx.ledger.spans[0]['outputTokens'], 3)
+
     def test_continuation_checks_current_grant_before_dispatch_without_false_attempt(self):
         rt, model = runtime(), SimpleNamespace(get_response=AsyncMock(return_value=SimpleNamespace(usage=None)))
         ctx = context(rt)

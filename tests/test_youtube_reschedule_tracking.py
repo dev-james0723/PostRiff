@@ -25,6 +25,7 @@ ORIGINAL, CHANGED, LATEST = '2099-01-01T00:00:00Z', '2099-02-01T00:00:00Z', '209
 class MemoryDatabase:
     def __init__(self, fixture):
         self.fixture, self.result = fixture, []
+        self.rowcount = -1
 
     def __enter__(self):
         return self
@@ -38,6 +39,7 @@ class MemoryDatabase:
     def execute(self, sql, params=()):
         f = self.fixture
         f.sql.append((sql, params))
+        self.result, self.rowcount = [], 0
         if sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.result = [(copy.deepcopy(f.workspace),)]
         elif sql.startswith('SELECT operation_key,state FROM public.pr_youtube_uploads'):
@@ -56,19 +58,32 @@ class MemoryDatabase:
             workspace, connection, actor, operation, manifest, action_digest = params
             action_id = 'action-' + str(len(f.actions) + 1)
             f.actions[action_id] = {'manifest': json.loads(manifest), 'digest': action_digest, 'status': 'prepared',
-                                    'receipt': None, 'actor': actor, 'operation': operation}
+                                    'receipt': None, 'actor': actor, 'operation': operation,
+                                    'workspace': workspace, 'connection': connection, 'privacy_erased_at': None}
             self.result = [(action_id,)]
+            self.rowcount = 1
         elif sql.startswith('SELECT manifest,manifest_digest,status,receipt,actor::text FROM public.pr_youtube_actions'):
             row = f.actions.get(params[-1])
-            self.result = [(copy.deepcopy(row['manifest']), row['digest'], row['status'], copy.deepcopy(row['receipt']), row['actor'])] if row else []
+            if row and (row['workspace'], row['connection']) == params[:2]:
+                self.result = [(copy.deepcopy(row['manifest']), row['digest'], row['status'], copy.deepcopy(row['receipt']), row['actor'])]
         elif sql.startswith("UPDATE public.pr_youtube_actions SET status='started'"):
-            f.actions[params[-1]]['status'] = 'started'
-        elif sql.startswith("UPDATE public.pr_youtube_actions SET status='accepted'"):
-            f.actions[params[-1]].update(status='accepted', receipt=json.loads(params[0]))
-        elif sql.startswith('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb'):
-            f.actions[params[-1]].update(status=params[0], receipt=json.loads(params[1]))
+            row = f.actions.get(params[-1])
+            if row:
+                row['status'] = 'started'
+                self.rowcount = 1
+        elif sql.startswith(("UPDATE public.pr_youtube_actions SET status='accepted'",
+                             'UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb')):
+            assert sql.endswith('WHERE workspace_id=%s AND connection_id=%s AND id::text=%s AND privacy_erased_at IS NULL'), sql
+            workspace, connection, action_id = params[-3:]
+            row = f.actions.get(action_id)
+            if row and (row['workspace'], row['connection']) == (workspace, connection) and row['privacy_erased_at'] is None:
+                accepted = sql.startswith("UPDATE public.pr_youtube_actions SET status='accepted'")
+                row.update(status='accepted' if accepted else params[0], receipt=json.loads(params[0 if accepted else 1]))
+                self.rowcount = 1
         else:
             raise AssertionError('Unexpected synthetic SQL: ' + sql)
+        if sql.startswith('SELECT '):
+            self.rowcount = len(self.result)
 
     def fetchall(self):
         return copy.deepcopy(self.result)
@@ -469,6 +484,43 @@ class ApprovedNativeScheduleTrackingTests(unittest.TestCase):
         self.assertEqual(f.actions, {})
         self.assertEqual(f.uploads, {})
         self.assertEqual(f.writes, [])
+
+    def test_late_receipt_cannot_overwrite_an_erased_action(self):
+        for stage in ('accepted', 'verified'):
+            with self.subTest(stage=stage):
+                f = ScheduleFixture()
+                review = f.prepare()
+                row = f.actions[review['id']]
+
+                def erase():
+                    row.update(status='privacy_erased', receipt=None, privacy_erased_at=f.now)
+
+                if stage == 'accepted':
+                    execute = f.api.execute
+
+                    def erase_after_execute(*args, **kwargs):
+                        result = execute(*args, **kwargs)
+                        erase()
+                        return result
+
+                    f.api.execute = erase_after_execute
+                else:
+                    verify = f.creator.verify_action
+
+                    def erase_after_verify(*args, **kwargs):
+                        result = verify(*args, **kwargs)
+                        erase()
+                        return result
+
+                    f.creator.verify_action = erase_after_verify
+                result = f.approve(review)
+                self.assertEqual((result['status'], result['receipt'], result['dataRemoved']), ('privacy_erased', None, True))
+                self.assertEqual((row['status'], row['receipt'], row['privacy_erased_at']), ('privacy_erased', None, f.now))
+                with self.assertRaises(AlphaError) as replay:
+                    f.approve(review)
+                self.assertEqual(replay.exception.code, 'youtube_privacy_erased')
+                self.assertEqual(len(f.writes), 1)
+                self.assertEqual(f.upload_requests, 0)
 
 
 if __name__ == '__main__':

@@ -229,12 +229,15 @@ class WorkspaceProviderDataTests(unittest.TestCase):
             api.assert_not_called()
 
     def test_workspace_scan_remains_cron_only(self):
-        cur = SimpleNamespace(execute=Mock())
+        # The additional privacy-erasure cron scan also sees no candidates.
+        cur = SimpleNamespace(execute=Mock(), fetchall=Mock(return_value=[]))
         with patch('postriff_phase2.youtube.workspace_provider_data.purge_expired') as sweep, patch('postriff_phase2.youtube.agent_context.purge_expired'):
             purge_expired_data(cur)
             sweep.assert_not_called()
+            cur.fetchall.assert_not_called()
             purge_expired_data(cur, agent_context=True)
             sweep.assert_called_once_with(cur)
+            cur.fetchall.assert_called_once_with()
 
 
 if __name__ == '__main__':
