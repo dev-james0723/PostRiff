@@ -14,7 +14,7 @@ import tempfile
 import urllib.request
 
 VERSION = '26.2.6'
-BUNDLE_REVISION = VERSION + '-headless-minimal-1'
+BUNDLE_REVISION = VERSION + '-headless-minimal-2'
 DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
 SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
 
@@ -48,6 +48,8 @@ OMIT_OFFICE_LIBS = (
     'libstaroffice-0.0-lo.so.0', 'libvbaobjlo.so', 'libvbaswobjlo.so',
     'libClp.so.1', 'libCoinUtils.so.3', 'libCgl.so.1',
     'libCbc.so.3', 'libCbcSolver.so.3', 'libwps-0.4-lo.so.4',
+    'libcuilo.so', 'libswuilo.so', 'libscuilo.so', 'libsduilo.so',
+    'libslideshowlo.so', 'xpdfimport',
 )
 # FONTCONFIG_FILE in library_preview.py points at the bundled root/fonts;
 # curate there rather than copying the same full font families twice.
@@ -129,6 +131,16 @@ def main():
         candidate = bundled / 'program' / library
         if candidate.is_file():
             candidate.unlink()
+    # Interactive dialog layouts are not required to decode documents. Keep
+    # cross-module UI and the Impress tab view used by actual headless imports.
+    # Trace: 13 real DOCX/XLSX/PPTX/legacy/HTML/text/CSV format conversions,
+    # followed by test_library_preview (real pages, colour, seccomp, pagination).
+    ui_root = bundled / 'share/config/soffice.cfg'
+    for ui in ui_root.rglob('*.ui'):
+        relative = ui.relative_to(ui_root).as_posix()
+        if not (relative.startswith(('svt/ui/', 'cui/ui/'))
+                or relative == 'modules/simpress/ui/tabviewbar.ui'):
+            ui.unlink()
     # Trace only retained ELF files. Otherwise optional deleted modules pull
     # irrelevant shared libraries back into the function bundle.
     link_env['LD_LIBRARY_PATH'] = str(bundled / 'program')
@@ -164,7 +176,13 @@ def main():
             if dep.name not in {'libc.so.6', 'libm.so.6', 'libdl.so.2', 'libpthread.so.0', 'librt.so.1', 'libresolv.so.2'}:
                 pending.append(dep)
     (root / 'VERSION').write_text(BUNDLE_REVISION)
-    print('Runtime bundle bytes', sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))
+    bundle_bytes = sum(p.stat().st_size for p in root.rglob('*') if p.is_file())
+    print('Runtime bundle bytes', bundle_bytes)
+    # Current API dependencies occupy ~109 MB in the Vercel 2026-10-08 build.
+    # 385 MB for this renderer leaves headroom under the standard 500 MB
+    # preview function limit, independent of large-functions beta rollout.
+    if bundle_bytes > 385_000_000:
+        raise SystemExit('Renderer exceeds standard-preview 385MB bundle budget')
     print('Bundled checksum-verified LibreOffice', VERSION)
 
 if __name__ == '__main__':
