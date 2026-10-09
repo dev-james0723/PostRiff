@@ -120,3 +120,7 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
   - TaskStatus has no path parameter.
   
   The canary's first-pass validity was 0/3 (J01-a and J01-c each needed the repair). The upstream text, which teaches @Filter/@Each over `rows.data.items`, stays in the hash-checked asset; the bindings section is not hash-checked and now overrides it for bound slots.
+- D-A50 (2026-10-09) Presenter prompt rules aimed at the first-pass rejections D-A48 measured in the live canary. Run 2 on 26d7e901 had 20/24 first-pass valid, and the logged codes were duplicate_statement×13, unresolved_ref×1 and query_args_shape×1. Two of the three logged rejections came on multi-journey turns.
+  - Generate mode adds: "Write the program once: declare every statement id exactly once, and never repeat, restate or continue a program". Patch mode is unchanged, since re-declaring a statement by id replaces it.
+  - All modes add: "Every name you use must be declared in this program", plus WRONG/RIGHT Query-argument examples.
+  - For views limited to some journeys' component groups, the allowed-components line now comes BEFORE the shared prompt, with "Any other component documented below is rejected for this view". It stays on its own line, so the CI fake provider still parses it.

@@ -257,6 +257,8 @@ def bindings_section(manifest: dict) -> str:
              "an @Filter or @Sort result or an @Each item. Narrow and order rows with that query's own arguments; to show one record, declare "
              "a query with a literal id from CONTEXT. A $variable bound to a selection holds a list of ids: pass it whole to a list argument "
              "such as ids. Give the row components a rowsField, and Metric the dotted path inside the result as its field.",
+             "Every name you use must be declared in this program: each statement you reference, each $variable and each query. "
+             "Query arguments: WRONG `{platform: $filters.platform}` or `{ids: [$picked[0]]}`; RIGHT `{platform: $platform}` or `{ids: $picked}`.",
              "Before you answer, check every statement against these rules and the component signatures; a view that breaks one is rejected."]
     if queries:
         for q in queries:
@@ -380,8 +382,9 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
     components_line = ""
     if allowed and allowed != known:
         # A shared (`all`) prompt documents every component; this view may use only its journeys' groups (the validator policy).
-        components_line = "\n\n## Components for this view\nUse only these components: " + ", ".join(allowed) + "."
-    instructions = (base_prompt.rstrip() + "\n\n" + bindings_section(manifest) + components_line).strip()
+        components_line = ("## Components for this view\nUse only these components: " + ", ".join(allowed)
+                           + ".\nAny other component documented below is rejected for this view.\n\n")
+    instructions = (components_line + base_prompt.rstrip() + "\n\n" + bindings_section(manifest)).strip()
     context = presenter_context(projection)
     blocks = [f"<context kind=\"UI_PROJECTION\">\n{_escape_block(_bounded_json(context, MAX_CONTEXT_BYTES))}\n</context>"]
     if mode == "patch":
@@ -402,7 +405,8 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
         tail = ("Write only the statements that change: re-declare a statement by its id to replace it, `id = null` to remove it. "
                 "Keep every statement the person did not ask to change, including their filters, selections and form fields.")
     else:
-        tail = "Compose the complete interface for this verified result using only the components and bindings above."
+        tail = ("Compose the complete interface for this verified result using only the components and bindings above. Write the program "
+                "once: declare every statement id exactly once, and never repeat, restate or continue a program you have already written.")
     if rejected_source is not None:
         tail = ("The previous output (REJECTED_UI) failed validation with the VALIDATOR codes. Write a corrected "
                 + ("patch" if mode == "patch" else "complete program") + " that fixes them. " + tail)
