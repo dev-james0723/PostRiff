@@ -317,12 +317,13 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
         </>}
       </div>
       <div className={cn('bg-card/95 z-10 flex min-w-0 flex-col', compact ? 'px-1' : 'absolute inset-x-0 bottom-0 border-t border-foreground/[0.06]')}>
-        <div className='flex min-w-0 items-center gap-1 px-1'>
+        {/* A container: in a narrow card the time label gives way so the timeline stays usable (the slider still says "x of y"). */}
+        <div className='@container flex min-w-0 items-center gap-1 px-1'>
           <button type='button' onClick={toggle} disabled={!ready || busy} aria-label={`${playing ? 'Pause' : 'Play'} ${video ? 'video' : 'audio'} preview`} className='rafii-focus hover:bg-foreground/[0.06] flex size-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-50 pointer-coarse:size-11'>
             {busy ? <Icons.spinner aria-hidden className='size-4 animate-spin motion-reduce:animate-none' /> : playing ? <Icons.pause aria-hidden className='size-4' /> : <Icons.play aria-hidden className='size-4' />}
           </button>
           <input type='range' min={0} max={duration || 1} step={0.05} value={Math.min(position, duration || 1)} onChange={event => seek(Number(event.target.value))} disabled={!metadataReady || !duration} aria-label={`${video ? 'Video' : 'Audio'} preview timeline`} aria-valuetext={`${timeLabel(position)} of ${duration || knownDuration ? timeLabel(duration || knownDuration) : 'unknown length'}`} className='rafii-focus accent-foreground h-9 min-w-0 flex-1 cursor-pointer disabled:cursor-default pointer-coarse:h-11' />
-          <span className='text-muted-foreground shrink-0 px-1 text-[11px] tabular-nums'>
+          <span className='text-muted-foreground shrink-0 px-1 text-[11px] tabular-nums @max-[15rem]:hidden'>
             {/* The length is shown once it is known (from the file or its metadata), never as a made-up 0:00. */}
             {timeLabel(position)} / {duration || knownDuration ? timeLabel(duration || knownDuration) : '–:––'}
           </span>
