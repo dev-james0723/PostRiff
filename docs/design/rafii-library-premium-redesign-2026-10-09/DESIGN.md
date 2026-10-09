@@ -35,14 +35,15 @@ below 1600 px; below 1280 it is a sheet; on phones a drawer.
 Workspace stack, top to bottom:
 1. Header row: `Library` + info, and the single primary `Add` (Upload files / Paste link / Quick note) on the same row at
    every width.
-2. Search: one 40 px field, scope selector inside it on the right (Entire Library · a collection · Selected N), Search/Ask
-   as a quiet two-option switch when Ask is available.
-3. Toolbar (one row): Type, Usage, Status, Tag as compact menu buttons that show their value; Clear when any is set; on the
-   right: count, Sort, Gallery/List, density. Phones collapse the filters into one Filters button (sheet) and keep view
-   controls.
-4. Results. Bulk bar replaces nothing; it floats at the bottom only while something is selected.
+2. Search: one 40 px field (`/` focuses it). Under it, the scope in words ("Searching Entire permitted Library", "This
+   collection", "Selected N items") is itself the scope picker when more than one scope exists; Search/Ask sits at the
+   right of that line as a quiet two-option switch when Ask is available.
+3. Toolbar: Type, Usage, Status, Tag as compact native selects that show their value; Clear when any is set; Sort after a
+   divider; then the count, Gallery/List and density. Nothing hides behind a Filters panel: on phones the filters are one
+   row that scrolls inside itself, with the count and view controls on the row below.
+4. Results. The bulk bar replaces nothing; it sticks to the bottom only while something is selected.
 
-At 390 × 844 the header, search, collection switcher and toolbar take ≈200 px, so the first row of results is visible.
+At 390 × 844 the first card's title and the top of its preview are above the fold (asserted by the browser harness, A059).
 
 Rail: `All assets` (the whole permitted Library), `Collections` (manual) with a quiet `New collection`, `Smart views`
 (rule-based collections) with `New smart view` when the service is reachable, and a one-line storage meter at the bottom
@@ -66,12 +67,13 @@ are square at the same heights, always with `aria-label` and a tooltip. One radi
 
 ## 5. Cards (`asset-card.tsx`, `asset-list-row.tsx`, shared parts in `asset-card-parts.tsx`)
 
-Order: preview → title (one line, middle-truncation for long names) → one meta line (type · size · duration/pages) → at
-most one status (Processing, Needs attention, Stored privately, Used in N). "Unused" is not shown (it is the default and
-is available as a filter).
+Order: preview → title (one line, truncated, the full name in the tooltip and the accessible name) → one meta line
+(type · duration, dimensions or size) → at most one status (Processing, Needs attention, Publishing, Used in N). "Unused"
+and "Stored privately" are not shown: they are the defaults (Unused is a filter; every item is private).
 
-- Images: whole picture, letterboxed on a neutral tile (no destructive crop).
-- Video: real poster, duration chip, centred play button; playback starts only on a press (no scroll autoplay).
+- Images: whole picture, letterboxed on a neutral 4:3 tile (no destructive crop).
+- Video: real poster and duration chip. One muted preview at a time may play while visible (never under reduced motion,
+  never after the person pauses it), labelled "Silent preview"; sound only starts from a press.
 - Audio: real decoded waveform after the first play (never a decorative timeline); a calm audio tile before that; play,
   time and seek visible; speed and volume behind Playback options.
 - Documents: the real rendered first page, framed from the top of the page so text is legible; label `PDF · PAGE 1` only on
@@ -84,10 +86,15 @@ is available as a filter).
 
 ## 6. Inspector (`asset-detail.tsx`)
 
-Header (title, meta, close, More) → large preview → one action row (secondary buttons: Use in draft / Use in a post /
-Play or Open document; icon buttons: Download, Open original) → sticky section tabs Overview · Content · Related · Usage.
-Overview leads with the summary and suggested uses; processing states and source permissions move into a "Processing &
-permissions" disclosure; technical details stay collapsed; Delete stays in the danger area at the end.
+Header (title, close) → large preview → one action row (secondary: Use in draft, Use in a post — or a quiet Open Ideas
+when the item can't be posted; icon buttons: Open original, Download original) → sticky section tabs Overview · Content ·
+Related · Usage. Overview leads with what the item is, the summary and suggested uses; processing states and source
+permissions sit in a "Processing and permissions" disclosure; technical details stay collapsed; Delete stays in the danger
+area at the end.
+
+From 1280 px the inspector is a docked, non-modal panel: focus moves to its heading when it opens, Escape closes it while
+focus is inside, and focus returns to the card that opened it. The query, filters, selection and scroll position are
+untouched. Below 1280 px it is a sheet; on phones a drawer whose footer keeps the actions in thumb reach.
 
 ## 7. Motion
 
