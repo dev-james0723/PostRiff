@@ -22,6 +22,8 @@ Read-only inventory taken at session start. The base is `26d7e901` (= `origin/co
 
 ## Pending dependencies and decisions
 
-1. Launch scope. Which provider, operation and account type goes first is not recorded (`founder_connections.LAUNCH_SCOPE` is empty), so the queue shows a "No launch provider scope is recorded" item. Decision: James.
+1. Launch scope: recorded by James on 2026-10-09 as YouTube read-only (connection health, channel identity, refresh capability, analytics within granted scopes; publishing, content changes and scope changes excluded). It lives in `founder_connections.LAUNCH_SCOPE`. Update 2026-10-09 ~20:00Z: #149 merged to `consumer-saas` (`220d2de1`, production `dpl_3mcXs7Xwtc8gKsjjYJNpjrNkJF7U`), and this branch merged it cleanly with no shared-file overlap.
 2. Provider decision receipts. `RECORDED_DECISIONS` is empty, so every approval requirement reads "check required". Each receipt (status, decision time, provider receipt reference, approved scopes, verifier, last check) gets added by a reviewed PR. Owner: each provider app owner.
 3. Launcher session id mismatch. The receipt id `78aab31f…` differs from the observed job id `497b094e…`. Owner: launcher or Codex coordinator.
+4. Library WebKit 1440 `/preview` intermittent CI failure: owned by the Library lane (#144). See LIBRARY-CI-DIAGNOSIS.md.
+5. Release: James's latest instruction is NO merge or deploy. PR #150 stays a draft.

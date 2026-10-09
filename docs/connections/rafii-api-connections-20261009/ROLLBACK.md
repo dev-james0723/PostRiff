@@ -4,6 +4,7 @@
 
 - Adds a read-only Founder route, `GET /connections/attention`, plus a Settings panel that calls it. Neither writes anything: no tables, no actions, no provider calls, no credential reads.
 - Changes the hourly `connection_health` cron stage. It now overlays the YouTube vault facts (`refresh_supported`, refresh presence, access expiry, revoked; metadata only) before it classifies connections. Refreshable YouTube connections are no longer reported `expired` or `expiring`. `client_binding_missing` now maps to `blocked` instead of falling through to `ok`.
+- The vault overlay runs inside a savepoint. Any error there falls back to the previous classification, and the hourly refresh still commits.
 - No migration, flag, environment variable or provider configuration is involved.
 
 ## Rollback steps
