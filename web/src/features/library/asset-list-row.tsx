@@ -107,7 +107,9 @@ export function AssetListRow({
         >
           <button
             type='button'
-            onClick={onOpen}
+            // In selection mode a tap toggles the item (as in Photos); Open stays in the More menu.
+            onClick={selecting && onSelect ? () => onSelect(!selected, false) : onOpen}
+            aria-pressed={selecting && onSelect ? selected : undefined}
             data-library-open={asset.id}
             aria-label={`${kindWord} ${title}${video ? ', video thumbnail' : documentPreviewSuffix(asset)}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}${status && !status.startsWith('Used') ? `, ${status.toLowerCase()}` : ''}`}
             className={cn(
@@ -118,7 +120,12 @@ export function AssetListRow({
             <span
               data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined}
               data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined}
-              className={cn('bg-foreground/[0.035] relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]', compact ? 'size-9' : 'size-12')}
+              className={cn(
+                'bg-foreground/[0.035] relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)] transition-opacity duration-150 motion-reduce:transition-none',
+                compact ? 'size-9' : 'size-12',
+                // The checkbox takes this slot (Gmail-style) rather than covering the picture.
+                onSelect && (selected || selecting ? 'opacity-0' : 'pointer-fine:group-hover/asset:opacity-0 group-has-[:focus-visible]/asset:opacity-0')
+              )}
             >
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='row' loadPreview={nearView} />
@@ -136,6 +143,11 @@ export function AssetListRow({
                 {title}
               </span>
               {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{[cardMeta(asset), dims && assetKind === 'video' ? dims : null].filter(Boolean).join(' · ')}</span> : null}
+              {status ? (
+                <span className='sm:hidden'>
+                  <CardStatusLine status={status} publishing={publishing} />
+                </span>
+              ) : null}
             </span>
             <span className='hidden shrink-0 sm:block'>
               <CardStatusLine status={status} publishing={publishing} />
@@ -143,8 +155,8 @@ export function AssetListRow({
           </button>
           {assetKind === 'audio' || video ? <div className='px-3 pb-2'><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
           {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-3 pb-2.5'>{footer}</div> : null}
-          {/* Over the thumbnail's corner, so the row keeps no empty gutter for it. */}
-          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-1.5', compact ? 'top-1' : 'top-1.5')} /> : null}
+          {/* Centred on the thumbnail's slot, which fades out while the checkbox shows: no gutter, no overlap. */}
+          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={compact ? 'top-2 left-3.5' : 'top-4 left-5'} /> : null}
           <div className={cn('absolute right-2 z-20 transition-opacity duration-150', compact ? 'top-2' : 'top-4', 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 has-[[data-popup-open]]:opacity-100 pointer-coarse:opacity-100', selecting && 'opacity-100')}>
             <AssetMoreMenu title={title} actions={actions} />
           </div>

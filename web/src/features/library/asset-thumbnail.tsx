@@ -29,14 +29,15 @@ const extensionOf = (asset: Asset) => (asset.extension || asset.originalFilename
 export function documentPreviewSuffix(asset: Asset) {
   if (!DOCUMENT_FORMATS.has(extensionOf(asset))) return '';
   if (PREVIEW_READY.includes(asset.processing || '')) return ', first-page preview';
+  if (asset.processing === 'failed') return `, ${extensionOf(asset).toUpperCase()} file, no preview`;
   return `, ${extensionOf(asset).toUpperCase()} file, preview being prepared`;
 }
 
-function FileFallback({ asset, size, preparing = false }: { asset: Asset; size: AssetThumbnailSize; preparing?: boolean }) {
+function FileFallback({ asset, size, preparing = false, failed = false }: { asset: Asset; size: AssetThumbnailSize; preparing?: boolean; failed?: boolean }) {
   return (
     <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview={preparing ? 'preparing' : 'unavailable'} className={cn('bg-foreground/[0.035] relative flex flex-col items-center justify-center gap-1.5 overflow-hidden p-2', SIZE_CLASS[size])}>
       <Icons.page className={cn('text-muted-foreground size-6', size === 'row' && 'size-4')} aria-hidden />
-      <span className={cn('text-muted-foreground text-center text-xs', size === 'row' && 'sr-only')}>{preparing ? 'Preparing preview' : 'Preview unavailable'}</span>
+      <span className={cn('text-muted-foreground text-center text-xs', size === 'row' && 'sr-only')}>{preparing ? 'Preparing preview' : failed ? 'No preview' : 'Preview unavailable'}</span>
       {size !== 'row' ? <span className='text-muted-foreground text-[10px] font-medium tracking-wide'>{extensionOf(asset).toUpperCase()}</span> : null}
     </div>
   );
@@ -46,6 +47,8 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
   const { api, workspaceId } = useWorkspaceApi();
   const [imageFailed, setImageFailed] = useState(false);
   const ready = PREVIEW_READY.includes(asset.processing || '');
+  // A file the server could not read never gets a page preview: say so instead of "Preparing" forever.
+  const failed = asset.processing === 'failed';
   const query = useQuery({
     queryKey: ['library-source-page', workspaceId, asset.id, asset.hash],
     queryFn: async () => {
@@ -61,7 +64,7 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
   });
   if (!query.data || imageFailed) return (
     <div className='relative'>
-      <FileFallback asset={asset} size={size} preparing={!ready || query.isFetching || !enabled} />
+      <FileFallback asset={asset} size={size} failed={failed} preparing={!failed && (!ready || query.isFetching || !enabled)} />
       {enabled && ready && (query.isError || imageFailed) && size === 'detail' ? (
         <Button variant='outline' size='sm' className='absolute bottom-3 left-1/2 -translate-x-1/2' onClick={() => void query.refetch()}>Retry preview</Button>
       ) : null}

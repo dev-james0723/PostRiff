@@ -144,21 +144,30 @@ export function ToolbarSelect<V extends string>({
   icon?: ReactNode;
 }) {
   const active = defaultValue !== undefined && value !== defaultValue;
+  const current = options.find((option) => option.value === value)?.label ?? '';
   return (
-    <span className={cn('relative inline-flex shrink-0', className)}>
-      {icon ? <span className='text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 [&_svg]:size-4'>{icon}</span> : null}
+    // The chip is as wide as the current choice (a bare <select> takes its longest option's width); the native select
+    // lies invisibly on top, so keyboard, screen readers and the system picker on touch behave exactly as before.
+    <span
+      data-active={active || undefined}
+      className={cn(
+        'relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[var(--rafii-radius-control)] px-2.5 text-[13px] font-medium whitespace-nowrap pointer-coarse:h-11',
+        'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors duration-150',
+        'has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-3',
+        active && 'bg-foreground/[0.07] text-foreground',
+        className
+      )}
+    >
+      {icon ? <span aria-hidden className='[&_svg]:size-4'>{icon}</span> : null}
+      <span aria-hidden>{current}</span>
+      <Icons.chevronDown aria-hidden className='size-3.5 opacity-70' />
       <select
         id={id}
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value as V)}
         data-active={active || undefined}
-        className={cn(
-          'rafii-focus h-9 cursor-pointer appearance-none rounded-[var(--rafii-radius-control)] bg-transparent pr-8 text-[13px] font-medium outline-none pointer-coarse:h-11',
-          'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] transition-colors duration-150',
-          icon ? 'pl-8' : 'pl-3',
-          active && 'bg-foreground/[0.07] text-foreground'
-        )}
+        className='absolute inset-0 size-full cursor-pointer appearance-none opacity-0 outline-none'
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -166,7 +175,6 @@ export function ToolbarSelect<V extends string>({
           </option>
         ))}
       </select>
-      <Icons.chevronDown aria-hidden className='text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2' />
     </span>
   );
 }

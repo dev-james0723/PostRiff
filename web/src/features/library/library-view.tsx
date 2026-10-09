@@ -367,6 +367,9 @@ function LibraryPage() {
   );
   const orderedIds = intelligent ? hitItems.map((entry) => entry.asset.id) : shown.map((asset) => asset.id);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
+  // Explicit selection mode (the Select control); selecting anything also turns it on.
+  const [selectMode, setSelectMode] = useState(false);
+  const selectionMode = selectMode || selection.length > 0;
   const lastToggled = useRef<string | null>(null);
 
   const setSelection = useCallback(
@@ -814,9 +817,10 @@ function LibraryPage() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest('input[type="search"], input[type="text"], textarea')) return;
-      if (event.key === 'Escape' && selection.length) {
+      if (event.key === 'Escape' && (selection.length || selectMode)) {
         event.preventDefault();
         setSelection([]);
+        setSelectMode(false);
         announce('Selection cleared.');
       } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && orderedIds.length) {
         event.preventDefault();
@@ -825,7 +829,7 @@ function LibraryPage() {
     };
     node.addEventListener('keydown', onKey);
     return () => node.removeEventListener('keydown', onKey);
-  }, [selection, orderedIds, setSelection, announce]);
+  }, [selection, selectMode, orderedIds, setSelection, announce]);
 
   // Settled result counts are announced once per query, never while results are still arriving.
   const settling = intelligent ? search.loading : library.normalized.isFetching;
@@ -896,7 +900,7 @@ function LibraryPage() {
     onStorageMissing: markStorageMissing,
     onPreviewLoaded: markPreviewLoaded,
     selected: selectedSet.has(asset.id),
-    selecting: selection.length > 0,
+    selecting: selectionMode,
     onSelect: (on: boolean, extend: boolean) => toggle(asset.id, on, extend),
     density,
     onExclude: activeSmart && canEdit ? () => void batch.execute('collection-exclude', [asset.id], { collectionId: url.collection, collectionName: activeCollection?.name }) : undefined,
@@ -1161,7 +1165,28 @@ function LibraryPage() {
               searching={intelligent}
               onClear={() => update({ use: 'all', kind: 'all', status: 'all', tag: '' })}
               summary={statusLine}
-              view={<LibraryViewSwitch mode={url.mode} onMode={(value) => update({ mode: value })} density={density} onDensity={(value) => update({ density: value })} />}
+              view={
+                <>
+                  {orderedIds.length ? (
+                    // Touch screens select like Photos: Select shows every checkbox and a tap then toggles; Done clears.
+                    <Control
+                      tone='ghost'
+                      size='sm'
+                      active={selectionMode}
+                      aria-pressed={selectionMode}
+                      onClick={() => {
+                        if (selectionMode) {
+                          setSelection([]);
+                          setSelectMode(false);
+                        } else setSelectMode(true);
+                      }}
+                    >
+                      {selectionMode ? 'Done' : 'Select'}
+                    </Control>
+                  ) : null}
+                  <LibraryViewSwitch mode={url.mode} onMode={(value) => update({ mode: value })} density={density} onDensity={(value) => update({ density: value })} />
+                </>
+              }
             />
           </div>
 
@@ -1311,7 +1336,10 @@ function LibraryPage() {
               onRetry={batch.retry}
               onDismissRun={batch.dismiss}
               onSelectAll={() => setSelection([...new Set([...selection, ...orderedIds])])}
-              onClear={() => setSelection([])}
+              onClear={() => {
+                setSelection([]);
+                setSelectMode(false);
+              }}
               canSelectMore={orderedIds.some((id) => !selectedSet.has(id))}
               searchWithin={scopeKind === 'selection'}
               onSearchWithin={(on) => update({ scope: on ? 'selection' : url.collection ? 'collection' : 'all' })}

@@ -283,6 +283,11 @@ async function openLibrary(page, query = '') {
           await page.getByRole('searchbox', { name: 'Search Library' }).fill('Brahms');
           await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'Brahms', null, { timeout: 10000 });
           const listed = page.getByRole('checkbox', { name: /^Select / });
+          // Touch screens show checkboxes only in selection mode: enter it the way a person does, with Select.
+          if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
+            await page.getByRole('button', { name: 'Select', exact: true }).click();
+            check(`${label}: Select turns on selection mode`, (await page.getByRole('button', { name: 'Done', exact: true }).getAttribute('aria-pressed')) === 'true');
+          }
           await listed.nth(0).check();
           await listed.nth(1).check();
           await page.waitForFunction(() => (new URL(location.href).searchParams.get('sel') || '').split(',').filter(Boolean).length === 2, null, { timeout: 10000 });

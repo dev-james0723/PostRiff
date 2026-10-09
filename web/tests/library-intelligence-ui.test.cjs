@@ -141,7 +141,9 @@ test('test_honest_document_preview: text covers say extracted text; only a real 
   const label = thumbnail.indexOf('· PAGE 1');
   assert.ok(label > thumbnail.indexOf("data-thumbnail-preview='first-page-raster'") && label < thumbnail.indexOf('function AudioCover'), 'the page label sits on the real raster');
   assert.match(thumbnail, /api\.libraryPreviewUrl\(workspaceId, asset\.id\)/);
-  assert.match(thumbnail, /'Preparing preview' : 'Preview unavailable'/);
+  assert.match(thumbnail, /'Preparing preview' : failed \? 'No preview' : 'Preview unavailable'/);
+  // A file the server could not read is never shown as still preparing.
+  assert.match(thumbnail, /preparing=\{!failed && /);
   // Card and row names say what the cover is: a first page only once a raster can exist.
   assert.match(thumbnail, /if \(PREVIEW_READY\.includes\(asset\.processing \|\| ''\)\) return ', first-page preview';/);
   assert.match(thumbnail, /preview being prepared/);

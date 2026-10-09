@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
@@ -112,12 +112,15 @@ export function assetTitle(asset: LibraryAsset) {
  * needing attention, then a publishing post, then real use. "Unused" and "Stored privately" are the defaults (every item is
  * private; usage is a filter) and are not shown; the details keep the processing state.
  */
+/** A document the server could not read: the file is stored, its text and page preview are not available yet. */
+export const FAILED_STATUS = 'Couldn’t read this file';
+
 export function cardStatus(asset: LibraryAsset, count = 0, publishing = false): string | null {
   const kind = kindOf(asset);
   const processing = asset.processing ?? '';
   if (kind !== 'image' && kind !== 'video') {
     if (['pending', 'queued', 'processing'].includes(processing)) return 'Processing';
-    if (processing === 'failed') return 'Needs attention';
+    if (processing === 'failed') return FAILED_STATUS;
   }
   if (publishing) return 'Publishing';
   if (count > 0) return `Used in ${count} ${count === 1 ? 'post' : 'posts'}`;
@@ -180,8 +183,21 @@ interface CardAction {
 /** The item's actions, in one order for the context menu and the More menu: common first, Delete last and apart. */
 export function useCardActions({ asset, canEdit, canApprove, deleting, publishing, onOpen, onDelete, onExclude, selected = false, onSelect }: AssetCardActionProps): CardAction[] {
   const router = useRouter();
+  const client = useQueryClient();
+  const { api, workspaceId } = useWorkspaceApi();
   const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
+  async function retry() {
+    try {
+      await api.retryLibraryFile(workspaceId, asset.id);
+      toast.success('Reading the file again');
+    } catch (error) {
+      toast.error('Couldn’t retry this file', { description: error instanceof Error ? error.message : undefined });
+    } finally {
+      await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
+    }
+  }
   const actions: CardAction[] = [{ key: 'open', label: 'Open', icon: <Icons.eye aria-hidden />, onSelect: onOpen }];
+  if (canEdit && !mediaAsset && asset.processing === 'failed') actions.push({ key: 'retry', label: 'Try reading again', icon: <Icons.refresh aria-hidden />, onSelect: () => void retry() });
   if (onSelect) actions.push({ key: 'select', label: selected ? 'Deselect' : 'Select', icon: <Icons.check aria-hidden />, onSelect: () => onSelect(!selected, false) });
   if (canApprove && mediaAsset) actions.push({ key: 'post', label: 'Use in a post', icon: <Icons.send aria-hidden />, onSelect: () => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`) });
   else if (canEdit) actions.push({ key: 'ideas', label: 'Open Ideas', icon: <Icons.sparkles aria-hidden />, onSelect: () => router.push('/app/ideas') });
@@ -232,7 +248,7 @@ export function AssetMoreMenu({ title, actions, className }: { title: string; ac
 /** The quiet single status line under a title. */
 export function CardStatusLine({ status, publishing }: { status: string | null; publishing: boolean }) {
   if (!status) return null;
-  const attention = status === 'Needs attention';
+  const attention = status === FAILED_STATUS;
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1 text-xs', attention ? 'text-destructive' : 'text-muted-foreground')}>
       {publishing || status === 'Processing' ? <Icons.spinner aria-hidden className='size-3 animate-spin motion-reduce:animate-none' /> : attention ? <Icons.warning aria-hidden className='size-3' /> : status.startsWith('Used') ? <Icons.check aria-hidden className='size-3' /> : null}
@@ -314,7 +330,9 @@ export function AssetCard({
           {inlineMedia ? <GalleryMediaPreview key={asset.id} asset={asset} video={assetKind === 'video'} posterUrl={image.data} enabled={nearView} /> : null}
           <button
             type='button'
-            onClick={onOpen}
+            // In selection mode a tap toggles the item (as in Photos); Open stays in the More menu.
+            onClick={selecting && onSelect ? () => onSelect(!selected, false) : onOpen}
+            aria-pressed={selecting && onSelect ? selected : undefined}
             aria-label={label}
             data-library-open={asset.id}
             className='focus-visible:ring-ring/50 flex min-w-0 flex-col text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'

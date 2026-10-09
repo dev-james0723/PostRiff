@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils';
 
 /**
  * The selection checkbox on a card or row (UI spec §3, §5). A native checkbox in a 44 px target: Space toggles it,
- * it appears on keyboard focus as well as hover, it is always visible on touch screens and once anything is selected.
- * Selecting is never a drag or a long press.
+ * it appears on keyboard focus and on hover, and on every item once selection mode is on (Select, or anything
+ * selected). Selecting is never a drag or a long press.
  */
 export function SelectToggle({
   title,
@@ -25,8 +25,12 @@ export function SelectToggle({
     <label
       data-select-toggle=''
       className={cn(
-        'bg-background/90 ring-foreground/10 absolute z-20 grid size-8 cursor-pointer place-items-center rounded-[10px] shadow-xs ring-1 transition-opacity duration-150 focus-within:opacity-100 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground motion-reduce:transition-none after:absolute after:-inset-1.5 after:content-[""]',
-        checked || visible ? 'opacity-100' : 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 pointer-coarse:opacity-100',
+        'bg-background/90 ring-foreground/10 absolute z-20 grid size-8 cursor-pointer place-items-center rounded-[10px] shadow-xs ring-1 transition-opacity duration-150 has-[:focus-visible]:opacity-100 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground motion-reduce:transition-none after:absolute after:-inset-1.5 after:content-[""]',
+        // Touch screens show checkboxes only in selection mode (Select, or once anything is selected); until then a
+        // tap on the corner opens the item instead of hitting an invisible box. Mouse: on hover. Keyboard: on focus.
+        checked || visible
+          ? 'opacity-100'
+          : 'opacity-0 pointer-coarse:pointer-events-none pointer-fine:group-hover/asset:opacity-100 group-has-[:focus-visible]/asset:opacity-100',
         className
       )}
     >

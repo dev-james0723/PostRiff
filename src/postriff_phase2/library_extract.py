@@ -87,18 +87,26 @@ def extract_text(raw,ext):
   except csv.Error:raise AlphaError("This CSV file is invalid.") from None
   return "ready",normalize("\n".join(rows))
  if ext=="pdf":
+  # Real-world PDFs (exported slides, scanned scores) often carry small structural faults that a strict parser rejects
+  # outright. Read leniently, still failing closed on files that are not PDFs, and lose only the text of a page that
+  # cannot be decoded: an image-only page or an odd font must not make the whole file unusable.
   try:
    from pypdf import PdfReader
-   r=PdfReader(io.BytesIO(raw),strict=True)
+   r=PdfReader(io.BytesIO(raw),strict=False)
    if r.is_encrypted:raise AlphaError("Password-protected PDFs are not supported.")
-   if len(r.pages)>300:raise AlphaError("This PDF has too many pages.")
-   out=[];size=0
-   for page in r.pages:
-    x=page.extract_text() or "";out.append(x);size+=len(x)
-    if size>=MAX_TEXT:break
-   return "ready",normalize("\n\n".join(out))
+   pages=r.pages
+   if len(pages)>300:raise AlphaError("This PDF has too many pages.")
   except AlphaError:raise
+  except MemoryError:raise
   except Exception:raise AlphaError("This PDF could not be read safely.") from None
+  out=[];size=0
+  for page in pages:
+   try:x=page.extract_text() or ""
+   except MemoryError:raise
+   except Exception:x=""
+   out.append(x);size+=len(x)
+   if size>=MAX_TEXT:break
+  return "ready",normalize("\n\n".join(out))
  return "ready",_office(raw,ext)
 
 AUDIO_MIMES = {
@@ -141,22 +149,43 @@ def extract_isolated(raw, ext):
     env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
            'PYTHONPATH': os.pathsep.join(dict.fromkeys(paths)), 'PYTHONDONTWRITEBYTECODE': '1'}
     try:
-        result = subprocess.run([sys.executable,'-m','postriff_phase2.library_extract',ext],input=raw,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20,env=env,check=False)
+        result = subprocess.run([sys.executable,'-m','postriff_phase2.library_extract',ext],input=raw,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=_budget(ext)[2],env=env,check=False)
         if result.returncode != 0 or len(result.stdout)>12*MAX_TEXT:
+            _failed(ext, 'exit_%d' % result.returncode)
             raise AlphaError('This document exceeded safe extraction limits or could not be read.',422)
         data=json.loads(result.stdout)
         if data.get('error'):
+            _failed(ext, data.get('errorClass') or 'AlphaError')
             raise AlphaError(data['error'],422)
         return data['status'],data['text'][:MAX_TEXT]
-    except (subprocess.TimeoutExpired,ValueError,KeyError):
+    except subprocess.TimeoutExpired:
+        _failed(ext, 'timeout')
         raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+    except (ValueError,KeyError):
+        _failed(ext, 'malformed_output')
+        raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+
+
+def _budget(ext):
+    """(CPU seconds, address space MiB, wall seconds) for one isolated extraction. Multi-page PDFs need more room than
+    the small XML formats; legacy Office conversion has its own larger boundary."""
+    if ext in LEGACY:
+        return 40, 1536, 60
+    if ext == 'pdf':
+        return 20, 1024, 30
+    return 10, 384, 20
+
+
+def _failed(ext, error_class):
+    """Content-free diagnostics: the format and the failure class, never file names or text."""
+    print(json.dumps({'event': 'library.extract_failed', 'ext': str(ext)[:12], 'errorClass': str(error_class)[:60]}), flush=True)
 
 
 if __name__ == '__main__':
     import sys
     try:
         import resource
-        budget = (40,1536) if sys.argv[1] in LEGACY else (10,384)
+        budget = _budget(sys.argv[1])
         resource.setrlimit(resource.RLIMIT_CPU,(budget[0],budget[0]))
         try:
             resource.setrlimit(resource.RLIMIT_AS,(budget[1]*1024*1024,budget[1]*1024*1024))
@@ -166,6 +195,8 @@ if __name__ == '__main__':
         status,text=extract_text(raw,sys.argv[1])
         print(json.dumps({'status':status,'text':text}))
     except AlphaError as e:
-        print(json.dumps({'error':str(e)[:300]}))
-    except Exception:
-        print(json.dumps({'error':'This document could not be read safely.'}))
+        print(json.dumps({'error':str(e)[:300],'errorClass':'AlphaError'}))
+    except MemoryError:
+        print(json.dumps({'error':'This document needs more memory than safe extraction allows.','errorClass':'MemoryError'}))
+    except Exception as e:
+        print(json.dumps({'error':'This document could not be read safely.','errorClass':type(e).__name__[:60]}))

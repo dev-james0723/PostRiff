@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, type ReactNode } from 'react';
-import { IconArrowsSort, IconLayoutGrid, IconLayoutList } from '@tabler/icons-react';
+import { IconArrowsSort, IconBaselineDensityMedium, IconBaselineDensitySmall, IconLayoutGrid, IconLayoutList } from '@tabler/icons-react';
 import { Icons } from '@/components/icons';
 import { SegmentedControl } from '@/components/rafii';
 import type { LibraryDensity, LibraryKindParam, LibrarySortParam, LibraryStatusParam, LibraryUsageParam } from '@/lib/library/url-state';
@@ -172,7 +172,7 @@ export function LibraryFilters({
   return (
     <div role='toolbar' aria-label='Filter and view' data-tour='library-filter' className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1'>
       {/* Phones: one row that scrolls inside itself (never the page); wider screens: it wraps. */}
-      <div className='scrollbar-hide -mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0'>
+      <div className='scrollbar-hide -mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 max-sm:pr-6 max-sm:[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.5rem),transparent)] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0'>
         <ToolbarSelect
           id='library-kind'
           label='Type'
@@ -248,8 +248,8 @@ export function LibraryViewSwitch({ mode, onMode, density, onDensity }: { mode: 
         onChange={onDensity}
         widths='content'
         options={[
-          { value: 'comfortable', ariaLabel: 'Comfortable', title: 'Comfortable', label: <Icons.galleryVerticalEnd className='size-4' aria-hidden /> },
-          { value: 'compact', ariaLabel: 'Compact', title: 'Compact', label: <Icons.columns className='size-4' aria-hidden /> }
+          { value: 'comfortable', ariaLabel: 'Comfortable', title: 'Comfortable spacing', label: <IconBaselineDensityMedium className='size-4' aria-hidden /> },
+          { value: 'compact', ariaLabel: 'Compact', title: 'Compact spacing', label: <IconBaselineDensitySmall className='size-4' aria-hidden /> }
         ]}
       />
     </div>
