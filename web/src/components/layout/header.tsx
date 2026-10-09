@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { NotificationBell } from './notification-bell';
+import { WorkspaceLivePill } from '@/features/notifications/live-pill';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Icons } from '@/components/icons';
 import { LiveIsland } from '@/components/layout/live-island';
@@ -12,7 +13,6 @@ import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { HelpMenu } from '@/features/onboarding/help-menu';
-import { SiteAgentLauncher } from '@/features/site-agent/launcher';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +50,7 @@ export default function Header() {
           <SearchInput />
         </div>
         <SearchIconButton />
-        <SiteAgentLauncher />
+        <WorkspaceLivePill />
         <NotificationBell />
         <HelpMenu />
         <div className='hidden sm:block'><ThemeModeToggle /></div>

@@ -6,7 +6,7 @@
  * Mutations invalidate the narrowest keys they change and never claim success the server did not verify.
  */
 import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { createCoworkerApi, isFeatureDisabled, shouldRetry } from './api';
@@ -79,12 +79,34 @@ export function useNotificationCenter() {
   return useQuery({ queryKey: coworkerKeys.notifications(w), queryFn: () => api.notifications(w), enabled: enabled && on, refetchInterval: POLL_MS, refetchIntervalInBackground: false, ...base });
 }
 
+/** The existing centre endpoint's timestamp cursor supplies durable history without a new store. */
+export function useNotificationHistory() {
+  const { api, w, enabled } = useCoworkerApi();
+  const on = useAnyFlagOn('RAFII_NOTIFICATIONS_V2_ENABLED');
+  return useInfiniteQuery({
+    queryKey: ['coworker', w, 'notification-history'],
+    queryFn: ({ pageParam }) => api.notifications(w, pageParam ? { ...pageParam, history: true } : { history: true }),
+    initialPageParam: null as { before: number; beforeId: string } | null,
+    getNextPageParam: (last) => {
+      const tail = last.items.at(-1);
+      return last.items.length === 50 && tail ? { before: tail.createdAt, beforeId: tail.id } : undefined;
+    },
+    enabled: enabled && on,
+    ...base
+  });
+}
+
 export function useMarkNotification() {
   const { api, w } = useCoworkerApi();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: { id: string; action: 'read' | 'acted' | 'dismissed' }) => api.markNotification(w, input.id, input.action),
-    onSettled: () => client.invalidateQueries({ queryKey: coworkerKeys.notifications(w) })
+    onSettled: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: coworkerKeys.notifications(w) }),
+        client.invalidateQueries({ queryKey: ['coworker', w, 'notification-history'] })
+      ]);
+    }
   });
 }
 

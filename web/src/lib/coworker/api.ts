@@ -97,10 +97,12 @@ export function createCoworkerApi(getToken: TokenSource) {
     attention: (w: string) => get<AttentionResponse>(`${co(w)}/attention`),
 
     /* notification centre */
-    notifications: (w: string, options: { unread?: boolean; before?: number } = {}) => {
+    notifications: (w: string, options: { unread?: boolean; before?: number; beforeId?: string; history?: boolean } = {}) => {
       const query = new URLSearchParams();
       if (options.unread) query.set('unread', '1');
       if (options.before) query.set('before', String(options.before));
+      if (options.beforeId) query.set('before_id', options.beforeId);
+      if (options.history) query.set('history', '1');
       const suffix = query.toString();
       return get<NotificationCenter>(`${ws(w)}/notifications${suffix ? `?${suffix}` : ''}`);
     },

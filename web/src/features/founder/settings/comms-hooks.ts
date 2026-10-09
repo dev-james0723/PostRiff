@@ -45,11 +45,12 @@ export function useSaveNoticePreferences() {
   });
 }
 
-export function useNotices() {
+export function useNotices(options: { enabled?: boolean; staleTime?: number } = {}) {
   const scope = useFounderScope();
   return useQuery({
     queryKey: scope.key('notices'),
-    enabled: scope.ready,
+    enabled: scope.ready && options.enabled !== false,
+    staleTime: options.staleTime,
     queryFn: async ({ signal }) => (await founderFetch<Envelope<NoticesData>>(`/notifications?mode=${scope.mode}&limit=20`, { signal })).data
   });
 }

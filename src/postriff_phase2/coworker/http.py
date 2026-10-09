@@ -105,7 +105,9 @@ def handle(app, environ, start_response, service, token, method, parts):
         if not rest and method == "GET":
             before = _query(environ, "before")
             return json_(200, notifications.center(workspace_id, token, before=float(before) if before and before.replace(".", "", 1).isdigit() else None,
-                                                   unread_only=_query(environ, "unread") == "1"))
+                                                   before_id=_query(environ, "before_id"),
+                                                   unread_only=_query(environ, "unread") == "1",
+                                                   include_dismissed=_query(environ, "history") == "1"))
         if rest == ["acknowledge"] and method=="POST":
             return json_(200,notifications.acknowledge(workspace_id,token,body().get("deliveryId")))
         if rest == ["read-all"] and method == "POST":

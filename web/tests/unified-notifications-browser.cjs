@@ -5,7 +5,9 @@ const {randomUUID}=require('node:crypto'),{execFileSync}=require('node:child_pro
 const base=process.env.RAFII_WEB_URL || 'http://localhost:3293';
 if (!['localhost','127.0.0.1'].includes(new URL(base).hostname)) throw Error('Loopback harness only');
 const root=path.resolve(__dirname,'../..');
-const out=path.join(root,'docs/design/rafii-live-agent/evidence/notifications');
+const out=process.env.RAFII_NOTIFICATION_EVIDENCE_DIR
+ ? path.resolve(process.env.RAFII_NOTIFICATION_EVIDENCE_DIR)
+ : path.join(root,'docs/design/rafii-live-agent/evidence/notifications');
 fs.mkdirSync(out,{recursive:true});
 (async()=>{
  const results=[];

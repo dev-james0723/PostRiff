@@ -53,7 +53,7 @@ export interface AttentionResponse {
 
 /* ---------- notification centre + preferences + push ---------- */
 
-export type DeliveryStatus = 'delivered' | 'read' | 'acted';
+export type DeliveryStatus = 'delivered' | 'read' | 'acted' | 'dismissed';
 
 export interface ServerNotification {
   id: string;
@@ -64,6 +64,7 @@ export interface ServerNotification {
   severity: string;
   entity: { type: string | null; id: string | null };
   payload: { title?: string; platform?: string; reason?: string; href?: string; count?: number; weekOf?: string; why?: string; [key: string]: unknown };
+  dedupeKey?: string;
   workspaceId?: string | null;
   readAt: number | null;
   actedAt: number | null;

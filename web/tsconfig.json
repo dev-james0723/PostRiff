@@ -40,7 +40,9 @@
     ".next-alt/types/**/*.ts",
     ".next-alt/dev/types/**/*.ts",
     ".next-codex-wp04a/types/**/*.ts",
-    ".next-codex-wp04a/dev/types/**/*.ts"
+    ".next-codex-wp04a/dev/types/**/*.ts",
+    ".next-notification-fixture/types/**/*.ts",
+    ".next-notification-fixture/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

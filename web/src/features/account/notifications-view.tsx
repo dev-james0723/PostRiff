@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { NotificationSettings } from '@/features/coworker/notifications/notification-settings';
+import { NotificationActivityFeed } from '@/features/notifications/activity-feed';
 import { useCoworkerFlag } from '@/lib/coworker/hooks';
 import { SettingsSection } from './settings-section';
 import { PhoneSettings } from '@/features/rafii-phone/phone-settings';
@@ -86,6 +87,7 @@ export function NotificationsView() {
       width='reading'
     >
       <div className='flex flex-col gap-8'>
+        <NotificationActivityFeed />
         <SecurityAlerts />
 
         <SettingsSection

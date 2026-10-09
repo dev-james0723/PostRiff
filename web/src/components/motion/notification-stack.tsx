@@ -23,6 +23,8 @@ export type NotificationStackItem = {
   title: ReactNode;
   description?: ReactNode;
   trailing?: ReactNode;
+  /** Interactive content appears only after expansion, never inside the collapsed trigger. */
+  expandedContent?: ReactNode;
 };
 
 export type NotificationStackClassNames = {
@@ -48,6 +50,7 @@ export interface NotificationStackProps {
   emptyLabel?: string;
   className?: string;
   classNames?: NotificationStackClassNames;
+  interactive?: boolean;
 }
 
 const STACK_PEEK = 8;
@@ -105,7 +108,7 @@ function NotificationCardContent({
   );
 }
 
-export function NotificationStack({
+function LegacyNotificationStack({
   items,
   expanded,
   defaultExpanded = false,
@@ -334,4 +337,113 @@ export function NotificationStack({
       </span>
     </motion.button>
   );
+}
+
+/**
+ * The bell uses the same physical stack with actual controls inside expanded cards. A
+ * button cannot contain those controls, so this variant keeps the stack trigger separate.
+ * Home's established one-button stack remains unchanged through LegacyNotificationStack.
+ */
+function InteractiveNotificationStack({
+  items,
+  expanded,
+  defaultExpanded = false,
+  onExpandedChange,
+  onViewAll,
+  maxVisible = 3,
+  collapsedLabel = 'Notifications',
+  expandedLabel = 'Collapse notifications',
+  emptyLabel = 'All caught up',
+  className,
+  classNames
+}: NotificationStackProps) {
+  const reduce = useReducedMotion();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [isExpanded, setIsExpanded] = useControllableExpanded({ expanded, defaultExpanded, onExpandedChange });
+  const [tapExpanded, setTapExpanded] = useState(false);
+  const collapse = useCallback(() => {
+    setTapExpanded(false);
+    setIsExpanded(false);
+  }, [setIsExpanded]);
+  useDismiss(tapExpanded && isExpanded, collapse, rootRef);
+
+  const visible = items.slice(0, Math.max(1, maxVisible));
+  const count = items.length;
+  const label = count === 1 ? '1 notification' : count + ' notifications';
+  const transition: Transition = reduce ? { duration: 0 } : SPRING_LAYOUT;
+
+  return (
+    <div
+      ref={rootRef}
+      role='group'
+      className={cn('relative w-full min-w-0 max-w-[23rem]', className)}
+    >
+      <button
+        ref={triggerRef}
+        type='button'
+        aria-expanded={isExpanded}
+        aria-label={label + (isExpanded ? '. Collapse notification stack.' : '. Expand notification stack.')}
+        onFocus={(event) => { if (event.target.matches(':focus-visible') && visible.length) setIsExpanded(true); }}
+        onBlur={(event) => { if (!rootRef.current?.contains(event.relatedTarget)) collapse(); }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          collapse();
+          triggerRef.current?.focus({ preventScroll: true });
+        }}
+        onClick={(event) => {
+          if (!visible.length) return;
+          if (event.detail === 0) {
+            setIsExpanded(true);
+            return;
+          }
+          if (event.detail > 0) setTapExpanded(!isExpanded);
+          setIsExpanded(!isExpanded);
+        }}
+        className='rafii-focus mb-2 flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-sm font-medium text-foreground hover:bg-accent/50'
+      >
+        <span>{collapsedLabel}</span>
+        <span className={cn('rounded-full border border-border px-2 py-0.5 text-xs tabular-nums', classNames?.count)}>{count}</span>
+      </button>
+      {visible.length === 0 ? (
+        <div className='rounded-2xl border border-border/70 bg-muted/50 px-4 py-5 text-sm text-muted-foreground'>{emptyLabel}</div>
+      ) : (
+        <div className={cn('relative grid min-w-0 gap-1.5', !isExpanded && 'mb-4', classNames?.stack)}>
+          {visible.map((item, index) => (
+            <motion.div
+              key={item.id}
+              layout='position'
+              initial={false}
+              animate={{
+                y: isExpanded ? 0 : index * STACK_PEEK,
+                scale: isExpanded ? 1 : 1 - index * 0.025,
+                opacity: isExpanded ? 1 : 1 - index * 0.08
+              }}
+              transition={transition}
+              className={cn('min-w-0 rounded-2xl', !isExpanded && 'border border-border/70 bg-background shadow-[0_5px_18px_rgb(0_0_0/0.08)]', classNames?.card)}
+              style={{ gridColumn: 1, gridRow: isExpanded ? index + 1 : 1, zIndex: visible.length - index }}
+            >
+              {isExpanded ? (item.expandedContent ?? <NotificationCardContent item={item} classNames={classNames} />) : (
+                <span aria-hidden='true' className='block min-h-[76px] overflow-hidden px-4'>
+                  {index === 0 ? <NotificationCardContent item={item} classNames={classNames} /> : null}
+                </span>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      )}
+      {isExpanded && onViewAll && (
+        <button type='button' onClick={onViewAll} className='rafii-focus mt-2 min-h-11 rounded-lg px-2 text-xs font-medium text-foreground underline underline-offset-4'>
+          View all activity
+        </button>
+      )}
+      {isExpanded && count > visible.length && <span className='sr-only'>{count - visible.length} more notifications in activity</span>}
+      <span className='sr-only'>{isExpanded ? expandedLabel : label}</span>
+    </div>
+  );
+}
+
+export function NotificationStack(props: NotificationStackProps) {
+  return props.interactive ? <InteractiveNotificationStack {...props} /> : <LegacyNotificationStack {...props} />;
 }

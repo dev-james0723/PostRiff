@@ -1,0 +1,33 @@
+
+> postriff-web@0.1.0 lint
+> oxlint src
+
+
+  ! eslint(no-new): Do not use 'new' for side effects.
+    ,-[src/features/founder/settings/contact-policy.ts:33:9]
+ 32 |   if (draft.budgetMode === 'limited' && (!draft.budgetUsd.trim() || !Number.isFinite(budget) || budget < 0 || budget > 10_000)) return { error: 'Daily call budget must be from $0 to $10,000, or Unlimited.' };
+ 33 |   try { new Intl.DateTimeFormat('en', { timeZone: draft.timeZone.trim() }); }
+    :         ^^^^^^^^^^^^^^^^^^^^^^^
+ 34 |   catch { return { error: 'A valid IANA time zone is required.' }; }
+    `----
+  help: Assign the result of 'new' to a variable or compare it to a reference.
+
+  ! unicorn(consistent-function-scoping): Function `nearestNeedle` does not capture any variables from its parent scope
+    ,-[src/features/context-navigation/thread-navigator.tsx:20:17]
+ 19 |
+ 20 | export function ThreadNavigator({ items, renderedIds, onJump }: Props) {
+    :                 ^^^^^^^|^^^^^^^
+    :                        `-- Outer scope where this function is defined
+ 21 |   const [active, setActive] = useState('');
+    `----
+    ,-[src/features/context-navigation/thread-navigator.tsx:70:9]
+ 69 |
+ 70 |   const nearestNeedle = (root: HTMLElement, clientY: number) => {
+    :         ^^^^^^|^^^^^^
+    :               `-- This function does not use any variables from the parent function
+ 71 |     const nodes = Array.from(root.querySelectorAll<HTMLElement>('[data-needle-index]'));
+    `----
+  help: Move `nearestNeedle` to the outer scope to avoid recreating it on every call.
+
+Found 2 warnings and 0 errors.
+Finished in 646ms on 1035 files with 213 rules using 12 threads.

@@ -1,0 +1,11 @@
+psql:/var/folders/84/fc_nvsy538d_fghjw0k_f7gr0000gn/T/rafii-pg-mirror-bjb5kw8z/repo/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+RUN tests/phase2/postgres_unified_notifications.py
+PASS defaults off, verified/calling alone never grant SMS, explicit consent, 10/30-minute durable timing and dedupe
+PASS strong cross-channel acknowledgement, cross-user isolation, read-all and domain resolution cancel escalation
+PASS no-push immediate Important Texts, expiry, membership/permission, consent, quiet/mute and serialized hourly/daily limits
+PASS fake acceptance, uncertain response/crash never resend, known rejection retry and provider cap
+PASS signed accepted/delivered/failed callbacks, numeric segments/cost, replay, STOP before/after consent disables SMS only, START never grants consent
+PASS binding invalidation, no plaintext in rows/receipts, forced RLS/server-only denial and account deletion with sending off
+PASS forward migration re-application
+{"status": "PASS", "execution": "disposable PostgreSQL / fake and injected provider transport", "realSMS": 0}
+{"execution": "local disposable PostgreSQL on port 55738; mirrored repository; synthetic external services", "results": [{"script": "tests/phase2/postgres_unified_notifications.py", "exitCode": 0, "seconds": 1.66}]}

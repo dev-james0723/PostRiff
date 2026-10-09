@@ -1,0 +1,1074 @@
+ok   cron tick runs the founder stage
+ok   cron founder stage has no unavailable stage
+ok   signed-out founder routes go to sign-in
+ok   sign-in page renders
+ok   signed-out session is 401
+ok   a consumer bearer cannot use Control
+ok   non-founder AAL2 exchange is refused
+ok   unknown identity exchange is refused
+ok   1440px founder exchange
+ok   1440px session cookie is host-only, HttpOnly, SameSite=Strict
+ok   1440px live overview: heading
+ok   1440px live overview: no fallback state
+ok   1440px live overview: never renders NaN or undefined
+ok   1440px live overview: no horizontal scroll
+ok   1440px live overview: axe without critical/serious violations
+ok   1440px live overview: no failed control request
+ok   1440px live overview: no page error
+ok   1440px live overview: no console error
+ok   1440px live overview: no failed request
+ok   1440px live customers: heading
+ok   1440px live customers: no fallback state
+ok   1440px live customers: never renders NaN or undefined
+ok   1440px live customers: no horizontal scroll
+ok   1440px live customers: axe without critical/serious violations
+ok   1440px live customers: no failed control request
+ok   1440px live customers: no page error
+ok   1440px live customers: no console error
+ok   1440px live customers: no failed request
+ok   1440px live revenue: heading
+ok   1440px live revenue: no fallback state
+ok   1440px live revenue: never renders NaN or undefined
+ok   1440px live revenue: no horizontal scroll
+ok   1440px live revenue: axe without critical/serious violations
+ok   1440px live revenue: no failed control request
+ok   1440px live revenue: no page error
+ok   1440px live revenue: no console error
+ok   1440px live revenue: no failed request
+ok   1440px live product: heading
+ok   1440px live product: no fallback state
+ok   1440px live product: never renders NaN or undefined
+ok   1440px live product: no horizontal scroll
+ok   1440px live product: axe without critical/serious violations
+ok   1440px live product: no failed control request
+ok   1440px live product: no page error
+ok   1440px live product: no console error
+ok   1440px live product: no failed request
+ok   1440px live ai-cost: heading
+ok   1440px live ai-cost: no fallback state
+ok   1440px live ai-cost: never renders NaN or undefined
+ok   1440px live ai-cost: no horizontal scroll
+ok   1440px live ai-cost: axe without critical/serious violations
+ok   1440px live ai-cost: no failed control request
+ok   1440px live ai-cost: no page error
+ok   1440px live ai-cost: no console error
+ok   1440px live ai-cost: no failed request
+ok   1440px live operations: heading
+ok   1440px live operations: no fallback state
+ok   1440px live operations: never renders NaN or undefined
+ok   1440px live operations: no horizontal scroll
+ok   1440px live operations: axe without critical/serious violations
+ok   1440px live operations: no failed control request
+ok   1440px live operations: no page error
+ok   1440px live operations: no console error
+ok   1440px live operations: no failed request
+ok   1440px live support: heading
+ok   1440px live support: no fallback state
+ok   1440px live support: never renders NaN or undefined
+ok   1440px live support: no horizontal scroll
+ok   1440px live support: axe without critical/serious violations
+ok   1440px live support: no failed control request
+ok   1440px live support: no page error
+ok   1440px live support: no console error
+ok   1440px live support: no failed request
+ok   1440px live settings: heading
+ok   1440px live settings: no fallback state
+ok   1440px live settings: never renders NaN or undefined
+ok   1440px live settings: no horizontal scroll
+ok   1440px live settings: axe without critical/serious violations
+ok   1440px live settings: no failed control request
+ok   1440px live settings: no page error
+ok   1440px live settings: no console error
+ok   1440px live settings: no failed request
+ok   1440px live advanced: heading
+ok   1440px live advanced: no fallback state
+ok   1440px live advanced: never renders NaN or undefined
+ok   1440px live advanced: no horizontal scroll
+ok   1440px live advanced: axe without critical/serious violations
+ok   1440px live advanced: no failed control request
+ok   1440px live advanced: no page error
+ok   1440px live advanced: no console error
+ok   1440px live advanced: no failed request
+ok   1440px demo overview: heading
+ok   1440px demo overview: no fallback state
+ok   1440px demo overview: never renders NaN or undefined
+ok   1440px demo overview: no horizontal scroll
+ok   1440px demo overview: axe without critical/serious violations
+ok   1440px demo overview: no failed control request
+ok   1440px demo overview: no page error
+ok   1440px demo overview: no console error
+ok   1440px demo overview: no failed request
+ok   1440px demo customers: heading
+ok   1440px demo customers: no fallback state
+ok   1440px demo customers: never renders NaN or undefined
+ok   1440px demo customers: no horizontal scroll
+ok   1440px demo customers: axe without critical/serious violations
+ok   1440px demo customers: no failed control request
+ok   1440px demo customers: no page error
+ok   1440px demo customers: no console error
+ok   1440px demo customers: no failed request
+ok   1440px demo revenue: heading
+ok   1440px demo revenue: no fallback state
+ok   1440px demo revenue: never renders NaN or undefined
+ok   1440px demo revenue: no horizontal scroll
+ok   1440px demo revenue: axe without critical/serious violations
+ok   1440px demo revenue: no failed control request
+ok   1440px demo revenue: no page error
+ok   1440px demo revenue: no console error
+ok   1440px demo revenue: no failed request
+ok   1440px demo product: heading
+ok   1440px demo product: no fallback state
+ok   1440px demo product: never renders NaN or undefined
+ok   1440px demo product: no horizontal scroll
+ok   1440px demo product: axe without critical/serious violations
+ok   1440px demo product: no failed control request
+ok   1440px demo product: no page error
+ok   1440px demo product: no console error
+ok   1440px demo product: no failed request
+ok   1440px demo ai-cost: heading
+ok   1440px demo ai-cost: no fallback state
+ok   1440px demo ai-cost: never renders NaN or undefined
+ok   1440px demo ai-cost: no horizontal scroll
+ok   1440px demo ai-cost: axe without critical/serious violations
+ok   1440px demo ai-cost: no failed control request
+ok   1440px demo ai-cost: no page error
+ok   1440px demo ai-cost: no console error
+ok   1440px demo ai-cost: no failed request
+ok   1440px demo operations: heading
+ok   1440px demo operations: no fallback state
+ok   1440px demo operations: never renders NaN or undefined
+ok   1440px demo operations: no horizontal scroll
+ok   1440px demo operations: axe without critical/serious violations
+ok   1440px demo operations: no failed control request
+ok   1440px demo operations: no page error
+ok   1440px demo operations: no console error
+ok   1440px demo operations: no failed request
+ok   1440px demo support: heading
+ok   1440px demo support: no fallback state
+ok   1440px demo support: never renders NaN or undefined
+ok   1440px demo support: no horizontal scroll
+ok   1440px demo support: axe without critical/serious violations
+ok   1440px demo support: no failed control request
+ok   1440px demo support: no page error
+ok   1440px demo support: no console error
+ok   1440px demo support: no failed request
+ok   1440px demo settings: heading
+ok   1440px demo settings: no fallback state
+ok   1440px demo settings: never renders NaN or undefined
+ok   1440px demo settings: no horizontal scroll
+ok   1440px demo settings: axe without critical/serious violations
+ok   1440px demo settings: no failed control request
+ok   1440px demo settings: no page error
+ok   1440px demo settings: no console error
+ok   1440px demo settings: no failed request
+ok   1440px demo advanced: heading
+ok   1440px demo advanced: no fallback state
+ok   1440px demo advanced: never renders NaN or undefined
+ok   1440px demo advanced: no horizontal scroll
+ok   1440px demo advanced: axe without critical/serious violations
+ok   1440px demo advanced: no failed control request
+ok   1440px demo advanced: no page error
+ok   1440px demo advanced: no console error
+ok   1440px demo advanced: no failed request
+ok   1440px live overview tab "Today": no fallback state
+ok   1440px live overview tab "Today": never renders NaN or undefined
+ok   1440px live overview tab "Today": no horizontal scroll
+ok   1440px live overview tab "Today": no failed control request
+ok   1440px live overview tab "Today": no page error
+ok   1440px live overview tab "Today": no console error
+ok   1440px live overview tab "Follow-ups": no fallback state
+ok   1440px live overview tab "Follow-ups": never renders NaN or undefined
+ok   1440px live overview tab "Follow-ups": no horizontal scroll
+ok   1440px live overview tab "Follow-ups": no failed control request
+ok   1440px live overview tab "Follow-ups": no page error
+ok   1440px live overview tab "Follow-ups": no console error
+ok   1440px live overview tab "Reports": no fallback state
+ok   1440px live overview tab "Reports": never renders NaN or undefined
+ok   1440px live overview tab "Reports": no horizontal scroll
+ok   1440px live overview tab "Reports": no failed control request
+ok   1440px live overview tab "Reports": no page error
+ok   1440px live overview tab "Reports": no console error
+ok   1440px live customers tab "Customers": no fallback state
+ok   1440px live customers tab "Customers": never renders NaN or undefined
+ok   1440px live customers tab "Customers": no horizontal scroll
+ok   1440px live customers tab "Customers": no failed control request
+ok   1440px live customers tab "Customers": no page error
+ok   1440px live customers tab "Customers": no console error
+ok   1440px live customers tab "Workspaces": no fallback state
+ok   1440px live customers tab "Workspaces": never renders NaN or undefined
+ok   1440px live customers tab "Workspaces": no horizontal scroll
+ok   1440px live customers tab "Workspaces": no failed control request
+ok   1440px live customers tab "Workspaces": no page error
+ok   1440px live customers tab "Workspaces": no console error
+ok   1440px live customers tab "Risk": no fallback state
+ok   1440px live customers tab "Risk": never renders NaN or undefined
+ok   1440px live customers tab "Risk": no horizontal scroll
+ok   1440px live customers tab "Risk": no failed control request
+ok   1440px live customers tab "Risk": no page error
+ok   1440px live customers tab "Risk": no console error
+ok   1440px live revenue tab "MRR bridge": no fallback state
+ok   1440px live revenue tab "MRR bridge": never renders NaN or undefined
+ok   1440px live revenue tab "MRR bridge": no horizontal scroll
+ok   1440px live revenue tab "MRR bridge": no failed control request
+ok   1440px live revenue tab "MRR bridge": no page error
+ok   1440px live revenue tab "MRR bridge": no console error
+ok   1440px live revenue tab "Cash": no fallback state
+ok   1440px live revenue tab "Cash": never renders NaN or undefined
+ok   1440px live revenue tab "Cash": no horizontal scroll
+ok   1440px live revenue tab "Cash": no failed control request
+ok   1440px live revenue tab "Cash": no page error
+ok   1440px live revenue tab "Cash": no console error
+ok   1440px live revenue tab "Subscriptions": no fallback state
+ok   1440px live revenue tab "Subscriptions": never renders NaN or undefined
+ok   1440px live revenue tab "Subscriptions": no horizontal scroll
+ok   1440px live revenue tab "Subscriptions": no failed control request
+ok   1440px live revenue tab "Subscriptions": no page error
+ok   1440px live revenue tab "Subscriptions": no console error
+ok   1440px live revenue tab "Payments": no fallback state
+ok   1440px live revenue tab "Payments": never renders NaN or undefined
+ok   1440px live revenue tab "Payments": no horizontal scroll
+ok   1440px live revenue tab "Payments": no failed control request
+ok   1440px live revenue tab "Payments": no page error
+ok   1440px live revenue tab "Payments": no console error
+ok   1440px live revenue tab "Refunds": no fallback state
+ok   1440px live revenue tab "Refunds": never renders NaN or undefined
+ok   1440px live revenue tab "Refunds": no horizontal scroll
+ok   1440px live revenue tab "Refunds": no failed control request
+ok   1440px live revenue tab "Refunds": no page error
+ok   1440px live revenue tab "Refunds": no console error
+ok   1440px live revenue tab "Credits": no fallback state
+ok   1440px live revenue tab "Credits": never renders NaN or undefined
+ok   1440px live revenue tab "Credits": no horizontal scroll
+ok   1440px live revenue tab "Credits": no failed control request
+ok   1440px live revenue tab "Credits": no page error
+ok   1440px live revenue tab "Credits": no console error
+ok   1440px live revenue tab "Forecast": no fallback state
+ok   1440px live revenue tab "Forecast": never renders NaN or undefined
+ok   1440px live revenue tab "Forecast": no horizontal scroll
+ok   1440px live revenue tab "Forecast": no failed control request
+ok   1440px live revenue tab "Forecast": no page error
+ok   1440px live revenue tab "Forecast": no console error
+ok   1440px live settings tab "Contact & calls": no fallback state
+ok   1440px live settings tab "Contact & calls": never renders NaN or undefined
+ok   1440px live settings tab "Contact & calls": no horizontal scroll
+ok   1440px live settings tab "Contact & calls": no failed control request
+ok   1440px live settings tab "Contact & calls": no page error
+ok   1440px live settings tab "Contact & calls": no console error
+ok   1440px live settings tab "Reports": no fallback state
+ok   1440px live settings tab "Reports": never renders NaN or undefined
+ok   1440px live settings tab "Reports": no horizontal scroll
+ok   1440px live settings tab "Reports": no failed control request
+ok   1440px live settings tab "Reports": no page error
+ok   1440px live settings tab "Reports": no console error
+ok   1440px live settings tab "Notifications": no fallback state
+ok   1440px live settings tab "Notifications": never renders NaN or undefined
+ok   1440px live settings tab "Notifications": no horizontal scroll
+ok   1440px live settings tab "Notifications": no failed control request
+ok   1440px live settings tab "Notifications": no page error
+ok   1440px live settings tab "Notifications": no console error
+ok   1440px live settings tab "Budgets": no fallback state
+ok   1440px live settings tab "Budgets": never renders NaN or undefined
+ok   1440px live settings tab "Budgets": no horizontal scroll
+ok   1440px live settings tab "Budgets": no failed control request
+ok   1440px live settings tab "Budgets": no page error
+ok   1440px live settings tab "Budgets": no console error
+ok   1440px live settings tab "Security": no fallback state
+ok   1440px live settings tab "Security": never renders NaN or undefined
+ok   1440px live settings tab "Security": no horizontal scroll
+ok   1440px live settings tab "Security": no failed control request
+ok   1440px live settings tab "Security": no page error
+ok   1440px live settings tab "Security": no console error
+ok   1440px live advanced tab "Audit": no fallback state
+ok   1440px live advanced tab "Audit": never renders NaN or undefined
+ok   1440px live advanced tab "Audit": no horizontal scroll
+ok   1440px live advanced tab "Audit": no failed control request
+ok   1440px live advanced tab "Audit": no page error
+ok   1440px live advanced tab "Audit": no console error
+ok   1440px live advanced tab "Receipts": no fallback state
+ok   1440px live advanced tab "Receipts": never renders NaN or undefined
+ok   1440px live advanced tab "Receipts": no horizontal scroll
+ok   1440px live advanced tab "Receipts": no failed control request
+ok   1440px live advanced tab "Receipts": no page error
+ok   1440px live advanced tab "Receipts": no console error
+ok   1440px live advanced tab "Data health": no fallback state
+ok   1440px live advanced tab "Data health": never renders NaN or undefined
+ok   1440px live advanced tab "Data health": no horizontal scroll
+ok   1440px live advanced tab "Data health": no failed control request
+ok   1440px live advanced tab "Data health": no page error
+ok   1440px live advanced tab "Data health": no console error
+ok   1440px live advanced tab "Actions": no fallback state
+ok   1440px live advanced tab "Actions": never renders NaN or undefined
+ok   1440px live advanced tab "Actions": no horizontal scroll
+ok   1440px live advanced tab "Actions": no failed control request
+ok   1440px live advanced tab "Actions": no page error
+ok   1440px live advanced tab "Actions": no console error
+ok   1440px live advanced tab "Engineering": no fallback state
+ok   1440px live advanced tab "Engineering": never renders NaN or undefined
+ok   1440px live advanced tab "Engineering": no horizontal scroll
+ok   1440px live advanced tab "Engineering": no failed control request
+ok   1440px live advanced tab "Engineering": no page error
+ok   1440px live advanced tab "Engineering": no console error
+ok   1440px demo overview tab "Today": no fallback state
+ok   1440px demo overview tab "Today": never renders NaN or undefined
+ok   1440px demo overview tab "Today": no horizontal scroll
+ok   1440px demo overview tab "Today": no failed control request
+ok   1440px demo overview tab "Today": no page error
+ok   1440px demo overview tab "Today": no console error
+ok   1440px demo overview tab "Follow-ups": no fallback state
+ok   1440px demo overview tab "Follow-ups": never renders NaN or undefined
+ok   1440px demo overview tab "Follow-ups": no horizontal scroll
+ok   1440px demo overview tab "Follow-ups": no failed control request
+ok   1440px demo overview tab "Follow-ups": no page error
+ok   1440px demo overview tab "Follow-ups": no console error
+ok   1440px demo overview tab "Reports": no fallback state
+ok   1440px demo overview tab "Reports": never renders NaN or undefined
+ok   1440px demo overview tab "Reports": no horizontal scroll
+ok   1440px demo overview tab "Reports": no failed control request
+ok   1440px demo overview tab "Reports": no page error
+ok   1440px demo overview tab "Reports": no console error
+ok   1440px demo customers tab "Customers": no fallback state
+ok   1440px demo customers tab "Customers": never renders NaN or undefined
+ok   1440px demo customers tab "Customers": no horizontal scroll
+ok   1440px demo customers tab "Customers": no failed control request
+ok   1440px demo customers tab "Customers": no page error
+ok   1440px demo customers tab "Customers": no console error
+ok   1440px demo customers tab "Workspaces": no fallback state
+ok   1440px demo customers tab "Workspaces": never renders NaN or undefined
+ok   1440px demo customers tab "Workspaces": no horizontal scroll
+ok   1440px demo customers tab "Workspaces": no failed control request
+ok   1440px demo customers tab "Workspaces": no page error
+ok   1440px demo customers tab "Workspaces": no console error
+ok   1440px demo customers tab "Risk": no fallback state
+ok   1440px demo customers tab "Risk": never renders NaN or undefined
+ok   1440px demo customers tab "Risk": no horizontal scroll
+ok   1440px demo customers tab "Risk": no failed control request
+ok   1440px demo customers tab "Risk": no page error
+ok   1440px demo customers tab "Risk": no console error
+ok   1440px demo revenue tab "MRR bridge": no fallback state
+ok   1440px demo revenue tab "MRR bridge": never renders NaN or undefined
+ok   1440px demo revenue tab "MRR bridge": no horizontal scroll
+ok   1440px demo revenue tab "MRR bridge": no failed control request
+ok   1440px demo revenue tab "MRR bridge": no page error
+ok   1440px demo revenue tab "MRR bridge": no console error
+ok   1440px demo revenue tab "Cash": no fallback state
+ok   1440px demo revenue tab "Cash": never renders NaN or undefined
+ok   1440px demo revenue tab "Cash": no horizontal scroll
+ok   1440px demo revenue tab "Cash": no failed control request
+ok   1440px demo revenue tab "Cash": no page error
+ok   1440px demo revenue tab "Cash": no console error
+ok   1440px demo revenue tab "Subscriptions": no fallback state
+ok   1440px demo revenue tab "Subscriptions": never renders NaN or undefined
+ok   1440px demo revenue tab "Subscriptions": no horizontal scroll
+ok   1440px demo revenue tab "Subscriptions": no failed control request
+ok   1440px demo revenue tab "Subscriptions": no page error
+ok   1440px demo revenue tab "Subscriptions": no console error
+ok   1440px demo revenue tab "Payments": no fallback state
+ok   1440px demo revenue tab "Payments": never renders NaN or undefined
+ok   1440px demo revenue tab "Payments": no horizontal scroll
+ok   1440px demo revenue tab "Payments": no failed control request
+ok   1440px demo revenue tab "Payments": no page error
+ok   1440px demo revenue tab "Payments": no console error
+ok   1440px demo revenue tab "Refunds": no fallback state
+ok   1440px demo revenue tab "Refunds": never renders NaN or undefined
+ok   1440px demo revenue tab "Refunds": no horizontal scroll
+ok   1440px demo revenue tab "Refunds": no failed control request
+ok   1440px demo revenue tab "Refunds": no page error
+ok   1440px demo revenue tab "Refunds": no console error
+ok   1440px demo revenue tab "Credits": no fallback state
+ok   1440px demo revenue tab "Credits": never renders NaN or undefined
+ok   1440px demo revenue tab "Credits": no horizontal scroll
+ok   1440px demo revenue tab "Credits": no failed control request
+ok   1440px demo revenue tab "Credits": no page error
+ok   1440px demo revenue tab "Credits": no console error
+ok   1440px demo revenue tab "Forecast": no fallback state
+ok   1440px demo revenue tab "Forecast": never renders NaN or undefined
+ok   1440px demo revenue tab "Forecast": no horizontal scroll
+ok   1440px demo revenue tab "Forecast": no failed control request
+ok   1440px demo revenue tab "Forecast": no page error
+ok   1440px demo revenue tab "Forecast": no console error
+ok   1440px demo settings tab "Contact & calls": no fallback state
+ok   1440px demo settings tab "Contact & calls": never renders NaN or undefined
+ok   1440px demo settings tab "Contact & calls": no horizontal scroll
+ok   1440px demo settings tab "Contact & calls": no failed control request
+ok   1440px demo settings tab "Contact & calls": no page error
+ok   1440px demo settings tab "Contact & calls": no console error
+ok   1440px demo settings tab "Reports": no fallback state
+ok   1440px demo settings tab "Reports": never renders NaN or undefined
+ok   1440px demo settings tab "Reports": no horizontal scroll
+ok   1440px demo settings tab "Reports": no failed control request
+ok   1440px demo settings tab "Reports": no page error
+ok   1440px demo settings tab "Reports": no console error
+ok   1440px demo settings tab "Notifications": no fallback state
+ok   1440px demo settings tab "Notifications": never renders NaN or undefined
+ok   1440px demo settings tab "Notifications": no horizontal scroll
+ok   1440px demo settings tab "Notifications": no failed control request
+ok   1440px demo settings tab "Notifications": no page error
+ok   1440px demo settings tab "Notifications": no console error
+ok   1440px demo settings tab "Budgets": no fallback state
+ok   1440px demo settings tab "Budgets": never renders NaN or undefined
+ok   1440px demo settings tab "Budgets": no horizontal scroll
+ok   1440px demo settings tab "Budgets": no failed control request
+ok   1440px demo settings tab "Budgets": no page error
+ok   1440px demo settings tab "Budgets": no console error
+ok   1440px demo settings tab "Security": no fallback state
+ok   1440px demo settings tab "Security": never renders NaN or undefined
+ok   1440px demo settings tab "Security": no horizontal scroll
+ok   1440px demo settings tab "Security": no failed control request
+ok   1440px demo settings tab "Security": no page error
+ok   1440px demo settings tab "Security": no console error
+ok   1440px demo advanced tab "Audit": no fallback state
+ok   1440px demo advanced tab "Audit": never renders NaN or undefined
+ok   1440px demo advanced tab "Audit": no horizontal scroll
+ok   1440px demo advanced tab "Audit": no failed control request
+ok   1440px demo advanced tab "Audit": no page error
+ok   1440px demo advanced tab "Audit": no console error
+ok   1440px demo advanced tab "Receipts": no fallback state
+ok   1440px demo advanced tab "Receipts": never renders NaN or undefined
+ok   1440px demo advanced tab "Receipts": no horizontal scroll
+ok   1440px demo advanced tab "Receipts": no failed control request
+ok   1440px demo advanced tab "Receipts": no page error
+ok   1440px demo advanced tab "Receipts": no console error
+ok   1440px demo advanced tab "Data health": no fallback state
+ok   1440px demo advanced tab "Data health": never renders NaN or undefined
+ok   1440px demo advanced tab "Data health": no horizontal scroll
+ok   1440px demo advanced tab "Data health": no failed control request
+ok   1440px demo advanced tab "Data health": no page error
+ok   1440px demo advanced tab "Data health": no console error
+ok   1440px demo advanced tab "Actions": no fallback state
+ok   1440px demo advanced tab "Actions": never renders NaN or undefined
+ok   1440px demo advanced tab "Actions": no horizontal scroll
+ok   1440px demo advanced tab "Actions": no failed control request
+ok   1440px demo advanced tab "Actions": no page error
+ok   1440px demo advanced tab "Actions": no console error
+ok   1440px demo advanced tab "Engineering": no fallback state
+ok   1440px demo advanced tab "Engineering": never renders NaN or undefined
+ok   1440px demo advanced tab "Engineering": no horizontal scroll
+ok   1440px demo advanced tab "Engineering": no failed control request
+ok   1440px demo advanced tab "Engineering": no page error
+ok   1440px demo advanced tab "Engineering": no console error
+ok   1440px revenue ?tab=payments selects its tab
+ok   1440px operations ?tab=connections scrolls to its panel
+ok   1440px settings ?tab=reports selects its tab
+ok   1440px /control/workspaces redirects to Customers
+ok   record boundary has a nonempty Live population
+ok   pending Demo read never displays Live rows
+ok   settled Demo population is nonempty and distinct from Live
+ok   record boundary has no failed control request
+ok   overview returns receipts
+ok   evidence drawer shows the receipt
+ok   evidence drawer axe without critical/serious violations
+ok   Escape closes the evidence drawer
+ok   evidence drawer: no failed control request
+ok   agent turn is accepted (201)
+ok   Rafii answer is rendered
+ok   Ask Rafii: no page error
+ok   voice: Talk to Rafii is disabled while voice is off
+ok   voice: the strip names a reason
+ok   voice: no failed control request
+ok   voice: no page error
+ok   voice: no console error
+ok   fresh exchange for step-up
+ok   contact policy PUT succeeds
+ok   live delivery stays disabled after saving
+ok   fresh exchange for Founder policy
+ok   Founder policy form PUT succeeds
+ok   Founder policy PUT omits immutable server fields
+ok   Founder policy saves the edited cap and increments revision
+ok   Founder entitlement and financial protections survive settings save
+ok   Founder policy save preserves disabled delivery
+ok   follow-up draft is created
+ok   follow-up confirm succeeds
+ok   follow-up is scheduled after confirm
+ok   1440px sign out returns to sign-in
+ok   1440px session is gone after sign out
+ok   768px founder exchange
+ok   768px session cookie is host-only, HttpOnly, SameSite=Strict
+ok   768px live overview: heading
+ok   768px live overview: no fallback state
+ok   768px live overview: never renders NaN or undefined
+ok   768px live overview: no horizontal scroll
+ok   768px live overview: no failed control request
+ok   768px live overview: no page error
+ok   768px live overview: no console error
+ok   768px live overview: no failed request
+ok   768px live customers: heading
+ok   768px live customers: no fallback state
+ok   768px live customers: never renders NaN or undefined
+ok   768px live customers: no horizontal scroll
+ok   768px live customers: no failed control request
+ok   768px live customers: no page error
+ok   768px live customers: no console error
+ok   768px live customers: no failed request
+ok   768px live revenue: heading
+ok   768px live revenue: no fallback state
+ok   768px live revenue: never renders NaN or undefined
+ok   768px live revenue: no horizontal scroll
+ok   768px live revenue: no failed control request
+ok   768px live revenue: no page error
+ok   768px live revenue: no console error
+ok   768px live revenue: no failed request
+ok   768px live product: heading
+ok   768px live product: no fallback state
+ok   768px live product: never renders NaN or undefined
+ok   768px live product: no horizontal scroll
+ok   768px live product: no failed control request
+ok   768px live product: no page error
+ok   768px live product: no console error
+ok   768px live product: no failed request
+ok   768px live ai-cost: heading
+ok   768px live ai-cost: no fallback state
+ok   768px live ai-cost: never renders NaN or undefined
+ok   768px live ai-cost: no horizontal scroll
+ok   768px live ai-cost: no failed control request
+ok   768px live ai-cost: no page error
+ok   768px live ai-cost: no console error
+ok   768px live ai-cost: no failed request
+ok   768px live operations: heading
+ok   768px live operations: no fallback state
+ok   768px live operations: never renders NaN or undefined
+ok   768px live operations: no horizontal scroll
+ok   768px live operations: no failed control request
+ok   768px live operations: no page error
+ok   768px live operations: no console error
+ok   768px live operations: no failed request
+ok   768px live support: heading
+ok   768px live support: no fallback state
+ok   768px live support: never renders NaN or undefined
+ok   768px live support: no horizontal scroll
+ok   768px live support: no failed control request
+ok   768px live support: no page error
+ok   768px live support: no console error
+ok   768px live support: no failed request
+ok   768px live settings: heading
+ok   768px live settings: no fallback state
+ok   768px live settings: never renders NaN or undefined
+ok   768px live settings: no horizontal scroll
+ok   768px live settings: no failed control request
+ok   768px live settings: no page error
+ok   768px live settings: no console error
+ok   768px live settings: no failed request
+ok   768px live advanced: heading
+ok   768px live advanced: no fallback state
+ok   768px live advanced: never renders NaN or undefined
+ok   768px live advanced: no horizontal scroll
+ok   768px live advanced: no failed control request
+ok   768px live advanced: no page error
+ok   768px live advanced: no console error
+ok   768px live advanced: no failed request
+ok   768px demo overview: heading
+ok   768px demo overview: no fallback state
+ok   768px demo overview: never renders NaN or undefined
+ok   768px demo overview: no horizontal scroll
+ok   768px demo overview: no failed control request
+ok   768px demo overview: no page error
+ok   768px demo overview: no console error
+ok   768px demo overview: no failed request
+ok   768px demo customers: heading
+ok   768px demo customers: no fallback state
+ok   768px demo customers: never renders NaN or undefined
+ok   768px demo customers: no horizontal scroll
+ok   768px demo customers: no failed control request
+ok   768px demo customers: no page error
+ok   768px demo customers: no console error
+ok   768px demo customers: no failed request
+ok   768px demo revenue: heading
+ok   768px demo revenue: no fallback state
+ok   768px demo revenue: never renders NaN or undefined
+ok   768px demo revenue: no horizontal scroll
+ok   768px demo revenue: no failed control request
+ok   768px demo revenue: no page error
+ok   768px demo revenue: no console error
+ok   768px demo revenue: no failed request
+ok   768px demo product: heading
+ok   768px demo product: no fallback state
+ok   768px demo product: never renders NaN or undefined
+ok   768px demo product: no horizontal scroll
+ok   768px demo product: no failed control request
+ok   768px demo product: no page error
+ok   768px demo product: no console error
+ok   768px demo product: no failed request
+ok   768px demo ai-cost: heading
+ok   768px demo ai-cost: no fallback state
+ok   768px demo ai-cost: never renders NaN or undefined
+ok   768px demo ai-cost: no horizontal scroll
+ok   768px demo ai-cost: no failed control request
+ok   768px demo ai-cost: no page error
+ok   768px demo ai-cost: no console error
+ok   768px demo ai-cost: no failed request
+ok   768px demo operations: heading
+ok   768px demo operations: no fallback state
+ok   768px demo operations: never renders NaN or undefined
+ok   768px demo operations: no horizontal scroll
+ok   768px demo operations: no failed control request
+ok   768px demo operations: no page error
+ok   768px demo operations: no console error
+ok   768px demo operations: no failed request
+ok   768px demo support: heading
+ok   768px demo support: no fallback state
+ok   768px demo support: never renders NaN or undefined
+ok   768px demo support: no horizontal scroll
+ok   768px demo support: no failed control request
+ok   768px demo support: no page error
+ok   768px demo support: no console error
+ok   768px demo support: no failed request
+ok   768px demo settings: heading
+ok   768px demo settings: no fallback state
+ok   768px demo settings: never renders NaN or undefined
+ok   768px demo settings: no horizontal scroll
+ok   768px demo settings: no failed control request
+ok   768px demo settings: no page error
+ok   768px demo settings: no console error
+ok   768px demo settings: no failed request
+ok   768px demo advanced: heading
+ok   768px demo advanced: no fallback state
+ok   768px demo advanced: never renders NaN or undefined
+ok   768px demo advanced: no horizontal scroll
+ok   768px demo advanced: no failed control request
+ok   768px demo advanced: no page error
+ok   768px demo advanced: no console error
+ok   768px demo advanced: no failed request
+ok   768px revenue ?tab=payments selects its tab
+ok   768px operations ?tab=connections scrolls to its panel
+ok   768px settings ?tab=reports selects its tab
+ok   768px /control/workspaces redirects to Customers
+ok   768px sign out returns to sign-in
+ok   768px session is gone after sign out
+ok   390px founder exchange
+ok   390px session cookie is host-only, HttpOnly, SameSite=Strict
+ok   390px live overview: heading
+ok   390px live overview: no fallback state
+ok   390px live overview: never renders NaN or undefined
+ok   390px live overview: no horizontal scroll
+ok   390px live overview: axe without critical/serious violations
+ok   390px live overview: no failed control request
+ok   390px live overview: no page error
+ok   390px live overview: no console error
+ok   390px live overview: no failed request
+ok   390px live customers: heading
+ok   390px live customers: no fallback state
+ok   390px live customers: never renders NaN or undefined
+ok   390px live customers: no horizontal scroll
+ok   390px live customers: axe without critical/serious violations
+ok   390px live customers: no failed control request
+ok   390px live customers: no page error
+ok   390px live customers: no console error
+ok   390px live customers: no failed request
+ok   390px live revenue: heading
+ok   390px live revenue: no fallback state
+ok   390px live revenue: never renders NaN or undefined
+ok   390px live revenue: no horizontal scroll
+ok   390px live revenue: axe without critical/serious violations
+ok   390px live revenue: no failed control request
+ok   390px live revenue: no page error
+ok   390px live revenue: no console error
+ok   390px live revenue: no failed request
+ok   390px live product: heading
+ok   390px live product: no fallback state
+ok   390px live product: never renders NaN or undefined
+ok   390px live product: no horizontal scroll
+ok   390px live product: axe without critical/serious violations
+ok   390px live product: no failed control request
+ok   390px live product: no page error
+ok   390px live product: no console error
+ok   390px live product: no failed request
+ok   390px live ai-cost: heading
+ok   390px live ai-cost: no fallback state
+ok   390px live ai-cost: never renders NaN or undefined
+ok   390px live ai-cost: no horizontal scroll
+ok   390px live ai-cost: axe without critical/serious violations
+ok   390px live ai-cost: no failed control request
+ok   390px live ai-cost: no page error
+ok   390px live ai-cost: no console error
+ok   390px live ai-cost: no failed request
+ok   390px live operations: heading
+ok   390px live operations: no fallback state
+ok   390px live operations: never renders NaN or undefined
+ok   390px live operations: no horizontal scroll
+ok   390px live operations: axe without critical/serious violations
+ok   390px live operations: no failed control request
+ok   390px live operations: no page error
+ok   390px live operations: no console error
+ok   390px live operations: no failed request
+ok   390px live support: heading
+ok   390px live support: no fallback state
+ok   390px live support: never renders NaN or undefined
+ok   390px live support: no horizontal scroll
+ok   390px live support: axe without critical/serious violations
+ok   390px live support: no failed control request
+ok   390px live support: no page error
+ok   390px live support: no console error
+ok   390px live support: no failed request
+ok   390px live settings: heading
+ok   390px live settings: no fallback state
+ok   390px live settings: never renders NaN or undefined
+ok   390px live settings: no horizontal scroll
+ok   390px live settings: axe without critical/serious violations
+ok   390px live settings: no failed control request
+ok   390px live settings: no page error
+ok   390px live settings: no console error
+ok   390px live settings: no failed request
+ok   390px live advanced: heading
+ok   390px live advanced: no fallback state
+ok   390px live advanced: never renders NaN or undefined
+ok   390px live advanced: no horizontal scroll
+ok   390px live advanced: axe without critical/serious violations
+ok   390px live advanced: no failed control request
+ok   390px live advanced: no page error
+ok   390px live advanced: no console error
+ok   390px live advanced: no failed request
+ok   390px demo overview: heading
+ok   390px demo overview: no fallback state
+ok   390px demo overview: never renders NaN or undefined
+ok   390px demo overview: no horizontal scroll
+ok   390px demo overview: no failed control request
+ok   390px demo overview: no page error
+ok   390px demo overview: no console error
+ok   390px demo overview: no failed request
+ok   390px demo customers: heading
+ok   390px demo customers: no fallback state
+ok   390px demo customers: never renders NaN or undefined
+ok   390px demo customers: no horizontal scroll
+ok   390px demo customers: no failed control request
+ok   390px demo customers: no page error
+ok   390px demo customers: no console error
+ok   390px demo customers: no failed request
+ok   390px demo revenue: heading
+ok   390px demo revenue: no fallback state
+ok   390px demo revenue: never renders NaN or undefined
+ok   390px demo revenue: no horizontal scroll
+ok   390px demo revenue: no failed control request
+ok   390px demo revenue: no page error
+ok   390px demo revenue: no console error
+ok   390px demo revenue: no failed request
+ok   390px demo product: heading
+ok   390px demo product: no fallback state
+ok   390px demo product: never renders NaN or undefined
+ok   390px demo product: no horizontal scroll
+ok   390px demo product: no failed control request
+ok   390px demo product: no page error
+ok   390px demo product: no console error
+ok   390px demo product: no failed request
+ok   390px demo ai-cost: heading
+ok   390px demo ai-cost: no fallback state
+ok   390px demo ai-cost: never renders NaN or undefined
+ok   390px demo ai-cost: no horizontal scroll
+ok   390px demo ai-cost: no failed control request
+ok   390px demo ai-cost: no page error
+ok   390px demo ai-cost: no console error
+ok   390px demo ai-cost: no failed request
+ok   390px demo operations: heading
+ok   390px demo operations: no fallback state
+ok   390px demo operations: never renders NaN or undefined
+ok   390px demo operations: no horizontal scroll
+ok   390px demo operations: no failed control request
+ok   390px demo operations: no page error
+ok   390px demo operations: no console error
+ok   390px demo operations: no failed request
+ok   390px demo support: heading
+ok   390px demo support: no fallback state
+ok   390px demo support: never renders NaN or undefined
+ok   390px demo support: no horizontal scroll
+ok   390px demo support: no failed control request
+ok   390px demo support: no page error
+ok   390px demo support: no console error
+ok   390px demo support: no failed request
+ok   390px demo settings: heading
+ok   390px demo settings: no fallback state
+ok   390px demo settings: never renders NaN or undefined
+ok   390px demo settings: no horizontal scroll
+ok   390px demo settings: no failed control request
+ok   390px demo settings: no page error
+ok   390px demo settings: no console error
+ok   390px demo settings: no failed request
+ok   390px demo advanced: heading
+ok   390px demo advanced: no fallback state
+ok   390px demo advanced: never renders NaN or undefined
+ok   390px demo advanced: no horizontal scroll
+ok   390px demo advanced: no failed control request
+ok   390px demo advanced: no page error
+ok   390px demo advanced: no console error
+ok   390px demo advanced: no failed request
+ok   390px live overview tab "Today": no fallback state
+ok   390px live overview tab "Today": never renders NaN or undefined
+ok   390px live overview tab "Today": no horizontal scroll
+ok   390px live overview tab "Today": no failed control request
+ok   390px live overview tab "Today": no page error
+ok   390px live overview tab "Today": no console error
+ok   390px live overview tab "Follow-ups": no fallback state
+ok   390px live overview tab "Follow-ups": never renders NaN or undefined
+ok   390px live overview tab "Follow-ups": no horizontal scroll
+ok   390px live overview tab "Follow-ups": no failed control request
+ok   390px live overview tab "Follow-ups": no page error
+ok   390px live overview tab "Follow-ups": no console error
+ok   390px live overview tab "Reports": no fallback state
+ok   390px live overview tab "Reports": never renders NaN or undefined
+ok   390px live overview tab "Reports": no horizontal scroll
+ok   390px live overview tab "Reports": no failed control request
+ok   390px live overview tab "Reports": no page error
+ok   390px live overview tab "Reports": no console error
+ok   390px live customers tab "Customers": no fallback state
+ok   390px live customers tab "Customers": never renders NaN or undefined
+ok   390px live customers tab "Customers": no horizontal scroll
+ok   390px live customers tab "Customers": no failed control request
+ok   390px live customers tab "Customers": no page error
+ok   390px live customers tab "Customers": no console error
+ok   390px live customers tab "Workspaces": no fallback state
+ok   390px live customers tab "Workspaces": never renders NaN or undefined
+ok   390px live customers tab "Workspaces": no horizontal scroll
+ok   390px live customers tab "Workspaces": no failed control request
+ok   390px live customers tab "Workspaces": no page error
+ok   390px live customers tab "Workspaces": no console error
+ok   390px live customers tab "Risk": no fallback state
+ok   390px live customers tab "Risk": never renders NaN or undefined
+ok   390px live customers tab "Risk": no horizontal scroll
+ok   390px live customers tab "Risk": no failed control request
+ok   390px live customers tab "Risk": no page error
+ok   390px live customers tab "Risk": no console error
+ok   390px live revenue tab "MRR bridge": no fallback state
+ok   390px live revenue tab "MRR bridge": never renders NaN or undefined
+ok   390px live revenue tab "MRR bridge": no horizontal scroll
+ok   390px live revenue tab "MRR bridge": no failed control request
+ok   390px live revenue tab "MRR bridge": no page error
+ok   390px live revenue tab "MRR bridge": no console error
+ok   390px live revenue tab "Cash": no fallback state
+ok   390px live revenue tab "Cash": never renders NaN or undefined
+ok   390px live revenue tab "Cash": no horizontal scroll
+ok   390px live revenue tab "Cash": no failed control request
+ok   390px live revenue tab "Cash": no page error
+ok   390px live revenue tab "Cash": no console error
+ok   390px live revenue tab "Subscriptions": no fallback state
+ok   390px live revenue tab "Subscriptions": never renders NaN or undefined
+ok   390px live revenue tab "Subscriptions": no horizontal scroll
+ok   390px live revenue tab "Subscriptions": no failed control request
+ok   390px live revenue tab "Subscriptions": no page error
+ok   390px live revenue tab "Subscriptions": no console error
+ok   390px live revenue tab "Payments": no fallback state
+ok   390px live revenue tab "Payments": never renders NaN or undefined
+ok   390px live revenue tab "Payments": no horizontal scroll
+ok   390px live revenue tab "Payments": no failed control request
+ok   390px live revenue tab "Payments": no page error
+ok   390px live revenue tab "Payments": no console error
+ok   390px live revenue tab "Refunds": no fallback state
+ok   390px live revenue tab "Refunds": never renders NaN or undefined
+ok   390px live revenue tab "Refunds": no horizontal scroll
+ok   390px live revenue tab "Refunds": no failed control request
+ok   390px live revenue tab "Refunds": no page error
+ok   390px live revenue tab "Refunds": no console error
+ok   390px live revenue tab "Credits": no fallback state
+ok   390px live revenue tab "Credits": never renders NaN or undefined
+ok   390px live revenue tab "Credits": no horizontal scroll
+ok   390px live revenue tab "Credits": no failed control request
+ok   390px live revenue tab "Credits": no page error
+ok   390px live revenue tab "Credits": no console error
+ok   390px live revenue tab "Forecast": no fallback state
+ok   390px live revenue tab "Forecast": never renders NaN or undefined
+ok   390px live revenue tab "Forecast": no horizontal scroll
+ok   390px live revenue tab "Forecast": no failed control request
+ok   390px live revenue tab "Forecast": no page error
+ok   390px live revenue tab "Forecast": no console error
+ok   390px live settings tab "Contact & calls": no fallback state
+ok   390px live settings tab "Contact & calls": never renders NaN or undefined
+ok   390px live settings tab "Contact & calls": no horizontal scroll
+ok   390px live settings tab "Contact & calls": no failed control request
+ok   390px live settings tab "Contact & calls": no page error
+ok   390px live settings tab "Contact & calls": no console error
+ok   390px live settings tab "Reports": no fallback state
+ok   390px live settings tab "Reports": never renders NaN or undefined
+ok   390px live settings tab "Reports": no horizontal scroll
+ok   390px live settings tab "Reports": no failed control request
+ok   390px live settings tab "Reports": no page error
+ok   390px live settings tab "Reports": no console error
+ok   390px live settings tab "Notifications": no fallback state
+ok   390px live settings tab "Notifications": never renders NaN or undefined
+ok   390px live settings tab "Notifications": no horizontal scroll
+ok   390px live settings tab "Notifications": no failed control request
+ok   390px live settings tab "Notifications": no page error
+ok   390px live settings tab "Notifications": no console error
+ok   390px live settings tab "Budgets": no fallback state
+ok   390px live settings tab "Budgets": never renders NaN or undefined
+ok   390px live settings tab "Budgets": no horizontal scroll
+ok   390px live settings tab "Budgets": no failed control request
+ok   390px live settings tab "Budgets": no page error
+ok   390px live settings tab "Budgets": no console error
+ok   390px live settings tab "Security": no fallback state
+ok   390px live settings tab "Security": never renders NaN or undefined
+ok   390px live settings tab "Security": no horizontal scroll
+ok   390px live settings tab "Security": no failed control request
+ok   390px live settings tab "Security": no page error
+ok   390px live settings tab "Security": no console error
+ok   390px live advanced tab "Audit": no fallback state
+ok   390px live advanced tab "Audit": never renders NaN or undefined
+ok   390px live advanced tab "Audit": no horizontal scroll
+ok   390px live advanced tab "Audit": no failed control request
+ok   390px live advanced tab "Audit": no page error
+ok   390px live advanced tab "Audit": no console error
+ok   390px live advanced tab "Receipts": no fallback state
+ok   390px live advanced tab "Receipts": never renders NaN or undefined
+ok   390px live advanced tab "Receipts": no horizontal scroll
+ok   390px live advanced tab "Receipts": no failed control request
+ok   390px live advanced tab "Receipts": no page error
+ok   390px live advanced tab "Receipts": no console error
+ok   390px live advanced tab "Data health": no fallback state
+ok   390px live advanced tab "Data health": never renders NaN or undefined
+ok   390px live advanced tab "Data health": no horizontal scroll
+ok   390px live advanced tab "Data health": no failed control request
+ok   390px live advanced tab "Data health": no page error
+ok   390px live advanced tab "Data health": no console error
+ok   390px live advanced tab "Actions": no fallback state
+ok   390px live advanced tab "Actions": never renders NaN or undefined
+ok   390px live advanced tab "Actions": no horizontal scroll
+ok   390px live advanced tab "Actions": no failed control request
+ok   390px live advanced tab "Actions": no page error
+ok   390px live advanced tab "Actions": no console error
+ok   390px live advanced tab "Engineering": no fallback state
+ok   390px live advanced tab "Engineering": never renders NaN or undefined
+ok   390px live advanced tab "Engineering": no horizontal scroll
+ok   390px live advanced tab "Engineering": no failed control request
+ok   390px live advanced tab "Engineering": no page error
+ok   390px live advanced tab "Engineering": no console error
+ok   390px demo overview tab "Today": no fallback state
+ok   390px demo overview tab "Today": never renders NaN or undefined
+ok   390px demo overview tab "Today": no horizontal scroll
+ok   390px demo overview tab "Today": no failed control request
+ok   390px demo overview tab "Today": no page error
+ok   390px demo overview tab "Today": no console error
+ok   390px demo overview tab "Follow-ups": no fallback state
+ok   390px demo overview tab "Follow-ups": never renders NaN or undefined
+ok   390px demo overview tab "Follow-ups": no horizontal scroll
+ok   390px demo overview tab "Follow-ups": no failed control request
+ok   390px demo overview tab "Follow-ups": no page error
+ok   390px demo overview tab "Follow-ups": no console error
+ok   390px demo overview tab "Reports": no fallback state
+ok   390px demo overview tab "Reports": never renders NaN or undefined
+ok   390px demo overview tab "Reports": no horizontal scroll
+ok   390px demo overview tab "Reports": no failed control request
+ok   390px demo overview tab "Reports": no page error
+ok   390px demo overview tab "Reports": no console error
+ok   390px demo customers tab "Customers": no fallback state
+ok   390px demo customers tab "Customers": never renders NaN or undefined
+ok   390px demo customers tab "Customers": no horizontal scroll
+ok   390px demo customers tab "Customers": no failed control request
+ok   390px demo customers tab "Customers": no page error
+ok   390px demo customers tab "Customers": no console error
+ok   390px demo customers tab "Workspaces": no fallback state
+ok   390px demo customers tab "Workspaces": never renders NaN or undefined
+ok   390px demo customers tab "Workspaces": no horizontal scroll
+ok   390px demo customers tab "Workspaces": no failed control request
+ok   390px demo customers tab "Workspaces": no page error
+ok   390px demo customers tab "Workspaces": no console error
+ok   390px demo customers tab "Risk": no fallback state
+ok   390px demo customers tab "Risk": never renders NaN or undefined
+ok   390px demo customers tab "Risk": no horizontal scroll
+ok   390px demo customers tab "Risk": no failed control request
+ok   390px demo customers tab "Risk": no page error
+ok   390px demo customers tab "Risk": no console error
+ok   390px demo revenue tab "MRR bridge": no fallback state
+ok   390px demo revenue tab "MRR bridge": never renders NaN or undefined
+ok   390px demo revenue tab "MRR bridge": no horizontal scroll
+ok   390px demo revenue tab "MRR bridge": no failed control request
+ok   390px demo revenue tab "MRR bridge": no page error
+ok   390px demo revenue tab "MRR bridge": no console error
+ok   390px demo revenue tab "Cash": no fallback state
+ok   390px demo revenue tab "Cash": never renders NaN or undefined
+ok   390px demo revenue tab "Cash": no horizontal scroll
+ok   390px demo revenue tab "Cash": no failed control request
+ok   390px demo revenue tab "Cash": no page error
+ok   390px demo revenue tab "Cash": no console error
+ok   390px demo revenue tab "Subscriptions": no fallback state
+ok   390px demo revenue tab "Subscriptions": never renders NaN or undefined
+ok   390px demo revenue tab "Subscriptions": no horizontal scroll
+ok   390px demo revenue tab "Subscriptions": no failed control request
+ok   390px demo revenue tab "Subscriptions": no page error
+ok   390px demo revenue tab "Subscriptions": no console error
+ok   390px demo revenue tab "Payments": no fallback state
+ok   390px demo revenue tab "Payments": never renders NaN or undefined
+ok   390px demo revenue tab "Payments": no horizontal scroll
+ok   390px demo revenue tab "Payments": no failed control request
+ok   390px demo revenue tab "Payments": no page error
+ok   390px demo revenue tab "Payments": no console error
+ok   390px demo revenue tab "Refunds": no fallback state
+ok   390px demo revenue tab "Refunds": never renders NaN or undefined
+ok   390px demo revenue tab "Refunds": no horizontal scroll
+ok   390px demo revenue tab "Refunds": no failed control request
+ok   390px demo revenue tab "Refunds": no page error
+ok   390px demo revenue tab "Refunds": no console error
+ok   390px demo revenue tab "Credits": no fallback state
+ok   390px demo revenue tab "Credits": never renders NaN or undefined
+ok   390px demo revenue tab "Credits": no horizontal scroll
+ok   390px demo revenue tab "Credits": no failed control request
+ok   390px demo revenue tab "Credits": no page error
+ok   390px demo revenue tab "Credits": no console error
+ok   390px demo revenue tab "Forecast": no fallback state
+ok   390px demo revenue tab "Forecast": never renders NaN or undefined
+ok   390px demo revenue tab "Forecast": no horizontal scroll
+ok   390px demo revenue tab "Forecast": no failed control request
+ok   390px demo revenue tab "Forecast": no page error
+ok   390px demo revenue tab "Forecast": no console error
+ok   390px demo settings tab "Contact & calls": no fallback state
+ok   390px demo settings tab "Contact & calls": never renders NaN or undefined
+ok   390px demo settings tab "Contact & calls": no horizontal scroll
+ok   390px demo settings tab "Contact & calls": no failed control request
+ok   390px demo settings tab "Contact & calls": no page error
+ok   390px demo settings tab "Contact & calls": no console error
+ok   390px demo settings tab "Reports": no fallback state
+ok   390px demo settings tab "Reports": never renders NaN or undefined
+ok   390px demo settings tab "Reports": no horizontal scroll
+ok   390px demo settings tab "Reports": no failed control request
+ok   390px demo settings tab "Reports": no page error
+ok   390px demo settings tab "Reports": no console error
+ok   390px demo settings tab "Notifications": no fallback state
+ok   390px demo settings tab "Notifications": never renders NaN or undefined
+ok   390px demo settings tab "Notifications": no horizontal scroll
+ok   390px demo settings tab "Notifications": no failed control request
+ok   390px demo settings tab "Notifications": no page error
+ok   390px demo settings tab "Notifications": no console error
+ok   390px demo settings tab "Budgets": no fallback state
+ok   390px demo settings tab "Budgets": never renders NaN or undefined
+ok   390px demo settings tab "Budgets": no horizontal scroll
+ok   390px demo settings tab "Budgets": no failed control request
+ok   390px demo settings tab "Budgets": no page error
+ok   390px demo settings tab "Budgets": no console error
+ok   390px demo settings tab "Security": no fallback state
+ok   390px demo settings tab "Security": never renders NaN or undefined
+ok   390px demo settings tab "Security": no horizontal scroll
+ok   390px demo settings tab "Security": no failed control request
+ok   390px demo settings tab "Security": no page error
+ok   390px demo settings tab "Security": no console error
+ok   390px demo advanced tab "Audit": no fallback state
+ok   390px demo advanced tab "Audit": never renders NaN or undefined
+ok   390px demo advanced tab "Audit": no horizontal scroll
+ok   390px demo advanced tab "Audit": no failed control request
+ok   390px demo advanced tab "Audit": no page error
+ok   390px demo advanced tab "Audit": no console error
+ok   390px demo advanced tab "Receipts": no fallback state
+ok   390px demo advanced tab "Receipts": never renders NaN or undefined
+ok   390px demo advanced tab "Receipts": no horizontal scroll
+ok   390px demo advanced tab "Receipts": no failed control request
+ok   390px demo advanced tab "Receipts": no page error
+ok   390px demo advanced tab "Receipts": no console error
+ok   390px demo advanced tab "Data health": no fallback state
+ok   390px demo advanced tab "Data health": never renders NaN or undefined
+ok   390px demo advanced tab "Data health": no horizontal scroll
+ok   390px demo advanced tab "Data health": no failed control request
+ok   390px demo advanced tab "Data health": no page error
+ok   390px demo advanced tab "Data health": no console error
+ok   390px demo advanced tab "Actions": no fallback state
+ok   390px demo advanced tab "Actions": never renders NaN or undefined
+ok   390px demo advanced tab "Actions": no horizontal scroll
+ok   390px demo advanced tab "Actions": no failed control request
+ok   390px demo advanced tab "Actions": no page error
+ok   390px demo advanced tab "Actions": no console error
+ok   390px demo advanced tab "Engineering": no fallback state
+ok   390px demo advanced tab "Engineering": never renders NaN or undefined
+ok   390px demo advanced tab "Engineering": no horizontal scroll
+ok   390px demo advanced tab "Engineering": no failed control request
+ok   390px demo advanced tab "Engineering": no page error
+ok   390px demo advanced tab "Engineering": no console error
+ok   390px revenue ?tab=payments selects its tab
+ok   390px operations ?tab=connections scrolls to its panel
+ok   390px settings ?tab=reports selects its tab
+ok   390px /control/workspaces redirects to Customers
+ok   390px sign out returns to sign-in
+ok   390px session is gone after sign out
+
+1072/1072 checks passed
