@@ -572,7 +572,14 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const target=beforeDelete.assets.find(a=>a.id===doc.id);
    assert.ok(target,`delete target ${doc.id} missing from current library`);
    assert.equal(target.displayTitle,'Brahms browser notes',`delete target changed: ${JSON.stringify(target)}`);
-   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('button',{name:'Delete…',exact:true}).click();
+   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
+   try{await page.getByRole('button',{name:'Delete…',exact:true}).click({timeout:15000});}
+   catch(error){
+    await page.screenshot({path:resolve(out,`debug-delete-${engine}-${width}.png`),fullPage:true});
+    const state=await page.evaluate(()=>({url:location.href,inspector:Boolean(document.querySelector('[data-library-inspector]')),dialogs:document.querySelectorAll('[role="dialog"]').length,danger:[...document.querySelectorAll('#asset-danger-title')].length,deletes:[...document.querySelectorAll('button')].filter(b=>(b.textContent||'').includes('Delete')).map(b=>(b.getAttribute('aria-label')||b.textContent||'').trim().slice(0,60))}));
+    console.error(JSON.stringify({step:'delete Brahms from its details',engine,width,state}));
+    throw error;
+   }
    const dialog=page.getByRole('alertdialog');
    const deletionResponse=page.waitForResponse(r=>r.request().method()==='DELETE'&&r.url().includes('/library/files/'),{timeout:10000});
    await dialog.getByRole('button',{name:/^Delete/}).click();
