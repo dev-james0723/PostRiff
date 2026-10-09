@@ -420,4 +420,78 @@ with connection() as db:
     assert db.execute("SELECT status FROM pr_metric_reads WHERE id=%s", (race_row['id'],)).fetchone()[0] == 'cancelled'
 checks.append('scope revoked during HTTP prevents append and is counted as cancelled, not done')
 
+# Owner enrollment (feature_enrollment) admits a second workspace with no env listing; nobody else is claimed.
+from postriff_phase2 import feature_enrollment
+SELF_SERVE = {"POSTRIFF_METRIC_SELF_SERVE_ENABLED": "1", "POSTRIFF_METRIC_SELF_SERVE_MAX_WORKSPACES": "5"}
+enrolled = M.MetricScheduler(connection, oauth, transport=transport, workspace_allowlist=(), worker_id="mr-enrolled", env=SELF_SERVE)
+assert enrolled.claim(100) == [], "no enrollment yet: nothing is claimed"
+with connection() as db:
+    assert db.execute("SELECT status,attempts FROM pr_metric_reads WHERE workspace_id=%s AND provider_post_id='denied-tenant'", (other,)).fetchone() == ("pending", 0)
+with connection() as db, db.cursor() as cur:
+    feature_enrollment.enroll(cur, other, "growth_measurement", actor=TWO, role="owner", values=SELF_SERVE)
+    M.schedule(cur, other, CONN, "threads", "enroll-race", "job-enroll-race", time.time() - 5, "verification", (("t0", 0),))
+    M.schedule(cur, other, CONN, "threads", "after-leave", "job-after-leave", time.time() + 3600, "verification", (("t0", 0),))
+    db.commit()
+assert enrolled.workspace_allowed(other) and not enrolled.workspace_allowed(wid)
+claimed = enrolled.claim(100)
+assert claimed and {r["workspaceId"] for r in claimed} == {other}, claimed
+tenant = next(r for r in claimed if r["postId"] == "denied-tenant")
+transport.replies = [INSIGHTS]
+assert enrolled.complete(tenant, enrolled.read(tenant, {})) is True
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE workspace_id=%s AND provider_post_id='denied-tenant' AND availability='available'", (other,)).fetchone()[0] == 2
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE workspace_id=%s AND provider_post_id='denied-tenant'", (wid,)).fetchone()[0] == 0
+for row in claimed:
+    if row["postId"] not in ("denied-tenant", "enroll-race"):
+        enrolled.complete(row, enrolled.read(row, {}))
+checks.append("an owner-enrolled workspace is admitted without any env listing; its readings stay in its own workspace")
+
+# Revoke race: the read is in flight when the owner leaves; leaving closes the claimed row, so nothing is recorded.
+race = next(r for r in claimed if r["postId"] == "enroll-race")
+transport.replies = [INSIGHTS]
+race_outcome = enrolled.read(race, {})
+assert race_outcome["state"] == "done", race_outcome
+with connection() as db, db.cursor() as cur:
+    feature_enrollment.unenroll(cur, other, "growth_measurement", actor=TWO, role="owner")
+    closed = M.close_unadmitted_reads(cur, other)
+    db.commit()
+assert closed >= 2, closed
+assert enrolled.complete(race, race_outcome) is False
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE workspace_id=%s AND provider_post_id='enroll-race'", (other,)).fetchone()[0] == 0
+    states = dict(db.execute("SELECT provider_post_id, status || ':' || coalesce(failure_class,'') FROM pr_metric_reads WHERE workspace_id=%s AND provider_post_id IN ('enroll-race','after-leave')", (other,)).fetchall())
+assert states == {"enroll-race": "cancelled:not_admitted", "after-leave": "cancelled:not_admitted"}, states
+assert enrolled.claim(100) == []
+checks.append("leaving closes pending and in-flight readings as not_admitted; an in-flight read's completion fails its fence and records nothing")
+
+# Revocation without a row change (self-serve switched off): completion re-reads admission after the workspace lock.
+with connection() as db, db.cursor() as cur:
+    feature_enrollment.enroll(cur, other, "growth_measurement", actor=TWO, role="owner", values=SELF_SERVE)
+    M.schedule(cur, other, CONN, "threads", "switch-off", "job-switch-off", time.time() - 5, "verification", (("t0", 0),))
+    db.commit()
+switched = next(r for r in enrolled.claim(100) if r["postId"] == "switch-off")
+transport.replies = [INSIGHTS]
+switch_outcome = enrolled.read(switched, {})
+paused = M.MetricScheduler(connection, oauth, transport=transport, workspace_allowlist=(), worker_id="mr-enrolled", env={})
+assert paused.complete(switched, switch_outcome) is True and switch_outcome["state"] == "cancelled" and switch_outcome["failure"] == "not_admitted"
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE workspace_id=%s AND provider_post_id='switch-off'", (other,)).fetchone()[0] == 0
+    assert db.execute("SELECT status,failure_class FROM pr_metric_reads WHERE workspace_id=%s AND provider_post_id='switch-off'", (other,)).fetchone() == ("cancelled", "not_admitted")
+checks.append("turning self-serve off un-admits at completion: the in-flight read records nothing and closes as not_admitted, never 'disconnected'")
+
+# Window truth on real SQL: a 1h reading claimed three hours late closes as missed without a token or provider call.
+with connection() as db, db.cursor() as cur:
+    M.schedule(cur, wid, CONN, "threads", "late-window", "job-late-window", time.time() - 3 * 3600 - 3600, "verification", (("1h", 3600),))
+    db.commit()
+late = next(r for r in scheduler.claim(100) if r["postId"] == "late-window")
+tokens, reads = oauth.calls, len(transport.urls)
+late_outcome = scheduler.read(late, {})
+assert (late_outcome["state"], late_outcome["failure"]) == ("unavailable", "window_missed"), late_outcome
+assert (oauth.calls, len(transport.urls)) == (tokens, reads)
+assert scheduler.complete(late, late_outcome) is True
+with connection() as db:
+    assert db.execute("SELECT status,failure_class FROM pr_metric_reads WHERE id=%s", (late["id"],)).fetchone() == ("unavailable", "window_missed")
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider_post_id='late-window'").fetchone()[0] == 0
+checks.append("a reading claimed after its window's tolerance closes as unavailable/window_missed: no token, no provider call, no observation")
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

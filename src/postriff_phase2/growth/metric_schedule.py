@@ -427,8 +427,9 @@ class MetricScheduler:
     def _read_comments(self, row, grant, now):
         """One bounded comment page for a young owned post (growth/comment_sync). Never fails the reading; None when
         not due, not permitted, out of time or unavailable."""
+        deadline = getattr(self, "_deadline", None)   # set only while tick() runs
         if (not comment_sync.due(row, now) or not comment_sync.scoped(grant.get("scopes"), row["provider"])
-                or self.monotonic() >= getattr(self, "_deadline", float("inf"))):
+                or (deadline is not None and self.monotonic() >= deadline)):
             return None
         try:
             with self.connection_factory() as db, db.cursor() as cur:
@@ -537,5 +538,7 @@ class MetricScheduler:
         except Exception as error:  # noqa: BLE001 - the cron handler's later steps must still run
             _note("metric_reads.tick_failed", error)
             counts["status"] = "unavailable"
+        finally:
+            self._deadline = None
         logger.info(json.dumps({"event": "metric_reads.tick", **counts, "costUsd": None, "costSource": "unknown"}))
         return counts
