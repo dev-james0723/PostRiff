@@ -267,12 +267,16 @@ scene('axe', async (t) => {
 scene('locales', async (t) => {
   const done = [];
   for (const locale of ['en-US', 'zh-HK', 'zh-CN']) {
+    t.step(`${locale}:open`);
     const page = await t.page({ surface: 'panel', locale });
+    t.step(`${locale}:generate`);
     const { region } = await generated(t, page);
+    t.step(`${locale}:ready`);
     t.assert(await noRawDsl(region), `${locale}: no raw DSL`);
     const lang = await page.evaluate(() => document.documentElement.lang);
     done.push(`${locale}→lang=${lang}`);
-    await page.context().close();   // free the whole context before the next locale (WebKit lost pages when contexts piled up)
+    await page.context().close();   // free the whole context before the next locale
+    t.step(`${locale}:closed`);
   }
   return done.join(', ');
 });
@@ -399,14 +403,21 @@ scene('xss', async (t) => {
 scene('viewports', async (t) => {
   const out = [];
   for (const vp of t.viewports) {
+    t.step(`${vp.id}:open`);
     const page = await t.page({ surface: vp.surface, viewport: { width: vp.width, height: vp.height }, mobile: vp.width < 768 });
+    t.step(`${vp.id}:generate`);
     const { region } = await generated(t, page);
+    t.step(`${vp.id}:ready`);
     const fits = await page.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1);
     const box = await region.boundingBox();
+    // Page-side growth signal for this size: DOM node count and JS heap where the engine exposes it (WebKit doesn't).
+    const size = await page.evaluate(() => ({ nodes: document.getElementsByTagName('*').length, heapMb: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null }));
+    t.step(`${vp.id}:measured nodes=${size.nodes} heapMb=${size.heapMb}`);
     t.assert(fits, `${vp.id}: no sideways page scroll`);
     t.assert(!box || box.width <= vp.width + 1, `${vp.id}: generated view fits the viewport width`, box);
     out.push(`${vp.id}✓`);
-    await page.context().close();   // one live context at a time (WebKit lost pages when five contexts piled up)
+    await page.context().close();   // one live context at a time
+    t.step(`${vp.id}:closed`);
   }
   return `${out.join(' ')} (emulation)`;
 });

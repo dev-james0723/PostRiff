@@ -115,8 +115,19 @@ run_scenes() {
       AGENT_UI_STACK_STATE="$EVIDENCE/stack.json" RAFII_TEST_PYTHON="$PY" \
       node web/tests/agent-ui-e2e/run.cjs --browser="$engine" --out="$EVIDENCE" 2>&1 | tee "$EVIDENCE/e2e-$engine.log" || failed=1
     record "e2e-$engine" "$failed" "$(grep -cE '^(PASS|FAIL|BLOCKED) ' "$EVIDENCE/e2e-$engine.log" || echo 0)"
+    system_diagnostics "after-$engine"
   done
   return "$failed"
+}
+
+system_diagnostics() { # label — runner memory, /dev/shm and kernel OOM/crash lines (diagnostics only; never fails the run)
+  {
+    echo "== $1 $(date -u +%H:%M:%SZ)"
+    free -m 2>/dev/null || true
+    df -h /dev/shm 2>/dev/null || true
+    nproc 2>/dev/null || true
+    sudo -n dmesg -T 2>/dev/null | grep -iE 'out of memory|oom-kill|killed process|segfault|WebKit|MiniBrowser' | tail -n 30 || true
+  } >>"$EVIDENCE/system-diagnostics.txt" 2>&1
 }
 
 bundle_grep() {
@@ -138,6 +149,7 @@ case "$mode" in
     trap cleanup EXIT
     failed=0
     start_stack || { record "$mode-stack" 1 0; exit 1; }
+    system_diagnostics "stack-started"
     run_py_corpus api_corpus api-corpus || failed=1
     run_py_corpus validator_corpus validator-corpus || failed=1
     # The contract-layer negatives (no stack needed) are mapped to gates too: record them in this run so its gate
