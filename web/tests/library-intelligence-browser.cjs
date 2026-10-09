@@ -184,7 +184,7 @@ async function openLibrary(page, query = '') {
         check(`${label}: scope visible beside search`, (await scope.isVisible()) && /Entire permitted Library/.test(await scope.innerText()));
         check(`${label}: no horizontal overflow`, await noOverflow(page));
 
-        // A016: a document cover is the real rendered page or says it is preparing/unavailable; only a raster says "PAGE 1".
+        // A016: a document cover is the real rendered page or says it is preparing/unavailable; no tile carries a page badge.
         const covers = await page.evaluate(() => {
           const nodes = [...document.querySelectorAll('[data-library-item] [data-thumbnail-preview]')];
           return {
@@ -196,7 +196,7 @@ async function openLibrary(page, query = '') {
         // 'audio-player' is the inline preview's own player (its waveform is decoded from the file after a press).
         const honest = ['first-page-raster', 'preparing', 'unavailable', 'audio-waveform', 'audio-file', 'audio-player', 'image', 'video-poster'];
         check(`${label}: every cover is a real rendition or says it is not`, covers.kinds.length > 0 && covers.kinds.every((kind) => honest.includes(kind)), covers.kinds);
-        check(`${label}: only a real page raster carries a page label`, covers.pageLabels.every((kind) => kind === 'first-page-raster'), covers.pageLabels);
+        check(`${label}: no page badge on document tiles`, covers.pageLabels.length === 0, covers.pageLabels);
         check(`${label}: no faux sheet, slide or text-cover labels`, !covers.faux);
 
         // A065: animated digits never add a second accessible name.

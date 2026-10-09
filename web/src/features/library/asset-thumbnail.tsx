@@ -74,7 +74,6 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
     <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview='first-page-raster' className={cn('relative overflow-hidden bg-white', SIZE_CLASS[size])}>
       {/* A tile shows the top of the real page at a legible scale; the detail shows the whole page. */}
       <Image src={query.data} alt={`First page of ${asset.originalFilename || 'document'}`} width={1000} height={1400} unoptimized onError={() => setImageFailed(true)} className={cn('h-full w-full object-top', size === 'detail' ? 'object-contain' : 'object-cover')} />
-      {size !== 'row' ? <span className='bg-background/90 text-foreground/80 ring-foreground/10 absolute bottom-2 left-2 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1'>{extensionOf(asset).toUpperCase()} · PAGE 1</span> : null}
     </div>
   );
 }

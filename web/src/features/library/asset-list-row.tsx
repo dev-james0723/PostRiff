@@ -142,7 +142,7 @@ export function AssetListRow({
               <span className='truncate text-sm font-medium' title={title}>
                 {title}
               </span>
-              {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{[cardMeta(asset), dims && assetKind === 'video' ? dims : null].filter(Boolean).join(' · ')}</span> : null}
+              {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{[cardMeta(asset), dims && assetKind === 'video' ? dims : null, (asset.tags ?? []).slice(0, 3).join(', ')].filter(Boolean).join(' · ')}</span> : null}
               {status ? (
                 <span className='sm:hidden'>
                   <CardStatusLine status={status} publishing={publishing} />

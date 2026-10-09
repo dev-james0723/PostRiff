@@ -59,7 +59,9 @@ def _asset(a):
         'id': str(a['id']).replace('-', ''), 'createdBy': str(a['created_by']),
         'uploadedBy': str(a['created_by']), 'originalFilename': a['original_filename'],
         'displayTitle': a['display_title'], 'titleSource': a['title_source'],
-        'summary': a['summary'], 'aiSummary': a['summary'], 'tags': a['tags'], 'aiTags': a['tags'],
+        'summary': a['summary'], 'aiSummary': a['summary'], 'tags': a['tags'],
+        # Tags the server took from the file itself (never a model); the UI marks them as automatic.
+        'aiTags': [t for t in (provenance.get('autoTags') or []) if isinstance(t, str)][:10],
         'kind': a['kind'], 'assetKind': a['kind'], 'mime': a['mime'], 'extension': a['extension'],
         'bytes': a['bytes'], 'hash': a['sha256'] or '', 'sha256': a['sha256'],
         'processing': a['processing_status'], 'processingStatus': a['processing_status'],
@@ -202,6 +204,9 @@ class UniversalLibrary:
             else:
                 status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES) else extract_isolated(raw,a['extension']))
             parts = chunks(text)
+            # Free, model-free metadata from the file's own text (and name): key-phrase tags and one sentence.
+            from .library_autometa import suggest
+            auto = suggest(text, a.get('original_filename') or '') if a['kind'] != 'audio' else {'tags': [], 'summary': None}
             with connect() as db, db.cursor() as cur:
                 # Serializes digest admission with other files in this workspace, without a network call under lock.
                 cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (w,))
@@ -219,7 +224,7 @@ class UniversalLibrary:
                 cur.execute('DELETE FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s',(w,i))
                 for n, part in enumerate(parts):
                     cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
-                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
+                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,tags=CASE WHEN cardinality(tags)=0 THEN %s ELSE tags END,provenance=provenance||%s::jsonb,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',auto['summary'] or normalize(text)[:360] or None,auto['tags'],json.dumps({'autoTags':auto['tags'],'autoMeta':'extract-v1'}),w,i))
             try:  # Library intelligence, after commit: flag-gated local capabilities; never blocks this file.
                 from .library_intelligence import jobs as intelligence_jobs
                 intelligence_jobs.on_asset_processed(connect, w, i)
@@ -473,7 +478,7 @@ class UniversalLibrary:
                 title,tags = labels[a['id']]
                 if title:
                     a.update(displayTitle=title,titleSource='user')
-                a.update(tags=tags,aiTags=tags)
+                a.update(tags=tags)
 
     def list(self,w,t,query='',limit=100,offset=0,kind='all',tag='',collection='',sort='newest'):
         try:

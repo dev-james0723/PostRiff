@@ -53,6 +53,13 @@ class RealWorldPdfTests(unittest.TestCase):
   self.assertIn("Hear the pull toward tonic",text)
   self.assertIn("SLIDE 18",text)
   self.assertGreater(len(text),30000)
+ @unittest.skipUnless(__import__("sys").platform.startswith("linux"),"the renderer child enforces Linux address-space limits")
+ def test_pdf_text_comes_from_the_pdfium_renderer_child(self):
+  # The engine that renders page previews on Vercel also reads the text (2026-10-09: pypdf failed every real PDF there).
+  from postriff_phase2.library_preview import extract_text_isolated
+  text=extract_text_isolated(self.FIXTURE.read_bytes(),"pdf")
+  self.assertIn("Hear the pull toward tonic",text)
+  self.assertIn("SLIDE 18",text)
  def test_stale_xref_offsets_are_read_leniently(self):
   import re
   from library_samples import pdf

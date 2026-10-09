@@ -41,4 +41,15 @@ class LibraryStorageTests(unittest.TestCase):
  def test_invalid_file_object_name_fails_closed(self):
   s,_=self.make([])
   with self.assertRaises(Exception):s.object_info(WS,"file","../evil.pdf")
+ def test_delete_treats_supabase_not_found_as_already_gone(self):
+  # The page preview of a document that never rendered one: Supabase answers 400 not_found (2026-10-09 staging bug:
+  # deleting a failed PDF stayed "deleting" with "Private storage could not delete this object.").
+  s,h=self.make([(400,{},b'{"statusCode":"404","error":"not_found","message":"Object not found"}'),(400,{},b"")])
+  s.delete(WS,"file",OBJ)
+  self.assertEqual([m for m,_,_ in h.requests],["DELETE","HEAD"])
+ def test_delete_still_fails_when_the_object_remains(self):
+  s,h=self.make([(400,{},b'{"error":"invalid"}'),(200,{"Content-Length":"3"},b"")])
+  with self.assertRaises(Exception):s.delete(WS,"file",OBJ)
+ def test_delete_success_needs_no_second_request(self):
+  s,h=self.make([(200,{},b"[]")]);s.delete(WS,"file",OBJ);self.assertEqual(len(h.requests),1)
 if __name__=="__main__":unittest.main()

@@ -134,15 +134,20 @@ def extract_isolated(raw, ext):
     import os
     import subprocess
     import sys
-    if ext in LEGACY:
+    if ext in LEGACY or ext == 'pdf':
         # The existing Office boundary has a credential-free environment,
         # denied network sockets, a process-group deadline, and enough bounded
         # memory/CPU for one conversion. Do not nest it in the smaller XML parser.
+        # PDFs use the same child: its pdfium text reader is the engine that already renders their page previews, and
+        # it reads real-world files (scans, exported slides) that trip pure-Python parsers. pypdf below is the fallback,
+        # which also gives password-protected files their specific message.
         from .library_preview import extract_text_isolated
         try:
             return 'ready', normalize(extract_text_isolated(raw, ext))
-        except (ValueError, OSError, subprocess.TimeoutExpired):
-            raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+        except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+            if ext != 'pdf':
+                raise AlphaError('This document exceeded safe extraction limits or could not be read.',422) from None
+            _failed(ext, 'pdfium_' + type(error).__name__)
     # Vercel installs vendored dependencies through site.addsitedir; these are
     # present in sys.path but absent from a fresh subprocess's default path.
     paths = [str(__import__('pathlib').Path(__file__).resolve().parents[1]), *sys.path]

@@ -146,8 +146,11 @@ export function CapabilityList({ states }: { states: CapabilityState[] }) {
 }
 
 export function UnderstandingSummary({ asset, card }: { asset: LibraryAsset; card: UnderstandingCard | undefined }) {
-  const summary = card?.summary ?? (asset.aiSummary ? { text: asset.aiSummary, origin: 'ai_suggested' as const } : null);
+  // The stored summary is one sentence taken from the file at upload (no model): it is extracted, not AI.
+  const summary = card?.summary ?? (asset.aiSummary ? { text: asset.aiSummary, origin: 'extracted' as const } : null);
   const topics = card?.topics ?? [];
+  const tags = asset.tags ?? [];
+  const automatic = new Set(asset.aiTags ?? []);
   return (
     <div className='flex flex-col gap-2'>
       {summary ? (
@@ -158,6 +161,22 @@ export function UnderstandingSummary({ asset, card }: { asset: LibraryAsset; car
       ) : (
         <p className='text-muted-foreground text-sm'>No summary yet. The original stays useful as a file.</p>
       )}
+      {tags.length ? (
+        <div className='flex flex-col gap-1.5'>
+          <ul aria-label='Tags' className='flex flex-wrap gap-1.5'>
+            {tags.map((tag) => (
+              <li
+                key={tag}
+                title={automatic.has(tag) ? 'Taken from the file automatically' : undefined}
+                className={cn('rounded-full px-2.5 py-1 text-xs', automatic.has(tag) ? 'text-muted-foreground border border-dashed border-current' : 'rafii-quiet')}
+              >
+                {tag}
+              </li>
+            ))}
+          </ul>
+          {tags.some((tag) => automatic.has(tag)) ? <p className='text-muted-foreground text-xs'>Dashed tags were taken from the file automatically. Change them in Edit details.</p> : null}
+        </div>
+      ) : null}
       {topics.length ? (
         <ul aria-label='Topics' className='flex flex-wrap gap-1.5'>
           {topics.map((topic) => {

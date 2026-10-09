@@ -30,6 +30,14 @@ Run locally on `11_Full_20min_Teaching_Script.pdf` (18 pages):
 
 ## Recommendation
 
+**Step 1 is built (2026-10-09, `library_autometa.py`, `extract-v1`).**
+- Every processed document gets up to 5 tags. They are recurring key phrases from its text (English runs, Traditional Chinese terms of 2–6 characters). A file with no text is tagged from its file name.
+- Each document also gets one sentence copied verbatim from the file.
+- Automatic tags fill the tags field only when it is empty, are listed separately (`aiTags`), and show dashed in the inspector.
+- The summary is labelled "Extracted".
+- On your teaching script it produced: leading-tone seventh chords, minor, a-flat, diminished, major.
+
+
 1. **Now, free:** make the existing extractive output honest and useful.
    - Key phrases appear as **suggested tags** the person accepts with one tap. They are never written into their tags silently.
    - A **"From the file"** sentence is shown, never called an AI summary.

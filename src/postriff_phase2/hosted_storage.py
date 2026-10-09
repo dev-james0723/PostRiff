@@ -209,8 +209,15 @@ class SupabaseStorage:
         path = self._path(workspace_id, category, object_name)
         url = self._object_url(category, path)
         status, _, _ = self.send("DELETE", url, self._headers(), None)
-        if status not in (200, 204, 404):
-            raise AlphaError("Private storage could not delete this object.", 502)
+        if status in (200, 204, 404):
+            return
+        if status == 400:
+            # Supabase answers 400 (statusCode "404", not_found) for an object that is already gone, such as the page
+            # preview of a document that never rendered one. Confirm it is absent before treating the delete as done.
+            absent, _, _ = self.send("HEAD", url, self._headers(), None)
+            if absent in (400, 404):
+                return
+        raise AlphaError("Private storage could not delete this object.", 502)
 
     def signed_url(self, workspace_id, category, object_name, expires_in=300):
         if type(expires_in) is not int or not 60 <= expires_in <= 600:

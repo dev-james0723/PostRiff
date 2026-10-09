@@ -136,10 +136,10 @@ test('test_honest_document_preview: text covers say extracted text; only a real 
   // "Preview unavailable", never a stand-in that looks like the page.
   const thumbnail = feature('asset-thumbnail.tsx');
   for (const banned of ['SHEET PREVIEW', 'SLIDE PREVIEW', 'WORD · FIRST PAGE', 'DOCUMENT · FIRST PAGE', 'TEXT PREVIEW', 'charCodeAt', 'asset.aiSummary', '<iframe']) assert.ok(!thumbnail.includes(banned), banned);
-  const pageLabelLines = thumbnail.split('\n').filter((line) => line.includes('· PAGE 1'));
-  assert.equal(pageLabelLines.length, 1, 'one page label');
-  const label = thumbnail.indexOf('· PAGE 1');
-  assert.ok(label > thumbnail.indexOf("data-thumbnail-preview='first-page-raster'") && label < thumbnail.indexOf('function AudioCover'), 'the page label sits on the real raster');
+  // The real page needs no badge on the tile (James, 2026-10-09): the raster carries data-thumbnail-preview and the
+  // card's accessible name says "first-page preview"; no visible "PDF · PAGE 1" chip.
+  assert.ok(!thumbnail.includes('· PAGE 1'), 'no page badge on the tile');
+  assert.match(thumbnail, /data-thumbnail-preview='first-page-raster'/);
   assert.match(thumbnail, /api\.libraryPreviewUrl\(workspaceId, asset\.id\)/);
   assert.match(thumbnail, /'Preparing preview' : failed \? 'No preview' : 'Preview unavailable'/);
   // A file the server could not read is never shown as still preparing.
