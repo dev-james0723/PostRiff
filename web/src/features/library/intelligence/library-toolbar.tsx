@@ -112,6 +112,9 @@ const SORT_LABELS: Record<LibrarySortParam, string> = {
   largest: 'Largest first'
 };
 
+/** One spoken name per option: the count joins the words, never a second label. */
+const withCount = (text: string, value: number | undefined) => (typeof value === 'number' ? `${text} · ${value.toLocaleString()}` : text);
+
 const USE_LABELS: Record<LibraryUsageParam, string> = { all: 'Any use', unused: 'Unused', used: 'Used in posts' };
 const STATUS_LABELS: Record<LibraryStatusParam, string> = { all: 'Any status', ready: 'Ready', processing: 'Processing', attention: 'Needs attention' };
 
@@ -166,8 +169,6 @@ export function LibraryFilters({
   view: ReactNode;
 }) {
   const active = (kind !== 'all' ? 1 : 0) + (use !== 'all' ? 1 : 0) + (status !== 'all' ? 1 : 0) + (tag ? 1 : 0);
-  // One spoken name per option: the count joins the words, never a second label.
-  const withCount = (text: string, value: number | undefined) => (typeof value === 'number' ? `${text} · ${value.toLocaleString()}` : text);
   return (
     <div role='toolbar' aria-label='Filter and view' data-tour='library-filter' className='flex min-w-0 flex-wrap items-center gap-x-1 gap-y-2'>
       <div className='flex min-w-0 flex-wrap items-center gap-1'>

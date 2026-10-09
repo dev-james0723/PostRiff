@@ -628,8 +628,11 @@ function LibraryPage() {
 
   const [railCollapsed, setRailCollapsed] = useState(false);
   useEffect(() => setRailCollapsed(readRailCollapsed()), []);
+  // "Show collections" while the inspector has narrowed the rail keeps it open for this visit (the person's choice wins).
+  const [railPinned, setRailPinned] = useState(false);
   const collapseRail = useCallback((value: boolean) => {
     setRailCollapsed(value);
+    setRailPinned(!value);
     try {
       window.localStorage.setItem(RAIL_KEY, value ? '1' : '0');
     } catch {
@@ -639,7 +642,7 @@ function LibraryPage() {
 
   // The inspector docks beside the results from 1280 px (non-modal); below that it is a sheet, on phones a drawer.
   const dockedOpen = docked && !isMobile && detailOpen;
-  const railNarrow = wide && (railCollapsed || (dockedOpen && !ultraWide));
+  const railNarrow = wide && (railCollapsed || (dockedOpen && !ultraWide && !railPinned));
 
   // "/" focuses the search from anywhere on the page (not while typing elsewhere).
   useEffect(() => {

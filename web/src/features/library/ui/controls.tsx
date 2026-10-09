@@ -99,17 +99,17 @@ export function IconControl({
   tooltip?: boolean;
   side?: 'top' | 'bottom' | 'left' | 'right';
 }) {
-  const className_ = controlClass({ tone, size, iconOnly: true, active, className });
+  const classes = controlClass({ tone, size, iconOnly: true, active, className });
   if (!tooltip) {
     return (
-      <Button {...props} aria-label={label} data-active={active || undefined} className={className_}>
+      <Button {...props} aria-label={label} data-active={active || undefined} className={classes}>
         {children}
       </Button>
     );
   }
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button {...props} aria-label={label} data-active={active || undefined} className={className_} />}>{children}</TooltipTrigger>
+      <TooltipTrigger render={<Button {...props} aria-label={label} data-active={active || undefined} className={classes} />}>{children}</TooltipTrigger>
       <TooltipContent side={side}>{label}</TooltipContent>
     </Tooltip>
   );

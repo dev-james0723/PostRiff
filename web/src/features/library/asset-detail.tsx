@@ -513,6 +513,20 @@ export function AssetDetail(props: AssetDetailProps & { docked?: boolean }) {
       if (opener instanceof HTMLElement) opener.focus();
     });
   };
+  // Docked: Escape closes the panel while focus is inside it (menus and dialogs opened from it handle their own Escape).
+  const closeRef = useRef(closeDocked);
+  closeRef.current = closeDocked;
+  useEffect(() => {
+    if (!dockedOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (!panelRef.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      closeRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [dockedOpen]);
   const actions = asset ? <DetailActions asset={asset} assetRef={intel.card.data?.assetRef ?? assetRefFor(asset.id)} canEdit={props.canEdit} canApprove={props.canApprove} onUseInDraft={props.onUseInDraft} /> : null;
   const body = (withActions: boolean) =>
     asset ? (
@@ -568,12 +582,6 @@ export function AssetDetail(props: AssetDetailProps & { docked?: boolean }) {
         ref={panelRef}
         aria-labelledby='library-inspector-title'
         data-library-inspector=''
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && !event.defaultPrevented) {
-            event.preventDefault();
-            closeDocked();
-          }
-        }}
         className='bg-card ring-foreground/[0.08] sticky top-4 flex max-h-[calc(100dvh-2rem)] min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] ring-1'
       >
         <header className='flex items-start gap-2 border-b border-foreground/[0.06] px-4 py-3'>

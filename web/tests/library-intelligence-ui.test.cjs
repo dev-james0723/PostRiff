@@ -271,7 +271,7 @@ test('test_drawer_focus_restore: the sheet and drawer trap focus, close on Escap
   assert.doesNotMatch(detail, /modal=\{false\}|disablePointerDismissal/, 'modal (focus-trapping, Escape-closable) primitives');
   assert.match(detail, /label='Close asset details'/, 'every form of the panel has a named close control');
   // Docked (from 1280 px) the inspector is non-modal: Escape closes it and focus returns to the card that opened it.
-  assert.match(detail, /if \(event\.key === 'Escape' && !event\.defaultPrevented\)/);
+  assert.match(detail, /if \(event\.key !== 'Escape' \|\| event\.defaultPrevented\) return;\s*if \(!panelRef\.current\?\.contains\(document\.activeElement\)\) return;/);
   assert.match(detail, /const opener = finalFocus\(\);\s*onOpenChange\(false\);/);
   assert.match(detail, /aria-labelledby='library-inspector-title'/);
   for (const file of ['asset-card.tsx', 'asset-list-row.tsx']) assert.match(feature(file), /data-library-open=\{asset\.id\}/, file);
