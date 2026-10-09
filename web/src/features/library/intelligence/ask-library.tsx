@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage } from '@/components/rafii';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from '../ui/controls';
 import { ApiError } from '@/lib/api/client';
 import type { AnswerResult, LibraryScope, SourceRef, ViewerResult } from '@/lib/api/library-intelligence-types';
 import {

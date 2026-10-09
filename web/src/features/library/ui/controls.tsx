@@ -175,3 +175,44 @@ export function ToolbarSelect<V extends string>({
 export function ToolbarDivider({ className }: { className?: string }) {
   return <span aria-hidden className={cn('bg-foreground/10 mx-1 h-5 w-px shrink-0', className)} />;
 }
+
+/*
+ * Existing Library panels keep their `variant`/`size` vocabulary but render on this scale: the old 48 px `control` and
+ * hand-set 44 px heights become the 36/32 px (44 px on touch) controls. Inside a dialog the filled `action` stays the
+ * dialog's one primary; inline on the page it becomes secondary, so the page keeps a single filled Add.
+ */
+type LegacyProps = Omit<ComponentProps<typeof Button>, 'className'> & { className?: string };
+
+const LEGACY_TONE: Record<string, Exclude<ControlTone, 'primary'> | 'action'> = {
+  action: 'action',
+  default: 'action',
+  glass: 'secondary',
+  outline: 'secondary',
+  secondary: 'secondary',
+  quiet: 'ghost',
+  ghost: 'ghost',
+  destructive: 'danger'
+};
+
+function legacyClass({ variant, size, className, primaryInside }: { variant: string; size: string; className?: string; primaryInside: boolean }) {
+  const mapped = LEGACY_TONE[variant] ?? 'secondary';
+  const tone: ControlTone = mapped === 'action' ? (primaryInside ? 'primary' : 'secondary') : mapped;
+  const iconOnly = size.startsWith('icon');
+  const small = ['sm', 'xs', 'icon-sm', 'icon-xs'].includes(size);
+  const cleaned = className?.replace(/(^|\s)(min-)?h-1[12](?=\s|$)/g, ' ').trim();
+  return { tone, classes: controlClass({ tone, size: small ? 'sm' : 'md', iconOnly, className: cleaned }) };
+}
+
+/** For buttons inline on the Library page and in the inspector. */
+export function PanelButton({ variant = 'default', size = 'default', className, ...props }: LegacyProps) {
+  if (variant === 'link') return <Button {...props} variant='link' size={size} className={className} />;
+  const { tone, classes } = legacyClass({ variant: variant ?? 'default', size: size ?? 'default', className, primaryInside: false });
+  return <Button {...props} variant={MATERIAL[tone]} className={classes} />;
+}
+
+/** For buttons inside a Library dialog, where the filled action is that dialog's one primary. */
+export function DialogButton({ variant = 'default', size = 'default', className, ...props }: LegacyProps) {
+  if (variant === 'link') return <Button {...props} variant='link' size={size} className={className} />;
+  const { tone, classes } = legacyClass({ variant: variant ?? 'default', size: size ?? 'default', className, primaryInside: true });
+  return <Button {...props} variant={MATERIAL[tone]} className={classes} />;
+}

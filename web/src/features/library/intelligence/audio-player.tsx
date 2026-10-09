@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from '../ui/controls';
 import type { AssetRef, ContentSegment } from '@/lib/api/library-intelligence-types';
 import { newIdempotencyKey, outcomeFromActionResult, outcomeFromError } from '@/lib/library/batch';
 import { assetRefFor } from '@/lib/library/url-state';

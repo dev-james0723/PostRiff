@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from './ui/controls';
 import { Input } from '@/components/ui/input';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useSnapshot, keys } from '@/lib/api/hooks';

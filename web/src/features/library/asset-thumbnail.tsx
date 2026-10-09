@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from './ui/controls';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/lib/api/client';
 import { useWorkspaceApi } from '@/lib/workspace/provider';

@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+import { DialogButton as Button } from '../ui/controls';
 import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api/client';
 import type { AffectedDependent, AssetRef, ComparisonResult, ComparisonSide, VersionStackEntry } from '@/lib/api/library-intelligence-types';
@@ -247,7 +247,8 @@ function LinkVersionDialog({ open, onOpenChange, current, onAnnounce }: { open: 
               const chosen = picked?.id === asset.id;
               return (
                 <li key={asset.id}>
-                  <Button variant={chosen ? 'action' : 'quiet'} size='control' className='h-11 w-full justify-start' aria-pressed={chosen} onClick={() => setPicked({ id: asset.id, title })}>
+                  <Button variant='quiet' size='control' className='aria-pressed:bg-foreground/[0.07] aria-pressed:text-foreground w-full justify-start' aria-pressed={chosen} onClick={() => setPicked({ id: asset.id, title })}>
+                    {chosen ? <Icons.check aria-hidden /> : null}
                     <span className='truncate'>{title}</span>
                   </Button>
                 </li>
