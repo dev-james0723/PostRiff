@@ -29,7 +29,7 @@ import unittest
 
 loader = unittest.TestLoader()
 suite = unittest.TestSuite()
-# Include the existing creator tests and new test_youtube*.py OAuth regressions.
+# Include creator, OAuth, context and workspace-output retention/fence regressions.
 suite.addTests(loader.discover('tests', pattern='test_youtube*.py', top_level_dir='tests'))
 suite.addTests(loader.loadTestsFromNames([
     'test_rafii_origin_migration',
@@ -51,6 +51,7 @@ suite.addTests(loader.loadTestsFromNames([
     'test_reply_writer',
     'test_postriff_content_types',
     'test_postriff_receipt_contract',
+    'test_agent_runtime', 'test_agent_runtime_references', 'test_rafii_followups', 'test_site_agent',
 ]))
 if loader.errors:
     for error in loader.errors:

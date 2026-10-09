@@ -364,6 +364,11 @@ class Cursor:
             found = db.credentials.get(params[1])
             self.result = None if not found else (found["provider"], found["access"], found.get("refresh"), found["key_id"], found.get("expires"),
                                                   bool(found.get("refresh")), found["revoked"], found["scopes"], found["account"], db.clock() - 3600)
+        elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in s:
+            self.result = (True,)
+        elif s.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            found = db.credentials.get(params[1])
+            self.result = ('00000000-0000-0000-0000-000000000098',) if found and not found['revoked'] else None
         elif s.startswith("UPDATE public.pr_encrypted_credentials SET scopes=%s"):
             db.credentials[params[2]]["scopes"] = params[0]
         elif s.startswith("SELECT provider_account_id FROM public.pr_encrypted_credentials"):

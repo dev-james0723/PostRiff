@@ -104,7 +104,7 @@ def run_lane(service, worker, lane, environ=None):
     if not creator or not provider or not getattr(provider, 'creator_enabled', False):
         return {'enabled': False, 'lane': lane, 'processed': 0, 'providerVerified': False, 'blocker': 'youtube_creator_unavailable'}
     if not creator.fleet_schema_ready():
-        return {'enabled': False, 'lane': lane, 'processed': 0, 'providerVerified': False, 'blocker': 'youtube_schema_089_097_required'}
+        return {'enabled': False, 'lane': lane, 'processed': 0, 'providerVerified': False, 'blocker': 'youtube_schema_089_097_104_required'}
     result = {'enabled': True, 'lane': lane, 'processed': 0, 'providerVerified': False,
               'budget': {'maxItems': configured.items, 'maxSeconds': configured.seconds, 'maxApiRequests': configured.requests}}
     with request_budget(configured) as budget:
