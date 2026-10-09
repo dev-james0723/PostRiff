@@ -118,7 +118,7 @@ runtime = SimpleNamespace(service=service, cfg=CFG)
 P1, P2, P3, P4, V1, V2 = (uuid.uuid4().hex for _ in range(6))     # workspace A media store
 D1, D2, D3 = (uuid.uuid4() for _ in range(3))                      # workspace A files
 BP, BD = uuid.uuid4().hex, uuid.uuid4()                             # workspace B photo, file
-SECRET = "Chopin Ballade rehearsal recital notes"
+CONTENT_ONLY = "Chopin Ballade rehearsal recital notes"
 
 
 def media(workspace, assets):
@@ -166,7 +166,7 @@ lib.metadata(wid, OWNER, P3, {"title": "Recital bow", "tags": ["recital"]})
 lib.metadata(wid, OWNER, V1, {"title": "Recital run-through"})
 lib.metadata(other_wid, OTHER, BP, {"title": "Piano practice in B", "tags": ["piano practice"]})
 library_file(D1, wid, ONE, "recital-programme.txt", "Recital programme", "2026-08-15 04:00:00+00", tags=["recital"])
-library_file(D2, wid, ONE, "notes.txt", None, "2026-09-10 04:00:00+00", summary=SECRET, chunk="Chopin: recital pacing, bar 1-24.")
+library_file(D2, wid, ONE, "notes.txt", None, "2026-09-10 04:00:00+00", summary=CONTENT_ONLY, chunk="Chopin: recital pacing, bar 1-24.")
 library_file(D3, wid, ONE, "ledger.txt", "Studio ledger", "2026-07-01 04:00:00+00", kind="file")
 library_file(BD, other_wid, OTHER_ID, "recital-b.txt", "Recital programme in B", "2026-08-16 04:00:00+00", tags=["recital"])
 upload_row(V1, wid, ONE, "2026-08-20 04:00:00+00")
@@ -260,7 +260,7 @@ def _():
     assert set(seen[OWNER]) == A_IDS, (sorted(set(seen[OWNER]) ^ A_IDS))
     _ctx, out = browse(OWNER)
     dumped = json.dumps(out)
-    for private in (SECRET, "private alt text", "poster.jpg", "x/video/", "e" * 64, ONE, "pypdf"):
+    for private in (CONTENT_ONLY, "private alt text", "poster.jpg", "x/video/", "e" * 64, ONE, "pypdf"):
         assert private not in dumped, private
     assert out["data"]["counts"] == {"listed": 9, "matched": 9, "dateUnknown": 5, "complete": True}, out["data"]["counts"]
     return {"rows": len(seen[OWNER])}

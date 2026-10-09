@@ -38,8 +38,8 @@ NOW = 1_790_000_000.0   # 2026-09-21T13:33:20Z (21:33 in Hong Kong)
 ON_ENV = {"RAFII_AGENT_LIBRARY_BROWSE_ENABLED": "1", "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES": WS}
 FORBIDDEN = ("summary", "aiSummary", "excerpt", "alt", "chunks", "sha256", "hash", "sourceHash", "storagePath", "objectName", "bucket", "poster",
              "frames", "uploadedBy", "createdBy", "provenance", "extractionError", "previewRoute", "url", "signedUrl", "mime", "sourceId")
-SECRET_TEXT = "Chopin Ballade No. 1 rehearsal notes"           # only in a document's summary/chunk text, never in its metadata
-SECRET_PATH = "11111111/video/private-object-name.mp4"
+CONTENT_ONLY_TEXT = "Chopin Ballade No. 1 rehearsal notes"           # only in a document's summary/chunk text, never in its metadata
+PRIVATE_PATH = "11111111/video/private-object-name.mp4"
 
 
 def hexid(n: int) -> str:
@@ -59,7 +59,7 @@ def photo(n, title=None, tags=(), collections=(), **extra):
 
 def video(n, title=None, tags=(), **extra):
     return {"id": hexid(n), "kind": "video", "assetKind": "video", "mime": "video/mp4", "category": "video", "bucket": "postriff-video",
-            "objectName": f"{hexid(n)}.mp4", "storagePath": SECRET_PATH, "bytes": 40_000_000 + n, "duration": 95.25, "durationSource": "container",
+            "objectName": f"{hexid(n)}.mp4", "storagePath": PRIVATE_PATH, "bytes": 40_000_000 + n, "duration": 95.25, "durationSource": "container",
             "width": 1920, "height": 1080, "etag": "e", "hash": "c" * 64, "poster": {"objectName": "poster.jpg", "hash": "d" * 64},
             "frames": [{"objectName": "f1.jpg", "at": 1.0}], "processing": "ready", "uploadedBy": PRINCIPAL, "deleted": False,
             **({"displayTitle": title} if title else {}), "tags": list(tags), "collections": [], **extra}
@@ -185,7 +185,7 @@ def library():
              photo(3, "Recital bow", tags=["recital"]), photo(4),
              video(5, "Recital run-through", tags=["recital"]), video(6, "Piano practice etude")]
     files = [file(10, "recital-programme.pdf", "Recital programme", created=hk(2026, 8, 15), tags=["recital"], source="src-1"),
-             file(11, "notes.pdf", None, created=hk(2026, 9, 10), summary=f"{SECRET_TEXT}. Recital pacing.", chunks="Chopin, recital"),
+             file(11, "notes.pdf", None, created=hk(2026, 9, 10), summary=f"{CONTENT_ONLY_TEXT}. Recital pacing.", chunks="Chopin, recital"),
              file(12, "ledger.pdf", "Studio ledger", created=hk(2026, 7, 1), kind="file")]
     uploads = {hexid(5): hk(2026, 8, 20)}   # video 6 has no committed upload row: no recorded date
     return FakeService(media, files, uploads=uploads)
@@ -260,7 +260,7 @@ class OutputAllowlist(unittest.TestCase):
         dumped = json.dumps(out)
         for key in FORBIDDEN:
             self.assertNotIn(f'"{key}"', dumped, key)
-        for private in (SECRET_TEXT, SECRET_PATH, "A child at the piano", "pypdf", "thumb.png", "poster.jpg", "a" * 64, PRINCIPAL):
+        for private in (CONTENT_ONLY_TEXT, PRIVATE_PATH, "A child at the piano", "pypdf", "thumb.png", "poster.jpg", "a" * 64, PRINCIPAL):
             self.assertNotIn(private, dumped, private)
         self.assertEqual(set(data["counts"]), {"listed", "matched", "dateUnknown", "complete"})
 
