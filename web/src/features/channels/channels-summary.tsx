@@ -44,20 +44,28 @@ export function ChannelsSummary({
   usage: Usage | undefined;
   'data-tour'?: string;
 }) {
-  const limit = usage?.entitlement.connectedAccounts;
+  const unlimited = usage?.entitlement.unlimited === true;
+  const limit = unlimited ? undefined : usage?.entitlement.connectedAccounts;
   const atLimit = typeof limit === 'number' && limit > 0 && counts.connected >= limit;
 
   if (counts.connected === 0) {
     return (
       <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' {...rest}>
         <Stat value={providersCount} label={providersCount === 1 ? 'platform available' : 'platforms available'} />
+        {unlimited && <span className='text-foreground font-medium'>· Founder · Unlimited</span>}
       </p>
     );
   }
 
   return (
     <p className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm' {...rest}>
-      {typeof limit === 'number' ? (
+      {unlimited ? (
+        <>
+          <Stat value={counts.connected} label='connected' />
+          <Dot />
+          <span className='text-foreground font-medium'>Founder · Unlimited</span>
+        </>
+      ) : typeof limit === 'number' ? (
         <span className='inline-flex items-baseline gap-1'>
           <DigitSwap value={counts.connected} className='text-foreground font-medium tabular-nums' />
           <span>of {limit} accounts</span>

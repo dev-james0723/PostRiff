@@ -392,6 +392,9 @@ def _can_publish(ctx):
     billing = getattr(ctx.service, "billing", None)
     if ctx.cur is None or billing is None:
         return None
+    from ..developer_usage import workspace_plan_exempt
+    if workspace_plan_exempt(ctx.cur, ctx.workspace_id):
+        return True
     try:
         ctx.cur.execute("SAVEPOINT site_agent_lifecycle")
         answer = billing.lifecycle(ctx.cur, ctx.workspace_id, ctx.now).get("canPublish")
@@ -570,7 +573,7 @@ def entitlements_summary(ctx):
     ctx.cur.execute("SAVEPOINT site_agent_usage")
     try:
         view = ledger.usage_view(ctx.cur, ctx.workspace_id, ctx.principal)
-        can_publish = ctx.service.billing.lifecycle(ctx.cur, ctx.workspace_id, ctx.now).get("canPublish") if getattr(ctx.service, "billing", None) else None
+        can_publish = True if (view.get("entitlement") or {}).get("unlimited") else (ctx.service.billing.lifecycle(ctx.cur, ctx.workspace_id, ctx.now).get("canPublish") if getattr(ctx.service, "billing", None) else None)
     finally:
         # Reading never changes billing rows (the usage view may create first-use rows; the owner's page does that).
         ctx.cur.execute("ROLLBACK TO SAVEPOINT site_agent_usage")
@@ -578,8 +581,8 @@ def entitlements_summary(ctx):
     owner = ctx.membership.allows("owner")
     budget = view.get("budget") or {}
     subscription = view.get("subscription") or {}
-    data = {"plan": subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId"), "subscriptionStatus": subscription.get("status"),
-            "aiUsageExempt": view.get("aiUsageExempt", False),
+    data = {"plan": "Founder" if entitlement.get("unlimited") else (subscription.get("label") or subscription.get("plan") or entitlement.get("planTermsId")), "subscriptionStatus": "unlimited" if entitlement.get("unlimited") else subscription.get("status"),
+            "unlimited": entitlement.get("unlimited") is True, "aiUsageExempt": view.get("aiUsageExempt", False),
             "writingBatchesRemaining": entitlement.get("writingBatchesRemaining"), "mediaCreditsRemaining": entitlement.get("mediaCreditsRemaining"),
             "resetsAt": entitlement.get("resetsAt"), "canPublish": can_publish, "budgetStatus": budget.get("status"),
             "spentUsdMicro": budget.get("spentUsdMicro") if owner else None, "stopUsdMicro": budget.get("stopUsdMicro") if owner else None, "costsVisible": owner}
