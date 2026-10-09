@@ -166,13 +166,15 @@ def plan_prepare(ctx, args):
     # Draft preparation calls no Google API and grants no publishing authority.
     # It uses the same membership, immutable asset, future-time and audit path.
     snapshot = ctx.snapshot()
-    result = creator.agent.prepare(ctx.workspace_id, ctx.token, args['connectionId'], {**body, 'revision': snapshot['revision']})
+    result = creator.agent.prepare_from_chat(ctx, args['connectionId'], {**body, 'revision': snapshot['revision']})
     identifier = result['result']['id']
     with ctx.workspace() as (_cur, _row, _actor, member, state):
         _membership(member, 'read')
         saved = copy.deepcopy(find_draft(state, args['connectionId'], identifier))
         verified = (saved.get('status') == 'proposed' and saved.get('assetId') == args['assetId']
                     and saved.get('digest') == draft_digest(saved) and saved.get('publishOptions') == result['result'].get('publishOptions')
+                    and saved.get('metadataOrigin') == 'chat_model_proposal_requires_video_review'
+                    and saved.get('metadataProvenance', {}).get('traceId') == ctx.trace_id
                     and not saved.get('jobId'))
     ctx.ledger.reference('youtube_plan', identifier, 'YouTube plan awaiting review')
     ctx.ledger.reference('draft', saved['variantId'], 'YouTube draft')
@@ -181,7 +183,7 @@ def plan_prepare(ctx, args):
     return {'ok': verified, 'verified': verified, 'needsUser': True, 'draftId': identifier, 'variantId': saved['variantId'],
         'channelId': saved['channelId'], 'assetId': saved['assetId'], 'title': saved['publishOptions']['title'],
         'description': saved['publishOptions']['description'], 'timing': saved['timing'], 'status': saved['status'],
-        'metadataOrigin': 'chat_model_proposal_requires_video_review', 'href': '/app/youtube',
+        'metadataOrigin': saved.get('metadataOrigin'), 'href': '/app/youtube',
         'queued': False, 'executed': False, 'providerVerified': False,
         'note': 'Review the exact video, metadata and time in YouTube Creator. This chat tool cannot approve, publish or enable autopilot.'}
 

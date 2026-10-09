@@ -18,6 +18,14 @@ export function YouTubeQuotaControls({ admission }: { admission: YouTubeOverview
           );
         })}
       </div>
+      {admission.analyticsAdmission && (
+        <div data-youtube-analytics-capacity className='min-w-0 rounded-md border p-3 text-sm [overflow-wrap:anywhere]'>
+          <p className='font-medium'>Analytics queries</p>
+          <p>Reserved today: {admission.analyticsAdmission.workspaceReservedRequestsToday} / {admission.analyticsAdmission.workspaceDailyLimit}</p>
+          <p className='text-muted-foreground text-xs'>Rafii project ceiling: {admission.analyticsAdmission.configuredProjectDailyLimit} queries daily; {admission.analyticsAdmission.configuredProjectRequestsPerMinute} per minute.</p>
+          <p className='text-muted-foreground text-xs'>Delayed attempts: {admission.analyticsAdmission.workspaceDelayedRequestsToday}. Analytics is counted in requests, separately from Data API units.</p>
+        </div>
+      )}
       <p className='text-xs text-muted-foreground'>
         Pending workflow limit: {admission.pendingQueueLimit}. Request limit: {admission.requestsPerMinute} per minute.
         {' '}Daily reset: {new Date(admission.resetAt * 1000).toLocaleString(undefined, { timeZone: admission.resetTimeZone })} ({admission.resetTimeZone}).

@@ -2,13 +2,13 @@
 
 Prepared 2026-10-08. **CANDIDATE / OWNER REVIEW REQUIRED.** Legal status remains `draft`; no operator facts, training exclusions, approval or deletion guarantees are invented.
 
-## Source facts at reconciled baseline `a14c5b28`
+## Current source disclosures and dated baseline findings
 
 `web/src/app/(marketing)/privacy/page.tsx` already discloses YouTube data, encrypted server credentials, selected-channel consent, Google/YouTube policy links, processor/AI routing, 30-day creator-cache/comment/reporting cleanup and the distinction between Rafii deletion and YouTube content. `terms/page.tsx` links YouTube terms and gates capabilities by grants/reviews/provider eligibility. `data-deletion/page.tsx` describes app controls and unresolved deletion outcomes. These are source facts, not proof of deployed runtime execution.
 
-`web/src/config/legal.ts` is still `draft`, with `privacy@postriff.app`, counsel/jurisdiction placeholders and 2026-09-20 last-edit metadata. `site.ts` contains `support@postriff.app` and a legacy fallback URL overridable by `NEXT_PUBLIC_APP_URL`. The owner has now explicitly selected `https://rafii.io`; source defaults alone do not prove its running env or Search Console verification. The coordinating release agent reports the current domain binding separately.
+As reconciled on 2026-10-09 at candidate `f5c7e0da`, `web/src/config/legal.ts` remains `draft`, configures `jamesau0723@gmail.com`, retains the counsel/jurisdiction placeholder and records last edit 2026-10-09. The public privacy source names Au Hin Sing as operator/controller. These are configured public disclosures, not independent verification of legal identity, mailbox monitoring or qualified legal approval. `site.ts` still contains `support@postriff.app` but defaults to `https://rafii.io`, overridable by `NEXT_PUBLIC_APP_URL`. [CURRENT-STATE.json](CURRENT-STATE.json) records production `4a0bd786` at 2026-10-09T17:17:09Z, a verified canonical Vercel binding and a Google verification TXT in DNS; neither DNS nor source copy establishes current Google property ownership or OAuth domain approval.
 
-Missing owner/reviewer facts: individual vs legal entity, full legal/operator name, address and applicable registration, jurisdiction/refund terms, confirmed monitored support/privacy contacts, enabled processors and their contracts/regions/retention, deployment backup/log retention and deletion replay, approved traffic forecast, and review-video/reviewer-access sharing. These must be supplied or verified before replacing placeholders or marking legal reviewed.
+Missing owner/reviewer facts: verified individual vs legal entity and legal/operator details beyond the configured public name, address and applicable registration, jurisdiction/refund terms, confirmed monitored support/privacy contacts, enabled processors and their contracts/regions/retention, deployment backup/log retention and deletion replay, approved traffic forecast, and review-video/reviewer-access sharing. These must be supplied or verified before replacing placeholders or marking legal reviewed.
 
 ## Required behavior and acceptance gaps
 

@@ -20,8 +20,9 @@
     "oauthAudience": null,
     "oauthPublishingStatus": null,
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
-    "existingReferenceProjectId": "rafii-509720"
+    "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
+    "existingReferenceProjectId": "rafii-509720",
+    "domainOwnership": "Google verification TXT is present in live DNS and the canonical Vercel binding is verified (2026-10-09). Google property ownership and OAuth domain approval still require current Console readback; do not infer approval from TXT or resubmit DNS blindly."
   },
   "workstreams": [
     {
@@ -113,7 +114,7 @@
     "Record correction request and resubmission as separate dated events",
     "Do not include secrets, raw customer data or passwords in this tracker"
   ],
-  "updatedOn": "2026-10-08",
+  "updatedOn": "2026-10-09",
   "stagingProject": {
     "id": "rafii-509720",
     "number": "81579135390",
@@ -124,18 +125,19 @@
   },
   "currentProductionObservation": {
     "url": "https://rafii.io",
-    "commit": "bb4ca5aa",
-    "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
-    "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
-    "integrationBranchDeployed": false,
+    "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
+    "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
+    "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+    "integrationBranchDeployed": true,
+    "youtubeGateFixCandidateDeployed": false,
     "youtubePublicLaunchReady": false,
-    "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+    "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
   },
   "storageOwnerGate": {
     "status": "BLOCKED OWNER BILLING",
     "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
     "observedPlan": "Free",
-    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "observationSource": "Live Supabase plan/bucket metadata rechecked2026-10-09; no upgrade authorization received.",
     "productionVideoBucket": "postriff-video",
     "bucketPublic": false,
     "bucketFileSizeLimitBytes": 50000000,
@@ -151,5 +153,24 @@
     },
     "limitsSource": "https://supabase.com/docs/guides/storage/uploads/file-limits",
     "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
+  },
+  "previousProductionObservations": [
+    {
+      "url": "https://rafii.io",
+      "commit": "bb4ca5aa",
+      "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+      "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
+      "integrationBranchDeployed": false,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+    }
+  ],
+  "configuredPublicDisclosures": {
+    "sourceReconciledOn": "2026-10-09",
+    "operatorName": "Au Hin Sing",
+    "privacyContact": "jamesau0723@gmail.com",
+    "siteSupportContact": "support@postriff.app",
+    "legalReviewStatus": "draft",
+    "evidenceLimit": "Configured public source only; no independent legal identity, mailbox monitoring/delivery or qualified legal approval established by this packet."
   }
 }
