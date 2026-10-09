@@ -37,6 +37,13 @@ FLAGS = {'check':'POSTRIFF_POST_DOCTOR','rewrite':'POSTRIFF_POST_DOCTOR','genome
          'postmortem':'POSTRIFF_POSTMORTEM','audience':'POSTRIFF_AUDIENCE_MINER'}
 # Bounded input/output/work caps. Reservations are conservative protection, never reported as actual costs.
 RESERVATIONS = {'check':10_000,'rewrite':200_000,'genome':800_000,'public':10_000,'postmortem':200_000,'audience':800_000}
+# Tables each paid run reads or writes (037/038 are additive and may not be applied yet).
+_RUN_TABLES = ('pr_post_doctor_runs','pr_growth_budgets')
+KIND_TABLES = {'check':(*_RUN_TABLES,'pr_post_history'),'rewrite':(*_RUN_TABLES,'pr_post_history'),
+               'genome':(*_RUN_TABLES,'pr_post_history','pr_genome_versions'),
+               'postmortem':(*_RUN_TABLES,'pr_predictions','pr_postmortems','pr_creator_calibrations'),
+               'audience':(*_RUN_TABLES,'pr_audience_clusters','pr_comment_judgments')}
+GENOME_READ_TABLES = ('pr_genome_versions','pr_post_history','pr_share_cards')
 
 
 def context_fingerprint(state):
@@ -219,16 +226,22 @@ class GrowthService:
             raise AlphaError('The owner must allow the growth analysis routes first.',403,code='growth_consent_required')
 
     def catalog(self,workspace_id,token):
+        """Flags plus server-authoritative readiness. Reads only: no provider, model or write."""
+        from ..hosted import _membership
+        from . import readiness
         self.session(token)
-        saved=self.repository.get(workspace_id,token)
-        _runtime,writer,_note=self.hosted.ideas.resolve_writer(saved['state'],None)
+        with self.repository.transaction(token,workspace_id,allow_deleting=True) as (cur,row,_):
+            state=copy.deepcopy(row[1])
+            ready=readiness.compute(readiness.gather(self,cur,workspace_id,state,_membership(row)))
+        _runtime,writer,_note=self.hosted.ideas.resolve_writer(state,None)
         return {'radar':self.env.get('POSTRIFF_GROWTH')=='1' and self.env.get('POSTRIFF_RADAR')=='1','postDoctorV2':self.env.get('POSTRIFF_POST_DOCTOR_V2')=='1','postDoctor':self.enabled('check'),'genome':self.enabled('genome'),
                 'postmortem':self.enabled('postmortem'),'audienceMiner':self.enabled('audience'),
-                'summaryRoute':SUMMARY_ROUTE,'audienceConsent':saved['state'].get('growthConsent',{}).get('audience') is True,
-                'consented':bool(saved['state'].get('growthConsent',{}).get('routes')),
-                'routes':list(ROUTES),'allowedRoutes':saved['state'].get('growthConsent',{}).get('routes',[]),
+                'summaryRoute':SUMMARY_ROUTE,'audienceConsent':state.get('growthConsent',{}).get('audience') is True,
+                'consented':bool(state.get('growthConsent',{}).get('routes')),
+                'routes':list(ROUTES),'allowedRoutes':state.get('growthConsent',{}).get('routes',[]),
                 'writer':writer,'writerRoute':'cloud:vercel-ai-gateway:'+writer,
-                'maxHistoryPosts':genome.MAX_POSTS,'checksPerDay':10,'rewritesPerDay':1}
+                'maxHistoryPosts':genome.MAX_POSTS,'checksPerDay':10,'rewritesPerDay':1,
+                'readiness':ready}
 
     def _history(self,cur,workspace_id,state):
         cur.execute('SELECT id::text,source_id,source_revision,platform,connection_id,provider_post_id,language,format,time_bucket,labels,judgment,supplied_metrics FROM public.pr_post_history WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 300',(workspace_id,))
@@ -275,6 +288,7 @@ class GrowthService:
 
     def _begin(self,workspace_id,token,kind,body,prepare,requirement='edit'):
         from ..hosted import _membership
+        from .readiness import require_schema
         self.session(token);self.gate(kind)
         key=body.get('requestKey')
         if not isinstance(key,str) or not 16<=len(key)<=100:
@@ -284,6 +298,7 @@ class GrowthService:
         fingerprint=digest(body)
         with self.repository.transaction(token,workspace_id) as (cur,row,principal):
             require(_membership(row),requirement)
+            require_schema(cur,KIND_TABLES[kind])
             state=copy.deepcopy(row[1]);self._consent(state)
             cur.execute('SELECT id::text,status,fingerprint,body,context_fingerprint FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND request_key=%s',(workspace_id,key))
             old=cur.fetchone()
@@ -547,8 +562,10 @@ class GrowthService:
         return self._finish(workspace_id,token,run,sink,result,error,store)
 
     def genome(self,workspace_id,token):
+        from .readiness import require_schema
         self.session(token);self.gate('genome')
         with self.repository.transaction(token,workspace_id) as (cur,row,_):
+            require_schema(cur,GENOME_READ_TABLES)
             cur.execute('SELECT id::text,status,body FROM public.pr_genome_versions WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 20',(workspace_id,))
             versions=[{**r[2],'id':r[0],'status':r[1] if bindings_current(row[1],r[2].get('evidenceBindings',[])) and postmortem.bindings_current(row[1],r[2].get('outcomeBindings',[])) and r[2].get('consentDigest')==digest(row[1].get('growthConsent')) else 'stale'} for r in cur.fetchall()]
             sources={s['id']:s for s in row[1].get('sources',[]) if s.get('active') and s.get('selected')}
@@ -586,6 +603,9 @@ class GrowthService:
                                         'audience':payload.get('audience') is True and bool(routes)}
             return state
         def after(cur,state,principal):
+            from .readiness import require_schema
+            if action!='growth_consent':
+                require_schema(cur,(*GENOME_READ_TABLES,'pr_post_doctor_runs'))
             if action in ('genome_approve','genome_restore'):
                 cur.execute('SELECT body,status FROM public.pr_genome_versions WHERE workspace_id=%s AND id::text=%s FOR UPDATE',(workspace_id,payload.get('genomeId')))
                 row=cur.fetchone()
@@ -717,8 +737,10 @@ class GrowthService:
         return result
 
     def feedback(self,workspace_id,token,job_id):
+        from .readiness import require_schema
         self.session(token);self.gate('check')
         with self.repository.transaction(token,workspace_id) as (cur,row,_):
+            require_schema(cur,('pr_predictions',))
             jobs=[j for j in row[1].get('phase2',{}).get('jobs',[]) if j.get('state')=='verified' and j.get('verification') and j.get('providerReference')]
             selected=next((j for j in jobs if j['id']==job_id),None)
             if not selected:return {'status':'unavailable','reason':'publication_not_verified','readings':[]}
