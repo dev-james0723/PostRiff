@@ -666,7 +666,7 @@ class CoworkerService:
                 # Only targets without a saved draft are written again, under a new writer key; finished drafts and the
                 # person's edits to them are never touched.
                 done = {(d.get("platform"), d.get("language"), d.get("channelId"), d.get("format")) for d in kept}
-                destinations = [d for d in record["destinations"] if (d["platform"], d["language"], d.get("channelId"), d.get("format")) not in done]
+                destinations = [d for d in record.get("destinations") or destinations if (d["platform"], d["language"], d.get("channelId"), d.get("format")) not in done]
                 key = f"{key}:retry{int(record.get('attempts') or 1) + 1}"
             try:
                 if not destinations:
@@ -710,7 +710,7 @@ class CoworkerService:
                 draft["media"] = native.get("media")
                 draft["skillRoute"] = {k: (native.get("skillRoute") or {}).get(k) for k in ("qualified", "missing", "cut")} if native.get("skillRoute") else None
                 draft["unresolved"] = native.get("unresolved") or []
-        visual = [d["platform"] for d in record["destinations"] if d["platform"] in VISUAL_FIRST]
+        visual = [d["platform"] for d in record.get("destinations") or destinations if d["platform"] in VISUAL_FIRST]
         creative_plan = creative.plan_assets(state, {"message": brief["coreMessage"], "copy": brief["coreMessage"], "cta": brief.get("cta")}, visual, "image") if visual else None
 
         def finish(state_, _p):
