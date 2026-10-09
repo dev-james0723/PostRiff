@@ -27,27 +27,26 @@ VERIFIED = {
     "A055": ["pgsuggestions::dedup: a dismissed identity is never recreated", "pgsuggestions::snooze: the editable default is used", "pgsuggestions::disable: survives a new session"],
     "A056": ["pgsuggestions::delivery: no notification, phone schedule or outbox rows were written", "pgsuggestions::inbox: cap and in-app delivery reported"],
     "A031": ["scripts/library-intelligence-bench.py receipt in the run log: 10,000 assets (7,000 normalized, 3,000 legacy), 8 concurrent, 100 warm requests per kind",
-             "lexical p95 1,981.4 ms (budget 2,000), hybrid p95 2,273.3 ms (budget 3,000), cold first request 185 ms, 0 errors",
+             "lexical p95 1,937.4 ms (budget 2,000), hybrid p95 2,253.8 ms (budget 3,000), cold first request 167 ms, 0 errors",
              "hardware: 16 CPU / 64 GB Linux runner, PostgreSQL 16.15 with pgvector"],
     "A058": ["pgsuggestions::metrics: a post without readings is unknown, never zero", "pgsuggestions::usage: correlation is not causation", "pgsuggestions::diversity: the same top item is not repeated for the next draft"],
 }
 NOTES = {
     "A010": "AI annotations come from the labelled contract-test model, which this case allows.",
     "A020": "Contract-test transcript; correction and speaker handling are the behaviour under test.",
-    "A027": "Lexical multilingual behaviour; semantic multilingual quality is part of BLOCKED A026.",
+    "A027": "Lexical multilingual behaviour on Postgres; with real embeddings (A026 run) cross-lingual Recall@10 is 1.00 and code-switched 0.90 (hybrid).",
     "A056": "Default (no opt-in) behaviour; opt-in and quiet-hours delivery are not exercised.",
-    "A031": "The bench JSON records candidateSha as the JCB base (65b1ea83) because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 is within 2% of its budget.",
+    "A031": "The bench JSON records candidateSha as the JCB base because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 sits close to its budget on shared runners: 1,937 ms here, 1,853 ms on rjzngvv5pw, 2,167 ms (over) on g9xm05vmv3.",
 }
 BLOCKED = {
     "A017": "Needs the real ASR evaluation (scripts/library-intelligence-provider-eval.py) with OPENAI_API_KEY in ~/.config/rafii-library-eval/provider.env; contract-test transcripts only so far.",
     "A018": "Needs labelled Cantonese/English clips through the real ASR provider with CER/WER; not yet run.",
     "A022": "Needs a real video transcript and scene evidence from the provider; only the poster path is exercised.",
     "A023": "Local perceptual vectors on generated images pass; a labelled real-provider visual evaluation is still needed.",
-    "A026": "Lexical baseline measured (semantic Recall@10 0.00 without embeddings); needs scripts/library-intelligence-eval.py with real embeddings.",
-    "A032": "Extractive quotation is verified on Postgres; scripts/library-intelligence-answer-eval.py with the real model and a human review are still needed.",
     "A066": "Needs James's iPhone Safari session; see evidence/iphone-smoke.md. The desktop harness is not a device result.",
 }
 UNVERIFIED = {
+    "A032": "Real model anthropic/claude-sonnet-5 via the AI Gateway (evidence/provider-eval/answer-eval.json): all 21 answerable questions answered, 21/21 kept claims machine-verified (verbatim quotes, figures, links); the >= 95% target still needs the human review queue. One reply (s03) was unreadable and handled as an error. US$1.23 estimated.",
     "A001": "Formats upload and sign; stored hash/bytes are not compared with the authorized download and no image fixture is asserted.",
     "A002": "No test for MIME mismatch or the per-file limit; corrupted input is unit-only.",
     "A003": "Only processing retry is covered; interrupted upload retry and partial-batch behaviour are untested.",
@@ -64,7 +63,7 @@ UNVERIFIED = {
     "A024": "No identity inference is unit-only with a fake vision provider.",
     "A029": "Server pagination and totals are complete; the UI refresh prompt and displayed count are not browser-checked.",
     "A030": "Server labelling of degraded search is covered in both phases; the absence of a false UI badge is not browser-checked.",
-    "A033": "One unanswerable question and one trap on Postgres; the trap set in answer-eval.py has not run.",
+    "A033": "Real-model trap/unanswerable set (answer-eval.json, LLM forced even where production would not call it): 14/15 correct, no forbidden string. Miss u02: asked a withheld sponsorship amount, the model quoted the withholding notice plus a separate HKD 10,000 video fee as conflicting; production's relevance gate would not call the model for it (gateWouldCallLlm=false). Needs human review.",
     "A034": "Page citations open the right version; time, slide and cell deep links and the UI open are untested.",
     "A035": "Server answers show conflicts and scope; the Ask Library display is not browser-checked.",
     "A036": "Injection is covered on the answers route; the Agent's tool-calling route with an injected source is not.",
@@ -124,13 +123,20 @@ for case, checks in VERIFIED.items():
         run(case, "UNVERIFIED", note=f"Postgres checks exist ({'; '.join(checks)}) but the candidate run {RUN} did not pass.")
 GOV_ENV = "Local git worktree and documents; remote CI receipt"
 if PASSED:
-    run("A075", "VERIFIED", evidence=["docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md", "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md", f"merge commits c471f7ae (#134) and 5b43b140 (#135) reconcile origin/consumer-saas 65b1ea83; `git merge-base --is-ancestor origin/consumer-saas {SHA}`"],
+    run("A075", "VERIFIED", evidence=["docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md", "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md", f"merge commits c471f7ae (#134), 5b43b140 (#135), a6e3210f (94ca0dbd: #136, #137) and 53f21530 (4a0bd786: #146, #147) reconcile origin/consumer-saas; `git merge-base --is-ancestor origin/consumer-saas {SHA}`"],
         command="Manual procedure: recorded origin, base, worktrees, leases and in-flight Library/OpenUI branches before code; merged the current base before release validation", env=GOV_ENV)
     run("A077", "VERIFIED", evidence=[RUNREF, f"JCB receipt sourceHead={SHA}: typecheck, lint, build, focused unit, disposable PostgreSQL lifecycle/RLS (both phases), npm audit, secrets scan and browser harnesses in one run"], env=ENV)
-    run("A078", "VERIFIED", evidence=[RUNREF, "pgmigration::migration: every existing asset row unchanged", "pgmigration::migration: 097 re-applies cleanly (attempt 2)", "pglifecycle::backfill: dry run counts only", "docs/releases/rafii-intelligent-library-2026-10-08.md (preconditions, pgvector schema, canary, rollback)", "OWNER-MAP.md: 097-099 reserved here, 102-103 by OpenUI"], env=ENV)
+    run("A078", "VERIFIED", evidence=[RUNREF, "pgmigration::migration: every existing asset row unchanged", "pgmigration::migration: 104 re-applies cleanly (attempt 2)", "pglifecycle::backfill: dry run counts only", "docs/releases/rafii-intelligent-library-2026-10-08.md (preconditions, pgvector schema, canary, rollback)", "Renumbered 097 -> 104 (097_youtube_capacity shipped; 098-103 claimed); runner rejects duplicate numbers", "Staging rafii-consumer-staging (oxacvkhpfgytkepxcaqh) 2026-10-09: vector in extensions, 104 applied; 18 tables RLS enabled+forced, service_only policy, no anon/authenticated select; 32 existing asset rows kept defaults; embedding column vector + both HNSW indexes; security advisors no Library finding", "docs/releases/rafii-library-release-runbook-2026-10-09.md"], env=ENV)
+    # A026 is a real-provider case: its evidence is the capped eval run, not the CI run.
+    run("A026", "VERIFIED", evidence=["evidence/provider-eval/retrieval-eval.json: real openai/text-embedding-3-large (1024 dims) through the Vercel AI Gateway on the frozen set (64 judged documents + 940 distractors, 100 queries)",
+             "Recall@10 hybrid 0.975, semantic-only 0.955 (target >= 0.90); lexical-only 0.31 (1.00 on lexical queries)",
+             "US$0.0054 actual over 18 calls, cap US$2 inside James's US$10 authorization"],
+        note="real-provider: Vercel AI Gateway with the project's short-lived OIDC credential (development); vectors embedded from the candidate's production seam providers.embed; receipt holds no credential.",
+        command="RAFII_LIBRARY_PROVIDER_EVAL_AUTHORIZATION=james-2026-10-08-cap-10usd scripts/library-intelligence-eval.py --budget-usd 2 --confirm-paid-inference",
+        env="James's Mac, release worktree at the candidate; Vercel AI Gateway (openai/text-embedding-3-large, 1024 dims)")
     run("A079", "VERIFIED", evidence=["evidence/acceptance-status.json", f"scripts/library-intelligence-acceptance.py check --sha {SHA}"],
         command="Manual procedure plus ledger check: real-provider, device, visual and UI-flow cases stay BLOCKED/UNVERIFIED", env=GOV_ENV)
-    run("A080", "VERIFIED", evidence=["docs/releases/rafii-intelligent-library-2026-10-08.md (AWAITING AUTHORIZATION)", "git ls-remote shows no claude/rafii-intelligent-library-20261008 branch on origin"],
+    run("A080", "VERIFIED", evidence=["docs/releases/rafii-intelligent-library-2026-10-08.md (AWAITING AUTHORIZATION)", "Push and draft PR #144 under James's explicit redesign brief (commit, push, CI/PR workflow); James approved the full release on 2026-10-09", "No merge to consumer-saas, deploy or production migration yet: OpenUI production hold and per-action permission", "Paid evaluation within the US$10 authorization: US$0.0054 actual + US$1.23 estimated"],
         command="Manual procedure: no push, merge, deploy, production migration or paid service activation without authorization", env=GOV_ENV)
 else:
     for case in ("A075", "A077", "A078", "A079", "A080"):

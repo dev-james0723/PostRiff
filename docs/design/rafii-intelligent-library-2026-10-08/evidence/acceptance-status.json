@@ -78,11 +78,11 @@
       "title": "Workspace isolation",
       "expected": "Attempt browse/search/read/preview/count/suggestion/pack/mutation across two workspaces; all unauthorized paths denied without identity or count leakage.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsearch::A004 a foreign selection is indistinguishable from a missing one",
         "pganswers::A004 another workspace can neither answer from nor open this item",
         "pgpolicy::isolation: forged cross-workspace action denied"
@@ -98,11 +98,11 @@
       "title": "Browse does not authorize AI egress",
       "expected": "Storage-only asset remains browsable; cloud transcription, embeddings, summaries and Agent retrieval remain blocked without appropriate grants.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgpolicy::purpose: browse never implies cloud",
         "pgjobs::permission: cloud without a grant creates no job",
         "pgmedia::audio card: transcription blocked without a cloud grant"
@@ -148,11 +148,11 @@
       "title": "Revocation wins an in-flight race",
       "expected": "Revoke after retrieval/job/action begins but before delivery/finalization; server rechecks revision and blocks delivery/write.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgpolicy::toctou: recheck before delivery denies",
         "pglifecycle::A008: recheck allowed before the revoke, refused after it",
         "pganswers::A036/R02 a grant revoked mid-answer drops the source and abstains"
@@ -183,11 +183,11 @@
       "title": "Understanding has evidence and provenance",
       "expected": "Every summary/annotation/segment suggestion can be traced to a source/version; AI suggestions and human confirmations remain distinct.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgmedia::card: extractive summary with evidence",
         "pgmedia::card: decisions and suggestions distinct",
         "pgmedia::write: hash, source hash and normalizer recorded"
@@ -218,11 +218,11 @@
       "title": "Capability status is truthful",
       "expected": "Exercise queued/processing/ready/partial/unsupported/failed/cancelled/permission/budget states separately; stored/playable is not mislabelled understood.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgjobs::states: each capability independent",
         "pgjobs::budget: job and capability blocked_budget",
         "pgmedia::card: inapplicable capability honest"
@@ -343,11 +343,11 @@
       "title": "Corrections and speakers are handled honestly",
       "expected": "Correct a timed segment and an anonymous speaker label; preserve history/alignment; no inferred real-world identity.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgmedia::correct: same locator, linked history",
         "pgmedia::correct via action: applied, speaker label cleared",
         "pgmedia::transcript: code-switching labelled, no speaker guessed"
@@ -423,11 +423,11 @@
       "title": "Old assets remain findable",
       "expected": "With at least 1,001 assets find known assets at positions 201 and 1,001 and an old segment by exact query; no newest-200/global age cutoff.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsearch::A025 position 201 by exact filename",
         "pgsearch::A025 position 1001 by exact id",
         "pgsearch::A025 oldest asset's segment found by exact query"
@@ -442,12 +442,16 @@
       "owner_task": "T04",
       "title": "Lexical and semantic strengths coexist",
       "expected": "Exact filename/id/phrase/dimension tests pass; independently labelled semantic queries reach Recall@10 >= 0.90 on the agreed 100-query set.",
-      "status": "BLOCKED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": "Lexical baseline measured (semantic Recall@10 0.00 without embeddings); needs scripts/library-intelligence-eval.py with real embeddings."
+      "status": "VERIFIED",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
+      "environment": "James's Mac, release worktree at the candidate; Vercel AI Gateway (openai/text-embedding-3-large, 1024 dims)",
+      "command": "RAFII_LIBRARY_PROVIDER_EVAL_AUTHORIZATION=james-2026-10-08-cap-10usd scripts/library-intelligence-eval.py --budget-usd 2 --confirm-paid-inference",
+      "evidence": [
+        "evidence/provider-eval/retrieval-eval.json: real openai/text-embedding-3-large (1024 dims) through the Vercel AI Gateway on the frozen set (64 judged documents + 940 distractors, 100 queries)",
+        "Recall@10 hybrid 0.975, semantic-only 0.955 (target >= 0.90); lexical-only 0.31 (1.00 on lexical queries)",
+        "US$0.0054 actual over 18 calls, cap US$2 inside James's US$10 authorization"
+      ],
+      "note": "real-provider: Vercel AI Gateway with the project's short-lived OIDC credential (development); vectors embedded from the candidate's production seam providers.embed; receipt holds no credential."
     },
     {
       "id": "A027",
@@ -458,16 +462,16 @@
       "title": "Multilingual query behavior is tested",
       "expected": "Traditional/Simplified Chinese, Cantonese expressions, English and mixed queries evaluated; language normalization cannot erase meaningful content.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsearch::A027 '<query>' finds exactly the expected passages",
         "pgsearch::A027 language filter narrows before ranking",
         "pgeval::every query ran in lexical mode"
       ],
-      "note": "Lexical multilingual behaviour; semantic multilingual quality is part of BLOCKED A026."
+      "note": "Lexical multilingual behaviour on Postgres; with real embeddings (A026 run) cross-lingual Recall@10 is 1.00 and code-switched 0.90 (hybrid)."
     },
     {
       "id": "A028",
@@ -478,11 +482,11 @@
       "title": "UI and Agent share retrieval policy",
       "expected": "Same user/scope/purpose query yields consistent eligibility and coverage through both routes; any presentation difference is documented.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsearch::A028 UI and Agent routes report the same eligibility and coverage",
         "pgsearch::A028 the Agent gets the same purpose-filtered passages",
         "pgsearch::A028 purpose filtering happens before ranking"
@@ -528,16 +532,16 @@
       "title": "Search latency meets candidate budget",
       "expected": "At 10,000 mixed assets/8 concurrent scoped searches, 100 warm measured requests: lexical p95 <= 2 s, hybrid p95 <= 3 s; report hardware/network/cold results separately.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "scripts/library-intelligence-bench.py receipt in the run log: 10,000 assets (7,000 normalized, 3,000 legacy), 8 concurrent, 100 warm requests per kind",
-        "lexical p95 1,981.4 ms (budget 2,000), hybrid p95 2,273.3 ms (budget 3,000), cold first request 185 ms, 0 errors",
+        "lexical p95 1,937.4 ms (budget 2,000), hybrid p95 2,253.8 ms (budget 3,000), cold first request 167 ms, 0 errors",
         "hardware: 16 CPU / 64 GB Linux runner, PostgreSQL 16.15 with pgvector"
       ],
-      "note": "The bench JSON records candidateSha as the JCB base (65b1ea83) because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 is within 2% of its budget."
+      "note": "The bench JSON records candidateSha as the JCB base because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 sits close to its budget on shared runners: 1,937 ms here, 1,853 ms on rjzngvv5pw, 2,167 ms (over) on g9xm05vmv3."
     },
     {
       "id": "A032",
@@ -547,12 +551,12 @@
       "owner_task": "T05",
       "title": "Answers are grounded",
       "expected": "On agreed benchmark, >=95% of evaluated factual claims are supported by cited passages; report denominator and human review, not just model self-scoring.",
-      "status": "BLOCKED",
+      "status": "UNVERIFIED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": "Extractive quotation is verified on Postgres; scripts/library-intelligence-answer-eval.py with the real model and a human review are still needed."
+      "note": "Real model anthropic/claude-sonnet-5 via the AI Gateway (evidence/provider-eval/answer-eval.json): all 21 answerable questions answered, 21/21 kept claims machine-verified (verbatim quotes, figures, links); the >= 95% target still needs the human review queue. One reply (s03) was unreadable and handled as an error. US$1.23 estimated."
     },
     {
       "id": "A033",
@@ -567,7 +571,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": "One unanswerable question and one trap on Postgres; the trap set in answer-eval.py has not run."
+      "note": "Real-model trap/unanswerable set (answer-eval.json, LLM forced even where production would not call it): 14/15 correct, no forbidden string. Miss u02: asked a withheld sponsorship amount, the model quoted the withholding notice plus a separate HKD 10,000 video fee as conflicting; production's relevance gate would not call the model for it (gateWouldCallLlm=false). Needs human review."
     },
     {
       "id": "A034",
@@ -623,11 +627,11 @@
       "title": "Smart Collections save criteria, not SQL",
       "expected": "Allowlisted rule AST preview and save succeed; arbitrary SQL/code/prompt-as-execution is rejected.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgorg::save: applied through the action surface",
         "pgorg::rules: SQL text is rejected",
         "pgorg::rules: unknown field is rejected"
@@ -688,11 +692,11 @@
       "title": "Duplicates are handled conservatively",
       "expected": "Exact duplicates preserve reference-count deletion safety; near duplicates are suggestions, never auto-merged/deleted.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgmigration::delete: the exact duplicate survives and is re-queued as canonical",
         "pglifecycle::sibling: original bytes kept, redundant copy deleted",
         "pgorg::near-duplicate: nothing merged, hidden or deleted"
@@ -723,11 +727,11 @@
       "title": "Source update warns rather than overwrites",
       "expected": "Dependent draft flagged on new version; old citation remains old; applying replacement checks revision and requires intended user action.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgorg::link: pack, Ideas source, draft and post flagged stale",
         "pgorg::link: old citations are not rewritten",
         "pgorg::replace: explicit acceptance applied with a new pack revision"
@@ -758,11 +762,11 @@
       "title": "Span-level and negative examples work",
       "expected": "Approve one passage and a negative example; only permitted spans influence the specified persona/style, not the whole file.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgvoice::approve: indexed span links the canonical sample",
         "pgvoice::negative: indexed without a canonical sample",
         "pgvoice::exemplars: positive and negative with provenance"
@@ -793,11 +797,11 @@
       "title": "Revocation rebuilds derived profile",
       "expected": "Remove a voice sample; future retrieval and persistent derived profile summary cease using it; show evidence of rebuild/invalidation.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgvoice::revoke: speaker revision invalidated",
         "pgvoice::revoke: persistent profile stale; VOICE.md no longer uses it",
         "pgvoice::revoke: retrieve() excludes it"
@@ -873,11 +877,11 @@
       "title": "Final artifacts auto-register exactly once",
       "expected": "Successful final output with verified bytes appears once with producing run/output/source pack after duplicate completion events.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgcreation::artifact: registered once by the accepting command",
         "pgcreation::artifact: a replayed completion event returns the same asset",
         "pgcreation::artifact: one Library row, one registration"
@@ -923,11 +927,11 @@
       "title": "Dismiss/snooze/disable persist",
       "expected": "Dedup replayed trigger; dismissed identity suppressed; editable 7-day default snooze and category disable survive refresh/session.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsuggestions::dedup: a dismissed identity is never recreated",
         "pgsuggestions::snooze: the editable default is used",
         "pgsuggestions::disable: survives a new session"
@@ -943,11 +947,11 @@
       "title": "No unsolicited external side effects",
       "expected": "In-app default only; no email/push/schedules/publication without explicit corresponding opt-in and existing quiet-hour rules.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsuggestions::delivery: no notification, phone schedule or outbox rows were written",
         "pgsuggestions::inbox: cap and in-app delivery reported"
       ],
@@ -977,11 +981,11 @@
       "title": "Recommendations are not causal or popularity-only",
       "expected": "Missing metrics stay null/unknown; no claim an asset caused engagement; diversity/freshness prevents always repeating the top-like item.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgsuggestions::metrics: a post without readings is unknown, never zero",
         "pgsuggestions::usage: correlation is not causation",
         "pgsuggestions::diversity: the same top item is not repeated for the next draft"
@@ -1237,13 +1241,13 @@
       "title": "Current branch is reconciled before code",
       "expected": "Record real origin/base SHA/worktrees/lease/Library/OpenUI branches and baseline; no stale shared-root modifications or duplicate implementations.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Local git worktree and documents; remote CI receipt",
       "command": "Manual procedure: recorded origin, base, worktrees, leases and in-flight Library/OpenUI branches before code; merged the current base before release validation",
       "evidence": [
         "docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md",
         "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md",
-        "merge commits c471f7ae (#134) and 5b43b140 (#135) reconcile origin/consumer-saas 65b1ea83; `git merge-base --is-ancestor origin/consumer-saas 757e127d`"
+        "merge commits c471f7ae (#134), 5b43b140 (#135), a6e3210f (94ca0dbd: #136, #137) and 53f21530 (4a0bd786: #146, #147) reconcile origin/consumer-saas; `git merge-base --is-ancestor origin/consumer-saas 7737d63c571b959236baf8144f0af53632544763`"
       ],
       "note": null
     },
@@ -1271,12 +1275,12 @@
       "title": "Quality gates bind to the candidate SHA",
       "expected": "Typecheck, lint, build, focused tests, disposable Postgres lifecycle/RLS, dependency/security checks and browser evidence all name the same candidate.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
-        "JCB receipt sourceHead=757e127d: typecheck, lint, build, focused unit, disposable PostgreSQL lifecycle/RLS (both phases), npm audit, secrets scan and browser harnesses in one run"
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
+        "JCB receipt sourceHead=7737d63c571b959236baf8144f0af53632544763: typecheck, lint, build, focused unit, disposable PostgreSQL lifecycle/RLS (both phases), npm audit, secrets scan and browser harnesses in one run"
       ],
       "note": null
     },
@@ -1289,16 +1293,18 @@
       "title": "Migration and rollback are rehearsed",
       "expected": "New migration IDs reserved once; legacy fixtures migrate safely in disposable DB; backfill dry-run and rollback/canary playbook include actual environment requirements.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
-      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run q88fqk426t",
       "evidence": [
-        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "https://depot.dev/orgs/jf34f85hr0/workflows/q88fqk426t",
         "pgmigration::migration: every existing asset row unchanged",
-        "pgmigration::migration: 097 re-applies cleanly (attempt 2)",
+        "pgmigration::migration: 104 re-applies cleanly (attempt 2)",
         "pglifecycle::backfill: dry run counts only",
         "docs/releases/rafii-intelligent-library-2026-10-08.md (preconditions, pgvector schema, canary, rollback)",
-        "OWNER-MAP.md: 097-099 reserved here, 102-103 by OpenUI"
+        "Renumbered 097 -> 104 (097_youtube_capacity shipped; 098-103 claimed); runner rejects duplicate numbers",
+        "Staging rafii-consumer-staging (oxacvkhpfgytkepxcaqh) 2026-10-09: vector in extensions, 104 applied; 18 tables RLS enabled+forced, service_only policy, no anon/authenticated select; 32 existing asset rows kept defaults; embedding column vector + both HNSW indexes; security advisors no Library finding",
+        "docs/releases/rafii-library-release-runbook-2026-10-09.md"
       ],
       "note": null
     },
@@ -1311,12 +1317,12 @@
       "title": "No fake complete status",
       "expected": "Required cases remain UNVERIFIED/FAILED/BLOCKED until actual evidence; a disabled feature, fixture, PR merge or config file cannot pass a user-flow case.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Local git worktree and documents; remote CI receipt",
       "command": "Manual procedure plus ledger check: real-provider, device, visual and UI-flow cases stay BLOCKED/UNVERIFIED",
       "evidence": [
         "evidence/acceptance-status.json",
-        "scripts/library-intelligence-acceptance.py check --sha 757e127d"
+        "scripts/library-intelligence-acceptance.py check --sha 7737d63c571b959236baf8144f0af53632544763"
       ],
       "note": null
     },
@@ -1329,12 +1335,14 @@
       "title": "Production authority is separate",
       "expected": "Document explicit release authority, if supplied. Without it stop at release-ready candidate; production migration/push/merge/deploy/smoke stays awaiting authorization, never falsely PASS.",
       "status": "VERIFIED",
-      "candidate_sha": "757e127d",
+      "candidate_sha": "7737d63c571b959236baf8144f0af53632544763",
       "environment": "Local git worktree and documents; remote CI receipt",
       "command": "Manual procedure: no push, merge, deploy, production migration or paid service activation without authorization",
       "evidence": [
         "docs/releases/rafii-intelligent-library-2026-10-08.md (AWAITING AUTHORIZATION)",
-        "git ls-remote shows no claude/rafii-intelligent-library-20261008 branch on origin"
+        "Push and draft PR #144 under James's explicit redesign brief (commit, push, CI/PR workflow); James approved the full release on 2026-10-09",
+        "No merge to consumer-saas, deploy or production migration yet: OpenUI production hold and per-action permission",
+        "Paid evaluation within the US$10 authorization: US$0.0054 actual + US$1.23 estimated"
       ],
       "note": null
     }
