@@ -105,6 +105,8 @@ class FakeDatabase:
             return [(3, json.dumps(self.states[workspace]), "owner", True, True, True, True)] if workspace in self.states else []
         if "pg_try_advisory_xact_lock" in sql:
             return [(True,)]
+        if sql == "SELECT to_regclass('public.pr_worker_tenants')":
+            return [('public.pr_worker_tenants',)]
         return []
 
 
@@ -319,11 +321,14 @@ class WorkerFreeze(BlockTestCase):
         self.assertIsNone(CampaignWorker(SimpleNamespace(connection_factory=db.connect, clock=lambda: NOW))._claim())
         result = automation_runs.advance(SimpleNamespace(service=SimpleNamespace(commands=SimpleNamespace(engine=None), connection_factory=db.connect), clock=lambda: NOW))
         self.assertEqual(result["workspaces"], 0)
-        selects = [sql for sql, _ in db.executed if sql.lstrip().startswith("SELECT id::text") and "pr_workspaces" in sql]
+        selects = [sql for sql, _ in db.executed if sql.lstrip().startswith(("SELECT id::text", "SELECT w.id::text")) and "pr_workspaces" in sql]
         self.assertEqual(len(selects), 3)
         for sql in selects:
-            self.assertIn("NOT state ? 'accountDeletion'", sql)
-            self.assertIn(self.PREDICATE, sql)
+            # The publishing worker now aliases its workspace for the fair-dispatch join.
+            normalized = sql.replace('w.state', 'state')
+            self.assertIn("NOT state ? 'accountDeletion'", normalized)
+            self.assertIn(self.PREDICATE, normalized)
+        self.assertIn(("SELECT to_regclass('public.pr_worker_tenants')", None), db.executed)
         self.assertEqual([sql for sql, _ in db.executed if "pr_account_blocks" in sql], [])   # no table dependency in any worker
 
 

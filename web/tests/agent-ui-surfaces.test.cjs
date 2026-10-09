@@ -182,6 +182,14 @@ test('a panel turn sent before the runtime status loaded waits for it instead of
   assert.ok(/markFresh\(uiScope, response\.runId\)/.test(send), 'an eligible answer from this tab is marked fresh');
 });
 
+test('"Change this view" opens a focused field (keyboard typing goes into the request) and sends the stored selection as is', () => {
+  const source = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/surfaces/artifact.tsx'), 'utf8');
+  const edit = source.slice(source.indexOf('function EditView('));
+  assert.match(edit, /useEffect\(\(\) => \{\s*input\.current\?\.focus\(\);\s*\}, \[\]\)/);
+  assert.match(edit, /<input ref=\{input\}/);
+  assert.doesNotMatch(edit, /\? \{ selection \} :/, 'the selection is not wrapped in another object');
+});
+
 test('the outline and the panel Escape handling skip generated layers (same selectors everywhere)', () => {
   const outline = fs.readFileSync(path.join(WEB, 'src/features/site-agent/use-page-context.ts'), 'utf8');
   for (const selector of selectors.OUTLINE_SKIP_SELECTORS) assert.ok(outline.includes(selector), `OWN_SURFACES includes ${selector}`);

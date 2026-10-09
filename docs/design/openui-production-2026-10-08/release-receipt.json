@@ -78,6 +78,25 @@
     ]
   },
   "rollback_drill": null,
-  "known_unverified_items": [],
+  "known_unverified_items": [
+    {
+      "item": "Founder component spec descriptions (names/description strings only) are included in the consumer JS bundle via the shared registry module; the founder library renderers and all founder data/manifests are a separate dynamic chunk and founder-scope routes only",
+      "owner": "C",
+      "severity": "low",
+      "status": "known limitation"
+    },
+    {
+      "item": "COMPATIBLE_LIBRARY_HASHES empty: after any component-spec change, earlier saved views show their stored native fallback (no regeneration, no charge) until a verified hash is listed",
+      "owner": "C/A",
+      "severity": "low",
+      "status": "by design"
+    },
+    {
+      "item": "Pre-existing (not GenUI): malformed workspace id in an /api/workspaces/{id}/ path returns 500 InvalidTextRepresentation instead of 404",
+      "owner": "platform",
+      "severity": "low",
+      "status": "pre-existing"
+    }
+  ],
   "remaining_human_action": []
 }

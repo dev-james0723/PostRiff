@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "recordScope": "Pre-merge engineering validation only; release and live-version evidence belong to the coordinating final receipt.",
+  "status": "VERIFIED CLOUD SYNTHETIC SUBSET",
+  "realGoogleAcceptance": false,
+  "publicLaunchComplete": false,
+  "cloud": {
+    "provider": "Depot via JCB",
+    "runId": "cfj6vg03bh",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/cfj6vg03bh",
+    "exitCode": 0,
+    "remoteExitCode": 0,
+    "sourceBase": "bb4ca5aa0a4667aa8753bef84122b482874b3ea7",
+    "sourceHeadBeforeUncommittedPatch": "41ec5db40bf8ce88f37246c1c2be4e31c8684f74",
+    "sourceFingerprint": "23a13fc6aae60785e41f86b2174d3cad184ee604e5a5ed03597a0ee83d7ec783",
+    "patchSha256": "4db12d85f390d6ceba3e7fe12c20ebc899d41ca11eb6850cd32a1ff17fd2cc22",
+    "pythonTests": 437,
+    "frontendTests": 716,
+    "postgresGroups": 9,
+    "postgresGroupsPassed": [
+      "youtube_creator",
+      "video",
+      "consumer_campaign_worker",
+      "youtube_acceptance",
+      "youtube_capacity",
+      "youtube_scale",
+      "library_lifecycle",
+      "reverify",
+      "youtube_fleet"
+    ],
+    "checks": [
+      "dependency security (0 known vulnerabilities reported)",
+      "lint",
+      "TypeScript",
+      "Next production build",
+      "browser: real application to synthetic Google transport and disposable PostgreSQL"
+    ],
+    "browser": {
+      "status": "PASS",
+      "capturedAt": "2026-10-08T21:20:40.718Z",
+      "widths": [
+        1440,
+        390,
+        320
+      ],
+      "realGoogleE2E": false,
+      "artifacts": {
+        "CLOUD-SYNTHETIC-browser.json": {
+          "bytes": 2570,
+          "sha256": "1d933d4b46901d57b8ae19313bd1d9c5b4d12c7053c0f279721bbb4cab5e0a54"
+        },
+        "CLOUD-SYNTHETIC-agent-1440.png": {
+          "bytes": 453099,
+          "sha256": "418581aba82e38dc2b6a259dc26dbfe479646d9fbaf1528f55aba2d306cef86b"
+        },
+        "CLOUD-SYNTHETIC-agent-390.png": {
+          "bytes": 368796,
+          "sha256": "b4489bdb38326a14f04059d60367fe9797a858292fe3c7538b5301afcbfac5c2"
+        },
+        "CLOUD-SYNTHETIC-agent-320.png": {
+          "bytes": 368896,
+          "sha256": "84c5fc278b2624e2ed50f15ccccbd04788c5176195d79f22c630a7c5943c29e0"
+        },
+        "CLOUD-SYNTHETIC-capacity-1440.png": {
+          "bytes": 25072,
+          "sha256": "2ada9f3e5fe361e2cdeea86cec7917692c1d141c25f698a28cd2c80fd71631e1"
+        },
+        "CLOUD-SYNTHETIC-capacity-390.png": {
+          "bytes": 37340,
+          "sha256": "89f79dfc3ea5f7f83eb9d951580358ac0f0da9cc41c50d44c0a872230f41a705"
+        },
+        "CLOUD-SYNTHETIC-capacity-320.png": {
+          "bytes": 36868,
+          "sha256": "8152b020dfebaae46fac63f87b06f79ceff132a52e25f42eab86356d9601d66d"
+        }
+      }
+    },
+    "guardsVerified": [
+      "quoted instructions cannot supply current analytics consent or publishing declarations",
+      "publishAt remains at least 60 seconds in the future immediately after quota admission",
+      "owner freshness and immutable tenant/client/lane credential binding",
+      "unapproved public and agentic execution held",
+      "10,000-tenant synthetic DB claim isolation/fairness",
+      "8-worker distinct upload/identity/planner claims; crash recovery and stale-worker rejection",
+      "same-owner and changed-owner Autopilot reactivation generation fences",
+      "shared project budget admits exactly 7 of 24 concurrent attempts",
+      "workspace quota UI displays reservations and explicitly unknown Google remaining allocation"
+    ],
+    "fleet": {
+      "execution": "CLOUD SYNTHETIC ONLY",
+      "providerCalls": 0,
+      "productionAcceptance": false,
+      "workers": 8,
+      "distinctClaimsPerLane": 64,
+      "otherPlatformJobsUntouched": 108,
+      "quotaAttempts": 24,
+      "quotaAdmitted": 7,
+      "quotaDenied": 17,
+      "artifactSha256": "f1f346a3201d4246f70508d89a1fcbc5926f0bb3c5727bde6907b86691c1faaf",
+      "crashAndStaleLeaseFences": "PASS"
+    }
+  },
+  "local": {
+    "checks": [
+      "git diff --check",
+      "bounded JSON/AST validation",
+      "narrow single Python control tests only"
+    ],
+    "heavyBuildsOrBrowserSuites": false
+  },
+  "actualDatabaseEffects": {
+    "production089": "20261008190651",
+    "production097": "20261008193806",
+    "staging097": "20261008193754",
+    "rls": "VERIFIED on actual projects; browser roles denied, service role allowed"
+  },
+  "requiredPullRequestCI": "PR #136 open; current-head regression workflows must pass before merge. Final run IDs and release state belong to the coordinating receipt.",
+  "deployment": "PENDING; do not interpret this validation as a running production version",
+  "external": {
+    "productionGoogleProject": "rafii-youtube-production",
+    "productionOAuthClient": "NOT CONFIGURED",
+    "googleVerification": "NOT SUBMITTED",
+    "youtubeAudit": "NOT SUBMITTED",
+    "quotaExtension": "NOT SUBMITTED",
+    "approvedDailyUploads": 100,
+    "publicUploadEligibility": "UNVERIFIED",
+    "independentAccounts": "UNEXECUTED",
+    "privateUpload": "UNEXECUTED",
+    "nativeSchedule": "UNEXECUTED",
+    "providerAutopilot": "UNEXECUTED",
+    "quotaObservation": "VERIFIED DEFAULT:100 uploads/day,100 search/day,10,000 Queries/day; extension NOT SUBMITTED, public eligibility UNVERIFIED",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ]
+  },
+  "releaseConfiguration": {
+    "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "0",
+    "POSTRIFF_YOUTUBE_AGENTIC_ENABLED": "0",
+    "POSTRIFF_YOUTUBE_PUBLIC_BASE_URL": "UNSET pending registered dedicated client",
+    "NEXT_PUBLIC_APP_URL": "https://rafii.io",
+    "POSTRIFF_YOUTUBE_FLEET_ENABLED": "0 / default off; no isolated scheduler activated"
+  },
+  "limitations": [
+    "Free storage provider currently limits video objects to 50 MB; no paid upgrade authorized",
+    "Sustainable media/identity/agent worker fleets are not provisioned or provider benchmarked; isolated lane code and synthetic concurrent claim acceptance remain separate from activation",
+    "Verified legal/operator details, legal approval, actual account consent and disposable private asset remain pending",
+    "Console access recovered; APIs enabled and default Data API allocation verified. OAuth contacts, policy agreement, client, verification/audit and quota extension remain pending"
+  ],
+  "postSnapshotCorrections": {
+    "status": "VERIFIED BY SOURCE-BOUND JCB cfj6vg03bh; latest-head full PR regression still required",
+    "scope": [
+      "Preserve disabled-feature specialist instruction behavior while gating YouTube tools",
+      "Numerically ordered 089/097 migration harness",
+      "Worker-freeze fixture recognizes new schema query and still covers all three workers",
+      "Eight exact reviewed checksum/synthetic-fixture secret-scan entries",
+      "Synthetic Library storage adapter and browser interception implement signed TUS while retaining the real production upload client; original browser assertions stay required",
+      "Default-off isolated YouTube upload/identity/planner lanes, fenced concurrent claims and separate cloud-only concurrency fixture",
+      "Workspace reservation/limit/delay dashboard with explicit unknown Google remaining quota"
+    ],
+    "reuse": "The complete corrected source was included in JCB cfj6vg03bh. Earlier source-bound results remain historical. Latest-head full PR CI additionally covers the complete Library Chromium/WebKit path and other product regressions.",
+    "currentPullRequestFailure": {
+      "head": "668a1cc92c0daf1733607e7d74380ded84be4e9a",
+      "run": 37846834540,
+      "case": "postgres_youtube_fleet concurrent_claims",
+      "cause": "Fixture exhausted 128 expected nonblocking advisory-lock denials before the original 30-second deadline on 4 CPU",
+      "repair": "Deadline-based staggered backoff; all 8 x 8 claim, latency, uniqueness, isolation and quota assertions retained",
+      "validation": "PENDING LATEST-HEAD CLOUD GHA; no runtime change"
+    }
+  },
+  "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/136",
+  "historicalCloudRuns": [
+    {
+      "provider": "Depot via JCB",
+      "runId": "ftch52s5jv",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/ftch52s5jv",
+      "exitCode": 0,
+      "remoteExitCode": 0,
+      "sourceBase": "bb4ca5aa0a4667aa8753bef84122b482874b3ea7",
+      "sourceHeadBeforeUncommittedPatch": "a14c5b2808392732840644776331cad9d0fbab5f",
+      "sourceFingerprint": "60f819b13dc7fea38cd1b912767b6723065722345104dc22ddd7b64973e92b73",
+      "patchSha256": "eb0032b9e0765b6eeec9185c708e4b6c8823ade87a15beafde0ebc67b22b8769",
+      "pythonTests": 411,
+      "frontendTests": 716,
+      "postgresGroups": 8,
+      "postgresGroupsPassed": [
+        "youtube_creator",
+        "video",
+        "consumer_campaign_worker",
+        "youtube_acceptance",
+        "youtube_capacity",
+        "youtube_scale",
+        "library_lifecycle",
+        "reverify"
+      ],
+      "checks": [
+        "dependency security (0 known vulnerabilities reported)",
+        "lint",
+        "TypeScript",
+        "Next production build",
+        "browser: real application to synthetic Google transport and disposable PostgreSQL"
+      ],
+      "browser": {
+        "status": "PASS",
+        "capturedAt": "2026-10-08T20:24:15.068Z",
+        "widths": [
+          1440,
+          390,
+          320
+        ],
+        "realGoogleE2E": false,
+        "artifacts": {
+          "CLOUD-SYNTHETIC-browser.json": {
+            "bytes": 2450,
+            "sha256": "500ae8b57530d2889aa6aa0583d028765afd828a85398bfa6294d7fb85102f2c"
+          },
+          "CLOUD-SYNTHETIC-agent-1440.png": {
+            "bytes": 453847,
+            "sha256": "65111a2f70b34475f78c6bf0fd4ad672faa947d8b22fad1661fa7b190e1634f9"
+          },
+          "CLOUD-SYNTHETIC-agent-390.png": {
+            "bytes": 368586,
+            "sha256": "84e7f14636f531875ae94dc59e9b95f1954eb6ed7591807b713544498a08e41a"
+          },
+          "CLOUD-SYNTHETIC-agent-320.png": {
+            "bytes": 369268,
+            "sha256": "bd331812f79721f62e0043ea8a8c35ac2ed7d39b074f1825a8bcb95a33f76de1"
+          }
+        }
+      },
+      "guardsVerified": [
+        "quoted instructions cannot supply current analytics consent or publishing declarations",
+        "publishAt remains at least 60 seconds in the future immediately after quota admission",
+        "owner freshness and immutable tenant/client/lane credential binding",
+        "unapproved public and agentic execution held",
+        "10,000-tenant synthetic DB claim isolation/fairness",
+        "8-worker distinct upload/identity/planner claims; crash recovery and stale-worker rejection",
+        "same-owner and changed-owner Autopilot reactivation generation fences",
+        "shared project budget admits exactly 7 of 24 concurrent attempts",
+        "workspace quota UI displays reservations and explicitly unknown Google remaining allocation"
+      ]
+    }
+  ],
+  "originReconciliation": {
+    "productionBase": "65b1ea83283b34c99779e7d311828662debf4b23",
+    "productionPR": 135,
+    "previousCandidate": "b0ca13a4ebc46fa53573bc6f6b6516032a6130e1",
+    "previousMainCI": 37850230732,
+    "previousMainCIStatus": "SUCCESS99/99PG modules plus remaining gates",
+    "status": "COMBINED SOURCE CLOUD VALIDATION PENDING",
+    "conflictResolution": "Preserve canonical callback_base_url; callback_uri honors registered provider pin except explicit dedicated YouTube override for both lanes. Existing exact in-flight redirect and custody retained.",
+    "regressions": [
+      "test_rafii_origin_migration",
+      "test_youtube_callback_origin",
+      "test_youtube_oauth_binding",
+      "legacy-host and all existing web contracts"
+    ],
+    "actualGoogleAcceptance": false
+  }
+}

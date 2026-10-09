@@ -138,6 +138,26 @@ class PathTests(unittest.TestCase):
 
 
 class SignedUploadTests(unittest.TestCase):
+    def test_signed_resumable_is_exact_object_signature_on_direct_storage_host(self):
+        path = f'{WS}/video/{VID}.mp4'
+        send = Recorder((200, {}, json.dumps({'url': f'/object/upload/sign/postriff-video/{path}?token=signed-only-object'}).encode()))
+        storage = SupabaseStorage(PROJECT, KEY, send=send)
+        grant = storage.signed_resumable_upload(WS, f'{VID}.mp4', 'video/mp4')
+        self.assertEqual(grant['endpoint'], 'https://abcd1234.storage.supabase.co/storage/v1/upload/resumable')
+        self.assertEqual(grant['headers'], {'x-signature': 'signed-only-object'})
+        self.assertEqual(grant['metadata'], {'bucketName': 'postriff-video', 'objectName': path, 'contentType': 'video/mp4', 'cacheControl': '3600'})
+        self.assertEqual(grant['chunkBytes'], 6 * 1024 * 1024)
+        self.assertNotIn(KEY, json.dumps(grant))
+        self.assertEqual(len(send.calls), 1)
+        self.assertNotIn('x-upsert', {k.lower() for k in send.calls[0][2]})
+
+    def test_resumable_duplicate_or_header_injected_signature_is_rejected(self):
+        path = f'{WS}/video/{VID}.mp4'
+        for token in ('token=a&token=b', 'token=a%0D%0Aauthorization%3Abearer'):
+            with self.subTest(token=token), self.assertRaises(AlphaError):
+                storage = SupabaseStorage(PROJECT, KEY, send=Recorder((200, {}, json.dumps({'url': f'/object/upload/sign/postriff-video/{path}?{token}'}).encode())))
+                storage.signed_resumable_upload(WS, f'{VID}.mp4', 'video/mp4')
+
     def test_signed_upload(self):
         path = f"{WS}/video/{VID}.mp4"
         send = Recorder((200, {}, json.dumps({"url": f"/object/upload/sign/postriff-video/{path}?token=abc"}).encode()))

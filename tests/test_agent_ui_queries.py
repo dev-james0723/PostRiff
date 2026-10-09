@@ -257,6 +257,17 @@ class QueryGateTest(unittest.TestCase):
         self.assertEqual(ctx.cur.statements[0], "SAVEPOINT ui_query_read")
         self.assertEqual(ctx.cur.statements[-2:], ["ROLLBACK TO SAVEPOINT ui_query_read", "RELEASE SAVEPOINT ui_query_read"])
 
+    def test_an_undrawable_library_version_has_no_live_data(self):
+        auth = UiAuth(workspace_id=WS, principal="00000000-0000-0000-0000-000000000001", member=Membership.from_row("owner"), role="owner")
+        manifest = ui_capabilities.build_manifest(None, auth, {"journey_ids": ["J01"]})
+        artifact = {"id": ART, "revision": 1, "source_hash": "c" * 64, "conversation_id": "c", "parent_run_id": "r", "scope": "workspace", "library_hash": "e" * 64}
+        cur = Cursor()
+        with self.assertRaises(AlphaError) as refused:
+            ui_queries.query_ui_binding(cur, auth, artifact, manifest, {"artifactRevision": 1, "bindingId": "drafts_list", "inputs": {}},
+                                        supported={"workspace": {"a" * 64}, "founder": set()})
+        self.assertEqual((refused.exception.status, refused.exception.code), (409, "library_unsupported"))
+        self.assertEqual(cur.statements, [], "no throttle row, no workspace read, no reader")
+
     def test_next_cursor_round_trips_through_the_query_gate(self):
         ctx = dctx(cur=Cursor())
         first = ui_queries.run_binding(ctx, ui_domain.QUERIES["drafts_list"], {"limit": 4}, None)

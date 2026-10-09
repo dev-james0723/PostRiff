@@ -54,21 +54,20 @@ def _now() -> float:
     return time.time()
 
 
-def _binding(effective: dict, action_id: str):
+def _binding(effective: dict, action_id: str, manifest: dict | None = None, member=None):
+    """The control, as the caller may use it now. A control this view offers but the caller's current role can't use is 403
+    (NC02: a viewer, or a member demoted since the view was made); an id the view never offered is 404, so nothing is probed."""
     entry = ui_capabilities.action_binding(effective, action_id)
     if entry is None:
+        issued = ui_capabilities.action_binding(manifest, action_id) if manifest is not None else None
+        if issued is not None and member is not None and not ui_capabilities._allows(member, issued["binding"].requirement):
+            raise AlphaError("Your role in this workspace can't do this.", 403, code="ui_forbidden")
         raise AlphaError("Unknown action.", 404, code="ui_action")
     return entry["binding"]
 
 
 def _require_drawable(artifact: dict, supported: dict | None = None) -> None:
-    """NC18, defense in depth: a view whose stored component-library hash this build cannot draw is the native fallback, so
-    it has no controls. The same rule as F's snapshot (ui_store.compatibility: the current library hash plus the declared
-    compatibleLibraryHashes and RAFII_GENUI_COMPATIBLE_LIBRARIES); refused before any activation, receipt or domain write."""
-    from . import ui_store
-    record = {"revision": int(artifact.get("revision") or 0), "libraryHash": str(artifact.get("library_hash") or ""), "scope": artifact.get("scope") or "workspace"}
-    if not ui_store.compatibility(record, supported)["supported"]:
-        raise AlphaError("This view was made with an earlier version and can't be changed here.", 409, code="library_unsupported")
+    ui_capabilities.require_drawable(artifact, supported)
 
 
 def _require_current(artifact: dict, revision: int) -> None:
@@ -93,7 +92,7 @@ def activate_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, 
     now = now if now is not None else _now()
     effective = ui_capabilities.current(cur, auth, manifest)
     _require_drawable(artifact, supported)
-    binding = _binding(effective, request.get("actionId"))
+    binding = _binding(effective, request.get("actionId"), manifest, auth.member)
     if not ui_capabilities._allows(auth.member, binding.requirement):
         raise AlphaError("Your role in this workspace can't do this.", 403, code="ui_forbidden")
     revision = int(request.get("artifactRevision") or 0)
@@ -195,7 +194,7 @@ def execute_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, n
     now = now if now is not None else _now()
     effective = ui_capabilities.current(cur, auth, manifest)
     _require_drawable(artifact, supported)   # before the stored receipt, the activation and the command
-    binding = _binding(effective, request.get("actionId"))
+    binding = _binding(effective, request.get("actionId"), manifest, auth.member)
     key = request["idempotencyKey"]
     inputs = ui_domain.validate(binding.inputs, request.get("inputs") or {})
     digest = ui_contracts.input_digest(binding.action_id, inputs)

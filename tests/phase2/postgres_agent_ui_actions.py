@@ -371,8 +371,9 @@ def _():
 @scenario("A01", "A viewer is never offered or allowed a write; a forged activation writes nothing")
 def _():
     before = counts()
-    denied(lambda: activate("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, token=VIEWER), 404, "ui_action")
-    denied(lambda: execute("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, "act_" + "x" * 43, token=VIEWER), 404, "ui_action")
+    denied(lambda: activate("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, token=VIEWER), 403, "ui_forbidden")
+    denied(lambda: execute("draft_edit", {"draftId": DRAFT, "revision": 1, "text": "viewer"}, "act_" + "x" * 43, token=VIEWER), 403, "ui_forbidden")
+    denied(lambda: activate("publish_now", {}, token=VIEWER), 404, "ui_action")   # never offered: indistinguishable from unknown
     effective = ui_capabilities.current(None, auth_for(VIEWER), ART["manifest"])
     assert effective["actions"] == []
     assert counts() == before
@@ -504,7 +505,7 @@ def _():
 
 @scenario("A08", "Schedule prepare is a proposal on a new assistant message: prepared, not applied; only the native decide applies it")
 def _():
-    denied(lambda: activate("schedule_prepare", {"draftId": DRAFT, "local": local_in(4), "zone": HK}, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("schedule_prepare", {"draftId": DRAFT, "local": local_in(4), "zone": HK}, token=EDITOR), 403, "ui_forbidden")
     rev = query("draft_read", {"draftId": DRAFT})["data"]["revision"]
     inputs = {"draftId": DRAFT, "local": local_in(4), "zone": HK}
     act = activate("schedule_prepare", inputs)
@@ -542,7 +543,7 @@ def _():
 def _():
     act = activate("voice_sample_select", {"sourceId": SAMPLE_ID, "selected": True}, token=EDITOR)
     assert execute("voice_sample_select", {"sourceId": SAMPLE_ID, "selected": True}, act["activationId"], token=EDITOR)["verified"] is True
-    denied(lambda: activate("voice_sample_grant", {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("voice_sample_grant", {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}, token=EDITOR), 403, "ui_forbidden")
     grant = {"sourceId": SAMPLE_ID, "purpose": "analysis", "route": "local-rules"}
     granted = execute("voice_sample_grant", grant, activate("voice_sample_grant", grant)["activationId"])
     assert granted["verified"] is True, granted
@@ -644,7 +645,7 @@ def _():
     prefs = query("voice_preferences")["data"]
     assert any(p["id"] == created["id"] for p in prefs["pending"]) and not any(l.get("statement") == "Avoid emojis in posts" for l in prefs["learned"])
     inputs = {"proposalId": created["id"], "decision": "remember"}
-    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 404, "ui_action")
+    denied(lambda: activate("preference_decide", inputs, token=EDITOR), 403, "ui_forbidden")
     decided = execute("preference_decide", inputs, activate("preference_decide", inputs)["activationId"])
     assert decided["outcome"] == "applied" and decided["verified"] is True, decided
     after = query("voice_preferences")["data"]
@@ -741,11 +742,12 @@ def _():
     return {"coverage": coverage["data"]["state"]}
 
 
-@scenario("A17", "NC18: a view whose library version this build can't draw refuses activate and execute (409 library_unsupported), with zero writes")
+@scenario("A17", "NC18: a view whose library version this build can't draw refuses queries, activate and execute (409 library_unsupported), with zero writes")
 def _():
     art = make_artifact(["J01", "J05"])
-    rev = query("draft_read", {"draftId": DRAFT}, token=EDITOR, artifact=art)["data"]["revision"]
-    inputs = {"draftId": DRAFT, "revision": rev, "text": "Edit that must never land."}
+    draft = fresh_draft("A draft only this scenario edits: one bar, three times.")   # DRAFT is in the queue since A08
+    rev = query("draft_read", {"draftId": draft}, token=EDITOR, artifact=art)["data"]["revision"]
+    inputs = {"draftId": draft, "revision": rev, "text": "Edit that must never land."}
     issued = activate("draft_edit", inputs, token=EDITOR, artifact=art)            # while the view is drawable
     old_hash = "f" * 64
     with connection() as db:
@@ -756,19 +758,32 @@ def _():
             return {**counts(),
                     "activations": db.execute("SELECT count(*) FROM public.pr_ui_activations WHERE workspace_id=%s", (wid,)).fetchone()[0],
                     "used": db.execute("SELECT used_at IS NOT NULL FROM public.pr_ui_activations WHERE id=%s", (issued["activationId"],)).fetchone()[0],
-                    "text": next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == DRAFT)["text"],
+                    "text": next(v for v in service.get(wid, OWNER)["state"]["variants"] if v["id"] == draft)["text"],
                     "campaigns": len(service.get(wid, OWNER)["state"]["raffi"]["campaignPlanning"]["campaigns"])}
+    from postriff_phase2.hosted import bucket
+    buckets = [bucket(f"ui-query:{user}:{art['artifactId']}") for user in (EDITOR_ID, ONE)] + \
+              [bucket(f"ui-activate:{user}:{art['artifactId']}") for user in (EDITOR_ID, ONE)]
+
+    def throttle_rows():
+        with connection() as db:
+            return sorted(db.execute("SELECT bucket,count FROM public.pr_auth_throttle WHERE bucket = ANY(%s)", (buckets,)).fetchall())
     before = snapshot()
+    throttled = throttle_rows()
+    denied(lambda: query("draft_read", {"draftId": draft}, token=EDITOR, artifact=art), 409, "library_unsupported")
+    denied(lambda: query("drafts_list", {}, artifact=art), 409, "library_unsupported")
+    assert throttle_rows() == throttled, "a refused read never reaches the throttle"
     denied(lambda: activate("draft_edit", inputs, token=EDITOR, artifact=art), 409, "library_unsupported")
     denied(lambda: execute("draft_edit", inputs, issued["activationId"], token=EDITOR, artifact=art), 409, "library_unsupported")
     denied(lambda: activate("campaign_create", {"goal": "Never created", "audience": "Nobody"}, artifact=art), 409, "library_unsupported")
     after = snapshot()
     assert after == before, (before, after)
     assert after["used"] is False and after["text"] != inputs["text"]
+    assert throttle_rows() == throttled, "refused reads and actions never reach the throttle"
     # The same rule as F's snapshot: a hash declared compatible (RAFII_GENUI_COMPATIBLE_LIBRARIES) is drawable again.
     previous = os.environ.get("RAFII_GENUI_COMPATIBLE_LIBRARIES")
     os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = old_hash
     try:
+        assert query("draft_read", {"draftId": draft}, token=EDITOR, artifact=art)["state"] == "available"
         result = execute("draft_edit", inputs, issued["activationId"], token=EDITOR, artifact=art)
         assert result["outcome"] == "applied" and result["verified"] is True, result
     finally:

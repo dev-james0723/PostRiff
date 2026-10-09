@@ -226,6 +226,37 @@ def load_artifact(cur, auth, artifact_id):
     return record, record["manifest"]
 
 
+_SUPPORTED: list = [None, None]   # [cache key, {scope: set(libraryHash)}]
+
+
+def supported_hashes() -> dict:
+    """F's ui_store.supported_library_hashes, re-read only when the generated assets file or RAFII_GENUI_COMPATIBLE_LIBRARIES
+    changes (one stat per request, so the per-query gate stays cheap)."""
+    import os
+    from . import ui_store
+    try:
+        stamp = ui_store._ASSETS.stat().st_mtime_ns
+    except OSError:
+        stamp = None
+    key = (str(ui_store._ASSETS), stamp, os.environ.get("RAFII_GENUI_COMPATIBLE_LIBRARIES") or "")
+    if _SUPPORTED[0] != key:
+        _SUPPORTED[:] = [key, ui_store.supported_library_hashes()]
+    return _SUPPORTED[1]
+
+
+def require_drawable(artifact: dict, supported: dict | None = None) -> None:
+    """NC18, defense in depth: a view whose stored component-library hash this build cannot draw is the native fallback, so it
+    has no live data and no controls (F's access_for: canQuery/canAct false). The rule is F's ui_store.compatibility (current
+    hash + compatibleLibraryHashes + RAFII_GENUI_COMPATIBLE_LIBRARIES, per scope); refused before any throttle, reader,
+    activation, receipt or domain statement. A legacy view without a stored hash is drawable."""
+    from . import ui_store
+    record = {"revision": int(artifact.get("revision") or 0), "libraryHash": str(artifact.get("library_hash") or ""), "scope": artifact.get("scope") or "workspace"}
+    if not record["libraryHash"]:
+        return
+    if not ui_store.compatibility(record, supported if supported is not None else supported_hashes())["supported"]:
+        raise AlphaError("This view was made with an earlier version and can't be changed here.", 409, code="library_unsupported")
+
+
 def require_accepted(artifact: dict, requested_revision: int) -> None:
     """Queries and actions need a server-accepted revision. A query may name an older accepted revision of the same
     artifact; nothing may name one that does not exist yet."""

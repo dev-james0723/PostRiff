@@ -38,7 +38,7 @@ import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runti
 import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { AgentResult, AgentStatus, AgentTurnResponse } from '@/lib/agent-runtime/types';
-import { useAgent } from '@/lib/agent-runtime/use-agent';
+import { agentStatusQuery, useAgent } from '@/lib/agent-runtime/use-agent';
 import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
@@ -476,6 +476,14 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
       </div>
 
       <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        {!agent.status && agent.statusError ? (
+          // The agent runtime's status could not be read after its retries: say what still works instead of quietly answering
+          // with the basic assistant (no interactive views, no agent tools) — and let the person check again.
+          <div role='status' data-rafii-agent-status='unavailable' className='text-muted-foreground mb-2 flex flex-wrap items-center gap-2 px-2 text-xs'>
+            <span>Rafii’s full assistant isn’t reachable right now. Answers still work; interactive views are off until it’s back.</span>
+            <Button type='button' variant='quiet' size='xs' onClick={() => void agent.refetchStatus()}>Check again</Button>
+          </div>
+        ) : null}
         <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
         <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <Button type='button' variant='quiet' size='icon-control' aria-label='Add or create' aria-haspopup='dialog' onClick={() => setCapabilitiesOpen(true)}><Icons.add className='size-5' /></Button>
@@ -530,13 +538,13 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
 
 /** The agent runtime status for a workspace when the panel's own query hasn't answered yet (shared cache, at most 8 s). */
 async function loadStatus(client: ReturnType<typeof useQueryClient>, api: ReturnType<typeof useAgent>['api'], workspaceId: string): Promise<AgentStatus | null> {
-  const key = ['agent-runtime', 'status', workspaceId];
-  const cached = client.getQueryData<AgentStatus>(key);
+  const query = agentStatusQuery(api, workspaceId);
+  const cached = client.getQueryData<AgentStatus>(query.queryKey);
   if (cached) return cached;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      client.fetchQuery({ queryKey: key, queryFn: () => api.status(workspaceId), staleTime: 60_000, retry: 1 }),
+      client.fetchQuery(query),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 8000); })
     ]);
   } catch {

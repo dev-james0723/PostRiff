@@ -146,7 +146,10 @@ class Dispatcher(unittest.TestCase):
     def test_a_viewer_or_a_stale_view_never_reaches_the_command(self):
         with self.assertRaises(AlphaError) as viewer:
             self.run_action(self.script(), who=auth("viewer"))
-        self.assertEqual(viewer.exception.status, 404, "current() drops controls the role can't use: the id is unknown to a viewer")
+        self.assertEqual((viewer.exception.status, viewer.exception.code), (403, "ui_forbidden"), "an offered control the role can't use is 403 (NC02)")
+        with self.assertRaises(AlphaError) as never:
+            self.run_action(self.script(), request={**self.request(), "actionId": "publish_now"}, who=auth("viewer"))
+        self.assertEqual((never.exception.status, never.exception.code), (404, "ui_action"), "an id the view never offered stays 404")
         stale = {**self.request(), "artifactRevision": 2}
         with self.assertRaises(AlphaError) as old:
             self.run_action(self.script(), request=stale)
@@ -256,11 +259,35 @@ class Dispatcher(unittest.TestCase):
             return original(record, supported)
         ui_store.compatibility = spy
         try:
-            ui_actions.execute_ui_action(self.script(), auth(), {**self.artifact, "library_hash": "", "scope": "workspace"}, self.manifest, self.request(),
-                                         runtime=SimpleNamespace(service=SimpleNamespace()), supported={"workspace": set(), "founder": set()})
+            ui_actions.execute_ui_action(self.script(), auth(), {**self.artifact, "library_hash": "a" * 64, "scope": "workspace"}, self.manifest, self.request(),
+                                         runtime=SimpleNamespace(service=SimpleNamespace()), supported={"workspace": {"a" * 64}, "founder": set()})
         finally:
             ui_store.compatibility = original
-        self.assertEqual(calls, [{"revision": 3, "libraryHash": "", "scope": "workspace"}])
+        self.assertEqual(calls, [{"revision": 3, "libraryHash": "a" * 64, "scope": "workspace"}])
+
+    def test_the_supported_set_is_cached_until_the_assets_or_the_override_change(self):
+        import os
+        from postriff_phase2.agent_runtime_v2 import ui_store
+        reads = []
+        original = ui_store.supported_library_hashes
+        ui_store.supported_library_hashes = lambda *a, **k: reads.append(1) or original(*a, **k)
+        previous = os.environ.get("RAFII_GENUI_COMPATIBLE_LIBRARIES")
+        ui_capabilities._SUPPORTED[:] = [None, None]
+        try:
+            os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = "c" * 64
+            for _ in range(5):
+                self.assertIn("c" * 64, ui_capabilities.supported_hashes()["workspace"])
+            self.assertEqual(len(reads), 1)
+            os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = "d" * 64
+            self.assertIn("d" * 64, ui_capabilities.supported_hashes()["workspace"])
+            self.assertEqual(len(reads), 2)
+        finally:
+            ui_store.supported_library_hashes = original
+            ui_capabilities._SUPPORTED[:] = [None, None]
+            if previous is None:
+                os.environ.pop("RAFII_GENUI_COMPATIBLE_LIBRARIES", None)
+            else:
+                os.environ["RAFII_GENUI_COMPATIBLE_LIBRARIES"] = previous
 
     def test_activation_copy_is_server_built_and_bounded(self):
         cur = self.script()

@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "execution": "LOCAL SYNTHETIC; NOT REAL GOOGLE E2E",
+  "results": [
+    {
+      "width": 1440,
+      "execution": "local-synthetic",
+      "realGoogleE2E": false,
+      "independentCapabilities": 37,
+      "productionNotReady": true,
+      "officialUnsupportedCommunity": true,
+      "publicGateHeld": true,
+      "humanReviewBeforeWrite": true,
+      "metadataPreserved": true,
+      "destructiveExactIdGuard": true,
+      "privateStreamKeyGuard": true,
+      "foreignConnectionRejected": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 390,
+      "execution": "local-synthetic",
+      "realGoogleE2E": false,
+      "independentCapabilities": 37,
+      "productionNotReady": true,
+      "officialUnsupportedCommunity": true,
+      "publicGateHeld": true,
+      "humanReviewBeforeWrite": true,
+      "metadataPreserved": true,
+      "destructiveExactIdGuard": true,
+      "privateStreamKeyGuard": true,
+      "foreignConnectionRejected": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 320,
+      "execution": "local-synthetic",
+      "realGoogleE2E": false,
+      "independentCapabilities": 37,
+      "productionNotReady": true,
+      "officialUnsupportedCommunity": true,
+      "publicGateHeld": true,
+      "humanReviewBeforeWrite": true,
+      "metadataPreserved": true,
+      "destructiveExactIdGuard": true,
+      "privateStreamKeyGuard": true,
+      "foreignConnectionRejected": true,
+      "noHorizontalOverflow": true
+    }
+  ]
+}

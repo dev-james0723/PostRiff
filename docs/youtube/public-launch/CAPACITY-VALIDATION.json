@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-08",
+  "execution": "LOCAL LIGHTWEIGHT ARITHMETIC + SYNTHETIC CLOUD POSTGRES SUBSET",
+  "result": "PASS",
+  "source": "CAPACITY-MODEL.json",
+  "checks": [
+    "Decimal publication fractions sum exactly1",
+    "each workload units equals calls*unitsPerCall",
+    "publication counts sum to baseline uploads",
+    "scenario workload totals scale by customers/1000",
+    "25% general headroom uses ceiling",
+    "proposals cover stated baseline headroom",
+    "Primary unmeasured publishing forecast is30%DAU*1upload; comment-user forecast remains separately20%",
+    "48 identity checks/channel/day replaces one baseline check, adding47 units/channel/day",
+    "Primary1k/10k general demand116970/1169700;25%ceil146213/1462125;unapproved proposals150000/1500000",
+    "One-check alternative preserved but not represented as currently implemented cadence",
+    "Single maintenance check/tick ideal1440/day cannot deliver48000/480000 checks/day"
+  ],
+  "baselinePer1000Customers": {
+    "dailyActivePublisherFraction": 0.3,
+    "uploadsPerActivePublisherPerDay": 1,
+    "dailyCommentUserFraction": 0.2,
+    "identityChecksPerChannelPerDay": 48,
+    "generalCalls": 52360,
+    "generalUnits": 116970,
+    "headroomGeneralUnits": 146213,
+    "proposalGeneralUnits": 150000,
+    "quotaProposalApproved": false,
+    "oneDailyIdentityAlternative": {
+      "generalCalls": 5360,
+      "generalUnits": 69970,
+      "headroomGeneralUnits": 87463,
+      "proposalGeneralUnits": 100000
+    }
+  },
+  "baselinePer10000Customers": {
+    "dailyActivePublisherFraction": 0.3,
+    "uploadsPerActivePublisherPerDay": 1,
+    "dailyCommentUserFraction": 0.2,
+    "identityChecksPerChannelPerDay": 48,
+    "generalCalls": 523600,
+    "generalUnits": 1169700,
+    "headroomGeneralUnits": 1462125,
+    "proposalGeneralUnits": 1500000,
+    "quotaProposalApproved": false,
+    "oneDailyIdentityAlternative": {
+      "generalCalls": 53600,
+      "generalUnits": 699700,
+      "headroomGeneralUnits": 874625,
+      "proposalGeneralUnits": 1000000
+    }
+  },
+  "forecastsOwnerApproved": false,
+  "currentActualGoogleQuotaKnown": false,
+  "submitted": false,
+  "caveat": "48 identity checks/channel/day is the primary engineering planning scenario, not achieved cadence or a total-request upper bound; required maintenance fleet is unprovisioned. Actual Google quotas unknown; owner identity/legal/forecast approval and Free50MB storage billing gate remain unresolved.",
+  "resultScope": "Capacity-model arithmetic and synthetic database subset only; not full CI, Google/provider, production or worker-fleet acceptance.",
+  "syntheticDatabaseAcceptance": {
+    "result": "PASS",
+    "runId": "0sjg4k02d7",
+    "test": "tests/phase2/postgres_youtube_scale.py",
+    "exitCode": 0,
+    "runner": "depot-ubuntu-24.04-16",
+    "sourceCommit": "a14c5b2808392732840644776331cad9d0fbab5f",
+    "dirtyPatchBytes": 1303637,
+    "patchCacheKey": "patch/bb4ca5aa0a46/355ed0df4bc63343",
+    "sourceLog": "/tmp/rafii-youtube-public-ci-2.log",
+    "receipt": {
+      "execution": "synthetic-cloud-postgres",
+      "providerCalls": 0,
+      "realAccountConsent": false,
+      "realUploadAcceptance": false,
+      "productionLoadAcceptance": false,
+      "tenants": 10000,
+      "channels": 10000,
+      "dueJobs": 20000,
+      "thresholds": {
+        "seedSeconds": 60,
+        "claimP95Ms": 2000,
+        "claimMaxMs": 5000,
+        "queryPlanExecutionMs": 2000,
+        "concurrentReservationsSeconds": 30,
+        "distinctFairTenants": 40
+      },
+      "runtime": {
+        "system": "Linux",
+        "architecture": "x86_64",
+        "logicalCpuCount": 16,
+        "pythonVersion": "3.12.3",
+        "postgresVersion": "16.15 (Ubuntu 16.15-1.pgdg24.04+2)",
+        "postgresMaxConnections": 100
+      },
+      "seedSeconds": 0.2794,
+      "queryPlan": {
+        "planningMs": 0.406,
+        "executionMs": 23.033,
+        "nodes": [
+          {
+            "Node Type": "Limit",
+            "Plan Rows": 49,
+            "Actual Rows": 100,
+            "Actual Total Time": 22.304,
+            "Shared Hit Blocks": 2182,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "LockRows",
+            "Plan Rows": 49,
+            "Actual Rows": 100,
+            "Actual Total Time": 22.296,
+            "Shared Hit Blocks": 2182,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Sort",
+            "Plan Rows": 49,
+            "Actual Rows": 100,
+            "Actual Total Time": 22.235,
+            "Shared Hit Blocks": 2082,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Nested Loop",
+            "Plan Rows": 49,
+            "Actual Rows": 10000,
+            "Actual Total Time": 16.267,
+            "Shared Hit Blocks": 2076,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Seq Scan",
+            "Plan Rows": 49,
+            "Actual Rows": 10000,
+            "Actual Total Time": 14.109,
+            "Shared Hit Blocks": 2075,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Function Scan",
+            "Plan Rows": 11,
+            "Actual Rows": 1,
+            "Actual Total Time": 0.001,
+            "Shared Hit Blocks": 11,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Materialize",
+            "Plan Rows": 1,
+            "Actual Rows": 0,
+            "Actual Total Time": 0.0,
+            "Shared Hit Blocks": 1,
+            "Shared Read Blocks": 0
+          },
+          {
+            "Node Type": "Seq Scan",
+            "Plan Rows": 1,
+            "Actual Rows": 0,
+            "Actual Total Time": 0.002,
+            "Shared Hit Blocks": 1,
+            "Shared Read Blocks": 0
+          }
+        ]
+      },
+      "fairClaim": {
+        "claims": 40,
+        "distinctTenants": 40,
+        "p50Ms": 31.1807,
+        "p95Ms": 35.6601,
+        "maxMs": 39.4891
+      },
+      "concurrentAdmission": {
+        "attempts": 123,
+        "threads": 8,
+        "admitted": 50,
+        "denied": 73,
+        "elapsedSeconds": 0.2189
+      },
+      "authenticatedVisibleScaleWorkspaces": 1,
+      "status": "pass",
+      "elapsedSeconds": 1.8693,
+      "fixtureProcessPeakRssKiB": 59972
+    },
+    "limitations": [
+      "10,000 encrypted fixture credentials and channel identities; no genuine Google accounts or consent.",
+      "40 serial claims through restarted worker objects; no concurrent fleet or complete publishing-authority/provider benchmark.",
+      "Query selection scanned 10,000 due tenants and sorted; no production SLA or sustained load claim.",
+      "Synthetic project general budget 50 and workspace budget 2; no Google quota allocation or extension approval."
+    ]
+  },
+  "fullCi": {
+    "runId": "0sjg4k02d7",
+    "result": "FAIL",
+    "passedPostgresGroups": 7,
+    "failedPostgresGroup": "tests/phase2/postgres_library_lifecycle.py",
+    "failure": "Historical legacy Library indexing assertion failed. Coordinator diagnosis: cloud image missing LibreOffice.",
+    "followUpRunId": "mslbjz625h",
+    "followUpResult": "FAIL OVERALL; 383 PYTHON AND ALL 8 POSTGRES GROUPS PASS; FRONTEND LINT FAILED",
+    "followUpPassedPostgresGroups": 8,
+    "followUpPassedPythonCases": 383,
+    "currentFinalResult": "Final release validation recorded separately; no full-CI PASS claimed by this historical subset record."
+  },
+  "identityCadenceEngineeringForecastSelected": true,
+  "maintenanceFleetProvisioned": false
+}
