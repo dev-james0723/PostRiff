@@ -1,12 +1,12 @@
 # Rafii Intelligent Library release
 
-Execution state: **AWAITING AUTHORIZATION.** Nothing in this release has been pushed, merged, deployed or applied to a shared database. Every Library intelligence flag defaults to off. No paid model call has been made.
+Execution state: **AWAITING AUTHORIZATION.** The branch is pushed as draft PR #144 (redesign stacked as #145). Nothing has been merged, deployed or applied to a shared database. Every Library intelligence flag defaults to off. No paid model call has been made.
 
 | | |
 |---|---|
 | Package | `docs/design/rafii-intelligent-library-2026-10-08/` (R01–R20, A001–A080) |
 | Worktree | `/Users/ouxianxing/Documents/.agent-worktrees/rafii-intelligent-library-20261008` |
-| Branch | `claude/rafii-intelligent-library-20261008` (local only) |
+| Branch | `claude/rafii-intelligent-library-20261008` (draft PR #144) |
 | Base | `origin/consumer-saas` `3da806f0` |
 | Candidate | see "Candidate and validation" below |
 | Acceptance ledger | `docs/design/rafii-intelligent-library-2026-10-08/evidence/acceptance-status.json` |
@@ -100,11 +100,15 @@ Filled in from observed remote runs only. See `evidence/runs.md`.
 
 Acceptance ledger against `757e127d`: 24 VERIFIED, 49 UNVERIFIED, 7 BLOCKED, 0 FAILED (`scripts/library-intelligence-acceptance.py check --sha 757e127d` passes). The BLOCKED cases need the real-provider evaluation (A017, A018, A022, A023, A026, A032) or a real iPhone (A066). The run history, including every failed attempt and its fix, is in `evidence/runs.md`.
 
-`origin/consumer-saas` has since gained #136 (YouTube public launch), which touches no Library file; merging it is part of the merge step and needs one more validation run.
+**Merged head `aa52b8b8`** (branch now includes `origin/consumer-saas` `94ca0dbd`: OpenUI #137 and the YouTube launch #136). #136 did touch the Library: `library-view.tsx` gained resumable (TUS) video uploads and a server video policy, ported into the intelligent layout (limits under Add → Upload files, an inline retry if they fail to load, pause for an active video upload). Migration renumbered 097 → **104** (consumer-saas shipped `097_youtube_capacity.sql`; 098–103 are claimed). The Library renderer slot now passes `publishObservability={false}` (#137, D-A3).
+
+- GitHub `library-release.yml` on PR #144: **PASS** on `aa52b8b8` ([37894060489](https://github.com/dev-james0723/PostRiff/actions/runs/37894060489)).
+- JCB → Depot on the stacked redesign head `ea99149e` (contains this branch): **PASS** ([rjzngvv5pw](https://depot.dev/orgs/jf34f85hr0/workflows/rjzngvv5pw)), including A031 lexical p95 1,853 ms. One earlier green run measured 2,167 ms, so A031 sits close to its 2,000 ms budget on shared runners.
+- The acceptance ledger has not been re-applied to the merged head; its counts above are for `757e127d`.
 
 ## Remaining gates
 
-- **Authorization (James):** push the branch, open the PR, merge, apply 104 to staging and production, deploy, and enable each flag.
+- **Authorization (James):** merge, apply 104 to staging and production, deploy, and enable each flag.
 - **Real-provider evaluation:** A017, A018, A022, A023, A026 and A032. This needs `~/.config/rafii-library-eval/provider.env` with `AI_GATEWAY_API_KEY` and `OPENAI_API_KEY`, within the approved US$10 cap.
 - **Local authenticated preview and visual evidence:** this needs the one approved local `npm ci` in the worktree's `web/`.
 - **A066 iPhone Safari smoke test:** needs James's device; see `evidence/iphone-smoke.md`.
