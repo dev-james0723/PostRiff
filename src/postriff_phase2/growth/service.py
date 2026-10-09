@@ -243,6 +243,35 @@ class GrowthService:
                 'maxHistoryPosts':genome.MAX_POSTS,'checksPerDay':10,'rewritesPerDay':1,
                 'readiness':ready}
 
+    def measurement_enrollment(self,workspace_id,token,method,body=None):
+        """Owner opt-in to native post readings (CONTRACTS.md §2). Interactive owner only, origin-guarded by the app.
+        Returns only this workspace's own status, eligibility and reason; never cohort sizes or other workspaces.
+        Leaving closes this workspace's open readings when no reviewed env listing still admits it."""
+        from ..hosted import _membership
+        from .. import feature_enrollment
+        from . import metric_schedule
+        from .readiness import MEASUREMENT_FEATURE as feature
+        self.session(token)
+        if method not in ('GET','POST','DELETE'):
+            raise AlphaError('Growth route unavailable.',404)
+        with self.repository.transaction(token,workspace_id) as (cur,row,principal):
+            membership=_membership(row)
+            require(membership,'owner')
+            if method=='POST':
+                if not isinstance(body,dict) or body.get('confirmed') is not True:
+                    raise AlphaError('Confirm turning on post readings for this workspace.')
+                feature_enrollment.enroll(cur,workspace_id,feature,actor=principal,role=membership.role,values=self.env)
+            elif method=='DELETE':
+                feature_enrollment.unenroll(cur,workspace_id,feature,actor=principal,role=membership.role)
+                if str(workspace_id) not in metric_schedule.allowed_workspaces(self.env):
+                    metric_schedule.close_unadmitted_reads(cur,workspace_id)
+            legacy=str(workspace_id) in metric_schedule.allowed_workspaces(self.env)
+            status=feature_enrollment.status(cur,workspace_id,feature)
+            eligibility={'eligible':False,'reason':'reviewed_cohort'} if legacy else feature_enrollment.eligibility(cur,workspace_id,feature,self.env)
+            admitted=legacy or feature_enrollment.admitted(cur,workspace_id,feature,self.env)
+        return {'feature':feature,'status':status or 'none','eligible':bool(eligibility['eligible']),'reason':eligibility['reason'],
+                'admitted':bool(admitted),'collecting':metric_schedule.enabled(self.env) and getattr(self.hosted,'metric_reads',None) is not None}
+
     def _history(self,cur,workspace_id,state):
         cur.execute('SELECT id::text,source_id,source_revision,platform,connection_id,provider_post_id,language,format,time_bucket,labels,judgment,supplied_metrics FROM public.pr_post_history WHERE workspace_id=%s ORDER BY created_at DESC LIMIT 300',(workspace_id,))
         sources={s['id']:s for s in state.get('sources',[]) if s.get('kind')=='voice_sample'}

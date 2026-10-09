@@ -318,5 +318,131 @@ class SchemaSafety(unittest.TestCase):
         R.require_schema(cur, ("pr_postmortems",))
 
 
+
+class EnrollmentCursor:
+    """Just enough of pr_feature_enrollments / pr_metric_reads for the owner enrollment routes."""
+
+    def __init__(self, store):
+        self.store, self.rows, self.rowcount = store, [], 0
+
+    def execute(self, sql, params=()):
+        text = " ".join(sql.split())
+        st = self.store
+        st["sql"].append(text)
+        self.rowcount = 0
+        if "to_regclass('public.pr_feature_enrollments')" in text:
+            self.rows = [(True,)]
+        elif text.startswith("SELECT status FROM public.pr_feature_enrollments"):
+            self.rows = [(st["status"],)] if st["status"] else []
+        elif "pg_advisory_xact_lock" in text:
+            self.rows = [(None,)]
+        elif text.startswith("SELECT count(*) FROM public.pr_feature_enrollments"):
+            self.rows = [(st["cohort"],)]
+        elif text.startswith("INSERT INTO public.pr_feature_enrollments"):
+            st["status"] = "active"
+            self.rows, self.rowcount = [], 1
+        elif text.startswith("UPDATE public.pr_feature_enrollments"):
+            self.rowcount = 1 if st["status"] == "active" else 0
+            st["status"] = "revoked" if st["status"] else None
+        elif text.startswith("INSERT INTO public.pr_audit_events"):
+            st["audit"].append(params[2])
+        elif text.startswith("UPDATE public.pr_metric_reads"):
+            st["closed"] += st["open_reads"]
+            self.rowcount, st["open_reads"] = st["open_reads"], 0
+        else:
+            raise AssertionError("unexpected statement: " + text[:100])
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return list(self.rows)
+
+
+class EnrollmentRepository:
+    def __init__(self, store, role):
+        self.store, self.role, self.effects = store, role, []
+
+    @contextmanager
+    def transaction(self, token, workspace_id, **_):
+        yield EnrollmentCursor(self.store), (1, {}, self.role, False, False, False, False), "3f10b38f-0000-4000-8000-000000000009"
+
+
+class MeasurementEnrollment(unittest.TestCase):
+    SELF_SERVE = {"POSTRIFF_METRIC_READS": "1", "POSTRIFF_METRIC_SELF_SERVE_ENABLED": "1", "POSTRIFF_METRIC_SELF_SERVE_MAX_WORKSPACES": "3"}
+
+    def growth(self, role="owner", env=None, **store):
+        state = {"status": None, "cohort": 0, "sql": [], "audit": [], "open_reads": 2, "closed": 0, **store}
+        hosted = SimpleNamespace(repository=EnrollmentRepository(state, role), clock=lambda: 1.0, metric_reads=object(),
+                                 ideas=NoNetwork(), oauth=NoNetwork(), connection_factory=NoNetwork())
+        return GrowthService(hosted, env=dict(self.SELF_SERVE if env is None else env)), state
+
+    def test_owner_enrolls_and_leaves_with_only_own_status_returned(self):
+        growth, store = self.growth()
+        view = growth.measurement_enrollment(OTHER, "session", "GET")
+        self.assertEqual(view, {"feature": "growth_measurement", "status": "none", "eligible": True, "reason": "enrollment_open",
+                                "admitted": False, "collecting": True})
+        with self.assertRaises(AlphaError):
+            growth.measurement_enrollment(OTHER, "session", "POST", {})
+        joined = growth.measurement_enrollment(OTHER, "session", "POST", {"confirmed": True})
+        self.assertEqual((joined["status"], joined["admitted"], joined["reason"]), ("active", True, "already_enrolled"))
+        self.assertEqual(store["audit"], ["feature.enrolled"])
+        left = growth.measurement_enrollment(OTHER, "session", "DELETE")
+        self.assertEqual((left["status"], left["admitted"]), ("revoked", False))
+        self.assertEqual(store["closed"], 2)
+        self.assertNotIn("cohort", json_keys(left))
+
+    def test_leaving_keeps_reads_when_the_reviewed_env_list_still_admits_the_workspace(self):
+        env = {**self.SELF_SERVE, "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST": OTHER}
+        growth, store = self.growth(env=env, status="active")
+        left = growth.measurement_enrollment(OTHER, "session", "DELETE")
+        self.assertEqual((left["status"], left["admitted"], left["reason"]), ("revoked", True, "reviewed_cohort"))
+        self.assertEqual(store["closed"], 0)
+
+    def test_only_an_interactive_owner_can_read_join_or_leave(self):
+        for role in ("admin", "editor", "approver", "viewer"):
+            growth, store = self.growth(role=role)
+            for method, body in (("GET", None), ("POST", {"confirmed": True}), ("DELETE", None)):
+                with self.subTest(role=role, method=method):
+                    with self.assertRaises(AlphaError) as caught:
+                        growth.measurement_enrollment(OTHER, "session", method, body)
+                    self.assertEqual(caught.exception.status, 403)
+            self.assertIsNone(store["status"])
+            self.assertEqual(store["closed"], 0)
+        growth, _ = self.growth()
+        with self.assertRaises(AlphaError) as caught:
+            growth.measurement_enrollment(OTHER, "prt_api_token", "POST", {"confirmed": True})
+        self.assertEqual(caught.exception.status, 403)
+
+    def test_paused_or_full_cohorts_refuse_without_writing(self):
+        growth, store = self.growth(env={"POSTRIFF_METRIC_READS": "1"})
+        self.assertEqual(growth.measurement_enrollment(OTHER, "session", "GET")["reason"], "self_serve_paused")
+        with self.assertRaises(AlphaError) as caught:
+            growth.measurement_enrollment(OTHER, "session", "POST", {"confirmed": True})
+        self.assertEqual(caught.exception.code, "self_serve_paused")
+        growth, store = self.growth(cohort=3)
+        self.assertEqual(growth.measurement_enrollment(OTHER, "session", "GET")["reason"], "cohort_full")
+        with self.assertRaises(AlphaError) as caught:
+            growth.measurement_enrollment(OTHER, "session", "POST", {"confirmed": True})
+        self.assertEqual(caught.exception.code, "cohort_full")
+        self.assertIsNone(store["status"])
+
+    def test_route_is_mounted_for_get_post_and_delete(self):
+        from postriff_phase2.growth import http
+        calls = []
+        growth = SimpleNamespace(measurement_enrollment=lambda wid, token, method, body=None: calls.append((wid, method, body)) or {"ok": True})
+        app = SimpleNamespace(_body=lambda environ: {"confirmed": True}, _json=lambda start, status, value: (status, value))
+        hosted = SimpleNamespace(growth=growth)
+        parts = ["api", "workspaces", OTHER, "growth", "measurement", "enrollment"]
+        for method in ("GET", "POST", "DELETE"):
+            self.assertEqual(http.handle(app, {}, None, hosted, "session", method, parts), (200, {"ok": True}))
+        self.assertEqual(calls, [(OTHER, "GET", None), (OTHER, "POST", {"confirmed": True}), (OTHER, "DELETE", None)])
+        with self.assertRaises(AlphaError):
+            http.handle(app, {}, None, hosted, "session", "PUT", parts)
+
+
+def json_keys(value):
+    return set(value)
+
 if __name__ == "__main__":
     unittest.main()

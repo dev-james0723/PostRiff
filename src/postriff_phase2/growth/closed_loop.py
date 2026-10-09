@@ -32,12 +32,20 @@ ACTIONS=('postmortem_lesson_approve','postmortem_dismiss','audience_suggestion_c
          'creator_calibration_propose','creator_calibration_approve','creator_calibration_restore')
 
 
-def collection_enabled(growth,workspace_id):
+def collection_enabled(growth,workspace_id,cur=None):
+    """Same admission as the worker (env allowlist or growth_measurement enrollment); mounting is not enablement."""
+    from .metric_schedule import MetricScheduler
     reader=getattr(growth.hosted,'metric_reads',None)
     if not metric_reads_enabled(growth.env) or reader is None:
         return False
     admission=getattr(reader,'workspace_allowed',None)
-    return admission is None or (callable(admission) and bool(admission(workspace_id)))
+    if admission is None:
+        return True
+    if not callable(admission):
+        return False
+    if cur is not None and isinstance(reader,MetricScheduler):
+        return bool(admission(workspace_id,cur))
+    return bool(admission(workspace_id))
 
 
 class ClosedLoop:
@@ -78,7 +86,7 @@ class ClosedLoop:
         with self.repository.transaction(token,wid) as (cur,row,_):
             require_schema(cur,OVERVIEW_TABLES)
             jobs,posts,predictions=self._observations(cur,wid,row[1])
-            enabled=collection_enabled(self.g,wid)
+            enabled=collection_enabled(self.g,wid,cur)
             tracked=tracking(cur,wid,{'phase2':{**row[1].get('phase2',{}),'jobs':jobs}},self.g.clock(),enabled=enabled,limit=300)
             windows={p['job_id']:{h['window']:h for h in p['horizons']} for p in tracked['posts']}
             cur.execute("SELECT connection_id FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='analytics' AND level='Direct'",(wid,))

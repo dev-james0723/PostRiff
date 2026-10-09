@@ -21,12 +21,19 @@ def status(workspace_id, values=None, *, metric_reads_enabled):
 
 
 def horizon_state(row, due, now):
+    """One window's honest state. A window closed late is 'missed', never filled; a cancellation keeps its real
+    reason: admission ('not_entitled') and missing rights ('rights_unavailable') never ask to reconnect, only a
+    revoked or missing credential is 'disconnected'."""
     if row is None:
         return "unscheduled"
+    if row.get("reason") == "window_missed":
+        return "missed"
     if row["status"] == "done":
         return "measured" if row["measured"] else "unavailable"
     if row["status"] == "cancelled":
-        return "disconnected"
+        if row.get("reason") == "not_admitted":
+            return "not_entitled"
+        return "rights_unavailable" if row.get("credential_live") else "disconnected"
     if row["status"] in ("unavailable", "dead"):
         return "unavailable"
     if row["status"] == "claimed":
@@ -41,7 +48,7 @@ def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
     candidates = [j for j in history if j.get("state") == "verified" and j.get("providerReference")]
     jobs = candidates[-limit:]
     result = {"enabled": bool(enabled), "as_of": now, "truncated": len(candidates) > limit, "posts": []}
-    rows, direct = {}, set()
+    rows, direct, live = {}, set(), set()
     schema_ready = False
     if enabled and jobs:
         cur.execute("SELECT to_regclass('public.pr_metric_reads') IS NOT NULL")
@@ -50,6 +57,9 @@ def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
             cur.execute("""SELECT connection_id FROM public.pr_channel_capabilities
                 WHERE workspace_id=%s AND capability='analytics' AND level='Direct'""", (workspace_id,))
             direct = {r[0] for r in cur.fetchall()}
+            cur.execute("""SELECT connection_id FROM public.pr_encrypted_credentials
+                WHERE workspace_id=%s AND revoked_at IS NULL""", (workspace_id,))
+            live = {r[0] for r in cur.fetchall()}
             cur.execute("""SELECT r.job_id,r.connection_id,r.provider,r.provider_post_id,r.read_offset,r.status,
                 extract(epoch from r.due_at),r.failure_class,
                 EXISTS(SELECT 1 FROM public.pr_metric_observations o WHERE o.workspace_id=r.workspace_id
@@ -58,7 +68,8 @@ def tracking(cur, workspace_id, state, now, *, enabled, limit=120):
                   AND o.availability='available' AND o.value>=0 AND o.value<'Infinity'::float8)
                 FROM public.pr_metric_reads r WHERE r.workspace_id=%s AND r.job_id=ANY(%s)""",
                 (workspace_id, [j["id"] for j in jobs]))
-            rows = {tuple(r[:5]): {"status": r[5], "due": float(r[6]), "reason": r[7], "measured": r[8]}
+            rows = {tuple(r[:5]): {"status": r[5], "due": float(r[6]), "reason": r[7], "measured": r[8],
+                                   "credential_live": r[1] in live}
                     for r in cur.fetchall()}
     channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if not c.get("revoked")}
     for job in reversed(jobs):

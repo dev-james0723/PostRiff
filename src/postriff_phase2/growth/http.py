@@ -35,6 +35,8 @@ def handle(app,environ,start_response,hosted,token,method,parts):
         value=radar.response(workspace_id,token,value)
     elif method=='GET' and rest==['catalog']:
         value=service.catalog(workspace_id,token)
+    elif rest==['measurement','enrollment'] and method in ('GET','POST','DELETE'):
+        value=service.measurement_enrollment(workspace_id,token,method,app._body(environ) if method=='POST' else None)
     elif method=='GET' and rest==['genome']:
         value=service.genome(workspace_id,token)
     elif method=='GET' and len(rest)==2 and rest[0]=='feedback':
