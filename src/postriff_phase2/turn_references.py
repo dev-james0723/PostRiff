@@ -328,7 +328,7 @@ def merge_destinations(payload_destinations, extra):
     for destination in list(payload_destinations or []) + list(extra or []):
         if not isinstance(destination, dict):
             continue
-        key = (destination.get("platform"), destination.get("channelId") or None)
+        key = (destination.get("platform"), destination.get("channelId") or None, destination.get("format") or None)
         if key in seen:
             continue
         seen.add(key)

@@ -18,20 +18,25 @@ REASONING = ("quick", "standard", "deep")
 # Xiaohongshu have no hosted publisher (hosted_social maps LinkedIn, Threads and Instagram only), so their drafts are
 # for review, copy and export, and the capability check reports them as having no publishing route.
 PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
+# The original five stay the flag-off set. Every route now asks the creation-capability projection which platforms it
+# may draft for (creation_capabilities.draftable_platforms): Facebook and the other mapped platforms join only through
+# their reversible rollout flags, and any failure building the projection falls back to these five.
+
+
+def draftable_platforms():
+    from .creation_capabilities import draftable_platforms as current
+    return current()
+
+
 DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 
 def check_destinations(destinations):
-    """Every destination is a supported platform with a known language; the key that must be unique is
-    (platform, language, account): two accounts on one platform are two destinations, the same account
-    in the same language twice is a client error."""
-    seen = set()
-    for d in destinations:
-        platform, tag = d.get("platform"), locales.canonical(d.get("language"))
-        channel_id = d.get("channelId") if isinstance(d.get("channelId"), str) else None
-        if platform not in PLATFORMS or tag is None or (platform, tag, channel_id) in seen:
-            raise AlphaError("Choose supported destinations.", 400)
-        seen.add((platform, tag, channel_id))
+    """Every destination is a draftable platform (creation projection) with a known language and, when it names one,
+    a native format of that platform; the key that must be unique is (platform, language, account, format): two
+    accounts or two formats on one platform are two destinations, the same one twice is a client error."""
+    from .creation_capabilities import validate_destinations
+    validate_destinations(destinations)
 
 
 def identity_fields(destination):
@@ -41,6 +46,8 @@ def identity_fields(destination):
         out["channelId"] = destination["channelId"]
     if isinstance(destination.get("account"), str) and destination["account"]:
         out["account"] = destination["account"]
+    if isinstance(destination.get("format"), str) and destination["format"]:
+        out["format"] = destination["format"]
     return out
 
 # Phase-3 adapter kinds → safe families. Never forwarded raw.
@@ -117,7 +124,7 @@ class FixtureAgentRuntime(AgentRuntime):
         return {"status": "completed" if run.get("status") == "completed" else "cancelled"}
 
     def supported_platforms(self):
-        return PLATFORMS
+        return draftable_platforms()
 
     def start_turn(self, request, emit):
         context = request["context"]

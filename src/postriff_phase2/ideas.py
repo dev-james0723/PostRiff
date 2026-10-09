@@ -48,7 +48,15 @@ def same_slot(variant, candidate):
     """A draft refreshes in place only when it is the same account (or platform-level draft) in the
     same language: two accounts on one platform never overwrite each other's drafts."""
     return (variant.get("platform") == candidate.get("platform") and locales.same(variant.get("language"), candidate.get("language"))
-            and (variant.get("channelId") or None) == (candidate.get("channelId") or None))
+            and (variant.get("channelId") or None) == (candidate.get("channelId") or None)
+            # Two native formats on one platform (a Page post and a Reel) are two drafts; a draft without a format is
+            # the platform's default format, so older drafts still refresh in place.
+            and _native_format(variant) == _native_format(candidate))
+
+
+def _native_format(item):
+    from .creation_capabilities import DEFAULT_FORMATS
+    return item.get("format") or DEFAULT_FORMATS.get(item.get("platform"))
 
 
 def usd_micro(cost_usd):
@@ -287,7 +295,19 @@ class IdeasService:
                 "detail": "Uses one managed media credit and the approved image budget, independently of the selected writing model or local CLI." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
             },
             "attachments": self.attachments_catalog(),
+            "creation": self.creation_catalog(),
         }
+
+    @staticmethod
+    def creation_catalog():
+        """The versioned creation-capability facet (creation_capabilities.SCHEMA): which platforms and native formats the
+        composer may offer, with independent draft/media/export/connect/publish/analytics/learning states. The server
+        validates every turn against the same projection; this facet never authorizes anything by itself."""
+        from .creation_capabilities import projection
+        try:
+            return projection().public()
+        except Exception:  # noqa: BLE001 - a failed load offers the original five only (client fallback), never more
+            return None
 
     def attachments_catalog(self):
         """Chat attachments (chat-context SPEC §5.11): every limit and number the UI shows, and which parts are on."""
@@ -1024,6 +1044,10 @@ class IdeasService:
                 if outcome.get("contentType"):
                     variant.update({k: outcome["contentType"].get(k) for k in ("contentTypeId", "contentTypeVersion", "formatId")})
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
+        # Structured native drafts (creation projection): public fields in their own slots, bindings and private notes
+        # apart, media and constraint states explicit. `text` is untouched, so every existing reader sees the same copy.
+        from .creation_capabilities import attach_native
+        attach_native(artifact["variants"], bindings=outcome.get("skillBindings") or [], omissions=outcome.get("skillOmissions") or [])
         artifact_hash = digest(artifact)
         usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
         if references is not None:
@@ -1366,6 +1390,11 @@ class IdeasService:
         chip_destinations = ahead["destinations"] if ahead else []
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        if isinstance(payload.get("capabilityRevision"), str):
+            # The composer offered destinations from one creation-capability revision; a stale or forged one is refused
+            # with a stable code before any writing or spending (the browser never decides what is draftable).
+            from .creation_capabilities import validate_destinations
+            validate_destinations(destinations, revision=payload["capabilityRevision"])
         plan = intent.build_plan(parsed, destinations)
         if text and not recurring and not reworking and not chips:
             # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
@@ -1929,7 +1958,7 @@ class IdeasService:
                 live_assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
                 media = [m for m in candidate.get("media") or artifact.get("media") or [] if m.get("assetId") in live_assets]
                 media_lost = len(candidate.get("media") or artifact.get("media") or []) > len(media)
-                content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId") if candidate.get(k) is not None}
+                content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId", "format", "native", "nativeFields") if candidate.get(k) is not None}
                 values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
                 if media or media_lost or "media" in candidate:
                     values["media"] = media
