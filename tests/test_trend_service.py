@@ -62,7 +62,7 @@ class Repository:
             self.state = old
             raise
 
-    def execute(self, sql, args):
+    def execute(self, sql, args=()):
         self.queries.append(sql)
         if sql.startswith("UPDATE public.pr_workspaces"):
             self.state = json.loads(args[0])
@@ -283,12 +283,59 @@ class TrendServiceTests(unittest.TestCase):
         self.status(400, lambda: self.svc.list(WID, "session", {"limit": 1, "cursor": cursor}))
 
     def test_ui_aliases_normalize_and_invalid_limits_refused(self):
-        self.svc.list(WID, "session", {"view": "rising", "platform": "bluesky", "language": "en", "niche": "baking"})
+        self.svc.list(WID, "session", {"view": "for_you", "platform": "bluesky", "language": "en"})
         selected = next(c[2] for c in self.store.calls if c[0] == "list")
         self.assertEqual(selected["platforms"], ["bluesky"])
-        self.assertEqual(selected["stages"], ["rising"])
-        for query in ({"limit": 101}, {"unknown": "x"}, {"since": "2026-01-01"}, {"platform": "invalid"}):
+        self.assertEqual(selected["languages"], ["en"])
+        for query in ({"limit": 101}, {"unknown": "x"}, {"since": "2026-01-01"}, {"platform": "invalid"},
+                      {"platform": "mastodon"}, {"language": "mixed"}):
             self.status(400, lambda: self.svc.list(WID, "session", query))
+
+    def test_stage_views_report_unqualified_lifecycle(self):
+        from postriff_phase2.growth.trends import service as S
+        for flag in ("1", "0"):
+            self.svc.values["RAFII_TREND_STAGE_CLAIMS_ENABLED"] = flag
+            for view in ("rising", "breaking", "hot"):
+                self.store.calls.clear()
+                result = self.svc.list(WID, "session", {"view": view})
+                assert_schema(self, "trends_response", result)
+                self.assertEqual(result["data"], [])
+                self.assertEqual(result["execution_state"], "unavailable")
+                self.assertIn("lifecycle_stage_unqualified", result["limitations"])
+                self.assertFalse([c for c in self.store.calls if c[0] == "list"], "no fake ranking from an unqualified stage")
+        self.svc.values["RAFII_TREND_STAGE_CLAIMS_ENABLED"] = "1"
+        with patch.object(S, "lifecycle_qualified", return_value=True):
+            self.svc.list(WID, "session", {"view": "rising"})
+        selected = next(c[2] for c in self.store.calls if c[0] == "list")
+        self.assertEqual(selected["stages"], ["rising"])
+
+    def test_niche_view_is_general_results_with_honest_limitation(self):
+        result = self.svc.list(WID, "session", {"view": "niche", "niche": "baking"})
+        self.assertEqual(len(result["data"]), 1)
+        self.assertIn("niche_grouping_unavailable", result["limitations"])
+        selected = next(c[2] for c in self.store.calls if c[0] == "list")
+        self.assertNotIn("niches", selected, "no producer writes a niche field; never filter on it")
+
+    def test_empty_list_reports_per_platform_source_health_for_authorized_scopes_only(self):
+        from postriff_phase2.growth.trends import service as S
+        self.store.rows = {k: v for k, v in self.store.rows.items() if k[0] != "trend"}
+        rows = [{"provider_id": "bluesky", "status": "unavailable", "reason": "provider_transient",
+                 "observed_at": opportunities.iso(NOW-60), "latest_successful_read": opportunities.iso(NOW-86400)}]
+        with patch.object(S, "source_health_rows", return_value=rows) as health:
+            result = self.svc.list(WID, "session")
+        self.assertEqual(health.call_args.args[1], [SCOPE], "only the caller's authorized scopes")
+        assert_schema(self, "trends_response", result)
+        self.assertEqual(result["data"], [])
+        self.assertEqual(result["execution_state"], "unavailable")
+        source = result["coverage"]["sources"][0]
+        self.assertEqual((source["platform"], source["availability"], source["reason"]), ("bluesky", "unavailable", "provider_transient"))
+        self.assertEqual(result["coverage"]["latest_successful_read"], opportunities.iso(NOW-86400))
+        self.assertEqual(result["source_health"], [{"platform": "bluesky", "availability": "unavailable", "reason": "provider_transient",
+            "latest_successful_read": opportunities.iso(NOW-86400), "completeness": "gap"}])
+        # Unknown or unsafe codes never pass through.
+        rows[0]["reason"] = "Upstream said: <secret body>"
+        with patch.object(S, "source_health_rows", return_value=rows):
+            self.assertEqual(self.svc.list(WID, "session")["source_health"][0]["reason"], "unspecified")
 
     def test_builder_is_wire_compatible_and_does_not_promote_shadow(self):
         metric = {"value": None, "unit": "posts/hour", "reason": "coverage_gap"}
@@ -375,6 +422,82 @@ class TrendServiceTests(unittest.TestCase):
         from postriff_phase2.growth.trends.store import TrendStorageError
         self.svc.platform_states_reader=unittest.mock.Mock(side_effect=TrendStorageError("platform_primary_unavailable"))
         self.status(410,lambda:self.svc.get(WID,"session",TID))
+
+
+class WatchProductTests(unittest.TestCase):
+    def setUp(self):
+        self.svc, self.repo, self.store = make_service()
+        self.watch = {"trend_id": TID, "platforms": ["bluesky"], "threshold": "coverage_change", "notification_policy": "in_app", "idempotency_key": "watch-1"}
+
+    def test_stage_alerts_need_qualified_stage_claims(self):
+        self.svc.values["RAFII_TREND_STAGE_CLAIMS_ENABLED"] = "0"
+        with self.assertRaises(AlphaError) as raised:
+            self.svc.watches(WID, "session", payload={**self.watch, "threshold": "stage_change"})
+        self.assertEqual(raised.exception.status, 400)
+        self.assertEqual(self.store.watches, [])
+        self.assertTrue(self.svc.watches(WID, "session", payload=self.watch)["data"]["active"])
+
+    def test_existing_active_watch_is_returned_not_duplicated(self):
+        first = self.svc.watches(WID, "session", payload=self.watch)["data"]
+        put = []
+        self.store.put_watch = lambda *a, **k: put.append(1) or self.fail("duplicate watch created")
+        again = self.svc.watches(WID, "session", payload={**self.watch, "idempotency_key": "watch-after-reload"})["data"]
+        self.assertEqual(again["id"], first["id"])
+        self.assertEqual(put, [])
+
+    def test_watch_rows_carry_title_and_current_state_for_reopen(self):
+        self.svc.watches(WID, "session", payload=self.watch)
+        listed = self.svc.watches(WID, "session")
+        assert_schema(self, "watches_response", listed)
+        row = listed["data"][0]
+        self.assertEqual((row["title"], row["trend_available"]), ("Baking experiments", True))
+        self.store.rows["trend", TID].update(validity="revoked", payload=None)
+        row = self.svc.watches(WID, "session")["data"][0]
+        self.assertEqual((row["title"], row["trend_available"]), (None, False))
+
+
+class AdmissionSplitTests(unittest.TestCase):
+    """Reads follow read admission; provider/model/media work keeps reviewed egress."""
+
+    def setUp(self):
+        self.svc, self.repo, self.store = make_service()
+        self.svc.values.pop("RAFII_TREND_WORKSPACE_ALLOWLIST")
+
+    def test_enrolled_workspace_reads_stored_results_without_egress(self):
+        from postriff_phase2.growth.trends import admission
+        with self.assertRaises(AlphaError) as raised:
+            self.svc.list(WID, "session")
+        self.assertEqual(raised.exception.status, 403)
+        with patch.object(admission, "admitted", return_value=True) as admitted:
+            self.assertEqual(len(self.svc.list(WID, "session")["data"]), 1)
+            self.assertEqual(self.svc.watches(WID, "session")["data"], [])
+            self.assertEqual(self.svc.opportunity(WID, "session", OID)["data"]["id"], OID)
+            self.assertTrue(admitted.call_args.args[0] is self.repo)
+            # Model generation stays on the reviewed egress allowlist.
+            angles = self.svc.generate_angles(WID, "session", OID, {"revision": 1, "idempotency_key": "k", "confirmed": True})
+            self.assertEqual(angles["data"]["status"], "disabled")
+            self.assertEqual(angles["data"]["provider_attempts"], 0)
+            self.assertNotIn(("enqueue", "trend.model_generation"), self.store.calls)
+
+    def test_store_membership_denial_is_forbidden_not_outage(self):
+        from postriff_phase2.growth.trends.store import TrendStorageError
+        self.svc.values["RAFII_TREND_WORKSPACE_ALLOWLIST"] = WID
+        self.store.authorized_scopes = lambda *a, **k: (_ for _ in ()).throw(TrendStorageError("workspace_access_denied"))
+        with self.assertRaises(AlphaError) as raised:
+            self.svc.list(WID, "session")
+        self.assertEqual((raised.exception.status, raised.exception.code), (403, "forbidden"))
+
+    def test_write_denied_by_store_role_is_forbidden(self):
+        from postriff_phase2.growth.trends.store import TrendStorageError
+        self.svc.values["RAFII_TREND_WORKSPACE_ALLOWLIST"] = WID
+        self.repo.role = "admin"
+        def denied(*a, **k):
+            raise TrendStorageError("workspace_access_denied")
+        self.store.put_watch = denied
+        payload = {"trend_id": TID, "platforms": ["bluesky"], "threshold": "coverage_change", "notification_policy": "in_app", "idempotency_key": "w"}
+        with self.assertRaises(AlphaError) as raised:
+            self.svc.watches(WID, "session", payload=payload)
+        self.assertEqual(raised.exception.status, 403)
 
 
 class WhitespaceCurrentBoundary(unittest.TestCase):

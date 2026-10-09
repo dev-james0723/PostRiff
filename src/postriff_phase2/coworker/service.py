@@ -111,13 +111,20 @@ class CoworkerService:
     # --- status -------------------------------------------------------------------------------------------------------------
     def status(self, workspace_id, token):
         from .. import skill_registry
-        from ..growth.trends import beta
+        from ..growth.trends import beta, readiness
         from ..growth.metric_schedule import workspace_enabled
-        state = self._state(workspace_id, token)
+        metric_reads = workspace_enabled(getattr(self.hosted, "metric_reads", None), workspace_id)
+        # One verified membership transaction: the strict legacy trend_beta (now
+        # admission-aware) and its sibling FeatureReadiness come from the same read.
+        with self.repository.transaction(token, workspace_id, allow_deleting=True) as (cur, row, _principal):
+            state = copy.deepcopy(self.hosted.ideas._state(row))
+            role = self.hosted.ideas._member(row).role
+            trend_beta = beta.status(workspace_id, self.values, metric_reads_enabled=metric_reads, cur=cur)
+            trend_readiness = readiness.safe_trend_readiness(cur, workspace_id, role=role, values=self.values)
         weekly = weekly_operator.view(state)
         notifications = getattr(self.hosted, "notifications", None)
         return {**flags.public(), "registryRelease": skill_registry.default_registry().release(),
-                "trend_beta": beta.status(workspace_id, self.values, metric_reads_enabled=workspace_enabled(getattr(self.hosted, "metric_reads", None), workspace_id)),
+                "trend_beta": trend_beta, "trend_readiness": trend_readiness,
                 "notifications": notifications.status() if notifications else {"enabled": False},
                 "research": research_broker.ResearchBroker(state=state).diagnostics() if flags.enabled("RAFII_RESEARCH_BROKER_ENABLED") else [],
                 "weekly": {"recipes": len([r for r in weekly["recipes"] if r.get("status") != "deleted"]), "weeks": len(weekly["weeks"])}}
@@ -830,8 +837,9 @@ class CoworkerService:
                 if row is None:
                     continue
                 trend_report = None
-                from ..growth.trends import config as trend_config
-                if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
+                from ..growth.trends import admission as trend_admission, config as trend_config
+                # A stored learning report is a read: read admission, not provider egress.
+                if trend_config.enabled('TRUST_RECEIPTS',self.values) and trend_admission.admitted(cur,workspace_id,self.values):
                     cur.execute("""SELECT m.user_id::text FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id
                         WHERE m.workspace_id=%s AND m.status='active' AND m.role IN ('owner','editor') AND p.deleted_at IS NULL
                         ORDER BY (m.role='owner') DESC,m.user_id LIMIT 1""",(workspace_id,))
@@ -847,9 +855,9 @@ class CoworkerService:
         return {"workspaces": out}
 
     def _trend_learning_report(self, cur, workspace_id, principal):
-        from ..growth.trends import config as trend_config, learning
+        from ..growth.trends import admission as trend_admission, config as trend_config, learning
         from ..growth.trends.store import TrendStore
-        if trend_config.workspace_allowed(workspace_id,self.values) and trend_config.enabled('TRUST_RECEIPTS',self.values):
+        if trend_config.enabled('TRUST_RECEIPTS',self.values) and trend_admission.admitted(cur,workspace_id,self.values):
             return learning.report(cur,workspace_id,principal,self.clock(),store=TrendStore(self.hosted.connection_factory))
         return None
 

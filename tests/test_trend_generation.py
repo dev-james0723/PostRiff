@@ -261,3 +261,95 @@ class GenerationPostgresTests(unittest.TestCase):
         self.assertEqual(event,("rate_limited","unknown",None));self.assertEqual(reserve,("unknown",None,True))
         self.assertIsNone(self.store.get_projection(self.wid,self.actor,"model_judgment",queued["result_id"]))
         self.assertEqual(self.generator.tick()["provider_attempts"],0)
+
+
+class AngleRequestBoundaryTests(unittest.TestCase):
+    """Service boundary: explicit confirmation, actionable reasons, read-only latest job."""
+
+    def setUp(self):
+        from test_trend_service import make_service
+        self.svc, self.repo, self.store = make_service()
+        self.payload = {"revision": 1, "idempotency_key": "angles-1", "confirmed": True}
+
+    def angles(self, payload=None):
+        from test_trend_service import WID, OID
+        return self.svc.generate_angles(WID, "session", OID, payload or self.payload)["data"]
+
+    def test_request_needs_explicit_confirmation(self):
+        from postriff_alpha.domain import AlphaError
+        from test_trend_service import WID, OID
+        for payload in ({"revision": 1, "idempotency_key": "k"}, {**self.payload, "confirmed": False},
+                        {**self.payload, "confirmed": "yes"}, {**self.payload, "extra": 1}):
+            with self.assertRaises(AlphaError) as raised:
+                self.svc.generate_angles(WID, "session", OID, payload)
+            self.assertEqual(raised.exception.status, 400)
+
+    def test_disabled_reasons_name_the_missing_authority(self):
+        self.svc.values["RAFII_TREND_MODEL_ENRICHMENT_ENABLED"] = "0"
+        self.assertEqual(self.angles(), {"status": "disabled", "reason": "generation_disabled", "provider_attempts": 0})
+        self.svc.values["RAFII_TREND_MODEL_ENRICHMENT_ENABLED"] = "1"
+        self.svc.values.pop("RAFII_TREND_WORKSPACE_ALLOWLIST")
+        from postriff_phase2.growth.trends import admission
+        with patch.object(admission, "admitted", return_value=True):
+            # Read-admitted (enrolled) but not on the reviewed egress list: no model budget exists for it.
+            self.assertEqual(self.angles(), {"status": "disabled", "reason": "model_budget_unconfigured", "provider_attempts": 0})
+
+    def test_load_refusals_become_actionable_safe_reason_codes(self):
+        cases = {"generation_approved_facts_required": ("needs_facts", "approved_facts_required"),
+                 "generation_brand_egress_required": ("needs_review", "brand_egress_consent_required"),
+                 "generation_display_rights_required": ("needs_review", "display_rights_unavailable"),
+                 "model_source_rights_denied": ("needs_review", "display_rights_unavailable"),
+                 "generation_boundaries_require_review": ("needs_review", "brand_boundaries_require_review"),
+                 "generation_review_required": ("needs_review", "generation_review_required"),
+                 "generation_policy_bounds": ("needs_review", "generation_review_required"),
+                 "generation_opportunity_decided": ("needs_review", "evidence_changed"),
+                 "something_private_and_new": ("needs_review", "generation_unavailable")}
+        for code, (status, reason) in cases.items():
+            with self.subTest(code=code), patch.object(generation.TrendGeneration, "_load", side_effect=contracts.ContractError(code)):
+                self.assertEqual(self.angles(), {"status": status, "reason": reason, "provider_attempts": 0})
+
+    def test_budget_and_queue_outcomes_carry_reasons_and_never_raise_caps(self):
+        from test_trend_service import OID
+        loaded = {"opportunity": {"object_id": OID, "revision": 1}, "config": {"approved_attempt_cap_microusd": 50000}}
+        with patch.object(generation.TrendGeneration, "_load", return_value=loaded), \
+                patch.object(generation.TrendGeneration, "_cached", return_value=None), \
+                patch.object(generation.TrendGeneration, "_enqueue_loaded", return_value={"status": "budget_unavailable", "provider_attempts": 0}):
+            self.assertEqual(self.angles(), {"status": "budget_unavailable", "reason": "model_budget_unconfigured",
+                                             "attempt_cap_microusd": 50000, "provider_attempts": 0})
+        with patch.object(generation.TrendGeneration, "_load", return_value=loaded), \
+                patch.object(generation.TrendGeneration, "_cached", return_value=None), \
+                patch.object(generation.TrendGeneration, "_enqueue_loaded", return_value={"status": "queued", "job_id": OID, "provider_attempts": 0}) as enqueue:
+            result = self.angles()
+        self.assertEqual((result["status"], result["attempt_cap_microusd"], result.get("reason")), ("queued", 50000, None))
+        self.assertEqual(enqueue.call_args.args[-1], "angles-1", "the client's key is the only idempotency key")
+        self.assertFalse(any("pr_trend_budget_limits" in q and q.lstrip().upper().startswith(("UPDATE", "INSERT"))
+                             for q in self.repo.queries), "no budget is created or raised")
+
+    def test_latest_job_and_preflight_are_read_only_and_workspace_scoped(self):
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.growth.trends import service as S
+        from test_trend_service import WID, OID, OTHER, RID
+        job = {"job_id": "00000000-0000-4000-8000-0000000000aa", "status": "queued"}
+        loaded = {"opportunity": {"object_id": OID, "revision": 1}, "config": {"approved_attempt_cap_microusd": 50000,
+                  "budget_keys": ["a", "b", "c"]}}
+        with patch.object(S, "latest_generation_job", return_value=job) as latest, \
+                patch.object(generation.TrendGeneration, "_load", return_value=loaded), \
+                patch.object(S, "generation_budget_available", return_value=True):
+            data = self.svc.generation_latest(WID, "session", OID)["data"]
+        self.assertEqual(latest.call_args.args[1:], ("workspace:" + WID, RID))
+        self.assertEqual(data["job"], job)
+        self.assertEqual(data["preflight"], {"ready": True, "reason": None, "attempt_cap_microusd": 50000,
+                                             "approved_facts": True, "brand_egress_consent": True, "display_rights": True, "budget": True})
+        with patch.object(S, "latest_generation_job", return_value=None), \
+                patch.object(generation.TrendGeneration, "_load", side_effect=contracts.ContractError("generation_approved_facts_required")):
+            data = self.svc.generation_latest(WID, "session", OID)["data"]
+        self.assertEqual((data["job"], data["preflight"]["ready"], data["preflight"]["reason"], data["preflight"]["approved_facts"]),
+                         (None, False, "approved_facts_required", False))
+        self.repo.role = "viewer"
+        with patch.object(S, "latest_generation_job", return_value=None):
+            data = self.svc.generation_latest(WID, "session", OID)["data"]
+        self.assertEqual((data["preflight"]["ready"], data["preflight"]["reason"]), (False, "role_edit_required"))
+        self.assertFalse([q for q in self.repo.queries if q.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))])
+        with self.assertRaises(AlphaError) as raised:
+            self.svc.generation_latest(OTHER, "session", OID)
+        self.assertEqual(raised.exception.status, 404)

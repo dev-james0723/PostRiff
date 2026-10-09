@@ -2,6 +2,10 @@
 from urllib.parse import parse_qs
 from postriff_alpha.domain import AlphaError
 from .service import error
+from .enrollment import ENROLLMENT_CODES
+
+SAFE_CODES = frozenset({"invalid_request", "unauthenticated", "forbidden", "not_found", "evidence_unavailable",
+                        "revision_conflict", "source_unavailable", "budget_or_rate_limited"}) | ENROLLMENT_CODES
 
 
 def query(environ):
@@ -25,6 +29,10 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         # Every static path is resolved before /{trend_id}.
         if not tail and method == "GET":
             data = service.list(workspace_id, token, q)
+        elif tail == ["enrollment"] and method in ("GET", "POST", "DELETE"):
+            if q:
+                raise error("invalid_request", 400)
+            data = service.enrollment(workspace_id, token, method, body() if method == "POST" else None)
         elif tail in (["methodology"], ["calibration"], ["language-patterns"]) and method == "GET":
             if q:
                 raise error("invalid_request", 400)
@@ -76,6 +84,9 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         elif len(tail) == 3 and tail[0] == "opportunities" and tail[2] == "angles" and method == "POST":
             if q: raise error("invalid_request", 400)
             data = service.generate_angles(workspace_id, token, tail[1], body())
+        elif len(tail) == 4 and tail[0] == "opportunities" and tail[2:] == ["generation-jobs", "latest"] and method == "GET":
+            if q: raise error("invalid_request", 400)
+            data = service.generation_latest(workspace_id, token, tail[1])
         elif len(tail) == 2 and tail[0] == "generation-jobs" and method == "GET":
             if q: raise error("invalid_request", 400)
             data = service.generation_status(workspace_id, token, tail[1])
@@ -98,7 +109,7 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         elif tail == ["refreshes"] and method == "POST":
             body()
             data = service.gated_mutation(workspace_id, token, "PROVIDER_OPERATIONS")
-        elif tail and tail[0] in {"generation-jobs", "methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts"}:
+        elif tail and tail[0] in {"generation-jobs", "methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts", "enrollment"}:
             raise error("not_found", 404)
         elif len(tail) == 1 and method == "GET":
             data = service.get(workspace_id, token, tail[0])
@@ -113,5 +124,5 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         exc = error("invalid_request", 400)
         return app._json(private_start, exc.status, {"error": str(exc), "code": exc.code})
     except AlphaError as exc:
-        safe = error(exc.code if exc.code in {"invalid_request", "unauthenticated", "forbidden", "not_found", "evidence_unavailable", "revision_conflict", "source_unavailable", "budget_or_rate_limited"} else "source_unavailable", exc.status)
+        safe = error(exc.code if exc.code in SAFE_CODES else "source_unavailable", exc.status)
         return app._json(private_start, safe.status, {"error": str(safe), "code": safe.code})

@@ -69,6 +69,35 @@ def candidate(trend, fit, state, workspace_id, now, *, angles=(), platform_targe
             "evidence": copy.deepcopy(trend.get("evidence", [])), "method_version": fit.get("method_version")}
 
 
+SAVEABLE = ("eligible", "suggested", "accepted", "drafting", "linked")
+USER_ANGLE_LIMITS = {"title": 200, "contribution": 1000}
+
+
+def clean_user_angle(value):
+    """A person's own angle: exactly a title and a contribution, bounded plain text."""
+    if not isinstance(value, dict) or set(value) != set(USER_ANGLE_LIMITS):
+        raise ValueError("user_angle_invalid")
+    cleaned = {}
+    for key, limit in USER_ANGLE_LIMITS.items():
+        text = value[key]
+        if not isinstance(text, str):
+            raise ValueError("user_angle_invalid")
+        text = " ".join(text.split())
+        if not 1 <= len(text) <= limit:
+            raise ValueError("user_angle_invalid")
+        cleaned[key] = text
+    return cleaned
+
+
+def user_angle(opportunity, value):
+    """User-authored, unqualified angle bound to this exact opportunity revision."""
+    identity = digest({"opportunity_id": opportunity["id"], "revision": opportunity["revision"], **value})
+    return {"id": "user-" + identity[:24], "title": value["title"], "contribution": value["contribution"],
+            "factual_requirements": [], "format_reason": "", "evidence_refs": [],
+            "authorship": "user_authored", "semantic_qualification": "unqualified", "review_state": "user_written",
+            "uncertainties": ["Written by a person in this workspace; fit, originality and audience response are not evaluated."]}
+
+
 def accept_source(state, actor, opportunity, trend, payload, now, commands):
     """One ordinary idea source; no drafting, publishing, factual approval or paid call.
 
@@ -76,18 +105,27 @@ def accept_source(state, actor, opportunity, trend, payload, now, commands):
     Even idempotent repeats recheck expiry/context/channel and exact selected angle first.
     """
     check_current(opportunity, state, now, workspace_id=payload["workspace_id"])
-    if opportunity.get("state") not in ("eligible", "suggested", "accepted", "drafting", "linked"):
+    user_written = payload.get("user_angle") is not None
+    # A verified candidate may be saved with the person's own angle (no model). A
+    # model-proposed angle still needs an eligible/suggested opportunity.
+    allowed = ("candidate",) + SAVEABLE if user_written else SAVEABLE
+    if opportunity.get("state") not in allowed:
         raise AlphaError("This opportunity is not eligible for drafting.", 409, code="revision_conflict")
     if payload["revision"] != opportunity["revision"]:
         raise AlphaError("Opportunity revision changed.", 409, code="revision_conflict")
-    angle = next((a for a in opportunity.get("angles", []) if a.get("id") == payload["angle_id"]), None)
+    if user_written:
+        angle = user_angle(opportunity, clean_user_angle(payload["user_angle"]))
+    else:
+        angle = next((a for a in opportunity.get("angles", []) if a.get("id") == payload["angle_id"]), None)
     channel = next((c for c in (state.get("phase2") or {}).get("channels", [])
                     if c.get("id") == payload["channel_id"] and not c.get("revoked")), None)
     if angle is None or channel is None or channel.get("platform", "").lower() not in [p.lower() for p in opportunity.get("platform_targets", [])]:
         raise AlphaError("Choose a current angle and eligible connected account.", 400, code="invalid_request")
     if not payload.get("goal") or not isinstance(payload["goal"], str):
         raise AlphaError("Choose a drafting goal.", 400, code="invalid_request")
-    choice = {k: payload[k] for k in ("revision", "angle_id", "channel_id", "goal")}
+    choice = {"revision": payload["revision"], "angle_id": angle["id"], "channel_id": payload["channel_id"], "goal": payload["goal"]}
+    if user_written:
+        choice["user_angle"] = {k: angle[k] for k in ("title", "contribution")}
     if payload.get("exposure_id"):
         choice["exposure_id"] = payload["exposure_id"]
     choice_hash = digest(choice)
@@ -100,7 +138,8 @@ def accept_source(state, actor, opportunity, trend, payload, now, commands):
                "platform_states": copy.deepcopy(trend.get("platform_states", [])),
                "do_not_copy": "Do not copy observed wording, hooks or personal experiences. Supply your own approved facts.",
                "receipt_revision": trend.get("receipt_revision", 1), "evidence_ids": [e["id"] for e in trend.get("evidence", []) if e.get("id")],
-               "accepted_at": iso(now), "accepted_by": actor, "selection_digest": choice_hash}
+               "accepted_at": iso(now), "accepted_by": actor, "selection_digest": choice_hash,
+               "angle_authorship": "user_authored" if user_written else "model_proposed"}
     if opportunity.get("generation_context") is not None:
         binding["generation_context"] = copy.deepcopy(opportunity["generation_context"])
     if payload.get("exposure_id"):
@@ -273,14 +312,25 @@ def refresh_workspace_candidates(hosted, *, values=None, max_workspaces=5, trend
         return {"status": "disabled", "workspaces": 0, "created": 0, "existing": 0, "unavailable": 0}
     if type(max_workspaces) is not int or not 1 <= max_workspaces <= 5 or type(trend_limit) is not int or not 1 <= trend_limit <= 20:
         raise ValueError("workspace_candidate_bound")
+    from ... import feature_enrollment
+    from . import admission
     raw = str(flags._source(values).get("RAFII_TREND_WORKSPACE_ALLOWLIST", ""))
     allowed = [contracts.uuid(w.strip()) for w in raw.split(",") if w.strip()]
     result = {"status": "stored_only", "workspaces": 0, "created": 0, "existing": 0, "unavailable": 0}
-    if not allowed:
+    # Candidate composition is a local read/derive step (no provider or model), so
+    # read-admitted (enrolled) workspaces are included while their cohort is open.
+    self_serve = feature_enrollment.self_serve_open(admission.FEATURE, values)
+    if not allowed and not self_serve:
         return result
+    enrolled = set()
     # Least recently projected first so the bound does not starve later members
     # of a larger allowlist. These are control IDs only, not source content.
     with hosted.repository.connection_factory() as db, db.cursor() as cur:
+        if self_serve:
+            enrolled = set(feature_enrollment.admitted_workspaces(cur, admission.FEATURE, values))
+            allowed = sorted(set(allowed) | enrolled)
+        if not allowed:
+            return result
         cur.execute("""SELECT w.id::text, m.user_id::text FROM pr_workspaces w
             JOIN LATERAL (SELECT user_id FROM pr_memberships WHERE workspace_id=w.id
                 AND status='active' AND role IN ('owner','editor') ORDER BY (role='owner') DESC,user_id LIMIT 1) m ON true
@@ -289,7 +339,7 @@ def refresh_workspace_candidates(hosted, *, values=None, max_workspaces=5, trend
                     (allowed, max_workspaces))
         targets = cur.fetchall()
     for workspace_id, actor_id in targets:
-        if not config.workspace_allowed(workspace_id, values):
+        if not (config.workspace_allowed(workspace_id, values) or workspace_id in enrolled):
             continue
         try:
             repository, capability = principal_repository(hosted, workspace_id, actor_id, "edit")

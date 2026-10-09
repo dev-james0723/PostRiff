@@ -4,9 +4,20 @@ from ..metric_schedule import OFFSETS
 from ...insights import INSIGHT_METRICS
 
 
-def status(workspace_id, values=None, *, metric_reads_enabled):
+def status(workspace_id, values=None, *, metric_reads_enabled, cur=None):
+    """Legacy strict trend_beta payload. Keys and value domains are frozen.
+
+    With a cursor, radar_available follows read admission (reviewed allowlist OR an
+    active self-serve enrollment) so enrolled workspaces open the page. Acquisition
+    still reflects provider egress, which enrollment never grants.
+    """
     ready = all(config.enabled(k, values) for k in ("INTELLIGENCE", "RADAR", "TRUST_RECEIPTS"))
-    allowed = config.workspace_allowed(workspace_id, values)
+    egress = config.workspace_allowed(workspace_id, values)
+    if cur is not None and ready:
+        from . import admission
+        allowed = admission.admitted(cur, workspace_id, values)
+    else:
+        allowed = egress
     state = "feature_off" if not ready else "workspace_not_allowlisted" if not allowed else "stored_radar"
     # A provider flag alone admits no operation. Even an explicit operation is
     # configuration, not proof of recent collection or qualified live coverage.
@@ -15,7 +26,7 @@ def status(workspace_id, values=None, *, metric_reads_enabled):
                   for entry in str(source.get("RAFII_TREND_ALLOWED_OPERATIONS", "")).split(",")]
     admitted = any(len(pair) == 2 and all(pair) and config.dispatch_allowed(*pair, source)
                    for pair in operations)
-    coverage = "unverified" if ready and allowed and admitted else "none"
+    coverage = "unverified" if ready and allowed and egress and admitted else "none"
     return {"state": state, "radar_available": ready and allowed, "acquisition": coverage,
             "metric_reads_enabled": bool(metric_reads_enabled), "follower_conversion": "unavailable"}
 

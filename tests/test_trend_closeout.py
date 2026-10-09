@@ -10,7 +10,7 @@ from test_trend_opportunities import PAYLOAD
 class CloseoutTests(unittest.TestCase):
     def setUp(self):
         self.svc, self.repo, self.store = make_service()
-        self.body = {"revision": 1, "idempotency_key": "explicit-angle-request"}
+        self.body = {"revision": 1, "idempotency_key": "explicit-angle-request", "confirmed": True}
 
     def test_angle_details_survive_read_and_accepted_source(self):
         angle = self.store.rows["opportunity", OID]["payload"]["angles"][0]
@@ -35,12 +35,12 @@ class CloseoutTests(unittest.TestCase):
         before = copy.deepcopy(self.repo.state)
         with patch("postriff_phase2.growth.trends.generation.TrendGeneration._load", side_effect=AssertionError("disabled work")):
             result = self.svc.generate_angles(WID, "session", OID, self.body)
-        self.assertEqual(result["data"], {"status":"disabled", "provider_attempts":0})
+        self.assertEqual(result["data"], {"status":"disabled", "reason":"generation_disabled", "provider_attempts":0})
         self.assertEqual(before, self.repo.state)
 
     def test_generation_rejects_roles_revision_expiry_and_unknown_input_before_load(self):
         with patch("postriff_phase2.growth.trends.generation.TrendGeneration._load", side_effect=AssertionError("invalid work")):
-            for body in ({**self.body,"revision":True}, {**self.body,"text":"untrusted"}, {**self.body,"revision":2}):
+            for body in ({**self.body,"revision":True}, {**self.body,"text":"untrusted"}, {**self.body,"revision":2}, {**self.body,"confirmed":False}):
                 with self.assertRaises(AlphaError): self.svc.generate_angles(WID,"session",OID,body)
             self.repo.role = "viewer"
             with self.assertRaises(AlphaError): self.svc.generate_angles(WID,"session",OID,self.body)
