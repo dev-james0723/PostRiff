@@ -16,9 +16,18 @@ from .store import row
 
 REASONS = frozenset({'invalid_record', 'jetstream_invalid_frame', 'jetstream_invalid_record',
     'jetstream_identity_required', 'jetstream_sequence_required', 'jetstream_unknown_event',
+    'jetstream_invalid_marker',
     'mastodon_identity_required', 'mastodon_canonical_identity_required', 'mastodon_nonpublic_status',
     'invalid_number', 'provider_invalid_json', 'invalid_payload', 'invalid_timestamp',
-    'source_right_not_permitted', 'unsafe_url', 'unsupported_language_tag'})
+    'source_right_not_permitted', 'unsafe_url', 'unsupported_language_tag',
+    # Record-level and policy-wide observation contract codes. Before 2026-10-09
+    # these collapsed to invalid_record, hiding the Jetstream poison frame cause.
+    'timestamp_must_be_utc', 'invalid_text_field', 'payload_limit', 'invalid_observation_fields',
+    'invalid_observation_type', 'raw_storage_not_permitted', 'invalid_knowledge_or_retention_time',
+    'invalid_json', 'invalid_revision_sequence', 'unknown_event_time', 'invalid_time_basis',
+    'author_status_required', 'payload_digest_mismatch', 'invalid_rights', 'invalid_permission_grant',
+    'invalid_permission_state', 'rights_scope_mismatch', 'provenance_required', 'invalid_scope',
+    'scope_required', 'invalid_id'})
 SCHEMA = 'trend.quarantine.v1'
 # At the maximum permitted code/index/64-bit counters, 500 entries remain
 # comfortably below the frozen64KiB jsonb::text constraint, including spaces.
