@@ -20,7 +20,11 @@ from dataclasses import dataclass, field
 # --- feature flags (§41) ----------------------------------------------------------------------------------------------
 FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENABLED", "RAFII_SPECIALISTS_ENABLED", "RAFII_PROACTIVE_V2_ENABLED", "RAFII_AGENT_THINKING_STATES_ENABLED",
          # Generative UI (rafii-genui/1). Off unless set; RAFII_GENUI_WORKSPACES narrows a canary to listed workspaces.
-         "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED")
+         "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED",
+         # The Manager's metadata-level Library browse (library_browse + library_read; D-A51). Off unless set, and then only for
+         # the workspaces listed in RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES (an empty list enables none: no consent covers a wider release).
+         "RAFII_AGENT_LIBRARY_BROWSE_ENABLED")
+LIBRARY_BROWSE_WORKSPACES_ENV = "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES"
 
 # --- model aliases (ADR-006) ------------------------------------------------------------------------------------------
 # Defaults are aliases for development. Pin dated snapshots in production only after the evals pass (ADR-006).
@@ -70,6 +74,11 @@ def _flag(values, name) -> bool:
     return str(values.get(name, "")).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _workspaces(value) -> frozenset:
+    """A comma-separated workspace allowlist (RAFII_GENUI_WORKSPACES, RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES), lower-cased."""
+    return frozenset(w.strip().lower() for w in str(value or "").split(",") if w.strip())
+
+
 @dataclass(frozen=True)
 class Route:
     """One routing decision, recorded in the trace (§21)."""
@@ -98,6 +107,7 @@ class RuntimeConfig:
     has_openai_key: bool = False
     has_gateway_key: bool = False
     genui_workspaces: frozenset = frozenset()   # empty: every workspace once RAFII_GENUI_ENABLED is on
+    library_browse_workspaces: frozenset = frozenset()   # empty: no workspace (fail closed), unlike genui_workspaces
 
     # The key itself is never an attribute: `credential()` reads it when a request is made.
     _env: dict = field(default_factory=dict, repr=False)
@@ -137,7 +147,8 @@ class RuntimeConfig:
         return cls(flags={name: _flag(values, name) for name in FLAGS}, models=models, provider=provider, base_url=base, prices=prices,
                    image_estimates=image_prices, openai_tracing=_flag(values, "RAFII_AGENT_OPENAI_TRACING") and has_openai,
                    has_openai_key=has_openai, has_gateway_key=has_gateway,
-                   genui_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_GENUI_WORKSPACES") or "").split(",") if w.strip()), _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
+                   genui_workspaces=_workspaces(values.get("RAFII_GENUI_WORKSPACES")),
+                   library_browse_workspaces=_workspaces(values.get(LIBRARY_BROWSE_WORKSPACES_ENV)), _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
 
     # --- flags -------------------------------------------------------------------------------------------------------
     def enabled(self, name: str) -> bool:
@@ -152,6 +163,14 @@ class RuntimeConfig:
             on = on and self.enabled("RAFII_GENUI_FOUNDER_ENABLED")
         return {"enabled": on, "actions": on and self.enabled("RAFII_GENUI_ACTIONS_ENABLED"), "edits": on and self.enabled("RAFII_GENUI_EDITS_ENABLED"),
                 "canary": bool(self.genui_workspaces)}
+
+    def library_browse_for(self, workspace_id: str | None) -> bool:
+        """The Manager may browse this workspace's Library metadata (library_browse + library_read; D-A51): the flag is on AND the
+        workspace is listed. Unlike the GenUI canary list, an empty list enables no workspace: titles, filenames and tags can
+        hold personal data, and no consent covers sending them to the Manager's provider beyond an approved canary (D1)."""
+        if not self.enabled("RAFII_AGENT_LIBRARY_BROWSE_ENABLED") or not workspace_id:
+            return False
+        return str(workspace_id).lower() in self.library_browse_workspaces
 
     # --- credentials (server-side only) ------------------------------------------------------------------------------
     def credential(self, provider: str | None = None) -> str | None:

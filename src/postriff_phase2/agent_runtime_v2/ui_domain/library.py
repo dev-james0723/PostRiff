@@ -21,8 +21,13 @@ from . import Receipt, action, common, query
 
 HEX = r"^[0-9a-f]{32}$"
 ASSET = {"type": "string", "maxLength": 32, "pattern": HEX}
+DAY = {"type": "string", "maxLength": 10, "format": "date"}
 KINDS = ("all", "image", "video", "audio", "document", "file")
 INVALIDATES = ["library_search", "library_item", "library_lineage", "drafts_list"]
+PICK_MAX = 25        # library_search `ids`: the items a Manager turn found (ui_projection suggests them), in that order
+PAGING_NOTE = "The Library does not report a total; more pages follow while a cursor is returned."
+EMPTY_FILTERED = "Nothing in your Library matches these filters."
+EMPTY_LIBRARY = "Your Library has no items yet."
 
 
 def _library(dctx):
@@ -72,8 +77,68 @@ def _row(dctx, asset: dict) -> dict:
     return row
 
 
+def _browse():
+    from .. import library_browse   # the agent's Library tool: same date window, video dates and scan (one filter system)
+    return library_browse
+
+
+def _filtered(inputs) -> bool:
+    return any(inputs.get(k) for k in ("q", "tag", "collection", "addedFrom", "addedTo")) or (inputs.get("kind") or "all") != "all" or inputs.get("ids") is not None
+
+
+def _empty_note(inputs) -> str:
+    return EMPTY_FILTERED if _filtered(inputs) else EMPTY_LIBRARY
+
+
+def _dated(dctx, assets: list) -> tuple[list, dict]:
+    """Media-store videos get the added date of their committed upload row; photos keep none (nothing records it)."""
+    browse = _browse()
+    dates = browse.video_dates(dctx.cur, dctx.workspace_id, [a.get("id") for a in assets if not _is_file(a) and (a.get("assetKind") or a.get("kind")) == "video"])
+    return [{**a, "createdAt": dates[a.get("id")]} if a.get("id") in dates else a for a in assets], dates
+
+
+def _search_scanned(dctx, library, inputs, cursor, args, window):
+    """`ids` (exactly those items of this workspace, in that order; the rest are counted, never explained) and/or an
+    addedFrom/addedTo window (items with a recorded added date inside it; photos have none). One bounded scan of the
+    Library service, then one ordered list paged with the binding's own cursor."""
+    browse = _browse()
+    found = browse.scan(library, dctx.workspace_id, query=args["query"], kind=args["kind"], tag=args["tag"], collection=args["collection"],
+                        sort=args["sort"], stop_before=window[0] if window else None)
+    assets, dates = _dated(dctx, found["legacy"] + found["files"])
+    warnings = []
+    if window:
+        epochs = {id(a): browse.added_epoch(a, dates) for a in assets}
+        undated = sum(1 for a in assets if epochs[id(a)] is None)
+        assets = [a for a in assets if epochs[id(a)] is not None and window[0] <= epochs[id(a)] < window[1]]
+        if undated:
+            warnings.append(f"{undated} item(s) have no recorded added date (photos never do), so a date range can't include them.")
+    ids = inputs.get("ids")
+    if ids is not None:
+        by_id = {a.get("id"): a for a in assets}
+        picked = [by_id[i] for i in ids if i in by_id]
+        if len(picked) < len(ids):
+            warnings.append(f"{len(ids) - len(picked)} of the chosen items aren't available here.")
+        assets = picked
+    page, next_cursor, start = common.paginate("library_search", inputs, cursor, assets, default=50)
+    rows = [_row(dctx, a) for a in page]
+    first = found["first"]
+    storage = first.get("storage") or {}
+    data = {"items": rows, "offset": start, "storage": {"usedBytes": storage.get("usedBytes"), "limitBytes": storage.get("limitBytes")},
+            "capabilities": first.get("capabilities") or {}, "legacyMedia": len([a for a in assets if not _is_file(a)])}
+    exact = bool(found["complete"])
+    note = _empty_note(inputs) if not rows and start == 0 else (None if exact else PAGING_NOTE)
+    return ui_contracts.query_result("available" if rows else ("empty" if start == 0 else "available"), data, as_of=common.iso(dctx.now),
+                                     source_refs=[r["ref"] for r in rows], revision=str(dctx.revision), next_cursor=next_cursor, known=len(rows),
+                                     total=len(assets) if exact else None, note=note, warnings=warnings)
+
+
 def library_search(dctx, inputs, cursor):
     library = _library(dctx)
+    window = _browse().added_window(inputs.get("addedFrom"), inputs.get("addedTo"), dctx.zone, dctx.now, code="ui_window")
+    if inputs.get("ids") is not None or window is not None:
+        args = dict(query=inputs.get("q") or "", kind=inputs.get("kind") or "all", tag=inputs.get("tag") or "", collection=inputs.get("collection") or "",
+                    sort=inputs.get("sort") or "newest")
+        return _search_scanned(dctx, library, inputs, cursor, args, window)
     size = common.page_size(inputs, 50)
     query_inputs = {k: v for k, v in inputs.items() if k != "limit"}
     position = common.decode_cursor("library_search", query_inputs, cursor)
@@ -94,6 +159,7 @@ def library_search(dctx, inputs, cursor):
         files = [a for a in listed["assets"] if _is_file(a)]
         page = files[:size]
         more = len(files) > size or listed.get("nextOffset") is not None
+    page, _dates = _dated(dctx, page)
     rows = [_row(dctx, a) for a in page]
     next_cursor = common.encode_cursor("library_search", query_inputs, position + size) if more else None
     storage = first.get("storage") or {}
@@ -101,7 +167,7 @@ def library_search(dctx, inputs, cursor):
             "capabilities": first.get("capabilities") or {}, "legacyMedia": len(legacy)}
     return ui_contracts.query_result("available" if rows else ("empty" if position == 0 else "available"), data, as_of=common.iso(dctx.now),
                                      source_refs=[r["ref"] for r in rows], revision=str(dctx.revision), next_cursor=next_cursor, known=len(rows), total=None,
-                                     note="The Library does not report a total; more pages follow while a cursor is returned.")
+                                     note=_empty_note(inputs) if not rows and position == 0 else PAGING_NOTE)
 
 
 def _legacy(state, asset_id):
@@ -214,9 +280,10 @@ def source_execute(dctx, inputs, _key):
 
 
 query("library_search", "J03", "Search or filter the Library (photos, videos, audio, documents, files): title, kind, size, tags, collections, processing state and how "
-      "the browser previews it. Paged; the Library gives no total.",
+      "the browser previews it. ids lists exactly those items, in that order; addedFrom/addedTo keep items added in that range. Paged; the Library gives no total.",
       {"q": {"type": "string", "maxLength": 120}, "kind": {"type": "string", "enum": list(KINDS)}, "tag": {"type": "string", "maxLength": 40},
-       "collection": ASSET, "sort": {"type": "string", "enum": ["newest", "stored", "largest"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}},
+       "collection": ASSET, "sort": {"type": "string", "enum": ["newest", "stored", "largest"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+       "ids": {"type": "array", "maxItems": PICK_MAX, "items": ASSET, "uniqueItems": True}, "addedFrom": DAY, "addedTo": DAY},
       library_search, page=50, refresh=60, search=True, tool="library.search", invalidated_by=("library_search",))
 query("library_item", "J03", "One Library item: metadata, preview kind, a bounded text excerpt and chunk count for documents, and whether a model may look at media.",
       {"assetId": ASSET}, library_item, required=("assetId",), refresh=None, tool="library.read")
