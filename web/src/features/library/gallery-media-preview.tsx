@@ -321,8 +321,11 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
           <button type='button' onClick={toggle} disabled={!ready || busy} aria-label={`${playing ? 'Pause' : 'Play'} ${video ? 'video' : 'audio'} preview`} className='rafii-focus hover:bg-foreground/[0.06] flex size-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-50 pointer-coarse:size-11'>
             {busy ? <Icons.spinner aria-hidden className='size-4 animate-spin motion-reduce:animate-none' /> : playing ? <Icons.pause aria-hidden className='size-4' /> : <Icons.play aria-hidden className='size-4' />}
           </button>
-          <input type='range' min={0} max={duration || 1} step={0.05} value={Math.min(position, duration || 1)} onChange={event => seek(Number(event.target.value))} disabled={!metadataReady || !duration} aria-label={`${video ? 'Video' : 'Audio'} preview timeline`} aria-valuetext={`${timeLabel(position)} of ${timeLabel(duration)}`} className='rafii-focus accent-foreground h-9 min-w-0 flex-1 cursor-pointer disabled:cursor-default pointer-coarse:h-11' />
-          <span className='text-muted-foreground shrink-0 px-1 text-[11px] tabular-nums'>{timeLabel(position)} / {timeLabel(duration || knownDuration)}</span>
+          <input type='range' min={0} max={duration || 1} step={0.05} value={Math.min(position, duration || 1)} onChange={event => seek(Number(event.target.value))} disabled={!metadataReady || !duration} aria-label={`${video ? 'Video' : 'Audio'} preview timeline`} aria-valuetext={`${timeLabel(position)} of ${duration || knownDuration ? timeLabel(duration || knownDuration) : 'unknown length'}`} className='rafii-focus accent-foreground h-9 min-w-0 flex-1 cursor-pointer disabled:cursor-default pointer-coarse:h-11' />
+          <span className='text-muted-foreground shrink-0 px-1 text-[11px] tabular-nums'>
+            {/* The length is shown once it is known (from the file or its metadata), never as a made-up 0:00. */}
+            {timeLabel(position)} / {duration || knownDuration ? timeLabel(duration || knownDuration) : '–:––'}
+          </span>
           <IconControl label='Playback options' size='sm' tooltip={false} aria-expanded={options} active={options} onClick={() => setOptions(value => !value)}>
             <Icons.adjustments aria-hidden />
           </IconControl>
