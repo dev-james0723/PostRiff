@@ -4,7 +4,6 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader } from '@/components/rafii';
-import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api/client';
@@ -12,6 +11,7 @@ import { newIdempotencyKey } from '@/lib/library/batch';
 import { storageNotice } from '@/lib/library/wording';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { Control } from '../ui/controls';
 
 function randomKey() {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -49,29 +49,28 @@ export function AddMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button data-tour='library-upload' variant='action' size='control' disabled={disabled} aria-label={busy ? `Add · ${busyLabel}` : 'Add to Library'}>
-              {busy ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : <Icons.add aria-hidden />}
+            <Control data-tour='library-upload' tone='primary' disabled={disabled} loading={busy} icon={<Icons.add aria-hidden />} aria-label={busy ? `Add · ${busyLabel}` : 'Add to Library'} className='pr-2.5'>
               Add
               <Icons.chevronDown className='size-3.5 opacity-70' aria-hidden />
-            </Button>
+            </Control>
           }
         />
-        <DropdownMenuContent align='end' className='rafii-elevated w-64 rounded-[var(--rafii-radius-card)] p-1.5'>
-          <DropdownMenuItem className='min-h-11 gap-3 px-3' onClick={onUploadFiles}>
+        <DropdownMenuContent align='end' className='rafii-elevated w-64 rounded-[var(--rafii-radius-card)] p-1'>
+          <DropdownMenuItem className='min-h-11 gap-3 px-2.5' onClick={onUploadFiles}>
             <Icons.upload aria-hidden />
             <span className='flex flex-col'>
               <span>Upload files</span>
               <span className='text-muted-foreground text-xs'>Photos, videos, audio, documents</span>
             </span>
           </DropdownMenuItem>
-          <DropdownMenuItem className='min-h-11 gap-3 px-3' onClick={() => setDialog('link')}>
+          <DropdownMenuItem className='min-h-11 gap-3 px-2.5' onClick={() => setDialog('link')}>
             <Icons.link aria-hidden />
             <span className='flex flex-col'>
               <span>Paste link</span>
               <span className='text-muted-foreground text-xs'>Save a public page privately</span>
             </span>
           </DropdownMenuItem>
-          <DropdownMenuItem className='min-h-11 gap-3 px-3' onClick={() => setDialog('note')}>
+          <DropdownMenuItem className='min-h-11 gap-3 px-2.5' onClick={() => setDialog('note')}>
             <Icons.edit aria-hidden />
             <span className='flex flex-col'>
               <span>Quick note</span>
@@ -143,13 +142,13 @@ function PasteLinkDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpe
             ) : null}
           </RafiiDialogBody>
           <RafiiDialogFooter className='flex-row justify-end'>
-            <Button type='button' variant='glass' size='control' onClick={() => onOpenChange(false)}>
+            <Control type='button' tone='secondary' onClick={() => onOpenChange(false)}>
               Cancel
-            </Button>
-            <Button type='submit' variant='action' size='control' disabled={busy || !url.trim()}>
+            </Control>
+            <Control type='submit' tone='primary' disabled={busy || !url.trim()}>
               {busy ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
               {busy ? 'Saving…' : 'Save link'}
-            </Button>
+            </Control>
           </RafiiDialogFooter>
         </form>
       </RafiiDialogContent>
@@ -242,13 +241,13 @@ function QuickNoteDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpe
             ) : null}
           </RafiiDialogBody>
           <RafiiDialogFooter className='flex-row justify-end'>
-            <Button type='button' variant='glass' size='control' onClick={() => onOpenChange(false)}>
+            <Control type='button' tone='secondary' onClick={() => onOpenChange(false)}>
               Cancel
-            </Button>
-            <Button type='submit' variant='action' size='control' disabled={busy || !text.trim()}>
+            </Control>
+            <Control type='submit' tone='primary' disabled={busy || !text.trim()}>
               {busy ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
               {busy ? 'Saving…' : 'Save note'}
-            </Button>
+            </Control>
           </RafiiDialogFooter>
         </form>
       </RafiiDialogContent>

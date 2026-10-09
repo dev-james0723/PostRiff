@@ -4,13 +4,13 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useReducedMotion } from 'motion/react';
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
 import type { Annotation, CapabilityState, ContentSegment, Locator, UnderstandingCard } from '@/lib/api/library-intelligence-types';
 import { normalizeKey } from '@/lib/library/url-state';
 import { countLabel, locatorLabel, originLabel, purposeLines } from '@/lib/library/wording';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { LibraryAsset } from '../use-library';
+import { Control } from '../ui/controls';
 
 /**
  * Library understanding for one item. Each read is optional: until a capability is in this build (or allowed for this
@@ -76,7 +76,7 @@ export const DETAIL_SECTIONS = [
 export function DetailSection({ prefix, id, title, children }: { prefix: string; id: string; title: string; children: ReactNode }) {
   return (
     <section id={`${prefix}-${id}`} aria-labelledby={`${prefix}-${id}-title`} className='flex scroll-mt-16 flex-col gap-3'>
-      <h3 id={`${prefix}-${id}-title`} className='text-foreground text-base font-medium'>
+      <h3 id={`${prefix}-${id}-title`} className='text-foreground text-sm font-semibold'>
         {title}
       </h3>
       {children}
@@ -88,12 +88,12 @@ export function DetailSection({ prefix, id, title, children }: { prefix: string;
 export function SectionNav({ prefix }: { prefix: string }) {
   const reduce = useReducedMotion();
   return (
-    <nav aria-label='Detail sections' className='rafii-panel sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto px-4 py-1.5'>
+    <nav aria-label='Detail sections' className='rafii-panel sticky top-0 z-10 -mx-4 flex gap-0.5 overflow-x-auto border-b border-foreground/[0.06] px-3 py-1'>
       {DETAIL_SECTIONS.map((section) => (
         <button
           key={section.id}
           type='button'
-          className='rafii-focus text-muted-foreground hover:text-foreground min-h-11 shrink-0 rounded-[var(--rafii-radius-control)] px-3 text-sm font-medium'
+          className='rafii-focus text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] h-8 shrink-0 rounded-[var(--rafii-radius-control)] px-2.5 text-[13px] font-medium transition-colors duration-150 pointer-coarse:h-11'
           onClick={() => document.getElementById(`${prefix}-${section.id}`)?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })}
         >
           {section.label}
@@ -200,7 +200,7 @@ export function SuggestedUses({ card }: { card: UnderstandingCard | undefined })
   if (!uses.length) return null;
   return (
     <div className='flex flex-col gap-1.5'>
-      <p className='rafii-eyebrow'>Suggested uses</p>
+      <p className='text-muted-foreground text-xs font-medium'>Suggested uses</p>
       <ul className='flex flex-col gap-1.5'>
         {uses.map(({ use, text }) => (
           <li key={use.id} className='flex items-start justify-between gap-2 text-sm'>
@@ -269,17 +269,9 @@ export function DangerArea({ uses, recorded, publishing, deleting, onDelete }: {
           {line}
         </p>
       ))}
-      <Button
-        variant='destructive'
-        size='control'
-        className='self-start rounded-[var(--rafii-radius-control)]'
-        disabled={deleting || publishing}
-        title={publishing ? 'A post using this asset is publishing' : undefined}
-        onClick={onDelete}
-      >
-        {deleting ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : <Icons.trash aria-hidden />}
+      <Control tone='danger' size='sm' className='self-start' disabled={deleting || publishing} loading={deleting} icon={<Icons.trash aria-hidden />} title={publishing ? 'A post using this asset is publishing' : undefined} onClick={onDelete}>
         {deleting ? 'Deleting…' : 'Delete…'}
-      </Button>
+      </Control>
     </section>
   );
 }

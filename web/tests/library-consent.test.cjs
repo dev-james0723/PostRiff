@@ -27,7 +27,8 @@ test('the Library copy explains the private universal upload path', () => {
 });
 
 test('the Living Archive exposes gallery\/list views, media filters and universal metadata hooks', () => {
-  const view = read('features', 'library', 'library-view.tsx');
+  // The view switch and filters live in the Library toolbar the page renders.
+  const view = read('features', 'library', 'library-view.tsx') + read('features', 'library', 'intelligence', 'library-toolbar.tsx');
   const library = read('features', 'library', 'use-library.ts');
   const types = read('lib', 'api', 'types.ts');
   assert.match(view, /label='Library view'/);

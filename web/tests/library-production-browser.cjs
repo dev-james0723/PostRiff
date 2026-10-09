@@ -99,6 +99,8 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    // Ignore periodic Library polling here, while keeping every runtime error below.
    // The open item lives in the address (Library URL state); a close is finished only when the panel is gone
    // and ?asset= has left the URL, so a following reload or click never meets a reopened panel.
+   // Speed and volume sit behind each inline player's Playback options; play, time and the timeline stay visible.
+   const playbackOptions=async player=>{const toggle=player.getByRole('button',{name:'Playback options',exact:true});if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.click();};
    const closeDetails=async()=>{
     await page.getByRole('button',{name:'Close asset details'}).click();
     await page.getByRole('button',{name:'Close asset details'}).waitFor({state:'detached',timeout:15000});
@@ -222,7 +224,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     await videoTimeline.press('ArrowRight');
     await page.waitForFunction(video=>video.dataset.acceptanceSeeked==='yes'&&!video.seeking,seekVideoHandle,{timeout:5000});
     assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4 after the native seeked event: '+JSON.stringify(await previewVideo.evaluate(video=>({time:video.currentTime,seeking:video.seeking,paused:video.paused,seekable:Array.from({length:video.seekable.length},(_,index)=>[video.seekable.start(index),video.seekable.end(index)]),buffered:Array.from({length:video.buffered.length},(_,index)=>[video.buffered.start(index),video.buffered.end(index)]),range:video.closest('[data-library-media-player]')?.querySelector('input[type="range"]')?.value}))));
-    await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
+    await playbackOptions(inlineVideo);await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
     assert.equal(await previewVideo.evaluate(video=>video.playbackRate),1.5);
     await page.emulateMedia({reducedMotion:'reduce'});
     checks.push({engine,width,format:'mp4',inline:'actual silent autoplay; reduced-motion pause; byte-range206/416; native keyboard seek; speed',execution:'real original MP4/UI; synthetic identity/storage'});
@@ -265,7 +267,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await search.fill(missingQuery);
    await page.getByText(`No asset matches “${missingQuery}”`,{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'unmatched query must retain its editable search control');
-   assert.ok(await page.getByRole('button',{name:/^Filters(?:,|$)/}).isVisible(),'unmatched query must retain filters');
+   assert.ok(await page.locator('#library-kind').isVisible(),'unmatched query must retain filters');
    await page.getByRole('button',{name:'Clear search',exact:true}).last().click();
    await restoredDocument.waitFor({state:'visible',timeout:15000});assert.equal(await search.inputValue(),'');
    assert.match(doc.sha256,/^[a-f0-9]{64}$/,'use the real normalized document fingerprint');
@@ -281,11 +283,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     assert.equal(await search.inputValue(),hashQuery);
    }
    await search.fill('');
-   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
+   // Filters are inline in the Library toolbar (redesign §3): no panel to open.
    const kindFilterControl=page.locator('#library-kind');await kindFilterControl.waitFor({state:'visible'});
    const primedPhotos=page.waitForResponse(response=>response.url().startsWith(path+'?')&&new URL(response.url()).searchParams.get('kind')==='image'&&response.request().method()==='GET'&&response.ok(),{timeout:15000});
    await kindFilterControl.selectOption('image');
-   await page.getByRole('button',{name:'Done',exact:true}).click();
    assert.equal((await (await primedPhotos).json()).assets.length,0,'prime the actual normalized Photos query before uploading');
    await page.getByText('No photos match these filters',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'unmatched type must retain search');
@@ -475,7 +476,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    }
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.currentTime>0),'actual WAV playback advances');
    const inlineAudioPause=inlineAudio.getByRole('button',{name:'Pause audio preview',exact:true});if(await inlineAudioPause.isVisible())await inlineAudioPause.click();
-   await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('2');
+   await playbackOptions(inlineAudio);await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('2');
    assert.equal(await inlineAudio.locator('audio').evaluate(audio=>audio.playbackRate),2);
    const audioVolume=inlineAudio.getByRole('slider',{name:'Audio preview volume',exact:true});await audioVolume.focus();await audioVolume.press('Home');await audioVolume.press('ArrowRight');
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.volume>0&&audio.volume<=0.1),'audio volume control updates the actual media element');
@@ -496,7 +497,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    try{
     await page.waitForFunction(({audio,before})=>audio.currentSrc!==before.url&&audio.readyState>=1&&!audio.seeking&&Math.abs(audio.currentTime-before.time)<0.025,{audio:seekAudioHandle,before:pausedRefresh},{timeout:10000});
     assert.deepEqual(await seekAudio.evaluate(audio=>({paused:audio.paused,rate:audio.playbackRate,volume:audio.volume,error:audio.error?.code||null})),{paused:true,rate:pausedRefresh.rate,volume:pausedRefresh.volume,error:null},'paused refresh preserves offset, rate and volume');
-    await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('0.5');
+    await playbackOptions(inlineAudio);await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('0.5');
     await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
     await page.waitForFunction(audio=>!audio.paused&&audio.currentTime>1.05,seekAudioHandle,{timeout:10000});
     const playingRefresh=await seekAudio.evaluate(audio=>({url:audio.currentSrc,time:audio.currentTime,volume:audio.volume}));

@@ -127,10 +127,18 @@ async function openLibrary(page, query = '') {
         return ticket.assetId;
       }
       const seeded = [];
+      // More than one page (the Library loads 200 at a time): the server total and Load more must stay honest.
+      for (let index = 0; index < 200; index += 1) {
+        await addFile(`bulk-reference-${String(index).padStart(3, '0')}.txt`, 'text/plain', Buffer.from(`Reference item ${index}`));
+      }
       for (let index = 0; index < 14; index += 1) {
         seeded.push(await addFile(`rehearsal-note-${String(index).padStart(2, '0')}.md`, 'text/markdown', Buffer.from(`Rehearsal note ${index}\nBrahms intermezzo phrasing, pedalling and tempo for week ${index}.`)));
       }
       seeded.push(await addFile('recital-budget.csv', 'text/csv', Buffer.from('item,cost\nhall,1200\npiano tuning,180\n')));
+      // Real names: long English, Cantonese and Traditional Chinese, so truncation and layout are exercised.
+      const LONG_NAME = '2026年10月 香港大會堂 獨奏會 節目單 Brahms Op. 118 Intermezzi and Ballades final revised programme notes for the printer (v12).md';
+      seeded.push(await addFile(LONG_NAME, 'text/markdown', Buffer.from('節目單 programme notes for the recital')));
+      seeded.push(await addFile('練琴筆記 左手踏板同埋 rubato.md', 'text/markdown', Buffer.from('練琴筆記 left-hand pedalling and rubato')));
       const audioId = await addFile('practice-take.wav', 'audio/wav', wav());
       const collectionResponse = await seed.request.post(`${library}/collections`, { headers, data: { name: 'Recital' } });
       assert.ok(collectionResponse.ok(), await collectionResponse.text());
@@ -145,6 +153,18 @@ async function openLibrary(page, query = '') {
         const label = `${engine} ${spec.name}`;
         // The first-view screenshot comes before any check, so a failing viewport still returns its picture.
         await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}.png`) });
+
+        // Redesign §4: exactly one filled primary on the page (Add); everything else is secondary, ghost or danger.
+        const primaries = await page.evaluate(() => [...document.querySelectorAll('[data-library-page] .rafii-action')].filter((node) => node.getClientRects().length > 0).length);
+        check(`${label}: exactly one filled primary`, primaries === 1, primaries);
+        // Long and Chinese names truncate inside their card instead of widening it.
+        const named = await page.evaluate(() => {
+          const card = [...document.querySelectorAll('[data-library-item]')].find((node) => (node.textContent || '').includes('香港大會堂'));
+          if (!card) return null;
+          const box = card.getBoundingClientRect();
+          return { right: box.right, width: box.width, viewport: window.innerWidth };
+        });
+        check(`${label}: long Chinese name stays inside its card`, named !== null && named.right <= named.viewport + 1, named);
 
         // A059: one Add control, scope in plain words, compact chrome.
         check(`${label}: one Add control`, (await page.getByRole('button', { name: /^Add to Library|^Add ·/ }).count()) === 1);
@@ -202,7 +222,8 @@ async function openLibrary(page, query = '') {
           await opener.focus();
           await page.keyboard.press('Enter');
           await page.getByRole('button', { name: 'Close asset details' }).waitFor({ timeout: 10000 });
-          check(`${label}: focus moves into the detail panel`, await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))));
+          // A sheet/drawer below 1280 px, the docked inspector from 1280 px (redesign §6): focus moves into either.
+          check(`${label}: focus moves into the detail panel`, await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"], [data-library-inspector]'))));
           check(`${label}: open item is in the address`, await addressSettles(page, () => Boolean(new URL(location.href).searchParams.get('asset'))));
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-detail.png`) });
           await page.keyboard.press('Escape');
@@ -273,6 +294,13 @@ async function openLibrary(page, query = '') {
           check(`${label}: collection switcher is one row on tablets`, await rail.isVisible() && ((await rail.boundingBox())?.height ?? 999) < 120);
         }
         if (spec.name === 'desktop-1440x900') {
+          // More than 200 items: the count is the server's total, and the rest loads on request.
+          const stats = (await page.locator('[data-tour="library-stats"]').first().innerText()).replace(/,/g, '');
+          check(`${label}: server total over 200 shown`, /\b2[0-9]{2} items\b/.test(stats), stats);
+          const loadMore = page.getByRole('button', { name: 'Load more assets' });
+          await loadMore.scrollIntoViewIfNeeded();
+          check(`${label}: Load more offered past the first 200`, await loadMore.isVisible());
+          await page.evaluate(() => window.scrollTo(0, 0));
           const rail = page.getByRole('navigation', { name: 'Collections' });
           check(`${label}: collection rail beside the results`, ((await rail.boundingBox())?.width ?? 999) < 260);
           await page.getByRole('button', { name: 'Hide collections' }).click();

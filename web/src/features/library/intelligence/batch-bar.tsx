@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState, type CSSProperties } from 'react';
+import { IconTag } from '@tabler/icons-react';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader } from '@/components/rafii';
 import {
@@ -13,7 +14,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -28,6 +28,7 @@ import { assetTitle, dimensionsOf, kindLabel } from '../asset-card';
 import type { LibraryAsset } from '../use-library';
 import type { BatchKind, BatchParams, BatchRun } from './use-batch-actions';
 import { ComparisonView } from './versions-panel';
+import { Control, IconControl, ToolbarDivider, controlClass } from '../ui/controls';
 
 /** Glass with an opaque fill where transparency is reduced or unsupported (the global material covers the rest). */
 export const OPAQUE_GLASS_FALLBACK = '[@media(prefers-reduced-transparency:reduce)]:bg-popover [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none';
@@ -103,43 +104,43 @@ export function BatchBar({
       role='region'
       aria-label='Selected items'
       style={{ bottom: stickyBottom } as CSSProperties}
-      className={cn('rafii-elevated sticky z-20 flex flex-col gap-2 rounded-[var(--rafii-radius-card)] p-2', OPAQUE_GLASS_FALLBACK)}
+      className={cn('rafii-elevated sticky z-20 flex flex-col gap-1.5 rounded-[var(--rafii-radius-card)] p-1.5', OPAQUE_GLASS_FALLBACK)}
     >
       {run ? <RunReport run={run} items={selected} onRetry={onRetry} onDismiss={onDismissRun} /> : null}
       {count > 0 ? (
-        <div className='flex flex-wrap items-center gap-2'>
-          <span className='px-2 text-sm font-medium tabular-nums'>{countLabel(count)} selected</span>
-          {canSelectMore ? (
-            <Button variant='quiet' size='control' className='h-11' onClick={onSelectAll}>
-              Select all shown
-            </Button>
-          ) : null}
-          <Button variant='quiet' size='control' className='h-11' onClick={onClear}>
-            Clear selection
-          </Button>
-          <Button variant='quiet' size='control' className='h-11' aria-pressed={searchWithin} onClick={() => onSearchWithin(!searchWithin)}>
-            {searchWithin ? <Icons.check aria-hidden /> : null}
-            Search only these
-          </Button>
-          <div className='scrollbar-hide -mx-1 flex min-w-0 basis-full gap-2 overflow-x-auto px-1 md:ml-auto md:basis-auto'>
+        <div className='flex flex-wrap items-center gap-1'>
+          <div className='flex min-w-0 items-center gap-1'>
+            <IconControl label='Clear selection' size='sm' onClick={onClear}>
+              <Icons.close aria-hidden />
+            </IconControl>
+            <span className='pr-1 text-sm font-medium whitespace-nowrap tabular-nums'>{countLabel(count)} selected</span>
+            {canSelectMore ? (
+              <Control tone='ghost' size='sm' onClick={onSelectAll}>
+                Select all shown
+              </Control>
+            ) : null}
+            <Control tone='ghost' size='sm' active={searchWithin} aria-pressed={searchWithin} icon={searchWithin ? <Icons.check aria-hidden /> : undefined} onClick={() => onSearchWithin(!searchWithin)}>
+              Search only these
+            </Control>
+          </div>
+          <div className='scrollbar-hide -mx-1 flex min-w-0 basis-full items-center gap-1 overflow-x-auto px-1 md:ml-auto md:basis-auto'>
             {canEdit && collections.length ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
-                    <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy}>
-                      <Icons.folder aria-hidden />
+                    <Control tone='secondary' size='sm' className='shrink-0' disabled={busy} icon={<Icons.folder aria-hidden />}>
                       Add to collection
-                    </Button>
+                    </Control>
                   }
                 />
-                <DropdownMenuContent align='end' className='rafii-elevated min-w-56 rounded-[var(--rafii-radius-card)] p-1.5'>
+                <DropdownMenuContent align='end' className='rafii-elevated min-w-56 rounded-[var(--rafii-radius-card)] p-1'>
                   {collections.map((collection) => (
                     <DropdownMenuItem
                       key={collection.id}
-                      className='min-h-11 gap-2 px-3'
+                      className='min-h-9 gap-2 px-2.5 pointer-coarse:min-h-11'
                       onClick={() => onRun(collection.kind === 'smart' ? 'collection-include' : 'collection-add', ids, { collectionId: collection.id, collectionName: collection.name })}
                     >
-                      {collection.kind === 'smart' ? <Icons.sparkles className='size-3.5' aria-hidden /> : null}
+                      {collection.kind === 'smart' ? <Icons.sparkles className='size-3.5' aria-hidden /> : <Icons.folder className='text-muted-foreground size-3.5' aria-hidden />}
                       <span className='min-w-0 flex-1 truncate'>{collection.name}</span>
                       {collection.kind === 'smart' ? <span className='text-muted-foreground text-xs'>include</span> : null}
                     </DropdownMenuItem>
@@ -148,23 +149,23 @@ export function BatchBar({
               </DropdownMenu>
             ) : null}
             {canEdit && activeCollection ? (
-              <Button
-                variant='glass'
-                size='control'
-                className='h-11 shrink-0'
+              <Control
+                tone='secondary'
+                size='sm'
+                className='shrink-0'
                 disabled={busy}
                 onClick={() => onRun(activeCollection.kind === 'smart' ? 'collection-exclude' : 'collection-remove', ids, { collectionId: activeCollection.id, collectionName: activeCollection.name })}
               >
                 {activeCollection.kind === 'smart' ? 'Exclude from this collection' : 'Remove from this collection'}
-              </Button>
+              </Control>
             ) : null}
             {canEdit ? (
               <Popover open={tagOpen} onOpenChange={setTagOpen}>
                 <PopoverTrigger
                   render={
-                    <Button variant='glass' size='control' className='h-11 shrink-0' disabled={busy}>
+                    <Control tone='secondary' size='sm' className='shrink-0' disabled={busy} icon={<IconTag aria-hidden />}>
                       Add tag
-                    </Button>
+                    </Control>
                   }
                 />
                 <PopoverContent align='end' className='rafii-elevated w-72 rounded-[var(--rafii-radius-card)] p-3'>
@@ -181,31 +182,32 @@ export function BatchBar({
                   >
                     <label htmlFor={tagId} className='flex flex-col gap-1.5 text-sm font-medium'>
                       Tag for {countLabel(count)}
-                      <Input id={tagId} value={tag} maxLength={60} onChange={(event) => setTag(event.target.value)} className='h-11 font-normal' />
+                      <Input id={tagId} value={tag} maxLength={60} onChange={(event) => setTag(event.target.value)} className='h-9 font-normal pointer-coarse:h-11' />
                     </label>
-                    <Button type='submit' variant='action' size='control' disabled={!tag.trim()}>
+                    <Control type='submit' tone='primary' disabled={!tag.trim()}>
                       Add tag
-                    </Button>
+                    </Control>
                   </form>
                 </PopoverContent>
               </Popover>
             ) : null}
             {canEdit && onBuildPack ? (
-              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={Boolean(run?.running)} title={packNote ?? undefined} onClick={onBuildPack}>
-                <Icons.sparkles aria-hidden />
+              <Control tone='secondary' size='sm' className='shrink-0' disabled={Boolean(run?.running)} title={packNote ?? undefined} icon={<Icons.sparkles aria-hidden />} onClick={onBuildPack}>
                 Build source pack
-              </Button>
+              </Control>
             ) : null}
             {count === 2 ? (
-              <Button variant='glass' size='control' className='h-11 shrink-0' disabled={Boolean(run?.running)} onClick={() => setDialog('compare')}>
+              <Control tone='secondary' size='sm' className='shrink-0' disabled={Boolean(run?.running)} onClick={() => setDialog('compare')}>
                 Compare
-              </Button>
+              </Control>
             ) : null}
             {canEdit ? (
-              <Button variant='destructive' size='control' className='h-11 shrink-0 rounded-[var(--rafii-radius-control)]' disabled={busy} onClick={() => setConfirmDelete(true)}>
-                <Icons.trash aria-hidden />
-                Delete selected…
-              </Button>
+              <>
+                <ToolbarDivider />
+                <Control tone='danger' size='sm' className='shrink-0' disabled={busy} icon={<Icons.trash aria-hidden />} onClick={() => setConfirmDelete(true)}>
+                  Delete selected…
+                </Control>
+              </>
             ) : null}
           </div>
           {unresolved ? <p className='text-muted-foreground basis-full px-2 text-xs'>Retry or dismiss the last change before starting another.</p> : null}
@@ -222,13 +224,12 @@ export function BatchBar({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel variant='glass' size='control'>
+            <AlertDialogCancel variant='glass' className={controlClass({ tone: 'secondary' })}>
               Keep
             </AlertDialogCancel>
             <AlertDialogAction
               variant='destructive'
-              size='control'
-              className='rounded-[var(--rafii-radius-control)]'
+              className={controlClass({ tone: 'danger' })}
               onClick={() => {
                 onRun('delete', ids, {});
                 setConfirmDelete(false);
@@ -256,14 +257,14 @@ function RunReport({ run, items, onRetry, onDismiss }: { run: BatchRun; items: S
         <p className='text-sm font-medium'>{run.summary.label}</p>
         <span className='ml-auto flex gap-2'>
           {!run.running && run.summary.retryIds.length ? (
-            <Button variant='glass' size='control' className='h-11' onClick={onRetry}>
+            <Control tone='secondary' size='sm' onClick={onRetry}>
               Retry {countLabel(run.summary.retryIds.length)}
-            </Button>
+            </Control>
           ) : null}
           {!run.running ? (
-            <Button variant='quiet' size='control' className='h-11' onClick={onDismiss}>
+            <Control tone='ghost' size='sm' onClick={onDismiss}>
               Dismiss
-            </Button>
+            </Control>
           ) : null}
         </span>
       </div>
@@ -337,13 +338,12 @@ function CompareDialog({ open, onOpenChange, items }: { open: boolean; onOpenCha
           ) : null}
         </RafiiDialogBody>
         <RafiiDialogFooter className='flex-row justify-end'>
-          <Button variant='glass' size='control' onClick={() => onOpenChange(false)}>
+          <Control tone='secondary' onClick={() => onOpenChange(false)}>
             Close
-          </Button>
-          <Button variant='action' size='control' disabled={busy} onClick={() => void compare()}>
-            {busy ? <Icons.spinner className='animate-spin motion-reduce:animate-none' aria-hidden /> : null}
+          </Control>
+          <Control tone='primary' loading={busy} onClick={() => void compare()}>
             Compare details
-          </Button>
+          </Control>
         </RafiiDialogFooter>
       </RafiiDialogContent>
     </RafiiDialog>

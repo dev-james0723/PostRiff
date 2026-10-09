@@ -25,7 +25,7 @@ export function SelectToggle({
     <label
       data-select-toggle=''
       className={cn(
-        'rafii-glass absolute z-20 grid size-11 cursor-pointer place-items-center rounded-full transition-opacity focus-within:opacity-100 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground motion-reduce:transition-none',
+        'bg-background/90 ring-foreground/10 absolute z-20 grid size-8 cursor-pointer place-items-center rounded-[10px] shadow-xs ring-1 transition-opacity duration-150 focus-within:opacity-100 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground motion-reduce:transition-none pointer-coarse:size-11 pointer-coarse:rounded-full',
         checked || visible ? 'opacity-100' : 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 pointer-coarse:opacity-100',
         className
       )}
@@ -42,7 +42,7 @@ export function SelectToggle({
             onChange(!checked, true);
           }
         }}
-        className='accent-foreground size-5 cursor-pointer'
+        className='accent-foreground size-4 cursor-pointer pointer-coarse:size-5'
       />
     </label>
   );

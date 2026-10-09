@@ -173,7 +173,13 @@ test('test_audio_no_autoplay: real peaks or a neutral symbol, and playback only 
   // view (a press under reduced motion), audio waits for a press, and either pauses when Now Playing or another preview plays.
   const inline = feature('gallery-media-preview.tsx');
   assert.match(inline, /useState\(video \? 0 : 0\.8\)/, 'video previews start muted');
-  assert.match(inline, /video \? visible && \(!reduce \|\| activated\) : activated/, 'audio plays only after a press');
+  assert.match(inline, /video \? visible && \(activated \|\| ownsSilent\) : activated/, 'audio plays only after a press; video after a press or while it holds the silent slot');
+  // One silent video preview at a time: the slot is claimed only while motion is allowed, released otherwise.
+  assert.match(inline, /const eligible = enabled && ready && visible && foreground && !reduce && !userPaused && !activated;/);
+  assert.match(inline, /if \(eligible\) claimSilent\(slot\);\s*else releaseSilent\(slot\);/);
+  assert.match(inline, /if \(silentOwner === slot \|\| \(silentOwner && !force\)\) return;/, 'a second video never takes the slot unless pointed at');
+  // Speed and volume sit behind Playback options; play, time and the timeline stay visible.
+  assert.match(inline, /label='Playback options'/);
   assert.match(inline, /useNowPlaying\.subscribe\(/, 'Now Playing pauses an inline preview');
   assert.match(inline, /window\.dispatchEvent\(new CustomEvent\(PLAY_EVENT/, 'one audible preview at a time');
   for (const { file, text } of sources()) {
@@ -263,7 +269,11 @@ test('test_drawer_focus_restore: the sheet and drawer trap focus, close on Escap
   assert.match(detail, /<SheetContent[^>]*finalFocus=\{finalFocus\}/);
   assert.match(detail, /const selector = asset \? openerSelector\(asset\.id\) : null;/);
   assert.doesNotMatch(detail, /modal=\{false\}|disablePointerDismissal/, 'modal (focus-trapping, Escape-closable) primitives');
-  assert.match(detail, /aria-label='Close asset details'/);
+  assert.match(detail, /label='Close asset details'/, 'every form of the panel has a named close control');
+  // Docked (from 1280 px) the inspector is non-modal: Escape closes it and focus returns to the card that opened it.
+  assert.match(detail, /if \(event\.key === 'Escape' && !event\.defaultPrevented\)/);
+  assert.match(detail, /const opener = finalFocus\(\);\s*onOpenChange\(false\);/);
+  assert.match(detail, /aria-labelledby='library-inspector-title'/);
   for (const file of ['asset-card.tsx', 'asset-list-row.tsx']) assert.match(feature(file), /data-library-open=\{asset\.id\}/, file);
   assert.equal(U.openerSelector('2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f'), '[data-library-open="2f0c6c1e-5a1b-4c6a-9d0e-3b2a1c0d9e8f"]');
   assert.equal(U.openerSelector('x"], body'), null, 'never builds a selector from an unsafe id');
@@ -337,7 +347,7 @@ test('test_animated_counts_single_accessible_name: digits are hidden, one label 
   assert.match(count, /<span aria-hidden='true'[^>]*>\s*<DigitSwap/);
   assert.equal((count.match(/sr-only/g) || []).length, 1);
   const toolbar = feature('intelligence', 'library-toolbar.tsx');
-  assert.match(toolbar, /ariaLabel: counts \? `\$\{text\}, \$\{countLabel\(counts\[value\]\)\}` : text/, 'each filter segment has one spoken name');
+  assert.match(toolbar, /const withCount = \(text: string, value: number \| undefined\) => \(typeof value === 'number' \? `\$\{text\} · \$\{value\.toLocaleString\(\)\}` : text\)/, 'each filter option has one spoken name, its count joined to the words');
 
   assert.equal(W.countLabel(1), '1 item');
   assert.equal(W.countLabel(0), '0 items');
@@ -896,7 +906,7 @@ test('status flags: entry points that are off are hidden or explained; the deter
   assert.match(view, /const asking = url\.panel === 'ask' && gates\.ask\.enabled;/);
   assert.match(view, /gates\.ask\.enabled \? \(\s*<SegmentedControl/, 'Ask is offered only where its search is on');
   assert.match(view, /canEdit && gates\.packs\.enabled\s*\?/);
-  assert.match(view, /voiceEnabled=\{gates\.voice\.enabled\}/);
+  assert.match(view, /voiceEnabled(?:=\{|: )gates\.voice\.enabled/);
   assert.match(feature('asset-detail.tsx'), /\{voiceEnabled \? <VoicePanel[^:]*: <p[^>]*>\{voiceNote/);
   const flow = feature('intelligence', 'source-pack-flow.tsx');
   assert.match(flow, /gates\.recommendations\.reason/);

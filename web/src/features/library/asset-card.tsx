@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
+import type { AnimatedBadgeStatus } from '@/components/motion/animated-badge';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -15,11 +15,10 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@/components/motion/context-menu';
-import { TiltCard } from '@/components/motion/tilt-card';
-import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
-import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
+import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -28,6 +27,7 @@ import { kindOf } from '@/lib/media/asset-kinds';
 import { AssetFileThumbnail, documentPreviewSuffix } from './asset-thumbnail';
 import { GalleryMediaPreview } from './gallery-media-preview';
 import { SelectToggle } from './intelligence/select-toggle';
+import { Control, IconControl } from './ui/controls';
 
 /**
  * The server's own wording when the deployment has no private media storage (`hosted.py` upload_media,
@@ -107,15 +107,32 @@ export function assetTitle(asset: LibraryAsset) {
   return asset.displayTitle?.trim() || asset.originalFilename?.trim() || kindLabel(asset);
 }
 
-/** One status at most on a card (UI spec §3): processing beats usage while a file is still being prepared. */
-export function cardStatus(asset: LibraryAsset): string | null {
+/**
+ * One status at most on a card (UI spec §3; redesign §5), in the order that matters: a file still being prepared or
+ * needing attention, then a publishing post, then real use. "Unused" is the default and is not shown (it is a filter).
+ */
+export function cardStatus(asset: LibraryAsset, count = 0, publishing = false): string | null {
   const kind = kindOf(asset);
-  if (kind === 'image' || kind === 'video') return null;
   const processing = asset.processing ?? '';
-  if (['pending', 'queued', 'processing'].includes(processing)) return 'Being indexed';
-  if (processing === 'failed') return 'Indexing failed';
-  if (processing === 'unsupported') return 'Stored privately';
+  if (kind !== 'image' && kind !== 'video') {
+    if (['pending', 'queued', 'processing'].includes(processing)) return 'Processing';
+    if (processing === 'failed') return 'Needs attention';
+  }
+  if (publishing) return 'Publishing';
+  if (count > 0) return `Used in ${count} ${count === 1 ? 'post' : 'posts'}`;
+  if (kind !== 'image' && kind !== 'video' && processing === 'unsupported') return 'Stored privately';
   return null;
+}
+
+/** The one metadata line: type, then size or duration (never both diagnostic fields and tags). */
+export function cardMeta(asset: LibraryAsset): string {
+  const kind = kindOf(asset);
+  const extension = (asset.extension || asset.originalFilename?.split('.').pop() || '').toUpperCase();
+  const type = kind === 'document' || kind === 'file' ? extension || kindLabel(asset) : kindLabel(asset);
+  const duration = (kind === 'audio' || kind === 'video') && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null;
+  const dims = kind === 'image' ? dimensionsOf(asset) : null;
+  const size = typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null;
+  return [type, duration ?? dims ?? size].filter(Boolean).join(' · ');
 }
 
 export type LibraryDensity = 'comfortable' | 'compact';
@@ -142,14 +159,92 @@ interface AssetCardProps {
   density?: LibraryDensity;
   /** Exclude this item from the smart collection being viewed (an override, undoable from the collection). */
   onExclude?: () => void;
+  /** This item is open in the inspector. */
+  inspected?: boolean;
   /** Search context under the caption: why it matched, passages and moments (outside the open button). */
   footer?: ReactNode;
 }
 
+export type AssetCardActionProps = Pick<AssetCardProps, 'asset' | 'canEdit' | 'canApprove' | 'deleting' | 'publishing' | 'onOpen' | 'onDelete' | 'onExclude' | 'selected' | 'onSelect'>;
+
+interface CardAction {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+  destructive?: boolean;
+  disabled?: boolean;
+  separated?: boolean;
+}
+
+/** The item's actions, in one order for the context menu and the More menu: common first, Delete last and apart. */
+export function useCardActions({ asset, canEdit, canApprove, deleting, publishing, onOpen, onDelete, onExclude, selected = false, onSelect }: AssetCardActionProps): CardAction[] {
+  const router = useRouter();
+  const mediaAsset = kindOf(asset) === 'image' || kindOf(asset) === 'video';
+  const actions: CardAction[] = [{ key: 'open', label: 'Open', icon: <Icons.eye aria-hidden />, onSelect: onOpen }];
+  if (onSelect) actions.push({ key: 'select', label: selected ? 'Deselect' : 'Select', icon: <Icons.check aria-hidden />, onSelect: () => onSelect(!selected, false) });
+  if (canApprove && mediaAsset) actions.push({ key: 'post', label: 'Use in a post', icon: <Icons.send aria-hidden />, onSelect: () => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`) });
+  else if (canEdit) actions.push({ key: 'ideas', label: 'Open Ideas', icon: <Icons.sparkles aria-hidden />, onSelect: () => router.push('/app/ideas') });
+  if (onExclude) actions.push({ key: 'exclude', label: 'Exclude from this collection', icon: <Icons.minus aria-hidden />, onSelect: onExclude });
+  actions.push({ key: 'hash', label: 'Copy hash', icon: <Icons.copy aria-hidden />, onSelect: () => void copyHash(asset.hash) });
+  if (canEdit) actions.push({ key: 'delete', label: 'Delete…', icon: <Icons.trash aria-hidden />, onSelect: onDelete, destructive: true, disabled: deleting || publishing, separated: true });
+  return actions;
+}
+
+export function AssetContextItems({ actions }: { actions: CardAction[] }) {
+  return (
+    <>
+      {actions.map((action) => (
+        <Fragment key={action.key}>
+          {action.separated ? <ContextMenuSeparator /> : null}
+          <ContextMenuItem tone={action.destructive ? 'destructive' : 'default'} disabled={action.disabled} onSelect={action.onSelect}>
+            <span className={cn('size-4 [&_svg]:size-4', !action.destructive && 'text-muted-foreground')}>{action.icon}</span>
+            {action.label}
+          </ContextMenuItem>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/** The visible More button: the same actions as the context menu, reachable by touch and keyboard (never hover-only). */
+export function AssetMoreMenu({ title, actions, className }: { title: string; actions: CardAction[]; className?: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<IconControl label={`More actions for ${title}`} size='sm' tooltip={false} className={cn('bg-background/90 hover:bg-background ring-foreground/10 shadow-xs ring-1', className)} />}>
+        <Icons.moreHorizontal aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' className='rafii-elevated min-w-48 rounded-[var(--rafii-radius-card)] p-1'>
+        {actions.map((action) => (
+          <Fragment key={action.key}>
+            {action.separated ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem variant={action.destructive ? 'destructive' : 'default'} disabled={action.disabled} className='min-h-9 gap-2.5 px-2.5 pointer-coarse:min-h-11' onClick={action.onSelect}>
+              <span className={cn('size-4 [&_svg]:size-4', !action.destructive && 'text-muted-foreground')}>{action.icon}</span>
+              {action.label}
+            </DropdownMenuItem>
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The quiet single status line under a title. */
+export function CardStatusLine({ status, publishing }: { status: string | null; publishing: boolean }) {
+  if (!status) return null;
+  const attention = status === 'Needs attention';
+  return (
+    <span className={cn('inline-flex min-w-0 items-center gap-1 text-xs', attention ? 'text-destructive' : 'text-muted-foreground')}>
+      {publishing || status === 'Processing' ? <Icons.spinner aria-hidden className='size-3 animate-spin motion-reduce:animate-none' /> : attention ? <Icons.warning aria-hidden className='size-3' /> : status.startsWith('Used') ? <Icons.check aria-hidden className='size-3' /> : null}
+      <span className='truncate'>{status}</span>
+    </span>
+  );
+}
+
 /**
- * Gallery card anatomy (DNA §13.2, §21.9; UI spec §3): the real preview in its own colours on top — whole, never
- * cropped — then a readable title, concise metadata and at most one status. Broken media says so instead of
- * rendering a blank.
+ * Gallery card anatomy (UI spec §3; redesign §5): the real preview on a neutral tile — whole, never cropped for photos
+ * and video — then a one-line title, one metadata line and at most one status. Selection top-left, More top-right.
+ * Broken media says so instead of rendering a blank.
  */
 export function AssetCard({
   asset,
@@ -168,10 +263,10 @@ export function AssetCard({
   onSelect,
   density = 'comfortable',
   onExclude,
+  inspected = false,
   footer
 }: AssetCardProps) {
   const reduce = useReducedMotion();
-  const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   // Thumbnails are the stored renditions (up to 4096 px), so a card fetches only once it is near the viewport.
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
@@ -192,9 +287,10 @@ export function AssetCard({
   const itemTitle = assetTitle(asset);
   const kindWord = kindLabel(asset);
   const previewLabel = assetKind === 'video' ? ', video thumbnail' : documentPreviewSuffix(asset);
-  const status = cardStatus(asset);
-  const label = `${kindWord} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}${status ? `, ${status.toLowerCase()}` : ''}`;
+  const status = cardStatus(asset, count, publishing);
+  const label = `${kindWord} ${itemTitle}${dims ? `, ${dims}` : ''}${previewLabel}, ${count === 0 ? 'not used in a post yet' : `used in ${count} ${count === 1 ? 'post' : 'posts'}`}${status && !status.startsWith('Used') ? `, ${status.toLowerCase()}` : ''}`;
   const compact = density === 'compact';
+  const actions = useCardActions({ asset, canEdit, canApprove, deleting, publishing, onOpen, onDelete, onExclude, selected, onSelect });
 
   return (
     <ContextMenu>
@@ -204,15 +300,15 @@ export function AssetCard({
           role='listitem'
           data-tour={first ? 'library-card' : undefined}
           data-library-item={asset.id}
+          data-inspected={inspected || undefined}
           aria-busy={deleting || undefined}
-          layout={reduce ? false : 'position'}
-          initial={reduce ? false : { opacity: 0, scale: 0.98 }}
-          animate={{ opacity: deleting ? 0.55 : 1, scale: 1, transition: { duration: reduce ? 0 : 0.24, ease: EASE_OUT } }}
-          exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.96, transition: { duration: 0.2, ease: EASE_OUT } }}
-          transition={{ layout: SPRING_LAYOUT }}
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: deleting ? 0.55 : 1, transition: { duration: reduce ? 0 : 0.18, ease: EASE_OUT } }}
+          exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.12, ease: EASE_OUT } }}
+          style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 280px' }}
           className={cn(
-            'group/asset bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]',
-            selected && 'ring-foreground ring-offset-background ring-2 ring-offset-2'
+            'group/asset bg-card text-card-foreground relative flex min-w-0 flex-col overflow-hidden rounded-[var(--rafii-radius-card)] ring-1 transition-shadow duration-150',
+            selected ? 'ring-foreground ring-2' : inspected ? 'ring-foreground/45 ring-2' : 'ring-foreground/[0.08] hover:ring-foreground/[0.16]'
           )}
         >
           {inlineMedia ? <GalleryMediaPreview key={asset.id} asset={asset} video={assetKind === 'video'} posterUrl={image.data} enabled={nearView} /> : null}
@@ -221,114 +317,55 @@ export function AssetCard({
             onClick={onOpen}
             aria-label={label}
             data-library-open={asset.id}
-            className='focus-visible:ring-ring/50 flex min-w-0 flex-col rounded-[var(--rafii-radius-card)] text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
+            className='focus-visible:ring-ring/50 flex min-w-0 flex-col text-left outline-none focus-visible:ring-3 focus-visible:ring-inset'
           >
-            {/* Only the preview tilts; the caption stays still. The card clips the corners. */}
-            {!inlineMedia ? <TiltCard max={6} className='rounded-none'>
-              {!mediaAsset ? (
+            {!inlineMedia ? (
+              !mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='gallery' loadPreview={nearView} />
               ) : image.data ? (
-                <div data-library-thumbnail='image' data-thumbnail-preview='image' className='rafii-quiet relative'>
+                <div data-library-thumbnail='image' data-thumbnail-preview='image' className='bg-foreground/[0.035] relative'>
                   {/* Letterboxed, not cropped: the whole picture in its own proportions. */}
-                  <Image src={image.data} alt='' width={asset.width ?? 400} height={asset.height ?? 400} unoptimized loading='lazy' className='aspect-square w-full object-contain' />
-                  {kindOf(asset) === 'video' && (
-                    <span className='bg-background/85 text-foreground absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>
-                      <Icons.play aria-hidden className='size-3' />
-                      {typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : 'Video'}
-                    </span>
-                  )}
+                  <Image src={image.data} alt='' width={asset.width ?? 400} height={asset.height ?? 400} unoptimized loading='lazy' className='aspect-[4/3] w-full object-contain' />
                 </div>
               ) : image.isError ? (
-                <div className={cn('rafii-quiet text-muted-foreground flex aspect-square w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs', image.canRetry && 'pb-12')}>
+                <div className={cn('bg-foreground/[0.035] text-muted-foreground flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 p-2 text-center text-xs', image.canRetry && 'pb-12')}>
                   <Icons.media className='size-5' aria-hidden />
                   Preview unavailable
                 </div>
               ) : (
-                <Skeleton className='aspect-square w-full rounded-none' />
-              )}
-            </TiltCard> : null}
-            <span className={cn('flex min-w-0 flex-col items-start gap-1.5 p-2.5', compact && 'gap-1 p-2')}>
-              <span className='w-full truncate text-sm font-medium'>{itemTitle}</span>
-              {status ? (
-                <span className='text-muted-foreground text-xs'>{status}</span>
-              ) : (
-                <AnimatedBadge
-                  size='sm'
-                  status={publishing ? 'loading' : 'neutral'}
-                  showIcon={count > 0}
-                  icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
-                  className={cn(badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground', compact && 'hidden sm:inline-flex')}
-                  title={publishing ? 'A post using this asset is publishing now' : undefined}
-                >
-                  {usageLabel(count)}
-                </AnimatedBadge>
-              )}
-              {!compact ? (
-                <span className='text-muted-foreground w-full truncate text-xs tabular-nums'>
-                  {[assetKind === 'audio' && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null, dims, typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null].filter(Boolean).join(' · ') || 'Size not recorded'}
-                </span>
-              ) : null}
+                <Skeleton className='aspect-[4/3] w-full rounded-none' />
+              )
+            ) : null}
+            <span className={cn('flex min-w-0 flex-col items-start gap-0.5 px-3 pt-2.5 pb-3', compact && 'px-2.5 pt-2 pb-2.5')}>
+              <span className='w-full truncate text-sm font-medium' title={itemTitle}>
+                {itemTitle}
+              </span>
+              {!compact ? <span className='text-muted-foreground w-full truncate text-xs tabular-nums'>{cardMeta(asset)}</span> : null}
+              <CardStatusLine status={status} publishing={publishing} />
             </span>
           </button>
-          {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-2.5 pb-2.5'>{footer}</div> : null}
-          {onSelect ? <SelectToggle title={itemTitle} checked={selected} visible={selecting} onChange={onSelect} className='top-1.5 left-1.5' /> : null}
+          {footer ? <div className='flex min-w-0 flex-col gap-1.5 px-3 pb-3'>{footer}</div> : null}
+          {onSelect ? <SelectToggle title={itemTitle} checked={selected} visible={selecting} onChange={onSelect} className='top-2 left-2' /> : null}
+          <div className={cn('absolute top-2 right-2 z-20 transition-opacity duration-150', 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 has-[[data-popup-open]]:opacity-100 pointer-coarse:opacity-100', selecting && 'opacity-100')}>
+            <AssetMoreMenu title={itemTitle} actions={actions} />
+          </div>
           {image.canRetry && !inlineMedia && (
-            // Outside the open button (a button cannot hold another), laid over the square image area.
-            <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-square items-end justify-center pb-3'>
-              <Button size='lg' variant='glass' className='pointer-events-auto' aria-label='Retry loading this preview' disabled={image.isFetching} onClick={() => void image.refetch()}>
-                <Icons.refresh className={cn(image.isFetching && 'animate-spin')} aria-hidden />
+            // Outside the open button (a button cannot hold another), laid over the image area.
+            <div className='pointer-events-none absolute inset-x-0 top-0 flex aspect-[4/3] items-end justify-center pb-3'>
+              <Control tone='secondary' size='sm' className='pointer-events-auto' aria-label='Retry loading this preview' disabled={image.isFetching} icon={<Icons.refresh className={cn(image.isFetching && 'animate-spin')} aria-hidden />} onClick={() => void image.refetch()}>
                 Retry
-              </Button>
+              </Control>
             </div>
           )}
           {deleting && (
-            <span className='rafii-elevated absolute top-2 right-2 grid size-7 place-items-center rounded-full' aria-hidden>
+            <span className='bg-background/90 absolute top-2 right-12 grid size-8 place-items-center rounded-full' aria-hidden>
               <Icons.spinner className='size-3.5 animate-spin motion-reduce:animate-none' />
             </span>
           )}
         </motion.div>
       </ContextMenuTrigger>
       <ContextMenuContent ariaLabel={`${kindWord} actions`}>
-        <ContextMenuItem onSelect={onOpen}>
-          <Icons.eye className='text-muted-foreground size-4' aria-hidden />
-          Open
-        </ContextMenuItem>
-        {onSelect ? (
-          <ContextMenuItem onSelect={() => onSelect(!selected, false)}>
-            <Icons.check className='text-muted-foreground size-4' aria-hidden />
-            {selected ? 'Deselect' : 'Select'}
-          </ContextMenuItem>
-        ) : null}
-        {canApprove && mediaAsset ? (
-          <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
-            <Icons.send className='text-muted-foreground size-4' aria-hidden />
-            Use in a post
-          </ContextMenuItem>
-        ) : canEdit ? (
-          <ContextMenuItem onSelect={() => router.push('/app/ideas')}>
-            <Icons.sparkles className='text-muted-foreground size-4' aria-hidden />
-            Open Ideas
-          </ContextMenuItem>
-        ) : null}
-        {onExclude ? (
-          <ContextMenuItem onSelect={onExclude}>
-            <Icons.minus className='text-muted-foreground size-4' aria-hidden />
-            Exclude from this collection
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem onSelect={() => void copyHash(asset.hash)}>
-          <Icons.copy className='text-muted-foreground size-4' aria-hidden />
-          Copy hash
-        </ContextMenuItem>
-        {canEdit && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem tone='destructive' disabled={deleting || publishing} onSelect={onDelete}>
-              <Icons.trash className='size-4' aria-hidden />
-              Delete…
-            </ContextMenuItem>
-          </>
-        )}
+        <AssetContextItems actions={actions} />
       </ContextMenuContent>
     </ContextMenu>
   );

@@ -2,24 +2,15 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { motion, useInView, useReducedMotion } from 'motion/react';
 import { Icons } from '@/components/icons';
-import { AnimatedBadge } from '@/components/motion/animated-badge';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger
-} from '@/components/motion/context-menu';
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/motion/context-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EASE_OUT, SPRING_LAYOUT } from '@/lib/ease';
+import { EASE_OUT } from '@/lib/ease';
 import { kindOf } from '@/lib/media/asset-kinds';
-import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
-import { assetTitle, badgeClass, cardStatus, copyHash, dimensionsOf, formatDuration, kindLabel, useAssetImage, usageLabel, type LibraryDensity } from './asset-card';
+import { AssetContextItems, AssetMoreMenu, CardStatusLine, assetTitle, cardMeta, cardStatus, dimensionsOf, kindLabel, useAssetImage, useCardActions, type LibraryDensity } from './asset-card';
 import { AssetFileThumbnail, documentPreviewSuffix } from './asset-thumbnail';
 import { GalleryMediaPreview } from './gallery-media-preview';
 import { SelectToggle } from './intelligence/select-toggle';
@@ -41,6 +32,7 @@ export interface AssetListRowProps {
   onSelect?: (selected: boolean, extend: boolean) => void;
   density?: LibraryDensity;
   onExclude?: () => void;
+  inspected?: boolean;
   footer?: ReactNode;
 }
 
@@ -48,6 +40,11 @@ export function libraryAssetTitle(asset: LibraryAsset) {
   return assetTitle(asset);
 }
 
+/**
+ * The list form of the same card (redesign §5): preview, title, one metadata line, one status, More — the parts and
+ * actions are shared with the gallery card, so the two views never disagree. Audio and video keep a slim inline player
+ * under the row.
+ */
 export function AssetListRow({
   asset,
   uses,
@@ -65,10 +62,10 @@ export function AssetListRow({
   onSelect,
   density = 'comfortable',
   onExclude,
+  inspected = false,
   footer
 }: AssetListRowProps) {
   const reduce = useReducedMotion();
-  const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
   const nearView = useInView(ref, { once: true, margin: '240px 0px' });
   const assetKind = kindOf(asset);
@@ -79,8 +76,9 @@ export function AssetListRow({
   const dims = dimensionsOf(asset);
   const count = uses.length;
   const kindWord = kindLabel(asset);
-  const status = cardStatus(asset);
+  const status = cardStatus(asset, count, publishing);
   const compact = density === 'compact';
+  const actions = useCardActions({ asset, canEdit, canApprove, deleting, publishing, onOpen, onDelete, onExclude, selected, onSelect });
 
   useEffect(() => {
     if (preview.storageNotConfigured) onStorageMissing?.();
@@ -88,13 +86,6 @@ export function AssetListRow({
   useEffect(() => {
     if (preview.data) onPreviewLoaded?.();
   }, [preview.data, onPreviewLoaded]);
-
-  const meta = [
-    (video || assetKind === 'audio') && typeof asset.duration === 'number' && asset.duration > 0 ? formatDuration(asset.duration) : null,
-    dims,
-    typeof asset.bytes === 'number' ? formatBytes(asset.bytes) : null,
-    asset.mime || null
-  ].filter(Boolean).join(' · ');
 
   return (
     <ContextMenu>
@@ -104,106 +95,64 @@ export function AssetListRow({
           role='listitem'
           data-tour={first ? 'library-card' : undefined}
           data-library-item={asset.id}
+          data-inspected={inspected || undefined}
           aria-busy={deleting || undefined}
-          layout={reduce ? false : 'position'}
-          initial={reduce ? false : { opacity: 0, y: 4 }}
-          animate={{ opacity: deleting ? 0.55 : 1, y: 0, transition: { duration: reduce ? 0 : 0.2, ease: EASE_OUT } }}
-          exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -4, transition: { duration: 0.15, ease: EASE_OUT } }}
-          transition={{ layout: SPRING_LAYOUT }}
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: deleting ? 0.55 : 1, transition: { duration: reduce ? 0 : 0.18, ease: EASE_OUT } }}
+          exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.12, ease: EASE_OUT } }}
+          style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 72px' }}
           className={cn(
-            'group/asset bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] shadow-[var(--rafii-shadow-glass)]',
-            selected && 'ring-foreground ring-2 ring-inset'
+            'group/asset bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] ring-1 transition-shadow duration-150',
+            selected ? 'ring-foreground ring-2' : inspected ? 'ring-foreground/45 ring-2' : 'ring-foreground/[0.08] hover:ring-foreground/[0.16]'
           )}
         >
           <button
             type='button'
             onClick={onOpen}
             data-library-open={asset.id}
-            aria-label={`${kindWord} ${title}${video ? ', video thumbnail' : documentPreviewSuffix(asset)}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}${status ? `, ${status.toLowerCase()}` : ''}`}
+            aria-label={`${kindWord} ${title}${video ? ', video thumbnail' : documentPreviewSuffix(asset)}, ${count ? `used in ${count} ${count === 1 ? 'post' : 'posts'}` : 'not used yet'}${status && !status.startsWith('Used') ? `, ${status.toLowerCase()}` : ''}`}
             className={cn(
-              'focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-3 py-2.5 pr-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset',
-              onSelect ? 'pl-14' : 'pl-3',
-              compact ? 'min-h-14 py-1.5' : 'min-h-[76px]'
+              'focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-3 pr-12 text-left outline-none focus-visible:ring-3 focus-visible:ring-inset',
+              onSelect ? 'pl-12' : 'pl-3',
+              compact ? 'min-h-12 py-1.5' : 'min-h-16 py-2'
             )}
           >
             <span
               data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined}
               data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined}
-              className={cn('rafii-quiet relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]', compact ? 'size-10' : 'size-14')}
+              className={cn('bg-foreground/[0.035] relative flex shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]', compact ? 'size-9' : 'size-12')}
             >
               {!mediaAsset ? (
                 <AssetFileThumbnail asset={asset} size='row' loadPreview={nearView} />
               ) : preview.data ? (
-                <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-contain' />
+                <Image src={preview.data} alt='' fill unoptimized sizes='48px' className='object-contain' />
               ) : preview.isError ? (
                 video ? <Icons.video className='text-muted-foreground size-5' aria-hidden /> : <Icons.media className='text-muted-foreground size-5' aria-hidden />
               ) : (
                 <Skeleton className='size-full rounded-none' />
               )}
-              {video ? <Icons.play className='rafii-glass absolute size-5 rounded-full p-1' aria-hidden /> : null}
+              {video ? <Icons.play className='bg-background/85 absolute size-5 rounded-full p-1' aria-hidden /> : null}
             </span>
-            <span className='flex min-w-0 flex-1 flex-col gap-1'>
-              <span className='truncate text-sm font-medium'>{title}</span>
-              {status ? <span className='text-muted-foreground text-xs'>{status}</span> : null}
-              {!compact && asset.aiSummary ? <span className='text-muted-foreground line-clamp-1 text-xs'>{asset.aiSummary}</span> : null}
-              {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{meta || 'Metadata not recorded'}</span> : null}
+            <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+              <span className='truncate text-sm font-medium' title={title}>
+                {title}
+              </span>
+              {!compact ? <span className='text-muted-foreground truncate text-xs tabular-nums'>{[cardMeta(asset), dims && assetKind === 'video' ? dims : null].filter(Boolean).join(' · ')}</span> : null}
             </span>
-            <AnimatedBadge
-              size='sm'
-              status={publishing ? 'loading' : 'neutral'}
-              showIcon={count > 0}
-              icon={publishing || count === 0 ? undefined : <Icons.check className='size-3' />}
-              className={cn('shrink-0', badgeClass(publishing ? 'loading' : 'neutral'), count === 0 && !publishing && 'text-muted-foreground dark:text-muted-foreground')}
-            >
-              {publishing ? 'Publishing' : usageLabel(count)}
-            </AnimatedBadge>
+            <span className='hidden shrink-0 sm:block'>
+              <CardStatusLine status={status} publishing={publishing} />
+            </span>
           </button>
-          {assetKind === 'audio' || video ? <div className={cn('pr-3 pb-3', onSelect ? 'pl-14' : 'pl-3')}><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
-          {footer ? <div className={cn('flex min-w-0 flex-col gap-1.5 pr-3 pb-2.5', onSelect ? 'pl-14' : 'pl-3')}>{footer}</div> : null}
-          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-1.5', compact ? 'top-1.5' : 'top-4')} /> : null}
+          {assetKind === 'audio' || video ? <div className={cn('pr-3 pb-2', onSelect ? 'pl-12' : 'pl-3')}><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
+          {footer ? <div className={cn('flex min-w-0 flex-col gap-1.5 pr-3 pb-2.5', onSelect ? 'pl-12' : 'pl-3')}>{footer}</div> : null}
+          {onSelect ? <SelectToggle title={title} checked={selected} visible={selecting} onChange={onSelect} className={cn('left-2', compact ? 'top-2' : 'top-4')} /> : null}
+          <div className={cn('absolute right-2 z-20 transition-opacity duration-150', compact ? 'top-2' : 'top-4', 'opacity-0 group-hover/asset:opacity-100 group-focus-within/asset:opacity-100 has-[[data-popup-open]]:opacity-100 pointer-coarse:opacity-100', selecting && 'opacity-100')}>
+            <AssetMoreMenu title={title} actions={actions} />
+          </div>
         </motion.div>
       </ContextMenuTrigger>
       <ContextMenuContent ariaLabel={`${kindWord} actions`}>
-        <ContextMenuItem onSelect={onOpen}>
-          <Icons.eye className='text-muted-foreground size-4' aria-hidden />
-          Open
-        </ContextMenuItem>
-        {onSelect ? (
-          <ContextMenuItem onSelect={() => onSelect(!selected, false)}>
-            <Icons.check className='text-muted-foreground size-4' aria-hidden />
-            {selected ? 'Deselect' : 'Select'}
-          </ContextMenuItem>
-        ) : null}
-        {canApprove && mediaAsset ? (
-          <ContextMenuItem onSelect={() => router.push(`/app/queue?asset=${encodeURIComponent(asset.id)}`)}>
-            <Icons.send className='text-muted-foreground size-4' aria-hidden />
-            Use in a post
-          </ContextMenuItem>
-        ) : canEdit ? (
-          <ContextMenuItem onSelect={() => router.push('/app/ideas')}>
-            <Icons.sparkles className='text-muted-foreground size-4' aria-hidden />
-            Open Ideas
-          </ContextMenuItem>
-        ) : null}
-        {onExclude ? (
-          <ContextMenuItem onSelect={onExclude}>
-            <Icons.minus className='text-muted-foreground size-4' aria-hidden />
-            Exclude from this collection
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem onSelect={() => void copyHash(asset.hash)}>
-          <Icons.copy className='text-muted-foreground size-4' aria-hidden />
-          Copy hash
-        </ContextMenuItem>
-        {canEdit ? (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem tone='destructive' disabled={deleting || publishing} onSelect={onDelete}>
-              <Icons.trash className='size-4' aria-hidden />
-              Delete…
-            </ContextMenuItem>
-          </>
-        ) : null}
+        <AssetContextItems actions={actions} />
       </ContextMenuContent>
     </ContextMenu>
   );

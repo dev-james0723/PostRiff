@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { Icons } from '@/components/icons';
 import { AnimatedBadge, type AnimatedBadgeStatus } from '@/components/motion/animated-badge';
-import { FilterSelect, SegmentedControl, StateMessage, Surface } from '@/components/rafii';
+import { SegmentedControl, StateMessage, Surface } from '@/components/rafii';
+import { PageHeader } from '@/components/rafii/page-header';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,18 +20,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/lib/api/client';
-import type { Locator, LibraryFilters as SearchFilters, LibraryScope } from '@/lib/api/library-intelligence-types';
+import type { AssetRef, Locator, LibraryFilters as SearchFilters, LibraryScope } from '@/lib/api/library-intelligence-types';
 import { putSignedUpload } from '@/lib/api/upload';
 import { keys, useAct } from '@/lib/api/hooks';
 import { useAuth } from '@/lib/auth/session';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { bottomClearance } from '@/lib/library/layout';
-import { MAX_SELECTED, assetRefFor, normalizeKey, reconcileSelection, scrollKey, type LibraryKindParam, type LibrarySortParam } from '@/lib/library/url-state';
+import { MAX_SELECTED, assetRefFor, normalizeKey, reconcileSelection, scrollKey, statusBucket, type LibraryKindParam, type LibrarySortParam } from '@/lib/library/url-state';
 import { libraryGates, removedNotice, restoreLibraryState } from '@/lib/library/source-pack';
 import { countLabel, coverageLabel, hitTotalLabel, processingLabel, scopeLabel, storageNotice, totalLabel, type ScopeKind } from '@/lib/library/wording';
 import { kindOf } from '@/lib/media/asset-kinds';
@@ -50,7 +50,7 @@ import { AddMenu } from './intelligence/add-menu';
 import { AnimatedCount } from './intelligence/animated-count';
 import { BatchBar, type SelectedItem } from './intelligence/batch-bar';
 import { CollectionRail } from './intelligence/collection-rail';
-import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewControls } from './intelligence/library-toolbar';
+import { KIND_OPTIONS, LibraryFilters, LibrarySearchField, LibraryViewSwitch } from './intelligence/library-toolbar';
 import { AskLibraryPanel } from './intelligence/ask-library';
 import { SmartCollectionPanel } from './intelligence/smart-collections';
 import { SourcePackFlow, type PackRequest } from './intelligence/source-pack-flow';
@@ -59,6 +59,7 @@ import { HitDetails, resolveHitAsset } from './intelligence/search-results';
 import { useBatchActions } from './intelligence/use-batch-actions';
 import { groupHits, useLibraryIntelligence, useLibrarySearch } from './intelligence/use-library-search';
 import { useLibraryUrlState } from './intelligence/use-library-url-state';
+import { Control, controlClass } from './ui/controls';
 
 const infoContent = {
   title: 'Library',
@@ -86,6 +87,16 @@ const VIDEO_UPLOAD_MIMES = new Set(['video/mp4', 'video/quicktime']);
 const VIDEO_UPLOAD_EXTENSIONS = new Set(['mp4', 'mov', 'm4v']);
 
 const SKELETON_KEYS = Array.from({ length: 8 }, (_, index) => `skeleton-${index}`);
+
+/* Rail | results | inspector (redesign §3). The rail narrows to its icon column while the inspector is docked below 1600 px. */
+const LAYOUT = {
+  wide: 'lg:grid-cols-[13.5rem_minmax(0,1fr)]',
+  narrow: 'lg:grid-cols-[3.25rem_minmax(0,1fr)]'
+} as const;
+const INSPECTOR_LAYOUT = {
+  wide: 'xl:grid-cols-[13.5rem_minmax(0,1fr)_23rem]',
+  narrow: 'xl:grid-cols-[3.25rem_minmax(0,1fr)_23rem]'
+} as const;
 
 /* Grid geometry per density. Comfortable keeps two columns on a 390 px phone so the first item shows in full. */
 const GRID: Record<'comfortable' | 'compact', string> = {
@@ -125,9 +136,9 @@ function UploadTray({ items, progress, onDismiss }: { items: UploadItem[]; progr
           {progress ? uploadingText(progress) : `${done} of ${items.length} uploaded`}
         </h3>
         {!progress && (
-          <Button variant='quiet' size='control' className='h-11' onClick={onDismiss}>
+          <Control tone='ghost' size='sm' onClick={onDismiss}>
             Dismiss
-          </Button>
+          </Control>
         )}
       </div>
       <ul className='flex max-h-60 flex-col gap-0.5 overflow-y-auto px-2 pb-2'>
@@ -178,17 +189,17 @@ function useAnnouncer() {
   return [message, announce] as const;
 }
 
-/** The collection rail sits beside the results from 1024 px; below that it is a one-row switcher. */
-function useWideLayout() {
-  const [wide, setWide] = useState(false);
+/** True from this viewport width: the rail sits beside the results from 1024 px, the inspector docks from 1280 px. */
+function useMinWidth(px: number) {
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
-    const query = window.matchMedia('(min-width: 1024px)');
-    const update = () => setWide(query.matches);
+    const query = window.matchMedia(`(min-width: ${px}px)`);
+    const update = () => setMatches(query.matches);
     update();
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
-  }, []);
-  return wide;
+  }, [px]);
+  return matches;
 }
 
 const RAIL_KEY = 'rafii-library-rail-collapsed';
@@ -222,7 +233,9 @@ function LibraryPage() {
   const upload = useUploadQueue();
   const auth = useAuth();
   const isMobile = useIsMobile();
-  const wide = useWideLayout();
+  const wide = useMinWidth(1024);
+  const docked = useMinWidth(1280);
+  const ultraWide = useMinWidth(1600);
   const { state: url, update, commit } = useLibraryUrlState();
   const intel = useLibraryIntelligence();
   // What this environment switched on (GET …/status): entry points that are off are hidden or explained.
@@ -278,6 +291,8 @@ function LibraryPage() {
   const selection = url.sel;
   const scopeKind: ScopeKind = url.scope === 'selection' && selection.length ? 'selection' : url.collection ? 'collection' : 'workspace';
   const scope = { kind: scopeKind, collectionName: activeCollection?.name ?? null, selectedCount: selection.length };
+  // The scopes that exist right now: the whole Library, the open collection, the selection.
+  const scopeOptions: ScopeKind[] = ['workspace', ...(url.collection ? (['collection'] as const) : []), ...(selection.length ? (['selection'] as const) : [])];
   const searchScope: LibraryScope = useMemo(
     () =>
       scopeKind === 'selection'
@@ -306,6 +321,7 @@ function LibraryPage() {
     query: intelligent ? '' : query,
     tag: url.tag,
     collection: scopeKind === 'collection' ? url.collection : '',
+    status: url.status,
     onlyIds: scopeKind === 'selection' ? selection : null
   });
   const { snapshot, assets } = library;
@@ -326,8 +342,13 @@ function LibraryPage() {
   );
   const groups = useMemo(() => groupHits(search.hits), [search.hits]);
   const hitItems = useMemo(
-    () => groups.map((group) => ({ group, asset: applyOverlay(resolveHitAsset(group, library.byKey)) })).filter((entry): entry is { group: (typeof groups)[number]; asset: LibraryAsset } => entry.asset !== null),
-    [groups, library.byKey, applyOverlay]
+    () =>
+      groups
+        .map((group) => ({ group, asset: applyOverlay(resolveHitAsset(group, library.byKey)) }))
+        .filter((entry): entry is { group: (typeof groups)[number]; asset: LibraryAsset } => entry.asset !== null)
+        // Status is applied to the matches the same way as to the browsed Library.
+        .filter((entry) => url.status === 'all' || statusBucket(entry.asset.processing) === url.status),
+    [groups, library.byKey, applyOverlay, url.status]
   );
   const orderedIds = intelligent ? hitItems.map((entry) => entry.asset.id) : shown.map((asset) => asset.id);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -616,6 +637,25 @@ function LibraryPage() {
     }
   }, []);
 
+  // The inspector docks beside the results from 1280 px (non-modal); below that it is a sheet, on phones a drawer.
+  const dockedOpen = docked && !isMobile && detailOpen;
+  const railNarrow = wide && (railCollapsed || (dockedOpen && !ultraWide));
+
+  // "/" focuses the search from anywhere on the page (not while typing elsewhere).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const field = document.querySelector<HTMLInputElement>('input[name="library-search"]');
+      if (!field) return;
+      event.preventDefault();
+      field.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const track = useNowPlaying((state) => state.track);
   const playerExpanded = useNowPlaying((state) => state.expanded);
   const clearance = bottomClearance({ mobile: isMobile, playerOpen: Boolean(track), playerExpanded: playerExpanded && track?.kind !== 'audio' });
@@ -691,12 +731,11 @@ function LibraryPage() {
   const askOff = url.panel === 'ask' && intel.reachable && !gates.ask.enabled ? gates.ask.reason : null;
   const llm = intel.status.data?.providers?.llm;
   const summariesAvailable = typeof llm?.available === 'boolean' ? llm.available : null;
-  const defaultSort: LibrarySortParam = library.hasTimestamps ? 'newest' : 'stored';
   const sortOptions: LibrarySortParam[] = [...(library.hasTimestamps ? (['newest'] as const) : []), 'stored', 'largest'];
   const exactCounts = library.complete && !intelligent;
   const kindCounts = intelligent ? (search.facets?.kinds as Partial<Record<LibraryKindParam, number>> | undefined) ?? null : exactCounts ? library.kindCounts : null;
   const notice = library.storage ? storageNotice(library.storage.usedBytes, library.storage.limitBytes) : null;
-  const filtersActive = url.kind !== 'all' || Boolean(url.tag) || url.use !== 'all' || scopeKind !== 'workspace';
+  const filtersActive = url.kind !== 'all' || Boolean(url.tag) || url.use !== 'all' || url.status !== 'all' || scopeKind !== 'workspace';
   const normalizedQuery = query.trim();
   const density = url.density;
 
@@ -749,6 +788,7 @@ function LibraryPage() {
     onSelect: (on: boolean, extend: boolean) => toggle(asset.id, on, extend),
     density,
     onExclude: activeSmart && canEdit ? () => void batch.execute('collection-exclude', [asset.id], { collectionId: url.collection, collectionName: activeCollection?.name }) : undefined,
+    inspected: Boolean(url.asset) && normalizeKey(url.asset) === normalizeKey(asset.id),
     footer
   });
 
@@ -772,10 +812,10 @@ function LibraryPage() {
         title='Couldn’t load the library'
         description={snapshot.error instanceof Error ? snapshot.error.message : undefined}
         action={
-          <Button variant='glass' size='control' disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}>
+          <Control tone='secondary' disabled={snapshot.isFetching} onClick={() => void snapshot.refetch()}>
             <Icons.refresh className={cn(snapshot.isFetching && 'animate-spin')} aria-hidden />
             Try again
-          </Button>
+          </Control>
         }
       />
     );
@@ -793,10 +833,10 @@ function LibraryPage() {
           description={canEdit ? 'Add photos, videos, audio, documents or files to your Library.' : 'Only editors can add assets.'}
           action={
             canEdit ? (
-              <Button variant='action' size='control' onClick={() => filePicker.current?.click()} disabled={library.revision === null || uploadingFile}>
+              <Control tone='secondary' onClick={() => filePicker.current?.click()} disabled={library.revision === null || uploadingFile}>
                 <Icons.upload aria-hidden />
                 Choose assets
-              </Button>
+              </Control>
             ) : undefined
           }
         />
@@ -815,13 +855,13 @@ function LibraryPage() {
             description={search.coverage && search.coverage.pendingAssetCount > 0 ? `${search.coverage.pendingAssetCount} ${search.coverage.pendingAssetCount === 1 ? 'item is' : 'items are'} still being indexed and may match later.` : undefined}
             action={
               <div className='flex flex-wrap justify-center gap-2'>
-                <Button variant='glass' size='control' onClick={() => setQuery('')}>
+                <Control tone='secondary' onClick={() => setQuery('')}>
                   Clear search
-                </Button>
+                </Control>
                 {scopeKind !== 'workspace' ? (
-                  <Button variant='quiet' size='control' onClick={() => update({ collection: '', scope: 'all' })}>
+                  <Control tone='ghost' onClick={() => update({ collection: '', scope: 'all' })}>
                     Search entire Library
-                  </Button>
+                  </Control>
                 ) : null}
               </div>
             }
@@ -835,9 +875,9 @@ function LibraryPage() {
           )
         )}
         {search.nextCursor ? (
-          <Button variant='glass' size='control' className='self-center' disabled={search.loadingMore} onClick={search.loadMore}>
+          <Control tone='secondary' className='self-center' disabled={search.loadingMore} onClick={search.loadMore}>
             {search.loadingMore ? 'Loading…' : 'Show more results'}
-          </Button>
+          </Control>
         ) : null}
       </div>
     );
@@ -853,29 +893,68 @@ function LibraryPage() {
               ? 'This collection is empty'
               : url.kind !== 'all'
                 ? `No ${KIND_OPTIONS.find((option) => option.value === url.kind)?.label.toLowerCase() ?? 'items'} match these filters`
-                : url.use === 'unused'
+                : url.status === 'processing'
+                  ? 'Nothing is processing'
+                  : url.status === 'attention'
+                    ? 'Nothing needs attention'
+                    : url.status === 'ready'
+                      ? 'No ready items match these filters'
+                      : url.use === 'unused'
                   ? 'Every asset is used in a post'
                   : url.use === 'used'
                     ? 'No asset is used in a post yet'
                     : 'No assets match these filters'
         }
         action={
-          <Button
-            variant='glass'
-            size='control'
+          <Control
+            tone='secondary'
             onClick={() => {
               if (normalizedQuery) setQuery('');
-              else update({ use: 'all', kind: 'all', tag: '', collection: '', scope: 'all' });
+              else update({ use: 'all', kind: 'all', status: 'all', tag: '', collection: '', scope: 'all' });
             }}
           >
             {normalizedQuery ? 'Clear search' : 'Show all'}
-          </Button>
+          </Control>
         }
       />
     );
   } else {
     content = renderItems(shown.map((asset) => ({ asset })));
   }
+
+  const detailProps = {
+    asset: current,
+    open: detailOpen,
+    onOpenChange: (open: boolean) => {
+      if (!open) update({ asset: '' });
+    },
+    uses: current ? library.usesOf(current.id) : [],
+    publishing: current ? library.isPublishing(current.id) : false,
+    canEdit,
+    canApprove,
+    isOwner,
+    deleting: current ? deletingIds.has(current.id) : false,
+    currentUserId: auth.user?.id ?? null,
+    platforms: library.platforms,
+    onDelete: setPendingDelete,
+    intelligence: intel.reachable,
+    focusLocator,
+    onAnnounce: announce,
+    onOpenAsset: (assetId: string) => {
+      setFocusLocator(null);
+      update({ asset: assetId });
+    },
+    onUseInDraft:
+      canEdit && gates.packs.enabled
+        ? (asset: LibraryAsset, ref: AssetRef) => {
+            askForPack('detail', [ref], [assetTitle(asset)]);
+            // The open item travels in the pack's return state, so coming back opens it again.
+            update({ asset: '' });
+          }
+        : undefined,
+    voiceEnabled: gates.voice.enabled,
+    voiceNote: gates.voice.reason
+  };
 
   const headerActions = canEdit ? (
     <AddMenu
@@ -889,7 +968,10 @@ function LibraryPage() {
   ) : undefined;
 
   return (
-    <PageContainer pageTitle='Library' infoContent={infoContent} pageHeaderAction={headerActions}>
+    <PageContainer infoContent={infoContent}>
+      <div data-library-page='' className='contents'>
+      {/* Title and the one primary Add on one row at every width (redesign §3). */}
+      <PageHeader title='Library' infoContent={infoContent} actions={headerActions} className='flex-row flex-wrap items-center justify-between gap-3 md:items-center' />
       <div {...getRootProps({ className: 'relative flex min-w-0 flex-1 flex-col gap-4' })}>
         <input {...getInputProps({ 'aria-label': 'Drop assets into Library' })} />
         <input
@@ -907,12 +989,14 @@ function LibraryPage() {
           {announcement}
         </p>
 
-        <div className={cn('grid min-w-0 gap-3 lg:gap-x-8', railCollapsed && wide ? 'lg:grid-cols-[2.75rem_minmax(0,1fr)]' : 'lg:grid-cols-[13.5rem_minmax(0,1fr)]')}>
+        <div className={cn('grid min-w-0 items-start gap-3 lg:gap-x-6', LAYOUT[railNarrow ? 'narrow' : 'wide'], dockedOpen && INSPECTOR_LAYOUT[railNarrow ? 'narrow' : 'wide'])}>
           <div className='min-w-0 lg:col-start-2 lg:row-start-1'>
             <LibrarySearchField
               value={query}
               onChange={setQuery}
               scope={scope}
+              scopeOptions={scopeOptions}
+              onScope={(kind) => update(kind === 'workspace' ? { collection: '', scope: 'all' } : kind === 'selection' ? { scope: 'selection' } : { scope: 'all' })}
               searching={intelligent && search.loading}
               aside={
                 gates.ask.enabled ? (
@@ -937,54 +1021,34 @@ function LibraryPage() {
             active={url.collection}
             onSelect={(collectionId) => update({ collection: collectionId, scope: collectionId ? 'collection' : 'all' })}
             canEdit={canEdit}
-            collapsed={railCollapsed && wide}
+            collapsed={railNarrow}
             onCollapsedChange={collapseRail}
             storage={library.storage ?? null}
             smartCollections={intel.reachable}
             onAnnounce={announce}
           />
 
-          <div className='flex min-w-0 flex-col gap-3 lg:col-start-2 lg:row-start-2'>
+          <div className='min-w-0 lg:col-start-2 lg:row-start-2'>
             <LibraryFilters
               use={url.use}
               onUse={(value) => update({ use: value })}
               counts={exactCounts ? library.counts : null}
               kind={url.kind}
               onKind={(value) => update({ kind: value })}
-              typeSelect={
-                <FilterSelect
-                  id='library-kind'
-                  label='Type'
-                  value={url.kind}
-                  onChange={(value) => update({ kind: value as LibraryKindParam })}
-                  options={KIND_OPTIONS.map((option) => ({ value: option.value, label: kindCounts && typeof kindCounts[option.value] === 'number' ? `${option.label} (${kindCounts[option.value]})` : option.label }))}
-                />
-              }
+              kindCounts={kindCounts}
+              status={url.status}
+              onStatus={(value) => update({ status: value })}
+              statusCounts={exactCounts ? library.statusCounts : null}
               tag={url.tag}
               onTag={(value) => update({ tag: value })}
               tags={library.tags}
               sort={library.sort}
               onSort={(value) => update({ sort: value })}
               sortOptions={sortOptions}
-              defaultSort={defaultSort}
               searching={intelligent}
-            />
-            <LibraryViewControls
-              status={statusLine}
-              viewSwitch={
-                <SegmentedControl
-                  label='Library view'
-                  value={url.mode}
-                  onChange={(value) => update({ mode: value })}
-                  widths='content'
-                  options={[
-                    { value: 'gallery', label: 'Gallery' },
-                    { value: 'list', label: 'List' }
-                  ]}
-                />
-              }
-              density={density}
-              onDensity={(value) => update({ density: value })}
+              onClear={() => update({ use: 'all', kind: 'all', status: 'all', tag: '' })}
+              summary={statusLine}
+              view={<LibraryViewSwitch mode={url.mode} onMode={(value) => update({ mode: value })} density={density} onDensity={(value) => update({ density: value })} />}
             />
           </div>
 
@@ -1003,13 +1067,12 @@ function LibraryPage() {
                 action={
                   pendingFile.current ? (
                     <div className='flex gap-2'>
-                      <Button variant='glass' size='control' className='h-11' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>
+                      <Control tone='secondary' size='sm' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>
                         Retry
-                      </Button>
-                      <Button
-                        variant='quiet'
-                        size='control'
-                        className='h-11'
+                      </Control>
+                      <Control
+                        tone='ghost'
+                        size='sm'
                         onClick={() => {
                           const pending = pendingFile.current;
                           if (pending)
@@ -1023,7 +1086,7 @@ function LibraryPage() {
                         }}
                       >
                         Remove pending upload
-                      </Button>
+                      </Control>
                     </div>
                   ) : undefined
                 }
@@ -1037,9 +1100,9 @@ function LibraryPage() {
                 title='Documents could not be loaded'
                 description='Your media remains available. Retry to load the full Library.'
                 action={
-                  <Button variant='glass' size='control' className='h-11' onClick={() => void library.normalized.refetch()}>
+                  <Control tone='secondary' size='sm' onClick={() => void library.normalized.refetch()}>
                     Retry Library
-                  </Button>
+                  </Control>
                 }
               />
             ) : null}
@@ -1098,9 +1161,9 @@ function LibraryPage() {
             </div>
 
             {!asking && !intelligent && library.normalized.hasNextPage ? (
-              <Button variant='glass' size='control' className='self-center' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>
+              <Control tone='secondary' className='self-center' disabled={library.normalized.isFetchingNextPage} onClick={() => void library.normalized.fetchNextPage()}>
                 Load more assets
-              </Button>
+              </Control>
             ) : null}
 
             <BatchBar
@@ -1132,6 +1195,12 @@ function LibraryPage() {
               stickyBottom={clearance.stickyBottom}
             />
           </div>
+
+          {dockedOpen ? (
+            <div className='hidden min-w-0 self-stretch xl:col-start-3 xl:row-span-4 xl:row-start-1 xl:block'>
+              <AssetDetail docked {...detailProps} />
+            </div>
+          ) : null}
         </div>
 
         <AnimatePresence>
@@ -1157,40 +1226,9 @@ function LibraryPage() {
       {/* Room for the Now Playing bar above the tab bar, so it never covers the last result or action. */}
       <div aria-hidden data-library-bottom-clearance='' style={{ height: clearance.spacer }} />
 
-      <AssetDetail
-        asset={current}
-        open={detailOpen}
-        onOpenChange={(open) => {
-          if (!open) update({ asset: '' });
-        }}
-        uses={current ? library.usesOf(current.id) : []}
-        publishing={current ? library.isPublishing(current.id) : false}
-        canEdit={canEdit}
-        canApprove={canApprove}
-        isOwner={isOwner}
-        deleting={current ? deletingIds.has(current.id) : false}
-        currentUserId={auth.user?.id ?? null}
-        platforms={library.platforms}
-        onDelete={setPendingDelete}
-        intelligence={intel.reachable}
-        focusLocator={focusLocator}
-        onAnnounce={announce}
-        onOpenAsset={(assetId) => {
-          setFocusLocator(null);
-          update({ asset: assetId });
-        }}
-        onUseInDraft={
-          canEdit && gates.packs.enabled
-            ? (asset, ref) => {
-                askForPack('detail', [ref], [assetTitle(asset)]);
-                // The open item travels in the pack's return state, so coming back opens it again.
-                update({ asset: '' });
-              }
-            : undefined
-        }
-        voiceEnabled={gates.voice.enabled}
-        voiceNote={gates.voice.reason}
-      />
+      </div>
+
+      {!dockedOpen ? <AssetDetail {...detailProps} /> : null}
 
       <SourcePackFlow
         request={packRequest}
@@ -1219,13 +1257,12 @@ function LibraryPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel variant='glass' size='control'>
+            <AlertDialogCancel variant='glass' className={controlClass({ tone: 'secondary' })}>
               Keep
             </AlertDialogCancel>
             <AlertDialogAction
               variant='destructive'
-              size='control'
-              className='rounded-[var(--rafii-radius-control)]'
+              className={controlClass({ tone: 'danger' })}
               onClick={() => {
                 if (pendingDelete) void remove(pendingDelete);
                 setPendingDelete(null);

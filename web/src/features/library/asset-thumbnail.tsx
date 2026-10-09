@@ -14,7 +14,7 @@ import { peaksToBars } from '@/lib/library/wording';
 
 export type AssetThumbnailSize = 'gallery' | 'row' | 'detail';
 const SIZE_CLASS: Record<AssetThumbnailSize, string> = {
-  gallery: 'aspect-square w-full',
+  gallery: 'aspect-[4/3] w-full',
   row: 'size-14 shrink-0',
   detail: 'mx-auto aspect-[3/4] max-h-[50vh] w-full max-w-sm'
 };
@@ -34,10 +34,10 @@ export function documentPreviewSuffix(asset: Asset) {
 
 function FileFallback({ asset, size, preparing = false }: { asset: Asset; size: AssetThumbnailSize; preparing?: boolean }) {
   return (
-    <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview={preparing ? 'preparing' : 'unavailable'} className={cn('rafii-quiet relative flex flex-col items-center justify-center gap-2 overflow-hidden p-2', SIZE_CLASS[size])}>
-      <Icons.page className={cn('text-muted-foreground size-7', size === 'row' && 'size-4')} aria-hidden />
-      <span className={cn('text-muted-foreground text-center text-xs', size === 'row' && 'text-[7px]')}>{preparing ? 'Preparing preview' : 'Preview unavailable'}</span>
-      {size !== 'row' ? <span className='text-muted-foreground text-[10px]'>{extensionOf(asset).toUpperCase()}</span> : null}
+    <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview={preparing ? 'preparing' : 'unavailable'} className={cn('bg-foreground/[0.035] relative flex flex-col items-center justify-center gap-1.5 overflow-hidden p-2', SIZE_CLASS[size])}>
+      <Icons.page className={cn('text-muted-foreground size-6', size === 'row' && 'size-4')} aria-hidden />
+      <span className={cn('text-muted-foreground text-center text-xs', size === 'row' && 'sr-only')}>{preparing ? 'Preparing preview' : 'Preview unavailable'}</span>
+      {size !== 'row' ? <span className='text-muted-foreground text-[10px] font-medium tracking-wide'>{extensionOf(asset).toUpperCase()}</span> : null}
     </div>
   );
 }
@@ -68,9 +68,10 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
     </div>
   );
   return (
-    <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview='first-page-raster' className={cn('rafii-quiet relative overflow-hidden bg-white', SIZE_CLASS[size])}>
-      <Image src={query.data} alt={`First page of ${asset.originalFilename || 'document'}`} width={1000} height={1400} unoptimized onError={() => setImageFailed(true)} className='h-full w-full object-contain object-top' />
-      {size !== 'row' ? <span className='rafii-glass absolute right-2 bottom-2 rounded-full px-2 py-1 text-[9px] font-medium'>{extensionOf(asset).toUpperCase()} · PAGE 1</span> : null}
+    <div data-library-thumbnail={extensionOf(asset)} data-thumbnail-preview='first-page-raster' className={cn('relative overflow-hidden bg-white', SIZE_CLASS[size])}>
+      {/* A tile shows the top of the real page at a legible scale; the detail shows the whole page. */}
+      <Image src={query.data} alt={`First page of ${asset.originalFilename || 'document'}`} width={1000} height={1400} unoptimized onError={() => setImageFailed(true)} className={cn('h-full w-full object-top', size === 'detail' ? 'object-contain' : 'object-cover')} />
+      {size !== 'row' ? <span className='bg-background/90 text-foreground/80 ring-foreground/10 absolute bottom-2 left-2 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1'>{extensionOf(asset).toUpperCase()} · PAGE 1</span> : null}
     </div>
   );
 }
@@ -87,7 +88,7 @@ function AudioCover({ asset, size, peaks }: { asset: Asset; size: AssetThumbnail
       aria-hidden='true'
       data-library-thumbnail={extension.toLowerCase()}
       data-thumbnail-preview={bars ? 'audio-waveform' : 'audio-file'}
-      className={cn('rafii-quiet relative flex flex-col items-center justify-center gap-3 overflow-hidden p-3', SIZE_CLASS[size], size === 'detail' && 'aspect-[16/7]')}
+      className={cn('bg-foreground/[0.035] relative flex flex-col items-center justify-center gap-3 overflow-hidden p-3', SIZE_CLASS[size], size === 'detail' && 'aspect-[16/7]')}
     >
       {bars ? (
         <div className={cn('flex w-full items-center justify-center gap-[2px]', size === 'row' ? 'h-8' : size === 'detail' ? 'h-24' : 'h-16')}>
