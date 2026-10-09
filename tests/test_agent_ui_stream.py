@@ -396,6 +396,17 @@ class Failures(Base):
         self.assertEqual([(r["kind"], r["codes"]) for r in rejected], [("generate", {"component_denied": 1, "unresolved_ref": 1})])
         self.assertNotIn("Bogus", " ".join(logs.output))
 
+    def test_rejection_log_is_a_fixed_vocabulary(self):
+        from postriff_phase2.agent_runtime_v2 import ui_stream as stream
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            stream._log_rejected("generate", ["type-mismatch:title", "missing-required:root", "unresolved_ref:x", "mydraftsecret", "source_not_query:s1"])
+        record = json.loads(logs.records[-1].getMessage())
+        self.assertEqual(set(record), {"event", "kind", "codes", "errorCount"})
+        self.assertEqual(record["codes"], {"missing-required": 1, "other": 1, "source_not_query": 1, "type-mismatch": 1, "unresolved_ref": 1})
+        self.assertEqual((record["kind"], record["errorCount"]), ("generate", 5))
+        for leaked in ("title", "root", "mydraftsecret", "s1"):
+            self.assertNotIn(leaked, json.dumps(record["codes"]) + record["kind"])
+
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
         self.transport.scripts.append([("delta", GOOD_PROGRAM), ("final", usage_final(1200, 16_000))])   # the first attempt costs ~8.1k

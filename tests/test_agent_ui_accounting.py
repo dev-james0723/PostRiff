@@ -100,14 +100,16 @@ class Accounting(unittest.TestCase):
         with self.assertRaises(AlphaError) as raised:
             m.reserve_attempt(self.runtime, self.cur, auth(), artifact3, third, self.plan(40_000))
         self.assertEqual(raised.exception.code, "ui_budget", "the chain never exceeds its reserved portion")
-        # Unknown parent spend no longer blocks a portion that was reserved for the view up front.
+        # An unknown parent spend still refuses the view (unknown is never zero), allowance or not.
         parent_unknown = self.db.add_parent(ceiling=128_000, spent_state="unknown", ui_allowance=40_000)
         artifact4, attempt4 = self.attempt(parent_unknown)
-        self.assertEqual(m.reserve_attempt(self.runtime, self.cur, auth(), artifact4, attempt4, self.plan(9_000))["room"], 40_000)
-        # An explicit edit keeps its own per-request chain, unchanged by the allowance.
+        with self.assertRaises(AlphaError) as unknown:
+            m.reserve_attempt(self.runtime, self.cur, auth(), artifact4, attempt4, self.plan(9_000))
+        self.assertEqual(unknown.exception.code, "ui_budget_unknown")
+        # An explicit edit keeps the per-request allowance of the turn's own estimate: the presentation portion is not added.
         _artifact5, edit = self.attempt(parent, "edit")
         chain = m.chain_for("edit", edit["attemptId"])
-        self.assertEqual(m.allowance(self.cur, WS, parent, chain)["room"], 128_000)
+        self.assertEqual(m.allowance(self.cur, WS, parent, chain)["room"], 88_000)
 
     def test_turn_without_an_allowance_keeps_the_original_combined_rule(self):
         parent = self.db.add_parent(ceiling=88_000, spent=112_163)

@@ -7,10 +7,11 @@ edit) reserves its own hold on the existing usage ledger BEFORE the provider is 
   feature attribution (LEDGER_FEATURES) and the parent run keeps the turn's lineage; no new ledger feature;
 - the parent turn's credit authority is inherited (``AgentRuntimeService._reservation_approval``); a credit-mode workspace
   without one is refused by the ledger exactly like a text turn, never run unbilled;
-- the combined admission plan: a presentation chain (initial + repair + explicit retries) must fit in the room the person's
-  original turn left — its reserved ceiling minus its settled spend minus what earlier UI attempts used or still hold. An
-  explicit edit is a new request with the same per-request allowance as the turn, shared only with its own repair. An
-  unknown parent or attempt spend is never treated as zero: the presenter is refused (native answer, no call);
+- the combined admission plan: a turn admitted with a presentation allowance (D-A47, James's decision 2026-10-09) gives its
+  presentation chain (initial + repair + explicit retries) exactly that portion minus what earlier UI attempts used or still
+  hold; a turn without one keeps the original rule (its reserved ceiling minus its settled spend minus earlier UI attempts).
+  An explicit edit is a new request with the same per-request allowance as the turn's own estimate, shared only with its own
+  repair. An unknown parent or attempt spend is never treated as zero: the presenter is refused (native answer, no call);
 - no hidden retries: one reservation is one physical request (the presenter client uses ``max_retries=0``);
 - settlement: known usage → ``completed`` at the priced cost; a provider refusal before any work (4xx/429) or an attempt
   that was never dispatched → ``failed``/0 (released); anything uncertain (timeout, 5xx, a cut stream, a cancel after
@@ -77,8 +78,10 @@ USAGE_ROWS_SQL = (
 
 # The presentation part of a turn's admission plan (D-A47): one initial attempt and its single repair, each at the worst-case
 # input (the largest prompt asset, the full context block, a full-size rejected or base source and an edit instruction) and the
-# fixed output cap. The turn reserves it together with its own estimate under the same credit authority, so the combined plan is
-# covered when the turn is admitted, and how the Manager's own share settles can no longer take the view's room away.
+# fixed output cap. It is an admission-time check: the turn's reservation includes it (so a turn that could not also afford its
+# view is known when it starts), it is released with the turn's settlement, and each presenter attempt then reserves its own
+# hold against the workspace, person-day, founder and credit limits. How the Manager's share settles no longer takes the view's
+# room away. Turns that cannot present, phone/credit turns and founder turns with founder views off reserve no allowance.
 ALLOWANCE_ATTEMPTS = 2
 ALLOWANCE_PROMPT_BYTES = 64 * 1024 + 24 * 1024 + 128 * 1024 + 2 * 1024
 
@@ -96,8 +99,11 @@ def presentation_allowance(cfg) -> int | None:
 
 def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTATION_CHAIN) -> dict:
     """{ceiling, parentSpent, chainUsed, room}: the room left for one more presenter attempt on `chain`. `room` is None when a
-    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered. A turn that reserved a
-    presentation allowance (D-A47) gives its presentation chain exactly that portion; other turns keep the original rule."""
+    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered. A turn admitted with a
+    presentation allowance (D-A47, James's decision of 2026-10-09) gives its presentation chain exactly that portion: the
+    Manager's own share settling above its estimate no longer takes the view's room, while every attempt is still reserved on
+    the ledger against the workspace, person-day, founder and credit limits. An unknown parent spend still refuses the view.
+    Other turns keep the original rule (turn ceiling minus the turn's settled spend)."""
     cur.execute(USAGE_ROWS_SQL, (workspace_id, parent_key(parent_run_id), parent_key(parent_run_id) + ":ui:%"))
     ceiling, parent_spent, used, ui_allowance = None, None, 0, None
     for key, estimate, actual, _unknown, row_chain, row_allowance in cur.fetchall() or []:
@@ -111,14 +117,16 @@ def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTAT
         used += int(actual) if actual is not None else int(estimate or 0)
     if ceiling is None:
         return {"ceiling": None, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_unmetered"}
-    if chain == PRESENTATION_CHAIN and ui_allowance is not None:
-        return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ui_allowance - used, "reason": None,
-                "allowance": ui_allowance}
     if chain == PRESENTATION_CHAIN:
         if parent_spent is None:
-            return {"ceiling": ceiling, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_spend_unknown"}
+            return {"ceiling": ceiling, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_spend_unknown",
+                    **({"allowance": ui_allowance} if ui_allowance is not None else {})}
+        if ui_allowance is not None:
+            return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ui_allowance - used, "reason": None,
+                    "allowance": ui_allowance}
         return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - parent_spent - used, "reason": None}
-    return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - used, "reason": None}
+    # An explicit edit has the same per-request allowance as the turn's own estimate (the presentation portion is not added).
+    return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ceiling - (ui_allowance or 0) - used, "reason": None}
 
 
 # --- reserve ---------------------------------------------------------------------------------------------------------------

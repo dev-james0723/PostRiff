@@ -53,15 +53,30 @@ class _Service:
         self.repository, self.ideas, self.ledger = _Repo(), _Ideas(), _Ledger()
 
 
-def open_run(cfg):
+def open_run(cfg, *, text="Show my drafts", modality="text", delegation_id=None, refuse_first=None, prepare=None):
     service = _Service()
     rt = AgentRuntimeService(service, cfg, model_factory=None, clock=lambda: 0)
     rt._reap_stale_turns = lambda cur, workspace_id: None
     approvals = []
     rt._reservation_approval = lambda cur, ws, principal, revision, cost, route, run_id: (approvals.append(cost) or (None, {}))
-    run_id, reservation = rt._open_run("ws-1", "token", "conv-1", "Show my drafts", "text", "agent:k1", "trace_1", [],
-                                       model="rafii-agent", reserve_for="standard_reasoning")
+    if refuse_first is not None:
+        original = service.ledger.reserve
+        def reserve(*args, **kwargs):
+            if not service.ledger.calls and not getattr(reserve, "refused", False):
+                reserve.refused = True
+                raise refuse_first
+            return original(*args, **kwargs)
+        service.ledger.reserve = reserve
+    if prepare is not None:
+        prepare(rt)
+    run_id, reservation = rt._open_run("ws-1", "token", "conv-1", text, modality, "agent:k1", "trace_1", [],
+                                       model="rafii-agent", reserve_for="standard_reasoning", delegation_id=delegation_id)
     return service.ledger.calls, reservation, approvals, cfg
+
+
+def turn_estimate(cfg):
+    route = cfg.route("standard_reasoning", reason="test")
+    return cfg.estimate_usd_micro(route.model, 24_000, 4_000)
 
 
 class TurnAllowance(unittest.TestCase):
@@ -97,6 +112,64 @@ class TurnAllowance(unittest.TestCase):
         route = cfg.route(WORKLOAD, reason="test")
         one = cfg.estimate_usd_micro(route.model, -(-ui_metering.ALLOWANCE_PROMPT_BYTES // 3) + 16, MAX_OUTPUT_TOKENS)
         self.assertEqual(ui_metering.presentation_allowance(cfg), 2 * one)
+
+
+class TurnsThatCannotPresent(unittest.TestCase):
+    def assert_estimate_only(self, calls, cfg):
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["estimate"], turn_estimate(cfg))
+        self.assertNotIn("uiAllowanceUsdMicro", calls[0]["meta"])
+
+    def test_voice_without_a_request_for_a_view(self):
+        calls, _r, _a, cfg = open_run(make_cfg(), text="What's on today?", modality="voice")
+        self.assert_estimate_only(calls, cfg)
+
+    def test_voice_that_asks_for_a_view_gets_the_allowance(self):
+        calls, _r, _a, cfg = open_run(make_cfg(), text="Show my drafts in a table", modality="voice")
+        self.assertIn("uiAllowanceUsdMicro", calls[0]["meta"])
+
+    def test_greeting_or_acknowledgement(self):
+        for text in ("hi", "thanks", "好的"):
+            calls, _r, _a, cfg = open_run(make_cfg(), text=text)
+            self.assert_estimate_only(calls, cfg)
+
+    def test_delegated_turn(self):
+        calls, _r, _a, cfg = open_run(make_cfg(), delegation_id="d-1")
+        self.assert_estimate_only(calls, cfg)
+
+    def test_credit_authorised_turn_keeps_the_managers_own_quote(self):
+        def credit(rt):
+            rt.reservation_approval = lambda *args: ("authority", {})
+        calls, _r, _a, cfg = open_run(make_cfg(), prepare=credit)
+        self.assert_estimate_only(calls, cfg)
+
+    def test_founder_turn_with_founder_views_off(self):
+        def founder(rt):
+            rt.founder = {"namespace": "founder:live"}
+        calls, _r, _a, cfg = open_run(make_cfg(RAFII_GENUI_FOUNDER_ENABLED=None), prepare=founder)
+        self.assert_estimate_only(calls, cfg)
+        calls_on, _r, _a, _cfg = open_run(make_cfg(), prepare=founder)
+        self.assertIn("uiAllowanceUsdMicro", calls_on[0]["meta"])
+
+    def test_an_allowance_that_cannot_be_computed_never_refuses_the_turn(self):
+        from unittest import mock
+        with mock.patch.object(ui_metering, "presentation_allowance", side_effect=RuntimeError("boom")):
+            calls, _r, _a, cfg = open_run(make_cfg())
+        self.assert_estimate_only(calls, cfg)
+
+    def test_a_budget_stop_on_the_combined_plan_admits_the_turn_alone(self):
+        from postriff_alpha.domain import AlphaError
+        for error in (AlphaError("stop", 402, code="budget_exhausted"), AlphaError("slow down", 429, code="rate"),
+                      AlphaError("cap", 409, code="founder_budget")):
+            calls, reservation, approvals, cfg = open_run(make_cfg(), refuse_first=error)
+            self.assert_estimate_only(calls, cfg)
+            self.assertEqual(approvals, [turn_estimate(cfg) + ui_metering.presentation_allowance(cfg), turn_estimate(cfg)])
+            self.assertEqual(reservation["estimateUsdMicro"], turn_estimate(cfg))
+
+    def test_other_refusals_still_refuse_the_turn(self):
+        from postriff_alpha.domain import AlphaError
+        with self.assertRaises(AlphaError):
+            open_run(make_cfg(), refuse_first=AlphaError("conflict", 409, code="other_conflict"))
 
 
 if __name__ == "__main__":

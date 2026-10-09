@@ -669,20 +669,42 @@ class AgentRuntimeService:
                 estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
                 if estimate is None:
                     raise AlphaError("Configure verified prices for the agent model before using it.", 503, code="price_unknown")
-                # D-A47: where generated views are on, the turn's admission plan also covers its presentation chain, reserved here
-                # under the same credit authority; the view then draws only on that portion (ui_metering.allowance).
-                ui_allowance = None
-                if self.cfg.genui_for(workspace_id).get("enabled"):
-                    from . import ui_metering
-                    ui_allowance = ui_metering.presentation_allowance(self.cfg)
-                planned = estimate + (ui_allowance or 0)
-                authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], planned, route, run_id)
-                reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", planned, f"agent:{run_id}", charge_batch=False,
-                                                          provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
-                                                          meta={"via": "rafii_agent", "traceId": trace_id, **extra_meta,
-                                                                **({"uiAllowanceUsdMicro": str(ui_allowance)} if ui_allowance else {})})
+                # D-A47 (James, 2026-10-09): a turn that can show a generated view is admitted with a small presentation portion;
+                # the view then draws only on that portion (ui_metering.allowance). The portion never costs the answer itself.
+                ui_allowance = self._presentation_allowance(workspace_id, text, modality, delegation_id)
+                def reserve(amount, allowance):
+                    authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], amount, route, run_id)
+                    return self.service.ledger.reserve(cur, workspace_id, principal, "text_model", amount, f"agent:{run_id}", charge_batch=False,
+                                                       provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
+                                                       meta={"via": "rafii_agent", "traceId": trace_id, **extra_meta,
+                                                             **({"uiAllowanceUsdMicro": str(allowance)} if allowance else {})})
+                try:
+                    reservation = reserve(estimate + (ui_allowance or 0), ui_allowance)
+                except AlphaError as error:
+                    if not ui_allowance or not (error.status in (402, 429) or getattr(error, "code", None) == "founder_budget"):
+                        raise
+                    # The combined plan did not fit a budget stop: admit the turn alone; its view then follows the original rule.
+                    reservation = reserve(estimate, None)
                 reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's own ceiling (follow-up chips fit inside it)
         return run_id, reservation
+
+    def _presentation_allowance(self, workspace_id, text, modality, delegation_id):
+        """D-A47: the presentation portion for a turn that can show a generated view, else None (the turn reserves only its own
+        estimate). None for: generated views off for this workspace (founder views need their own flag); delegated and
+        credit-authorised turns (phone), whose quote must stay the Manager's own; voice without a request for a view; greetings
+        and acknowledgements. A failure to compute it is treated as None, never as a reason to refuse the turn."""
+        try:
+            from . import ui_metering, ui_projection
+            founder = isinstance(getattr(self, "founder", None), dict)
+            if not self.cfg.genui_for(workspace_id, founder=founder).get("enabled"):
+                return None
+            if delegation_id or (getattr(self, "reservation_approval", None) is not None and not founder):
+                return None
+            if (modality == "voice" and not ui_projection.wants_ui(text)) or ui_projection.is_greeting_or_ack(text):
+                return None
+            return ui_metering.presentation_allowance(self.cfg)
+        except Exception:  # noqa: BLE001 — an optional view never blocks the answer
+            return None
 
     def _reservation_approval(self, cur, workspace_id, principal, revision, cost, route, run_id):
         """Optional authenticated transport authority; text/browser retain their existing credit gates."""
