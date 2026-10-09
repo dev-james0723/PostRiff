@@ -253,6 +253,20 @@ class SupabaseStorage:
             raise AlphaError("Private storage did not create a safe upload URL.", 502)
         return f"{self.project_url}/storage/v1{signed}"
 
+    def signed_resumable_upload(self, workspace_id, object_name, mime):
+        """Official signed TUS grant for one immutable video; never a user/service-role JWT."""
+        if mime not in ('video/mp4', 'video/quicktime'):
+            raise AlphaError('Invalid video content type.', 400)
+        path = self._path(workspace_id, 'video', object_name)
+        signed = self.signed_upload_url(workspace_id, 'video', object_name)
+        tokens = parse_qs(urlparse(signed).query).get('token', [])
+        if len(tokens) != 1 or not tokens[0] or len(tokens[0]) > 16384 or any(c in tokens[0] for c in ('\r', '\n')):
+            raise AlphaError('Private storage did not create a safe upload grant.', 502)
+        direct_host = self.host[:-len('.supabase.co')] + '.storage.supabase.co'
+        return {'protocol': 'tus', 'endpoint': f'https://{direct_host}/storage/v1/upload/resumable',
+                'headers': {'x-signature': tokens[0]}, 'chunkBytes': 6 * 1024 * 1024,
+                'metadata': {'bucketName': self.video_bucket, 'objectName': path, 'contentType': mime, 'cacheControl': '3600'}}
+
     def object_info(self, workspace_id, category, object_name):
         path = self._path(workspace_id, category, object_name)
         status, headers, _ = self.send("HEAD", self._object_url(category, path), self._headers(), None)

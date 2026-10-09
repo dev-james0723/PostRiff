@@ -23,11 +23,11 @@ The shared root (`/Users/ouxianxing/Documents/James-Au-Studio`) was not reset, c
   - This candidate adds no `@openuidev/*` dependency and does not edit `vercel.json`, `web/package.json`, the lockfile, `.james-cloud-build.json` or `agent_runtime_v2/http.py`.
   - Library exports plain descriptors `{name, version, propsSchema (zod v4, ordered), component, actions[]}` and importable Python functions in `library_intelligence/api.py`: `search`, `read`, `answer` and `apply_action`, each taking `(cur, principal, workspace_id, params)`.
   - Merge order: OpenUI runtime first, then this candidate rebases and registers its descriptors.
-  - Migrations: 097–099 belong to this candidate, 100–101 to the linkedin branch, 102–103 to OpenUI.
+  - Migrations: this candidate first used 097. On 2026-10-09 consumer-saas shipped `097_youtube_capacity.sql` (and 098–103 are claimed by the YouTube, LinkedIn, OpenUI and Growth Studio branches), so the Library migration is now **104**.
 - No other open PR touches Library intelligence. The `codex/rafii-universal-library-*` branches are merged (#116, #132, #133).
 
 ## Migration numbering (all local branches + remotes scanned)
-Used anywhere: 001–071 (with gaps), 080–081, 083–084, 087–096, 100–101. **Reserved by this candidate: 097 (used), 098–099 (spare).** `097_library_intelligence.sql` is additive. It adds a pgvector column/indexes only where the `vector` extension is available.
+Used anywhere: 001–071 (with gaps), 080–081, 083–084, 087–096, 100–101. **This candidate: 104** (renumbered from 097 when it merged consumer-saas on 2026-10-09; the runner refuses duplicate numbers). `104_library_intelligence.sql` is additive. It adds a pgvector column/indexes only where the `vector` extension is available.
 
 ## Baseline capability diff (verified in code at 3da806f0)
 | Area | Baseline behaviour | Evidence |

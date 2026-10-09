@@ -5,7 +5,7 @@ One coordinator, at most four active implementation workers, one shared reviewer
 ## Coordinator-only files (contract freeze; workers read, never edit)
 - `src/postriff_phase2/library_intelligence/{__init__,contracts,policy,policy_http,versions,http,actions,api,providers,textnorm}.py`
   - Exception: `textnorm.py` may be extended by **C** (S/T table, tests). The interface `search_terms/query_terms/tsquery/NORMALIZER_VERSION` is frozen.
-- `migrations/postriff/097_library_intelligence.sql` (098–099 reserved; request schema changes from the coordinator), `tests/phase2/rls.sql`
+- `migrations/postriff/104_library_intelligence.sql` (renumbered from 097 on 2026-10-09; request schema changes from the coordinator), `tests/phase2/rls.sql`
 - `src/postriff_phase2/hosted.py`, `src/postriff_phase2/hosted_app.py`, `src/postriff_phase2/site_agent/tools.py` (catalog text), `agent_runtime_v2/*`
 - `web/src/lib/api/client.ts`, `web/src/lib/api/library-intelligence-types.ts`, `web/src/lib/api/types.ts`
 - `scripts/library-cloud-validation.sh`, `scripts/library-intelligence-validation.sh`, and every lockfile/package/CI/vercel file. `vercel.json`, `web/package.json`, the lockfile, `.james-cloud-build.json` and `agent_runtime_v2/http.py` belong to the OpenUI coordinator; this team sends patches and does not edit them.

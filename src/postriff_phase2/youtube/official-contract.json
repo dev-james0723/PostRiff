@@ -1,0 +1,2044 @@
+{
+  "auditedAt": "2026-10-05",
+  "discoveryRevision": "20261001",
+  "sources": {
+    "discovery": "https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest",
+    "quota": "https://developers.google.com/youtube/v3/determine_quota_cost"
+  },
+  "methods": {
+    "channels.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/channels",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/youtubepartner-channel-audit"
+      ],
+      "parameters": {
+        "categoryId": {
+          "type": "string"
+        },
+        "managedByMe": {
+          "type": "boolean"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "maxResults": {
+          "type": "integer",
+          "minimum": "0",
+          "maximum": "50"
+        },
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        },
+        "mine": {
+          "type": "boolean"
+        },
+        "forHandle": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "mySubscribers": {
+          "type": "boolean"
+        },
+        "hl": {
+          "type": "string"
+        },
+        "forUsername": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "channels.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/channels",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "videos.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/videos",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "videos.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/videos",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "videos.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/videos",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "stabilize": {
+          "type": "boolean"
+        },
+        "autoLevels": {
+          "type": "boolean"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "notifySubscribers": {
+          "type": "boolean"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        }
+      },
+      "bucket": "videoUploads",
+      "cost": 1,
+      "mediaUpload": {
+        "protocols": {
+          "simple": {
+            "multipart": true,
+            "path": "/upload/youtube/v3/videos"
+          },
+          "resumable": {
+            "path": "/resumable/upload/youtube/v3/videos",
+            "multipart": true
+          }
+        },
+        "maxSize": "274877906944",
+        "accept": [
+          "video/*",
+          "application/octet-stream"
+        ]
+      }
+    },
+    "videos.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/videos",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "locale": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "repeated": true
+        },
+        "maxWidth": {
+          "minimum": "72",
+          "maximum": "8192",
+          "type": "integer"
+        },
+        "regionCode": {
+          "type": "string"
+        },
+        "hl": {
+          "type": "string"
+        },
+        "maxResults": {
+          "maximum": "50",
+          "minimum": "1",
+          "type": "integer"
+        },
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        },
+        "videoCategoryId": {
+          "type": "string"
+        },
+        "chart": {
+          "type": "string",
+          "enum": [
+            "chartUnspecified",
+            "mostPopular"
+          ]
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "maxHeight": {
+          "maximum": "8192",
+          "minimum": "72",
+          "type": "integer"
+        },
+        "myRating": {
+          "enum": [
+            "none",
+            "like",
+            "dislike"
+          ],
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "videoCategories.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/videoCategories",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "regionCode": {
+          "type": "string"
+        },
+        "hl": {
+          "type": "string"
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "i18nLanguages.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/i18nLanguages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "type": "string",
+          "repeated": true
+        },
+        "hl": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "playlists.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/playlists",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlists.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/playlists",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "required": true,
+          "type": "string",
+          "repeated": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlists.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/playlists",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlists.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/playlists",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "channelId": {
+          "type": "string"
+        },
+        "hl": {
+          "type": "string"
+        },
+        "maxResults": {
+          "minimum": "0",
+          "maximum": "50",
+          "type": "integer"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "mine": {
+          "type": "boolean"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "playlistItems.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "maxResults": {
+          "minimum": "0",
+          "type": "integer",
+          "maximum": "50"
+        },
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        },
+        "playlistId": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "repeated": true
+        },
+        "videoId": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "playlistItems.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlistItems.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlistItems.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "playlistImages.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/playlistImages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "maxResults": {
+          "minimum": "0",
+          "maximum": "50",
+          "type": "integer"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "part": {
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "playlistId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1,
+      "documentationConflict": {
+        "source": "https://developers.google.com/youtube/v3/docs/playlistImages/list",
+        "discoveryRevision": null,
+        "limitation": "Discovery exposes parent; current public method documentation exposes id or playlistId. Use the documented filter; real acceptance is required."
+      }
+    },
+    "playlistImages.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/playlistImages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "repeated": true
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50,
+      "mediaUpload": {
+        "protocols": {
+          "simple": {
+            "multipart": true,
+            "path": "/upload/youtube/v3/playlistImages"
+          },
+          "resumable": {
+            "multipart": true,
+            "path": "/resumable/upload/youtube/v3/playlistImages"
+          }
+        },
+        "maxSize": "52428800",
+        "accept": [
+          "image/jpeg",
+          "image/png",
+          "application/octet-stream"
+        ]
+      }
+    },
+    "playlistImages.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/playlistImages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "part": {
+          "type": "string",
+          "repeated": true
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50,
+      "mediaUpload": {
+        "protocols": {
+          "simple": {
+            "path": "/upload/youtube/v3/playlistImages",
+            "multipart": true
+          },
+          "resumable": {
+            "multipart": true,
+            "path": "/resumable/upload/youtube/v3/playlistImages"
+          }
+        },
+        "accept": [
+          "image/jpeg",
+          "image/png",
+          "application/octet-stream"
+        ],
+        "maxSize": "52428800"
+      }
+    },
+    "playlistImages.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/playlistImages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "captions.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/captions",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "sync": {
+          "type": "boolean"
+        },
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        },
+        "onBehalfOf": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 450,
+      "mediaUpload": {
+        "maxSize": "104857600",
+        "accept": [
+          "text/xml",
+          "application/octet-stream",
+          "*/*"
+        ],
+        "protocols": {
+          "simple": {
+            "path": "/upload/youtube/v3/captions",
+            "multipart": true
+          },
+          "resumable": {
+            "multipart": true,
+            "path": "/resumable/upload/youtube/v3/captions"
+          }
+        }
+      }
+    },
+    "captions.download": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/captions/{id}",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "tlang": {
+          "type": "string"
+        },
+        "tfmt": {
+          "type": "string"
+        },
+        "onBehalfOf": {
+          "type": "string"
+        },
+        "id": {
+          "required": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "captions.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/captions",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOf": {
+          "type": "string"
+        },
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "sync": {
+          "type": "boolean"
+        }
+      },
+      "bucket": "general",
+      "cost": 400,
+      "mediaUpload": {
+        "maxSize": "104857600",
+        "protocols": {
+          "resumable": {
+            "multipart": true,
+            "path": "/resumable/upload/youtube/v3/captions"
+          },
+          "simple": {
+            "multipart": true,
+            "path": "/upload/youtube/v3/captions"
+          }
+        },
+        "accept": [
+          "text/xml",
+          "application/octet-stream",
+          "*/*"
+        ]
+      }
+    },
+    "captions.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/captions",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "onBehalfOf": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "captions.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/captions",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "videoId": {
+          "type": "string",
+          "required": true
+        },
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        },
+        "onBehalfOf": {
+          "type": "string"
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "thumbnails.set": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/thumbnails/set",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtubepartner"
+      ],
+      "parameters": {
+        "videoId": {
+          "required": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50,
+      "mediaUpload": {
+        "accept": [
+          "image/jpeg",
+          "image/png",
+          "application/octet-stream"
+        ],
+        "maxSize": "52428800",
+        "protocols": {
+          "resumable": {
+            "multipart": true,
+            "path": "/resumable/upload/youtube/v3/thumbnails/set"
+          },
+          "simple": {
+            "multipart": true,
+            "path": "/upload/youtube/v3/thumbnails/set"
+          }
+        }
+      }
+    },
+    "comments.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/comments",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "comments.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/comments",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        },
+        "textFormat": {
+          "enum": [
+            "textFormatUnspecified",
+            "html",
+            "plainText"
+          ],
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "repeated": true
+        },
+        "maxResults": {
+          "minimum": "1",
+          "type": "integer",
+          "maximum": "100"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "comments.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/comments",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "comments.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/comments",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "comments.setModerationStatus": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/comments/setModerationStatus",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "moderationStatus": {
+          "required": true,
+          "type": "string",
+          "enum": [
+            "published",
+            "heldForReview",
+            "likelySpam",
+            "rejected"
+          ]
+        },
+        "banAuthor": {
+          "type": "boolean"
+        },
+        "id": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "commentThreads.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/commentThreads",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "searchTerms": {
+          "type": "string"
+        },
+        "order": {
+          "enum": [
+            "orderUnspecified",
+            "time",
+            "relevance"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "repeated": true
+        },
+        "channelId": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "allThreadsRelatedToChannelId": {
+          "type": "string"
+        },
+        "maxResults": {
+          "maximum": "100",
+          "minimum": "1",
+          "type": "integer"
+        },
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        },
+        "moderationStatus": {
+          "enum": [
+            "published",
+            "heldForReview",
+            "likelySpam",
+            "rejected"
+          ],
+          "type": "string"
+        },
+        "videoId": {
+          "type": "string"
+        },
+        "textFormat": {
+          "enum": [
+            "textFormatUnspecified",
+            "html",
+            "plainText"
+          ],
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "commentThreads.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/commentThreads",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveBroadcasts.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/liveBroadcasts",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "required": true,
+          "type": "string",
+          "repeated": true
+        },
+        "mine": {
+          "type": "boolean"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "maxResults": {
+          "type": "integer",
+          "maximum": "50",
+          "minimum": "0"
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "broadcastStatus": {
+          "enum": [
+            "broadcastStatusFilterUnspecified",
+            "all",
+            "active",
+            "upcoming",
+            "completed"
+          ],
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "broadcastType": {
+          "type": "string",
+          "enum": [
+            "broadcastTypeFilterUnspecified",
+            "all",
+            "event",
+            "persistent"
+          ]
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "liveBroadcasts.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/liveBroadcasts",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveBroadcasts.bind": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveBroadcasts/bind",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        },
+        "streamId": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveBroadcasts.transition": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveBroadcasts/transition",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "broadcastStatus": {
+          "type": "string",
+          "enum": [
+            "statusUnspecified",
+            "testing",
+            "live",
+            "complete"
+          ],
+          "required": true
+        },
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveBroadcasts.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveBroadcasts",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveBroadcasts.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/liveBroadcasts",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveStreams.update": {
+      "httpMethod": "PUT",
+      "path": "youtube/v3/liveStreams",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveStreams.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/liveStreams",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveStreams.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveStreams",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "repeated": true,
+          "required": true
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveStreams.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/liveStreams",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "parameters": {
+        "maxResults": {
+          "maximum": "50",
+          "type": "integer",
+          "minimum": "0"
+        },
+        "onBehalfOfContentOwnerChannel": {
+          "type": "string"
+        },
+        "id": {
+          "repeated": true,
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        },
+        "mine": {
+          "type": "boolean"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "liveChatMessages.transition": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveChat/messages/transition",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "status": {
+          "enum": [
+            "statusUnspecified",
+            "closed"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatMessages.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/liveChat/messages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "parameters": {
+        "liveChatId": {
+          "type": "string",
+          "required": true
+        },
+        "maxResults": {
+          "maximum": "2000",
+          "type": "integer",
+          "minimum": "200"
+        },
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        },
+        "profileImageSize": {
+          "type": "integer",
+          "maximum": "720",
+          "minimum": "16"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "hl": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "liveChatMessages.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveChat/messages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatMessages.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/liveChat/messages",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatBans.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveChat/bans",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "type": "string",
+          "required": true
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatBans.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/liveChat/bans",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatModerators.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/liveChat/moderators",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        },
+        "liveChatId": {
+          "type": "string",
+          "required": true
+        },
+        "maxResults": {
+          "type": "integer",
+          "minimum": "0",
+          "maximum": "50"
+        },
+        "pageToken": {
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "liveChatModerators.delete": {
+      "httpMethod": "DELETE",
+      "path": "youtube/v3/liveChat/moderators",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "id": {
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "liveChatModerators.insert": {
+      "httpMethod": "POST",
+      "path": "youtube/v3/liveChat/moderators",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 50
+    },
+    "superChatEvents.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/superChatEvents",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "parameters": {
+        "hl": {
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string",
+          "required": true,
+          "repeated": true
+        },
+        "maxResults": {
+          "maximum": "50",
+          "minimum": "1",
+          "type": "integer"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "members.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/members",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.channel-memberships.creator"
+      ],
+      "parameters": {
+        "part": {
+          "required": true,
+          "repeated": true,
+          "type": "string"
+        },
+        "hasAccessToLevel": {
+          "type": "string"
+        },
+        "filterByMemberChannelId": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "listMembersModeUnknown",
+            "updates",
+            "all_current"
+          ]
+        },
+        "pageToken": {
+          "type": "string"
+        },
+        "maxResults": {
+          "minimum": "0",
+          "maximum": "1000",
+          "type": "integer"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "membershipsLevels.list": {
+      "httpMethod": "GET",
+      "path": "youtube/v3/membershipsLevels",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.channel-memberships.creator"
+      ],
+      "parameters": {
+        "part": {
+          "repeated": true,
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "general",
+      "cost": 1
+    },
+    "analytics.groups.delete": {
+      "httpMethod": "DELETE",
+      "path": "v2/groups",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "id": {
+          "type": "string",
+          "location": "query"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groups.insert": {
+      "httpMethod": "POST",
+      "path": "v2/groups",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groups.list": {
+      "httpMethod": "GET",
+      "path": "v2/groups",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "mine": {
+          "type": "boolean",
+          "location": "query"
+        },
+        "pageToken": {
+          "location": "query",
+          "type": "string"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        },
+        "id": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groups.update": {
+      "httpMethod": "PUT",
+      "path": "v2/groups",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groupItems.insert": {
+      "httpMethod": "POST",
+      "path": "v2/groupItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groupItems.list": {
+      "httpMethod": "GET",
+      "path": "v2/groupItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        },
+        "groupId": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.groupItems.delete": {
+      "httpMethod": "DELETE",
+      "path": "v2/groupItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        },
+        "id": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "analytics.reports.query": {
+      "httpMethod": "GET",
+      "path": "v2/reports",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtubepartner",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "endDate": {
+          "location": "query",
+          "type": "string"
+        },
+        "filters": {
+          "type": "string",
+          "location": "query"
+        },
+        "maxResults": {
+          "location": "query",
+          "type": "integer"
+        },
+        "currency": {
+          "location": "query",
+          "type": "string"
+        },
+        "includeHistoricalChannelData": {
+          "type": "boolean",
+          "location": "query"
+        },
+        "startIndex": {
+          "type": "integer",
+          "location": "query"
+        },
+        "sort": {
+          "location": "query",
+          "type": "string"
+        },
+        "startDate": {
+          "location": "query",
+          "type": "string"
+        },
+        "ids": {
+          "location": "query",
+          "type": "string"
+        },
+        "metrics": {
+          "location": "query",
+          "type": "string"
+        },
+        "dimensions": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "analytics",
+      "cost": null
+    },
+    "reporting.reportTypes.list": {
+      "httpMethod": "GET",
+      "path": "v1/reportTypes",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        },
+        "pageSize": {
+          "type": "integer",
+          "location": "query"
+        },
+        "pageToken": {
+          "location": "query",
+          "type": "string"
+        },
+        "includeSystemManaged": {
+          "location": "query",
+          "type": "boolean"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.media.download": {
+      "httpMethod": "GET",
+      "path": "v1/media/{+resourceName}",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "resourceName": {
+          "location": "path",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.delete": {
+      "httpMethod": "DELETE",
+      "path": "v1/jobs/{jobId}",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "jobId": {
+          "type": "string",
+          "required": true,
+          "location": "path"
+        },
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.get": {
+      "httpMethod": "GET",
+      "path": "v1/jobs/{jobId}",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "jobId": {
+          "required": true,
+          "type": "string",
+          "location": "path"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.list": {
+      "httpMethod": "GET",
+      "path": "v1/jobs",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "pageSize": {
+          "type": "integer",
+          "location": "query"
+        },
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        },
+        "includeSystemManaged": {
+          "location": "query",
+          "type": "boolean"
+        },
+        "pageToken": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.create": {
+      "httpMethod": "POST",
+      "path": "v1/jobs",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.reports.list": {
+      "httpMethod": "GET",
+      "path": "v1/jobs/{jobId}/reports",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "pageSize": {
+          "location": "query",
+          "type": "integer"
+        },
+        "createdAfter": {
+          "type": "string",
+          "location": "query"
+        },
+        "startTimeAtOrAfter": {
+          "type": "string",
+          "location": "query"
+        },
+        "onBehalfOfContentOwner": {
+          "location": "query",
+          "type": "string"
+        },
+        "startTimeBefore": {
+          "type": "string",
+          "location": "query"
+        },
+        "jobId": {
+          "location": "path",
+          "required": true,
+          "type": "string"
+        },
+        "pageToken": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    },
+    "reporting.jobs.reports.get": {
+      "httpMethod": "GET",
+      "path": "v1/jobs/{jobId}/reports/{reportId}",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "parameters": {
+        "reportId": {
+          "type": "string",
+          "required": true,
+          "location": "path"
+        },
+        "jobId": {
+          "required": true,
+          "type": "string",
+          "location": "path"
+        },
+        "onBehalfOfContentOwner": {
+          "type": "string",
+          "location": "query"
+        }
+      },
+      "bucket": "reporting",
+      "cost": null
+    }
+  }
+}

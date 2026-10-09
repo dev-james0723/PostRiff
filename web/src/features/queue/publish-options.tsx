@@ -6,7 +6,6 @@ import { Icons } from '@/components/icons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ApiError } from '@/lib/api/client';
 import type { Asset } from '@/lib/api/types';
@@ -26,6 +25,7 @@ import {
   type TikTokPrivacy
 } from '@/lib/channels/tiktok-rules';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { YouTubeOptions } from '@/features/youtube/youtube-options';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
 export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
@@ -52,7 +52,7 @@ function Caution({ children }: { children: ReactNode }) {
 
 export function PublishOptions(props: Props) {
   if (props.platform === 'TikTok') return <TikTokFields {...props} />;
-  if (props.platform === 'YouTube') return <YouTubeFields {...props} />;
+  if (props.platform === 'YouTube') return <YouTubeOptions {...props} />;
   if (props.platform === 'Pinterest') return <PinterestFields {...props} />;
   if (props.platform === 'Google Business Profile') return <BusinessProfileFields {...props} />;
   return null;
@@ -245,58 +245,6 @@ function TikTokFields({ channelId, asset, text, onChange }: Props) {
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function YouTubeFields({ asset, onChange }: Props) {
-  const [title, setTitle] = useState('');
-  const [privacy, setPrivacy] = useState('');
-  const [audience, setAudience] = useState<'' | 'kids' | 'not-kids'>('');
-  const titleOk = title.trim().length > 0 && !/[<>]/.test(title);
-
-  useEffect(() => {
-    onChange(isVideo(asset) && titleOk && privacy && audience ? { title: title.trim(), privacyStatus: privacy, madeForKids: audience === 'kids' } : null);
-  }, [asset, title, titleOk, privacy, audience, onChange]);
-
-  return (
-    <section className='flex flex-col gap-3 rounded-[var(--rafii-radius-control)] border p-3' aria-labelledby='youtube-options-title'>
-      <h3 id='youtube-options-title' className='text-sm font-medium'>
-        YouTube
-      </h3>
-      {!isVideo(asset) && <Caution>YouTube needs one verified video. Add a video from Rafii chat, then choose it here.</Caution>}
-      <div className='flex flex-col gap-1.5'>
-        <Label htmlFor='youtube-title'>Title</Label>
-        <Input id='youtube-title' className='text-base md:text-sm' value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} />
-        {/[<>]/.test(title) && <Caution>YouTube titles can’t contain &lt; or &gt;.</Caution>}
-      </div>
-      <div className='flex flex-col gap-1.5'>
-        <Label htmlFor='youtube-privacy'>Visibility</Label>
-        <Select value={privacy} onValueChange={(value) => setPrivacy(value ?? '')}>
-          <SelectTrigger id='youtube-privacy' className='w-full'>
-            <SelectValue placeholder='Choose visibility' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='private'>Private</SelectItem>
-            <SelectItem value='unlisted'>Unlisted</SelectItem>
-            <SelectItem value='public'>Public</SelectItem>
-          </SelectContent>
-        </Select>
-        <Caution>Until Google audits Rafii, YouTube keeps every upload private, whatever you choose.</Caution>
-      </div>
-      <div className='flex flex-col gap-1.5'>
-        <Label id='youtube-audience'>Audience</Label>
-        <RadioGroup aria-labelledby='youtube-audience' value={audience} onValueChange={(value) => setAudience(value as 'kids' | 'not-kids')}>
-          <Label className='flex items-center gap-2 text-sm font-normal'>
-            <RadioGroupItem value='not-kids' />
-            <span>No, it’s not made for kids</span>
-          </Label>
-          <Label className='flex items-center gap-2 text-sm font-normal'>
-            <RadioGroupItem value='kids' />
-            <span>Yes, it’s made for kids</span>
-          </Label>
-        </RadioGroup>
-      </div>
     </section>
   );
 }

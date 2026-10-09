@@ -27,6 +27,10 @@ class ModelNotDispatched(RuntimeError):
     """A local admission guard refused before the provider was called; no attempt or spend is implied."""
 
 
+class StreamEndedWithoutUsage(RuntimeError):
+    """A streamed provider call ended without its final response event: the provider's usage (and cost) is unknown."""
+
+
 MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
                  "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
@@ -188,11 +192,38 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
                                  "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(response, usage, route, wall)})
             return response
 
-        def stream_response(self, *args, **kwargs):
+        async def stream_response(self, *args, **kwargs):
+            # A streamed call is metered exactly like get_response: one span from the final event's usage, or one failed /
+            # unknown call when the stream raised, was abandoned or ended without a final response (never assumed zero).
             op, reason = thinking_state.model_op(agent, ledger.tool_activity)
             ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
-            ledger.model_requests += 1
-            return model.stream_response(*args, **kwargs)
+            started, wall = time.monotonic(), time.time()
+            completed = None
+            counted = False
+            try:
+                async for event in model.stream_response(*args, **kwargs):
+                    if not counted:
+                        ledger.model_requests += 1
+                        counted = True
+                    if getattr(event, "type", None) == "response.completed":
+                        completed = getattr(event, "response", None)
+                    yield event
+            except BaseException as error:
+                if isinstance(error, ModelNotDispatched):
+                    raise
+                if not counted:
+                    ledger.model_requests += 1
+                _note_failure(ledger, error, workload=workload, route=route, started=started, wall=wall)
+                raise
+            if not counted:
+                ledger.model_requests += 1
+            if completed is None:
+                _note_failure(ledger, StreamEndedWithoutUsage(), workload=workload, route=route, started=started, wall=wall)
+                return
+            usage = getattr(completed, "usage", None)
+            ledger.spans.append({"span": "generation", "agent": agent, "workload": workload, "model": (route or {}).get("model"),
+                                 "inputTokens": getattr(usage, "input_tokens", 0) or 0, "outputTokens": getattr(usage, "output_tokens", 0) or 0,
+                                 "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(completed, usage, route, wall)})
 
         async def close(self):
             closer = getattr(model, "close", None)

@@ -26,7 +26,7 @@ One server-side retrieval and policy service (`src/postriff_phase2/library_intel
 
 ## Database migration
 
-Only one migration: `migrations/postriff/097_library_intelligence.sql`. It is additive, idempotent and wrapped in a single transaction.
+Only one migration: `migrations/postriff/104_library_intelligence.sql`. It is additive, idempotent and wrapped in a single transaction.
 
 - It adds four columns to `pr_library_assets` (`lineage_id`, `version_no` default 1, `source_kind` default `'upload'`, `media` default `{}`), all with safe defaults, so no backfill is needed.
 - It extends collections (`kind` default `'manual'`, rule, revision) and collection items (`origin` default `'manual'`).
@@ -36,10 +36,10 @@ Only one migration: `migrations/postriff/097_library_intelligence.sql`. It is ad
 Preconditions on the target project, checked read-only before applying:
 
 1. Migrations 093–096 are applied. Production had 093–095 on 2026-10-08, and 096 was in validation per `rafii-library-20261007.md`; re-check this.
-2. pgvector: on Supabase, enable `vector` in the `extensions` schema from the dashboard first. Otherwise 097's `create extension if not exists vector` creates it in `public`, which the security advisor flags. Once it is enabled in `extensions`, that statement is a no-op and the type resolves through the search path.
+2. pgvector: on Supabase, enable `vector` in the `extensions` schema from the dashboard first. Otherwise 104's `create extension if not exists vector` creates it in `public`, which the security advisor flags. Once it is enabled in `extensions`, that statement is a no-op and the type resolves through the search path.
 3. Run the security and performance advisors before and after. Expect no new Library findings.
 
-Rehearsal evidence: `tests/phase2/postgres_library_intelligence_migration.py` (A078) builds a pre-097 workspace (normalized assets, chunks, labels, manual collection, a legacy photo id in workspace JSON), applies 097 twice, and checks that:
+Rehearsal evidence: `tests/phase2/postgres_library_intelligence_migration.py` (A078) builds a pre-104 workspace (normalized assets, chunks, labels, manual collection, a legacy photo id in workspace JSON), applies 104 twice, and checks that:
 
 - every existing row is unchanged;
 - defaults are safe;
@@ -72,13 +72,13 @@ Paid calls use `RAFII_LIBRARY_PRICES` and the existing `billing.Ledger` reserve/
 ## Canary and rollback plan (requires authorization at each step)
 
 1. Merge the OpenUI production branch first (owned by the "Rafii × OpenUI 正式版發佈" session). Then rebase this branch and send them the descriptor-registration patch. Re-run `jcb ci` on the rebased head.
-2. Apply 097 to staging. Run the advisors and a read-only check (table count, RLS, `service_only` policies, pgvector presence).
+2. Apply 104 to staging. Run the advisors and a read-only check (table count, RLS, `service_only` policies, pgvector presence).
 3. Deploy with all flags off. Smoke-test the existing Library (upload, list, detail, download, delete) to confirm no regression.
 4. Turn on `ENRICHMENT` and `RETRIEVAL` for the founder workspace only. Check search latency against A031, the job error rate and costs.
 5. Turn on the paid capabilities (`EMBEDDINGS`, `ASR`, `VISION`) only after the real-provider evaluation, within an approved spend cap.
 6. Turn on `VOICE`, `SUGGESTIONS`, `ARTIFACTS` and `TASK_UI` one at a time.
 
-To roll back, turn the flags off. That stops every new code path immediately. To go further, promote the previous Vercel deployment. **Do not drop the 097 tables**; they hold derived data and consent records. Originals, chunks, labels and legacy media are never modified by 097.
+To roll back, turn the flags off. That stops every new code path immediately. To go further, promote the previous Vercel deployment. **Do not drop the 104 tables**; they hold derived data and consent records. Originals, chunks, labels and legacy media are never modified by 104.
 
 ## Candidate and validation
 
@@ -104,7 +104,7 @@ Acceptance ledger against `757e127d`: 24 VERIFIED, 49 UNVERIFIED, 7 BLOCKED, 0 F
 
 ## Remaining gates
 
-- **Authorization (James):** push the branch, open the PR, merge, apply 097 to staging and production, deploy, and enable each flag.
+- **Authorization (James):** push the branch, open the PR, merge, apply 104 to staging and production, deploy, and enable each flag.
 - **Real-provider evaluation:** A017, A018, A022, A023, A026 and A032. This needs `~/.config/rafii-library-eval/provider.env` with `AI_GATEWAY_API_KEY` and `OPENAI_API_KEY`, within the approved US$10 cap.
 - **Local authenticated preview and visual evidence:** this needs the one approved local `npm ci` in the worktree's `web/`.
 - **A066 iPhone Safari smoke test:** needs James's device; see `evidence/iphone-smoke.md`.

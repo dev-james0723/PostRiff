@@ -31,6 +31,7 @@ export function AddMenu({
   busy,
   busyLabel,
   onUploadFiles,
+  uploadHint,
   storage,
   onAdded
 }: {
@@ -38,6 +39,8 @@ export function AddMenu({
   busy: boolean;
   busyLabel: string;
   onUploadFiles: () => void;
+  /** This workspace's video limits (or why videos can't be added right now), under "Upload files". */
+  uploadHint?: string;
   storage?: { usedBytes: number; limitBytes: number } | null;
   /** Announce what was added (one polite live region on the page). */
   onAdded: (message: string) => void;
@@ -62,6 +65,7 @@ export function AddMenu({
             <span className='flex flex-col'>
               <span>Upload files</span>
               <span className='text-muted-foreground text-xs'>Photos, videos, audio, documents</span>
+              {uploadHint ? <span className='text-muted-foreground text-xs'>{uploadHint}</span> : null}
             </span>
           </DropdownMenuItem>
           <DropdownMenuItem className='min-h-11 gap-3 px-3' onClick={() => setDialog('link')}>

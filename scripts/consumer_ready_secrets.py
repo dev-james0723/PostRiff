@@ -31,7 +31,21 @@ def main():
             raise ValueError('Malformed secret allowlist entry')
     metadata_hashes={hashlib.sha1(a['hash'].encode()).hexdigest() for a in allowed}
     metadata_lines=allow_path.read_text().splitlines() if allow_path.exists() else []
+    # Cloud-generated OpenUI asset manifests carry sha256 digests of the component library and prompts (rafii-genui/1) that
+    # change on every regeneration. Accept only a 64-hex value on a libraryHash/promptHash line (or a bare digest inside the
+    # compatibleLibraryHashes array) in exactly these two generated files; every other string there is still scanned.
+    generated_manifests={'src/postriff_phase2/agent_runtime_v2/generated/openui-assets.json','web/src/features/agent/generative-ui/generated/openui-assets.json'}
+    def generated_digest(finding):
+        if finding['path'] not in generated_manifests or finding['type']!='Hex High Entropy String':
+            return False
+        lines=(ROOT/finding['path']).read_text().splitlines()
+        if not 0 < finding['line'] <= len(lines):
+            return False
+        line=lines[finding['line']-1]
+        return bool(re.fullmatch(r'\s*"(libraryHash|promptHash)": "[a-f0-9]{64}",?\s*',line) or re.fullmatch(r'\s*"[a-f0-9]{64}",?\s*',line))
     def reviewed(finding):
+        if generated_digest(finding):
+            return True
         if finding['path']=='docs/consumer-ready/secret-allowlist.json' and finding['type']=='Hex High Entropy String' and finding['hash'] in metadata_hashes:
             line=metadata_lines[finding['line']-1]
             if re.fullmatch(r'\s*"hash": "[a-f0-9]{40}",?\s*',line):

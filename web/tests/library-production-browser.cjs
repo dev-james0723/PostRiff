@@ -49,6 +49,29 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const boot=await context.request.post(base+'/api/auth/verify',{headers,data:{plan:'studio'}});assert.equal(boot.status(),201,await boot.text());
    const ws=(await boot.json()).workspaceId,path=base+'/api/workspaces/'+ws+'/library';
    const storageTrace=[],thumbnailFormats=new Set(['md']),markdownBytes=Buffer.from('Browser Brahms acceptance '+engine+' '+width+'\nFinger exercises and rehearsal notes.');
+   await context.route('https://devharness.storage.supabase.co/**',async route=>{
+    const request=route.request(),url=new URL(request.url()),method=request.method();
+    const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'POST,HEAD,PATCH,OPTIONS',
+     'Access-Control-Allow-Headers':'Tus-Resumable,Upload-Length,Upload-Metadata,Upload-Offset,Content-Type,x-signature',
+     'Access-Control-Expose-Headers':'Location,Upload-Offset,Upload-Length,Tus-Resumable,Tus-Version,Tus-Extension'};
+    if(!/^\/storage\/v1\/upload\/resumable(?:\/[0-9a-f]{32})?$/.test(url.pathname)||url.search)return route.fulfill({status:404,headers:cors});
+    if(method==='OPTIONS')return route.fulfill({status:204,headers:cors});
+    const sourceHeaders=request.headers(),forward={};
+    for(const name of ['tus-resumable','upload-length','upload-metadata','upload-offset','content-type','x-signature']){
+     if(sourceHeaders[name]!==undefined)forward[name]=sourceHeaders[name];
+    }
+    const raw=request.postDataBuffer();
+    const response=await context.request.fetch(base+url.pathname.replace('/storage/v1/upload/resumable','/dev/resumable'),{
+     method,headers:forward,...(method==='HEAD'?{}:{data:raw||undefined}),maxRedirects:0,failOnStatusCode:false});
+    const supplied=response.headers(),headers={...cors};
+    for(const name of ['location','upload-offset','upload-length','tus-resumable','tus-version','tus-extension','cache-control']){
+     if(supplied[name]!==undefined)headers[name]=supplied[name];
+    }
+    storageTrace.push({protocol:'tus',method,status:response.status(),bytes:raw?.length||0,
+     requestedOffset:sourceHeaders['upload-offset']||null,acceptedOffset:supplied['upload-offset']||null,
+     uploadLength:supplied['upload-length']||sourceHeaders['upload-length']||null});
+    return route.fulfill({status:response.status(),headers,body:method==='HEAD'?Buffer.alloc(0):await response.body()});
+   });
    await context.route('https://devharness.supabase.co/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'PUT,POST,OPTIONS','Access-Control-Allow-Headers':'*'}});
@@ -114,7 +137,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     navigationPhase=phase;
    };
    const relevantUploadUrl=value=>{try{const u=new URL(value);if(u.searchParams.has('token'))u.searchParams.set('token','[redacted]');return u.origin+u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch{return value}};
-   const isUploadRequest=request=>/\/library\/files(?:\/|\?|$)|devharness\.supabase\.co|\/dev\/upload\//.test(request.url());
+   const isUploadRequest=request=>/\/library\/files(?:\/|\?|$)|\/media\/videos(?:\/|\?|$)|devharness\.(?:storage\.)?supabase\.co|\/dev\/(?:upload|resumable)(?:\/|$)/.test(request.url());
    page.on('pageerror',error=>errors.push(error.message));
    page.on('request',request=>{
     if(isUploadRequest(request))uploadTrace.push({event:'request',method:request.method(),url:relevantUploadUrl(request.url())});
@@ -149,7 +172,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    await page.locator('[data-library-thumbnail="md"]').first().waitFor({timeout:15000});
-   const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4'));
+   const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4')),videoTraceStart=storageTrace.length;
    if(engine==='chromium'){
     await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
    }else{
@@ -167,13 +190,28 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     assert.ok(titled.ok(),await titled.text());
     await settleBeforeNavigation('show uploaded WebKit video');await page.reload();
    }
-   const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoCard.waitFor({timeout:30000});
+   const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();
+   try{await videoCard.waitFor({timeout:30000});}
+   catch(error){
+    const response=await context.request.get(path,{headers}),listing=await response.text();
+    const visibleBody=await page.locator('body').innerText().catch(()=> '');
+    const diagnostics={engine,width,error:String(error),libraryStatus:response.status(),listing:listing.slice(0,3000),
+     visibleBody:visibleBody.slice(0,4000),uploadTrace:uploadTrace.slice(-40),storageTrace:storageTrace.slice(-40)};
+    writeFileSync(resolve(out,`video-upload-failure-${engine}-${width}.json`),JSON.stringify(diagnostics,null,2));
+    await page.screenshot({path:resolve(out,`video-upload-failure-${engine}-${width}.png`),fullPage:true,timeout:5000}).catch(()=>{});
+    throw new Error(`${error.message}\nVideo upload diagnostics: ${JSON.stringify(diagnostics)}`);
+   }
    const videoPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await videoPoster.waitFor({state:'visible',timeout:15000});
    await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
    if(engine==='chromium'){
     const videoListing=await (await context.request.get(path,{headers})).json();
     const videoAsset=videoListing.assets.find(asset=>asset.originalFilename===videoName||asset.displayTitle===videoName);
     assert.ok(videoAsset,`uploaded video missing from Library listing: ${JSON.stringify(videoListing)}`);
+    const tusTrace=storageTrace.slice(videoTraceStart).filter(entry=>entry.protocol==='tus');
+    assert.ok(tusTrace.some(entry=>entry.method==='POST'&&entry.status===201),'real Chromium client must create its signed TUS session');
+    assert.ok(tusTrace.some(entry=>entry.method==='HEAD'&&[200,204].includes(entry.status)),'real Chromium client must reconcile its TUS offset');
+    assert.ok(tusTrace.some(entry=>entry.method==='PATCH'&&entry.status===204&&Number(entry.acceptedOffset)===videoAsset.bytes),
+     `real Chromium client must complete the exact committed video bytes: ${JSON.stringify(tusTrace)}`);
     const posterResponse=await context.request.get(base+'/api/workspaces/'+ws+'/media/'+videoAsset.id,{headers});
     assert.equal(posterResponse.status(),200,await posterResponse.text());
     assert.equal(posterResponse.headers()['content-type'],'image/jpeg');
