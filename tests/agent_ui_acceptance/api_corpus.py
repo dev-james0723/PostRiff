@@ -233,28 +233,28 @@ class Revocation(Case):
 
     @check
     def test_deleted_source_is_reauthorized_on_reopen(self):
-        """A bound source deleted after generation is re-checked on reopen: the query no longer returns it (unavailable/denied/empty)."""
-        art = self.ready()
+        """NC04: a view whose source answer was removed after generation (retention, account erasure: the answer message is
+        gone; there is no in-app delete for it, so the removal is injected on the disposable DB) is re-checked on reopen: the
+        snapshot and by-message refuse it, nothing is regenerated, and the view's canonical source is never served again."""
+        self.ready()
         owner = self.owner()
-        binding = self.manifest_query(art)
-        result = self.w.ui(owner, "POST", "/queries", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "bindingId": binding}, route="queries")
-        self.assertEqual(result.status, 200)
-        refs = (result.json() or {}).get("sourceRefs") or []
-        draft = next((r.split(":", 1)[1] for r in refs if r.startswith(("draft:", "variant:"))), None)
-        if not draft:
-            raise Blocked(f"BLOCKED harness: the harness view's first binding {binding} carries no deletable source (refs={refs[:3]}; automations have "
-                          "no delete command, cancel keeps the record). Service-level coverage: tests/phase2/postgres_agent_ui_store.py F-S13")
-        snap = self.w.call(owner, "GET", f"/api/workspaces/{owner.workspace_id}")
-        deleted = self.w.api.request("POST", f"/api/workspaces/{owner.workspace_id}/actions", owner.token,
-                                     {"expectedRevision": snap["revision"], "action": "p2_variant_delete", "payload": {"variantId": draft}})
-        if deleted.status not in (200, 201):
-            raise Blocked(f"BLOCKED harness: could not delete the bound draft through the hosted action ({deleted.status} {deleted.code})")
-        reopened = self.w.ui(owner, "GET", f"/presentations/{art['artifactId']}", route="snapshot")
-        self.assertEqual(reopened.status, 200)
-        again = self.w.ui(owner, "POST", "/queries", {"artifactId": art["artifactId"], "artifactRevision": self.revision(art), "bindingId": binding}, route="queries")
-        body = again.json() or {}
-        self.assertNotIn(f"{draft}", json.dumps(body.get("data")), "the deleted draft is still served")
-        return "deleted bound draft not served after reopen"
+        result = self.w.eligible_turn(owner)
+        shown = self.w.present(owner, result["runId"])
+        if (shown.terminal or {}).get("event") != "ui.ready" or not shown.artifact_id:
+            raise Blocked(f"BLOCKED lanes B/F: the second presentation ended {(shown.terminal or {}).get('event')}")
+        first = self.w.ui(owner, "GET", f"/presentations/{shown.artifact_id}", route="snapshot")
+        self.assertEqual(first.status, 200)
+        message = ((first.json() or {}).get("artifact") or {}).get("messageId") or result.get("messageId")
+        self.assertTrue(message, "the view records its answer message")
+        provider = self.w.provider_requests()
+        self.w.db.run("DELETE FROM public.pr_messages WHERE id=%s AND workspace_id=%s", message, owner.workspace_id)
+        reopened = self.w.ui(owner, "GET", f"/presentations/{shown.artifact_id}", route="snapshot")
+        self.assertEqual(reopened.status, 404, f"a view of a removed answer was served: {reopened.status} {reopened.text(160)}")
+        self.assertNotIn('"canonicalSource":"', reopened.text(8000))
+        listed = self.w.ui(owner, "GET", f"/messages/{message}", route="messages")
+        self.assertIn(listed.status, (404,), f"by-message of a removed answer → {listed.status}")
+        self.assertEqual(self.w.provider_requests() - provider, 0, "reopening a revoked view reached the provider")
+        return f"answer removed → snapshot 404 {reopened.code}, by-message 404, provider delta 0"
 
     @check
     def test_expired_login_stops_replay_and_queries(self):
@@ -942,18 +942,40 @@ class Privacy(Case):
 class Founder(Case):
     @check
     def test_consumer_and_founder_artifacts_do_not_cross(self):
-        """NC03/RF5: a founder-scoped artifact is 404 on consumer routes and a consumer artifact is 404 on founder routes."""
-        if not self.w.state.get("founder"):
-            raise Blocked("BLOCKED harness: this stack was started without --founder-fixture (founder identities); run the founder stack")
+        """NC03/RF5: a founder-scoped artifact in the caller's own workspace is invisible on every consumer route (snapshot,
+        replay, by-message, queries, activation), and the founder route family never serves a consumer artifact to a consumer
+        bearer. The founder row is setup on the disposable DB (founder views are made by Control's routes, which need founder
+        identities); every assertion goes through the consumer API."""
         art = self.ready()
-        founder = self.w.api.request("GET", f"/api/control/v2/agent/ui/presentations/{art['artifactId']}", self.owner().token)
-        self.assertIn(founder.status, (401, 403, 404))
-        rows = self.w.db.all("SELECT id::text FROM public.pr_ui_artifacts WHERE scope='founder' LIMIT 1")
-        if not rows:
-            raise Blocked("BLOCKED lane F (founder_agent_ui): no founder-scoped artifact exists on the founder stack yet")
-        cross = self.w.ui(self.owner(), "GET", f"/presentations/{rows[0][0]}")
-        self.assertEqual(cross.status, 404)
-        return "founder/consumer artifacts 404 across scopes"
+        owner = self.owner()
+        founder_route = self.w.api.request("GET", f"/api/control/v2/agent/ui/presentations/{art['artifactId']}", owner.token)
+        self.assertNotEqual(founder_route.status, 200, "the founder route family served a consumer artifact to a consumer bearer")
+        self.assertNotIn('"canonicalSource":"', founder_route.text(4000))
+        result = self.w.eligible_turn(owner)
+        founder_id = str(uuid.uuid4())
+        self.w.db.run("INSERT INTO public.pr_ui_artifacts(id,workspace_id,scope,scope_key,conversation_id,parent_run_id,message_id,actor,surface) "
+                      "VALUES(%s,%s,'founder','founder:live:local',%s,%s,%s,%s,'founder')", founder_id, owner.workspace_id, result["conversationId"],
+                      result["runId"], result.get("messageId"), owner.principal)
+        provider = self.w.provider_requests()
+        try:
+            probes = {"snapshot": self.w.ui(owner, "GET", f"/presentations/{founder_id}"),
+                      "replay": self.w.ui(owner, "GET", f"/presentations/{founder_id}/events?after=0"),
+                      "query": self.w.ui(owner, "POST", "/queries", {"artifactId": founder_id, "bindingId": "founder_revenue"}),
+                      "activate": self.w.ui(owner, "POST", "/actions/activate", {"artifactId": founder_id, "actionId": "campaign_create", "inputs": {}}),
+                      "state": self.w.ui(owner, "POST", f"/presentations/{founder_id}/state", {"expectedStateRevision": 0, "patch": {}})}
+            random = self.w.ui(owner, "GET", f"/presentations/{RANDOM}")
+            for name, answer in probes.items():
+                with self.subTest(route=name):
+                    self.assertIn(answer.status, (400, 403, 404), f"{name} → {answer.status} {answer.text(160)}")
+                    self.assertNotIn(founder_id, answer.text(4000) if name != "replay" else "", f"{name} echoed the founder view")
+            self.assertEqual((probes["snapshot"].status, probes["snapshot"].code), (random.status, random.code), "a founder view is distinguishable from a random id")
+            listed = self.w.ui(owner, "GET", f"/messages/{result['messageId']}") if result.get("messageId") else None
+            if listed is not None and listed.status == 200:
+                self.assertNotIn(founder_id, listed.text(8000), "by-message lists a founder view to a consumer")
+        finally:
+            self.w.db.run("DELETE FROM public.pr_ui_artifacts WHERE id=%s", founder_id)
+        self.assertEqual(self.w.provider_requests() - provider, 0)
+        return "founder view: snapshot/replay/query/activate/state refused like a random id; not listed by message; founder routes refuse consumer"
 
 
 class Truthful(Case):

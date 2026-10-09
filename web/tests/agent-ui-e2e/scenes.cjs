@@ -265,7 +265,7 @@ scene('locales', async (t) => {
     t.assert(await noRawDsl(region), `${locale}: no raw DSL`);
     const lang = await page.evaluate(() => document.documentElement.lang);
     done.push(`${locale}→lang=${lang}`);
-    await page.close();
+    await page.context().close();   // free the whole context before the next locale (WebKit lost pages when contexts piled up)
   }
   return done.join(', ');
 });
@@ -399,7 +399,7 @@ scene('viewports', async (t) => {
     t.assert(fits, `${vp.id}: no sideways page scroll`);
     t.assert(!box || box.width <= vp.width + 1, `${vp.id}: generated view fits the viewport width`, box);
     out.push(`${vp.id}✓`);
-    await page.close();
+    await page.context().close();   // one live context at a time (WebKit lost pages when five contexts piled up)
   }
   return `${out.join(' ')} (emulation)`;
 });
