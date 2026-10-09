@@ -275,7 +275,13 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(out['items'][0]['incidentRef'], 'i-1')
         categories = [i['category'] for i in out['items']]
         self.assertIn('reconnect_required', categories)
-        self.assertIn('launch_scope', categories, 'an unrecorded launch scope is itself a visible decision item')
+        blocker = next(i for i in out['items'] if i['category'] == 'launch_blocker')
+        self.assertEqual((blocker['provider'], blocker['priority'], blocker['launchBlocker']), ('youtube', 'P2', True))
+        self.assertNotIn('launch_scope', categories, 'the YouTube read-only launch scope is recorded')
+        youtube = next(app for app in out['registry'] if app['provider'] == 'youtube')
+        self.assertEqual(youtube['readiness'], 'check_required', 'no approval is claimed without a decision receipt')
+        self.assertIn('publishing', youtube['launch']['excluded'])
+        self.assertTrue(all(req['documentationRef'].startswith('https://developers.google.com/') for req in youtube['requirements'] if req['documentationRef']))
         self.assertEqual(out['summary']['tenants']['countState'], 'lower_bound')
         self.assertEqual(out['sources']['incidents'], {'state': 'connected'})
         self.assertEqual(out['environment'], 'production')
@@ -298,7 +304,7 @@ class RouteTests(unittest.TestCase):
 
     def test_launch_scope_turns_registry_gaps_into_launch_blockers(self):
         original = fc.LAUNCH_SCOPE
-        fc.LAUNCH_SCOPE = ('linkedin',)
+        fc.LAUNCH_SCOPE = {'linkedin': {'operations': ['identity']}}
         try:
             evaluated = fc.evaluate_registry(fc.registry_entries(), NOW)
             items = fc.registry_items(evaluated, NOW, 'production')
@@ -309,6 +315,85 @@ class RouteTests(unittest.TestCase):
         self.assertTrue(items[0]['nextAction']['requiresHuman'])
         self.assertIn('no_decision_recorded', items[0]['nextAction']['blockedBy'])
         self.assertEqual(items[0]['affected']['tenants']['countState'], 'unknown')
+
+
+class LaunchScopeTests(unittest.TestCase):
+    def test_empty_launch_scope_is_a_visible_decision_item(self):
+        original = fc.LAUNCH_SCOPE
+        fc.LAUNCH_SCOPE = {}
+        try:
+            items = fc.registry_items(fc.evaluate_registry(fc.registry_entries(), NOW), NOW, 'production')
+        finally:
+            fc.LAUNCH_SCOPE = original
+        self.assertEqual([(i['category'], i['safeReasonCode']) for i in items], [('launch_scope', 'launch_scope_not_recorded')])
+
+    def test_registry_stays_extensible_to_every_adapter(self):
+        providers = {app['provider'] for app in fc.registry_entries()}
+        self.assertTrue({'youtube', 'instagram', 'threads', 'facebook', 'tiktok', 'linkedin', 'x', 'bluesky', 'google'} <= providers)
+        self.assertEqual([app['provider'] for app in fc.registry_entries() if app['launchScope']], ['youtube'])
+
+
+class EndToEndAuthorizationTests(unittest.TestCase):
+    """The route through the real Boundary and ControlApplication: only an active founder operator session with control.read
+    reaches the handler; Demo never touches the Live reader."""
+
+    def setUp(self):
+        from control.test_boundary import MemoryStore, NOW as BOUNDARY_NOW, USER
+        from rafii_control.auth import Boundary, Config, VerifiedIdentity
+        from rafii_control.http import ControlApplication
+        slices.load()
+        self.origin = 'http://localhost:4449'
+        self.store = MemoryStore()
+        self.reader = ReaderStub(coverage={'latest': fc._iso(BOUNDARY_NOW - 600), 'total': 1}, rows=[row('w-secret-1', 'c1', 'youtube', 'client_binding_missing')])
+        self.store.metric_rows = self.reader.metric_rows
+        self.user = USER
+        self.boundary = Boundary(Config(True, 'local', self.origin), self.store, lambda token: VerifiedIdentity(self.user, 'aal2', 's' * 32, BOUNDARY_NOW),
+                                 clock=lambda: BOUNDARY_NOW)
+        self.app = ControlApplication(self.boundary, types.SimpleNamespace(store=self.store))
+        self.app._founder_store = FounderStoreStub()
+
+    def call(self, query='mode=live', cookie=True):
+        import io
+        env = dict(PATH_INFO='/api/control/v2/connections/attention', QUERY_STRING=query, REQUEST_METHOD='GET', CONTENT_LENGTH='0', HTTP_HOST='localhost:4449',
+                   HTTP_ORIGIN=self.origin, **{'wsgi.input': io.BytesIO(b'')})
+        if cookie:
+            token, session = self.boundary.exchange('verified-token', self.origin)
+            env.update(HTTP_COOKIE='__Host-rafii-control=' + token, HTTP_X_CSRF_TOKEN=session['csrfToken'])
+        result = {}
+        body = b''.join(self.app(env, lambda status, headers: result.update(status=int(status[:3]))))
+        return result['status'], json.loads(body)
+
+    def test_founder_session_reads_the_queue(self):
+        status, body = self.call()
+        self.assertEqual(status, 200, body)
+        reconnect = next(i for i in body['data']['items'] if i['category'] == 'reconnect_required')
+        self.assertEqual(reconnect['safeReasonCode'], 'client_binding_missing', 'client_binding_missing is an attention item, never healthy')
+        self.assertEqual(body['dataState'], 'live')
+        self.assertNotIn('w-secret-1', json.dumps(body))
+
+    def test_anonymous_is_denied(self):
+        status, _ = self.call(cookie=False)
+        self.assertEqual(status, 401)
+        self.assertEqual(self.reader.statements, [])
+
+    def test_operator_without_control_read_is_denied(self):
+        self.store.operator_row['capabilities'] = [c for c in self.store.operator_row['capabilities'] if c != 'control.read']
+        status, _ = self.call()
+        self.assertEqual(status, 403)
+        self.assertEqual(self.reader.statements, [])
+
+    def test_inactive_or_non_operator_identity_is_denied(self):
+        self.store.operator_row['status'] = 'suspended'
+        with self.assertRaises(ControlError):
+            self.call()
+        self.assertEqual(self.reader.statements, [])
+
+    def test_demo_never_reads_live_and_bad_mode_is_rejected(self):
+        status, body = self.call('mode=demo')
+        self.assertEqual((status, body['dataState'], body['data']['mode'], body['data']['environment']), (200, 'synthetic', 'demo', 'demo'))
+        self.assertEqual(self.reader.statements, [], 'Demo must not touch the Live reader')
+        status, _ = self.call('mode=staging')
+        self.assertEqual(status, 400)
 
 
 if __name__ == '__main__':

@@ -119,9 +119,27 @@ SIGN_IN_APP = {'provider': 'google', 'appRef': 'rafii-sign-in', 'environment': '
 # approvedScopes, verifiedBy, evidenceObservedAt and lastCheckedAt. Empty: no decision receipt has been reviewed into this
 # registry yet (2026-10-09), so every requirement reports 'unknown' / check required.
 RECORDED_DECISIONS = {}
-# The provider(s) the first launch covers. Empty until James records the launch scope; registry blockers are launch blockers
-# only for providers listed here, and an empty scope is itself an attention item.
-LAUNCH_SCOPE = ()
+# The first technical acceptance scope (James, 2026-10-09). Registry gaps are launch blockers only for providers listed here;
+# an empty scope is itself an attention item. This is the first acceptance provider, not a limit on Rafii's providers.
+LAUNCH_SCOPE = {
+    'youtube': {'recordedAt': '2026-10-09', 'recordedBy': 'james',
+                'operations': ['connection_health', 'channel_identity', 'token_refresh_capability', 'owned_analytics_read_within_granted_scopes'],
+                'accountTypes': ['oauth_linked_channel', 'brand_account_channel_where_supported'],
+                'excluded': ['publishing', 'channel_content_changes', 'new_permissions', 'oauth_scope_changes']},
+}
+# Official pages that say what evidence each requirement needs (checked 2026-10-09). A documentation reference is guidance
+# for collecting evidence; it is never evidence that the requirement is met.
+GOOGLE_DOCS = {'brand_verification': 'https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification',
+               'sensitive_scope': 'https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification',
+               'restricted_scope': 'https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification'}
+META_DOCS = {'app_review': 'https://developers.facebook.com/docs/graph-api/overview/access-levels/',
+             'business_verification': 'https://developers.facebook.com/docs/development/release/business-verification'}
+DOCUMENTATION = {'youtube': {**GOOGLE_DOCS, 'quota_entitlement': 'https://developers.google.com/youtube/v3/determine_quota_cost',
+                             'api_audit': 'https://developers.google.com/youtube/terms/developer-policies'},
+                 'google_business_profile': GOOGLE_DOCS, 'google': GOOGLE_DOCS,
+                 'instagram': META_DOCS, 'threads': META_DOCS, 'facebook': META_DOCS,
+                 'tiktok': {'app_review': 'https://developers.tiktok.com/doc/app-review-guidelines',
+                            'api_audit': 'https://developers.tiktok.com/docs/en/content-posting-api-get-started'}}
 
 
 def _requested_scopes(cls):
@@ -144,9 +162,11 @@ def registry_entries(adapters=None, decisions=None):
         requirements = []
         for kind in app['kinds']:
             recorded = decisions.get((app['provider'], app['appRef'], app['environment'], kind)) or {}
-            requirements.append({'kind': kind, 'requestedScopes': list(recorded.get('requestedScopes') or app['requestedScopes']), **recorded})
+            requirements.append({'kind': kind, 'requestedScopes': list(recorded.get('requestedScopes') or app['requestedScopes']),
+                                 'documentationRef': DOCUMENTATION.get(app['provider'], {}).get(kind), **recorded})
+        launch = LAUNCH_SCOPE.get(app['provider']) if app['appRef'] == app['provider'] else None
         entries.append({key: app[key] for key in ('provider', 'appRef', 'environment', 'product', 'lane')} | {'requirements': requirements,
-                                                                                                         'launchScope': app['provider'] in LAUNCH_SCOPE})
+                                                                                                         'launchScope': launch is not None, 'launch': launch})
     return entries
 
 
@@ -187,7 +207,7 @@ def evaluate_requirement(requirement, now, *, environment):
             'requestedScopes': sorted(requested), 'approvedScopes': sorted(approved), 'missingScopes': sorted(requested - approved) if status == 'approved' else [],
             'requestedAt': _iso(_epoch(requirement.get('requestedAt'))), 'decidedAt': _iso(_epoch(requirement.get('decidedAt'))),
             'expiresAt': _iso(expires), 'providerReceiptRef': ref, 'verifiedBy': requirement.get('verifiedBy') if isinstance(requirement.get('verifiedBy'), str) else None,
-            'freshness': envelope, 'ownerLane': requirement.get('ownerLane') or 'provider_app_owner',
+            'freshness': envelope, 'ownerLane': requirement.get('ownerLane') or 'provider_app_owner', 'documentationRef': requirement.get('documentationRef'),
             'nextAction': None if standing == 'satisfied' else {'kind': 'record_provider_evidence', 'label': NEXT_ACTIONS[kind], 'requiresHuman': True},
             'revision': int(requirement.get('revision') or 0)}
 
@@ -200,7 +220,7 @@ def evaluate_registry(entries, now):
         rows = [evaluate_requirement(req, now, environment=entry['environment']) for req in entry['requirements']]
         standings = {row['standing'] for row in rows}
         readiness = 'ready' if rows and standings == {'satisfied'} else 'blocked' if 'blocked' in standings else 'check_required' if 'check_required' in standings else 'pending' if 'pending' in standings else 'stale'
-        out.append({key: entry[key] for key in ('provider', 'appRef', 'environment', 'product', 'lane', 'launchScope')}
+        out.append({key: entry.get(key) for key in ('provider', 'appRef', 'environment', 'product', 'lane', 'launchScope', 'launch')}
                    | {'readiness': readiness, 'requirements': rows, 'unsatisfied': sorted(row['kind'] for row in rows if row['standing'] != 'satisfied')})
     return out
 
