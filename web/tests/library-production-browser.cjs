@@ -8,6 +8,33 @@ const base='http://127.0.0.1:4439';
 const out=process.env.RAFII_LIBRARY_EVIDENCE||resolve(__dirname,'../../docs/consumer-ready/evidence/library');
 mkdirSync(out,{recursive:true});
 const checks=[];
+// Observation only: no extra requests, waits, retries, or error filtering.
+const DIAGNOSTIC_LIMITS=Object.freeze({contexts:4,events:256,pageErrors:16,precedingEvents:16,trackedPreviews:128,activePreviews:64,fixtures:128,text:4096,url:512});
+const browserDiagnostics=[];let diagnosticContextsDropped=0;
+function diagnosticUrl(value){
+ if(typeof value!=='string')return null;
+ if(value==='about:blank')return value;
+ try{
+  const url=new URL(value,base);
+  if(!['http:','https:'].includes(url.protocol))return '[non-http-url]';
+  // Drop userinfo, every query value, fragments, and external object paths.
+  const path=url.origin===base?url.pathname.replace(/\/dev\/upload\/[^/]+/g,'/dev/upload/[redacted]'):'/[path-redacted]';
+  return (url.origin+path).slice(0,DIAGNOSTIC_LIMITS.url);
+ }catch{return '[invalid-url]'}
+}
+function diagnosticText(value,limit=DIAGNOSTIC_LIMITS.text){
+ return String(value??'').slice(0,limit)
+  .replace(/https?:\/\/[^\s"'<>]+/gi,diagnosticUrl)
+  .replace(/\b(?:data|blob):[^\s"'<>]+/gi,'[inline-url-redacted]')
+  .replace(/\?[^\s"'<>)]*/g,'?[redacted]')
+  .replace(/\bBearer\s+[^\s"'<>;]+/gi,'Bearer [redacted]')
+  .replace(/\b(authorization|cookie|set-cookie|x-signature|(?:access|refresh)[_-]?token|token|password|secret|api[_-]?key)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi,'$1=[redacted]')
+  .replace(/\/dev\/upload\/[^/\s"'<>?]+/g,'/dev/upload/[redacted]')
+  .slice(0,limit);
+}
+function diagnosticOrigin(value){
+ try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.origin.slice(0,DIAGNOSTIC_LIMITS.url):null}catch{return null}
+}
 // Observe the current locator on every poll: signed-source renewal may replace
 // an image while decode() is pending, even when its replacement loads correctly.
 async function waitForLoadedRaster(locator,minimumDimension,timeout){
@@ -115,6 +142,56 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    });
    const page=await context.newPage(),errors=[],uploadTrace=[],rscFailures=[],activeRsc=new Set();
    let navigationPhase='initial library load',lastRscActivity=Date.now();
+   const diagnosticState={engine,width,events:[],pageErrors:[],fixtures:[],activePreviews:[],dropped:{events:0,pageErrors:0,trackedPreviews:0,activePreviews:0,fixtures:0}};
+   if(browserDiagnostics.length===DIAGNOSTIC_LIMITS.contexts){browserDiagnostics.shift();diagnosticContextsDropped++}
+   browserDiagnostics.push(diagnosticState);
+   const previewRequests=new Map(),activePreviews=new Map(),fixtureAssets=new Map();
+   let diagnosticSequence=0,previewSequence=0,navigationSequence=0,diagnosticPhase='initial library load';
+   const pushDiagnostic=(list,value,key,limit)=>{if(list.length===limit){list.shift();diagnosticState.dropped[key]++}list.push(value)};
+   const recordDiagnostic=(event,details={})=>{
+    const documentUrl=diagnosticUrl(page.url());
+    const entry={sequence:++diagnosticSequence,atMs:Date.now(),event,phase:diagnosticText(diagnosticPhase,160),harnessPhase:diagnosticText(navigationPhase,160),navigationId:navigationSequence,documentUrl,documentOrigin:diagnosticOrigin(page.url()),...details};
+    diagnosticState.activePreviews=[...activePreviews.values()];
+    pushDiagnostic(diagnosticState.events,entry,'events',DIAGNOSTIC_LIMITS.events);
+    return entry;
+   };
+   const markDiagnosticNavigation=(action,target,label=navigationPhase)=>{
+    diagnosticPhase=label;navigationSequence++;
+    recordDiagnostic('navigation:start',{action,target:diagnosticUrl(target),activePreviewIds:[...activePreviews.keys()]});
+   };
+   const rememberFixtureAssets=assets=>{
+    for(const asset of assets||[]){
+     const assetId=String(asset?.id||'');
+     if(!/^(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(assetId))continue;
+     const previous=fixtureAssets.get(assetId);
+     if(!previous&&fixtureAssets.size===DIAGNOSTIC_LIMITS.fixtures){fixtureAssets.delete(fixtureAssets.keys().next().value);diagnosticState.dropped.fixtures++}
+     fixtureAssets.set(assetId,{assetId,filename:diagnosticText(asset.originalFilename??previous?.filename,160),extension:diagnosticText(asset.extension??previous?.extension,24),processing:diagnosticText(asset.processing??asset.indexingStatus??previous?.processing,32)});
+    }
+    diagnosticState.fixtures=[...fixtureAssets.values()];
+   };
+   const observePreviewRequest=request=>{
+    let info=previewRequests.get(request);if(info)return info;
+    const url=new URL(request.url()),match=url.origin===base&&/^\/api\/workspaces\/[^/]+\/library\/files\/([a-f0-9]{32})\/preview\/?$/i.exec(url.pathname);
+    const redirectedFrom=request.redirectedFrom(),previous=redirectedFrom&&previewRequests.get(redirectedFrom);
+    if(!match&&!previous)return null;
+    info={requestId:++previewSequence,assetId:match?match[1]:previous.assetId,url:diagnosticUrl(request.url()),method:diagnosticText(request.method(),16),startedAtMs:Date.now(),startedPhase:diagnosticText(diagnosticPhase,160),startedNavigationId:navigationSequence,redirectedFromId:previous?.requestId||null};
+    if(previewRequests.size===DIAGNOSTIC_LIMITS.trackedPreviews){
+     const oldest=previewRequests.keys().next().value,removed=previewRequests.get(oldest);
+     previewRequests.delete(oldest);diagnosticState.dropped.trackedPreviews++;
+     if(activePreviews.delete(removed.requestId))diagnosticState.dropped.activePreviews++;
+    }
+    previewRequests.set(request,info);
+    if(activePreviews.size===DIAGNOSTIC_LIMITS.activePreviews){activePreviews.delete(activePreviews.keys().next().value);diagnosticState.dropped.activePreviews++}
+    activePreviews.set(info.requestId,info);
+    return info;
+   };
+   const finishPreviewRequest=(request,event)=>{
+    const info=previewRequests.get(request);if(!info)return;
+    activePreviews.delete(info.requestId);
+    recordDiagnostic(event,{requestId:info.requestId,assetId:info.assetId,url:info.url,failure:diagnosticText(request.failure()?.errorText,256),redirectedTo:diagnosticUrl(request.redirectedTo()?.url()),activePreviewIds:[...activePreviews.keys()]});
+   };
+   page.on('framenavigated',frame=>{if(frame===page.mainFrame())recordDiagnostic('navigation:commit',{target:diagnosticUrl(frame.url()),activePreviewIds:[...activePreviews.keys()]})});
+   page.on('close',()=>recordDiagnostic('page:close',{activePreviewIds:[...activePreviews.keys()]}));
    const isRscRequest=request=>new URL(request.url()).searchParams.has('_rsc');
    const finishRsc=request=>{if(activeRsc.delete(request))lastRscActivity=Date.now()};
    // Let real RSC prefetches finish before the harness destroys their document.
@@ -131,18 +208,29 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    };
    const relevantUploadUrl=value=>{try{const u=new URL(value);if(u.searchParams.has('token'))u.searchParams.set('token','[redacted]');return u.origin+u.pathname+(u.search?'?'+u.searchParams.toString():'')}catch{return value}};
    const isUploadRequest=request=>/\/library\/files(?:\/|\?|$)|\/media\/videos(?:\/|\?|$)|devharness\.(?:storage\.)?supabase\.co|\/dev\/(?:upload|resumable)(?:\/|$)/.test(request.url());
-   page.on('pageerror',error=>errors.push(error.message));
+   page.on('pageerror',error=>{
+    errors.push(error.message);
+    const precedingEvents=diagnosticState.events.slice(-DIAGNOSTIC_LIMITS.precedingEvents);
+    const entry=recordDiagnostic('pageerror',{message:diagnosticText(error.message),stack:diagnosticText(error.stack),activePreviewIds:[...activePreviews.keys()]});
+    pushDiagnostic(diagnosticState.pageErrors,{...entry,activePreviews:[...activePreviews.values()],precedingEvents},'pageErrors',DIAGNOSTIC_LIMITS.pageErrors);
+   });
    page.on('request',request=>{
+    const preview=observePreviewRequest(request);if(preview)recordDiagnostic('preview:start',preview);
     if(isUploadRequest(request))uploadTrace.push({event:'request',method:request.method(),url:relevantUploadUrl(request.url())});
     if(isRscRequest(request)){activeRsc.add(request);lastRscActivity=Date.now()}
    });
-   page.on('requestfinished',finishRsc);
-   page.on('response',response=>{if(isUploadRequest(response.request()))uploadTrace.push({event:'response',method:response.request().method(),url:relevantUploadUrl(response.url()),status:response.status()})});
+   page.on('requestfinished',request=>{finishRsc(request);finishPreviewRequest(request,'preview:finished')});
+   page.on('response',response=>{
+    const preview=previewRequests.get(response.request());if(preview)recordDiagnostic('preview:response',{requestId:preview.requestId,assetId:preview.assetId,url:diagnosticUrl(response.url()),status:response.status()});
+    if(isUploadRequest(response.request()))uploadTrace.push({event:'response',method:response.request().method(),url:relevantUploadUrl(response.url()),status:response.status()})
+   });
    page.on('requestfailed',request=>{
+    finishPreviewRequest(request,'preview:failed');
     if(isUploadRequest(request))uploadTrace.push({event:'requestfailed',method:request.method(),url:relevantUploadUrl(request.url()),failure:request.failure()?.errorText});
     finishRsc(request);
     if(isRscRequest(request))rscFailures.push({url:relevantUploadUrl(request.url()),method:request.method(),prefetch:request.headers()['next-router-prefetch']||null,failure:request.failure()?.errorText,phase:navigationPhase});
    });
+   markDiagnosticNavigation('goto',base+'/app/library');
    await page.goto(base+'/app/library');
    const welcome=page.getByRole('button',{name:'Not now',exact:true});
    try{await welcome.waitFor({state:'visible',timeout:5000});await welcome.click();await welcome.waitFor({state:'hidden',timeout:5000});}
@@ -158,6 +246,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    let listing,doc;const indexDeadline=Date.now()+30000;
    while(Date.now()<indexDeadline){
     listing=await (await context.request.get(path,{headers})).json();doc=listing.assets.find(a=>a.originalFilename==='rehearsal-'+width+'.md');
+    rememberFixtureAssets(listing.assets);
     if(doc&&doc.indexingStatus!=='pending')break;
     await new Promise(resolve=>setTimeout(resolve,250));
    }
@@ -181,7 +270,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     assert.ok(committed.ok(),await committed.text());
     const titled=await context.request.patch(base+'/api/workspaces/'+ws+'/library/assets/'+ticket.assetId,{headers,data:{title:videoName}});
     assert.ok(titled.ok(),await titled.text());
-    await settleBeforeNavigation('show uploaded WebKit video');await page.reload();
+    await settleBeforeNavigation('show uploaded WebKit video');markDiagnosticNavigation('reload',page.url());await page.reload();
    }
    const videoCard=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();
    try{await videoCard.waitFor({timeout:30000});}
@@ -276,13 +365,14 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:'Use as a source',exact:true}).click();
    const sourceReviewLink=page.getByRole('link',{name:'Review source in Ideas',exact:true});await sourceReviewLink.waitFor();
    assert.match(await sourceReviewLink.getAttribute('href'),/^\/app\/ideas\?source=[a-f0-9]{32}$/,'source review must target the real source inspector');
+   markDiagnosticNavigation('link',base+'/app/ideas','open source review');
    await sourceReviewLink.click();await page.waitForURL(/\/app\/ideas\?source=/);
    await page.locator('[data-tour="ideas-facts"]').getByText('Finger exercises',{exact:false}).waitFor({timeout:15000});
    await page.getByRole('heading',{name:'How it may be used',exact:true}).waitFor();
    await page.getByText(doc.sha256,{exact:true}).waitFor();
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
-   await settleBeforeNavigation('return from source review');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
+   await settleBeforeNavigation('return from source review');markDiagnosticNavigation('goto',base+'/app/library');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).click();
    // Base UI retains an inert, hidden portal node after dismissal. Confirm
    // that the overlay is no longer visible/interactable before scrolling,
@@ -376,12 +466,13 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     const committed=await context.request.post(path+'/files/'+ticket.assetId+'/commit',{headers,data:{}});assert.ok(committed.ok(),await committed.text());
     await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+ticket.assetId);
     const d=await (await context.request.get(path+'/files/'+ticket.assetId,{headers})).json();
+    rememberFixtureAssets([d.asset]);
     assert.ok(['ready','unsupported','duplicate'].includes(d.asset.processing),JSON.stringify(d));
     if(d.asset.processing!=='duplicate')thumbnailFormats.add(ext);
     if(d.asset.processing==='ready')assert.match(d.extractedText,/Rafii archive acceptance/);
     checks.push({engine,width,format:ext,status:d.asset.processing,execution:'real file/API/DB; synthetic identity/storage'});
    }
-   await settleBeforeNavigation('show uploaded sample formats');await page.reload();
+   await settleBeforeNavigation('show uploaded sample formats');markDiagnosticNavigation('reload',page.url());await page.reload();
    for(const ext of thumbnailFormats){
     await page.locator(`[data-library-thumbnail="${ext}"]`).first().waitFor({timeout:15000});
    }
@@ -416,7 +507,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.equal((await context.request.put(base+'/dev/upload/'+new URL(viewerTicket.url).searchParams.get('token'),{data:viewerBytes,headers:{'Content-Type':'application/pdf'}})).status(),200);
    assert.ok((await context.request.post(path+'/files/'+viewerTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+viewerTicket.assetId);
-   await settleBeforeNavigation('show uploaded multipage PDF');await page.reload();await search.fill('archive-viewer.pdf');
+   await settleBeforeNavigation('show uploaded multipage PDF');markDiagnosticNavigation('reload',page.url());await page.reload();await search.fill('archive-viewer.pdf');
    await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
@@ -489,7 +580,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     url.searchParams.set('acceptance-refresh',String(++audioUrlRevision));
     await route.fulfill({response,json:{...payload,url:url.href}});
    });
-   await settleBeforeNavigation('show uploaded waveform WAV');await page.reload();await search.fill('inline-preview.wav');
+   await settleBeforeNavigation('show uploaded waveform WAV');markDiagnosticNavigation('reload',page.url());await page.reload();await search.fill('inline-preview.wav');
    await view.getByRole('radio',{name:'Gallery'}).click();
    const inlineAudio=page.locator('[data-library-media-player="audio"]').first();
    await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
@@ -598,6 +689,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.screenshot({path:resolve(out,`library-${engine}-${width}.png`),fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'horizontal overflow');
    const beforeDelete=await (await context.request.get(path,{headers})).json();
+   rememberFixtureAssets(beforeDelete.assets);
    const target=beforeDelete.assets.find(a=>a.id===doc.id);
    assert.ok(target,`delete target ${doc.id} missing from current library`);
    assert.equal(target.displayTitle,'Brahms browser notes',`delete target changed: ${JSON.stringify(target)}`);
@@ -614,10 +706,12 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:/Document Brahms browser notes/}).waitFor({state:'detached',timeout:15000});
    const afterDelete=await context.request.get(path+'/files/'+doc.id,{headers});
    assert.equal(afterDelete.status(),404,`deleted asset ${doc.id} still resolves: ${await afterDelete.text()}`);
+   recordDiagnostic('runtime:guard',{errorCount:errors.length,activePreviewIds:[...activePreviews.keys()]});
    assert.deepEqual(errors,[],`browser runtime errors (${engine} ${width}); RSC request failures: ${JSON.stringify(rscFailures)}`);
    checks.push({engine,width,status:'pass',flows:['upload','rename','tags','collection','search','source-review','audio-player','transcript','delete','responsive'],execution:'real UI/API/DB; synthetic storage/identity'});
+   recordDiagnostic('context:close-requested',{activePreviewIds:[...activePreviews.keys()]});
    await context.close();
   }}finally{await browser.close();}
  }
  writeFileSync(resolve(out,'browser.json'),JSON.stringify({status:'pass',checks},null,2));console.log(JSON.stringify({status:'pass',checks}));
-})().catch(error=>{writeFileSync(resolve(out,'browser-failure.json'),JSON.stringify({status:'fail',error:String(error),checks},null,2));console.error(error);process.exitCode=1;});
+})().catch(error=>{writeFileSync(resolve(out,'browser-failure.json'),JSON.stringify({status:'fail',error:diagnosticText(String(error)),checks,diagnostics:{schemaVersion:1,limits:DIAGNOSTIC_LIMITS,contextsDropped:diagnosticContextsDropped,contexts:browserDiagnostics}},null,2));console.error(error);process.exitCode=1;});
