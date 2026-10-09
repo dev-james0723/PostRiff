@@ -334,7 +334,8 @@ try:
     CHECKS.append('current consent complete, manual/worker identity refresh and picture store succeed')
 
     # Shared non-YouTube behavior has no authorization-generation requirement.
-    ordinary_connection, ordinary_account = 'synthetic-linkedin', 'synthetic-linkedin-account'
+    # Picture rows require the same 32-character hex connection IDs as OAuth.
+    ordinary_connection, ordinary_account = uuid4().hex, 'synthetic-linkedin-account'
     ordinary_provider = SimpleNamespace(id='linkedin', execution_enabled=True,
         identity=lambda _access: {'providerAccountId': ordinary_account, 'handle': 'Ordinary current account'},
         inspect_scopes=lambda *_: ['synthetic.linkedin.read'])
