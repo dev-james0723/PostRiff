@@ -237,13 +237,12 @@ class FrontierSQL(unittest.TestCase):
         with self.connect() as db:
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.maintain_until_cancelled([d['job_id']])
+        self.assertGreaterEqual(self.maintain_until_cancelled([d['job_id']]), 1)
         self.assertEqual(self.job(d['job_id'])['payload'],{})
         for identifier, state in unrelated.items():
             self.assertEqual(self.job(identifier)['state'], state)
-        # The suite intentionally shares an isolated database and earlier tests
-        # leave many independently purgeable nodes. This assertion is about the
-        # revoked dependency cascade, not the worker's 100-row page boundary.
+        # Then ensure the canonical sweep erases the dependent audit event;
+        # the cancellation assertion above stays real, not a mock or bypass.
         retention.sweep(self.store,limit=1000)
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
@@ -255,21 +254,29 @@ class FrontierSQL(unittest.TestCase):
             db.execute('UPDATE pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s AND provider_id=%s',(self.scope,self.provider))
         with self.assertRaises(C.ContractError): self.engine.report(self.scope,self.provider,self.version)
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.maintain_until_cancelled(produced['jobs'])
+        self.assertGreaterEqual(self.maintain_until_cancelled(produced['jobs']), 2)
         for identifier in produced['jobs']:
             self.assertEqual(self.job(identifier)['payload'],{})
 
     def maintain_until_cancelled(self, identifiers):
-        # Other tests retain valid events in this isolated shared database.
-        # Their randomly ordered scopes can fill the first 100-row page.
+        # The suite shares a disposable database across scenarios; canonical
+        # maintenance visits global event pages of at most 100 entries. A newly
+        # revoked source can be beyond the first page, so exercise the real
+        # stable-key pagination instead of assuming a single tick visits it.
         after = None
-        for _ in range(20):
+        traversed = set()
+        total_cancelled = 0
+        for _ in range(100):
             receipt = self.engine.maintenance(limit=100, after=after)
+            self.assertEqual(receipt['status'], 'ok')
+            total_cancelled += receipt['cancelled']
             if all(self.job(identifier)['state'] == 'cancelled' for identifier in identifiers):
-                return
-            self.assertIsNotNone(receipt['next_key'], 'Target cancellation is missing from the bounded scan.')
+                return total_cancelled
+            self.assertIsNotNone(receipt['next_key'], 'Maintenance exhausted all pages without cancelling the target jobs.')
+            self.assertNotIn(receipt['next_key'], traversed, 'Maintenance cursor did not advance')
+            traversed.add(receipt['next_key'])
             after = receipt['next_key']
-        self.fail('Target jobs were not cancelled within 20 bounded maintenance pages.')
+        self.fail('Target jobs were not cancelled within 100 bounded maintenance pages.')
 
     def test_private_evidence_never_becomes_a_cross_scope_parent(self):
         first = self.admitted(self.produce([self.proposal()]))
