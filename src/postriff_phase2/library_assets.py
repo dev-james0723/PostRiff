@@ -34,6 +34,24 @@ def _read_now(a):
     return a['kind'] == 'document' and a['bytes'] <= READ_NOW_BYTES
 
 
+def _fill_meta(cur, w, i, filename):
+    """Automatic tags and one sentence for a file read before they existed, from its stored text (the chunks are exact
+    slices of the normalized text). Tags fill only an empty tag list; the summary is replaced only while it is still the
+    old machine default, the text's first 360 characters. Returns the updated row, or None if nothing was left to do."""
+    from .library_autometa import suggest
+    cur.execute('SELECT text FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s ORDER BY ordinal LIMIT 400', (w, uuid.UUID(hex=i)))
+    text = ''.join(r[0] for r in cur.fetchall())
+    auto = suggest(text, filename or '')
+    cur.execute("UPDATE public.pr_library_assets SET tags=CASE WHEN cardinality(tags)=0 THEN %s ELSE tags END,"
+                "summary=CASE WHEN %s::text IS NOT NULL AND summary IS NOT DISTINCT FROM %s THEN %s ELSE summary END,"
+                "provenance=provenance||%s::jsonb WHERE workspace_id=%s AND id=%s AND processing_status='ready' AND NOT (provenance ? 'autoMeta') "
+                "RETURNING to_jsonb(pr_library_assets)||jsonb_build_object('epoch',extract(epoch from created_at))",
+                (auto['tags'], auto['summary'], text[:360] or None, auto['summary'],
+                 json.dumps({'autoTags': auto['tags'], 'autoMeta': 'extract-v1'}), w, uuid.UUID(hex=i)))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _member(row):
     from .permissions import Membership
     return Membership.from_row(*row[2:7])
@@ -263,6 +281,9 @@ class UniversalLibrary:
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
             a = self._row(cur,w,i)
+            if a['processing_status'] == 'ready' and a['kind'] != 'audio' and 'autoMeta' not in (a.get('provenance') or {}):
+                # Read before automatic tags existed: describe it now from its stored text, then show the result.
+                a = _fill_meta(cur,w,i,a.get('original_filename')) or a
             cur.execute('SELECT ordinal,text FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s ORDER BY ordinal LIMIT 17',(w,i))
             parts = [{'ordinal':int(n),'text':x} for n,x in cur.fetchall()]
             result = _asset(a)
@@ -549,7 +570,12 @@ class UniversalLibrary:
                 failed+=1
                 with connect() as db,db.cursor() as cur:
                     cur.execute('UPDATE public.pr_library_assets SET delete_attempts=delete_attempts+1 WHERE workspace_id=%s AND id=%s',(w,i))
-        return {'processed':processed,'removed':removed,'failed':failed}
+        described=0
+        with connect() as db,db.cursor() as cur:
+            cur.execute("SELECT workspace_id::text,replace(id::text,'-',''),original_filename FROM public.pr_library_assets WHERE processing_status='ready' AND kind<>'audio' AND NOT (provenance ? 'autoMeta') ORDER BY updated_at DESC LIMIT 20")
+            for w,i,name in cur.fetchall():
+                described+=bool(_fill_meta(cur,w,i,name))
+        return {'processed':processed,'removed':removed,'failed':failed,'described':described}
 
     def purge_workspace(self,cur,w):
         cur.execute('SELECT object_name FROM public.pr_library_assets WHERE workspace_id=%s',(w,))
