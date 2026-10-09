@@ -214,7 +214,7 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
       // Actual synthetic disconnect/reconnect must show erased plans as
       // permanently unusable, while preserving the customer's Library/title.
-      await request('DELETE', `/api/workspaces/${wid}/channels/${encodeURIComponent(cid)}`);
+      await request('DELETE', `/api/workspaces/${wid}/channels/${encodeURIComponent(cid)}`, {});
       const reconnectStart = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, {
         capability: 'publish', input: { connectionId: cid }
       });
