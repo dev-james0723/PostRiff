@@ -142,7 +142,7 @@ def _normalize(item, *, platform, policy, at, available_at, epoch, source_key,
     if not isinstance(item, dict):
         raise ContractError("meta_item_invalid")
     native_id = item.get("id")
-    if not isinstance(native_id, str) or not _ID.fullmatch(native_id):
+    if not isinstance(native_id, str) or not re.fullmatch(r"[0-9]{1,40}(?:_[0-9]{1,40})?", native_id):
         raise ContractError("meta_identity_invalid")
     payload = {"platform": platform, "native_id": native_id,
                "author_status": "known" if page_id else "unknown",
@@ -165,13 +165,13 @@ def _normalize(item, *, platform, policy, at, available_at, epoch, source_key,
         if isinstance(content, str):
             payload["text"] = content[:8000]
     return observation(
-        policy=policy, source_identity=f"{platform}:{source_key}:{native_id}",
+        policy=policy, source_identity=f"{platform}:{native_id}",
         revision_identity=digest([at, payload]),
         sequence=int(instant(at).timestamp() * 1_000_000), kind="raw_post",
         operation="create", payload=payload, event_at=published_at,
         received_at=at, available_at=available_at, coverage_epoch=epoch,
         contract_version=PROTOCOL, access_method=f"official_meta_{platform}_public_sample",
-        deletion_key=f"{platform}:{source_key}:{native_id}")
+        deletion_key=f"{platform}:{native_id}")
 
 
 def _fold(data, *, capability, policy, received_at, available_at, epoch,
