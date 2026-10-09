@@ -1811,12 +1811,11 @@ class IdeasService:
 
     @staticmethod
     def _check_capability_revision(payload, destinations):
-        """The composer offered destinations from one creation-capability revision; a stale or forged one is refused with
-        a stable code (`schema_revision_mismatch`) before any writing or spending. The browser never decides what is
-        draftable: every route still runs `check_destinations` against the live projection."""
-        if isinstance(payload.get("capabilityRevision"), str):
-            from .creation_capabilities import validate_destinations
-            validate_destinations(destinations, revision=payload["capabilityRevision"])
+        """Every route's destinations are checked against the live creation projection before any writing or spending
+        (CLI and subscription routes included); a composer that sent its facet revision gets a stale or forged list
+        refused with `schema_revision_mismatch`. The browser never decides what is draftable."""
+        from .creation_capabilities import validate_destinations
+        validate_destinations(destinations, revision=payload["capabilityRevision"] if isinstance(payload.get("capabilityRevision"), str) else None)
 
     @staticmethod
     def _with_chip_destinations(requested, chip_destinations):

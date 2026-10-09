@@ -615,12 +615,20 @@ class CoworkerService:
             _mark_superseded(state_, artifact, record_id, now)
             source_id = None
             if pack["claims"]:
-                before = {s.get("id") for s in state_.get("sources") or []}
-                commands(state_, principal, "source", {"kind": "text", "title": artifact["title"][:200], "text": source_text})
-                source = next(s for s in state_["sources"] if s.get("id") not in before)
+                # The same text already in this workspace (an explicit regenerate, or the same source for other targets)
+                # is reused: adding it again is refused, and re-approving would mark its other drafts stale.
+                from postriff_alpha.domain import clean as domain_clean
+                fingerprint_ = hashlib.sha256(("text" + domain_clean(source_text, 20000)).encode()).hexdigest()
+                source = next((x for x in state_.get("sources") or [] if x.get("fingerprint") == fingerprint_ and x.get("active")), None)
+                if source is None:
+                    before = {x.get("id") for x in state_.get("sources") or []}
+                    commands(state_, principal, "source", {"kind": "text", "title": artifact["title"][:200], "text": source_text})
+                    source = next(x for x in state_["sources"] if x.get("id") not in before)
                 source_id = source["id"]
                 fact_ids = [f["id"] for f, claim in zip(source["facts"], pack["claims"]) if claim["usableForDraft"]]
-                commands(state_, principal, "approve_source", {"sourceId": source_id, "factIds": fact_ids})
+                if not all(f.get("approved") for f in source["facts"] if f["id"] in fact_ids):
+                    approved = [f["id"] for f in source["facts"] if f.get("approved")]
+                    commands(state_, principal, "approve_source", {"sourceId": source_id, "factIds": list(dict.fromkeys(approved + fact_ids))})
                 source["origin"] = {"kind": "source_to_campaign", **{k: artifact["provenance"].get(k) for k in ("provider", "accessMethod", "url", "host", "publishedAt", "author", "contentHash", "evidenceType", "representedScope")},
                                     "retrievedAt": artifact["provenance"].get("retrievedAt"), "evidenceId": evidence_id, "factPackId": pack["id"], "format": artifact["format"]}
             created = commands(state_, principal, "raffi_campaign_create", {"goal": goal, "audience": audience or "Not specified",

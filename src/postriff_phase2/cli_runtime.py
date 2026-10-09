@@ -305,7 +305,9 @@ class ClaudeCliRuntime(AgentRuntime):
         return isinstance(model_id, str) and model_id in {f"{MODEL_PREFIX}{alias}" for alias in MODEL_ALIASES}
 
     def supported_platforms(self):
-        return tuple(PLATFORM_LIMITS)
+        # The creation projection decides what any route may draft for (one source, flag-gated); never a second list.
+        from .agent_runtime import draftable_platforms
+        return draftable_platforms()
 
     def start_conversation(self, workspace_id, actor):
         return {"runtime": ROUTE, "resumable": False}
