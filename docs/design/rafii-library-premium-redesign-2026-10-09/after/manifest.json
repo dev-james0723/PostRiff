@@ -1,0 +1,82 @@
+{
+  "source": "JCB -> Depot run rjzngvv5pw (https://depot.dev/orgs/jf34f85hr0/workflows/rjzngvv5pw), sourceHead ea99149e, LIBRARY_EVIDENCE chunks in the job log",
+  "images": {
+    "document-viewer-chromium-1440": {
+      "originalPngSha256": "85d02ea2558b0bdfa776c29c612c6d82f7720557d6b5bd76b9103f2d1e2ac50b",
+      "reviewCopy": "document-viewer-chromium-1440.jpg"
+    },
+    "document-viewer-chromium-390": {
+      "originalPngSha256": "0c799c251235f7a4415507630415d8c98157359923aa2cc16a5be4cc6fa5d5c9",
+      "reviewCopy": "document-viewer-chromium-390.jpg"
+    },
+    "document-viewer-webkit-1440": {
+      "originalPngSha256": "273785c12ac0e2a9f116a5bed2a1d0d0411bd4d5cbbe7eec30c3d12a1fdf5178",
+      "reviewCopy": "document-viewer-webkit-1440.jpg"
+    },
+    "document-viewer-webkit-390": {
+      "originalPngSha256": "501363e288f814b2c3b35f39c75cfadffc7e453a7655d0a99ff2b0fdea1cba18",
+      "reviewCopy": "document-viewer-webkit-390.jpg"
+    },
+    "library-chromium-1440": {
+      "originalPngSha256": "30272d565ac997c9e72ad816ea504671a45f45234008d8540513943071e3a780",
+      "reviewCopy": "library-chromium-1440.jpg"
+    },
+    "library-chromium-390": {
+      "originalPngSha256": "01233090813d3dbfb92ee34e43ac424f9a0744de6b80afc53e3664bcd74182b3",
+      "reviewCopy": "library-chromium-390.jpg"
+    },
+    "library-chromium-desktop-1440x900": {
+      "originalPngSha256": "7ac39b8861852e0ba732b7fa6131c1549ba8be41dbcb96b13251178478c88c63",
+      "reviewCopy": "library-chromium-desktop-1440x900.jpg"
+    },
+    "library-chromium-desktop-1440x900-detail": {
+      "originalPngSha256": "cee6162b0a6b943b852355e73d76ea39fe2f5ebbb78a8bb4cb3766a286a7430a",
+      "reviewCopy": "library-chromium-desktop-1440x900-detail.jpg"
+    },
+    "library-chromium-desktop-1440x900-player": {
+      "originalPngSha256": "03b534a4cf851158b3baf34192245a5a3dcc8733820b0cddf2ccf84c286ba980",
+      "reviewCopy": "library-chromium-desktop-1440x900-player.jpg"
+    },
+    "library-chromium-desktop-1440x900-selected": {
+      "originalPngSha256": "189a65d7355588920f61a6272074c22e20d220f4ca08c9742728d39e90bce617",
+      "reviewCopy": "library-chromium-desktop-1440x900-selected.jpg"
+    },
+    "library-chromium-phone-390x844": {
+      "originalPngSha256": "c40c9a4b874e63ab9409d8d007dc36bfbc2aa636f67adadce79579bf62dea41e",
+      "reviewCopy": "library-chromium-phone-390x844.jpg"
+    },
+    "library-chromium-phone-390x844-detail": {
+      "originalPngSha256": "5fad29abc11c67d7beabe88e7b8633a9027370a6be20e99fdf77516e060c5095",
+      "reviewCopy": "library-chromium-phone-390x844-detail.jpg"
+    },
+    "library-chromium-phone-390x844-player": {
+      "originalPngSha256": "9cbb3a4dac56dfb93915207325af9ab094e43d70d1390c8ce98fb61f7792ca79",
+      "reviewCopy": "library-chromium-phone-390x844-player.jpg"
+    },
+    "library-chromium-phone-390x844-selected": {
+      "originalPngSha256": "1c5b2611d392d082bc34a39c9024074f0c8bc5c17264f392c1ab8adf3c9d62ba",
+      "reviewCopy": "library-chromium-phone-390x844-selected.jpg"
+    },
+    "library-chromium-phone-landscape-844x390": {
+      "originalPngSha256": "ede51088f6644ceffa9f0ca4843cb66d9d65d0651eb2cc5fdf8cd8c6af3da361",
+      "reviewCopy": "library-chromium-phone-landscape-844x390.jpg"
+    },
+    "library-chromium-tablet-768x1024": {
+      "originalPngSha256": "cac7daab0d621e405705fca8674bbaecd395d8cd29a240c43e4f0ff9513bd782",
+      "reviewCopy": "library-chromium-tablet-768x1024.jpg"
+    },
+    "library-chromium-zoom-200-1280x800": {
+      "originalPngSha256": "ee7d258038305ea5df85df1f43e0fcb096a9c846b174578ef884b11d331fa462",
+      "reviewCopy": "library-chromium-zoom-200-1280x800.jpg"
+    },
+    "library-webkit-1440": {
+      "originalPngSha256": "0c1497fa0b850a31371c2ebda852d0dccc0165b914932e57415575779c2dd052",
+      "reviewCopy": "library-webkit-1440.jpg"
+    },
+    "library-webkit-390": {
+      "originalPngSha256": "f4356633dda0d0ccff3b6b62450ca6997eefdd3e02744fad2d71a4c093606f59",
+      "reviewCopy": "library-webkit-390.jpg"
+    }
+  },
+  "incomplete": []
+}

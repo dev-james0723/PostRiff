@@ -41,17 +41,22 @@ ffmpeg -hide_banner -loglevel error -i .codex/library-samples/archive-acceptance
 cd web
 npx playwright install --with-deps chromium webkit
 cd ..
-python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-ready/evidence/library
+# Both browser suites run even if the first fails; every screenshot comes back through the log (JCB keeps logs, not
+# artifacts) and the first failure decides the exit, after the bench.
+library_exit=0
+python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-ready/evidence/library || library_exit=$?
 python scripts/library-evidence-export.py emit docs/consumer-ready/evidence/library 'library-*.png' || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
 python scripts/library-evidence-export.py emit docs/consumer-ready/evidence/library 'document-viewer-*.png' || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
+python scripts/library-evidence-export.py emit docs/consumer-ready/evidence/library 'debug-*.png' || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
+browser_exit=0
 if [ -f web/tests/library-intelligence-browser.cjs ]; then
-  browser_exit=0
   python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser || browser_exit=$?
-  # Screenshots return through the log (JCB keeps logs, not artifacts); exported on failure too, then the real exit stands.
   python scripts/library-evidence-export.py emit docs/design/rafii-intelligent-library-2026-10-08/evidence/browser || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
-  if [ "$browser_exit" -ne 0 ]; then exit "$browser_exit"; fi
 fi
+echo "LIBRARY_BROWSER_EXITS library=$library_exit intelligence=$browser_exit"
 # A031 search latency at 10,000 mixed assets, 8 concurrent scoped searches (pgvector installed by the intelligence stage).
 # Informational: the JSON receipt is the evidence; an over-budget result is reported, never hidden.
 python scripts/library-intelligence-bench.py || echo "LIBRARY_BENCH_EXIT=$?"
 npm --prefix web audit --audit-level=high
+if [ "$library_exit" -ne 0 ]; then exit "$library_exit"; fi
+if [ "$browser_exit" -ne 0 ]; then exit "$browser_exit"; fi

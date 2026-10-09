@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from '../ui/controls';
 import { Input } from '@/components/ui/input';
 import type { AssetRef, ContentSegment, VoiceSample } from '@/lib/api/library-intelligence-types';
 import { newIdempotencyKey } from '@/lib/library/batch';

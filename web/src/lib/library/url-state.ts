@@ -11,6 +11,8 @@ export const LIBRARY_SCOPES = ['all', 'collection', 'selection'] as const;
 export const LIBRARY_USAGE = ['all', 'unused', 'used'] as const;
 export const LIBRARY_KINDS = ['all', 'image', 'video', 'audio', 'document', 'file'] as const;
 export const LIBRARY_SORTS = ['newest', 'stored', 'largest'] as const;
+/** Processing state as a filter: ready to use, still being prepared, or needing attention (failed). */
+export const LIBRARY_STATUSES = ['all', 'ready', 'processing', 'attention'] as const;
 /** Search the Library, or ask it a question; switching keeps each one's state. */
 export const LIBRARY_PANELS = ['search', 'ask'] as const;
 
@@ -24,6 +26,7 @@ export type LibraryScopeParam = (typeof LIBRARY_SCOPES)[number];
 export type LibraryUsageParam = (typeof LIBRARY_USAGE)[number];
 export type LibraryKindParam = (typeof LIBRARY_KINDS)[number];
 export type LibrarySortParam = (typeof LIBRARY_SORTS)[number];
+export type LibraryStatusParam = (typeof LIBRARY_STATUSES)[number];
 export type LibraryPanelParam = (typeof LIBRARY_PANELS)[number];
 
 export interface LibraryUrlState {
@@ -32,6 +35,7 @@ export interface LibraryUrlState {
   collection: string;
   use: LibraryUsageParam;
   kind: LibraryKindParam;
+  status: LibraryStatusParam;
   tag: string;
   sort: LibrarySortParam;
   mode: LibraryViewMode;
@@ -49,6 +53,7 @@ export const DEFAULT_LIBRARY_STATE: LibraryUrlState = {
   collection: '',
   use: 'all',
   kind: 'all',
+  status: 'all',
   tag: '',
   sort: 'newest',
   mode: 'gallery',
@@ -116,6 +121,7 @@ export function parseLibraryState(params: URLSearchParams | Record<string, strin
     collection: isSafeId(collection) ? collection : '',
     use: literal(LIBRARY_USAGE, read(params, 'use'), d.use),
     kind: literal(LIBRARY_KINDS, read(params, 'kind'), d.kind),
+    status: literal(LIBRARY_STATUSES, read(params, 'status'), d.status),
     tag: looksLikeSecret(tag) ? '' : tag,
     sort: literal(LIBRARY_SORTS, read(params, 'sort'), d.sort),
     mode: literal(LIBRARY_VIEW_MODES, read(params, 'mode'), d.mode),
@@ -137,6 +143,7 @@ export function serializeLibraryState(state: Partial<LibraryUrlState>): Record<s
   if (isSafeId(full.collection)) out.collection = full.collection;
   if (full.use !== DEFAULT_LIBRARY_STATE.use) out.use = full.use;
   if (full.kind !== DEFAULT_LIBRARY_STATE.kind) out.kind = full.kind;
+  if (full.status !== DEFAULT_LIBRARY_STATE.status) out.status = full.status;
   if (full.tag && !looksLikeSecret(full.tag)) out.tag = full.tag.slice(0, 80);
   if (full.sort !== DEFAULT_LIBRARY_STATE.sort) out.sort = full.sort;
   if (full.mode !== DEFAULT_LIBRARY_STATE.mode) out.mode = full.mode;
@@ -190,4 +197,12 @@ export function openerSelector(id: string): string | null {
 /** Where a view's scroll position is kept for the return trip (per workspace, per view, without selection or pack). */
 export function scrollKey(workspaceId: string, state: Partial<LibraryUrlState>): string {
   return `rafii-library-scroll:${workspaceId}:${libraryHref({ ...state, sel: [], asset: '', pack: '' })}`;
+}
+
+/** Which status bucket an item's processing state falls in (items without one, such as photos, are ready). */
+export function statusBucket(processing: string | null | undefined): Exclude<LibraryStatusParam, 'all'> {
+  const value = processing ?? '';
+  if (['pending', 'queued', 'processing'].includes(value)) return 'processing';
+  if (value === 'failed') return 'attention';
+  return 'ready';
 }

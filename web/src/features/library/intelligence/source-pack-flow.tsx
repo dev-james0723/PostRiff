@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader } from '@/components/rafii';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
+import { DialogButton as Button } from '../ui/controls';
 import { Input } from '@/components/ui/input';
 import { useModelChoice } from '@/features/agent/use-model';
 import { ApiError } from '@/lib/api/client';
@@ -353,7 +354,7 @@ function FlowBody({
                   {platforms.map((platform) => {
                     const on = channels.includes(platform);
                     return (
-                      <Button key={platform} type='button' variant={on ? 'action' : 'glass'} size='control' className='h-11' aria-pressed={on} onClick={() => setChannels(on ? channels.filter((value) => value !== platform) : [...channels, platform])}>
+                      <Button key={platform} type='button' variant='glass' size='control' className='aria-pressed:rafii-glass-selected aria-pressed:text-foreground' aria-pressed={on} onClick={() => setChannels(on ? channels.filter((value) => value !== platform) : [...channels, platform])}>
                         {on ? <Icons.check aria-hidden /> : null}
                         {platform}
                       </Button>

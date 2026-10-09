@@ -1,0 +1,74 @@
+{
+  "source": "/private/tmp/claude-501/-Users-ouxianxing-Documents-James-Au-Studio/b39ea4ef-00e4-40a0-9610-1e6845b7b267/scratchpad/ci-f7dbfccf-raw.log",
+  "images": {
+    "document-viewer-chromium-1440": {
+      "originalPngSha256": "a45deaeeaf9409a7023c8e3af0323b9b714e07d2bf8db426daa12df28206dddb",
+      "reviewCopy": "document-viewer-chromium-1440.jpg"
+    },
+    "document-viewer-chromium-390": {
+      "originalPngSha256": "a608e85cc73ec5190c979125a1d434d97a5bc9861b765f5dd7bdb35ded2967a1",
+      "reviewCopy": "document-viewer-chromium-390.jpg"
+    },
+    "document-viewer-webkit-1440": {
+      "originalPngSha256": "ff94528341f196f3833354a5b8c0c865db33780efe42fd5f1a7ca6f9b06b527b",
+      "reviewCopy": "document-viewer-webkit-1440.jpg"
+    },
+    "document-viewer-webkit-390": {
+      "originalPngSha256": "7123c19b6b00d3df9921337070af10aec2f45043bd8a707996bff21ede50fa44",
+      "reviewCopy": "document-viewer-webkit-390.jpg"
+    },
+    "library-chromium-1440": {
+      "originalPngSha256": "bfb4f9840009e80099f635763012b41ed443d4747f10b4a670c7fda2298cbc11",
+      "reviewCopy": "library-chromium-1440.jpg"
+    },
+    "library-chromium-390": {
+      "originalPngSha256": "15b2307817ced0b294d4d4399c101136c033cbf41dec19b59af8d977a3c0e4fe",
+      "reviewCopy": "library-chromium-390.jpg"
+    },
+    "library-chromium-desktop-1440x900": {
+      "originalPngSha256": "ce83a66e7d8d9c951fbb1c064b092cd87cf2521172569c1541a7e93b37203182",
+      "reviewCopy": "library-chromium-desktop-1440x900.jpg"
+    },
+    "library-chromium-desktop-1440x900-detail": {
+      "originalPngSha256": "d1d6647d6786a6c3855f44532c1881a6da726849700aedf3987e3b337cfc1b32",
+      "reviewCopy": "library-chromium-desktop-1440x900-detail.jpg"
+    },
+    "library-chromium-desktop-1440x900-player": {
+      "originalPngSha256": "f7ed74d182712c495ca7a433c94cf1a1bf545c10157402ef77a1a0d9eedb4987",
+      "reviewCopy": "library-chromium-desktop-1440x900-player.jpg"
+    },
+    "library-chromium-desktop-1440x900-selected": {
+      "originalPngSha256": "6638753d936e2ab6aab761711208749a21566b7fe5e3641849fc51b50c4f6e2d",
+      "reviewCopy": "library-chromium-desktop-1440x900-selected.jpg"
+    },
+    "library-chromium-phone-390x844": {
+      "originalPngSha256": "ecd9286fecde692d9d3e3c15796ee79ddaab8094c5c156c653d994506c9dd389",
+      "reviewCopy": "library-chromium-phone-390x844.jpg"
+    },
+    "library-chromium-phone-390x844-detail": {
+      "originalPngSha256": "0a1cf414d0f45919eccbe95ccf939ea58bce6f97e7366a9d0eb7450038798794",
+      "reviewCopy": "library-chromium-phone-390x844-detail.jpg"
+    },
+    "library-chromium-phone-390x844-player": {
+      "originalPngSha256": "81da3939073196ca04a9c8f54d4e9cbaacf7d1cc7c05df34d3cd8853850dbc37",
+      "reviewCopy": "library-chromium-phone-390x844-player.jpg"
+    },
+    "library-chromium-phone-390x844-selected": {
+      "originalPngSha256": "0fc703165960deae56040a6538a7010cb171936f3e89bb51e4c17b29422a6e33",
+      "reviewCopy": "library-chromium-phone-390x844-selected.jpg"
+    },
+    "library-chromium-tablet-768x1024": {
+      "originalPngSha256": "d4b893ac2eeb12858041be18bd07845e096c31397dc27f70764d3fd74311ff4f",
+      "reviewCopy": "library-chromium-tablet-768x1024.jpg"
+    },
+    "library-webkit-1440": {
+      "originalPngSha256": "1cd606009aa5b336de9739cf84cbd10d4dd960111c49281706ba2f2fa09b2237",
+      "reviewCopy": "library-webkit-1440.jpg"
+    },
+    "library-webkit-390": {
+      "originalPngSha256": "2f9d9cf92709a02e8099b4de0441998fa2711c1eade328ababef96104c3d1f5b",
+      "reviewCopy": "library-webkit-390.jpg"
+    }
+  },
+  "incomplete": []
+}

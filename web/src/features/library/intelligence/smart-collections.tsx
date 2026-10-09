@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icons } from '@/components/icons';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage } from '@/components/rafii';
-import { Button } from '@/components/ui/button';
+import { DialogButton as Button } from '../ui/controls';
 import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api/client';
 import type { CollectionDefinition, CollectionPreview, CollectionWriteResult, SmartRule } from '@/lib/api/library-intelligence-types';

@@ -2,7 +2,7 @@
 
 import { Component, useCallback, useEffect, useMemo, useState, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 import { StateMessage } from '@/components/rafii';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from '../../ui/controls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseLibraryProps, type LibraryAssetRef, type LibraryLocator } from '@/lib/library/openui-schemas';
 import { applyStreamFrame, canRepair, fallbackItems, initialSurfaceState, surfacePhase, type StreamFrame, type TaskSurfaceState, type ValidatedTaskNode } from '@/lib/library/openui-policy';

@@ -1,7 +1,7 @@
 'use client';
 
 import { Icons } from '@/components/icons';
-import { Button } from '@/components/ui/button';
+import { PanelButton as Button } from '../ui/controls';
 import type { Locator, SearchHit } from '@/lib/api/library-intelligence-types';
 import type { Asset } from '@/lib/api/types';
 import { normalizeKey } from '@/lib/library/url-state';

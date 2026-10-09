@@ -52,26 +52,26 @@ export function bottomClearance({ mobile, playerOpen, playerExpanded = false }: 
 }
 
 /**
- * The phone layout above the first result at 390 × 844, in CSS pixels, from the classes used in the Library:
- * app header `h-16`, page padding `pt-3`, title, the Add button row (`h-12`), page gap `gap-5`, the search row
- * (`min-h-11`) with its scope line and Search/Ask switch, the collection switcher row (`h-11`), the filter row (`min-h-11`), the view row (`min-h-11`) and the
- * `gap-3` between them. No banners (the spec's measurement condition).
+ * The phone layout above the first result at 390 × 844, in CSS pixels, from the classes used in the Library (redesign
+ * §3; touch sizes, since phones have coarse pointers): app header `h-16`, page padding `pt-3`, the title row with the
+ * one Add (`pointer-coarse:h-11`), page gap `gap-5`, the search field (`pointer-coarse:h-11`), its scope line with the
+ * Search/Ask switch, the collection switcher row (`pointer-coarse:h-11`), the toolbar (filters on one row, sort and view
+ * on a second, then the count line) and the `gap-3` between them. No banners (the spec's measurement condition).
  */
 export const MOBILE_CHROME_PX = {
   appHeader: 64,
   pageTop: 12,
-  pageTitle: 36,
-  titleGap: 12,
-  addButton: 48,
+  titleRow: 44,
   pageGap: 20,
   search: 44,
-  scopeLine: 44,
+  scopeLine: 36,
   switcher: 44,
-  filters: 44,
-  view: 44,
-  gaps: 12 * 4
+  toolbar: 44 + 6 + 44,
+  gaps: 12 * 3
 } as const;
 
+/** Gallery previews are 4:3 tiles. */
+export const PREVIEW_RATIO = 3 / 4;
 export const CARD_TITLE_PX = 28;
 export const PAGE_GUTTER_PX = 16;
 export const GRID_GAP_PX = 12;
@@ -84,7 +84,7 @@ export function mobileFirstAsset({
 }: { viewportWidth?: number; viewportHeight?: number; chrome?: Record<string, number>; columns?: number } = {}) {
   const top = Object.values(chrome).reduce((sum, value) => sum + value, 0);
   const cardWidth = (viewportWidth - PAGE_GUTTER_PX * 2 - GRID_GAP_PX * (columns - 1)) / columns;
-  const previewBottom = top + cardWidth;
+  const previewBottom = top + cardWidth * PREVIEW_RATIO;
   const titleBottom = previewBottom + CARD_TITLE_PX;
   const visibleLimit = viewportHeight - TAB_BAR_REM * 16;
   return { top, cardWidth, previewBottom, titleBottom, visibleLimit, visible: titleBottom <= visibleLimit };
