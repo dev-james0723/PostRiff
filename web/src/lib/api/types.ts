@@ -3,6 +3,8 @@
  * Ported from the founder alpha client (`studio/web/src/founder/cloud-api.ts`)
  * and kept in one place so every page reads the same shapes.
  */
+
+import type { CreationCatalog } from '@/lib/creation/capabilities';
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
 import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 
@@ -829,6 +831,8 @@ export interface Destination {
   platform: string;
   language: LocaleTag;
   channelId?: string;
+  /** Native format id from the creation facet (e.g. `facebook.reel`); omitted = the platform's default format. */
+  format?: string;
 }
 
 export interface SchedulePlan {
@@ -1088,6 +1092,8 @@ export interface ModelCatalog {
   };
   /** Chat attachments (SPEC §5.11). Every limit the UI shows comes from here. Absent = feature off. */
   attachments?: AttachmentsCatalog;
+  /** Creation-capability facet (`rafii.creation-capabilities.v1`); null/absent = offer the original five only. */
+  creation?: CreationCatalog | null;
 }
 
 export interface MediaProcessor {

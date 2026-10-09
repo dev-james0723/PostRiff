@@ -21,16 +21,19 @@ import type { SlashCommand } from '@/lib/agent-runtime/commands';
 import { ModelPicker } from './model-picker';
 import { DeliveryPlanner, type DeliveryTargetOption } from './delivery-planner';
 import { DeliverySummary, type DeliverySummaryRow } from './delivery-summary';
+import { NativeFormatPicker, type NativeFormatRow } from './native-format-picker';
 import type { ChannelLanguages } from './use-channel-languages';
 
 /** A conversation turn's message text, mirroring the server's cap (ideas.MAX_TEXT). Unlike the Home quick
  *  start, which seeds a new idea and allows up to 20,000 characters, a turn is a follow-up message. */
 export const MESSAGE_MAX = 6000;
 
-/** Platforms the drafting runtime can write for today (mirrors `agent_runtime.PLATFORMS`). X is draftable but never
- *  publishable: PostRiff has no X publisher, so X drafts are copied and posted by hand. */
-export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu', 'X'] as const;
-export type DraftPlatform = (typeof DRAFT_PLATFORMS)[number];
+/** The original drafting platforms (mirrors `creation_capabilities.ORIGINAL_PLATFORMS`): the fallback whenever the
+ *  creation-capability facet is missing. The live list comes from `draftableFrom(models.data?.creation)`; drafting a
+ *  platform never means Rafii can publish there (publishing runs its own live checks). */
+export const DRAFT_PLATFORMS: readonly string[] = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu', 'X'];
+/** A platform the creation facet lists as draftable (server-validated on every turn). */
+export type DraftPlatform = string;
 
 /** Tool pills in the compact composer: one height, one radius, disabled states with their reason in the title. */
 const TOOL = 'rafii-focus inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-50 sm:h-9';
@@ -86,6 +89,8 @@ interface ComposerProps {
   attachments?: ComposerAttachments;
   attachmentBar?: Omit<AttachmentBarProps, 'attachments' | 'requestedView' | 'onRequestedViewHandled'>;
   slash?: { onPick: (command: SlashCommand, args: string, pick: SlashPick) => void; onDismiss?: () => void };
+  /** Native format per selected destination (creation facet); absent = platform defaults only. */
+  nativeFormats?: { rows: NativeFormatRow[]; value: Record<string, string>; onChange: (key: string, format: string) => void };
 }
 
 /** "More…" in the `@` list opens the ＋ sheet at the view of its best match. */
@@ -98,7 +103,7 @@ const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'template
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, deliveryPlanner, attachments, attachmentBar, slash },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, deliveryPlanner, attachments, attachmentBar, slash, nativeFormats },
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again. Send also waits for uploads (SPEC §4.7).
@@ -194,6 +199,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         />
       )}
       <DeliverySummary rows={summaryRows} open={deliveryPlanner.open} controls={deliveryPlannerId} disabled={disabled} onOpen={() => deliveryPlanner.onOpenChange(true)} />
+      {nativeFormats && <NativeFormatPicker rows={nativeFormats.rows} value={nativeFormats.value} onChange={nativeFormats.onChange} disabled={disabled} />}
       {/* Tools on one line (same height, same material), the single primary action on the right. */}
       <div className='flex items-center gap-2 px-3 pb-2.5'>
         <div data-slot='composer-tools' className='scrollbar-hide relative flex min-w-0 flex-1 items-center gap-2 overflow-x-auto'>

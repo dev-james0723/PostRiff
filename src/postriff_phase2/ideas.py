@@ -1390,11 +1390,7 @@ class IdeasService:
         chip_destinations = ahead["destinations"] if ahead else []
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
-        if isinstance(payload.get("capabilityRevision"), str):
-            # The composer offered destinations from one creation-capability revision; a stale or forged one is refused
-            # with a stable code before any writing or spending (the browser never decides what is draftable).
-            from .creation_capabilities import validate_destinations
-            validate_destinations(destinations, revision=payload["capabilityRevision"])
+        self._check_capability_revision(payload, destinations)
         plan = intent.build_plan(parsed, destinations)
         if text and not recurring and not reworking and not chips:
             # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
@@ -1814,6 +1810,15 @@ class IdeasService:
         return runtime, model_id, request
 
     @staticmethod
+    def _check_capability_revision(payload, destinations):
+        """The composer offered destinations from one creation-capability revision; a stale or forged one is refused with
+        a stable code (`schema_revision_mismatch`) before any writing or spending. The browser never decides what is
+        draftable: every route still runs `check_destinations` against the live projection."""
+        if isinstance(payload.get("capabilityRevision"), str):
+            from .creation_capabilities import validate_destinations
+            validate_destinations(destinations, revision=payload["capabilityRevision"])
+
+    @staticmethod
     def _with_chip_destinations(requested, chip_destinations):
         """The payload's destinations, joined by chip destinations when there are any (a chip-less request is unchanged)."""
         return (turn_references.merge_destinations(requested, chip_destinations) or None) if chip_destinations else requested
@@ -2047,6 +2052,7 @@ class IdeasService:
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        self._check_capability_revision(payload, destinations)
         if text and not chips and self._may_orchestrate(workspace_id, token, text, parsed, reading):
             # Home is the primary place to create, change or ask about automations (orchestration §7).
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))

@@ -371,7 +371,7 @@ class ModelRouteTest(FlagIsolation):
             self.assertEqual(ig_v["format"], "instagram.carousel")
 
 
-class PackReviewTest(unittest.TestCase):
+class PackReviewTest(FlagIsolation):
     """A17 (automated part): no shipped channel adapter or shared playbook demands hashtag quotas, promises reach, or
     tells the writer to invent experience. Editorial quality itself still needs the human/paired review."""
 
@@ -385,9 +385,27 @@ class PackReviewTest(unittest.TestCase):
             for pattern in self.BANNED:
                 self.assertIsNone(re.search(pattern, text, re.I), (path.name, pattern))
 
+    def test_web_fixture_matches_the_live_projection(self):
+        """A03: the facet the web tests read is the server's projection; a deliberate change to platforms, formats,
+        draft fields or operation states fails here until the fixture is regenerated."""
+        fixture = json.loads((ROOT / "web/tests/fixtures/creation-catalog.json").read_text())
+        cc._CACHE.clear()
+        live = cc.projection(WAVE1).public()
+
+        def shape(catalog):
+            return [(r["platform"], r["defaultFormat"], [(f["id"], f["mediaKind"], f["draftFields"], f["bindingFields"]) for f in r["formats"]],
+                     {k: (v["state"], v["reason"]) for k, v in r["operations"].items()}) for r in catalog["platforms"]]
+        self.assertEqual(fixture["schema"], cc.SCHEMA)
+        self.assertEqual(shape(fixture), shape(live))
+        self.assertEqual(fixture["draftable"], live["draftable"])
+        ts = (ROOT / "web/src/lib/creation/capabilities.ts").read_text()
+        self.assertIn(f"CREATION_SCHEMA = '{cc.SCHEMA}'", ts)
+        listed = re.search(r"export const ORIGINAL_PLATFORMS = \[([^\]]*)\]", ts).group(1)
+        self.assertEqual(sorted(re.findall(r"'([^']+)'", listed)), sorted(cc.ORIGINAL_PLATFORMS))
+
     def test_web_fallback_matches_the_server_original_set(self):
         composer = (ROOT / "web/src/features/agent/composer.tsx").read_text()
-        listed = re.search(r"export const DRAFT_PLATFORMS = \[([^\]]*)\]", composer).group(1)
+        listed = re.search(r"export const DRAFT_PLATFORMS[^=]*= \[([^\]]*)\]", composer).group(1)
         self.assertEqual(sorted(re.findall(r"'([^']+)'", listed)), sorted(cc.ORIGINAL_PLATFORMS))
         self.assertEqual(set(generation.PLATFORMS) | set(generation.NATIVE_PLATFORMS), set(skills.CHANNEL_SKILLS))
 
