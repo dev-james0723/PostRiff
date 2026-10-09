@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordScope": "Pre-merge engineering validation only; release and live-version evidence belong to the coordinating final receipt.",
+  "recordScope": "Historical PR136 source-bound cloud validation plus dated 2026-10-09 candidate reconciliation; current exact-head CI, release and live-version evidence belong to the coordinating final receipt.",
   "status": "VERIFIED CLOUD SYNTHETIC SUBSET",
   "realGoogleAcceptance": false,
   "publicLaunchComplete": false,
@@ -98,7 +98,8 @@
       "quotaDenied": 17,
       "artifactSha256": "f1f346a3201d4246f70508d89a1fcbc5926f0bb3c5727bde6907b86691c1faaf",
       "crashAndStaleLeaseFences": "PASS"
-    }
+    },
+    "recordScope": "Historical PR136 candidate snapshot on 2026-10-08; these results do not validate PR149 head f5c7e0da."
   },
   "local": {
     "checks": [
@@ -114,8 +115,8 @@
     "staging097": "20261008193754",
     "rls": "VERIFIED on actual projects; browser roles denied, service role allowed"
   },
-  "requiredPullRequestCI": "PR #136 open; current-head regression workflows must pass before merge. Final run IDs and release state belong to the coordinating receipt.",
-  "deployment": "PENDING; do not interpret this validation as a running production version",
+  "requiredPullRequestCI": "PR149 head f5c7e0da447205bde02387935bc8cea40cd98903 has exact-head GitHub release checks running at the coordinating agent's 2026-10-09 observation. Passing required checks, merge and deployment remain pending; packet edits require their own final-head validation.",
+  "deployment": "Latest dated production observation is 4a0bd786 at 2026-10-09T17:17:09Z (CURRENT-STATE.json). Historical PR136 integration is preserved there; PR149 gate-fix candidate is not observed deployed. No public-launch acceptance is claimed.",
   "external": {
     "productionGoogleProject": "rafii-youtube-production",
     "productionOAuthClient": "NOT CONFIGURED",
@@ -145,10 +146,10 @@
     "Free storage provider currently limits video objects to 50 MB; no paid upgrade authorized",
     "Sustainable media/identity/agent worker fleets are not provisioned or provider benchmarked; isolated lane code and synthetic concurrent claim acceptance remain separate from activation",
     "Verified legal/operator details, legal approval, actual account consent and disposable private asset remain pending",
-    "Console access recovered; APIs enabled and default Data API allocation verified. OAuth contacts, policy agreement, client, verification/audit and quota extension remain pending"
+    "Data/Analytics APIs and default allocations were verified 2026-10-08; browser control is unavailable again on 2026-10-09. OAuth contacts, policy agreement, clients, verification/audit and quota extension remain pending."
   ],
   "postSnapshotCorrections": {
-    "status": "VERIFIED BY SOURCE-BOUND JCB cfj6vg03bh; latest-head full PR regression still required",
+    "status": "HISTORICAL SOURCE-BOUND JCB cfj6vg03bh PASS; current PR149 exact-head checks are tracked separately.",
     "scope": [
       "Preserve disabled-feature specialist instruction behavior while gating YouTube tools",
       "Numerically ordered 089/097 migration harness",
@@ -165,10 +166,12 @@
       "case": "postgres_youtube_fleet concurrent_claims",
       "cause": "Fixture exhausted 128 expected nonblocking advisory-lock denials before the original 30-second deadline on 4 CPU",
       "repair": "Deadline-based staggered backoff; all 8 x 8 claim, latency, uniqueness, isolation and quota assertions retained",
-      "validation": "PENDING LATEST-HEAD CLOUD GHA; no runtime change"
-    }
+      "validation": "PENDING LATEST-HEAD CLOUD GHA; no runtime change",
+      "recordScope": "Historical PR136 failure/repair snapshot; its PENDING validation text is preserved from that dated snapshot and does not describe current PR149 checks."
+    },
+    "recordScope": "Historical PR136 candidate corrections and failure record; currentPullRequestFailure below names the old recorded head/run, not current PR149 CI."
   },
-  "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/136",
+  "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/149",
   "historicalCloudRuns": [
     {
       "provider": "Depot via JCB",
@@ -247,7 +250,7 @@
     "previousCandidate": "b0ca13a4ebc46fa53573bc6f6b6516032a6130e1",
     "previousMainCI": 37850230732,
     "previousMainCIStatus": "SUCCESS99/99PG modules plus remaining gates",
-    "status": "COMBINED SOURCE CLOUD VALIDATION PENDING",
+    "status": "HISTORICAL PR135/PR136 PRE-MERGE SNAPSHOT; current production 4a0bd786 preserves the merged integration.",
     "conflictResolution": "Preserve canonical callback_base_url; callback_uri honors registered provider pin except explicit dedicated YouTube override for both lanes. Existing exact in-flight redirect and custody retained.",
     "regressions": [
       "test_rafii_origin_migration",
@@ -255,6 +258,34 @@
       "test_youtube_oauth_binding",
       "legacy-host and all existing web contracts"
     ],
-    "actualGoogleAcceptance": false
-  }
+    "actualGoogleAcceptance": false,
+    "historicalStatus": "COMBINED SOURCE CLOUD VALIDATION PENDING",
+    "recordScope": "Original refs/run/status retained as historical evidence; PR149 reconciled with current production 4a0bd786, final exact-head CI/merge/deployment still pending."
+  },
+  "historicalReleaseGate": {
+    "recordScope": "Original pre-merge PR136 snapshot; preserved as history, not current release state.",
+    "requiredPullRequestCI": "PR #136 open; current-head regression workflows must pass before merge. Final run IDs and release state belong to the coordinating receipt.",
+    "deployment": "PENDING; do not interpret this validation as a running production version",
+    "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/136"
+  },
+  "currentCandidate": {
+    "observedOn": "2026-10-09",
+    "source": "Coordinating agent current-head observation; no independent account API readback by this packet correction.",
+    "head": "f5c7e0da447205bde02387935bc8cea40cd98903",
+    "pullRequestUrl": "https://github.com/dev-james0723/PostRiff/pull/149",
+    "ci": "RUNNING AT DATED OBSERVATION; FINAL RESULT PENDING",
+    "productionObservation": {
+      "url": "https://rafii.io",
+      "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
+      "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
+      "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+      "integrationBranchDeployed": true,
+      "youtubeGateFixCandidateDeployed": false,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
+    },
+    "realGoogleAcceptance": false,
+    "publicLaunchComplete": false
+  },
+  "updatedOn": "2026-10-09"
 }

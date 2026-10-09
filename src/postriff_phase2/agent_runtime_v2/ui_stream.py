@@ -130,6 +130,36 @@ def _log_closed(route: str, outcome: str, started: float, frames: int, sent: int
         pass
 
 
+# The fixed code vocabulary a rejection can carry (D-A48): web/src/lib/agent-runtime/ui-parser/validate.ts's literal prefixes,
+# lang-core 0.3.2's ValidationErrorCode / OpenUIErrorCode (evidence/r0/openui-package.md) and the seam codes. Anything else is
+# counted as "other", so an unexpected string can never reach the log.
+REJECTION_CODES = frozenset((
+    "action_denied", "action_id_not_literal", "bound_literal", "bounds_depth", "bounds_forms", "bounds_state", "bounds_statements",
+    "component_denied", "duplicate_statement", "excess_args", "form_name_invalid", "href_not_allowed", "incomplete", "mutation_forbidden",
+    "query_args_count", "query_args_shape", "query_binding_denied", "query_defaults_forbidden", "query_inline", "refresh_invalid",
+    "root_invalid", "source_not_query", "state_name_invalid", "unexplained_deletion", "unknown_component", "unresolved_ref",
+    "fence_in_source", "library_unsupported", "missing_base", "nesting_too_deep", "parse_exception", "revision_conflict",
+    "source_too_large", "parse_rejected",
+    "missing-required", "null-required", "unknown-component", "inline-reserved", "excess-args", "type-mismatch",
+    "runtime-error", "render-error", "parse-exception", "parse-failed",
+    *NOT_REPAIRABLE))
+
+
+def _log_rejected(kind, errors) -> None:
+    """Content-free: the validator's code prefixes (the part before ':') with counts, never the statement ids, names or source
+    behind them, so first-pass rejections can be measured and fixed without logging what a view contained."""
+    try:
+        counts: dict = {}
+        for error in errors[:contracts.BOUNDS.get("statements", 512)]:
+            code = str(error).split(":", 1)[0]
+            code = code if code in REJECTION_CODES else "other"
+            counts[code] = counts.get(code, 0) + 1
+        log.info(json.dumps({"event": "genui.validation_rejected", "kind": kind if kind in ("generate", "repair", "retry", "edit") else "other",
+                             "codes": dict(sorted(counts.items())), "errorCount": len(errors)}))
+    except Exception:  # noqa: BLE001 — logging never breaks a stream
+        pass
+
+
 class _Closing:
     """The WSGI iterable: delegates to a frame generator; `close()` (client gone or normal end) closes it exactly once. A stream
     closed before its first frame still runs the generator's cleanup through `on_unstarted`."""
@@ -499,6 +529,7 @@ class _Producer:
                     yield from self._ready(candidate, validation, outcome.usage)
                     return
                 errors = [str(e) for e in validation.get("errors") or []] or ["parse_rejected"]
+                _log_rejected(self.attempt.get("kind"), errors)
                 fatal = next((NOT_REPAIRABLE[e.split(":", 1)[0]] for e in errors if e.split(":", 1)[0] in NOT_REPAIRABLE), None)
                 if fatal is not None:
                     # The model can't fix this (seam down, deploy/asset skew, size, missing base): no second paid call.

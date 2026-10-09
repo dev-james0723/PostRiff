@@ -62,6 +62,8 @@ class CredentialRepository:
             self.result = (self.generation,)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
+        elif sql.startswith('SELECT state FROM public.pr_workspaces'):
+            self.result = (self.state,)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):
             if "provider='youtube'" in sql and sql.endswith('FOR UPDATE'):
                 assert self.revocation_locks[-1:] == ['workspace'], 'Revocation must lock workspace before credential.'

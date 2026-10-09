@@ -52,9 +52,9 @@
     }
   },
   "forecastsOwnerApproved": false,
-  "currentActualGoogleQuotaKnown": false,
+  "currentActualGoogleQuotaKnown": true,
   "submitted": false,
-  "caveat": "48 identity checks/channel/day is the primary engineering planning scenario, not achieved cadence or a total-request upper bound; required maintenance fleet is unprovisioned. Actual Google quotas unknown; owner identity/legal/forecast approval and Free50MB storage billing gate remain unresolved.",
+  "caveat": "48 identity checks/channel/day is the primary engineering planning scenario, not achieved cadence or a total-request upper bound; required maintenance fleet is unprovisioned. Configured Google defaults were observed 2026-10-08; current usage/remaining balance and any approved extension remain unknown or absent. Owner identity/legal/forecast approval and Free50MB storage billing gate remain unresolved.",
   "resultScope": "Capacity-model arithmetic and synthetic database subset only; not full CI, Google/provider, production or worker-fleet acceptance.",
   "syntheticDatabaseAcceptance": {
     "result": "PASS",
@@ -201,5 +201,15 @@
     "currentFinalResult": "Final release validation recorded separately; no full-CI PASS claimed by this historical subset record."
   },
   "identityCadenceEngineeringForecastSelected": true,
-  "maintenanceFleetProvisioned": false
+  "maintenanceFleetProvisioned": false,
+  "quotaObservationScope": {
+    "observedOn": "2026-10-08",
+    "reference": "GOOGLE-QUOTAS.observed.json",
+    "configuredDefaultAllocationsKnown": true,
+    "currentGoogleRemainingKnown": false,
+    "quotaExtensionSubmitted": false,
+    "quotaExtensionApproved": false,
+    "note": "currentActualGoogleQuotaKnown refers only to the dated configured default allocation; it does not establish live remaining balance, audit/public-upload approval or sufficient rollout capacity."
+  },
+  "updatedOn": "2026-10-09"
 }

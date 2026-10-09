@@ -66,6 +66,12 @@ class Phase2Store(Store):
 
     def _present(self, state, revision):
         result = super()._present(state, revision)
+        # Creator uses scoped bounded endpoints. Internal authority/leases and
+        # model attribution must not escape through ordinary workspace payloads.
+        result["state"].pop("youtubeAgent", None)
+        for variant in result["state"].get("variants", []):
+            if isinstance(variant, dict) and variant.get("platform") == "YouTube":
+                variant.pop("metadataProvenance", None)
         ensure_content_state(result["state"])
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
@@ -290,7 +296,12 @@ class Phase2Store(Store):
                 raise AlphaError("Choose a supported fixture outcome.")
             c.update({"identityVerified": scenario != "denied", "capabilityVerified": scenario not in ("denied", "capability_loss"), "scopes": ["w_member_social"] if c["platform"] == "LinkedIn" else ["instagram_business_basic", "instagram_business_content_publish"], "expiresAt": now-1 if scenario == "expired" else now+86400, "verifiedAt": now, "revoked": False, "capabilityVersion": c["capabilityVersion"]+1, "scenario": scenario})
         elif action == "channel_disconnect":
-            find(data["channels"], p.get("channelId"))["revoked"] = True
+            channel = find(data["channels"], p.get("channelId"))
+            channel["revoked"] = True
+            if channel.get('platform') == 'YouTube':
+                from .youtube.agent import revoke_connection_authority
+                revoke_connection_authority(s, channel['id'], device['user_id'], now,
+                                            reason='connection_disconnected')
         elif action == "variant_review":
             v = self._variant(s, p.get("variantId"))
             if p.get("variantRevision") != v["revision"] or p.get("confirmed") is not True:

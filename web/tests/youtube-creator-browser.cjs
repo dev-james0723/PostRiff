@@ -13,7 +13,7 @@ mkdirSync(out, { recursive: true });
 const results = [];
 let currentPage;
 const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWSER; NOT REAL GOOGLE E2E',
-  realGoogleE2E: false, productionAcceptance: false, capturedAt: new Date().toISOString(),
+  realGoogleE2E: false, providerCalls: 0, productionAcceptance: false, capturedAt: new Date().toISOString(),
   backend: 'loopback Python with disposable PostgreSQL; generated synthetic standard/agentic clients', results });
 (async () => {
   const browser = await chromium.launch({ headless: true });
@@ -139,12 +139,123 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       assert.equal(agentView.autopilotGate.canActivate, false);
       assert.equal(agentView.executionState, 'IMPLEMENTED BUT UNVERIFIED');
       assert.equal(agentView.policies[0].status, 'prepared');
+      // Bounded UI response fixtures exercise independent cursor navigation; they are
+      // synthetic browser proof, not provider or archived-database acceptance.
+      const firstDrafts = [plan.result, ...Array.from({ length: 24 }, (_, index) => ({
+        ...plan.result, id: `pagination-plan-${index}`, digest: `pagination-digest-${index}`,
+        publishOptions: { ...plan.result.publishOptions, title: `Other future plan ${index}` }
+      }))];
+      const expiredDraft = { ...plan.result, id: 'expired-plan-history', readOnly: true,
+        timing: { ...plan.result.timing, timestamp: Date.now() / 1000 - 60 },
+        publishOptions: { ...plan.result.publishOptions, title: 'Expired read-only plan' } };
+      const policy = agentView.policies[0];
+      const endedPolicies = [{ ...policy, id: 'expired-policy-history', status: 'expired', endsAt: Date.now() / 1000 - 60 },
+        { ...policy, id: 'revoked-policy-history', status: 'revoked' }];
+      let staleCursorOnce = true, historyReads = 0, archiveCalls = 0;
+      const paginationRoute = `**/youtube/${encodeURIComponent(cid)}/agent**`;
+      await page.route(paginationRoute, async route => {
+        const url = new URL(route.request().url());
+        if (route.request().method() === 'GET' && url.pathname.endsWith('/agent')) {
+          assert.equal(url.searchParams.get('limit'), '25');
+          const draftNext = url.searchParams.get('draftCursor');
+          const policyNext = url.searchParams.get('policyCursor');
+          if (draftNext && staleCursorOnce) {
+            staleCursorOnce = false;
+            return route.fulfill({ status: 400, json: { error: 'This publishing page changed. Reload the first page.', code: 'youtube_agent_cursor_stale' } });
+          }
+          return route.fulfill({ json: { ...agentView,
+            drafts: draftNext ? [expiredDraft] : firstDrafts,
+            policies: policyNext ? endedPolicies : [policy],
+            pagination: {
+              drafts: { hasMore: !draftNext, nextCursor: draftNext ? null : 'synthetic-draft-next' },
+              policies: { hasMore: !policyNext, nextCursor: policyNext ? null : 'synthetic-policy-next' }
+            }
+          } });
+        }
+        const kind = url.pathname.endsWith('/history/draft') ? 'draft' : url.pathname.endsWith('/history/policy') ? 'policy' : null;
+        if (route.request().method() === 'GET' && kind) {
+          historyReads++;
+          assert.equal(url.searchParams.get('limit'), '25');
+          const next = url.searchParams.get('cursor');
+          return route.fulfill({ json: { items: [{ recordKind: kind, id: `archived-${kind}-${next ? 2 : 1}`,
+            status: 'archived', historicalStatus: kind === 'draft' ? 'proposed' : 'expired',
+            archivedAt: new Date().toISOString(), canReactivate: false, channelId: plan.result.channelId }],
+            nextCursor: next ? null : 'synthetic-history-next', canReactivate: false } });
+        }
+        if (route.request().method() === 'POST' && url.pathname.endsWith('/history/archive')) {
+          archiveCalls++;
+          assert.equal(typeof route.request().postDataJSON().revision, 'number');
+          return route.fulfill({ json: { revision: 0, result: { archived: 0, draftsArchived: 0, policiesArchived: 0,
+            authorityReactivated: false, residualGrowth: [] }, executed: false, providerVerified: false } });
+        }
+        return route.continue();
+      });
+      await page.reload();
+      const selectedPlan = agent.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true });
+      await selectedPlan.check();
+      const exactConfirmation = agent.getByRole('checkbox', { name: `Approve the exact video, metadata, channel, time and visibility for ${planTitle}`, exact: true });
+      await exactConfirmation.check();
+      assert.equal(await agent.locator('[data-youtube-agent-draft]').count(), 25);
+      assert.equal(historyReads, 0, 'History is not queried by ordinary creator loading.');
+      await agent.getByRole('button', { name: 'Next publishing plans', exact: true }).click();
+      await agent.getByRole('button', { name: 'Reload first publishing pages', exact: true }).click();
+      await selectedPlan.waitFor();
+      assert.equal(await selectedPlan.isChecked(), true, 'Stale-page reset preserves exact selected plans.');
+      assert.equal(await exactConfirmation.isChecked(), true);
+      await agent.getByRole('button', { name: 'Next publishing plans', exact: true }).click();
+      const pastPlan = agent.locator('[data-youtube-agent-draft="expired-plan-history"]');
+      await pastPlan.waitFor();
+      assert.equal(await agent.locator('[data-youtube-agent-draft]').count(), 1, 'Pages replace rows rather than append unbounded history.');
+      assert.equal(await pastPlan.getByRole('checkbox').count(), 0);
+      assert.equal(await pastPlan.getByRole('button').count(), 0);
+      await agent.getByRole('button', { name: 'Next authority records', exact: true }).click();
+      await agent.locator('[data-youtube-agent-policy="expired-policy-history"]').waitFor();
+      assert.equal(await agent.locator('[data-youtube-agent-policy]').count(), 2);
+      assert.equal(await agent.locator('[data-youtube-agent-policy]').getByRole('button').count(), 0);
+      await agent.getByLabel('Authority expires (ISO date with UTC offset)', { exact: true }).fill(new Date(Date.now() + 86400000).toISOString());
+      const [crossPagePreview] = await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/agent/policies/preview') && response.request().method() === 'POST'),
+        agent.getByRole('button', { name: 'Review standing authority for 1 plans', exact: true }).click()
+      ]);
+      assert.deepEqual(crossPagePreview.request().postDataJSON().draftIds, [plan.result.id]);
+      assert.deepEqual(crossPagePreview.request().postDataJSON().draftDigests, { [plan.result.id]: plan.result.digest });
+      assert.ok(crossPagePreview.ok());
+      const exactPolicyScope = agent.locator(`[data-youtube-policy-scope-draft="${plan.result.id}"]`);
+      await exactPolicyScope.waitFor();
+      assert.ok((await exactPolicyScope.textContent()).includes(plan.result.digest));
+      await selectedPlan.waitFor();
+      assert.equal(await agent.locator('[data-youtube-agent-draft]').count(), 25, 'Mutation returns both live lists to their first pages.');
+      assert.equal(await selectedPlan.isChecked(), true);
+      assert.equal(await agent.getByRole('button', { name: 'Previous authority records', exact: true }).isEnabled(), false);
+      await agent.getByRole('button', { name: 'Open publishing history', exact: true }).click();
+      const archived = agent.getByRole('region', { name: 'Archived publishing history', exact: true });
+      await archived.locator('[data-youtube-agent-history="archived-draft-1"]').waitFor();
+      assert.equal(archiveCalls, 0, 'Opening and reading history must not automatically archive.');
+      await archived.getByRole('button', { name: 'Next history records', exact: true }).click();
+      await archived.locator('[data-youtube-agent-history="archived-draft-2"]').waitFor();
+      assert.equal(await archived.locator('[data-youtube-agent-history]').count(), 1);
+      await archived.getByRole('button', { name: 'Previous history records', exact: true }).click();
+      await archived.locator('[data-youtube-agent-history="archived-draft-1"]').waitFor();
+      await archived.getByRole('button', { name: 'Authority history', exact: true }).click();
+      await archived.locator('[data-youtube-agent-history="archived-policy-1"]').waitFor();
+      assert.equal(await archived.locator('[data-youtube-agent-history]').getByRole('button').count(), 0);
+      assert.equal(await archived.getByRole('checkbox').count(), 0);
+      await archived.getByRole('button', { name: 'Archive expired unqueued plans', exact: true }).click();
+      await agent.getByRole('status').filter({ hasText: 'Inert records archived.' }).waitFor();
+      assert.equal(archiveCalls, 1, 'Only an explicit owner click requests archive; this response is synthetic UI evidence.');
+      assert.ok(await archived.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth + 1));
+      await page.unroute(paginationRoute);
+      await page.reload();
+      await agent.getByRole('heading', { name: 'Library publishing plans', exact: true }).waitFor();
+      await agent.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true }).waitFor();
       await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-agent-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: 'Capabilities', exact: true }).click();
       await page.getByText('UNSUPPORTED BY OFFICIAL API', { exact: true }).first().waitFor();
       const capacity = page.getByRole('region', { name: 'Workspace publishing capacity', exact: true });
       await capacity.waitFor();
       assert.equal(await capacity.locator('[data-youtube-capacity]').count(), 3);
+      await capacity.locator('[data-youtube-analytics-capacity]').getByText('Analytics queries', { exact: true }).waitFor();
+      await capacity.getByText(/Analytics is counted in requests, separately from Data API units/).waitFor();
       await capacity.getByText(/These counters cover Rafii requests and do not show Google’s remaining allocation/).waitFor();
       assert.ok(await capacity.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth + 1), 'Capacity controls must fit the mobile viewport.');
       await capacity.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-capacity-${width}.png`) });
@@ -240,6 +351,7 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
         productionNotReady: true, officialUnsupportedCommunity: true, publicGateHeld: true, humanReviewBeforeWrite: true,
         distinctOAuthLaneConnections: true, explicitAgenticConsent: true, reviewableLibraryPlan: true,
         finiteThirtyDayAuthority: true, policyPreviewNotExecution: true, unapprovedAutopilotHeld: true,
+        boundedAgentPageUiFixtures: true, exactSelectionAcrossPages: true, readOnlyExpiredAndArchivedHistory: true, historyOnlyOnExplicitOpen: true, archiveOnlyOnExplicitOwnerClick: true,
         metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true,
         erasedPlansAndReceiptsVisible: true, erasedOperationsPermanentlyHeld: true, genuineReconnectPreservesUserContent: true });
       await context.close();
