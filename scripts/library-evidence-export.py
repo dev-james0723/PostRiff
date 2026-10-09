@@ -2,7 +2,7 @@
 """Carry remote browser screenshots back through the CI log (JCB returns logs, not artifacts).
 
 Remote (release validation, after the browser harness):
-  python scripts/library-evidence-export.py emit <evidence-dir>
+  python scripts/library-evidence-export.py emit <evidence-dir> [glob]   (default glob: *.png)
     For each PNG: SHA-256 of the original bytes, then a JPEG re-encode (ffmpeg, max 960 px wide) printed as base64 in
     fixed-size chunks: `LIBRARY_EVIDENCE <name> <index>/<count> <sha256> <chunk>`.
 Local (from a downloaded `depot ci logs` file):
@@ -23,8 +23,8 @@ CHUNK = 6000
 LINE = re.compile(r"LIBRARY_EVIDENCE (\S+) (\d+)/(\d+) ([0-9a-f]{64}) ([A-Za-z0-9+/=]+)")
 
 
-def emit(directory):
-    images = sorted(Path(directory).rglob("*.png"))
+def emit(directory, pattern="*.png"):
+    images = sorted(Path(directory).rglob(pattern))
     print(f"LIBRARY_EVIDENCE_BEGIN {len(images)}", flush=True)
     for png in images:
         raw = png.read_bytes()
@@ -64,8 +64,8 @@ def collect(log_file, out_dir):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "emit":
-        sys.exit(emit(sys.argv[2]))
+    if len(sys.argv) in (3, 4) and sys.argv[1] == "emit":
+        sys.exit(emit(*sys.argv[2:]))
     if len(sys.argv) == 4 and sys.argv[1] == "collect":
         sys.exit(collect(sys.argv[2], sys.argv[3]))
     print(__doc__, file=sys.stderr)

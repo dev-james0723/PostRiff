@@ -41,6 +41,8 @@ cd web
 npx playwright install --with-deps chromium webkit
 cd ..
 python scripts/consumer_ready_browser.py --library --evidence-dir docs/consumer-ready/evidence/library
+python scripts/library-evidence-export.py emit docs/consumer-ready/evidence/library 'library-*.png' || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
+python scripts/library-evidence-export.py emit docs/consumer-ready/evidence/library 'document-viewer-*.png' || echo "LIBRARY_EVIDENCE_EXPORT_EXIT=$?"
 if [ -f web/tests/library-intelligence-browser.cjs ]; then
   browser_exit=0
   python scripts/consumer_ready_browser.py --library-intelligence --evidence-dir docs/design/rafii-intelligent-library-2026-10-08/evidence/browser || browser_exit=$?

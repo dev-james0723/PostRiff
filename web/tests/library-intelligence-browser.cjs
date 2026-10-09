@@ -37,6 +37,11 @@ function check(name, ok, detail) {
   assert.ok(ok, `${name}${detail === undefined ? '' : `: ${JSON.stringify(detail)}`}`);
 }
 
+/** The address follows state a moment later (throttled URL updates); wait up to 5 s for it, then report. */
+async function addressSettles(page, predicate) {
+  return page.waitForFunction(predicate, null, { timeout: 5000 }).then(() => true, () => false);
+}
+
 /** A short real PCM WAV (440 Hz), so the audio path runs on genuine bytes. */
 function wav(seconds = 2, rate = 8000) {
   const samples = seconds * rate;
@@ -185,11 +190,11 @@ async function openLibrary(page, query = '') {
           const bar = page.getByRole('region', { name: 'Selected items' });
           await bar.waitFor({ timeout: 10000 });
           check(`${label}: keyboard selection shows batch actions`, /1 item selected/.test(await bar.innerText()));
-          check(`${label}: selection is in the address`, new URL(page.url()).searchParams.has('sel'));
+          check(`${label}: selection is in the address`, await addressSettles(page, () => new URL(location.href).searchParams.has('sel')));
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-selected.png`) });
           await page.keyboard.press('Escape');
           await bar.waitFor({ state: 'detached', timeout: 10000 });
-          check(`${label}: Escape clears the selection`, !new URL(page.url()).searchParams.has('sel'));
+          check(`${label}: Escape clears the selection`, await addressSettles(page, () => !new URL(location.href).searchParams.has('sel')));
 
           // Focus moves into the detail panel and returns to the opener on Escape.
           const opener = page.locator('button[data-library-open]').first();
@@ -198,7 +203,7 @@ async function openLibrary(page, query = '') {
           await page.keyboard.press('Enter');
           await page.getByRole('button', { name: 'Close asset details' }).waitFor({ timeout: 10000 });
           check(`${label}: focus moves into the detail panel`, await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))));
-          check(`${label}: open item is in the address`, Boolean(new URL(page.url()).searchParams.get('asset')));
+          check(`${label}: open item is in the address`, await addressSettles(page, () => Boolean(new URL(location.href).searchParams.get('asset'))));
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-detail.png`) });
           await page.keyboard.press('Escape');
           await page.getByRole('button', { name: 'Close asset details' }).waitFor({ state: 'detached', timeout: 10000 });
