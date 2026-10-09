@@ -1,0 +1,87 @@
+{
+  "role": "B",
+  "lane": "provider runtime, real stream, accounting (R1; gates G03 G04 G12 G13 G14 G17)",
+  "branch": "claude/rafii-openui-b-runtime",
+  "base_sha": "31cbee09",
+  "head_sha": "see git log of this commit's parent chain; code head c572599f + this record",
+  "owned_paths": [
+    "src/postriff_phase2/agent_runtime_v2/ui_presenter.py",
+    "src/postriff_phase2/agent_runtime_v2/ui_stream.py",
+    "src/postriff_phase2/agent_runtime_v2/ui_metering.py",
+    "tests/test_agent_ui_presenter.py",
+    "tests/test_agent_ui_presenter_sdk.py",
+    "tests/test_agent_ui_presenter_assets.py",
+    "tests/test_agent_ui_stream.py",
+    "tests/test_agent_ui_stream_fakes.py",
+    "tests/test_agent_ui_accounting.py",
+    "tests/phase2/postgres_agent_ui_stream.py",
+    "docs/design/openui-production-2026-10-08/evidence/lanes/B.json",
+    "docs/design/openui-production-2026-10-08/evidence/lanes/B-shared-patches/**"
+  ],
+  "completed_tasks": [
+    "ui_stream.create_presentation: one short edit-level ui_transaction (actor of the parent run only); parent must be a completed metered Manager agent: run with result.ui.eligible and fresh (<= 900 s) unless an explicit retry; D projection + manifest (with cfg.genui_for flags); C assets plan; F claim/resume (same key or live producer = replay, never re-dispatch); ui_metering reservation inside the combined plan; ui.started persisted; refusals after the claim persist a failed attempt + one ui.failed (native fallback, no call)",
+    "SSE closing iterator: worker thread asyncio.run(stream_presentation) with AsyncOpenAI(max_retries=0) via RuntimeConfig.route('fast_language') and cfg.base_url; bounded queue with backpressure; coalesced persisted ui.delta (append + byte offset); coarse ui.checkpoint via F checkpoint (>= 4 KiB or >= 1 s, lease-owner checked); cancel/reap polling; ui.heartbeat after 10 s (not persisted, reuses last seq); 60 s deadline capped by the function budget",
+    "Finalize: SDK stream drained to final usage; server validator with D-A38 policy {rootName, allowedComponents, readBindings, actionIds, founder}; exactly one automatic UI-only repair (derived key r1_*, own reservation, budget- and time-checked) then repair_exhausted; one short ui_transaction settles then CAS-commits via F, ui.ready only after both (canonical source inlined when <= 16 KiB, timing for G17)",
+    "Every exception in the generator -> terminal ui.failed with a REASON_CODES value; GeneratorExit/close -> provider task cancelled, attempt interrupted (client_gone), settled once, content-free request.stream_closed log; close before the first frame releases an undispatched hold",
+    "replay: authorized bounded replay (F events_after) + live tail <= 30 s with heartbeats; heals a dead producer through F reap; never dispatches",
+    "cancel_http/cancel_presentation: presentation only; the live producer settles what it knows and forwards the single ui.canceled",
+    "create_edit/run_edit: actor only; busy -> 409 ui_busy; base revision/hash CAS BEFORE any reservation or call -> 409 ui_revision_conflict; patch-mode prompt + current canonical source + instruction + selection; validator patch mode; separately metered edit chain (founder patch cap 24 KiB)",
+    "probe (D-A9): authenticated read member, throttled 6/min/person, zero model cost: ui.started, ui.delta (one multi-byte char split across two writes), ui.delta, ui.ready ~1.5 s apart with serverMonotonicNs",
+    "Founder scope (D-A22 + A defect report): runKey agent:{scope_key}:*, manifest scope from auth, scope-exact artifact head, surface founder only in founder scope, read-only founder manifest; non-streaming run_presentation/run_edit/cancel_presentation with injectable transaction",
+    "ui_presenter: restricted presenter (no tools, no handoffs, Responses streaming on openai / Chat Completions with include_usage on gateway), generated prompt asset (D-A30, hash-checked) + runtime Rafii bindings (query names, arg schemas, result shapes rowsField/row fields/data paths, action ids + input schemas, never-invent/EmptyState rules), presenter_view context scrubbed again, promptHash = sha256(final prompt), deterministic ceiling, library chosen by manifest scope, egress check against the parent's processor",
+    "ui_metering: reserve_attempt key agent:{parentRunId}:ui:{attemptId}, run_id = parent, parent credit-authority path, combined plan (turn room for generate/retry+repair, per-request allowance for an edit chain), unknown parent spend -> refused; settle_attempt exactly once (completed/known, failed/0, unknown keeps the hold), accounting columns (D-A39), one pr_ai_call_events row per dispatched attempt; settle_orphans at admission and sweep_orphans for cron",
+    "Shared patch 01 (MeteredModel.stream_response usage spans/failures + test) applied by A at 0fd80a6d; shared patch 02 (cron sweep_orphans) applied by A at 3f6080c6"
+  ],
+  "interfaces_produced": {
+    "ui_stream": [
+      "create_presentation(runtime, environ, start_response, workspace_id, token, request) -> WSGI iterable",
+      "replay(runtime, environ, start_response, workspace_id, token, artifact_id, after) -> WSGI iterable",
+      "cancel_http(runtime, workspace_id, token, artifact_id) -> dict",
+      "create_edit(runtime, environ, start_response, workspace_id, token, artifact_id, request) -> WSGI iterable",
+      "probe(runtime, environ, start_response, workspace_id, token) -> WSGI iterable",
+      "run_presentation(runtime, workspace_id, request, *, transaction, request_id=None) -> dict",
+      "run_edit(runtime, workspace_id, artifact_id, request, *, transaction, request_id=None) -> dict",
+      "cancel_presentation(runtime, workspace_id, artifact_id, *, transaction) -> dict"
+    ],
+    "ui_presenter": [
+      "load_assets(root=None) -> Assets",
+      "build_plan(cfg, assets, projection, manifest, *, kind, mode, chain, base_source, base_revision, instruction, selection, rejected_source, errors) -> PresentationPlan",
+      "async stream_presentation(ctx, projection, artifact_id, attempt_id, *, mode='generate', base_source=None, instruction=None) -> yields {type: dispatch|delta|usage}",
+      "PresentationRefused(reason), OpenAIStreamTransport, PresenterContext, bindings_section(manifest), presenter_context(projection), strip_fences"
+    ],
+    "ui_metering": [
+      "reserve_attempt(runtime, cur, auth, artifact, attempt, route, *, ceiling_usd_micro=None) -> dict",
+      "settle_attempt(runtime, cur, auth, attempt, usage) -> dict",
+      "allowance(cur, workspace_id, parent_run_id, chain) -> dict",
+      "settle_orphans(runtime, cur, workspace_id, *, ledger=None) -> int",
+      "sweep_orphans(connection_factory, *, ledger=None, limit=50) -> dict",
+      "ledger_key, chain_for, reason_for, outcome_of"
+    ],
+    "events": "ui.started {attempt, kind, retryOf, targetRevision, library*, promptHash, manifestId, bindingVersion, manifest(public), surface, timeOrigin}; ui.delta {append, offset, attempt}; ui.checkpoint {cursor, hash}; ui.ready {revision, sourceHash, validationState, attempt, promptHash, libraryHash, costState, providerAttempts, timing, canonicalSource|null}; ui.failed/ui.canceled/ui.interrupted {reason, fallback:'native', attempt}; ui.heartbeat {} (not persisted). A repair is announced by a second ui.started (kind repair, retryOf); clients reset the candidate buffer on a new attempt id."
+  },
+  "tests": [
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37826880828", "sha": "c572599f",
+     "conclusion": "failure outside lane B (C types/lint/drift/web tests, F lint, D PG actions); B suites pass",
+     "test_counts": {"unit_python": 201, "unit_python_failures": 0, "postgres_agent_ui_stream": "S1-S17 PASS", "database_scripts": 4, "database_failing_script": "tests/phase2/postgres_agent_ui_actions.py (lane D)"}},
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37824323498", "sha": "0bd997a0",
+     "conclusion": "failure only in web Lint (C core/state.ts:169, F state/registry.ts, persisted-state.ts)",
+     "test_counts": {"unit_python": 158, "unit_web": 55, "postgres_agent_ui_stream": "S1-S14 PASS"}},
+    {"command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37820463116", "sha": "98de93e9", "conclusion": "success",
+     "test_counts": {"unit_python": 53, "unit_web": 5}},
+    {"command_or_ci_run_url": "local: PYTHONPATH=src:tests .venv/bin/python -m unittest tests.test_agent_ui_stream / tests.test_agent_ui_presenter / tests.test_agent_ui_accounting / tests.test_agent_ui_presenter_assets (one module at a time)",
+     "sha": "75a5d54a", "conclusion": "pass", "test_counts": {"stream": 43, "presenter": 22, "accounting": 15, "presenter_assets": 4}},
+    {"command_or_ci_run_url": "local stub check of shared patch 01 test (tests/test_agent_runtime_metered_stream.py) against the patched manager with a minimal agents.Model stub", "sha": "patch 01",
+     "conclusion": "pass", "test_counts": {"metered_stream": 4}}
+  ],
+  "blockers": [
+    {"kind": "other-lane defect", "exact_dependency": "C cb9acde7: renderer.tsx(313,26) TS2339 'dispose' not on UiBridges; generate-openui-assets --check drift; lint renderer.tsx:196, primitives/data.tsx:73,315, primitives/inputs.tsx:241,245, core/state.ts:169; web tests (D-A3 openui import guard, primitive render)", "independent_work_remaining": "none in B"},
+    {"kind": "other-lane defect", "exact_dependency": "F surfaces/artifact.tsx:204 label lint (reported after F e5b52713)", "independent_work_remaining": "none in B"},
+    {"kind": "other-lane defect", "exact_dependency": "D tests/phase2/postgres_agent_ui_actions.py:739 coverage['data'] is None on the merged state", "independent_work_remaining": "none in B"},
+    {"kind": "live evidence (not lane work)", "exact_dependency": "G03/G17 real-model samples and the deployed G04 probe need A's production canary with OPENAI_API_KEY and the Node validator route; B provides the code paths, payload timing and the zero-cost probe", "independent_work_remaining": "none in B"}
+  ],
+  "shared_patches": [
+    {"file": "docs/design/openui-production-2026-10-08/evidence/lanes/B-shared-patches/01-metered-stream.patch", "status": "applied by A at 0fd80a6d"},
+    {"file": "docs/design/openui-production-2026-10-08/evidence/lanes/B-shared-patches/02-cron-orphan-holds.patch", "status": "applied by A at 3f6080c6"}
+  ],
+  "next_action": "A integrates claude/rafii-openui-b-runtime; after C/D/F fix their listed defects the integrated CI should be green for B's suites as shown; G runs live G03/G04/G17 on the canary."
+}

@@ -1,0 +1,5 @@
+root = RafiiRoot([list, brief])
+$selectedCampaign = null
+all = Query("campaigns_list", {}, null)
+list = CampaignList(all, $selectedCampaign, "Your campaigns")
+brief = CampaignBriefForm("campaign_create", "newBrief")

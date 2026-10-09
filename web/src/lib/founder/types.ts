@@ -384,14 +384,39 @@ export interface FounderLink {
   label?: string | null;
 }
 
-/** The founder section of a turn result (CONTRACTS §4): facts cite receipts; totals are never computed by the model. */
+/** A fact as the server stores it (`result.founder.facts[]`): text plus the receipt this turn produced for it. */
+export interface FounderFact {
+  text: string;
+  receiptId: string;
+  kind?: 'stored' | string;
+}
+
+/** A recommendation with its experiment (`result.founder.recommendations[]`). */
+export interface FounderRecommendation {
+  text: string;
+  metric?: string | null;
+  period?: string | null;
+  success?: string | null;
+}
+
+/**
+ * The founder section of a turn result (CONTRACTS §4): facts cite receipts; totals are never computed by the model. The server
+ * sends it at `result.founder` with objects for facts and recommendations; plain strings are accepted for older answers.
+ */
 export interface FounderAgentSection {
   receiptIds: string[];
-  facts: string[];
+  facts: (string | FounderFact)[];
   hypotheses: string[];
-  recommendations: string[];
+  recommendations: (string | FounderRecommendation)[];
   unknowns: string[];
   links: FounderLink[];
+}
+
+/** The founder section of a response wherever it is: `result.founder` (server) or a top-level `founder` (older client copies). */
+export function founderSectionOf(response: { founder?: FounderAgentSection | null; result?: unknown } | null | undefined): FounderAgentSection | null {
+  if (!response) return null;
+  const nested = response.result && typeof response.result === 'object' ? (response.result as { founder?: FounderAgentSection | null }).founder : null;
+  return nested ?? response.founder ?? null;
 }
 
 export type FounderRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'blocked' | string;

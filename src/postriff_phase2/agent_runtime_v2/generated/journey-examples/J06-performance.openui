@@ -1,0 +1,7 @@
+root = RafiiRoot([coverage, table, compare], "Last 30 days")
+cov = Query("analytics_coverage", {}, null)
+posts = Query("analytics_posts", {start: "2026-09-08", end: "2026-10-07", zone: "Asia/Hong_Kong"}, null)
+like = Query("analytics_compare", {metric: "views", start: "2026-09-08", end: "2026-10-07", zone: "Asia/Hong_Kong"}, null)
+coverage = CoverageNote(cov)
+table = MetricTable(posts, ["views", "likes", "replies"])
+compare = ComparisonSummary(like)

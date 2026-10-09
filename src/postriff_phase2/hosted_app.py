@@ -660,6 +660,19 @@ class HostedApplication:
                     if site_agent is not None:
                         result['siteAgentRecovery'] = site_agent.recover_stalled()
                     result['writingRecovery'] = ideas.recover_stalled()
+                    if repository is not None:
+                        # Generative UI attempts whose producer died: interrupted, reservation kept as unknown, zero provider requests.
+                        try:
+                            from .agent_runtime_v2 import ui_store
+                            result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
+                        except Exception:
+                            result['uiRecovery'] = {'status': 'unavailable'}
+                        # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
+                        try:
+                            from .agent_runtime_v2 import ui_metering
+                            result['uiHolds'] = ui_metering.sweep_orphans(repository.connection_factory, ledger=getattr(service, 'ledger', None))
+                        except Exception:
+                            result['uiHolds'] = {'status': 'unavailable'}
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()

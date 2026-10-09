@@ -1,0 +1,3 @@
+root = RafiiRoot([coverage, chart, table, compare])
+series = Query("analytics_series", {metric: "views", bucket: "week", period: $period, zone: $zone, platform: $platform}, null)
+chart = MetricChart(series, "line", "Views by week")
