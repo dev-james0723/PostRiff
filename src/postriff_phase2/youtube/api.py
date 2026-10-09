@@ -93,11 +93,12 @@ def validate_caption(track):
 
 
 class YouTubeApi:
-    def __init__(self, provider, grant, channel_id, *, clock=time.time, account_usage=None, chat_resource=None, on_error=None):
+    def __init__(self, provider, grant, channel_id, *, clock=time.time, account_usage=None, chat_resource=None, on_error=None, before_request=None):
         self.provider, self.grant, self.channel_id, self.clock = provider, grant, resource_id(channel_id, 'channel'), clock
         self.account_usage = account_usage or (lambda *_: None)
         self.chat_resource = chat_resource
         self.on_error = on_error or (lambda *_: None)
+        self.before_request = before_request or (lambda: None)
 
     def _assert_schedule_dispatch(self, method, body):
         if method not in ('videos.insert', 'videos.update') or not isinstance(body, dict):
@@ -167,8 +168,12 @@ class YouTubeApi:
         self._assert_schedule_dispatch(method, body)
         # Record attempted usage even on invalid/failed requests. This is app accounting, not the project's remaining quota.
         self.account_usage(method, rule['bucket'], rule['cost'])
+        # The caller can bind this API instance to an exact live authorization
+        # generation. Recheck after quota admission, immediately before I/O.
+        self.before_request()
         # No blocking work between this clock check and transport dispatch.
-        # Preserve the conservative reservation if admission consumed the lead.
+        # Preserve the reservation if admission or the authorization fence
+        # consumed the lead.
         self._assert_schedule_dispatch(method, body)
         try:
             response = self.provider.api(self.grant['accessToken'], rule['httpMethod'], url, **kwargs)

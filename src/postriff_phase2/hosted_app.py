@@ -897,6 +897,11 @@ class HostedApplication:
                 if len(parts) == 7 and parts[4] == "reply-drafts" and parts[6] == "reply" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, audience.approve_reply(parts[2], token, parts[5], body.get("digest"), body.get("confirmed")))
+            if len(parts) == 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube-policy':
+                if method == 'GET':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.status(parts[2], token))
+                if method == 'POST':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.accept(parts[2], token, self._body(environ)))
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)

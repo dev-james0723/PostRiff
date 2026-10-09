@@ -152,7 +152,9 @@ async function api(method, url, body) {
     const alert=page.getByRole('alertdialog');await alert.getByText(/removes imported metadata/).waitFor();
     await alert.getByRole('button',{name:'Disconnect',exact:true}).click();
     await page.getByText('Threads disconnected',{exact:true}).waitFor();
-    assert.equal(await page.getByRole('button',{name:'Past analytics',exact:true}).count(),0);
+    // The server receipt toast precedes the awaited channel-query refresh.
+    // Check the eventual rendered state, not the race between those updates.
+    await page.getByRole('button',{name:'Past analytics',exact:true}).waitFor({state:'hidden',timeout:10_000});
     checks.push('disconnect review includes imported-data purge; actual disconnect removes import control');
     assert.deepEqual(errors,[]);
     const report={execution:'actual local browser/UI/API/disposable DB; synthetic providers and seeded status data; OFF/network fault responses explicitly mocked',checks,screenshots:['review-desktop.png','review-mobile-hant.png'],pageErrors:errors};

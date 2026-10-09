@@ -13,6 +13,7 @@ if not sys.platform.startswith('linux') or os.environ.get('CI', '').lower() not 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'src'))
 import psycopg
+from psycopg import sql as pg_sql
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.youtube import history
 
@@ -84,6 +85,51 @@ def expect_sql(code, db, run):
         raise AssertionError('Expected SQL privilege/immutability rejection')
 
 
+class MissingMigrationFixtureRollback(Exception):
+    pass
+
+
+def history_identity_and_security(db):
+    relation = db.execute('SELECT oid,relnamespace,relowner,relacl,relrowsecurity,relforcerowsecurity '
+                          'FROM pg_class WHERE oid=to_regclass(%s)', (history.TABLE,)).fetchone()
+    policies = db.execute('SELECT policyname,permissive,roles,cmd,qual,with_check FROM pg_policies '
+                          'WHERE schemaname=%s AND tablename=%s ORDER BY policyname',
+                          tuple(history.TABLE.split('.'))).fetchall()
+    return relation, policies
+
+
+def exercise_missing_migration(db):
+    # Shared bootstrap installs105 for integrated106 selection tests. Exercise
+    # genuine public-relation absence without removing that shared coverage or
+    # deleting an installed archive: move only an empty synthetic relation into
+    # a fresh schema, then roll back all fixture DDL through this savepoint.
+    assert db.execute('SELECT count(*) FROM public.pr_encrypted_credentials').fetchone()[0] == 0, \
+        'Missing-migration fixture refuses any credential-bearing cluster'
+    original = history_identity_and_security(db)
+    if original[0] is not None:
+        assert db.execute(pg_sql.SQL('SELECT count(*) FROM {}').format(
+            pg_sql.Identifier(*history.TABLE.split('.')))).fetchone()[0] == 0, \
+            'Missing-migration fixture refuses a non-empty archive'
+    temporary_schema = 'synthetic_youtube_pre105_' + uuid4().hex
+    try:
+        with db.transaction():
+            db.execute(pg_sql.SQL('CREATE SCHEMA {}').format(pg_sql.Identifier(temporary_schema)))
+            if original[0] is not None:
+                db.execute(pg_sql.SQL('ALTER TABLE {} SET SCHEMA {}').format(
+                    pg_sql.Identifier(*history.TABLE.split('.')), pg_sql.Identifier(temporary_schema)))
+            assert not history.schema_ready(db.cursor()), 'Canonical history relation must be absent before migration105'
+            expect_alpha(history.UNAVAILABLE, lambda: history.page(db.cursor(), WORKSPACES[0], CONNECTIONS[0], 'draft'))
+            expect_alpha(history.UNAVAILABLE, lambda: history.archive_and_compact(db.cursor(), WORKSPACES[0], CONNECTIONS[0], NOW))
+            assert db.execute('SELECT to_regclass(%s)', (history.TABLE,)).fetchone()[0] is None
+            raise MissingMigrationFixtureRollback()
+    except MissingMigrationFixtureRollback:
+        pass
+    assert history_identity_and_security(db) == original, 'Rollback must restore the same archive identity, owner, grants, forced RLS and policies'
+    assert db.execute('SELECT to_regnamespace(%s)', (temporary_schema,)).fetchone()[0] is None, 'Fixture schema must not survive rollback'
+    METRICS['missingMigration'] = {'publicRelationAbsent': True, 'pageFailClosed': True, 'compactionFailClosed': True,
+                                   'rollbackOnlyFixture': True, 'identityAndSecurityRestored': True}
+
+
 seeded = False
 try:
     with connection() as db:
@@ -92,9 +138,7 @@ try:
         directory = Path(db.execute("SELECT current_setting('data_directory')").fetchone()[0])
         assert directory.parent.name.startswith(('postriff-cw-pg-', 'consumer-pg-')), 'Fresh disposable cluster required'
         assert db.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='youtube'").fetchone()[0] == 0
-        assert not history.schema_ready(db.cursor()), 'Use a fresh cluster so missing-migration gating is exercised'
-        expect_alpha(history.UNAVAILABLE, lambda: history.page(db.cursor(), WORKSPACES[0], CONNECTIONS[0], 'draft'))
-        assert db.execute('SELECT to_regclass(%s)', (history.TABLE,)).fetchone()[0] is None
+        exercise_missing_migration(db)
         sql = (ROOT / 'migrations/postriff/105_youtube_agent_history.sql').read_text()
         db.execute(sql)
         db.execute(sql)  # Reviewed migration candidate is replayable.
