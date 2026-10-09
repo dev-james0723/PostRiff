@@ -630,7 +630,79 @@ def _switch():
     return {}
 
 
-summary = {"PASS": sum(1 for e in EVIDENCE if e["result"] == "PASS"), "FAIL": sum(1 for e in EVIDENCE if e["result"] == "FAIL")}
+@scenario("F-S19", "HF-3 revoked Library/media: a deleted or deleting Library file and a deleted photo/generated image are revoked on reopen and dropped from selections")
+def _revoked_library_media():
+    files = {name: uuid.uuid4() for name in ("kept", "removed", "deleting", "duplicate")}
+    with connection() as db:
+        for name, ident in files.items():
+            db.execute("INSERT INTO public.pr_library_assets(id,workspace_id,created_by,original_filename,display_title,kind,mime,extension,bytes,sha256,bucket,object_name,"
+                       "processing_status,analysis_status,indexing_status) VALUES(%s,%s,%s,%s,%s,'document','text/plain','txt',120,%s,'postriff-library',%s,'ready','ready','ready')",
+                       (ident, wid, ONE, f"{name}.txt", name.title(), "e" * 64, uuid.uuid4().hex + ".txt"))
+    media = {name: uuid.uuid4().hex for name in ("photo", "generated", "removed_photo", "pending_photo")}
+    state = one("SELECT state FROM public.pr_workspaces WHERE id=%s", wid)[0]
+    phase2 = dict(state.get("phase2") or {})
+    phase2["assets"] = list(phase2.get("assets") or []) + [{"id": ident, "mime": "image/png"} for ident in media.values()]
+    run_sql("UPDATE public.pr_workspaces SET state = jsonb_set(state, '{phase2}', %s::jsonb) WHERE id=%s", json.dumps(phase2), wid)
+    refs = [{"type": "library_file", "id": files["kept"].hex}, {"type": "library_file", "id": files["removed"].hex},
+            {"type": "library_file", "id": str(files["deleting"])}, {"type": "library_file", "id": files["duplicate"].hex},
+            {"type": "media", "id": media["photo"]}, {"type": "asset", "id": media["generated"]}, {"type": "media", "id": media["removed_photo"]},
+            {"type": "image", "id": media["pending_photo"]}, {"type": "draft", "id": "d1"}]
+    run = fixture_run(wid, ONE, title="library refs")
+    with ui_transaction(RUNTIME, OWNER, wid, "edit") as (cur, auth):
+        lease = store.create_or_resume_artifact(cur, auth, run["run"], "main", key(), surface="chat", manifest={**MANIFEST, "approvedRefs": refs},
+                                                projection=PROJECTION, lease_owner="pid:test")
+    artifact = lease["artifact"]["artifactId"]
+    commit(OWNER, artifact, lease["attempt"]["idempotencyKey"], 0, None, SOURCE)
+    snap = store.snapshot_http(RUNTIME, wid, OWNER, artifact)
+    assert snap["access"]["revokedRefs"] == [] and snap["display"]["mode"] == "generated", (snap["access"], snap["display"])
+
+    def select(expected):
+        items = [{"type": r["type"], "id": r["id"], "title": ""} for r in refs]
+        with ui_transaction(RUNTIME, OWNER, wid, "edit") as (cur, auth):
+            return store.persist_ui_state(cur, auth, artifact, expected, {store.SELECTION_KEY: {"items": items}})
+    selected = select(snap["artifact"]["stateRevision"])
+    # Delete one file outright, start deleting another, mark one a duplicate; delete one photo and leave another pending deletion.
+    run_sql("DELETE FROM public.pr_library_assets WHERE id=%s", files["removed"])
+    run_sql("UPDATE public.pr_library_assets SET processing_status='deleting' WHERE id=%s", files["deleting"])
+    run_sql("UPDATE public.pr_library_assets SET processing_status='duplicate' WHERE id=%s", files["duplicate"])
+    state = one("SELECT state FROM public.pr_workspaces WHERE id=%s", wid)[0]
+    for asset in state["phase2"]["assets"]:
+        if asset.get("id") == media["removed_photo"]:
+            asset["deleted"] = True
+        if asset.get("id") == media["pending_photo"]:
+            asset.update({"deleted": True, "deletionPending": True})
+    run_sql("UPDATE public.pr_workspaces SET state = jsonb_set(state, '{phase2}', %s::jsonb) WHERE id=%s", json.dumps(state["phase2"]), wid)
+    expected = [f"library_file:{files['removed'].hex}", f"library_file:{files['deleting']}", f"library_file:{files['duplicate'].hex}",
+                f"media:{media['removed_photo']}", f"image:{media['pending_photo']}"]
+    snap = store.snapshot_http(RUNTIME, wid, OWNER, artifact)
+    assert snap["access"]["revokedRefs"] == expected, snap["access"]["revokedRefs"]
+    # The same treatment as any other revoked source: the generated view stays, with the count the surface explains.
+    assert snap["display"] == {"mode": "generated", "reason": None, "updating": False, "revokedRefs": len(expected)}, snap["display"]
+    with ui_transaction(RUNTIME, OWNER, wid, "read") as (cur, auth):
+        context = store.selection_context(cur, auth, {"artifactId": artifact, "artifactRevision": 1, "stateRevision": selected["stateRevision"]})
+    assert [(r["type"], r["id"]) for r in context["references"]] == [("library_file", files["kept"].hex), ("media", media["photo"]),
+                                                                      ("asset", media["generated"]), ("draft", "d1")], context["references"]
+    assert "no longer available" in context["note"], context["note"]
+    # Another workspace's copy of a live file id is not a live file here.
+    with ui_transaction(RUNTIME, OTHER, other, "read") as (cur, auth):
+        assert store.revoked_refs(cur, auth, {"approvedRefs": [{"type": "library_file", "id": files["kept"].hex}]}) == [f"library_file:{files['kept'].hex}"]
+    return {"revoked": len(expected)}
+
+
+@scenario("F-S20", "HF-3 actor-only edits: a co-member editor reads and keeps their view state but is not offered canEdit; the actor is")
+def _actor_only_edit():
+    artifact = STATE["artifact"]
+    mine = store.snapshot_http(RUNTIME, wid, OWNER, artifact)["access"]
+    theirs = store.snapshot_http(RUNTIME, wid, EDITOR, artifact)["access"]
+    assert mine["isActor"] is True and mine["canEdit"] is True, mine
+    assert theirs["isActor"] is False and theirs["canEdit"] is False, theirs
+    assert theirs["canQuery"] is True and theirs["canPersistState"] is True, theirs
+    viewer = store.snapshot_http(RUNTIME, wid, VIEWER, artifact)["access"]
+    assert viewer["canEdit"] is False and viewer["isActor"] is False, viewer
+    return {}
+
+
+summary ={"PASS": sum(1 for e in EVIDENCE if e["result"] == "PASS"), "FAIL": sum(1 for e in EVIDENCE if e["result"] == "FAIL")}
 out = Path(os.environ.get("AGENT_UI_EVIDENCE_DIR") or (ROOT / "docs/design/openui-production-2026-10-08/evidence/lanes"))
 try:
     out.mkdir(parents=True, exist_ok=True)

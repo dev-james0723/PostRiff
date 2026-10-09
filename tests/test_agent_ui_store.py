@@ -237,6 +237,101 @@ class Access(unittest.TestCase):
         self.assertFalse(access["canAct"])
 
 
+class ActorOnlyEdits(unittest.TestCase):
+    """HF-3: `canEdit` is offered only to the artifact's actor (the person who asked), matching the client's isActor gate and
+    the edit route's own 403; another member keeps reading, refreshing and saving their own view state."""
+
+    FLAGS = {"enabled": True, "actions": True, "edits": True}
+    OK = {"supported": True, "reason": None}
+
+    def test_co_member_who_is_not_the_actor_cannot_edit(self):
+        someone_else = record(actor="55555555-5555-4555-8555-555555555555")
+        for role in ("owner", "admin", "editor"):
+            with self.subTest(role=role):
+                access = store.access_for(someone_else, auth(role), self.FLAGS, self.OK, [], store.display_for(someone_else, None, self.OK, []))
+                self.assertFalse(access["isActor"])
+                self.assertFalse(access["canEdit"], "an editor who did not ask for this view is not offered an edit")
+                self.assertTrue(access["canQuery"] and access["canPersistState"], "reads and their own view state stay available")
+
+    def test_the_actor_still_edits_and_viewers_or_kill_switch_never_do(self):
+        mine = store.access_for(record(), auth("editor"), self.FLAGS, self.OK, [], store.display_for(record(), None, self.OK, []))
+        self.assertTrue(mine["isActor"] and mine["canEdit"])
+        self.assertFalse(store.access_for(record(), auth("viewer"), self.FLAGS, self.OK, [])["canEdit"])
+        self.assertFalse(store.access_for(record(), auth(), {"enabled": True, "edits": False}, self.OK, [])["canEdit"])
+        self.assertFalse(store.access_for(record(revision=0), auth(), self.FLAGS, self.OK, [])["canEdit"])
+
+
+MEDIA_LIVE, MEDIA_DELETED, MEDIA_PENDING, MEDIA_MISSING = "a1" * 16, "a2" * 16, "a3" * 16, "a4" * 16
+FILE_LIVE, FILE_GONE, FILE_DELETING = "b1" * 16, "b2" * 16, "b3" * 16
+FILE_LIVE_DASHED = "c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1"
+
+
+class RevokedCursor:
+    """The two reads revoked_refs makes for Library/media refs: the workspace state (legacy photos/videos and generated images in
+    phase2.assets) and the caller's Library files that still exist and are not being deleted."""
+
+    def __init__(self, state, live_files):
+        self.state, self.live_files, self.statements, self._result = state, set(live_files), [], None
+
+    def execute(self, sql, params=()):
+        self.statements.append((sql, params))
+        if "FROM public.pr_workspaces" in sql:
+            self._result = [(self.state,)]
+        elif "FROM public.pr_library_assets" in sql:
+            assert params[0] == WID, "the Library check is scoped to the caller's workspace"
+            assert "deleting" in sql + repr(params), "a file being deleted counts as revoked"
+            wanted = {str(v).replace("-", "").lower() for v in params[1]}
+            self._result = [(i,) for i in sorted(self.live_files & wanted)]
+        else:
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    def fetchone(self):
+        return self._result[0] if self._result else None
+
+    def fetchall(self):
+        return list(self._result or [])
+
+
+class RevokedLibraryAndMedia(unittest.TestCase):
+    """HF-3: a view that references a deleted Library file or media item is treated like any other revoked source."""
+
+    STATE = {"variants": [{"id": "d1"}],
+             "phase2": {"assets": [{"id": MEDIA_LIVE}, {"id": MEDIA_DELETED, "deleted": True}, {"id": MEDIA_PENDING, "deleted": True, "deletionPending": True}]}}
+
+    def refs(self, *pairs):
+        return {"approvedRefs": [{"type": t, "id": i} for t, i in pairs]}
+
+    def test_deleted_media_and_library_files_are_revoked_live_ones_are_not(self):
+        cur = RevokedCursor(self.STATE, {FILE_LIVE, FILE_LIVE_DASHED.replace("-", "")})
+        manifest = self.refs(("media", MEDIA_LIVE), ("media", MEDIA_DELETED), ("asset", MEDIA_PENDING), ("image", MEDIA_MISSING), ("asset", MEDIA_LIVE),
+                             ("library_file", FILE_LIVE), ("library_file", FILE_GONE), ("library_file", FILE_DELETING), ("library_file", FILE_LIVE_DASHED),
+                             ("library_file", "not-a-library-id"), ("draft", "d1"), ("draft", "d9"))
+        revoked = store.revoked_refs(cur, auth(), manifest)
+        self.assertEqual(revoked, [f"media:{MEDIA_DELETED}", f"asset:{MEDIA_PENDING}", f"image:{MEDIA_MISSING}", f"library_file:{FILE_GONE}",
+                                   f"library_file:{FILE_DELETING}", "library_file:not-a-library-id", "draft:d9"])
+        library_reads = [s for s in cur.statements if "pr_library_assets" in s[0]]
+        self.assertEqual(len(library_reads), 1, "one bounded Library read per check")
+
+    def test_selection_of_a_deleted_library_file_or_photo_is_dropped_like_a_deleted_draft(self):
+        cur = RevokedCursor(self.STATE, {FILE_LIVE})
+        revoked = store.revoked_refs(cur, auth(), self.refs(("library_file", FILE_LIVE), ("media", MEDIA_LIVE)))
+        self.assertEqual(revoked, [])
+        cur = RevokedCursor({"phase2": {"assets": []}}, set())
+        revoked = store.revoked_refs(cur, auth(), self.refs(("library_file", FILE_LIVE), ("media", MEDIA_LIVE)))
+        self.assertEqual(revoked, [f"library_file:{FILE_LIVE}", f"media:{MEDIA_LIVE}"])
+
+    def test_state_ids_lists_only_live_media(self):
+        ids = store.state_ids(self.STATE)
+        self.assertEqual(ids["media"], {MEDIA_LIVE})
+        self.assertEqual(ids["asset"], ids["media"])
+        self.assertEqual(ids["image"], ids["media"])
+
+    def test_unchecked_types_still_pass_and_no_library_read_without_library_refs(self):
+        cur = RevokedCursor(self.STATE, set())
+        self.assertEqual(store.revoked_refs(cur, auth(), self.refs(("connection", "youtube:1"), ("media", MEDIA_LIVE))), [])
+        self.assertFalse(any("pr_library_assets" in s[0] for s in cur.statements))
+
+
 class LeaseShapes(unittest.TestCase):
     def test_lease_attempt_has_the_d_a33_fields(self):
         attempt = {"attemptId": ART, "artifactId": ART, "kind": "edit", "targetRevision": 2, "baseRevision": 1, "baseSourceHash": HASH, "state": "queued",
