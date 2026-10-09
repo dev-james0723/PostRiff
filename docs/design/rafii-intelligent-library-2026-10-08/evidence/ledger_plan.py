@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 SHA, RUN, PASSED = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
-ROOT = "/Users/ouxianxing/Documents/.agent-worktrees/rafii-intelligent-library-20261008"
+ROOT = str(__import__("pathlib").Path(__file__).resolve().parents[4])  # the checkout this script lives in
 ENV = "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector"
 CMD = f"jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run {RUN}"
 RUNREF = f"https://depot.dev/orgs/jf34f85hr0/workflows/{RUN}"
@@ -26,6 +26,9 @@ VERIFIED = {
     "A052": ["pgcreation::artifact: registered once by the accepting command", "pgcreation::artifact: a replayed completion event returns the same asset", "pgcreation::artifact: one Library row, one registration"],
     "A055": ["pgsuggestions::dedup: a dismissed identity is never recreated", "pgsuggestions::snooze: the editable default is used", "pgsuggestions::disable: survives a new session"],
     "A056": ["pgsuggestions::delivery: no notification, phone schedule or outbox rows were written", "pgsuggestions::inbox: cap and in-app delivery reported"],
+    "A031": ["scripts/library-intelligence-bench.py receipt in the run log: 10,000 assets (7,000 normalized, 3,000 legacy), 8 concurrent, 100 warm requests per kind",
+             "lexical p95 1,981.4 ms (budget 2,000), hybrid p95 2,273.3 ms (budget 3,000), cold first request 185 ms, 0 errors",
+             "hardware: 16 CPU / 64 GB Linux runner, PostgreSQL 16.15 with pgvector"],
     "A058": ["pgsuggestions::metrics: a post without readings is unknown, never zero", "pgsuggestions::usage: correlation is not causation", "pgsuggestions::diversity: the same top item is not repeated for the next draft"],
 }
 NOTES = {
@@ -33,6 +36,7 @@ NOTES = {
     "A020": "Contract-test transcript; correction and speaker handling are the behaviour under test.",
     "A027": "Lexical multilingual behaviour; semantic multilingual quality is part of BLOCKED A026.",
     "A056": "Default (no opt-in) behaviour; opt-in and quiet-hours delivery are not exercised.",
+    "A031": "The bench JSON records candidateSha as the JCB base (65b1ea83) because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 is within 2% of its budget.",
 }
 BLOCKED = {
     "A017": "Needs the real ASR evaluation (scripts/library-intelligence-provider-eval.py) with OPENAI_API_KEY in ~/.config/rafii-library-eval/provider.env; contract-test transcripts only so far.",
@@ -54,13 +58,12 @@ UNVERIFIED = {
     "A013": "Digital-before-OCR ordering is unit-only with fakes; no scanned fixture through the worker.",
     "A014": "Page locators are covered on Postgres; slide, sheet and cell locators are unit-only.",
     "A015": "Sandboxing is unit-level; no hostile upload end to end through the worker.",
-    "A016": "Harness checks covers are real rasters or labelled preparing/unavailable (Chromium); WebKit and unsupported-format labelling still open.",
+    "A016": "Documents now show real first-page rasters (Library acceptance, Chromium and WebKit) and the intelligence harness checks honest cover labels in Chromium; an explicit unsupported-format check in WebKit is still open.",
     "A019": "Two-signal comparison is unit-only; the drawn waveform is not checked in a browser.",
     "A021": "Harness checks no autoplay and press-to-play; pause, seek, Save moment and reopen are not driven in a browser.",
     "A024": "No identity inference is unit-only with a fake vision provider.",
     "A029": "Server pagination and totals are complete; the UI refresh prompt and displayed count are not browser-checked.",
     "A030": "Server labelling of degraded search is covered in both phases; the absence of a false UI badge is not browser-checked.",
-    "A031": "Bench is informational in the release script and records git HEAD; a passing receipt bound to the candidate is needed.",
     "A033": "One unanswerable question and one trap on Postgres; the trap set in answer-eval.py has not run.",
     "A034": "Page citations open the right version; time, slide and cell deep links and the UI open are untested.",
     "A035": "Server answers show conflicts and scope; the Ask Library display is not browser-checked.",

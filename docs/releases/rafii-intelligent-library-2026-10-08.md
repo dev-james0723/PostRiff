@@ -84,7 +84,23 @@ To roll back, turn the flags off. That stops every new code path immediately. To
 
 Filled in from observed remote runs only. See `evidence/runs.md`.
 
-<!-- CANDIDATE-VALIDATION -->
+**Candidate `757e127d`** (branch `claude/rafii-intelligent-library-20261008`): full remote release validation **PASS**, JCB → Depot run [psn1gp78lq](https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq), receipt `sourceHead=757e127d`, base `origin/consumer-saas` `65b1ea83` (#134 and #135 merged in). Commits after the candidate on this branch change only evidence documents.
+
+| Stage | Result |
+|---|---|
+| Dependency audit | 0 vulnerabilities |
+| Python unit + full discovery | pass (4,062 tests, 371 skipped) |
+| Disposable PostgreSQL 16 | all 12 intelligence suites pass without and with pgvector; lifecycle, agent runtime/style pass |
+| Web node tests | pass |
+| Web type check / lint / production build | pass / 0 errors (4 pre-existing warnings) / pass |
+| Offline secret scan | pass (synthetic test values marked inline) |
+| Library browser acceptance | pass in Chromium and WebKit, 1440 and 390 px |
+| Intelligence browser harness | pass in Chromium at 390×844, 768×1024, 1440×900, 844×390, 200% zoom |
+| A031 search latency (10,000 assets, 8 concurrent) | lexical p95 1,981 ms ≤ 2,000; hybrid p95 2,273 ms ≤ 3,000; cold 185 ms |
+
+Acceptance ledger against `757e127d`: 24 VERIFIED, 49 UNVERIFIED, 7 BLOCKED, 0 FAILED (`scripts/library-intelligence-acceptance.py check --sha 757e127d` passes). The BLOCKED cases need the real-provider evaluation (A017, A018, A022, A023, A026, A032) or a real iPhone (A066). The run history, including every failed attempt and its fix, is in `evidence/runs.md`.
+
+`origin/consumer-saas` has since gained #136 (YouTube public launch), which touches no Library file; merging it is part of the merge step and needs one more validation run.
 
 ## Remaining gates
 

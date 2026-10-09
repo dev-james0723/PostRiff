@@ -37,7 +37,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Formats upload and sign; stored hash/bytes are not compared with the authorized download and no image fixture is asserted."
     },
     {
       "id": "A002",
@@ -52,7 +52,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "No test for MIME mismatch or the per-file limit; corrupted input is unit-only."
     },
     {
       "id": "A003",
@@ -67,7 +67,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Only processing retry is covered; interrupted upload retry and partial-batch behaviour are untested."
     },
     {
       "id": "A004",
@@ -77,11 +77,16 @@
       "owner_task": "T01",
       "title": "Workspace isolation",
       "expected": "Attempt browse/search/read/preview/count/suggestion/pack/mutation across two workspaces; all unauthorized paths denied without identity or count leakage.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsearch::A004 a foreign selection is indistinguishable from a missing one",
+        "pganswers::A004 another workspace can neither answer from nor open this item",
+        "pgpolicy::isolation: forged cross-workspace action denied"
+      ],
       "note": null
     },
     {
@@ -92,11 +97,16 @@
       "owner_task": "T01",
       "title": "Browse does not authorize AI egress",
       "expected": "Storage-only asset remains browsable; cloud transcription, embeddings, summaries and Agent retrieval remain blocked without appropriate grants.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgpolicy::purpose: browse never implies cloud",
+        "pgjobs::permission: cloud without a grant creates no job",
+        "pgmedia::audio card: transcription blocked without a cloud grant"
+      ],
       "note": null
     },
     {
@@ -112,7 +122,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Only the attributionOnly flag is checked; no attempt to approve or publish a fact under an answer-only grant."
     },
     {
       "id": "A007",
@@ -127,7 +137,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Separation of Inspiration, Memory, public use and processing location is unit-only."
     },
     {
       "id": "A008",
@@ -137,11 +147,16 @@
       "owner_task": "T12",
       "title": "Revocation wins an in-flight race",
       "expected": "Revoke after retrieval/job/action begins but before delivery/finalization; server rechecks revision and blocks delivery/write.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgpolicy::toctou: recheck before delivery denies",
+        "pglifecycle::A008: recheck allowed before the revoke, refused after it",
+        "pganswers::A036/R02 a grant revoked mid-answer drops the source and abstains"
+      ],
       "note": null
     },
     {
@@ -157,7 +172,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Server revocation of cursors and packs is covered; cached views already in a browser are not."
     },
     {
       "id": "A010",
@@ -167,12 +182,17 @@
       "owner_task": "T03",
       "title": "Understanding has evidence and provenance",
       "expected": "Every summary/annotation/segment suggestion can be traced to a source/version; AI suggestions and human confirmations remain distinct.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": null
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgmedia::card: extractive summary with evidence",
+        "pgmedia::card: decisions and suggestions distinct",
+        "pgmedia::write: hash, source hash and normalizer recorded"
+      ],
+      "note": "AI annotations come from the labelled contract-test model, which this case allows."
     },
     {
       "id": "A011",
@@ -187,7 +207,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Human corrections survive reprocessing; the title override is not re-checked after a rerun."
     },
     {
       "id": "A012",
@@ -197,11 +217,16 @@
       "owner_task": "T02",
       "title": "Capability status is truthful",
       "expected": "Exercise queued/processing/ready/partial/unsupported/failed/cancelled/permission/budget states separately; stored/playable is not mislabelled understood.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgjobs::states: each capability independent",
+        "pgjobs::budget: job and capability blocked_budget",
+        "pgmedia::card: inapplicable capability honest"
+      ],
       "note": null
     },
     {
@@ -217,7 +242,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Digital-before-OCR ordering is unit-only with fakes; no scanned fixture through the worker."
     },
     {
       "id": "A014",
@@ -232,7 +257,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Page locators are covered on Postgres; slide, sheet and cell locators are unit-only."
     },
     {
       "id": "A015",
@@ -247,7 +272,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Sandboxing is unit-level; no hostile upload end to end through the worker."
     },
     {
       "id": "A016",
@@ -262,7 +287,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Documents now show real first-page rasters (Library acceptance, Chromium and WebKit) and the intelligence harness checks honest cover labels in Chromium; an explicit unsupported-format check in WebKit is still open."
     },
     {
       "id": "A017",
@@ -272,12 +297,12 @@
       "owner_task": "T03",
       "title": "ASR works on real permitted audio",
       "expected": "Run at least one authorized real-provider transcription and retain timestamped evidence; mocks alone cannot pass automatic transcription.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Needs the real ASR evaluation (scripts/library-intelligence-provider-eval.py) with OPENAI_API_KEY in ~/.config/rafii-library-eval/provider.env; contract-test transcripts only so far."
     },
     {
       "id": "A018",
@@ -287,12 +312,12 @@
       "owner_task": "T03",
       "title": "Mixed-language transcription is evaluated",
       "expected": "Use labelled Cantonese/Traditional Chinese/English code-switch clips; report CER/WER per language and segment, errors and processor identity; confirm usable retrieval moments.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Needs labelled Cantonese/English clips through the real ASR provider with CER/WER; not yet run."
     },
     {
       "id": "A019",
@@ -307,7 +332,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Two-signal comparison is unit-only; the drawn waveform is not checked in a browser."
     },
     {
       "id": "A020",
@@ -317,12 +342,17 @@
       "owner_task": "T03",
       "title": "Corrections and speakers are handled honestly",
       "expected": "Correct a timed segment and an anonymous speaker label; preserve history/alignment; no inferred real-world identity.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": null
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgmedia::correct: same locator, linked history",
+        "pgmedia::correct via action: applied, speaker label cleared",
+        "pgmedia::transcript: code-switching labelled, no speaker guessed"
+      ],
+      "note": "Contract-test transcript; correction and speaker handling are the behaviour under test."
     },
     {
       "id": "A021",
@@ -337,7 +367,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Harness checks no autoplay and press-to-play; pause, seek, Save moment and reopen are not driven in a browser."
     },
     {
       "id": "A022",
@@ -347,12 +377,12 @@
       "owner_task": "T03",
       "title": "Video understanding is bounded and useful",
       "expected": "Real permitted video produces poster, duration, timed transcript and bounded scene/frame evidence; missing capabilities displayed accurately.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Needs a real video transcript and scene evidence from the provider; only the poster path is exercised."
     },
     {
       "id": "A023",
@@ -362,12 +392,12 @@
       "owner_task": "T04",
       "title": "Visual similarity is not caption-only",
       "expected": "Labelled image/frame query exercises a compatible visual index and finds expected visual candidates; report applied modality and fallback.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Local perceptual vectors on generated images pass; a labelled real-provider visual evaluation is still needed."
     },
     {
       "id": "A024",
@@ -382,7 +412,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "No identity inference is unit-only with a fake vision provider."
     },
     {
       "id": "A025",
@@ -392,11 +422,16 @@
       "owner_task": "T04",
       "title": "Old assets remain findable",
       "expected": "With at least 1,001 assets find known assets at positions 201 and 1,001 and an old segment by exact query; no newest-200/global age cutoff.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsearch::A025 position 201 by exact filename",
+        "pgsearch::A025 position 1001 by exact id",
+        "pgsearch::A025 oldest asset's segment found by exact query"
+      ],
       "note": null
     },
     {
@@ -407,12 +442,12 @@
       "owner_task": "T04",
       "title": "Lexical and semantic strengths coexist",
       "expected": "Exact filename/id/phrase/dimension tests pass; independently labelled semantic queries reach Recall@10 >= 0.90 on the agreed 100-query set.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Lexical baseline measured (semantic Recall@10 0.00 without embeddings); needs scripts/library-intelligence-eval.py with real embeddings."
     },
     {
       "id": "A027",
@@ -422,12 +457,17 @@
       "owner_task": "T04",
       "title": "Multilingual query behavior is tested",
       "expected": "Traditional/Simplified Chinese, Cantonese expressions, English and mixed queries evaluated; language normalization cannot erase meaningful content.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": null
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsearch::A027 '<query>' finds exactly the expected passages",
+        "pgsearch::A027 language filter narrows before ranking",
+        "pgeval::every query ran in lexical mode"
+      ],
+      "note": "Lexical multilingual behaviour; semantic multilingual quality is part of BLOCKED A026."
     },
     {
       "id": "A028",
@@ -437,11 +477,16 @@
       "owner_task": "T04",
       "title": "UI and Agent share retrieval policy",
       "expected": "Same user/scope/purpose query yields consistent eligibility and coverage through both routes; any presentation difference is documented.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsearch::A028 UI and Agent routes report the same eligibility and coverage",
+        "pgsearch::A028 the Agent gets the same purpose-filtered passages",
+        "pgsearch::A028 purpose filtering happens before ranking"
+      ],
       "note": null
     },
     {
@@ -457,7 +502,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Server pagination and totals are complete; the UI refresh prompt and displayed count are not browser-checked."
     },
     {
       "id": "A030",
@@ -472,7 +517,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Server labelling of degraded search is covered in both phases; the absence of a false UI badge is not browser-checked."
     },
     {
       "id": "A031",
@@ -482,12 +527,17 @@
       "owner_task": "T13",
       "title": "Search latency meets candidate budget",
       "expected": "At 10,000 mixed assets/8 concurrent scoped searches, 100 warm measured requests: lexical p95 <= 2 s, hybrid p95 <= 3 s; report hardware/network/cold results separately.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": null
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "scripts/library-intelligence-bench.py receipt in the run log: 10,000 assets (7,000 normalized, 3,000 legacy), 8 concurrent, 100 warm requests per kind",
+        "lexical p95 1,981.4 ms (budget 2,000), hybrid p95 2,273.3 ms (budget 3,000), cold first request 185 ms, 0 errors",
+        "hardware: 16 CPU / 64 GB Linux runner, PostgreSQL 16.15 with pgvector"
+      ],
+      "note": "The bench JSON records candidateSha as the JCB base (65b1ea83) because JCB applies the candidate as a patch; the run receipt binds sourceHead to the candidate. Lexical p95 is within 2% of its budget."
     },
     {
       "id": "A032",
@@ -497,12 +547,12 @@
       "owner_task": "T05",
       "title": "Answers are grounded",
       "expected": "On agreed benchmark, >=95% of evaluated factual claims are supported by cited passages; report denominator and human review, not just model self-scoring.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Extractive quotation is verified on Postgres; scripts/library-intelligence-answer-eval.py with the real model and a human review are still needed."
     },
     {
       "id": "A033",
@@ -517,7 +567,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "One unanswerable question and one trap on Postgres; the trap set in answer-eval.py has not run."
     },
     {
       "id": "A034",
@@ -532,7 +582,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Page citations open the right version; time, slide and cell deep links and the UI open are untested."
     },
     {
       "id": "A035",
@@ -547,7 +597,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Server answers show conflicts and scope; the Ask Library display is not browser-checked."
     },
     {
       "id": "A036",
@@ -562,7 +612,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Injection is covered on the answers route; the Agent's tool-calling route with an injected source is not."
     },
     {
       "id": "A037",
@@ -572,11 +622,16 @@
       "owner_task": "T06",
       "title": "Smart Collections save criteria, not SQL",
       "expected": "Allowlisted rule AST preview and save succeed; arbitrary SQL/code/prompt-as-execution is rejected.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgorg::save: applied through the action surface",
+        "pgorg::rules: SQL text is rejected",
+        "pgorg::rules: unknown field is rejected"
+      ],
       "note": null
     },
     {
@@ -592,7 +647,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Joins come from tag edits; membership after a new upload finishes processing is not asserted."
     },
     {
       "id": "A039",
@@ -607,7 +662,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Override and undo are covered; undo never restoring revoked consent is unit-only."
     },
     {
       "id": "A040",
@@ -622,7 +677,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Cycles are rejected; the full original-to-post chain and explorer depth limit are not asserted."
     },
     {
       "id": "A041",
@@ -632,11 +687,16 @@
       "owner_task": "T06",
       "title": "Duplicates are handled conservatively",
       "expected": "Exact duplicates preserve reference-count deletion safety; near duplicates are suggestions, never auto-merged/deleted.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgmigration::delete: the exact duplicate survives and is re-queued as canonical",
+        "pglifecycle::sibling: original bytes kept, redundant copy deleted",
+        "pgorg::near-duplicate: nothing merged, hidden or deleted"
+      ],
       "note": null
     },
     {
@@ -652,7 +712,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Postgres compares text only; image, media and unsupported comparisons are node-level."
     },
     {
       "id": "A043",
@@ -662,11 +722,16 @@
       "owner_task": "T06",
       "title": "Source update warns rather than overwrites",
       "expected": "Dependent draft flagged on new version; old citation remains old; applying replacement checks revision and requires intended user action.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgorg::link: pack, Ideas source, draft and post flagged stale",
+        "pgorg::link: old citations are not rewritten",
+        "pgorg::replace: explicit acceptance applied with a new pack revision"
+      ],
       "note": null
     },
     {
@@ -682,7 +747,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Storage-only and quotation refusal are covered; third-party inspiration and generated drafts are not."
     },
     {
       "id": "A045",
@@ -692,11 +757,16 @@
       "owner_task": "T07",
       "title": "Span-level and negative examples work",
       "expected": "Approve one passage and a negative example; only permitted spans influence the specified persona/style, not the whole file.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgvoice::approve: indexed span links the canonical sample",
+        "pgvoice::negative: indexed without a canonical sample",
+        "pgvoice::exemplars: positive and negative with provenance"
+      ],
       "note": null
     },
     {
@@ -712,7 +782,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Only one voice set exists in the suite; no two-persona or brand leak test."
     },
     {
       "id": "A047",
@@ -722,11 +792,16 @@
       "owner_task": "T07",
       "title": "Revocation rebuilds derived profile",
       "expected": "Remove a voice sample; future retrieval and persistent derived profile summary cease using it; show evidence of rebuild/invalidation.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgvoice::revoke: speaker revision invalidated",
+        "pgvoice::revoke: persistent profile stale; VOICE.md no longer uses it",
+        "pgvoice::revoke: retrieve() excludes it"
+      ],
       "note": null
     },
     {
@@ -742,7 +817,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Server payload has no scores; the voice UI wording is not browser-checked."
     },
     {
       "id": "A049",
@@ -757,7 +832,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Ideas and draft packs are covered; the Agent entry and UI selection-to-pack flow are not."
     },
     {
       "id": "A050",
@@ -772,7 +847,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Task-aware ranking by format and currency is unit-only."
     },
     {
       "id": "A051",
@@ -787,7 +862,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "URL, mode, density and selection restore in the harness; scope, sort, scroll and a draft round trip are not."
     },
     {
       "id": "A052",
@@ -797,11 +872,16 @@
       "owner_task": "T08",
       "title": "Final artifacts auto-register exactly once",
       "expected": "Successful final output with verified bytes appears once with producing run/output/source pack after duplicate completion events.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgcreation::artifact: registered once by the accepting command",
+        "pgcreation::artifact: a replayed completion event returns the same asset",
+        "pgcreation::artifact: one Library row, one registration"
+      ],
       "note": null
     },
     {
@@ -817,7 +897,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Scratch logs never register on Postgres; the loop guard and retryable failure are unit-only."
     },
     {
       "id": "A054",
@@ -832,7 +912,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "All triggers and the daily cap are covered server side; the inbox UI is not browser-checked."
     },
     {
       "id": "A055",
@@ -842,11 +922,16 @@
       "owner_task": "T11",
       "title": "Dismiss/snooze/disable persist",
       "expected": "Dedup replayed trigger; dismissed identity suppressed; editable 7-day default snooze and category disable survive refresh/session.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsuggestions::dedup: a dismissed identity is never recreated",
+        "pgsuggestions::snooze: the editable default is used",
+        "pgsuggestions::disable: survives a new session"
+      ],
       "note": null
     },
     {
@@ -857,12 +942,16 @@
       "owner_task": "T11",
       "title": "No unsolicited external side effects",
       "expected": "In-app default only; no email/push/schedules/publication without explicit corresponding opt-in and existing quiet-hour rules.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
-      "note": null
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsuggestions::delivery: no notification, phone schedule or outbox rows were written",
+        "pgsuggestions::inbox: cap and in-app delivery reported"
+      ],
+      "note": "Default (no opt-in) behaviour; opt-in and quiet-hours delivery are not exercised."
     },
     {
       "id": "A057",
@@ -877,7 +966,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Usage events are recorded through the API with synthetic post ids; a real schedule/publish path and segment link are not asserted."
     },
     {
       "id": "A058",
@@ -887,11 +976,16 @@
       "owner_task": "T11",
       "title": "Recommendations are not causal or popularity-only",
       "expected": "Missing metrics stay null/unknown; no claim an asset caused engagement; diversity/freshness prevents always repeating the top-like item.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgsuggestions::metrics: a post without readings is unknown, never zero",
+        "pgsuggestions::usage: correlation is not causation",
+        "pgsuggestions::diversity: the same top item is not repeated for the next draft"
+      ],
       "note": null
     },
     {
@@ -907,7 +1001,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "One Add control and visible scope are asserted in Chromium; storage indicator and compact filters need visual review."
     },
     {
       "id": "A060",
@@ -922,7 +1016,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Visual identity needs before/after screenshot review; screenshots are exported through the CI log for review."
     },
     {
       "id": "A061",
@@ -937,7 +1031,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Type-aware previews are exercised; per-density checks and eager-player avoidance are not asserted."
     },
     {
       "id": "A062",
@@ -952,7 +1046,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Detail sections and the danger area are node-level; permission and dependency-impact confirmation are not browser-checked."
     },
     {
       "id": "A063",
@@ -967,7 +1061,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Partial-failure reporting is node logic only; no Postgres or browser mixed batch with idempotent retry."
     },
     {
       "id": "A064",
@@ -982,7 +1076,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Focus return, Escape and 200% reflow pass in Chromium; no automated a11y scan, contrast or manual WCAG 2.2 AA review."
     },
     {
       "id": "A065",
@@ -997,7 +1091,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "No horizontal overflow at five viewports in Chromium; screenshots need review and WebKit is not run by this harness."
     },
     {
       "id": "A066",
@@ -1007,12 +1101,12 @@
       "owner_task": "T13",
       "title": "Actual iPhone Safari smoke passes",
       "expected": "Real device upload/playback/seek/drawer/selection/back navigation; safe-area/player/navigation never cover required actions. Desktop WebKit is separately labelled.",
-      "status": "UNVERIFIED",
+      "status": "BLOCKED",
       "candidate_sha": null,
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Needs James's iPhone Safari session; see evidence/iphone-smoke.md. The desktop harness is not a device result."
     },
     {
       "id": "A067",
@@ -1027,7 +1121,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "The OpenUI runtime is owned by the OpenUI branch and not yet merged; descriptors are registered by patch after it lands."
     },
     {
       "id": "A068",
@@ -1042,7 +1136,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "No generated surface is rendered with real server refs in a browser until the OpenUI runtime is merged."
     },
     {
       "id": "A069",
@@ -1057,7 +1151,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Forged cross-workspace and stale actions are refused on Postgres; URL/tool payload forgery and different-body replay are unit-only."
     },
     {
       "id": "A070",
@@ -1072,7 +1166,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Streaming, repair and fallback are node logic only; no browser stream run."
     },
     {
       "id": "A071",
@@ -1087,7 +1181,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Lease recovery and budget blocks are covered; model timeouts and retry storms are not exercised or measured."
     },
     {
       "id": "A072",
@@ -1102,7 +1196,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Derivative deletion is checked by replaying the delete steps; the real delete route is exercised only in the migration suite and preview objects are not asserted."
     },
     {
       "id": "A073",
@@ -1117,7 +1211,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Actual cost by kind is covered; estimated/unknown cost and log secrecy are unit-only; no latency/retry metrics."
     },
     {
       "id": "A074",
@@ -1132,7 +1226,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Backfill resume and generation rollback are simulated with limit=1 passes; cost admission is unit-only."
     },
     {
       "id": "A075",
@@ -1142,11 +1236,15 @@
       "owner_task": "T00",
       "title": "Current branch is reconciled before code",
       "expected": "Record real origin/base SHA/worktrees/lease/Library/OpenUI branches and baseline; no stale shared-root modifications or duplicate implementations.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Local git worktree and documents; remote CI receipt",
+      "command": "Manual procedure: recorded origin, base, worktrees, leases and in-flight Library/OpenUI branches before code; merged the current base before release validation",
+      "evidence": [
+        "docs/design/rafii-intelligent-library-2026-10-08/BASELINE.md",
+        "docs/design/rafii-intelligent-library-2026-10-08/OWNER-MAP.md",
+        "merge commits c471f7ae (#134) and 5b43b140 (#135) reconcile origin/consumer-saas 65b1ea83; `git merge-base --is-ancestor origin/consumer-saas 757e127d`"
+      ],
       "note": null
     },
     {
@@ -1162,7 +1260,7 @@
       "environment": null,
       "command": null,
       "evidence": [],
-      "note": null
+      "note": "Photo/video/doc/audio ingest and delete, agent runtime/style Postgres and the full Python discovery pass; Memory, Drafts and Queue have no Postgres regression suite in the release scripts."
     },
     {
       "id": "A077",
@@ -1172,11 +1270,14 @@
       "owner_task": "T13",
       "title": "Quality gates bind to the candidate SHA",
       "expected": "Typecheck, lint, build, focused tests, disposable Postgres lifecycle/RLS, dependency/security checks and browser evidence all name the same candidate.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "JCB receipt sourceHead=757e127d: typecheck, lint, build, focused unit, disposable PostgreSQL lifecycle/RLS (both phases), npm audit, secrets scan and browser harnesses in one run"
+      ],
       "note": null
     },
     {
@@ -1187,11 +1288,18 @@
       "owner_task": "T14",
       "title": "Migration and rollback are rehearsed",
       "expected": "New migration IDs reserved once; legacy fixtures migrate safely in disposable DB; backfill dry-run and rollback/canary playbook include actual environment requirements.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Depot depot-ubuntu-24.04-16 via JCB sanitized working-tree transport; disposable PostgreSQL 16 without and with pgvector",
+      "command": "jcb ci (scripts/library-release-validation.sh -> library-cloud-validation.sh -> library-intelligence-validation.sh), run psn1gp78lq",
+      "evidence": [
+        "https://depot.dev/orgs/jf34f85hr0/workflows/psn1gp78lq",
+        "pgmigration::migration: every existing asset row unchanged",
+        "pgmigration::migration: 097 re-applies cleanly (attempt 2)",
+        "pglifecycle::backfill: dry run counts only",
+        "docs/releases/rafii-intelligent-library-2026-10-08.md (preconditions, pgvector schema, canary, rollback)",
+        "OWNER-MAP.md: 097-099 reserved here, 102-103 by OpenUI"
+      ],
       "note": null
     },
     {
@@ -1202,11 +1310,14 @@
       "owner_task": "T14",
       "title": "No fake complete status",
       "expected": "Required cases remain UNVERIFIED/FAILED/BLOCKED until actual evidence; a disabled feature, fixture, PR merge or config file cannot pass a user-flow case.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Local git worktree and documents; remote CI receipt",
+      "command": "Manual procedure plus ledger check: real-provider, device, visual and UI-flow cases stay BLOCKED/UNVERIFIED",
+      "evidence": [
+        "evidence/acceptance-status.json",
+        "scripts/library-intelligence-acceptance.py check --sha 757e127d"
+      ],
       "note": null
     },
     {
@@ -1217,11 +1328,14 @@
       "owner_task": "T14",
       "title": "Production authority is separate",
       "expected": "Document explicit release authority, if supplied. Without it stop at release-ready candidate; production migration/push/merge/deploy/smoke stays awaiting authorization, never falsely PASS.",
-      "status": "UNVERIFIED",
-      "candidate_sha": null,
-      "environment": null,
-      "command": null,
-      "evidence": [],
+      "status": "VERIFIED",
+      "candidate_sha": "757e127d",
+      "environment": "Local git worktree and documents; remote CI receipt",
+      "command": "Manual procedure: no push, merge, deploy, production migration or paid service activation without authorization",
+      "evidence": [
+        "docs/releases/rafii-intelligent-library-2026-10-08.md (AWAITING AUTHORIZATION)",
+        "git ls-remote shows no claude/rafii-intelligent-library-20261008 branch on origin"
+      ],
       "note": null
     }
   ]
