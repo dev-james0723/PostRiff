@@ -54,11 +54,15 @@
   "physical_device_evidence": null,
   "model_attempt_and_cost_summary": null,
   "rollback_deployment": {
-    "deployment_id": "dpl_HPRcYu9tsfvDDUwtHoZwiuES1xgy",
-    "sha": "65b1ea83",
-    "recorded_at": "2026-10-08T21:00:00-04:00",
-    "note": "65b1ea83 + rafii.io env, legacy temporary redirect, FB/IG/YouTube/TikTok callback pins removed (domain-migration session)",
+    "deployment_id": "dpl_HE8oWvF5TMF7xo63rgS26NSVB3WR",
+    "sha": "a522482e",
+    "recorded_at": "2026-10-08T20:05:00-04:00",
+    "note": "PR #136 YouTube public launch (merge a522482e); rafii.io alias confirmed via vercel inspect. This is the last production deployment before the GenUI release.",
     "previous": [
+      {
+        "deployment_id": "dpl_HPRcYu9tsfvDDUwtHoZwiuES1xgy",
+        "sha": "65b1ea83"
+      },
       {
         "deployment_id": "dpl_EVqE4ugSHbJoWkbmErhpqUDV48Cf",
         "sha": "65b1ea83"
