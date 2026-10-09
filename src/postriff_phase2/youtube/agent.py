@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -445,6 +446,21 @@ class YouTubePublishingAgent:
                 state = json.loads(raw) if isinstance(raw, str) else raw
                 if 'accountDeletion' in state or 'accountBlock' in state:
                     continue
+                if fleet:
+                    # A projection read can precede another caller's commit.
+                    # Recheck the hydrated authority while holding its row lock.
+                    lease = root(state).get('fleetLease')
+                    if lease is not None and not isinstance(lease, dict):
+                        continue
+                    until = (lease or {}).get('until')
+                    until = 0 if until is None else until
+                    if type(until) not in (int, float):
+                        continue
+                    try:
+                        if not math.isfinite(until) or until > self.clock():
+                            continue
+                    except OverflowError:
+                        continue
                 for policy in root(state)['policies']:
                     if policy.get('status') != 'active' or not policy['startsAt'] <= self.clock() < policy['endsAt']:
                         continue
