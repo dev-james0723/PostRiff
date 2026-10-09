@@ -20,6 +20,7 @@
     "ci:jcb": "npm run lint && npm run typecheck && npm run test:jcb && npm run build",
     "ci:youtube:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-validation.sh",
     "ci:content-skills:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-content-skills-validation.sh",
+    "ci:content-skills:web:jcb": "CONTENT_SKILLS_STAGES=web bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-content-skills-validation.sh",
     "ci:youtube:proposal:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-proposal-validation.sh",
     "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs",
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh"

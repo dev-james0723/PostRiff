@@ -36,10 +36,14 @@ as_root mkdir -p /var/run/postgresql && as_root chmod 1777 /var/run/postgresql
 stage() { echo; echo "=== $1 ==="; }
 stage "content-skills: targeted P0/P1/P2 contracts"
 "$TREND_VISUAL_TEST_PYTHON" -m unittest -v test_rafii_creation_capabilities 2>&1 | tail -n 60
-stage "python: full discovery (consumer-ready.yml parity)"
-"$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_*.py'
-stage "postgres: disposable clusters, every tests/phase2/postgres_*.py group ($("$pg_bin/postgres" --version))"
-POSTRIFF_PG_BIN="$pg_bin" "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py
+# CONTENT_SKILLS_STAGES=web reruns only the web and browser gates (after a web-only change on a commit whose Python and
+# PostgreSQL gates already passed remotely); the default runs everything.
+if [ "${CONTENT_SKILLS_STAGES:-all}" != "web" ]; then
+  stage "python: full discovery (consumer-ready.yml parity)"
+  "$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_*.py'
+  stage "postgres: disposable clusters, every tests/phase2/postgres_*.py group ($("$pg_bin/postgres" --version))"
+  POSTRIFF_PG_BIN="$pg_bin" "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py
+fi
 
 cd -- "$root/web"
 stage "web: contracts and locale checks"
