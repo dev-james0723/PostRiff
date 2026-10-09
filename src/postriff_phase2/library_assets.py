@@ -22,6 +22,16 @@ EXT = re.compile(r"^[a-z0-9]{1,12}$")
 ASSET_ID = re.compile(r"^[0-9a-f]{32}$")
 READY = ('ready', 'unsupported')
 INLINE = {'txt','md','markdown','html','htm','csv','json'}
+# Documents up to this size are read in the uploader's own request (bounded child processes, well inside the function
+# duration), so a file is ready, or honestly failed, when its upload finishes. The cron worker only picks up what is
+# left: larger files, transient storage errors and retries. Any other worker on the same queue never decides them.
+READ_NOW_BYTES = 8 * 1024 * 1024
+
+
+def _read_now(a):
+    if a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
+        return True
+    return a['kind'] == 'document' and a['bytes'] <= READ_NOW_BYTES
 
 
 def _member(row):
@@ -171,8 +181,7 @@ class UniversalLibrary:
             if current['processing_status'] == 'pending':
                 cur.execute("UPDATE public.pr_library_assets SET etag=%s,processing_status='queued',next_attempt_at=now(),updated_at=now() WHERE workspace_id=%s AND id=%s", (info['etag'],w,i))
             a = self._row(cur, w, i)
-        # Bounded small plain text/generic files can finish immediately. Complex parsers run on the cron worker.
-        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
+        if a['processing_status'] == 'queued' and _read_now(a):
             self.process(self.service.repository.connection_factory, w, i)
             with self.service.repository.transaction(t, w) as (cur, row, p):
                 a = self._row(cur, w, i)
@@ -245,10 +254,9 @@ class UniversalLibrary:
             if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY):
                 raise AlphaError('This file is not waiting for a retry.',409)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
-        # An explicit retry can complete a bounded small file without waiting
-        # for cron (preview deployments do not run production cron schedules).
-        # Larger files retain their durable background queue and lease.
-        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 else 'queued'
+        # An explicit retry completes a bounded file in this request, as an upload does, without waiting for cron
+        # (preview deployments do not run production cron schedules). Larger files keep their durable queue and lease.
+        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 or _read_now(a) else 'queued'
         return {'status':status,'assetId':i}
 
     def detail(self,w,t,i):

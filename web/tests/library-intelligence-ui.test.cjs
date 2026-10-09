@@ -955,3 +955,11 @@ test('host writes: a failed press becomes Retry with the same key; an applied on
   ])
     assert.match(feature('intelligence', file), pattern, file);
 });
+
+test('an upload whose text cannot be read is saved with a warning, never reported as a failed upload', () => {
+  const view = feature('library-view.tsx');
+  const commit = view.slice(view.indexOf('await api.commitLibraryFile('), view.indexOf('} catch (error) {', view.indexOf('await api.commitLibraryFile(')));
+  assert.doesNotMatch(commit, /throw new Error/, 'the original is saved; a read failure is not an upload failure');
+  assert.match(commit, /result\.status === 'failed'\) toast\.warning\(`Saved \$\{file\.name\}, but Rafii couldn’t read it`/);
+  assert.match(commit, /result\.status === 'ready'\) toast\.success\(`Saved and read \$\{file\.name\}`\)/);
+});

@@ -620,12 +620,14 @@ function LibraryPage() {
         pending.put = true;
       }
       if (!pending.put) throw new Error('Remove this pending upload and choose the file again.');
-      setFileProgress(`Verifying ${file.name}…`);
+      setFileProgress(`Reading ${file.name}…`);
       const result = await api.commitLibraryFile(workspaceId, pending.assetId);
       pendingFile.current = null;
-      if (result.status === 'failed') throw new Error(result.asset.extractionError || 'The original file was saved, but text extraction failed. Retry from its details.');
       await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
-      toast.success('File saved. Complex documents are indexed in the background.');
+      // The original is saved either way; a file Rafii could not read stays in the Library with "Try reading again".
+      if (result.status === 'failed') toast.warning(`Saved ${file.name}, but Rafii couldn’t read it`, { description: result.asset.extractionError || 'Try reading it again from its ⋯ menu.' });
+      else if (result.status === 'ready') toast.success(`Saved and read ${file.name}`);
+      else toast.success('File saved. Rafii reads larger files in the background.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not add this file';
       setFileFailure(message);
