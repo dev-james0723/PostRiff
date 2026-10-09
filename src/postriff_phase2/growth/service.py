@@ -339,7 +339,13 @@ class GrowthService:
                     if old[4]!=self._context(state) or not self._draft_matches(state,draft):
                         raise AlphaError('This completed request belongs to an older input.',409,code='growth_input_changed')
                     return {'replayed':client_result(old[3])}
-                raise AlphaError('This request already started. Its result must be reconciled before trying again.',409,code='growth_request_pending')
+                if old[1]=='unknown':
+                    # Usage was recorded and the outcome is uncertain: never re-send under this key.
+                    raise AlphaError('The outcome of this request is uncertain. Nothing was sent again, and nothing will be retried automatically.',409,code='growth_request_unknown')
+                if old[1] in ('failed','cancelled'):
+                    # Finished without a result. A new request key starts a fresh, separately confirmed attempt.
+                    raise AlphaError('This request did not finish. Start it again to retry.',409,code='growth_request_failed')
+                raise AlphaError('This request is still running. Wait for it to finish.',409,code='growth_request_pending')
             prepared=prepare(cur,state,principal)
             if kind=='check' and prepared['draft'].get('adviceVersion')==2 and prepared['draft'].get('id'):
                 variant=next(v for v in state['variants'] if v['id']==prepared['draft']['id'])
@@ -393,7 +399,9 @@ class GrowthService:
             raise AlphaError('The draft, voice, history or consent changed. Discard this result and check the current version.',409,code='growth_input_changed')
         if error:
             if isinstance(error,AlphaError):raise error
-            raise AlphaError('Growth AI could not complete this request. Your normal draft flow is available.',503,code='growth_ai_unavailable') from error
+            if status=='unknown':
+                raise AlphaError('The AI service did not confirm this request. Its outcome is uncertain, so nothing will be sent again automatically.',503,code='growth_request_unknown') from error
+            raise AlphaError('Growth AI could not complete this request. Nothing was used; you can try again.',503,code='growth_request_failed') from error
         return client_result(saved)
 
     def _check(self,router,workspace_id,state,draft,posts):
