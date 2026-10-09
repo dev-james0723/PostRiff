@@ -80,6 +80,27 @@ const MESSAGES = {
   expand: ['Expand', '展開', '展开'],
   dataTable: ['Data table', '資料表', '数据表'],
   picked: ['Picked', '已選', '已选'],
+  // "Change this view" (lane F surfaces/artifact.tsx). English stays byte-identical: tests find the controls by these names.
+  changeView: ['Change this view', '更改這個畫面', '更改这个视图'],
+  whatShouldChange: ['What should change?', '想改甚麼？', '想改什么？'],
+  editPlaceholder: ['For example: add a chart, compare the selected two, show last month', '例如：加入圖表、比較已選的兩項、顯示上個月', '例如：加入图表、比较已选的两项、显示上个月'],
+  editBilling: ['Updating the view is billed separately. The answer and anything you approved stay as they are.', '更新畫面會另外收費。回答和你已批准的內容保持不變。', '更新视图会另外计费。回答和你已批准的内容保持不变。'],
+  updateView: ['Update view', '更新畫面', '更新视图'],
+  suggestions: ['Suggestions', '建議', '建议'],
+  restoreText: ['Restore my text', '還原我的文字', '还原我的文字'],
+  chipAdded: ['Added to the box. Press Update view to apply it.', '已加入輸入框。按「更新畫面」套用。', '已加入输入框。按“更新视图”应用。'],
+  selectionChanged: ['Your selection changed. Pick a suggestion again.', '你的選擇已改變，請重新揀選建議。', '你的选择已改变，请重新选择建议。'],
+  suggestionStale: ['This suggestion no longer fits the view. Pick one again.', '這個建議已不適用於目前的畫面，請重新揀選。', '这个建议已不适用于当前视图，请重新选择。'],
+  newerVersion: ['A newer version is ready. Use the updated view to change it.', '已有較新的版本。請先使用更新後的畫面，再作更改。', '已有较新的版本。请先使用更新后的视图，再作更改。'],
+  keptEarlier: ['You kept the earlier view, so it can’t be changed here. Reload to see and change the latest version.', '你保留了較早的畫面，所以不能在這裡更改。重新載入即可查看及更改最新版本。', '你保留了较早的视图，所以不能在这里更改。重新加载即可查看和更改最新版本。'],
+  editConflict: ['This view changed since you looked at it. The latest version is shown; ask again.', '這個畫面在你查看後有所改動。現已顯示最新版本，請再提出一次。', '这个视图在你查看后有所改动。现已显示最新版本，请再提出一次。'],
+  editBusy: ['This view is already being updated. Wait for it to finish, then ask again.', '這個畫面正在更新。請等它完成後再提出。', '这个视图正在更新。请等它完成后再提出。'],
+  editUnavailable: ['Changing views isn’t available here.', '這裡不能更改畫面。', '这里不能更改视图。'],
+  editFailed: ['That change couldn’t be started. The current view is kept.', '未能開始這項更改，目前的畫面保持不變。', '未能开始这项更改，当前视图保持不变。'],
+  editNotActor: ['Only the person who asked can change this view.', '只有提出這個問題的人可以更改這個畫面。', '只有提出这个问题的人可以更改这个视图。'],
+  editBudget: ['There’s no AI allowance left for this change, so the view wasn’t changed. Nothing was charged.', '已沒有足夠的 AI 用量進行這項更改，所以畫面沒有更改，也未有收費。', '已没有足够的 AI 用量进行这项更改，所以视图没有更改，也未收费。'],
+  editBudgetUnknown: ['The cost of this answer isn’t settled yet, so the view wasn’t changed. Nothing was charged; try again in a moment.', '這個回答的費用仍未結算，所以畫面沒有更改，也未有收費。請稍後再試。', '这个回答的费用尚未结算，所以视图没有更改，也未收费。请稍后再试。'],
+  editPaused: ['AI updates that cost money are paused right now, so the view wasn’t changed. Nothing was charged.', '目前已暫停需要收費的 AI 更新，所以畫面沒有更改，也未有收費。', '目前已暂停需要计费的 AI 更新，所以视图没有更改，也未收费。'],
 } as const;
 
 export type GenUiMessageKey = keyof typeof MESSAGES;
