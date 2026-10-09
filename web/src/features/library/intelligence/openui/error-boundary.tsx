@@ -89,6 +89,8 @@ export interface LibraryTaskRendererProps {
   descriptors: readonly LibraryOpenUiDescriptor[];
   onAction: LibraryOnAction;
   streaming: boolean;
+  /** Always false: the OpenUI renderer mounted here must not publish observability (rafii-genui/1, D-A3). */
+  publishObservability: false;
 }
 
 export interface LibraryTaskResult {
@@ -200,7 +202,7 @@ export function LibraryTaskSurface({
           </div>
         ) : Renderer && generated && !rendererFailed ? (
           <LibraryOpenUiErrorBoundary resetKey={taskId} fallback={deterministic} onError={() => setRendererFailed(true)}>
-            <Renderer nodes={state.nodes} descriptors={LIBRARY_OPENUI_DESCRIPTORS} onAction={adapter.onAction} streaming={streaming} />
+            <Renderer nodes={state.nodes} descriptors={LIBRARY_OPENUI_DESCRIPTORS} onAction={adapter.onAction} streaming={streaming} publishObservability={false} />
           </LibraryOpenUiErrorBoundary>
         ) : (
           deterministic
