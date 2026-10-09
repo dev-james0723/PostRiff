@@ -120,6 +120,15 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    // Let real RSC prefetches finish before the harness destroys their document.
    // Track current requests explicitly; an earlier load-state event is not readiness.
    // Ignore periodic Library polling here, while keeping every runtime error below.
+   // The open item lives in the address (Library URL state); a close is finished only when the panel is gone
+   // and ?asset= has left the URL, so a following reload or click never meets a reopened panel.
+   // Speed and volume sit behind each inline player's Playback options; play, time and the timeline stay visible.
+   const playbackOptions=async player=>{const toggle=player.getByRole('button',{name:'Playback options',exact:true});if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.click();};
+   const closeDetails=async()=>{
+    await page.getByRole('button',{name:'Close asset details'}).click();
+    await page.getByRole('button',{name:'Close asset details'}).waitFor({state:'detached',timeout:15000});
+    await page.waitForFunction(()=>!new URL(location.href).searchParams.get('asset'),null,{timeout:5000});
+   };
    const settleBeforeNavigation=async phase=>{
     navigationPhase='settling before '+phase;
     const deadline=Date.now()+15000;
@@ -253,7 +262,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     await videoTimeline.press('ArrowRight');
     await page.waitForFunction(video=>video.dataset.acceptanceSeeked==='yes'&&!video.seeking,seekVideoHandle,{timeout:5000});
     assert.ok(await previewVideo.evaluate(video=>video.currentTime>0&&video.currentTime<0.25),'video timeline keyboard seeks actual MP4 after the native seeked event: '+JSON.stringify(await previewVideo.evaluate(video=>({time:video.currentTime,seeking:video.seeking,paused:video.paused,seekable:Array.from({length:video.seekable.length},(_,index)=>[video.seekable.start(index),video.seekable.end(index)]),buffered:Array.from({length:video.buffered.length},(_,index)=>[video.buffered.start(index),video.buffered.end(index)]),range:video.closest('[data-library-media-player]')?.querySelector('input[type="range"]')?.value}))));
-    await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
+    await playbackOptions(inlineVideo);await inlineVideo.getByRole('combobox',{name:'Video playback speed',exact:true}).selectOption('1.5');
     assert.equal(await previewVideo.evaluate(video=>video.playbackRate),1.5);
     await page.emulateMedia({reducedMotion:'reduce'});
     checks.push({engine,width,format:'mp4',inline:'actual silent autoplay; reduced-motion pause; byte-range206/416; native keyboard seek; speed',execution:'real original MP4/UI; synthetic identity/storage'});
@@ -283,11 +292,11 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    // Search only words inside the file; server full-text results drive the UI.
    const search=page.getByRole('searchbox');await search.fill('Finger exercises');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().waitFor();
    await search.fill('');
@@ -296,7 +305,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await search.fill(missingQuery);
    await page.getByText(`No asset matches “${missingQuery}”`,{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'unmatched query must retain its editable search control');
-   assert.ok(await page.getByRole('button',{name:/^Filters(?:,|$)/}).isVisible(),'unmatched query must retain filters');
+   assert.ok(await page.locator('#library-kind').isVisible(),'unmatched query must retain filters');
    await page.getByRole('button',{name:'Clear search',exact:true}).last().click();
    await restoredDocument.waitFor({state:'visible',timeout:15000});assert.equal(await search.inputValue(),'');
    assert.match(doc.sha256,/^[a-f0-9]{64}$/,'use the real normalized document fingerprint');
@@ -312,11 +321,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     assert.equal(await search.inputValue(),hashQuery);
    }
    await search.fill('');
-   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
+   // Filters are inline in the Library toolbar (redesign §3): no panel to open.
    const kindFilterControl=page.locator('#library-kind');await kindFilterControl.waitFor({state:'visible'});
    const primedPhotos=page.waitForResponse(response=>response.url().startsWith(path+'?')&&new URL(response.url()).searchParams.get('kind')==='image'&&response.request().method()==='GET'&&response.ok(),{timeout:15000});
    await kindFilterControl.selectOption('image');
-   await page.getByRole('button',{name:'Done',exact:true}).click();
    assert.equal((await (await primedPhotos).json()).assets.length,0,'prime the actual normalized Photos query before uploading');
    await page.getByText('No photos match these filters',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'unmatched type must retain search');
@@ -354,11 +362,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByLabel('New collection name').fill(emptyCollectionName);
    await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:'Remove collection '+emptyCollectionName,exact:true}).waitFor();
-   await page.getByRole('button',{name:/^Filters(?:,|$)/}).click();
-   const collectionFilterControl=page.locator('#library-collection');await collectionFilterControl.waitFor({state:'visible'});
-   await collectionFilterControl.selectOption({label:emptyCollectionName});
-   await page.getByRole('button',{name:'Done',exact:true}).click();
-   await page.getByText('No assets match these filters',{exact:true}).waitFor({timeout:15000});
+   // Collections scope the Library from the collection rail (creating one opens it); an empty one says so and keeps search.
+   const emptyCollection=page.getByRole('navigation',{name:'Collections'}).getByRole('button',{name:new RegExp('^'+emptyCollectionName+', ')});
+   if((await emptyCollection.getAttribute('aria-current'))!=='true')await emptyCollection.click();
+   await page.getByText('This collection is empty',{exact:true}).waitFor({timeout:15000});
    assert.ok(await search.isVisible(),'empty collection must retain search');
    await page.getByRole('button',{name:'Show all',exact:true}).click();
    await restoredDocument.waitFor({state:'visible',timeout:15000});
@@ -403,7 +410,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:/Document sample, first-page preview/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).waitFor();
    assert.ok(await page.locator('[data-library-thumbnail="pdf"][data-thumbnail-preview="first-page-raster"] img').count()>=2,'Actual PDF page must also appear in asset details');
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    // Real two-page PDF: the reader must navigate source pages, not reuse its thumbnail.
    const viewerBytes=readFileSync(resolve(__dirname,'../../.codex/library-samples/archive-viewer.pdf'));
    const viewerTicketResponse=await context.request.post(path+'/files',{headers,data:{filename:'archive-viewer.pdf',mime:'application/pdf',bytes:viewerBytes.length}});
@@ -413,7 +420,13 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.ok((await context.request.post(path+'/files/'+viewerTicket.assetId+'/commit',{headers,data:{}})).ok());
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+viewerTicket.assetId);
    await settleBeforeNavigation('show uploaded multipage PDF');await page.reload();await search.fill('archive-viewer.pdf');
-   await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
+   try{await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click({timeout:15000});}
+   catch(error){
+    // Say what is covering the card instead of only timing out.
+    const open=await page.evaluate(()=>[...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[data-slot="sheet-portal"]')].map(node=>(node.getAttribute('aria-label')||node.querySelector('h1,h2,[data-slot$="title"]')?.textContent||node.textContent||'').trim().slice(0,120)));
+    console.error(JSON.stringify({step:'open archive-viewer after reload',url:page.url(),open}));
+    throw error;
+   }
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
    const firstPage=reader.locator('img[data-document-page="1"]');await waitForLoadedRaster(firstPage,500,90000);
@@ -459,14 +472,14 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    assert.deepEqual(viewerAccessibility,[],'document viewer serious/critical accessibility violations');
    await page.screenshot({path:resolve(out,`document-viewer-${engine}-${width}.png`),fullPage:true});
    await reader.getByRole('button',{name:'Close document viewer',exact:true}).click();
-   await reader.waitFor({state:'hidden'});await page.getByRole('button',{name:'Close asset details'}).click();
+   await reader.waitFor({state:'hidden'});await closeDetails();
    checks.push({engine,width,format:'pdf',viewer:'two actual pages; source text; sidebar; page jump; keyboard; zoom; rotation; current-page find; responsive close',execution:'real source bytes/UI/API/renderer/DB; synthetic identity/storage'});
    await search.fill(videoName);
    const videoRow=page.getByRole('button',{name:new RegExp('Video '+videoName)}).first();await videoRow.waitFor({timeout:15000});
    const listPoster=page.locator('[data-thumbnail-preview="video-poster"] img').first();await listPoster.waitFor({state:'visible',timeout:15000});
    await page.waitForFunction(()=>{const image=document.querySelector('[data-thumbnail-preview="video-poster"] img');return image instanceof HTMLImageElement&&image.complete&&image.naturalWidth>0;},null,{timeout:15000});
    await videoRow.click();await page.locator('[data-library-thumbnail="video"][data-thumbnail-preview="video-poster"]').last().waitFor({timeout:15000});
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    // A real four-second PCM file with changing amplitude must produce changing
    // waveform peaks. This is actual source decoding, not a drawn fixture cover.
    const audioRate=8000,audioSeconds=4,audioSamples=audioRate*audioSeconds,audioBytes=Buffer.alloc(44+audioSamples*2);
@@ -501,7 +514,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    }
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.currentTime>0),'actual WAV playback advances');
    const inlineAudioPause=inlineAudio.getByRole('button',{name:'Pause audio preview',exact:true});if(await inlineAudioPause.isVisible())await inlineAudioPause.click();
-   await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('2');
+   await playbackOptions(inlineAudio);await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('2');
    assert.equal(await inlineAudio.locator('audio').evaluate(audio=>audio.playbackRate),2);
    const audioVolume=inlineAudio.getByRole('slider',{name:'Audio preview volume',exact:true});await audioVolume.focus();await audioVolume.press('Home');await audioVolume.press('ArrowRight');
    assert.ok(await inlineAudio.locator('audio').evaluate(audio=>audio.volume>0&&audio.volume<=0.1),'audio volume control updates the actual media element');
@@ -522,7 +535,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    try{
     await page.waitForFunction(({audio,before})=>audio.currentSrc!==before.url&&audio.readyState>=1&&!audio.seeking&&Math.abs(audio.currentTime-before.time)<0.025,{audio:seekAudioHandle,before:pausedRefresh},{timeout:10000});
     assert.deepEqual(await seekAudio.evaluate(audio=>({paused:audio.paused,rate:audio.playbackRate,volume:audio.volume,error:audio.error?.code||null})),{paused:true,rate:pausedRefresh.rate,volume:pausedRefresh.volume,error:null},'paused refresh preserves offset, rate and volume');
-    await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('0.5');
+    await playbackOptions(inlineAudio);await inlineAudio.getByRole('combobox',{name:'Audio playback speed',exact:true}).selectOption('0.5');
     await inlineAudio.getByRole('button',{name:'Play audio preview',exact:true}).click();
     await page.waitForFunction(audio=>!audio.paused&&audio.currentTime>1.05,seekAudioHandle,{timeout:10000});
     const playingRefresh=await seekAudio.evaluate(audio=>({url:audio.currentSrc,time:audio.currentTime,volume:audio.volume}));
@@ -588,7 +601,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByRole('button',{name:'Play audio in Now Playing'}).click();
    await page.getByLabel('Now Playing',{exact:true}).waitFor();
    await page.getByText('Add or replace transcript',{exact:true}).click();await page.getByLabel('Transcript',{exact:true}).fill('Searchable audio bowing lesson.');await page.getByRole('button',{name:'Save transcript',exact:true}).click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
+   await closeDetails();
    await page.getByRole('button',{name:'Close player',exact:true}).click();
    await search.fill('');
    await page.screenshot({path:resolve(out,`library-${engine}-${width}.png`),fullPage:true});
@@ -597,7 +610,14 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const target=beforeDelete.assets.find(a=>a.id===doc.id);
    assert.ok(target,`delete target ${doc.id} missing from current library`);
    assert.equal(target.displayTitle,'Brahms browser notes',`delete target changed: ${JSON.stringify(target)}`);
-   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('button',{name:'Delete…',exact:true}).click();
+   await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
+   try{await page.getByRole('button',{name:'Delete…',exact:true}).click({timeout:15000});}
+   catch(error){
+    await page.screenshot({path:resolve(out,`debug-delete-${engine}-${width}.png`),fullPage:true});
+    const state=await page.evaluate(()=>({url:location.href,inspector:Boolean(document.querySelector('[data-library-inspector]')),dialogs:document.querySelectorAll('[role="dialog"]').length,danger:[...document.querySelectorAll('#asset-danger-title')].length,deletes:[...document.querySelectorAll('button')].filter(b=>(b.textContent||'').includes('Delete')).map(b=>(b.getAttribute('aria-label')||b.textContent||'').trim().slice(0,60))}));
+    console.error(JSON.stringify({step:'delete Brahms from its details',engine,width,state}));
+    throw error;
+   }
    const dialog=page.getByRole('alertdialog');
    const deletionResponse=page.waitForResponse(r=>r.request().method()==='DELETE'&&r.url().includes('/library/files/'),{timeout:10000});
    await dialog.getByRole('button',{name:/^Delete/}).click();

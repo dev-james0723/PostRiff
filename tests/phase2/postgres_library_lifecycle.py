@@ -44,7 +44,9 @@ for unchanged in (ids['bin'],ids['wav']):
 reader=viewer_pdf()
 reader_upload=library.begin(wid,'one',{'filename':'reader.pdf','mime':'application/pdf','bytes':len(reader)})['upload'];reader_id=reader_upload['assetId']
 storage.put(wid,reader_id+'.pdf',reader,'application/pdf')
-check('complex document starts in durable queue',library.commit(wid,'one',reader_id)['status']=='queued')
+check('small document is read during its own upload',library.commit(wid,'one',reader_id)['status']=='ready')
+with connection() as db:
+    db.execute("UPDATE public.pr_library_assets SET processing_status='failed',indexing_status='failed',extraction_error='Earlier read failed.' WHERE id=%s",(reader_id,))
 check('explicit small-document retry completes extraction',library.retry(wid,'one',reader_id)['status']=='ready')
 reader_first=library.viewer_page(wid,'one',reader_id,1);reader_second=library.viewer_page(wid,'one',reader_id,2)
 check('private viewer retrieves two actual distinct pages',reader_first['pageCount']==2 and 'Brahms' in reader_first['text'] and 'Mozart' in reader_second['text'] and reader_first['url']!=reader_second['url'])

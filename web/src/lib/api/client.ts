@@ -1,5 +1,10 @@
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
+import type {
+  ActionEnvelope, ActionResult, AnswerResult, AssetRef, CapabilityState, CollectionDetail, CollectionPreview, ComparisonResult, ContentSegment,
+  AssetUsage, AssetVoice, LibraryCapability, LibraryGrant, LibraryIntelligenceStatus, LibraryReturnTo, LibraryScope, LibrarySearchRequest, RelatedResult, SearchResponse,
+  SmartRule, SourcePack, SourceRef, SuggestionInbox, TaskContext, UnderstandingCard, VersionStack, ViewerResult
+} from './library-intelligence-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
 /**
@@ -132,6 +137,19 @@ export function createApi(getToken: TokenSource) {
   async function send<T>(method: string, path: string, body: unknown = {}, timeoutMs?: number): Promise<T> {
     return parse<T>(
       await fetch(path, { method, headers: await headers(), body: JSON.stringify(body), ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) })
+    );
+  }
+
+  /** Library intelligence: abortable so a newer search cancels the obsolete one (UI spec §5). */
+  async function intelligence<T>(w: string, method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+    return parse<T>(
+      await fetch(`${ws(w)}/library/intelligence/${path}`, {
+        method,
+        headers: await headers(),
+        cache: 'no-store',
+        ...(method === 'GET' ? {} : { body: JSON.stringify(body ?? {}) }),
+        ...(signal ? { signal } : {})
+      })
     );
   }
 
@@ -416,7 +434,7 @@ export function createApi(getToken: TokenSource) {
 
     /* Universal Library: normalized documents/files use the same signed private-storage boundary as video. */
     library: (w: string, query = '', limit = 100, offset = 0, filters: { kind: string; tag: string; collection: string; sort: string } = { kind: 'all', tag: '', collection: '', sort: 'newest' }) =>
-      get<{ assets: Asset[]; query: string; nextOffset: number | null; storage: { usedBytes: number; limitBytes: number } }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit), offset: String(offset), ...filters })}`),
+      get<{ assets: Asset[]; query: string; nextOffset: number | null; total: number; storage: { usedBytes: number; limitBytes: number } }>(`${ws(w)}/library?${new URLSearchParams({ q: query, limit: String(limit), offset: String(offset), ...filters })}`),
     beginLibraryFile: (w: string, body: { filename: string; mime: string; bytes: number }) =>
       send<{ upload: { assetId: string; url: string; mime: string; bytes: number; filename: string; expiresIn: number } }>('POST', `${ws(w)}/library/files`, body),
     commitLibraryFile: (w: string, assetId: string) =>
@@ -434,13 +452,55 @@ export function createApi(getToken: TokenSource) {
     deleteLibraryFile: (w: string, assetId: string) =>
       send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
 
-    libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number }[] }>(`${ws(w)}/library/collections`),
+    libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number; kind?: 'manual' | 'smart' }[] }>(`${ws(w)}/library/collections`),
     createLibraryCollection: (w: string, name: string) => send('POST', `${ws(w)}/library/collections`, { name }),
     deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),
     updateLibraryAsset: (w: string, id: string, body: { title?: string; tags?: string[]; collections?: string[] }) => send('PATCH', `${ws(w)}/library/assets/${encodeURIComponent(id)}`, body),
     retryLibraryFile: (w: string, id: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/retry`, {}),
     libraryTranscript: (w: string, id: string, text: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/transcript`, { text }),
     librarySource: (w: string, id: string, expectedRevision: number) => send<{ sourceId: string; revision?: number; clipped: boolean; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/source`, { expectedRevision }),
+
+    /* Library intelligence (rafii-library/1): the same permission-aware service the Agent uses. */
+    librarySearch: (w: string, body: LibrarySearchRequest, signal?: AbortSignal) => intelligence<SearchResponse>(w, 'POST', 'search', body, signal),
+    /** `search.scope` is required: answers never default to the whole Library. */
+    libraryAnswer: (w: string, body: { question: string; search: LibrarySearchRequest & { scope: LibraryScope } }, signal?: AbortSignal) =>
+      intelligence<AnswerResult>(w, 'POST', 'answer', body, signal),
+    /** A fresh authorized target per call (never stored); an old citation opens its old version. */
+    libraryViewer: (w: string, ref: SourceRef) =>
+      intelligence<ViewerResult>(w, 'POST', 'viewer', {
+        sourceRef: { assetRef: ref.assetRef, ...(ref.segmentId ? { segmentId: ref.segmentId } : {}), ...(ref.locator ? { locator: ref.locator } : {}), ...(ref.quoteHash ? { quoteHash: ref.quoteHash } : {}) }
+      }),
+    libraryCard: (w: string, key: string) => intelligence<UnderstandingCard>(w, 'GET', `assets/${encodeURIComponent(key)}`),
+    librarySegments: (w: string, key: string, cursor = '') =>
+      intelligence<{ segments: ContentSegment[]; nextCursor: string | null; history?: ContentSegment[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/segments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    libraryCapabilities: (w: string, key: string) => intelligence<{ capabilities: CapabilityState[] }>(w, 'GET', `assets/${encodeURIComponent(key)}/capabilities`),
+    libraryProcess: (w: string, key: string, body: { capabilities: LibraryCapability[]; idempotencyKey: string }) =>
+      intelligence<{ capabilities: CapabilityState[] }>(w, 'POST', `assets/${encodeURIComponent(key)}/process`, body),
+    libraryCancel: (w: string, key: string, body: { capability: LibraryCapability }) => intelligence<{ capabilities: CapabilityState[] }>(w, 'POST', `assets/${encodeURIComponent(key)}/cancel`, body),
+    libraryWaveform: (w: string, key: string, body: { sha256: string; peaks: number[]; durationMs: number; sampleRate: number }) =>
+      intelligence<{ status: string }>(w, 'POST', `assets/${encodeURIComponent(key)}/waveform`, body),
+    libraryRelated: (w: string, key: string) => intelligence<RelatedResult>(w, 'GET', `assets/${encodeURIComponent(key)}/related`),
+    libraryVersions: (w: string, key: string) => intelligence<VersionStack>(w, 'GET', `assets/${encodeURIComponent(key)}/versions`),
+    libraryUsage: (w: string, key: string) => intelligence<AssetUsage>(w, 'GET', `assets/${encodeURIComponent(key)}/usage`),
+    libraryAssetVoice: (w: string, key: string) => intelligence<AssetVoice>(w, 'GET', `assets/${encodeURIComponent(key)}/voice`),
+    libraryCompare: (w: string, refs: AssetRef[]) => intelligence<ComparisonResult>(w, 'POST', 'compare', { refs }),
+    libraryAction: <T = unknown>(w: string, envelope: ActionEnvelope) => intelligence<ActionResult<T>>(w, 'POST', 'actions', envelope),
+    libraryGrants: (w: string) => intelligence<{ grants: LibraryGrant[]; revisions: LibraryIntelligenceStatus['revisions']; flags: Record<string, boolean> }>(w, 'GET', 'grants'),
+    libraryGrant: (w: string, body: Record<string, unknown>) => intelligence<{ grantId: string; grantRevision: number }>(w, 'POST', 'grants', body),
+    libraryRevokeGrant: (w: string, id: string, expectedRevision?: number) =>
+      intelligence<{ grantId: string; grantRevision: number; propagation: Record<string, number>; residual: string }>(w, 'DELETE', `grants/${encodeURIComponent(id)}`, { expectedRevision }),
+    libraryIngestLink: (w: string, body: { url: string; idempotencyKey: string }) => intelligence<{ asset: Asset; status: string }>(w, 'POST', 'ingest/link', body),
+    libraryIngestNote: (w: string, body: { title: string; text: string; authoredByMe: boolean; idempotencyKey: string }) => intelligence<{ asset: Asset; status: string }>(w, 'POST', 'ingest/note', body),
+    libraryCollectionPreview: (w: string, body: { rule: SmartRule; overrides?: { include?: string[]; exclude?: string[] }; collectionId?: string; offset?: number; limit?: number }) =>
+      intelligence<CollectionPreview>(w, 'POST', 'collections/preview', body),
+    libraryCollection: (w: string, id: string) => intelligence<CollectionDetail>(w, 'GET', `collections/${encodeURIComponent(id)}`),
+    librarySourcePack: (w: string, id: string) => intelligence<SourcePack>(w, 'GET', `source-packs/${encodeURIComponent(id)}`),
+    /** A persisted pack (revision 1) recommended for the task; `returnTo` is the Library state to come back to. */
+    libraryRecommendSources: (w: string, task: TaskContext, returnTo?: LibraryReturnTo | null) =>
+      intelligence<SourcePack>(w, 'POST', 'source-packs', returnTo ? { ...task, returnTo } : task),
+    librarySuggestions: (w: string) => intelligence<SuggestionInbox>(w, 'GET', 'suggestions'),
+    libraryVoiceSummary: (w: string) => intelligence<Record<string, unknown>>(w, 'GET', 'voice'),
+    libraryIntelligenceStatus: (w: string) => intelligence<LibraryIntelligenceStatus>(w, 'GET', 'status'),
 
     /* chat attachments (chat-context SPEC §5.6–5.9); the video bytes go to storage via `upload.ts`, never here */
     mediaNotes: (w: string, body: MediaNotesBody) => send<MediaNotesResult>('POST', `${ws(w)}/ideas/media-notes`, body),

@@ -1,0 +1,371 @@
+{
+  "instructions": "Mark humanSupported true/false for each claim against its quotations.",
+  "claims": [
+    {
+      "question": "a01",
+      "claim": "“學生票港幣一百八十元” … “学生票只要一百八十港币”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d02",
+          "excerpt": "學生票港幣一百八十元"
+        },
+        {
+          "document": "d31",
+          "excerpt": "学生票只要一百八十港币"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a02",
+      "claim": "The studio rental invoice (Harbour Sound Studio, INV-2026-0917) shows a rental of Studio B with Steinway D for 14 hours at HKD 650 per hour, with a total of HKD 9,100.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d05",
+          "excerpt": "Rental of Studio B with Steinway D, 14 hours at HKD 650 per hour, total HKD 9,100"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a03",
+      "claim": "The sources disagree: “Concert on 5 November at 7pm.” (Tokyo itinerary for the November concert) / “closing in Tokyo on 5 November” (Press release: autumn tour announced) / “the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day” (Updated Tokyo itinerary)",
+      "support": "conflicting",
+      "quotations": [
+        {
+          "document": "d10",
+          "excerpt": "Concert on 5 November at 7pm."
+        },
+        {
+          "document": "d25",
+          "excerpt": "closing in Tokyo on 5 November"
+        },
+        {
+          "document": "x01",
+          "excerpt": "the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a04",
+      "claim": "“play the coda without pedal three times, then add half-pedal only on the bass notes”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d04",
+          "excerpt": "play the coda without pedal three times, then add half-pedal only on the bass notes"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a05",
+      "claim": "According to the physiotherapist's plan, wrist flexor stretches should be held for thirty seconds, done five times a day.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d15",
+          "excerpt": "Do gentle flexor stretches for thirty seconds, five times a day."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a06",
+      "claim": "“佢建議部抽濕機要日夜開住，濕度保持喺百分之五十左右”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d09",
+          "excerpt": "佢建議部抽濕機要日夜開住，濕度保持喺百分之五十左右"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a07",
+      "claim": "The new piece inspired by the harbour at night is being composed by Ka Lok Chan, as part of a commission agreement.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d48",
+          "excerpt": "Commission agreement with composer Ka Lok Chan for a piano piece of eight to ten minutes, inspired by the harbour at night."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a08",
+      "claim": "“版税比例为净收入的百分之十二”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d43",
+          "excerpt": "版税比例为净收入的百分之十二"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a09",
+      "claim": "“本次演出后共收回二百一十五份问卷”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d08",
+          "excerpt": "本次演出后共收回二百一十五份问卷"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a10",
+      "claim": "“one Steinway Model B grand piano, serial number 589214, insured value HKD 980,000”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d33",
+          "excerpt": "one Steinway Model B grand piano, serial number 589214, insured value HKD 980,000"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a11",
+      "claim": "According to the loading dock and parking passage, the City Hall loading dock opens at 1pm on concert day.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d44",
+          "excerpt": "The City Hall loading dock opens at 1pm on concert day."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a12",
+      "claim": "According to the venue hire contract summary, if the hire is cancelled within 60 days of the event, the full venue fee becomes payable.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d21",
+          "excerpt": "within 60 days the full fee is payable"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a13",
+      "claim": "“好多人唔知原來搬一部三角琴要六個人”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d32",
+          "excerpt": "好多人唔知原來搬一部三角琴要六個人"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a14",
+      "claim": "“用琴鍵同海浪做 motif，主色係深綠同米白”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d20",
+          "excerpt": "用琴鍵同海浪做 motif，主色係深綠同米白"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a15",
+      "claim": "“今次收費一千二百蚊。”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d09",
+          "excerpt": "今次收費一千二百蚊。"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a16",
+      "claim": "Schumann's Träumerei is suggested as an encore for a quiet ending.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d34",
+          "excerpt": "Schumann's Träumerei for a quiet ending"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a17",
+      "claim": "“社交媒体帖子需要在发布前四十八小时发给贵方确认”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d24",
+          "excerpt": "社交媒体帖子需要在发布前四十八小时发给贵方确认"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a18",
+      "claim": "“音色變化唔夠多，特別係慢板嗰段太平，冇乜起伏” … “佢哋建議我多聽唔同版本嘅錄音，同埋留意呼吸位，等句子有方向感”",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d39",
+          "excerpt": "音色變化唔夠多，特別係慢板嗰段太平，冇乜起伏"
+        },
+        {
+          "document": "d39",
+          "excerpt": "佢哋建議我多聽唔同版本嘅錄音，同埋留意呼吸位，等句子有方向感"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a19",
+      "claim": "A thank-you note states that twenty-three donors supported the free library concerts this year.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d52",
+          "excerpt": "Thank you to the twenty-three donors who supported the free library concerts this year."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a20",
+      "claim": "The documents for the Certificate of Eligibility (a passport copy, a performance contract, and a short biography) must be sent by 15 September.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d60",
+          "excerpt": "Send them a passport copy, a performance contract, and a short biography by 15 September."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "a21",
+      "claim": "The sources disagree: “Concert on 5 November at 7pm.” (Tokyo itinerary for the November concert) / “the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day” (Updated Tokyo itinerary)",
+      "support": "conflicting",
+      "quotations": [
+        {
+          "document": "d10",
+          "excerpt": "Concert on 5 November at 7pm."
+        },
+        {
+          "document": "x01",
+          "excerpt": "the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "u02",
+      "claim": "The sources disagree: “今季贊助金額不對外公佈” (贊助品牌核實資料) / “pay 係一萬蚊” (Call notes with tea brand)",
+      "support": "conflicting",
+      "quotations": [
+        {
+          "document": "d06",
+          "excerpt": "今季贊助金額不對外公佈"
+        },
+        {
+          "document": "d57",
+          "excerpt": "pay 係一萬蚊"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "s01",
+      "claim": "Doors open 45 minutes before the performance begins.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "t01",
+          "excerpt": "Doors open forty-five minutes before the performance."
+        },
+        {
+          "document": "d02",
+          "excerpt": "開場前四十五分鐘入場"
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "s07",
+      "claim": "The library contains a commission agreement with composer Ka Lok Chan for a new piano piece.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d48",
+          "excerpt": "Commission agreement with composer Ka Lok Chan for a piano piece of eight to ten minutes, inspired by the harbour at night."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "s07",
+      "claim": "The agreed fee is HKD 30,000, paid in two installments: half upon signing and half upon delivery of the final score by 1 September.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d48",
+          "excerpt": "Fee HKD 30,000, half on signing and half on delivery of the final score by 1 September."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    },
+    {
+      "question": "s07",
+      "claim": "The performer is granted exclusive premiere rights to the piece for one year.",
+      "support": "supported",
+      "quotations": [
+        {
+          "document": "d48",
+          "excerpt": "The performer has exclusive premiere rights for one year."
+        }
+      ],
+      "humanSupported": null,
+      "reviewer": null
+    }
+  ]
+}

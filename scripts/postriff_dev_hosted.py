@@ -396,6 +396,8 @@ def main():
     parser.add_argument("--founder-fixture", action="store_true", help="embedded founder Control with synthetic founder identities; disposable database only")
     parser.add_argument("--pg-port", type=int, default=PORT_PG, help="disposable PostgreSQL port; change it to run a second harness beside the first")
     parser.add_argument("--static", type=Path, default=ROOT / "studio/web/dist-alpha")
+    parser.add_argument("--library-intelligence", action="store_true", help="Library intelligence flags on; local processing only unless --library-provider-env is given")
+    parser.add_argument("--library-provider-env", type=Path, help="KEY=VALUE file with OPENAI_API_KEY / AI_GATEWAY_API_KEY for an authorized, capped evaluation (never committed)")
     args = parser.parse_args()
     if args.growth_phase2_fixture or args.radar_fixture or args.postdoctor_v2_fixture:args.growth_fixture=True
     import psycopg
@@ -426,6 +428,24 @@ def main():
             from growth_postdoctor_v2_fixtures import Models, ENV
         growth_writer=Writer()
     service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
+    if args.library_intelligence:
+        # Local, private processing only (lexical index, structural extraction, perceptual image features). Cloud ASR,
+        # embeddings and vision stay off unless an explicitly authorized credential file is named.
+        for name in ("ENRICHMENT", "RETRIEVAL", "VOICE", "SUGGESTIONS", "TASK_UI", "ARTIFACTS"):
+            os.environ[f"RAFII_LIBRARY_{name}_ENABLED"] = "1"
+        library_env = dict(os.environ)
+        if args.library_provider_env:
+            allowed = {"OPENAI_API_KEY", "AI_GATEWAY_API_KEY"}
+            for line in args.library_provider_env.read_text().splitlines():
+                key, _, value = line.strip().partition("=")
+                if key in allowed and value:
+                    library_env[key] = value.strip().strip('"')
+            for name in ("ASR", "EMBEDDINGS", "VISION"):
+                library_env[f"RAFII_LIBRARY_{name}_ENABLED"] = "1"
+            print("Library intelligence: provider credentials loaded for", sorted(k for k in allowed if k in library_env), flush=True)
+        from postriff_phase2.library_intelligence import LibraryIntelligence
+        from postriff_phase2.library_intelligence.providers import Providers
+        service.library_intelligence = LibraryIntelligence(service, providers=Providers(environ=library_env))
     if args.history_import_fixture:
         from postriff_phase2.growth.history_import import HistoryImporter
         service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
@@ -493,6 +513,9 @@ def main():
             q=parse_qs(environ.get('QUERY_STRING',''))
             result=service.library.process(service.repository.connection_factory,q['workspace'][0],q['assetId'][0]) if q.get('assetId') and q.get('workspace') else service.library.sweep(service.repository.connection_factory)
             raw=json.dumps(result).encode()
+            start_response('200 OK',[('Content-Type','application/json'),('Content-Length',str(len(raw)))]);return [raw]
+        if path == '/dev/library/intelligence-tick' and environ['REQUEST_METHOD']=='POST':
+            raw=json.dumps(service.library_intelligence.tick(service.repository.connection_factory), default=str).encode()
             start_response('200 OK',[('Content-Type','application/json'),('Content-Length',str(len(raw)))]);return [raw]
         if path.startswith('/dev/storage/') and environ['REQUEST_METHOD']=='GET':
             try:
@@ -562,6 +585,8 @@ def main():
             time.sleep(4)
             try:
                 worker.tick(max_jobs=5, max_seconds=5)
+                if args.library_intelligence:
+                    service.library_intelligence.tick(service.repository.connection_factory, max_jobs=4, max_seconds=5)
             except Exception as error:  # keep the harness alive; surface in the log
                 print("worker tick error:", error, flush=True)
 

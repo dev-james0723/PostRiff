@@ -143,6 +143,32 @@ storage.put(wid, blob["assetId"] + ".bin", b"\x01\x02\x03", "application/octet-s
 generic = library.commit(wid, "one", blob["assetId"])
 check("generic: metadata-only asset", generic["status"] == "unsupported" and generic["asset"]["indexingStatus"] == "not_applicable")
 
+# A real-world PDF is read in the upload's own request: ready, with automatic tags and one sentence from the file,
+# never left queued for whichever worker happens to poll the queue next.
+slides = (Path(__file__).resolve().parents[1] / "fixtures" / "library" / "real-world-slides.pdf").read_bytes()
+deck = library.begin(wid, "one", {"filename": "teaching-slides.pdf", "mime": "application/pdf", "bytes": len(slides)})["upload"]
+storage.put(wid, deck["assetId"] + ".pdf", slides, "application/pdf")
+read = library.commit(wid, "one", deck["assetId"])
+check("commit: PDF read during upload", read["status"] == "ready", (read["status"], read["asset"].get("extractionError")))
+check("commit: PDF gets automatic tags", read["asset"]["aiTags"] and read["asset"]["tags"] == read["asset"]["aiTags"], read["asset"])
+check("commit: PDF summary is a sentence from the file", bool(read["asset"]["summary"]) and "SLIDE" not in read["asset"]["summary"], read["asset"]["summary"])
+
+# A file read before automatic tags existed (no tags, the old 360-character summary) is described from its stored
+# text when someone opens it, and by the worker sweep; a person's own tags are never replaced.
+OLD_STYLE = ("UPDATE public.pr_library_assets a SET tags=%s,provenance=provenance-'autoMeta'-'autoTags',summary=(SELECT "
+             "left(string_agg(c.text,'' ORDER BY c.ordinal),360) FROM public.pr_library_chunks c WHERE c.asset_id=a.id) WHERE id=%s")
+with connection() as db:
+    db.execute(OLD_STYLE, ([], deck["assetId"]))
+opened = library.detail(wid, "one", deck["assetId"])["asset"]
+check("backfill: opening describes an older file", opened["aiTags"] == read["asset"]["aiTags"] and opened["tags"] == opened["aiTags"], opened)
+check("backfill: old default summary becomes the sentence", opened["summary"] == read["asset"]["summary"], opened["summary"])
+with connection() as db:
+    db.execute(OLD_STYLE, (["mine"], deck["assetId"]))
+swept_meta = library.sweep(connection)
+kept = library.detail(wid, "one", deck["assetId"])["asset"]
+check("backfill: worker describes older files", swept_meta["described"] >= 1 and kept["aiTags"] == read["asset"]["aiTags"], swept_meta)
+check("backfill: a person's tags are kept", kept["tags"] == ["mine"], kept["tags"])
+
 # Same asset id through another workspace path is unavailable, not leaked cross-tenant.
 with connection() as db:
     db.execute("INSERT INTO auth.users VALUES(%s) ON CONFLICT DO NOTHING", (VIEWER,))

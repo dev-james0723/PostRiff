@@ -22,6 +22,34 @@ EXT = re.compile(r"^[a-z0-9]{1,12}$")
 ASSET_ID = re.compile(r"^[0-9a-f]{32}$")
 READY = ('ready', 'unsupported')
 INLINE = {'txt','md','markdown','html','htm','csv','json'}
+# Documents up to this size are read in the uploader's own request (bounded child processes, well inside the function
+# duration), so a file is ready, or honestly failed, when its upload finishes. The cron worker only picks up what is
+# left: larger files, transient storage errors and retries. Any other worker on the same queue never decides them.
+READ_NOW_BYTES = 8 * 1024 * 1024
+
+
+def _read_now(a):
+    if a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
+        return True
+    return a['kind'] == 'document' and a['bytes'] <= READ_NOW_BYTES
+
+
+def _fill_meta(cur, w, i, filename):
+    """Automatic tags and one sentence for a file read before they existed, from its stored text (the chunks are exact
+    slices of the normalized text). Tags fill only an empty tag list; the summary is replaced only while it is still the
+    old machine default, the text's first 360 characters. Returns the updated row, or None if nothing was left to do."""
+    from .library_autometa import suggest
+    cur.execute('SELECT text FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s ORDER BY ordinal LIMIT 400', (w, uuid.UUID(hex=i)))
+    text = ''.join(r[0] for r in cur.fetchall())
+    auto = suggest(text, filename or '')
+    cur.execute("UPDATE public.pr_library_assets SET tags=CASE WHEN cardinality(tags)=0 THEN %s ELSE tags END,"
+                "summary=CASE WHEN %s::text IS NOT NULL AND summary IS NOT DISTINCT FROM %s THEN %s ELSE summary END,"
+                "provenance=provenance||%s::jsonb WHERE workspace_id=%s AND id=%s AND processing_status='ready' AND NOT (provenance ? 'autoMeta') "
+                "RETURNING to_jsonb(pr_library_assets)||jsonb_build_object('epoch',extract(epoch from created_at))",
+                (auto['tags'], auto['summary'], text[:360] or None, auto['summary'],
+                 json.dumps({'autoTags': auto['tags'], 'autoMeta': 'extract-v1'}), w, uuid.UUID(hex=i)))
+    row = cur.fetchone()
+    return row[0] if row else None
 
 
 def _member(row):
@@ -59,7 +87,9 @@ def _asset(a):
         'id': str(a['id']).replace('-', ''), 'createdBy': str(a['created_by']),
         'uploadedBy': str(a['created_by']), 'originalFilename': a['original_filename'],
         'displayTitle': a['display_title'], 'titleSource': a['title_source'],
-        'summary': a['summary'], 'aiSummary': a['summary'], 'tags': a['tags'], 'aiTags': a['tags'],
+        'summary': a['summary'], 'aiSummary': a['summary'], 'tags': a['tags'],
+        # Tags the server took from the file itself (never a model); the UI marks them as automatic.
+        'aiTags': [t for t in (provenance.get('autoTags') or []) if isinstance(t, str)][:10],
         'kind': a['kind'], 'assetKind': a['kind'], 'mime': a['mime'], 'extension': a['extension'],
         'bytes': a['bytes'], 'hash': a['sha256'] or '', 'sha256': a['sha256'],
         'processing': a['processing_status'], 'processingStatus': a['processing_status'],
@@ -169,8 +199,7 @@ class UniversalLibrary:
             if current['processing_status'] == 'pending':
                 cur.execute("UPDATE public.pr_library_assets SET etag=%s,processing_status='queued',next_attempt_at=now(),updated_at=now() WHERE workspace_id=%s AND id=%s", (info['etag'],w,i))
             a = self._row(cur, w, i)
-        # Bounded small plain text/generic files can finish immediately. Complex parsers run on the cron worker.
-        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
+        if a['processing_status'] == 'queued' and _read_now(a):
             self.process(self.service.repository.connection_factory, w, i)
             with self.service.repository.transaction(t, w) as (cur, row, p):
                 a = self._row(cur, w, i)
@@ -202,6 +231,9 @@ class UniversalLibrary:
             else:
                 status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES) else extract_isolated(raw,a['extension']))
             parts = chunks(text)
+            # Free, model-free metadata from the file's own text (and name): key-phrase tags and one sentence.
+            from .library_autometa import suggest
+            auto = suggest(text, a.get('original_filename') or '') if a['kind'] != 'audio' else {'tags': [], 'summary': None}
             with connect() as db, db.cursor() as cur:
                 # Serializes digest admission with other files in this workspace, without a network call under lock.
                 cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (w,))
@@ -219,7 +251,12 @@ class UniversalLibrary:
                 cur.execute('DELETE FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s',(w,i))
                 for n, part in enumerate(parts):
                     cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
-                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
+                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,tags=CASE WHEN cardinality(tags)=0 THEN %s ELSE tags END,provenance=provenance||%s::jsonb,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',auto['summary'] or normalize(text)[:360] or None,auto['tags'],json.dumps({'autoTags':auto['tags'],'autoMeta':'extract-v1'}),w,i))
+            try:  # Library intelligence, after commit: flag-gated local capabilities; never blocks this file.
+                from .library_intelligence import jobs as intelligence_jobs
+                intelligence_jobs.on_asset_processed(connect, w, i)
+            except Exception:
+                pass
             return status
         except Exception as e:
             transient = not isinstance(e,AlphaError) or e.status >= 500
@@ -235,16 +272,18 @@ class UniversalLibrary:
             if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY):
                 raise AlphaError('This file is not waiting for a retry.',409)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
-        # An explicit retry can complete a bounded small file without waiting
-        # for cron (preview deployments do not run production cron schedules).
-        # Larger files retain their durable background queue and lease.
-        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 else 'queued'
+        # An explicit retry completes a bounded file in this request, as an upload does, without waiting for cron
+        # (preview deployments do not run production cron schedules). Larger files keep their durable queue and lease.
+        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 or _read_now(a) else 'queued'
         return {'status':status,'assetId':i}
 
     def detail(self,w,t,i):
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
             a = self._row(cur,w,i)
+            if a['processing_status'] == 'ready' and a['kind'] != 'audio' and 'autoMeta' not in (a.get('provenance') or {}):
+                # Read before automatic tags existed: describe it now from its stored text, then show the result.
+                a = _fill_meta(cur,w,i,a.get('original_filename')) or a
             cur.execute('SELECT ordinal,text FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s ORDER BY ordinal LIMIT 17',(w,i))
             parts = [{'ordinal':int(n),'text':x} for n,x in cur.fetchall()]
             result = _asset(a)
@@ -275,12 +314,16 @@ class UniversalLibrary:
                 cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(tags,w,i))
                 cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(tags,w,i))
             if collections is not None:
-                cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
+                # Only manual collections are edited here; smart membership follows rules and overrides.
+                cur.execute("SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[]) AND kind='manual'",(w,collections))
                 if len(cur.fetchall()) != len(set(collections)):
                     raise AlphaError('Collection unavailable.',404)
-                cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
+                cur.execute("DELETE FROM public.pr_library_collection_items i USING public.pr_library_collections c WHERE i.workspace_id=%s AND i.asset_key=%s AND c.workspace_id=i.workspace_id AND c.id=i.collection_id AND c.kind='manual'",(w,i))
                 for c in set(collections):
                     cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
+            if title is not None or tags is not None:
+                from .library_intelligence import collections as smart
+                smart.reevaluate_for_asset(cur,w,i)  # own savepoint; never raises
             cur.execute('SELECT 1 FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s',(w,i))
             normalized = bool(cur.fetchone())
         return {'asset':self.detail(w,t,i)['asset']} if normalized else {'assetId':i,'status':'updated'}
@@ -302,8 +345,8 @@ class UniversalLibrary:
                 if cur.fetchone()[0]>=100:
                     raise AlphaError('This workspace has reached 100 collections.',409)
                 cur.execute('INSERT INTO public.pr_library_collections(id,workspace_id,name,created_by) VALUES(%s,%s,%s,%s) ON CONFLICT(workspace_id,name) DO NOTHING',(uuid.uuid4(),w,name.strip(),p))
-            cur.execute('SELECT c.id::text,c.name,count(i.asset_key) FROM public.pr_library_collections c LEFT JOIN public.pr_library_collection_items i ON i.workspace_id=c.workspace_id AND i.collection_id=c.id WHERE c.workspace_id=%s GROUP BY c.id ORDER BY c.name',(w,))
-            return {'collections':[{'id':i.replace('-',''),'name':n,'count':int(c)} for i,n,c in cur.fetchall()]}
+            cur.execute('SELECT c.id::text,c.name,count(i.asset_key),c.kind FROM public.pr_library_collections c LEFT JOIN public.pr_library_collection_items i ON i.workspace_id=c.workspace_id AND i.collection_id=c.id WHERE c.workspace_id=%s GROUP BY c.id ORDER BY c.name',(w,))
+            return {'collections':[{'id':i.replace('-',''),'name':n,'count':int(c),'kind':k} for i,n,c,k in cur.fetchall()]}
 
     def transcript(self,w,t,i,text):
         if not isinstance(text,str) or not text.strip() or len(text)>250000 or '\x00' in text:
@@ -428,7 +471,16 @@ class UniversalLibrary:
             a = self._row(cur,w,i,True)
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
-        s.delete(w,'file',a['object_name'])
+            # Every derivative goes with it (segments, vectors, previews, voice spans, packs, suggestions). An exact duplicate
+            # that still references the bytes takes over the original object, so only the released object is deleted.
+            from .library_intelligence import lifecycle
+            released = lifecycle.on_source_deleted(cur,w,i,actor=p,service=self.service)
+            from .library_intelligence import collections as smart
+            smart.reevaluate_for_asset(cur,w,i)  # a previous version may become current; own savepoint, never raises
+        to_delete = (released.get('sibling') or {}).get('objectToDelete')
+        if to_delete:
+            s.delete(w,'file',to_delete)
+        # Rendered previews are named by this asset's id and hash; an heir renders its own after re-queueing.
         for preview_name in self._preview_objects(a):
             s.delete(w,'media',preview_name)
         with self.service.repository.transaction(t,w) as (cur,row,p):
@@ -455,7 +507,7 @@ class UniversalLibrary:
                 title,tags = labels[a['id']]
                 if title:
                     a.update(displayTitle=title,titleSource='user')
-                a.update(tags=tags,aiTags=tags)
+                a.update(tags=tags)
 
     def list(self,w,t,query='',limit=100,offset=0,kind='all',tag='',collection='',sort='newest'):
         try:
@@ -470,19 +522,28 @@ class UniversalLibrary:
         order='a.bytes DESC,a.created_at DESC,a.id' if sort=='largest' else 'a.created_at DESC,a.id'
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
-            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR a.sha256 LIKE %s OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s)) ORDER BY "+order+" LIMIT %s OFFSET %s",(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,hash_prefix,query,query,'%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%',limit+1,offset))
+            where="FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR a.sha256 LIKE %s OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s))"
+            like='%'+query.replace('%','\\%').replace('_','\\_')+'%'
+            params=(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,hash_prefix,query,query,like,like,like)
+            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) "+where+" ORDER BY "+order+" LIMIT %s OFFSET %s",params+(limit+1,offset))
             rows=cur.fetchall();more=len(rows)>limit
+            # The server total for these filters (normalized rows); the client never treats loaded cards as the Library size.
+            cur.execute("SELECT count(*) "+where,params)
+            normalized_total=int(cur.fetchone()[0])
             assets=[_asset(r[0]) for r in rows[:limit]]
             state=self.service.ideas._state(row)
-            legacy=[{**a,'assetKind':'video' if str(a.get('mime') or '').startswith('video/') else 'image'} for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted') and not a.get('deletionPending')] if offset==0 else []
+            # Legacy photos/videos are filtered the same way on every page (for the total) but listed only on the first.
+            legacy=[{**a,'assetKind':'video' if str(a.get('mime') or '').startswith('video/') else 'image'} for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted') and not a.get('deletionPending')]
             self._decorate(cur,w,assets+legacy)
             legacy=[a for a in legacy if (kind=='all' or a['assetKind']==kind) and (not tag or tag in a.get('tags',[])) and (not collection or collection in a.get('collections',[]))]
             if query:
                 words=query.casefold().split()
                 legacy=[a for a in legacy if all(word in ' '.join(str(x) for x in [a.get('displayTitle',''),a.get('originalFilename',''),a.get('hash',''),*a.get('tags',[])]).casefold() for word in words)]
+            legacy_total=len(legacy)
+            legacy=legacy if offset==0 else []
             cur.execute("SELECT coalesce(sum(bytes + coalesce((provenance->'thumbnail'->>'bytes')::bigint,0)),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
             used=int(cur.fetchone()[0])+sum(int(a.get('bytes') or 0) for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted'))
-        return {'assets':legacy+assets,'query':query,'nextOffset':offset+limit if more else None,'storage':{'usedBytes':used,'limitBytes':self.storage_limit},'capabilities':{'automaticTranscription':False,'transcriptImport':True}}
+        return {'assets':legacy+assets,'query':query,'nextOffset':offset+limit if more else None,'total':normalized_total+legacy_total,'storage':{'usedBytes':used,'limitBytes':self.storage_limit},'capabilities':{'automaticTranscription':False,'transcriptImport':True}}
 
     def sweep(self,connect,limit=100):
         s=self._store();removed=failed=processed=0
@@ -509,7 +570,12 @@ class UniversalLibrary:
                 failed+=1
                 with connect() as db,db.cursor() as cur:
                     cur.execute('UPDATE public.pr_library_assets SET delete_attempts=delete_attempts+1 WHERE workspace_id=%s AND id=%s',(w,i))
-        return {'processed':processed,'removed':removed,'failed':failed}
+        described=0
+        with connect() as db,db.cursor() as cur:
+            cur.execute("SELECT workspace_id::text,replace(id::text,'-',''),original_filename FROM public.pr_library_assets WHERE processing_status='ready' AND kind<>'audio' AND NOT (provenance ? 'autoMeta') ORDER BY updated_at DESC LIMIT 20")
+            for w,i,name in cur.fetchall():
+                described+=bool(_fill_meta(cur,w,i,name))
+        return {'processed':processed,'removed':removed,'failed':failed,'described':described}
 
     def purge_workspace(self,cur,w):
         cur.execute('SELECT object_name FROM public.pr_library_assets WHERE workspace_id=%s',(w,))

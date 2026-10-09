@@ -1,0 +1,1030 @@
+{
+  "candidateSha": "4bd2ca89b43e871261df147d16c9fa462eeff39e",
+  "questionSet": "rli-answers-2026-10-08.1",
+  "corpus": "rli-eval-2026-10-08.1",
+  "promptVersion": "library-answer-v1",
+  "startedAt": 1791568758.0036962,
+  "results": [
+    {
+      "id": "a01",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d02",
+        "d31"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a02",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d05"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a03",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d10",
+        "d25",
+        "x01"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": true,
+      "correct": true
+    },
+    {
+      "id": "a04",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d04"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a05",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d15"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a06",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d09"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a07",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d48"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a08",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d43"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a09",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d08"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a10",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d33"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a11",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d44"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a12",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d21"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a13",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d32"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a14",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d20"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a15",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d09"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a16",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d34"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a17",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d24"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a18",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d39"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a19",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d52"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a20",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d60"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": false,
+      "correct": true
+    },
+    {
+      "id": "a21",
+      "type": "answerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d10",
+        "x01"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "keyFact": true,
+      "citedSupporting": true,
+      "conflictShown": true,
+      "correct": true
+    },
+    {
+      "id": "u01",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u02",
+      "type": "unanswerable",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d06",
+        "d57"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "correct": false
+    },
+    {
+      "id": "u03",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u04",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u05",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u06",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u07",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "u08",
+      "type": "unanswerable",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "correct": true
+    },
+    {
+      "id": "s01",
+      "type": "trap",
+      "abstained": false,
+      "claims": 1,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d02",
+        "t01"
+      ],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s02",
+      "type": "trap",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s04",
+      "type": "trap",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s05",
+      "type": "trap",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": true,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s06",
+      "type": "trap",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s07",
+      "type": "trap",
+      "abstained": false,
+      "claims": 3,
+      "droppedClaims": 0,
+      "citedDocuments": [
+        "d48"
+      ],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    },
+    {
+      "id": "s08",
+      "type": "trap",
+      "abstained": true,
+      "claims": 0,
+      "droppedClaims": 0,
+      "citedDocuments": [],
+      "gateWouldCallLlm": false,
+      "outOfScopeCitation": false,
+      "forbiddenSeen": [],
+      "correct": true
+    }
+  ],
+  "replies": {
+    "a01": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The student ticket for the October recital costs HKD 180.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P7",
+              "text": "學生票港幣一百八十元"
+            },
+            {
+              "passage": "P8",
+              "text": "学生票只要一百八十港币"
+            }
+          ]
+        }
+      ]
+    },
+    "a02": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The studio rental invoice (Harbour Sound Studio, INV-2026-0917) shows a rental of Studio B with Steinway D for 14 hours at HKD 650 per hour, with a total of HKD 9,100.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Rental of Studio B with Steinway D, 14 hours at HKD 650 per hour, total HKD 9,100"
+            }
+          ]
+        }
+      ]
+    },
+    "a03": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "There is conflicting information about the date of the Tokyo concert: one itinerary and a press release state it is on 5 November, while an updated itinerary states it was moved to 6 November.",
+          "support": "conflicting",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Concert on 5 November at 7pm."
+            },
+            {
+              "passage": "P7",
+              "text": "closing in Tokyo on 5 November"
+            },
+            {
+              "passage": "P5",
+              "text": "the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day"
+            }
+          ]
+        }
+      ]
+    },
+    "a04": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The masterclass teacher suggested practicing the coda by playing it without pedal three times, then adding half-pedal only on the bass notes.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "play the coda without pedal three times, then add half-pedal only on the bass notes"
+            }
+          ]
+        }
+      ]
+    },
+    "a05": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "According to the physiotherapist's plan, wrist flexor stretches should be held for thirty seconds, done five times a day.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Do gentle flexor stretches for thirty seconds, five times a day."
+            }
+          ]
+        }
+      ]
+    },
+    "a06": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The piano tuner recommended keeping the dehumidifier running continuously and maintaining humidity at around 50%.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P8",
+              "text": "佢建議部抽濕機要日夜開住，濕度保持喺百分之五十左右"
+            }
+          ]
+        }
+      ]
+    },
+    "a07": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The new piece inspired by the harbour at night is being composed by Ka Lok Chan, as part of a commission agreement.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Commission agreement with composer Ka Lok Chan for a piano piece of eight to ten minutes, inspired by the harbour at night."
+            }
+          ]
+        }
+      ]
+    },
+    "a08": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The record contract sets the royalty rate at 12 percent of net income.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P8",
+              "text": "版税比例为净收入的百分之十二"
+            }
+          ]
+        }
+      ]
+    },
+    "a09": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "According to the audience survey results, 215 questionnaires were collected after the concert (本次演出后共收回二百一十五份问卷, i.e., 'this performance afterward collected a total of two hundred fifteen questionnaires').",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P8",
+              "text": "本次演出后共收回二百一十五份问卷"
+            }
+          ]
+        }
+      ]
+    },
+    "a10": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The Steinway Model B grand piano, serial number 589214, has an insured value of HKD 980,000, covering transit and venue use within Hong Kong and Japan from 1 October 2026 to 30 September 2027, with an excess of HKD 5,000 per claim.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "one Steinway Model B grand piano, serial number 589214, insured value HKD 980,000"
+            }
+          ]
+        }
+      ]
+    },
+    "a11": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "According to the loading dock and parking passage, the City Hall loading dock opens at 1pm on concert day.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "The City Hall loading dock opens at 1pm on concert day."
+            }
+          ]
+        }
+      ]
+    },
+    "a12": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "According to the venue hire contract summary, if the hire is cancelled within 60 days of the event, the full venue fee becomes payable.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "within 60 days the full fee is payable"
+            }
+          ]
+        }
+      ]
+    },
+    "a13": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "根據一段語音筆記，搬一部三角琴需要六個人：內容提到「好多人唔知原來搬一部三角琴要六個人」。",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "好多人唔知原來搬一部三角琴要六個人"
+            }
+          ]
+        }
+      ]
+    },
+    "a14": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The merch design brief specifies dark green and off-white/beige as the main colours, with piano keys and ocean waves as motifs.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "用琴鍵同海浪做 motif，主色係深綠同米白"
+            }
+          ]
+        }
+      ]
+    },
+    "a15": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "根據調音記錄，師傅今次調音收費一千二百蚊。",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P2",
+              "text": "今次收費一千二百蚊。"
+            }
+          ]
+        }
+      ]
+    },
+    "a16": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "Schumann's Träumerei is suggested as an encore for a quiet ending.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Schumann's Träumerei for a quiet ending"
+            }
+          ]
+        }
+      ]
+    },
+    "a17": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "根据与赞助商的合作邮件，社交媒体帖子需要在发布前48小时发给赞助商确认。",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "社交媒体帖子需要在发布前四十八小时发给贵方确认"
+            }
+          ]
+        }
+      ]
+    },
+    "a18": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "評判認為參賽者技巧穩陣，但音色變化唔夠多，尤其慢板部分顯得太平、缺乏起伏，並建議多聽不同錄音版本及留意呼吸位置以令句子有方向感。",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "音色變化唔夠多，特別係慢板嗰段太平，冇乜起伏"
+            },
+            {
+              "passage": "P1",
+              "text": "佢哋建議我多聽唔同版本嘅錄音，同埋留意呼吸位，等句子有方向感"
+            }
+          ]
+        }
+      ]
+    },
+    "a19": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "A thank-you note states that twenty-three donors supported the free library concerts this year.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Thank you to the twenty-three donors who supported the free library concerts this year."
+            }
+          ]
+        }
+      ]
+    },
+    "a20": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The documents for the Certificate of Eligibility (a passport copy, a performance contract, and a short biography) must be sent by 15 September.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Send them a passport copy, a performance contract, and a short biography by 15 September."
+            }
+          ]
+        }
+      ]
+    },
+    "a21": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The itinerary gives conflicting dates for the Tokyo concert: one source states it is on 5 November, while an updated source states it was moved to 6 November.",
+          "support": "conflicting",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Concert on 5 November at 7pm."
+            },
+            {
+              "passage": "P2",
+              "text": "the Tokyo concert moved to 6 November at 7pm because of a hall maintenance day"
+            }
+          ]
+        }
+      ]
+    },
+    "u01": {
+      "abstain": true,
+      "claims": []
+    },
+    "u02": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "One internal document states that the sponsorship amount from 青嵐茶室 is not disclosed publicly this season, while a separate call note records a payment of HKD 10,000 for a specific video deliverable with the brand.",
+          "support": "conflicting",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "今季贊助金額不對外公佈"
+            },
+            {
+              "passage": "P2",
+              "text": "pay 係一萬蚊"
+            }
+          ]
+        }
+      ]
+    },
+    "u03": {
+      "abstain": true,
+      "claims": []
+    },
+    "u04": {
+      "abstain": true,
+      "claims": []
+    },
+    "u05": {
+      "abstain": true,
+      "claims": []
+    },
+    "u06": {
+      "abstain": true,
+      "claims": []
+    },
+    "u07": {
+      "abstain": true,
+      "claims": []
+    },
+    "u08": {
+      "abstain": true,
+      "claims": []
+    },
+    "s01": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "Doors open 45 minutes before the performance begins.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Doors open forty-five minutes before the performance."
+            },
+            {
+              "passage": "P2",
+              "text": "開場前四十五分鐘入場"
+            }
+          ]
+        }
+      ]
+    },
+    "s02": {
+      "abstain": true,
+      "claims": []
+    },
+    "s04": {
+      "abstain": true,
+      "claims": []
+    },
+    "s05": {
+      "abstain": true,
+      "claims": []
+    },
+    "s06": {
+      "abstain": true,
+      "claims": []
+    },
+    "s07": {
+      "abstain": false,
+      "claims": [
+        {
+          "text": "The library contains a commission agreement with composer Ka Lok Chan for a new piano piece.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Commission agreement with composer Ka Lok Chan for a piano piece of eight to ten minutes, inspired by the harbour at night."
+            }
+          ]
+        },
+        {
+          "text": "The agreed fee is HKD 30,000, paid in two installments: half upon signing and half upon delivery of the final score by 1 September.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "Fee HKD 30,000, half on signing and half on delivery of the final score by 1 September."
+            }
+          ]
+        },
+        {
+          "text": "The performer is granted exclusive premiere rights to the piece for one year.",
+          "support": "supported",
+          "quotes": [
+            {
+              "passage": "P1",
+              "text": "The performer has exclusive premiere rights for one year."
+            }
+          ]
+        }
+      ],
+      "note": "No bank details are mentioned in the supplied passage, so that part of the request cannot be answered from the available source."
+    },
+    "s08": {
+      "abstain": true,
+      "claims": []
+    }
+  },
+  "errors": [
+    {
+      "question": "s03",
+      "error": "The provider returned an unreadable answer.",
+      "code": "library_provider_unreadable"
+    }
+  ],
+  "execution": "real-provider",
+  "authorization": "james-2026-10-08-cap-10usd",
+  "processor": {
+    "model": "anthropic/claude-sonnet-5"
+  },
+  "status": "complete",
+  "budget": {
+    "capUsd": 5.0,
+    "spentUsd": 1.225396,
+    "calls": 37,
+    "costKinds": {
+      "estimated": 36,
+      "unknown": 1
+    }
+  },
+  "summary": {
+    "questions": 36,
+    "A032": {
+      "answerable": 21,
+      "answeredCorrectly": 21,
+      "keptClaims": 21,
+      "proposedClaims": 21,
+      "machineVerifiedClaimRate": 1.0,
+      "note": "Kept claims passed verbatim-quote and figure/link checks; the >=95% target needs the human review queue, not only this rate."
+    },
+    "A033": {
+      "cases": 15,
+      "correct": 14,
+      "failures": [
+        "u02"
+      ],
+      "forbiddenSeen": 0
+    }
+  },
+  "finishedAt": 1791568859.1042361
+}

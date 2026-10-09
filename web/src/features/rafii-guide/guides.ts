@@ -173,7 +173,7 @@ export const GUIDES: readonly Guide[] = [
       {
         target: [tour('library-upload')],
         action: 'await-click',
-        say: 'Press Upload images and choose JPEG or PNG files. You can also drop them anywhere on this page.'
+        say: 'Press Add, then Upload files, and choose your images. You can also drop them anywhere on this page.'
       },
       { target: [tour('library-card')], action: 'await-visible', optional: true, say: 'Uploaded images appear here, ready to attach to a post.' }
     ],

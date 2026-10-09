@@ -18,3 +18,4 @@ export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 sudo -n mkdir -p /var/run/postgresql
 sudo -n chmod 1777 /var/run/postgresql
 python scripts/postriff_pg_suite.py postgres_library_lifecycle
+bash scripts/library-intelligence-validation.sh

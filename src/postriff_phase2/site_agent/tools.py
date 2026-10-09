@@ -28,8 +28,8 @@ MAX_TOOLS_PER_TURN = 6
 _ID = r"^[A-Za-z0-9_.:-]{1,120}$"
 
 _DEFINITIONS = (
-    ("library.search", "read", "Search approved Library source facts. Requires per-source cloud sharing consent; returns traceable asset/source ids.", {"query":{"type":"string","maxLength":120}, "limit":{"type":"number"}}, ()),
-    ("library.read", "read", "Read approved facts and provenance from a Library asset admitted by source/egress policy.", {"assetId":{"type":"string","pattern":r"^[0-9a-f]{32}$"}}, ("assetId",)),
+    ("library.search", "read", "Search the whole permitted Library (not only recent items). Returns approved source facts (reviewed sources with cloud sharing) and, where the owner allowed private answers with cloud processing, attributed passages with page/time locators. Passages are what a source says, never approved facts.", {"query":{"type":"string","maxLength":120}, "limit":{"type":"number"}}, ()),
+    ("library.read", "read", "Read approved facts, and attributed passages where private answers are allowed, with provenance and locators from one Library asset admitted by source/egress policy.", {"assetId":{"type":"string","pattern":r"^[0-9a-f]{32}$"}}, ("assetId",)),
     ("help.search", "read", "Search Rafii's versioned help for passages that answer a question.",
      {"query": {"type": "string", "maxLength": 400}, "routeFamily": {"type": "string", "maxLength": 40}, "documents": {"type": "array"}}, ("query",)),
     ("help.get", "read", "Read one help article by id.", {"documentId": {"type": "string", "pattern": _ID}}, ("documentId",)),
@@ -177,7 +177,7 @@ LABELS = {
     "workspace.summary": "Read your workspace summary", "channels.capabilities": "Checked your connected accounts",
     "queue.summary": "Checked the queue", "job.get": "Read the post's publishing record", "draft.get": "Read the draft",
     "automation.list": "Listed your automations", "automation.get": "Read the automation", "automation.explain": "Read the automation's run history",
-    "library.search": "Searched approved Library facts", "library.read": "Read a Library source",
+    "library.search": "Searched the Library", "library.read": "Read a Library source",
     "memory.summary": "Read what Rafii remembers", "privacy.egress_state": "Checked what may leave Rafii",
     "entitlements.summary": "Checked your plan and allowances", "models.summary": "Checked the available writers",
     "ui.navigate": "Prepared a link", "ui.show_help": "Prepared a help link", "automation.patch_propose": "Prepared a proposed change",

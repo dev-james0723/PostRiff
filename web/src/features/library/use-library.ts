@@ -7,6 +7,7 @@ import { IN_FLIGHT } from '@/lib/jobs';
 import type { Asset, Job, Manifest, Review } from '@/lib/api/types';
 import { isLibraryAsset, kindOf } from '@/lib/media/asset-kinds';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { normalizeKey, statusBucket, type LibraryStatusParam } from '@/lib/library/url-state';
 
 /**
  * Everything the Library reads, derived from the workspace snapshot: the live images in a stated order,
@@ -120,7 +121,9 @@ export function useLibrary({
   sort,
   query,
   tag = '',
-  collection = ''
+  collection = '',
+  status = 'all',
+  onlyIds = null
 }: {
   filter: LibraryFilter;
   kindFilter: LibraryKindFilter;
@@ -128,6 +131,10 @@ export function useLibrary({
   query: string;
   tag?: string;
   collection?: string;
+  /** Processing state (redesign §3): applied to loaded items, like usage, so totals stay honest. */
+  status?: LibraryStatusParam;
+  /** "Selected N items" scope without the intelligence search: only these ids (stable, from the address). */
+  onlyIds?: readonly string[] | null;
 }) {
   const snapshot = useSnapshot();
   const phase2 = snapshot.data?.state.phase2;
@@ -156,6 +163,7 @@ export function useLibrary({
     const platforms = [...new Set((phase2?.channels ?? []).map((channel) => channel.platform))];
     return {
       live,
+      byKey: new Map(live.map((asset) => [normalizeKey(asset.id), asset])),
       usage,
       platforms,
       hasTimestamps,
@@ -179,6 +187,8 @@ export function useLibrary({
   // `newest` without timestamps would be a guess, so it falls back to the stored order.
   const effectiveSort: LibrarySort = sort === 'newest' && !derived.hasTimestamps ? 'stored' : sort;
   const backendSearch = Boolean(normalized.data && normalizedQuery);
+  const onlyKey = onlyIds ? onlyIds.join(',') : null;
+  const only = useMemo(() => (onlyKey === null ? null : new Set(onlyKey.split(',').filter(Boolean).map(normalizeKey))), [onlyKey]);
 
   const visible = useMemo(() => {
     const filtered = derived.live.filter((asset) => {
@@ -188,6 +198,8 @@ export function useLibrary({
       if (kindFilter !== 'all' && kindOf(asset) !== kindFilter) return false;
       if (tag && !(asset.tags ?? asset.aiTags ?? []).includes(tag)) return false;
       if (collection && !asset.collections?.includes(collection)) return false;
+      if (status !== 'all' && statusBucket(asset.processing) !== status) return false;
+      if (only && !only.has(normalizeKey(asset.id))) return false;
       return backendSearch || matchesQuery(asset, normalizedQuery);
     });
     if (effectiveSort === 'stored') return filtered;
@@ -201,15 +213,32 @@ export function useLibrary({
       if (typeof right !== 'number') return -1;
       return right - left || stable(a, b);
     });
-  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort, tag, collection]);
+  }, [derived, filter, kindFilter, normalizedQuery, backendSearch, effectiveSort, tag, collection, status, only]);
 
+  const firstPage = normalized.data?.pages[0];
+  // Every page is here (or the media-only snapshot fallback, which is the whole set): counts over it are totals.
+  const complete = normalized.data ? !normalized.hasNextPage : !normalized.isPending;
   return {
     snapshot,
     normalized,
+    complete,
+    /** The total the server states for this query and its server-side filters. */
+    serverTotal: typeof firstPage?.total === 'number' ? firstPage.total : null,
+    /** Loaded items still being extracted or indexed. */
+    processingCount: derived.live.filter((asset) => ['pending', 'queued', 'processing'].includes(asset.processing ?? '')).length,
+    /** Loaded items by their dash-free key (search hits and the address use that form). */
+    byKey: derived.byKey,
     revision: snapshot.data?.revision ?? null,
     assets: derived.live,
     visible,
     counts: derived.counts,
+    /** Loaded items by status bucket (exact only when `complete`). */
+    statusCounts: {
+      all: derived.live.length,
+      ready: derived.live.filter((asset) => statusBucket(asset.processing) === 'ready').length,
+      processing: derived.live.filter((asset) => statusBucket(asset.processing) === 'processing').length,
+      attention: derived.live.filter((asset) => statusBucket(asset.processing) === 'attention').length
+    },
     kindCounts: derived.kindCounts,
     totals: derived.totals,
     tags: [...new Set(derived.live.flatMap((a) => a.tags ?? a.aiTags ?? []))].toSorted(),

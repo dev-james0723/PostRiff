@@ -10,26 +10,46 @@ export interface RafiiTrack {
   startAt?: number;
 }
 
+/** A request for the bar's media element to jump; `nonce` makes two requests for the same second distinct. */
+export interface SeekRequest {
+  assetId: string;
+  seconds: number;
+  nonce: number;
+}
+
 interface NowPlayingState {
   track: RafiiTrack | null;
   playing: boolean;
   seconds: number;
   duration: number | null;
   expanded: boolean;
+  seekRequest: SeekRequest | null;
   open: (track: RafiiTrack) => void;
   setPlaying: (playing: boolean) => void;
+  /** Move the playing track to `seconds` without reloading it. False when nothing (or another item) is loaded. */
+  seek: (seconds: number, assetId?: string) => boolean;
   setPosition: (seconds: number, duration?: number | null) => void;
   setExpanded: (expanded: boolean) => void;
   close: () => void;
 }
 
-export const useNowPlaying = create<NowPlayingState>((set) => ({
-  track: null, playing: false, seconds: 0, duration: null, expanded: false,
-  open: (track) => set({ track, playing: true, seconds: track.startAt ?? 0, duration: null }),
+let seekNonce = 0;
+
+export const useNowPlaying = create<NowPlayingState>((set, get) => ({
+  track: null, playing: false, seconds: 0, duration: null, expanded: false, seekRequest: null,
+  open: (track) => set({ track, playing: true, seconds: track.startAt ?? 0, duration: null, seekRequest: null }),
   setPlaying: (playing) => set({ playing }),
+  seek: (seconds, assetId) => {
+    const { track, duration } = get();
+    if (!track || (assetId !== undefined && track.assetId !== assetId) || !Number.isFinite(seconds)) return false;
+    const bounded = Math.max(0, duration ? Math.min(seconds, duration) : seconds);
+    seekNonce += 1;
+    set({ seconds: bounded, seekRequest: { assetId: track.assetId, seconds: bounded, nonce: seekNonce } });
+    return true;
+  },
   setPosition: (seconds, duration) => set((state) => ({ seconds, duration: duration === undefined ? state.duration : duration })),
   setExpanded: (expanded) => set({ expanded }),
-  close: () => set({ track: null, playing: false, seconds: 0, duration: null, expanded: false })
+  close: () => set({ track: null, playing: false, seconds: 0, duration: null, expanded: false, seekRequest: null })
 }));
 
 export function formatMediaTime(seconds: number): string {

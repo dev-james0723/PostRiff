@@ -443,6 +443,15 @@ class HostedWorkspaceService:
         from .library_assets import UniversalLibrary
         library_storage = getattr(assets, 'storage', None) if assets is not None else None
         self.library = UniversalLibrary(self, storage=library_storage, clock=clock, bucket=getattr(library_storage, "file_bucket", "postriff-library"))
+        from .library_intelligence import LibraryIntelligence
+        # Library intelligence (2026-10-08 package): search, understanding, organization and source packs over the same assets.
+        self.library_intelligence = LibraryIntelligence(self)
+        from .library_intelligence import effects as library_effects
+        # Scheduled posts record Library usage; changed drafts get a quiet, debounced suggestion pass (savepoint, never raises).
+        self.repository.effects.append(library_effects.capture)
+        from .library_intelligence.artifacts import capture_effect as library_artifact_capture
+        # Final-artifact return: a draft accepted for use comes home to the Library once, in the same transaction.
+        self.repository.effects.append(library_artifact_capture)
 
     def _wire_chat_media(self, config):
         """Chat attachments (chat-context SPEC §14.2): photo/video notes, video uploads and the three flags. Everything is
@@ -1251,6 +1260,11 @@ class HostedWorkspaceService:
         from .media_notes import purge_asset
         def purge_metadata(cur, _state, _principal):
             purge_asset(cur, workspace_id, asset_id)
+            cur.execute("SELECT to_regclass('public.pr_library_jobs')")
+            if cur.fetchone()[0]:
+                # Library intelligence derivatives of this photo/video (vectors, annotations, voice spans, packs, suggestions).
+                from .library_intelligence import lifecycle
+                lifecycle.on_source_deleted(cur, workspace_id, asset_id, actor=_principal, service=self)
             # Shared organization must not retain deleted legacy media references.
             cur.execute("SELECT to_regclass('public.pr_library_labels')")
             if cur.fetchone()[0]:
