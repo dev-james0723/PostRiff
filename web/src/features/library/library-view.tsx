@@ -392,6 +392,29 @@ function LibraryPage() {
     }
   }, [library.complete, library.normalized.isFetching, snapshot.isPending, selection, assets, intelligent, unfiltered, setSelection]);
 
+  // A Library larger than one page: an id not on the loaded pages is asked about (at most 20 per pass) and leaves only
+  // when the server says it is gone or not permitted; anything else stays selected.
+  useEffect(() => {
+    if (library.complete || snapshot.isPending || library.normalized.isPending || selection.length === 0 || !workspaceId) return;
+    const loaded = new Set(assets.map((asset) => normalizeKey(asset.id)));
+    const unknown = selection.filter((id) => !loaded.has(normalizeKey(id))).slice(0, 20);
+    if (!unknown.length) return;
+    let cancelled = false;
+    void Promise.allSettled(unknown.map((id) => api.libraryFile(workspaceId, id))).then((results) => {
+      if (cancelled) return;
+      const gone = new Set(unknown.filter((_, index) => {
+        const result = results[index];
+        return result.status === 'rejected' && result.reason instanceof ApiError && [403, 404].includes(result.reason.status);
+      }));
+      if (gone.size === 0) return;
+      setSelection(selection.filter((id) => !gone.has(id)));
+      toast.info('Some selected items are no longer available, so they were removed from your selection.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [library.complete, library.normalized.isPending, snapshot.isPending, selection, assets, api, workspaceId, setSelection]);
+
   // After a delete run, the deleted items simply leave the selection.
   const lastRun = batch.run;
   useEffect(() => {

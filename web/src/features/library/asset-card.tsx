@@ -109,7 +109,8 @@ export function assetTitle(asset: LibraryAsset) {
 
 /**
  * One status at most on a card (UI spec §3; redesign §5), in the order that matters: a file still being prepared or
- * needing attention, then a publishing post, then real use. "Unused" is the default and is not shown (it is a filter).
+ * needing attention, then a publishing post, then real use. "Unused" and "Stored privately" are the defaults (every item is
+ * private; usage is a filter) and are not shown; the details keep the processing state.
  */
 export function cardStatus(asset: LibraryAsset, count = 0, publishing = false): string | null {
   const kind = kindOf(asset);
@@ -120,7 +121,6 @@ export function cardStatus(asset: LibraryAsset, count = 0, publishing = false): 
   }
   if (publishing) return 'Publishing';
   if (count > 0) return `Used in ${count} ${count === 1 ? 'post' : 'posts'}`;
-  if (kind !== 'image' && kind !== 'video' && processing === 'unsupported') return 'Stored privately';
   return null;
 }
 
@@ -211,7 +211,7 @@ export function AssetContextItems({ actions }: { actions: CardAction[] }) {
 export function AssetMoreMenu({ title, actions, className }: { title: string; actions: CardAction[]; className?: string }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<IconControl label={`More actions for ${title}`} size='sm' tooltip={false} className={cn('bg-background/90 hover:bg-background ring-foreground/10 shadow-xs ring-1', className)} />}>
+      <DropdownMenuTrigger render={<IconControl label={`More actions for ${title}`} size='sm' tooltip={false} className={cn("bg-background/90 hover:bg-background ring-foreground/10 relative shadow-xs ring-1 after:absolute after:-inset-1.5 after:content-[''] pointer-coarse:size-8", className)} />}>
         <Icons.moreHorizontal aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='rafii-elevated min-w-48 rounded-[var(--rafii-radius-card)] p-1'>

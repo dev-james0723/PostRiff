@@ -100,7 +100,6 @@ export function AssetListRow({
           initial={reduce ? false : { opacity: 0 }}
           animate={{ opacity: deleting ? 0.55 : 1, transition: { duration: reduce ? 0 : 0.18, ease: EASE_OUT } }}
           exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.12, ease: EASE_OUT } }}
-          style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 72px' }}
           className={cn(
             'group/asset bg-card text-card-foreground relative overflow-hidden rounded-[var(--rafii-radius-card)] ring-1 transition-shadow duration-150',
             selected ? 'ring-foreground ring-2' : inspected ? 'ring-foreground/45 ring-2' : 'ring-foreground/[0.08] hover:ring-foreground/[0.16]'

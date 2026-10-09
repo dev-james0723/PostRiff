@@ -31,7 +31,10 @@ const SQUARE: Record<ControlSize, string> = {
   sm: 'size-8 px-0 pointer-coarse:size-11'
 };
 
-/** Shared by buttons and links styled as buttons, so a `<Link>` matches its neighbours exactly. */
+/**
+ * Shared by buttons and links styled as buttons, so a `<Link>` matches its neighbours exactly. `Control` and
+ * `IconControl` also pass the material as `variant`: `Button` otherwise applies its own default (filled) material.
+ */
 export function controlClass({
   tone = 'secondary',
   size = 'md',
@@ -72,7 +75,7 @@ export function Control({
   ...props
 }: ButtonProps & { tone?: ControlTone; size?: ControlSize; active?: boolean; loading?: boolean; icon?: ReactNode }) {
   return (
-    <Button {...props} disabled={disabled || loading} aria-busy={loading || undefined} data-active={active || undefined} className={controlClass({ tone, size, active, className })}>
+    <Button {...props} variant={MATERIAL[tone]} disabled={disabled || loading} aria-busy={loading || undefined} data-active={active || undefined} className={controlClass({ tone, size, active, className })}>
       {loading ? <Icons.spinner aria-hidden className='animate-spin motion-reduce:animate-none' /> : icon}
       {children}
     </Button>
@@ -102,14 +105,14 @@ export function IconControl({
   const classes = controlClass({ tone, size, iconOnly: true, active, className });
   if (!tooltip) {
     return (
-      <Button {...props} aria-label={label} data-active={active || undefined} className={classes}>
+      <Button {...props} variant={MATERIAL[tone]} aria-label={label} data-active={active || undefined} className={classes}>
         {children}
       </Button>
     );
   }
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button {...props} aria-label={label} data-active={active || undefined} className={classes} />}>{children}</TooltipTrigger>
+      <TooltipTrigger render={<Button {...props} variant={MATERIAL[tone]} aria-label={label} data-active={active || undefined} className={classes} />}>{children}</TooltipTrigger>
       <TooltipContent side={side}>{label}</TooltipContent>
     </Tooltip>
   );

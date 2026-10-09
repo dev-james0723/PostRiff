@@ -66,7 +66,7 @@ export const MOBILE_CHROME_PX = {
   search: 44,
   scopeLine: 36,
   switcher: 44,
-  toolbar: 44 * 2 + 16,
+  toolbar: 44 + 6 + 44,
   gaps: 12 * 3
 } as const;
 

@@ -170,8 +170,9 @@ export function LibraryFilters({
 }) {
   const active = (kind !== 'all' ? 1 : 0) + (use !== 'all' ? 1 : 0) + (status !== 'all' ? 1 : 0) + (tag ? 1 : 0);
   return (
-    <div role='toolbar' aria-label='Filter and view' data-tour='library-filter' className='flex min-w-0 flex-wrap items-center gap-x-1 gap-y-2'>
-      <div className='flex min-w-0 flex-wrap items-center gap-1'>
+    <div role='toolbar' aria-label='Filter and view' data-tour='library-filter' className='flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-1'>
+      {/* Phones: one row that scrolls inside itself (never the page); wider screens: it wraps. */}
+      <div className='scrollbar-hide -mx-1 flex min-w-0 items-center gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0'>
         <ToolbarSelect
           id='library-kind'
           label='Type'
@@ -179,7 +180,7 @@ export function LibraryFilters({
           value={kind}
           defaultValue='all'
           onChange={onKind}
-          options={KIND_OPTIONS.map((option) => ({ value: option.value, label: withCount(option.label, kindCounts?.[option.value]) }))}
+          options={KIND_OPTIONS.map((option) => ({ value: option.value, label: option.value === 'all' ? option.label : withCount(option.label, kindCounts?.[option.value]) }))}
         />
         <ToolbarSelect
           id='library-use'
@@ -187,7 +188,7 @@ export function LibraryFilters({
           value={use}
           defaultValue='all'
           onChange={onUse}
-          options={(['all', 'unused', 'used'] as const).map((value) => ({ value, label: withCount(USE_LABELS[value], counts?.[value]) }))}
+          options={(['all', 'unused', 'used'] as const).map((value) => ({ value, label: value === 'all' ? USE_LABELS[value] : withCount(USE_LABELS[value], counts?.[value]) }))}
         />
         <ToolbarSelect
           id='library-status'
@@ -195,22 +196,17 @@ export function LibraryFilters({
           value={status}
           defaultValue='all'
           onChange={onStatus}
-          options={(['all', 'ready', 'processing', 'attention'] as const).map((value) => ({ value, label: withCount(STATUS_LABELS[value], statusCounts?.[value]) }))}
+          options={(['all', 'ready', 'processing', 'attention'] as const).map((value) => ({ value, label: value === 'all' ? STATUS_LABELS[value] : withCount(STATUS_LABELS[value], statusCounts?.[value]) }))}
         />
         {tags.length || tag ? (
           <ToolbarSelect id='library-tag' label='Tag' value={tag} defaultValue='' onChange={onTag} options={[{ value: '', label: 'Any tag' }, ...tags.map((entry) => ({ value: entry, label: entry }))]} />
         ) : null}
         {active ? (
-          <Control tone='ghost' size='sm' onClick={onClear} aria-label={`Clear ${countLabel(active, 'filter')}`}>
+          <Control tone='ghost' size='sm' className='shrink-0' onClick={onClear} aria-label={`Clear ${countLabel(active, 'filter')}`}>
             Clear
           </Control>
         ) : null}
-      </div>
-      <div className='ml-auto flex min-w-0 items-center gap-1'>
-        <div data-tour='library-stats' className='text-muted-foreground hidden min-w-0 px-1 text-xs tabular-nums sm:block'>
-          {summary}
-        </div>
-        <ToolbarDivider className='hidden sm:block' />
+        <ToolbarDivider />
         <ToolbarSelect
           id='library-sort'
           label={searching ? 'Sort (search results are ranked by relevance)' : 'Sort'}
@@ -219,9 +215,13 @@ export function LibraryFilters({
           onChange={onSort}
           options={sortOptions.map((value) => ({ value, label: SORT_LABELS[value] }))}
         />
+      </div>
+      <div className='flex min-w-0 items-center gap-1 sm:ml-auto'>
+        <div data-tour='library-stats' className='text-muted-foreground min-w-0 flex-1 px-1 text-xs tabular-nums sm:flex-none'>
+          {summary}
+        </div>
         {view}
       </div>
-      <div className='text-muted-foreground w-full px-1 text-xs tabular-nums sm:hidden'>{summary}</div>
     </div>
   );
 }
