@@ -50,4 +50,6 @@ node node_modules/next/dist/bin/next typegen
 npm run typecheck
 npm run lint -- --format=unix
 POSTRIFF_API_ORIGIN=http://127.0.0.1:4348 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4448 POSTRIFF_DEV_SSR=1 npm run build
+stage "browser: composer facet, native formats, 390px, keyboard (A32)"
+POSTRIFF_PG_BIN="$pg_bin" bash "$root/scripts/cloud-content-skills-browser.sh"
 stage "content-skills validation complete"
