@@ -67,8 +67,9 @@ export function CreatorReceipts({ channel }: { channel: string }) {
         {receipts.data?.actions.map((action) => (
           <div className='grid gap-2 rounded-md border p-3' key={action.id}>
             <p className='text-sm'>
-              {action.action} · {action.status} · {action.receipt?.result?.id || action.id}
+              {action.action} · {action.status === 'privacy_erased' ? 'Data removed' : action.status} · {action.receipt?.result?.id || action.id}
             </p>
+            {action.status === 'privacy_erased' && <p className='text-xs text-muted-foreground'>YouTube data was removed. This operation cannot run again. An accepted YouTube schedule is not canceled by data removal.</p>}
             {action.receipt?.verification?.note && (
               <p className='text-xs text-muted-foreground'>{action.receipt.verification.note}</p>
             )}

@@ -142,8 +142,8 @@ with connection() as db:
 late_run = persist(ONE, native_result())
 assert not contains_native(bodies(ONE, late_run)), 'An already-running model response cannot recreate revoked data.'
 with connection() as db:
-    generations[ONE, CONNECTION] = db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=NULL,authorization_generation=gen_random_uuid() '
-        'WHERE workspace_id=%s AND connection_id=%s RETURNING authorization_generation::text', (ONE, CONNECTION)).fetchone()[0]
+    generations[ONE, CONNECTION] = db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=NULL,provider_account_id=%s,youtube_identity_ingested_at=to_timestamp(%s),authorization_generation=gen_random_uuid() '
+        'WHERE workspace_id=%s AND connection_id=%s RETURNING authorization_generation::text', (CHANNEL, NOW, ONE, CONNECTION)).fetchone()[0]
 stale_run = persist(ONE, native_result(generation=baseline[1]['result'][private.KEY][0]['authorizationGeneration']))
 assert not contains_native(bodies(ONE, stale_run)), 'Replacement consent cannot revive old model context.'
 fresh_run = persist(ONE, native_result())

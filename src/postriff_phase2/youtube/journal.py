@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import hashlib
 import json
+import time
 
 from postriff_alpha.domain import AlphaError
 
@@ -47,6 +48,24 @@ class UploadJournal:
         if expected is None or expected[0] != tuple(key):
             raise self._authorization_error(changed=True)
         self.assert_authorized(key[0], key[1], expected[1], cursor=cur, locked=locked)
+        return self._retained(cur, key)
+
+    @staticmethod
+    def _retained(cur, key):
+        from .workspace_provider_data import REMOVED, INGESTED, RETENTION_SECONDS, number
+        cur.execute('SELECT state FROM public.pr_youtube_uploads WHERE workspace_id=%s AND connection_id=%s AND operation_key=%s', key)
+        row = cur.fetchone()
+        previous = row[0] if row else {}
+        if isinstance(previous, str):
+            previous = json.loads(previous)
+        ingested = number(previous.get(INGESTED))
+        if previous.get(REMOVED) or (ingested is not None and ingested + RETENTION_SECONDS <= time.time()):
+            error = AlphaError('This YouTube operation’s runtime data was removed. It cannot be resumed or uploaded again. Review any existing schedule directly in YouTube.',
+                               409, code='youtube_data_removed')
+            error.youtube_authorization_fence = True
+            error.youtube_authorization_changed = True
+            raise error
+        return previous
 
     def assert_authorized(self, workspace, connection, generation, *, cursor=None, locked=False):
         """Shared exact-grant fence for API calls and transactional cache saves.
@@ -94,6 +113,7 @@ class UploadJournal:
                     generation = self._generation(cur, key)
                     if generation is None:
                         raise self._authorization_error()
+                    self._retained(cur, key)
                     token = self._authorization.set((tuple(key), generation))
                     yield
                 finally:
@@ -112,8 +132,16 @@ class UploadJournal:
             # Serialize this save with disconnect/consent replacement. The
             # credential lock and upsert commit together; no network operation
             # runs while this short row lock is held.
-            self._assert_current(cur, key, locked=True)
-            cur.execute('INSERT INTO public.pr_youtube_uploads(workspace_id,connection_id,operation_key,state) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,connection_id,operation_key) DO UPDATE SET state=excluded.state,updated_at=now()', (*key, json.dumps(state)))
+            previous = self._assert_current(cur, key, locked=True)
+            from .workspace_provider_data import INGESTED, number
+            # Only a database-retained server stamp may carry across saves.
+            # Old engine snapshots cannot invent a new expiry after cleanup.
+            saved = dict(state)
+            ingested = number(previous.get(INGESTED))
+            if ingested is None:
+                ingested = number(previous.get('createdAt'))
+            saved[INGESTED] = time.time() if ingested is None else ingested
+            cur.execute('INSERT INTO public.pr_youtube_uploads(workspace_id,connection_id,operation_key,state) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,connection_id,operation_key) DO UPDATE SET state=excluded.state,updated_at=now()', (*key, json.dumps(saved)))
         if cursor is not None:
             # Recovery already owns the credential/workspace transaction. A
             # second connection would wait on its own uncommitted row lock.
@@ -133,8 +161,15 @@ def purge_authorized_data(cur, workspace_id, connection_id):
     """Revocation deletes authorized content immediately; keep only content-free audit events."""
     from .agent_context import purge_connection
     purge_connection(cur, workspace_id, connection_id)
+    from .workspace_provider_data import purge_connection as purge_workspace_outputs
+    purge_workspace_outputs(cur, workspace_id, connection_id)
+    # Audit subjects and AI provenance must be resolved while their canonical
+    # sources still exist. Keep erased operation tombstones and exact submitted
+    # inputs; they can never become executable approvals again.
+    from .privacy_erasure import purge_connection as purge_identity_snapshots
+    purge_identity_snapshots(cur, workspace_id, connection_id)
     for table in ('pr_youtube_cache', 'pr_youtube_reporting_coverage', 'pr_youtube_chat_cursor',
-                  'pr_youtube_uploads', 'pr_youtube_actions', 'pr_youtube_settings', 'pr_youtube_push'):
+                  'pr_youtube_settings', 'pr_youtube_push', 'pr_channel_pictures'):
         cur.execute('SELECT to_regclass(%s)', ('public.' + table,))
         if cur.fetchone()[0]:
             cur.execute('DELETE FROM public.' + table + ' WHERE workspace_id=%s AND connection_id=%s', (workspace_id, connection_id))
@@ -147,6 +182,11 @@ def purge_expired_data(cur, *, agent_context=False):
         # creator overview (which reuses this cache-expiry helper).
         from .agent_context import purge_expired
         purge_expired(cur)
+        from .workspace_provider_data import purge_expired as purge_workspace_outputs
+        purge_workspace_outputs(cur)
+        from .privacy_erasure import purge_expired as purge_identity_snapshots
+        purge_identity_snapshots(cur, purge_authorized=purge_authorized_data)
+        cur.execute("DELETE FROM public.pr_channel_pictures p USING public.pr_encrypted_credentials c WHERE p.workspace_id=c.workspace_id AND p.connection_id=c.connection_id AND c.provider='youtube' AND p.fetched_at<=now()-interval '30 days'")
     # Cascades also remove reply drafts and their saved approval context.
     cur.execute("DELETE FROM public.pr_audience_threads WHERE provider='youtube' AND ingested_at<=now()-interval '30 days'")
     cur.execute('DELETE FROM public.pr_youtube_cache WHERE expires_at<=now()')

@@ -1,4 +1,5 @@
 """Offline OAuth custody regression. Synthetic tokens; no Google calls or real acceptance."""
+import copy
 import json
 import unittest
 from contextlib import contextmanager
@@ -35,6 +36,7 @@ class CredentialRepository:
     def __init__(self, access, refresh, expires):
         self.access, self.refresh, self.expires = access, refresh, expires
         self.result, self.updates = None, []
+        self.generation = '00000000-0000-0000-0000-000000000098'
         self.revocation_locks = []
         self.state = {'phase2': {'channels': [{'id': 'connection', 'scopes': SCOPES, 'identityVerified': True}]}}
 
@@ -50,14 +52,14 @@ class CredentialRepository:
         if sql.startswith('SELECT provider,access_ciphertext'):
             self.result = ('youtube', self.access, self.refresh, 'synthetic-key', self.expires,
                            bool(self.refresh), False, SCOPES, 'UC' + 'a' * 22, NOW - 3600)
-        elif sql == 'SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE':
+        elif sql == 'SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE':
             assert params == ('workspace',)
             self.revocation_locks.append('workspace')
             self.result = ('workspace',)
         elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
             self.result = (True,)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
-            self.result = ('00000000-0000-0000-0000-000000000098',)
+            self.result = (self.generation,)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):
@@ -87,6 +89,7 @@ class ConnectionFlowRepository:
         self.locked, self.txn, self.consumed, self.result = False, None, False, None
         self.role = 'owner'
         self.credentials = {}
+        self.generation, self.consent_counter = None, 0
         self.state = {'phase2': {'channels': []}}
         self.assert_fresh = Mock()
 
@@ -113,6 +116,16 @@ class ConnectionFlowRepository:
             self.result = None
         elif sql.startswith('INSERT INTO public.pr_encrypted_credentials'):
             self.credentials[params[1]] = params
+            self.consent_counter += 1
+            self.generation = f'synthetic-new-consent-{self.consent_counter}'
+        elif sql.startswith('UPDATE public.pr_encrypted_credentials SET provider_account_id='):
+            account, observed_at, workspace, connection = params
+            assert self.credentials[connection][0] == workspace
+            assert self.credentials[connection][3] == account
+            self.identity_observation = (workspace, connection, account, observed_at)
+            self.result = (self.generation,)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            self.result = (self.generation,) if params[1] in self.credentials else None
         elif sql.startswith('INSERT INTO public.pr_channel_capabilities'):
             pass
         else:
@@ -125,7 +138,14 @@ class ConnectionFlowRepository:
         return {'revision': 1, 'state': self.state}
 
     def command(self, _workspace, _token, _revision, change, **_kwargs):
-        change(self.state, 'member')
+        before = copy.deepcopy(self.state)
+        try:
+            change(self.state, 'member')
+            if _kwargs.get('after'):
+                _kwargs['after'](self, self.state, 'member')
+        except Exception:
+            self.state = before
+            raise
         return self.get()
 
 
@@ -357,7 +377,7 @@ class YouTubeOAuthBindingTests(unittest.TestCase):
         service, repository = worker_service(provider, fresh['accessToken'], None, NOW + 60)
         service.mark_youtube_revoked = OAuthService.mark_youtube_revoked.__get__(service)
         with patch('postriff_phase2.youtube.journal.purge_authorized_data') as purge:
-            self.assertFalse(service.mark_youtube_revoked('workspace', 'connection', expected_access_token=old['accessToken']))
+            self.assertFalse(service.mark_youtube_revoked('workspace', 'connection', expected_access_token=old['accessToken'], expected_generation=repository.generation))
             self.assertFalse(service.mark_youtube_revoked('workspace', 'connection'))
             purge.assert_not_called()
         self.assertEqual(repository.revocation_locks, ['workspace', 'credential'])

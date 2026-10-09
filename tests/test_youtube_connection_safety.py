@@ -27,6 +27,7 @@ class Repository:
             'identityVerified': True, 'capabilityVerified': True, 'verifiedAt': NOW - 10,
             'expiresAt': NOW + 3600}]}}
         self.executed, self.result = [], None
+        self.rowcount, self.identity_ingested_at = 1, None
 
     def execute(self, sql, params=()):
         self.executed.append((sql, params))
@@ -48,6 +49,11 @@ class Repository:
             self.result = (self.state,)
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET scopes='):
             self.scopes = list(params[0])
+        elif sql.startswith('UPDATE public.pr_encrypted_credentials SET youtube_identity_ingested_at='):
+            observed_at, workspace, connection, generation, account = params
+            assert (workspace, connection, generation, account) == ('workspace', 'connection', '00000000-0000-0000-0000-000000000098', CHANNEL)
+            self.identity_ingested_at = observed_at
+            self.rowcount = 1
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
             self.state = json.loads(params[0])
 

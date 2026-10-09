@@ -559,6 +559,11 @@ class OAuthService:
             consent_generation_sql = ',authorization_generation=gen_random_uuid()' if provider_id == 'youtube' else ''
             cur.execute("INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s) ON CONFLICT(workspace_id,connection_id) DO UPDATE SET access_ciphertext=excluded.access_ciphertext,refresh_ciphertext=excluded.refresh_ciphertext,key_id=excluded.key_id,scopes=excluded.scopes,access_expires_at=excluded.access_expires_at,refresh_supported=excluded.refresh_supported,revoked_at=NULL" + consent_generation_sql + ",rotated_at=now(),updated_at=now()", (workspace_id, connection_id, provider_id, identity["providerAccountId"], access_ct, refresh_ct, key_id, granted, expires, bool(refresh_ct)))
             if provider_id == 'youtube':
+                # This is a genuine identity observation from this new consent.
+                # Restore an erased canonical ID only after its exact hashed
+                # connection was recomputed above; token refresh never stamps it.
+                cur.execute("UPDATE public.pr_encrypted_credentials SET provider_account_id=%s,youtube_identity_ingested_at=to_timestamp(%s) WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL RETURNING authorization_generation::text", (identity['providerAccountId'], self.clock(), workspace_id, connection_id))
+                consent_generation = cur.fetchone()[0]
                 self.youtube_policy.bind(cur, workspace_id, connection_id, policy_acceptance)
             now = self.clock()
             matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
@@ -574,12 +579,18 @@ class OAuthService:
         if provider_id == 'youtube':
             channel['refreshBindingRequired'] = False
             channel['authorizationLane'] = getattr(adapter, 'authorization_lane', 'standard')
+            channel['youtubeIdentityIngestedAt'] = now
         snapshot = self.repository.get(workspace_id, token)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections")
-        self._keep_picture(workspace_id, token, connection_id, identity)
+        # A disconnect/new consent can commit after token custody but before
+        # this workspace save. The same-transaction fence rolls back a stale
+        # profile restoration rather than trusting a newly fetched revision.
+        def consent_fence(cur, _state, _actor):
+            self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
+        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
+        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
-    def _keep_picture(self, workspace_id, token, connection_id, identity):
+    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None):
         """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
         try:
             outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
@@ -589,6 +600,8 @@ class OAuthService:
             return  # keep whatever picture was stored before
         try:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
+                if youtube_generation is not None:
+                    self._assert_youtube_generation(cur, workspace_id, connection_id, youtube_generation)
                 account_pictures.guarded(cur, account_pictures.store, workspace_id, connection_id, outcome)
         except AlphaError:
             pass  # membership ended in between; nothing to decorate
@@ -931,30 +944,36 @@ class OAuthService:
         except AlphaError as error:
             if error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
-                                         expected_ciphertext=getattr(error, 'credential_revocation_ciphertext', None))
+                                         expected_ciphertext=getattr(error, 'credential_revocation_ciphertext', None),
+                                         expected_generation=getattr(error, 'credential_revocation_generation', None))
             elif error.code in ('youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
                 expected = getattr(error, 'credential_binding_ciphertext', None)
-                if expected is not None:
+                expected_generation = getattr(error, 'credential_binding_generation', None)
+                if expected is not None and expected_generation is not None:
                     # The failed read/refresh transaction has rolled back. Persist only
                     # a reconnect marker, conditional on the exact credential observed;
                     # a concurrent new consent wins and no ciphertext is discarded.
                     with self.repository.connection_factory() as db, db.cursor() as cur:
-                        cur.execute("UPDATE public.pr_encrypted_credentials SET refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL AND access_ciphertext=%s", (workspace_id, connection_id, expected))
+                        cur.execute("UPDATE public.pr_encrypted_credentials SET refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL AND access_ciphertext=%s AND authorization_generation::text=%s", (workspace_id, connection_id, expected, expected_generation))
             raise
 
-    def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None):
+    def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None, expected_generation=None):
         from .hosted import audit
         from .youtube.journal import purge_authorized_data
         # Refresh or an authenticated API response may detect revocation. Purge in a separate commit.
         with self.repository.connection_factory() as db, db.cursor() as cur:
-            if expected_access_token is None and expected_ciphertext is None:
+            if (expected_access_token is None and expected_ciphertext is None) or not expected_generation:
                 return False  # No observed credential can authorize purging a possibly newer grant.
             # Match disconnect and derived-data writes: workspace before
             # credential, including audit/child foreign-key acquisition.
-            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE", (workspace_id,))
+            cur.execute("SELECT id FROM public.pr_workspaces WHERE id=%s FOR UPDATE", (workspace_id,))
             cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
             observed = cur.fetchone()
             if not observed or (expected_ciphertext is not None and observed[0] != expected_ciphertext):
+                return False
+            cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace_id, connection_id))
+            generation = cur.fetchone()
+            if not generation or generation[0] != expected_generation:
                 return False
             if expected_access_token is not None:
                 try:
@@ -972,12 +991,13 @@ class OAuthService:
             return bool(changed)
 
     @contextmanager
-    def _credential_errors(self, provider_id, access_ciphertext):
+    def _credential_errors(self, provider_id, access_ciphertext, authorization_generation=None):
         try:
             yield
         except AlphaError as error:
             if provider_id == 'youtube' and error.code == 'youtube_revoked_oauth':
                 error.credential_revocation_ciphertext = access_ciphertext
+                error.credential_revocation_generation = authorization_generation
             raise
 
     def _token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
@@ -1000,7 +1020,7 @@ class OAuthService:
                     if not generation or not generation[0]:
                         raise AlphaError('YouTube authorization is no longer available.', 409, code='youtube_revoked_oauth')
                     authorization_generation = generation[0]
-                with self._credential_errors(row[0], row[1]):
+                with self._credential_errors(row[0], row[1], authorization_generation):
                     provider, access_ct, refresh_ct, key_id, expires, refresh_supported, _, scopes, account_id, issued_at = row
                     adapter = self._provider_for_access(provider, self.vault.decrypt(access_ct, key_id))
                     if provider == 'youtube':
@@ -1019,6 +1039,7 @@ class OAuthService:
                         except AlphaError as error:
                             if error.code in ('youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
                                 error.credential_binding_ciphertext = access_ct
+                                error.credential_binding_generation = authorization_generation
                             raise
                         refresh_binding_required = adapter.refresh_binding_required(bound_access)
                         if refresh_binding_required:
@@ -1043,6 +1064,7 @@ class OAuthService:
                         if refresh_binding_required:
                             error = AlphaError('Reconnect this YouTube channel once to enable securely bound background access.', 409, code='youtube_oauth_binding_required')
                             error.credential_binding_ciphertext = row[1]
+                            error.credential_binding_generation = authorization_generation
                             raise error
                         if not (refresh_supported and refresh_ct):
                             raise AlphaError("Access expired and cannot be refreshed; re-authorization required.", 409)
@@ -1080,6 +1102,23 @@ class OAuthService:
                                 '_youtubePolicyContext': {'workspace': workspace_id, 'connection': connection_id,
                                     'force': youtube_policy_required}} if provider == 'youtube' else {})}
 
+    def _assert_youtube_generation(self, cur, workspace_id, connection_id, generation):
+        if not isinstance(generation, str) or not generation:
+            raise AlphaError('YouTube authorization changed during verification.', 409, code='youtube_connection_changed')
+        cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace_id, connection_id))
+        current = cur.fetchone()
+        if not current or current[0] != generation:
+            raise AlphaError('YouTube authorization changed during verification.', 409, code='youtube_connection_changed')
+
+    def _stamp_youtube_identity(self, cur, workspace_id, connection_id, grant, identity, now):
+        """Fence a genuine identity result against replacement consent, even with the same token."""
+        generation = grant.get('authorizationGeneration')
+        if not isinstance(generation, str) or not generation:
+            raise AlphaError('YouTube authorization changed during identity verification.', 409, code='youtube_connection_changed')
+        cur.execute("UPDATE public.pr_encrypted_credentials SET youtube_identity_ingested_at=to_timestamp(%s) WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL AND authorization_generation::text=%s AND provider_account_id=%s", (now, workspace_id, connection_id, generation, identity['providerAccountId']))
+        if cur.rowcount != 1:
+            raise AlphaError('YouTube authorization changed during identity verification.', 409, code='youtube_connection_changed')
+
     def verify(self, workspace_id, token, connection_id):
         """Re-check identity and scope drift for an existing connection."""
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
@@ -1090,6 +1129,9 @@ class OAuthService:
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
             if stored[0] == 'youtube':
+                cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
+                generation_row = cur.fetchone()
+                starting_generation = generation_row[0] if generation_row else None
                 adapter = self._provider_for_access('youtube', self.vault.decrypt(stored[3], stored[4]))
                 self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2])
         provider_id, account_id, scopes, starting_ciphertext = stored[:4]
@@ -1135,6 +1177,9 @@ class OAuthService:
             current = cur.fetchone()
             if not current or (grant and self.vault.decrypt(current[0], current[1]) != grant["accessToken"]) or (not grant and current[0] != starting_ciphertext):
                 raise AlphaError("Connection changed during verification; reload and verify again.", 409)
+            if provider_id == 'youtube':
+                self._assert_youtube_generation(cur, workspace_id, connection_id,
+                    grant.get('authorizationGeneration') if grant else starting_generation)
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             channel = next((c for c in state.get("phase2", {}).get("channels", []) if c["id"] == connection_id), None)
             if channel is None:
@@ -1148,6 +1193,13 @@ class OAuthService:
                 if provider_id == 'youtube':
                     channel['refreshBindingRequired'] = grant.get('refreshBindingRequired') is True
                     channel['authorizationLane'] = grant.get('authorizationLane', 'standard')
+                    if identity and result['identityVerified']:
+                        self._stamp_youtube_identity(cur, workspace_id, connection_id, grant, identity, self.clock())
+                        channel['account'] = identity.get('handle') or identity['providerAccountId']
+                        channel['providerAccountId'] = identity['providerAccountId']
+                        channel.update(configured=True, revoked=False)
+                        channel.pop('youtubeProviderDataRemoved', None)
+                        channel['youtubeIdentityIngestedAt'] = self.clock()
             if result["state"] != "read_verified":
                 channel["capabilityVerified"] = False
                 cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Permissions changed or could not be verified; reconnect and review.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace_id, connection_id))
@@ -1159,9 +1211,9 @@ class OAuthService:
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             audit(cur, workspace_id, principal, "channel.verified", connection_id, {"state": result["state"]})
         if provider_id == 'youtube' and grant and result['state'] == 'reauthorization_required':
-            self.mark_youtube_revoked(workspace_id, connection_id, expected_access_token=grant['accessToken'])
+            self.mark_youtube_revoked(workspace_id, connection_id, expected_access_token=grant['accessToken'], expected_generation=grant.get('authorizationGeneration'))
         if identity and result["identityVerified"]:
-            self._keep_picture(workspace_id, token, connection_id, identity)
+            self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': grant.get('authorizationGeneration')} if provider_id == 'youtube' else {}))
         return result
 
     # --- worker re-verification (orchestration §5 step 2) ------------------------------
@@ -1343,6 +1395,8 @@ class OAuthService:
                 same_credential = False
             if not same_credential:
                 return unavailable(cur, "credential_rotated")  # a person re-authorized meanwhile; their grant wins
+            if provider_id == 'youtube':
+                self._assert_youtube_generation(cur, workspace_id, connection_id, grant.get('authorizationGeneration'))
             state = json.loads(locked[0]) if isinstance(locked[0], str) else locked[0]
             if state.get("accountDeletion") or state.get("accountBlock"):
                 return unavailable(cur, "account_deletion_pending")
@@ -1360,6 +1414,13 @@ class OAuthService:
             if provider_id == 'youtube':
                 channel['refreshBindingRequired'] = grant.get('refreshBindingRequired') is True
                 channel['authorizationLane'] = grant.get('authorizationLane', 'standard')
+                if not drift:
+                    self._stamp_youtube_identity(cur, workspace_id, connection_id, grant, identity, self.clock())
+                    channel['account'] = identity.get('handle') or identity['providerAccountId']
+                    channel['providerAccountId'] = identity['providerAccountId']
+                    channel.update(configured=True, revoked=False)
+                    channel.pop('youtubeProviderDataRemoved', None)
+                    channel['youtubeIdentityIngestedAt'] = self.clock()
             channel["expiresAt"] = float(grant["expiresAt"]) if grant.get("expiresAt") else channel.get("expiresAt", 0)
             if outcome != "read_verified":
                 channel["capabilityVerified"] = False
@@ -1373,7 +1434,7 @@ class OAuthService:
             audit(cur, workspace_id, actor, audit_event, connection_id, {"state": outcome})
             ready = outcome == "read_verified" and not channel.get('refreshBindingRequired') and self.commands.engine.channel_state(channel) == "Ready for posting"
         if provider_id == 'youtube' and outcome == 'reauthorization_required':
-            self.mark_youtube_revoked(workspace_id, connection_id, expected_access_token=grant['accessToken'])
+            self.mark_youtube_revoked(workspace_id, connection_id, expected_access_token=grant['accessToken'], expected_generation=grant.get('authorizationGeneration'))
         return {"connectionId": connection_id, "state": 'client_binding_missing' if channel.get('refreshBindingRequired') else outcome, "ready": ready,
                 **({'refreshBindingRequired': True} if channel.get('refreshBindingRequired') else {})}
 
@@ -1398,9 +1459,6 @@ class OAuthService:
                     remote = False
             cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
-            if stored[0] == 'youtube':
-                from .youtube.journal import purge_authorized_data
-                purge_authorized_data(cur, workspace_id, connection_id)
             from .social_history import revoke_connection_samples
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
@@ -1408,6 +1466,11 @@ class OAuthService:
                 self.commands.engine.invalidate(state)
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
                 audit(cur, workspace_id, principal, 'voice.connection_samples_revoked', connection_id, {'samples': revoked_samples})
+            if stored[0] == 'youtube':
+                # Purge after any state write from this transaction's earlier
+                # snapshot so it cannot restore removed provider output.
+                from .youtube.journal import purge_authorized_data
+                purge_authorized_data(cur, workspace_id, connection_id)
             account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
             from .growth.history_import import mark_for_purge
             mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)

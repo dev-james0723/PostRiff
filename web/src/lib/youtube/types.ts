@@ -137,7 +137,8 @@ export interface YouTubeAgentDraft {
   channelId: string;
   assetId: string;
   variantId: string;
-  status: 'proposed' | 'queued';
+  status: 'proposed' | 'queued' | 'privacy_erased';
+  privacyErased?: boolean;
   uploadWorkflow: 'upload_now' | 'upload_later';
   uploadAt: number;
   timing: { local: string; timeZone: string; fold: number; timestamp: number };
@@ -152,6 +153,7 @@ export interface YouTubeAgentPolicy {
   digest: string;
   channelId: string;
   status: 'prepared' | 'active' | 'paused' | 'revoked';
+  privacyErased?: boolean;
   drafts: { id: string; digest: string }[];
   assetIds: string[];
   timeZone: string;

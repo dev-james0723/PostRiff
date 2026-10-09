@@ -212,12 +212,36 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       await page.goto(base + '/app/youtube?channel=foreign-connection');
       await page.getByRole('heading', { name: 'Connect your creator channel', exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
+      // Actual synthetic disconnect/reconnect must show erased plans as
+      // permanently unusable, while preserving the customer's Library/title.
+      await request('DELETE', `/api/workspaces/${wid}/channels/${encodeURIComponent(cid)}`);
+      const reconnectStart = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, {
+        capability: 'publish', input: { connectionId: cid }
+      });
+      const reconnected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, {
+        state: new URL(reconnectStart.authorizeUrl).searchParams.get('state'), code: 'synthetic-reconnect-code'
+      });
+      assert.equal(reconnected.connectionId, cid);
+      await page.goto(base + '/app/youtube?channel=' + cid);
+      const erasedPlans = page.getByRole('region', { name: 'YouTube publishing agent', exact: true });
+      await erasedPlans.getByText('Data removed. This plan cannot run again.', { exact: false }).waitFor();
+      await erasedPlans.getByText(planTitle, { exact: true }).waitFor();
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Approve and queue this plan', exact: true }).count(), 0);
+      assert.equal(await erasedPlans.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true }).count(), 0);
+      await erasedPlans.getByText('Channel data was removed and this authority cannot restart.', { exact: false }).waitFor();
+      await page.getByText('Creator receipts and official change notifications', { exact: true }).click();
+      await page.getByText('YouTube data was removed. This operation cannot run again.', { exact: false }).first().waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Read back the accepted result', exact: true }).count(), 0);
+      const erasedOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+      assert.ok(erasedOverflow, 'Erased-operation notices must fit the mobile viewport.');
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-erased-${width}.png`), fullPage: true });
       assert.deepEqual(errors, []);
       results.push({ width, execution: 'cloud-synthetic', realGoogleE2E: false, independentCapabilities: 37,
         productionNotReady: true, officialUnsupportedCommunity: true, publicGateHeld: true, humanReviewBeforeWrite: true,
         distinctOAuthLaneConnections: true, explicitAgenticConsent: true, reviewableLibraryPlan: true,
         finiteThirtyDayAuthority: true, policyPreviewNotExecution: true, unapprovedAutopilotHeld: true,
-        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true });
+        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true,
+        erasedPlansAndReceiptsVisible: true, erasedOperationsPermanentlyHeld: true, genuineReconnectPreservesUserContent: true });
       await context.close();
     }
     writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2) + '\n');

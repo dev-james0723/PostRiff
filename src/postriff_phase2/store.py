@@ -306,6 +306,8 @@ class Phase2Store(Store):
             data["reviews"] = data["reviews"][-19:]+[{"id": uid(), "manifest": manifest, "digest": digest(manifest), "status": "needs_review", "createdAt": now}]
         elif action == "approve":
             review = find(data["reviews"], p.get("reviewId"))
+            if review.get('privacyErased') or review.get('manifest', {}).get('privacyErased'):
+                raise AlphaError('This YouTube review was erased and cannot be approved again.', 409, code='youtube_data_removed')
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
@@ -313,6 +315,8 @@ class Phase2Store(Store):
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
             if existing:
+                if existing.get('privacyErased') or existing.get('youtubeProviderDataRemoved'):
+                    raise AlphaError('This YouTube operation was erased and cannot be resumed.', 409, code='youtube_data_removed')
                 if existing["state"] in ("failed", "canceled") and review["status"] != "approved":
                     raise AlphaError("This review belongs to an ended job. Prepare a new review to try again.", 409, code="review_consumed")
                 review.update({"status": "approved", "jobId": existing["id"]})
@@ -513,6 +517,8 @@ class Phase2Store(Store):
 
     def current(self, s, m):
         try:
+            if m.get('privacyErased'):
+                return False
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]

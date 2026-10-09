@@ -160,11 +160,11 @@ export function YouTubeAgentControls({ channel, canPublic }: { channel: string; 
             {owner && draft.status === 'proposed' && <input id={`${prefix}-include-${draft.id}`} type='checkbox' aria-label={`Include ${draft.publishOptions.title} in autopilot policy`}
               checked={selected.includes(draft.id)} onChange={(event) => setSelected((ids) => event.target.checked ? [...ids, draft.id] : ids.filter((id) => id !== draft.id))} />}
             <div className='min-w-0'><p className='font-medium'>{draft.publishOptions.title}</p>
-              <p className='text-muted-foreground'>{draft.timing.local.replace('T', ' ')} · {draft.timing.timeZone} · {draft.publishOptions.privacyStatus} · {draft.status}</p></div>
+              <p className='text-muted-foreground'>{draft.timing.local.replace('T', ' ')} · {draft.timing.timeZone} · {draft.publishOptions.privacyStatus} · {draft.privacyErased ? 'Data removed' : draft.status}</p></div>
           </div>
           <p className='whitespace-pre-wrap'>{draft.publishOptions.description || '(Empty description)'}</p>
-          <p>Channel: {draft.channelId} · Library video: {draft.assetId}</p>
-          <p>{draft.uploadWorkflow === 'upload_now' ? 'Upload privately after approval.' : `Upload begins ${new Date(draft.uploadAt * 1000).toISOString()}.`} {draft.publishOptions.privacyStatus === 'private' ? 'There is no automatic public transition.' : 'YouTube applies the native future publication schedule.'}</p>
+          <p>{draft.channelId && `Channel: ${draft.channelId} · `}Library video: {draft.assetId}</p>
+          {draft.privacyErased ? <p>Data removed. This plan cannot run again. Prepare and approve a new plan. A schedule already accepted by YouTube is not canceled.</p> : <p>{draft.uploadWorkflow === 'upload_now' ? 'Upload privately after approval.' : `Upload begins ${new Date(draft.uploadAt * 1000).toISOString()}.`} {draft.publishOptions.privacyStatus === 'private' ? 'There is no automatic public transition.' : 'YouTube applies the native future publication schedule.'}</p>}
           {draft.status === 'proposed' && <>
             <label htmlFor={`${prefix}-approve-${draft.id}`} className='flex items-start gap-2'><input id={`${prefix}-approve-${draft.id}`} aria-label={`Approve the exact video, metadata, channel, time and visibility for ${draft.publishOptions.title}`} type='checkbox' checked={confirmedDraft === draft.id} onChange={(event) => setConfirmedDraft(event.target.checked ? draft.id : undefined)} />I approve this exact video, metadata, channel, time and visibility.</label>
             <Button className='w-fit' disabled={busy || !canApprove || confirmedDraft !== draft.id} onClick={() => run(() => approve(draft), 'Approved and queued. Publication is complete only when the provider receipt verifies it.')}>Approve and queue this plan</Button>
@@ -199,6 +199,7 @@ export function YouTubeAgentControls({ channel, canPublic }: { channel: string; 
         </div>}
         {query.data?.policies.filter((policy) => policy.status !== 'prepared').map((policy) => <div key={policy.id} className='grid min-w-0 grid-cols-1 gap-2 rounded-md border p-3 text-sm'>
           <p>{policy.status} · {policy.drafts.length} plans · {policy.maxDaily}/day · expires {new Date(policy.endsAt * 1000).toISOString()}</p>
+          {policy.privacyErased && <p>Channel data was removed and this authority cannot restart. Prepare a new policy after reviewing new plans.</p>}
           {policy.intervention && <p role='alert'>{policy.intervention.message}</p>}
           {policy.status === 'paused' && <p>Restarting this policy permits new plan dispatch only. Held jobs require separate review and do not resume automatically. Creator recovery is available only for recoverable journaled uploads.</p>}
           <div className='flex flex-wrap gap-2'>

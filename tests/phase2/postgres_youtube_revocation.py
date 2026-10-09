@@ -153,9 +153,21 @@ def credential():
 
 def counts():
     with connection() as db:
-        return tuple(db.execute(f'SELECT count(*) FROM public.{table} WHERE workspace_id=%s AND connection_id=%s',
-                                (WORKSPACE, CONNECTION)).fetchone()[0]
-                     for table in ('pr_youtube_uploads', 'pr_youtube_cache'))
+        rows = db.execute('SELECT state FROM public.pr_youtube_uploads WHERE workspace_id=%s AND connection_id=%s',
+                          (WORKSPACE, CONNECTION)).fetchall()
+        retained = 0
+        for (state,) in rows:
+            if state.get('youtubeProviderDataRemoved'):
+                assert set(state) <= {'version', 'stage', 'youtubeProviderDataRemoved', 'dataRemovalReason', 'removedAt', 'manifestDigest'}
+                assert state['version'] == 2 and state['stage'] == 'held'
+                assert state['youtubeProviderDataRemoved'] is True
+                assert state['dataRemovalReason'] in ('youtube_disconnected_data_removed', 'youtube_expired_data_removed')
+                assert isinstance(state['removedAt'], (int, float))
+            else:
+                retained += 1
+        cached = db.execute('SELECT count(*) FROM public.pr_youtube_cache WHERE workspace_id=%s AND connection_id=%s',
+                            (WORKSPACE, CONNECTION)).fetchone()[0]
+        return retained, cached
 
 
 def clear_content():
@@ -358,6 +370,13 @@ try:
     # before commit. A copied genuine lock context waits and then rejects the
     # committed revoked row. This exercises workspace AND credential ordering.
     authorize()
+    try:
+        with journal.lock(key):
+            raise AssertionError('A new consent must not replay a privacy-erased upload operation.')
+    except AlphaError as error:
+        assert error.code == 'youtube_data_removed'
+    checks.append('content-free disconnect tombstone rejects replay even under a new consent generation')
+    clear_content()  # Start the next independent SQL race with an empty synthetic fixture.
     with journal.lock(key), ThreadPoolExecutor(max_workers=2) as pool:
         paused, release, waiting = threading.Event(), threading.Event(), Queue()
         blocked_by = Queue()

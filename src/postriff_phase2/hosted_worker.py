@@ -76,6 +76,8 @@ class PostgresWorker:
     def _approved(self, cur, workspace_id, state, job):
         from .billing import require_publishing
         try:
+            if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
+                return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())
             assert_job_authority(state, job, self.clock())
@@ -199,6 +201,18 @@ class PostgresWorker:
                             from . import product_events
                             product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
+                        youtube_generation = None
+                        if is_youtube:
+                            from .youtube import workspace_provider_data as youtube_data
+                            cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE",
+                                        (workspace_id, job['manifest'].get('channelId')))
+                            credential = cur.fetchone()
+                            youtube_generation = credential[0] if credential else None
+                            prior_source = job.get(youtube_data.KEY) if isinstance(job.get(youtube_data.KEY), dict) else {}
+                            if (not youtube_generation or job.get(youtube_data.REMOVED)
+                                    or (prior_source and prior_source.get('authorizationGeneration') != youtube_generation)):
+                                youtube_data.scrub_job(job, 'youtube_authorization_data_removed', now)
+                                continue
                         previous_state = job['state']
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
@@ -212,6 +226,8 @@ class PostgresWorker:
                                 job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                                 self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if is_youtube:
+                            selected['youtubeAuthorizationGeneration'] = youtube_generation
                         if youtube_forward:
                             selected.update(youtubeForward=True, previousState=previous_state)
                         if instagram and not reconciliation:
@@ -245,6 +261,19 @@ class PostgresWorker:
                 if (job.get("leaseOwner") != self.worker_id or job.get("leaseId") != claimed["job"].get("leaseId")
                         or job.get('leaseUntil', 0) <= self.clock()):
                     return False
+                youtube_source = None
+                if job.get('manifest', {}).get('platform') == 'YouTube':
+                    from .youtube import workspace_provider_data as youtube_data
+                    try:
+                        generation = youtube_data.assert_completion(cur, claimed['workspaceId'], job, claimed, self.clock())
+                        youtube_source = youtube_data.source(claimed['workspaceId'], job, generation, self.clock())
+                        if youtube_source['expiresAt'] <= self.clock():
+                            raise AlphaError('The previous YouTube runtime output expired.', 409, code='youtube_stale_completion')
+                    except AlphaError:
+                        youtube_data.scrub_job(job, 'youtube_stale_result_removed', self.clock())
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
+                                    (json.dumps(state), claimed['workspaceId'], revision))
+                        return False
                 result = normalize_result(result, job, claimed['reconciliation'])
                 self._event(job, result["state"], result["confirmed"])
                 if result.get("reference"):
@@ -258,6 +287,8 @@ class PostgresWorker:
                 job['resultSchema'] = result.get('schema')
                 if result.get('progress'):
                     job['progress'] = result['progress']
+                if youtube_source is not None:
+                    job[youtube_data.KEY] = youtube_source
                 published = result['state'] == 'verified' and (job['manifest']['platform'] != 'YouTube' or (result.get('progress') or {}).get('stage') == 'published')
                 if published and self.on_verified:
                     try:
@@ -323,6 +354,14 @@ class PostgresWorker:
                     job['leaseOwner'], job['leaseUntil'] = None, 0
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
+                if job.get('manifest', {}).get('platform') == 'YouTube':
+                    from .youtube import workspace_provider_data as youtube_data
+                    try:
+                        youtube_data.assert_completion(cur, claimed['workspaceId'], job, claimed, self.clock())
+                    except AlphaError:
+                        youtube_data.scrub_job(job, 'youtube_stale_result_removed', self.clock())
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
+                        return False
                 youtube_cancel = (claimed.get('youtubeForward') and claimed['reconciliation']
                                   and claimed['job'].get('cancelRequested') is True)
                 if (claimed.get('youtubeForward') and claimed['reconciliation']

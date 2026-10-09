@@ -24,6 +24,9 @@ class Cursor:
             self.result = ('workspace',) if self.repository.workspace_present else None
         elif 'SELECT authorization_generation::text' in statement:
             self.result = None if self.repository.revoked else (self.repository.generation,)
+        elif statement.startswith('SELECT state FROM public.pr_youtube_uploads'):
+            assert parameters == KEY
+            self.result = None  # No retained session or removal tombstone in this fixture.
         elif 'INSERT INTO public.pr_youtube_uploads' in statement:
             self.repository.writes.append(parameters)
         elif 'pg_advisory_unlock' in statement:
@@ -74,14 +77,16 @@ class JournalFenceTests(unittest.TestCase):
             self.journal.save(KEY, {'stage': 'uploading'})
         writer = self.repository.cursors[-1]
         self.assertEqual(len(self.repository.writes), 1)
-        self.assertEqual(len(writer.statements), 3)
+        self.assertEqual(len(writer.statements), 4)
         self.assertIn('public.pr_workspaces', writer.statements[0][0])
         self.assertIn('FOR KEY SHARE', writer.statements[0][0])
         self.assertEqual(writer.statements[0][1], KEY[:1])
         self.assertIn('public.pr_encrypted_credentials', writer.statements[1][0])
         self.assertIn('FOR NO KEY UPDATE', writer.statements[1][0])
         self.assertEqual(writer.statements[1][1], KEY[:2])
-        self.assertIn('INSERT INTO public.pr_youtube_uploads', writer.statements[2][0])
+        self.assertIn('SELECT state FROM public.pr_youtube_uploads', writer.statements[2][0])
+        self.assertEqual(writer.statements[2][1], KEY)
+        self.assertIn('INSERT INTO public.pr_youtube_uploads', writer.statements[3][0])
 
     def test_disconnect_or_new_consent_cannot_recreate_purged_state(self):
         for changed in (False, True):

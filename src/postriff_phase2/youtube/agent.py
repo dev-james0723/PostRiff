@@ -140,6 +140,8 @@ def review_payload(draft):
 
 
 def assert_draft_current(state, draft, now):
+    if draft.get('privacyErased'):
+        raise AlphaError('This plan contains erased YouTube API identity data. Prepare and approve a new plan.', 409, code='youtube_privacy_erased')
     if draft.get('digest') != draft_digest(draft):
         raise AlphaError('The publishing plan changed. Prepare a new plan.', 409)
     channel, asset = _channel(state, draft['connectionId']), _asset(state, draft['assetId'])
@@ -204,6 +206,8 @@ def activate_policy(state, connection, identifier, body, actor, now):
     policy = next((p for p in root(state)['policies'] if p.get('id') == identifier and p.get('connectionId') == connection), None)
     if not policy:
         raise AlphaError('YouTube policy unavailable.', 404)
+    if policy.get('privacyErased'):
+        raise AlphaError('This policy contains erased YouTube API identity data. Prepare a new policy.', 409, code='youtube_privacy_erased')
     if (body.get('confirmed') is not True or body.get('digest') != policy.get('digest')
             or policy.get('digest') != policy_digest(policy) or body.get('confirmationChannelId') != policy['channelId']):
         raise AlphaError('Confirm the exact channel, plans, source videos, times and limits.', 400)
@@ -234,6 +238,8 @@ def change_policy(state, connection, identifier, action, actor, now):
 
 
 def assert_policy(state, policy, draft, now):
+    if policy.get('privacyErased') or draft.get('privacyErased'):
+        raise AlphaError('Erased YouTube approvals cannot authorize publication.', 409, code='youtube_privacy_erased')
     if (policy.get('status') != 'active' or policy.get('digest') != policy_digest(policy)
             or not policy['startsAt'] <= now < policy['endsAt'] or not policy.get('grantedBy')
             or policy.get('channelId') != draft.get('channelId') or policy.get('connectionId') != draft.get('connectionId')
@@ -265,6 +271,8 @@ def assert_job_authority(state, job, now):
 
 def queue_draft(commands, state, connection, identifier, actor, now, *, policy=None):
     draft = find_draft(state, connection, identifier)
+    if draft.get('privacyErased'):
+        raise AlphaError('This plan contains erased YouTube API identity data. Prepare and approve a new plan.', 409, code='youtube_privacy_erased')
     if draft.get('jobId'):
         return draft  # Immutable job ID fences repeated manual/worker dispatch.
     variant = assert_draft_current(state, draft, now)
@@ -337,7 +345,7 @@ class YouTubePublishingAgent:
         saved = self.repository.command(workspace, token, revision, apply, requirement=right, step_up=fresh,
             audit_event=lambda state: ('youtube.agent_' + body.get('_event', 'changed'), connection,
                 {'draftId': output.get('id') if 'assetId' in output else None, 'policyId': output.get('id') if 'drafts' in output else None,
-                 'status': output.get('status'), 'channelId': output.get('channelId')}),
+                 'status': output.get('status'), 'connectionId': connection}),
             after=(lambda cur, state, actor: require_publishing(cur, workspace, self.clock())) if billing else None)
         return {'revision': saved['revision'], 'result': output, 'queued': output.get('status') == 'queued',
                 'executed': False, 'providerVerified': False}
@@ -505,7 +513,7 @@ class YouTubePublishingAgent:
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                             (json.dumps(state), workspace, row[0]))
                 audit(cur, workspace, policy['grantedBy'], 'youtube.agent_dispatched', result['jobId'],
-                      {'policyId': policy_id, 'draftId': draft_id, 'channelId': policy['channelId']})
+                      {'policyId': policy_id, 'draftId': draft_id, 'connectionId': connection})
             return {'dispatched': True, 'jobId': result['jobId'], 'providerVerified': False}
         except AlphaError as error:
             if getattr(error, 'capacity_reason', None) == 'fleet_budget':

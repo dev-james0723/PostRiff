@@ -20,19 +20,20 @@ class WorkerDatabase:
         self.depth, self.result, self.rowcount = 0, None, 1
         self.capacity_ready, self.tenant_dispatches = capacity_ready, 0
         self.member_role = 'owner'
+        self.youtube_generation = 'synthetic-consent-generation'
         self.state = {'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(channels):
             channel = {'id': f'connection-{index}', 'platform': 'YouTube', 'configured': True,
                        'identityVerified': True, 'capabilityVerified': True, 'revoked': False,
                        'expiresAt': NOW - 1, 'verifiedAt': NOW - 3601, 'scopes': ['youtube.upload'],
                        'providerAccountId': f'UC-synthetic-{index}', 'capabilityVersion': 1}
-            manifest = {'channelId': channel['id'], 'platform': 'YouTube', 'actor': 'owner',
+            manifest = {'workspaceId': 'workspace', 'channelId': channel['id'], 'platform': 'YouTube', 'actor': 'owner',
                         'providerAccountId': channel['providerAccountId'], 'expiresAt': NOW + 3600,
                         'idempotencyKey': f'synthetic-{index}',
                         'capability': {'scopes': list(channel['scopes']), 'version': 1}}
             self.state['phase2']['channels'].append(channel)
             self.state['phase2']['jobs'].append({'id': f'job-{index}', 'manifest': manifest,
-                'approvedBy': 'owner', 'approvalDigest': digest(manifest), 'state': 'approved',
+                'approvedBy': 'owner', 'approvedAt': NOW, 'approvalDigest': digest(manifest), 'state': 'approved',
                 'attempts': [], 'events': []})
 
     @contextmanager
@@ -60,6 +61,10 @@ class WorkerDatabase:
             self.tenant_dispatches += 1
         elif sql.startswith('SELECT m.role,m.can_publish'):
             self.result = (self.member_role, True)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            assert params[0] == 'workspace'
+            channel = next((item for item in self.state['phase2']['channels'] if item['id'] == params[1]), None)
+            self.result = (self.youtube_generation,) if channel and not channel.get('revoked') else None
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):

@@ -84,7 +84,7 @@ cd -- "$jcb_pg_repo_root"
 # switches. Only the disposable cluster can be reached by the libpq defaults.
 # Keep concurrent fleet claims in their own clean cluster: prior fixture accounts
 # must not be blocked or mutated merely to make claim selection deterministic.
-for jcb_pg_group in creator fleet revocation agent_context policy_acceptance; do
+for jcb_pg_group in creator fleet revocation agent_context workspace_provider_data privacy_erasure identity_fence policy_acceptance; do
   if [ "$jcb_pg_group" = creator ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_creator.py tests/phase2/postgres_video.py
       tests/phase2/postgres_consumer_campaign_worker.py tests/phase2/postgres_youtube_acceptance.py
@@ -96,6 +96,12 @@ for jcb_pg_group in creator fleet revocation agent_context policy_acceptance; do
     jcb_pg_scripts=(tests/phase2/postgres_youtube_revocation.py)
   elif [ "$jcb_pg_group" = agent_context ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_agent_context.py)
+  elif [ "$jcb_pg_group" = workspace_provider_data ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_workspace_provider_data.py)
+  elif [ "$jcb_pg_group" = privacy_erasure ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_privacy_erasure.py)
+  elif [ "$jcb_pg_group" = identity_fence ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_identity_fence.py)
   else
     jcb_pg_scripts=(tests/phase2/postgres_youtube_policy_acceptance.py)
   fi

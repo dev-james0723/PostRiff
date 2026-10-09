@@ -318,12 +318,20 @@ service.youtube._cache(foreign, conn, 'private-test', {'secretCreatorData': 'oth
 # A distinct Brand Channel ID cannot prove that Google project/account revocation is isolated.
 with connection() as db:
     db.execute("UPDATE public.pr_encrypted_credentials SET provider_account_id=%s WHERE workspace_id=%s AND connection_id=%s", ('UC' + 'b' * 22, foreign, conn))
+    original_actions = {identifier: (original_digest, manifest.get('inputs')) for identifier, original_digest, manifest in db.execute(
+        'SELECT id::text,manifest_digest,manifest FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchall()}
 disconnected = service.oauth.disconnect(wid, 'one', conn)
 assert disconnected['disconnected'] and disconnected['remoteRevoked'] is False and disconnected['remoteRevocationDeferred'] is True and google.revocations == 0
 with connection() as db:
     db.execute("UPDATE public.pr_encrypted_credentials SET provider_account_id=%s WHERE workspace_id=%s AND connection_id=%s", (CHANNEL, foreign, conn))
     assert db.execute('SELECT count(*) FROM public.pr_youtube_cache WHERE workspace_id=%s', (wid,)).fetchone()[0] == 0
-    assert db.execute('SELECT count(*) FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchone()[0] == 0
+    erased_actions = db.execute('SELECT id::text,manifest_digest,manifest,status,receipt,secret_ciphertext,secret_key_id,user_inputs FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchall()
+    assert len(erased_actions) == len(original_actions) > 0
+    for identifier, original_digest, manifest, status, receipt, ciphertext, key_id, inputs in erased_actions:
+        assert (original_digest, inputs) == original_actions[identifier]
+        assert status == 'privacy_erased' and manifest.get('privacyErased')
+        assert set(manifest) == {'schema', 'action', 'privacyErased', 'privacyErasedAt'}
+        assert receipt is None and ciphertext is None and key_id is None
     assert db.execute('SELECT count(*) FROM public.pr_youtube_cache WHERE workspace_id=%s', (foreign,)).fetchone()[0] >= 1
     db.execute("UPDATE public.pr_encrypted_credentials SET access_expires_at=now()-interval '1 second' WHERE workspace_id=%s AND connection_id=%s", (foreign, conn))
 google.fail_refresh = True

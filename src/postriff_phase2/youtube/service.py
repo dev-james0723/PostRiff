@@ -213,13 +213,15 @@ class YouTubeCreatorService:
         provider = self.oauth.provider_for_grant(grant)
         return YouTubeApi(provider, grant, channel, clock=self.clock, account_usage=self.account_usage(workspace, connection, provider),
                           chat_resource=lambda kind, ident, chat: self.chat_resource(workspace, connection, kind, ident, chat),
-                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method, expected_access_token=grant['accessToken']),
+                          on_error=lambda error, method: self.operational_error(workspace, connection, error, method,
+                              expected_access_token=grant['accessToken'], expected_generation=grant.get('authorizationGeneration')),
                           before_request=lambda: self.journal.assert_authorized(workspace, connection, grant.get('authorizationGeneration')))
 
-    def operational_error(self, workspace, connection, error, method, *, expected_access_token=None):
+    def operational_error(self, workspace, connection, error, method, *, expected_access_token=None, expected_generation=None):
         category = getattr(error, 'category', None) or getattr(error, 'code', '')
         if category in ('revoked_oauth', 'youtube_revoked_oauth'):
-            self.oauth.mark_youtube_revoked(workspace, connection, expected_access_token=expected_access_token)
+            self.oauth.mark_youtube_revoked(workspace, connection, expected_access_token=expected_access_token,
+                                           expected_generation=expected_generation)
             return
         if category not in ('quota', 'upload_limit', 'channel_restriction', 'project_restriction', 'capacity_delay',
                             'youtube_oauth_binding_required', 'youtube_oauth_binding_changed'):
@@ -647,7 +649,7 @@ class YouTubeCreatorService:
             result = cur.fetchone()
             if not result:
                 raise AlphaError('This operation key already has a review or result. Open its existing receipt.', 409, code='youtube_idempotency_conflict')
-            audit(cur, workspace, actor, 'youtube.action_prepared', result[0], {'action': action, 'channelId': channel, 'digest': digest, 'destructive': destructive})
+            audit(cur, workspace, actor, 'youtube.action_prepared', result[0], {'action': action, 'connectionId': connection, 'digest': digest, 'destructive': destructive})
         return {'id': result[0], 'digest': digest, 'manifest': redacted(manifest), 'executed': False,
                 'confirmationTarget': plan.get('targetId') or inputs.get('id') or inputs.get('videoId') or inputs.get('liveChatId')}
 
@@ -661,6 +663,8 @@ class YouTubeCreatorService:
             if not saved:
                 raise AlphaError('Creator action unavailable.', 404)
             manifest, digest, status, receipt, owner = saved
+            if status == 'privacy_erased' or manifest.get('privacyErased'):
+                raise AlphaError('This action contains erased YouTube API data. Prepare and approve a new operation.', 409, code='youtube_privacy_erased')
             require(_membership(row), 'owner' if manifest['eligibilityProbe'] else requirement(manifest['action']))
             if manifest['destructive'] or manifest['eligibilityProbe']:
                 self.repository.assert_fresh(token, actor)
@@ -684,8 +688,9 @@ class YouTubeCreatorService:
             throttle(cur, 'youtube-write:' + workspace + ':' + connection, 20, 60)
             # Committed intent fences duplicate submits, including destructive operations.
             cur.execute("UPDATE public.pr_youtube_actions SET status='started',updated_at=now() WHERE id::text=%s", (action_id,))
-            audit(cur, workspace, actor, 'youtube.action_approved', action_id, {'action': manifest['action'], 'digest': digest, 'destructive': manifest['destructive']})
+            audit(cur, workspace, actor, 'youtube.action_approved', action_id, {'action': manifest['action'], 'connectionId': connection, 'digest': digest, 'destructive': manifest['destructive']})
         remote_accepted = False
+        api = None
         try:
             _, channel, state = self._member(workspace, token, connection, requirement(manifest['action']))
             if channel != manifest['channelId']:
@@ -715,7 +720,10 @@ class YouTubeCreatorService:
                        'actionId': action_id, 'approvalDigest': digest,
                        'result': redacted(result), 'execution': 'real' if api.provider.real_transport else 'transport-injected'}
             with self.service.connection_factory() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_youtube_actions SET status='accepted',receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s", (json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
+                self.journal.assert_authorized(workspace, connection, api.grant.get('authorizationGeneration'), cursor=cur, locked=True)
+                cur.execute("UPDATE public.pr_youtube_actions SET status='accepted',receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s AND privacy_erased_at IS NULL", (json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
+                if not cur.rowcount:
+                    return {'id': action_id, 'status': 'privacy_erased', 'receipt': None, 'dataRemoved': True, 'retried': False}
             try:
                 verification = self.verify_action(api, plan, result)
             except AlphaError as error:
@@ -727,8 +735,11 @@ class YouTubeCreatorService:
                        'actionId': action_id, 'approvalDigest': digest,
                        'result': redacted(result), 'verification': verification, 'execution': 'real' if api.provider.real_transport else 'transport-injected'}
             with self.service.connection_factory() as db, db.cursor() as cur:
-                cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
-                audit(cur, workspace, actor, 'youtube.action_result', action_id, {'action': manifest['action'], 'status': status, 'resourceId': result.get('id') if isinstance(result, dict) else None})
+                self.journal.assert_authorized(workspace, connection, api.grant.get('authorizationGeneration'), cursor=cur, locked=True)
+                cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,secret_ciphertext=%s,secret_key_id=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s AND privacy_erased_at IS NULL', (status, json.dumps(receipt), ciphertext, key_id, workspace, connection, action_id))
+                if not cur.rowcount:
+                    return {'id': action_id, 'status': 'privacy_erased', 'receipt': None, 'dataRemoved': True, 'retried': False}
+                audit(cur, workspace, actor, 'youtube.action_result', action_id, {'action': manifest['action'], 'status': status, 'connectionId': connection})
             if manifest['eligibilityProbe'] and api.provider.real_transport:
                 self.record_eligibility(workspace, connection, channel, ACTION_CAPABILITY[manifest['action']], result.get('id') or plan.get('targetId'))
             return {'id': action_id, 'status': status, 'receipt': receipt}
@@ -738,8 +749,14 @@ class YouTubeCreatorService:
             receipt = {'category': getattr(error, 'category', getattr(error, 'code', 'creator_operation_failed')), 'message': str(error) if isinstance(error, AlphaError) else 'Remote outcome is unknown.', 'retriableAutomatically': False,
                        'actionId': action_id, 'approvalDigest': digest}
             with self.service.connection_factory() as db, db.cursor() as cur:
-                cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), workspace, connection, action_id))
-                audit(cur, workspace, actor, 'youtube.action_result', action_id, {'action': manifest['action'], 'status': status, 'category': receipt['category']})
+                if api is not None:
+                    self.journal.assert_authorized(workspace, connection, api.grant.get('authorizationGeneration'), cursor=cur, locked=True)
+                else:
+                    cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE', (workspace,))
+                cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s AND privacy_erased_at IS NULL', (status, json.dumps(receipt), workspace, connection, action_id))
+                if not cur.rowcount:
+                    return {'id': action_id, 'status': 'privacy_erased', 'receipt': None, 'dataRemoved': True, 'retried': False}
+                audit(cur, workspace, actor, 'youtube.action_result', action_id, {'action': manifest['action'], 'status': status, 'category': receipt['category'], 'connectionId': connection})
             return {'id': action_id, 'status': status, 'receipt': receipt}
 
     def actions(self, workspace, token, connection):
@@ -757,7 +774,7 @@ class YouTubeCreatorService:
             if not row or not row[0]:
                 raise AlphaError('Stream configuration unavailable.', 404)
             secret = self.oauth.vault.decrypt(row[0], row[1])
-            audit(cur, workspace, actor, 'youtube.stream_secret_viewed', action_id)
+            audit(cur, workspace, actor, 'youtube.stream_secret_viewed', action_id, {'connectionId': connection})
         return {'streamKey': secret, 'sensitive': True}
 
     def stream_configuration(self, workspace, token, connection, stream_id):
@@ -769,7 +786,7 @@ class YouTubeCreatorService:
         stream = api.owned('liveStreams', resource_id(stream_id, 'resource'))
         from ..hosted import audit
         with self.service.connection_factory() as db, db.cursor() as cur:
-            audit(cur, workspace, actor, 'youtube.stream_secret_viewed', stream_id)
+            audit(cur, workspace, actor, 'youtube.stream_configuration_viewed', str(uuid.uuid4()), {'connectionId': connection})
         return {'streamId': stream_id, 'cdn': stream.get('cdn'), 'sensitive': True, 'source': 'YouTube Live Streaming API'}
 
     def upload_recovery(self, workspace, token, connection, operation_key, body=None):
@@ -817,7 +834,7 @@ class YouTubeCreatorService:
                 latest_job['youtubeRecoveryApproval'] = {'approvedBy': actor, 'digest': job['approvalDigest'],
                     'approvedAt': self.clock(), 'expiresAt': self.clock() + 36 * 3600}
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(latest), workspace))
-                audit(cur, workspace, actor, 'youtube.upload_resumed', job['id'], {'operationKey': operation_key, 'videoId': saved.get('videoId')})
+                audit(cur, workspace, actor, 'youtube.upload_resumed', job['id'], {'operationKey': operation_key, 'connectionId': connection})
             return {'status': saved['stage'], 'resumed': True, 'replacementUpload': False}
 
     def record_eligibility(self, workspace, connection, channel, capability, reference):
@@ -933,11 +950,16 @@ class YouTubeCreatorService:
             status = 'verified'
         from ..hosted import audit
         with self.service.connection_factory() as db, db.cursor() as cur:
-            cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), workspace, connection, action_id))
-            audit(cur, workspace, actor, 'youtube.action_reconciled', action_id, {'status': status})
+            self.journal.assert_authorized(workspace, connection, api.grant.get('authorizationGeneration'), cursor=cur, locked=True)
+            cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s AND privacy_erased_at IS NULL', (status, json.dumps(receipt), workspace, connection, action_id))
+            if not cur.rowcount:
+                return {'id': action_id, 'status': 'privacy_erased', 'receipt': None, 'dataRemoved': True, 'writeRepeated': False}
+            audit(cur, workspace, actor, 'youtube.action_reconciled', action_id, {'status': status, 'connectionId': connection})
         return {'id': action_id, 'status': status, 'receipt': receipt, 'writeRepeated': False}
 
     def worker_api(self, manifest):
+        if manifest.get('privacyErased'):
+            raise AlphaError('Erased YouTube approvals cannot dispatch provider operations.', 409, code='youtube_privacy_erased')
         api = self._api(manifest['workspaceId'], manifest['channelId'], manifest.get('providerAccountId'))
         raw_options = copy.deepcopy(manifest.get('publishOptions') or {})
         native_time = raw_options.pop('publishAt', None)
