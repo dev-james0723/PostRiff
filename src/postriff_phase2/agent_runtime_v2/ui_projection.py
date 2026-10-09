@@ -48,6 +48,15 @@ REF_JOURNEYS = {"draft": "J01", "post": "J01", "job": "J02", "review": "J02", "a
                 "voice_sample": "J04", "campaign": "J05", "source": "J07", "automation": "J08", "automation_run": "J08", "connection": "J08"}
 PROPOSAL_JOURNEYS = {"schedule_draft": "J02", "reschedule_post": "J02", "automation_change": "J08"}
 MAX_JOURNEYS = 3
+# D-A52: run-history reads. automation_get returns an automation's latest runs and automation_explain reads its stored run
+# history; each harvests a single automation reference, so without this a question about several runs was a "single fact"
+# although J08's manifest shows run history (automation_history → RunHistory). They count as a collection read only when
+# the person asked about runs or history, so a one-run "why didn't it publish?" stays a native answer.
+RUN_HISTORY_TOOLS = {"automation_get", "automation_explain"}
+_RUN_HISTORY = re.compile(
+    r"\bruns\b|\brun\s+history\b|\bhistory\b|\b(?:last|latest|recent|past|previous)\s+(?:\d+\s+|few\s+|couple\s+of\s+)?(?:automation\s+)?(?:runs?|times)\b"
+    r"|運行紀錄|运行记录|執行紀錄|执行记录|運行記錄|執行記錄|歷史|历史|最近幾次|最近几次|上幾次|上几次",
+    re.I)
 
 # Explicit UI intents (en / zh-Hant / zh-Hans). Word boundaries for Latin words; CJK words are matched as substrings.
 _UI_INTENT = re.compile(
@@ -72,6 +81,10 @@ def is_greeting_or_ack(text: str) -> bool:
 
 def wants_ui(text: str) -> bool:
     return bool(_UI_INTENT.search(text or ""))
+
+
+def asks_run_history(text: str) -> bool:
+    return bool(_RUN_HISTORY.search(text or ""))
 
 
 def detect_journeys(result: dict, request_text: str = "", *, scope: str = "workspace") -> list[str]:
@@ -133,7 +146,8 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
     activity = [a for a in result.get("toolActivity") or [] if isinstance(a, dict) and a.get("status") in ("verified", "unverified")]
     rich = (any(str(a.get("tool")) in COLLECTION_TOOLS for a in activity) or bool(result.get("pendingApprovals"))
             or any(isinstance(c, dict) and c.get("verified") for c in result.get("changedEntities") or [])
-            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2)
+            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2
+            or (asks_run_history(text) and any(str(a.get("tool")) in RUN_HISTORY_TOOLS for a in activity)))
     if rich:
         return {"eligible": True, "slot": "main", "reason": "rich_result", "journeyIds": journeys}
     return {**_NOT, "reason": "single_fact", "journeyIds": journeys}
@@ -213,6 +227,7 @@ def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
         out.append({"binding": "campaign_detail", "inputs": {"campaignId": by_type["campaign"][0]}})
     if "J08" in journeys and by_type.get("automation"):
         out.append({"binding": "automation_detail", "inputs": {"automationId": by_type["automation"][0]}})
+        out.append({"binding": "automation_history", "inputs": {"automationId": by_type["automation"][0]}})
     assets = [i for i in by_type.get("asset") or [] if re.match(r"^[0-9a-f]{32}$", i)]
     if "J03" in journeys and assets:
         out.append({"binding": "library_item", "inputs": {"assetId": assets[0]}})

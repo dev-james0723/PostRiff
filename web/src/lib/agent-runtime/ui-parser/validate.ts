@@ -155,6 +155,28 @@ function refsOf(node: ASTNode): Set<string> {
   return out;
 }
 
+/**
+ * Statements root never reaches (D-A52), in source order: the walk follows `Ref`/`RuntimeRef` from `root` the way
+ * lang-core's merge garbage-collects. `$state` statements are always kept, as the merge keeps them.
+ */
+export function unreachableStatements(list: readonly { id: string; ast: ASTNode }[]): string[] {
+  const byId = new Map(list.map((s) => [s.id, s.ast] as const));
+  if (!byId.has('root')) return [];
+  const reached = new Set<string>(['root']);
+  const queue = ['root'];
+  while (queue.length) {
+    const ast = byId.get(queue.pop() as string);
+    if (!ast) continue;
+    for (const name of refsOf(ast)) {
+      if (!reached.has(name) && byId.has(name)) {
+        reached.add(name);
+        queue.push(name);
+      }
+    }
+  }
+  return [...new Set(list.map((s) => s.id).filter((sid) => !sid.startsWith('$') && !reached.has(sid)))];
+}
+
 function isLiteral(node: ASTNode): boolean {
   switch (node.k) {
     case 'Str':
@@ -247,7 +269,7 @@ function validRequest(request: UiValidatorRequest): string | null {
  * Validate (and in patch mode merge) one candidate against one library and one manifest policy. `sha256` is injected so
  * the module stays free of Node-only imports.
  */
-export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLibrary, sha256: Sha256): UiValidationResult {
+export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLibrary, sha256: Sha256, prune = true): UiValidationResult {
   const invalid = validRequest(request);
   if (invalid) return rejected([invalid], lib);
   if (request.libraryHash !== lib.libraryHash) return rejected(['library_unsupported'], lib);
@@ -453,6 +475,25 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
   }
 
   if (errors.length) return { ...rejected(errors, lib), ...(removed ? { removedStatementIds: removed, replacedStatementIds: replaced } : {}) };
+  if (!patch && prune) {
+    // D-A52: a generated view's canonical source keeps only what root reaches. lang-core garbage-collects unreachable
+    // statements in every later merge, so an orphan left in a base made the person's next edit fail the deletion guard
+    // (`unexplained_deletion` for statements nobody saw). Every check above already ran on the full candidate; the pruned
+    // program is validated again and used only if it is accepted, so no candidate is accepted that was not before.
+    const orphans = unreachableStatements(statements);
+    if (orphans.length) {
+      let pruned: string | null = null;
+      try {
+        pruned = mergeStatements(merged, orphans.map((sid) => `${sid} = null`).join('\n'), 'root').trim();
+      } catch {
+        pruned = null;
+      }
+      if (pruned) {
+        const again = validateCandidate({ ...request, candidateSource: pruned }, lib, sha256, false);
+        if (again.accepted && again.canonicalSource && unreachableStatements(statementsOf(again.canonicalSource)).length === 0) return again;
+      }
+    }
+  }
   return {
     accepted: true,
     canonicalSource: merged,

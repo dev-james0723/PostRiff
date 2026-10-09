@@ -276,3 +276,65 @@ test('validation performs no network or tool execution', () => {
   }
   assert.equal(calls, 0);
 });
+
+// --- D-A52: a generated view's canonical source keeps only what root reaches (run 3: J08-edit unexplained_deletion×5) ----
+const { statementsOf, unreachableStatements } = loader.load('src/lib/agent-runtime/ui-parser/validate.ts');
+const ORPHANED = [
+  'root = RafiiRoot([table], "Recent drafts")',
+  '$platform = "all"',
+  'drafts = Query("drafts_list", {platform: $platform}, null)',
+  'table = ToolBoundTable(drafts, [{field: "title", label: "Draft"}], null, null, "drafts")',
+  'summary = Query("analytics_summary", {}, null)',
+  'reach = Metric(summary, "totals.reach", "Reach", "number")',
+  'note = Text("Nobody lists this.", "muted")',
+].join('\n');
+const ids = (source) => statementsOf(source).map((s) => s.id);
+
+test('generate: statements root never reaches are pruned from the canonical source; state and reachable ones stay (D-A52)', () => {
+  assert.deepEqual(unreachableStatements(statementsOf(ORPHANED)), ['summary', 'reach', 'note']);
+  const result = validate(ORPHANED);
+  assert.equal(result.accepted, true, JSON.stringify(result.errors));
+  assert.deepEqual(ids(result.canonicalSource), ['root', '$platform', 'drafts', 'table']);
+  assert.equal(result.sourceHash, sha(result.canonicalSource));
+  assert.deepEqual(result.queryNames, ['drafts_list'], 'an orphan Query is not part of the view');
+  assert.deepEqual(result.stateNames, ['$platform']);
+  // A program without orphans is unchanged by the rule.
+  assert.equal(validate(GOOD).canonicalSource, GOOD);
+});
+
+test('generate: an orphan still has to pass every rule; pruning never accepts what was rejected (D-A52)', () => {
+  const denied = validate(`${ORPHANED}\nextra = Query("billing_export", {}, null)`);
+  assert.equal(denied.accepted, false);
+  assert.ok(hasCode(denied, 'query_binding_denied'), JSON.stringify(denied.errors));
+  const bad = validate(`${ORPHANED}\nghost = Hologram("x")`);
+  assert.equal(bad.accepted, false);
+  const dup = validate(`${ORPHANED}\nnote = Text("again", "muted")`);
+  assert.ok(hasCode(dup, 'duplicate_statement'), JSON.stringify(dup.errors));
+});
+
+test('patch: orphans in a stored base are unexplained deletions on any edit; the pruned canonical base edits cleanly (D-A52)', () => {
+  // The mechanism behind run 3's J08-edit (edit and repair both unexplained_deletion×5): lang-core's merge garbage-collects
+  // unreachable statements, and the deletion guard cannot explain a removal no parent ever made.
+  const edit = 'drafts = Query("drafts_list", {platform: "threads"}, null)';
+  const raw = validate(edit, { mode: 'patch', baseSource: ORPHANED });
+  assert.equal(raw.accepted, false);
+  assert.deepEqual(raw.errors.filter((e) => e.startsWith('unexplained_deletion:')).sort(),
+    ['unexplained_deletion:note', 'unexplained_deletion:reach', 'unexplained_deletion:summary']);
+  // The guard itself is unchanged: removing them on purpose is accepted.
+  const explicit = validate(`${edit}\nsummary = null\nreach = null\nnote = null`, { mode: 'patch', baseSource: ORPHANED });
+  assert.equal(explicit.accepted, true, JSON.stringify(explicit.errors));
+  // A base stored after this change has no orphans, so the same edit is accepted first time.
+  const base = validate(ORPHANED).canonicalSource;
+  const clean = validate(edit, { mode: 'patch', baseSource: base });
+  assert.equal(clean.accepted, true, JSON.stringify(clean.errors));
+  assert.deepEqual(clean.removedStatementIds, []);
+  assert.ok(clean.canonicalSource.includes('{platform: "threads"}'));
+});
+
+test('query arguments: member access on a DateRange $variable is rejected, the whole $variable or literal dates are not (D-A52)', () => {
+  const view = (args) => validate(`root = RafiiRoot([t])\n$range = null\nrows = Query("drafts_list", ${args}, null)\nt = ToolBoundTable(rows, [{field: "title", label: "Draft"}], null, null, "drafts")`);
+  assert.ok(hasCode(view('{start: $range.start, end: $range.end}'), 'query_args_shape'));
+  assert.ok(hasCode(view('null'), 'query_args_shape'), 'a null arguments object is rejected');
+  assert.equal(view('{start: "2026-10-12", end: "2026-10-18"}').accepted, true);
+  assert.equal(view('{}').accepted, true);
+});

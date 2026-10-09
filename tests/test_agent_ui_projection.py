@@ -86,6 +86,28 @@ class EligibilityTest(unittest.TestCase):
         self.assertFalse(decided["eligible"])
         self.assertEqual(decided["reason"], "voice")
 
+    def test_a_question_about_runs_after_a_run_history_read_is_a_collection(self):
+        # Run 3 J08-b: "What happened in my last automation runs?" read run history through automation_explain/automation_get,
+        # which harvest one automation reference, so the turn was a "single fact" and no view (or "Build interactive view") was
+        # offered although J08 shows run history (automation_history → RunHistory). D-A52.
+        ref = [{"type": "automation", "id": "t_weekly_tips", "title": "Weekly tips"}]
+        for tool in ("automation_explain", "automation_get"):
+            for text in ("What happened in my last automation runs?", "Any problems in the run history?", "我最近幾次自動化發生咩事？", "最近几次运行记录"):
+                with self.subTest(tool=tool, text=text):
+                    decided = ui_projection.eligibility(result([(tool, "verified")], refs=ref), text, "text", flags=ON)
+                    self.assertTrue(decided["eligible"], decided)
+                    self.assertEqual((decided["reason"], decided["journeyIds"]), ("rich_result", ["J08"]))
+        # One run's "why" stays a native answer; a blocked read or another tool never qualifies by the words alone.
+        single = ui_projection.eligibility(result([("automation_explain", "verified")], refs=ref), "Why didn't my Tuesday post publish?", "text", flags=ON)
+        self.assertEqual((single["eligible"], single["reason"]), (False, "single_fact"))
+        blocked = ui_projection.eligibility(result([("automation_explain", "blocked")], refs=ref), "What happened in my last runs?", "text", flags=ON)
+        self.assertFalse(blocked["eligible"])
+        other = ui_projection.eligibility(result([("draft_get", "verified")], refs=[{"type": "draft", "id": "v1"}]), "what about the history?", "text", flags=ON)
+        self.assertEqual(other["reason"], "single_fact")
+        # Voice still needs a visual ask.
+        self.assertEqual(ui_projection.eligibility(result([("automation_get", "verified")], refs=ref), "what happened in my last runs", "voice", flags=ON)["reason"],
+                         "voice")
+
     def test_odd_input_never_raises(self):
         for odd in (None, "x", 3, {"toolActivity": "nope"}, {"composedBy": "manager", "usage": {"billing": "metered"}, "toolActivity": [None, 1]}):
             self.assertFalse(ui_projection.eligibility(odd, None, None, flags=ON)["eligible"])
@@ -114,6 +136,15 @@ class ProjectionTest(unittest.TestCase):
         self.assertTrue(all(ui_contracts.valid_name(n) for n in names))
         self.assertEqual(projection["egress_decision"]["allowed"], True)
         self.assertEqual(projection["egress_decision"]["provider"], "openai")
+
+    def test_an_automation_reference_suggests_its_detail_and_run_history(self):
+        r = result([("automation_explain", "verified")], refs=[{"type": "automation", "id": "t_weekly_tips", "title": "Weekly tips"}],
+                   ui={"eligible": True, "journeyIds": ["J08"]})
+        projection = ui_projection.project_ui_context(None, auth("owner"), r, "panel", None)
+        suggested = projection["allowed_context"]["suggestedInputs"]
+        self.assertIn({"binding": "automation_detail", "inputs": {"automationId": "t_weekly_tips"}}, suggested)
+        self.assertIn({"binding": "automation_history", "inputs": {"automationId": "t_weekly_tips"}}, suggested)
+        self.assertIn("automation_history", {b["name"] for b in projection["data_bindings"]}, "J08's manifest carries the run-history read")
 
     def test_unmetered_parent_turn_denies_presenter_egress(self):
         projection = ui_projection.project_ui_context(None, auth(), result([("draft_get", "verified")], billing="scripted", ui={"journeyIds": ["J01"]}), "chat", None)

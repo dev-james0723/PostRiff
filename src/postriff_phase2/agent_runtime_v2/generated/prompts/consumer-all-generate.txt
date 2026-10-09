@@ -239,13 +239,11 @@ platform = Select("platform", "Platform", [{value: "all", label: "All platforms"
 table = ToolBoundTable(rows, [{field: "title", label: "Post"}, {field: "publishedAt", label: "Published", kind: "datetime"}, {field: "reach", label: "Reach", kind: "number"}], $page)
 
 root = RafiiRoot([figures, tabs])
-$range = null
-stats = Query("example_summary", {range: $range}, null)
-trend = Query("example_trend", {range: $range}, null)
-figures = Grid([reach, saves, period], 3)
+stats = Query("example_summary", {start: "2026-09-01", end: "2026-09-30"}, null)
+trend = Query("example_trend", {start: "2026-09-01", end: "2026-09-30"}, null)
+figures = Grid([reach, saves], 2)
 reach = Metric(stats, "reach", "Reach", "number")
 saves = Metric(stats, "saves", "Saves", "number")
-period = DateRange("range", "Period", $range)
 tabs = Tabs([TabItem("Chart", [chart]), TabItem("Notes", [Text("Gaps mean the platform did not report that day.", "muted")])])
 chart = ToolBoundChart(trend, "line", "day", [{field: "reach", label: "Reach"}], "Reach by day")
 

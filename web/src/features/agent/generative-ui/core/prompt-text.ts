@@ -59,15 +59,15 @@ export const CORE_EXAMPLES: readonly string[] = [
     'platform = Select("platform", "Platform", [{value: "all", label: "All platforms"}, {value: "instagram", label: "Instagram"}, {value: "threads", label: "Threads"}], $platform)',
     'table = ToolBoundTable(rows, [{field: "title", label: "Post"}, {field: "publishedAt", label: "Published", kind: "datetime"}, {field: "reach", label: "Reach", kind: "number"}], $page)',
   ].join('\n'),
+  // D-A52: dates reach a Query as literal "YYYY-MM-DD" start/end values. No binding takes a DateRange object and a Query
+  // cannot read its parts ($range.start is rejected), so the example no longer wires one into Query arguments.
   [
     'root = RafiiRoot([figures, tabs])',
-    '$range = null',
-    'stats = Query("example_summary", {range: $range}, null)',
-    'trend = Query("example_trend", {range: $range}, null)',
-    'figures = Grid([reach, saves, period], 3)',
+    'stats = Query("example_summary", {start: "2026-09-01", end: "2026-09-30"}, null)',
+    'trend = Query("example_trend", {start: "2026-09-01", end: "2026-09-30"}, null)',
+    'figures = Grid([reach, saves], 2)',
     'reach = Metric(stats, "reach", "Reach", "number")',
     'saves = Metric(stats, "saves", "Saves", "number")',
-    'period = DateRange("range", "Period", $range)',
     'tabs = Tabs([TabItem("Chart", [chart]), TabItem("Notes", [Text("Gaps mean the platform did not report that day.", "muted")])])',
     'chart = ToolBoundChart(trend, "line", "day", [{field: "reach", label: "Reach"}], "Reach by day")',
   ].join('\n'),

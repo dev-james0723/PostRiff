@@ -44,6 +44,9 @@ class RealAssets(unittest.TestCase):
         self.assertEqual(plan.library_hash, self.assets.library(library)["libraryHash"])
         for query in manifest["queries"]:
             self.assertIn(f"- {query['name']}: ", plan.instructions)
+            # D-A52: every real binding carries its call line, generated from its argument schema.
+            self.assertIn(f"    call: {p.statement_name(query['name'])} = Query(\"{query['name']}\", {{", plan.instructions)
+            self.assertIn(" ".join(str(query.get("description") or "").split()), plan.instructions, f"{query['name']} description is whole")
             shape = p.data_shape(query)
             self.assertIsNotNone(shape, query["name"])
             for rows in (shape.get("lists") or {}):
@@ -61,6 +64,24 @@ class RealAssets(unittest.TestCase):
         for journey in contracts.CONSUMER_JOURNEYS:
             with self.subTest(journey=journey):
                 self.check(journey, "workspace", "consumer")
+
+    def test_no_registered_binding_description_is_cut(self):
+        from postriff_phase2.agent_runtime_v2 import ui_domain
+        for name, binding in ui_domain.QUERIES.items():
+            self.assertLessEqual(len(" ".join(binding.description.split())), p.DESCRIPTION_CHARS, name)
+
+    def test_j02_collision_contract(self):
+        # Run 3 J02-b "do any time slots collide?": the agenda answers it (data.derived.closeTogether); slot_check checks one proposed
+        # time and is empty until one is picked. Both descriptions now say so, whole (D-A52).
+        plan, _manifest = self.check("J02", "workspace", "consumer")
+        agenda = plan.instructions.split("- calendar_agenda: ", 1)[1].split("\n", 1)[0]
+        slot = plan.instructions.split("- slot_check: ", 1)[1].split("\n", 1)[0]
+        self.assertIn("collide", agenda)
+        self.assertIn("data.derived.closeTogether.pairs", agenda)
+        self.assertIn("ONE proposed local time", slot)
+        self.assertIn("for posts that already collide, use calendar_agenda", slot)
+        self.assertIn('call: calendarAgendaData = Query("calendar_agenda", {}, null)', plan.instructions)
+        self.assertIn('optional keys: start "YYYY-MM-DD"; end "YYYY-MM-DD"; zone "Area/City"', plan.instructions)
 
     def test_founder_journey_uses_the_founder_library_and_is_read_only(self):
         plan, manifest = self.check("J09", "founder", "founder")
