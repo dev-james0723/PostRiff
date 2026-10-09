@@ -24,3 +24,14 @@ Desktop WebKit (Playwright) is recorded separately and does not satisfy this cas
 - A short screen recording (iOS Control Centre), or one screenshot per step.
 - Device model, iOS version, date/time and the candidate SHA shown in the receipt.
 - Pass or fail per step. Any failed step keeps A066 FAILED until it is fixed and re-run on the same candidate.
+
+## Alternative without the LAN dev pair (2026-10-09)
+
+The Vercel preview of PR #144 runs the candidate against the staging Supabase project. Migration 104 is applied there, and every Library flag is off, as in production.
+
+- James opens the preview on his iPhone through a Vercel share link from the release session. The link is never committed: the repository is public.
+- He signs in with his staging account.
+- Record the candidate SHA from `/api/health` (`sourceRevision`).
+- Run steps 2, 3 and 5 to 8 as written above.
+- Step 4 ("why it matched") and **Save moment** need the retrieval flags, which stay off unless a branch-scoped preview flag is approved.
+- Use synthetic files only.

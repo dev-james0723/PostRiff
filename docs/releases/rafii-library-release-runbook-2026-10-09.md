@@ -21,6 +21,30 @@ James approved a **full release** on 2026-10-09: migration 104 to staging, then 
 | Production | `buoyhkbodnhzngaotoel` (postriff-phase2-private, PG 17) | universal_library, _lifecycle, _storage, _duplicate_index (093–096); 097, 098, 102, 103 |
 | Staging | `oxacvkhpfgytkepxcaqh` (rafii-consumer-staging, PG 17) | 093 plus the verified lifecycle and storage releases; `duplicate_of` present. The 104 columns are absent. `vector` 0.8.2 is available but not installed. |
 
+## Staging result (2026-10-09, done)
+
+- Steps 1 to 5 ran on staging `oxacvkhpfgytkepxcaqh`.
+  - `vector` was installed in `extensions`.
+  - 104 applied: 18 tables with RLS enabled and forced, a `service_only` policy each, no anon or authenticated select.
+  - The new asset and collection columns exist. `embedding vector` exists, with both HNSW indexes.
+  - All 32 existing asset rows kept the safe defaults.
+- Security advisors: no Library finding. The remaining findings predate 104: credit tables without policies, `pg_trgm` in public, leaked-password protection.
+- Performance advisors: INFO only.
+  - The new indexes show as unused, because the tables are empty and the flags off.
+  - Two foreign keys lack a covering index: `pr_library_metrics.workspace_id` and `pr_library_source_packs.workspace_id`. Both are low-volume; follow-up.
+- Vercel previews of this branch use staging Supabase with every `RAFII_LIBRARY_*` flag unset, so a preview is a staging canary of the release.
+- Preview `n7pm4glu4` (`dpl_H7rpmxuNaZrd1Pyx2URcFyWUESgC`, code head `7737d63c`):
+  - `/api/health` returns `ok` with `sourceRevision` `7737d63c`.
+  - `/api/catalog` returns 200.
+  - `/app/library` redirects to sign-in (200).
+  - No error or warning runtime logs.
+  - A signed-in smoke needs James's staging account.
+- Production read-only probe (2026-10-09):
+  - 093–096 are applied and `duplicate_of` is present.
+  - The `(workspace_id, id)` key on collections exists.
+  - `vector` 0.8.2 is available but not installed.
+  - 104 is absent; there are 48 asset rows.
+
 ## Steps
 
 Run every step on staging first, then repeat it on production.
