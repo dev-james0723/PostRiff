@@ -194,6 +194,8 @@ def handle(app, environ, start_response, service, token, method, parts):
                 return json_(200, coworker.overlays_view(workspace_id, token))
             if tail == ["export"] and method == "GET":
                 return json_(200, coworker.overlays_export(workspace_id, token))
+            if tail == ["preview"] and method == "POST":
+                return json_(200, coworker.overlays_preview(workspace_id, token, body().get("scope")))
             if tail == ["notes"] and method == "POST":
                 return json_(201, coworker.overlay_note(workspace_id, token, body()))
             if len(tail) == 2 and tail[0] == "notes" and method == "PATCH":

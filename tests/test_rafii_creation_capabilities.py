@@ -435,6 +435,40 @@ class CampaignChainTest(FlagIsolation):
         self.assertEqual(package["manifest"][0]["formatId"], "instagram.carousel")
 
 
+class LearningEvidenceTest(FlagIsolation):
+    """A33–A35 at unit level (real database: tests/phase2/postgres_coworker.py CS05)."""
+
+    def test_variant_join_keeps_definitions_and_never_zero_fills(self):
+        from postriff_phase2.coworker import performance
+        variant = {"id": "v1", "platform": "Instagram", "language": "en", "format": "instagram.carousel", "text": "a\n\nb"}
+        cc.attach_native([variant], bindings=[], omissions=[])
+        state = {"variants": [variant], "phase2": {"jobs": [
+            {"id": "j1", "state": "verified", "providerReference": "p1", "manifest": {"variantId": "v1"}},
+            {"id": "j2", "state": "verified", "providerReference": "p2", "manifest": {"variantId": "gone"}},
+            {"id": "j3", "state": "failed", "providerReference": "p3", "manifest": {"variantId": "v1"}}]}}
+        posts = [
+            {"jobId": "j1", "publishedState": "verified", "providerPostId": "p1", "provider": "instagram", "platform": "Instagram", "connectionId": "c1", "language": "en",
+             "freshness": {"observedAt": 100.0}, "rates": {}, "metrics": {"likes": {"value": 4.0, "definitionVersion": "v3", "readOffset": "24h"}}},
+            {"jobId": "j2", "publishedState": "verified", "providerPostId": "p2", "provider": "instagram", "freshness": {"observedAt": 100.0}, "metrics": {}},
+            {"jobId": "j3", "publishedState": "failed", "providerPostId": "p3", "provider": "instagram", "freshness": {"observedAt": 100.0}, "metrics": {}}]
+        with mock.patch.object(performance.insights, "summary", return_value={"posts": posts}):
+            out = performance.variant_evidence(None, "w", state, now=100.0 + 8 * 86400)
+        self.assertEqual(len(out["variants"]), 1)
+        row = out["variants"][0]
+        self.assertEqual(row["formatId"], "instagram.carousel")
+        self.assertEqual(row["metrics"]["likes"]["state"], "stale")
+        self.assertEqual(row["metrics"]["reach"], {"value": None, "state": "not_reported", "definitionVersion": None, "window": None, "provider": "instagram"})
+        self.assertEqual(out["unlinkedVerifiedPosts"], 1)
+        self.assertFalse(out["rules"]["causal"])
+
+    def test_learning_summary_keeps_three_kinds_apart(self):
+        from postriff_phase2.coworker import performance
+        summary = performance.learning_summary({}, [{"id": "h1", "statement": "Shorter posts may reach more people", "causal": False, "status": "candidate"}])
+        self.assertEqual(summary["preferences"], [])
+        self.assertEqual(summary["hypotheses"][0]["causal"], False)
+        self.assertIn("not proven", summary["labels"]["hypotheses"])
+
+
 class PackReviewTest(FlagIsolation):
     """A17 (automated part): no shipped channel adapter or shared playbook demands hashtag quotas, promises reach, or
     tells the writer to invent experience. Editorial quality itself still needs the human/paired review."""

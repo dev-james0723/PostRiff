@@ -927,6 +927,8 @@ class CoworkerService:
     def hypothesis_decide(self, workspace_id, token, hypothesis_id, decision, *, expected_support=None):
         """Owner review in the existing strategy store; no automatic voice change."""
         self._require("RAFII_PERFORMANCE_LEARNING_ENABLED")
+        if decision == "undo":
+            return self._hypothesis_undo(workspace_id, token, hypothesis_id)
         accept = decision == "accepted"
         if decision not in ("experiment", "dismissed", "rejected") and not accept:
             raise AlphaError("Choose experiment, dismissed or rejected.", 400)
@@ -984,6 +986,37 @@ class CoworkerService:
         if stored is None:
             raise AlphaError("Hypothesis unavailable.", 404)
         return {"id": hypothesis_id, "status": stored[0], "causal": stored[1], "verified": bool(changed) and stored[0] == decision}
+
+    def _hypothesis_undo(self, workspace_id, token, hypothesis_id):
+        """Owner: undo a decision (experiment, dismiss, reject or an accepted planning use) while the hypothesis is still
+        current. It returns to candidate with its evidence intact; nothing else that learning touched is changed."""
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from ..permissions import require
+            require(self.hosted.ideas._member(row), "owner")
+            cur.execute("""UPDATE public.pr_strategy_hypotheses SET status='candidate', decided_by=%s, decided_at=now(),
+                           experiment=(coalesce(experiment,'{}'::jsonb) - 'planningAccepted') || jsonb_build_object('undoneAt', extract(epoch from now()))
+                           WHERE id::text=%s AND workspace_id=%s AND status IN ('experiment','dismissed','rejected','supported') AND expires_at>now()
+                           RETURNING status""", (principal, hypothesis_id, workspace_id))
+            changed = cur.fetchone()
+            from ..hosted import audit
+            audit(cur, workspace_id, principal, "hypothesis.undone", hypothesis_id, {})
+            cur.execute("SELECT status, causal FROM public.pr_strategy_hypotheses WHERE id::text=%s AND workspace_id=%s", (hypothesis_id, workspace_id))
+            stored = cur.fetchone()
+        if stored is None:
+            raise AlphaError("Hypothesis unavailable.", 404)
+        return {"id": hypothesis_id, "status": stored[0], "causal": stored[1], "verified": bool(changed) and stored[0] == "candidate"}
+
+    def overlays_preview(self, workspace_id, token, scope):
+        """Preview what learning would add to a writer's instructions for one scope, before accepting anything. Reads only
+        this workspace's own items; protected policy is never part of an overlay."""
+        self._require("RAFII_ADAPTIVE_SKILLS_ENABLED")
+        state = self._state(workspace_id, token)
+        scope = scope if isinstance(scope, dict) else {}
+        view = overlays.effective_view(state, {"platforms": [p for p in scope.get("platforms") or [] if isinstance(p, str)][:6],
+                                               "locales": [l for l in scope.get("locales") or [] if isinstance(l, str)][:6],
+                                               "contentType": scope.get("contentType")}, cloud_allowed=True, now=self.clock())
+        return {"text": view["text"], "items": [{k: i.get(k) for k in ("id", "memoryType", "origin", "scope", "confidence")} for i in view.get("items") or []],
+                "revisions": view.get("revisions"), "changesNothing": True}
 
     # === Listening + engagement (WP9) =============================================================================================
     def listening_view(self, workspace_id, token):

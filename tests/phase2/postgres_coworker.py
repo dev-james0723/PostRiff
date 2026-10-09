@@ -754,6 +754,42 @@ def _():
             and decided["verified"] and voice_untouched), {"cron": result, "statement": hypothesis and hypothesis["statement"], "confidence": hypothesis and hypothesis["confidence"]}
 
 
+@scenario("CS05", "content_skills", "results join the verified post to the draft that produced it (format, skill route, metric definition, window); unavailable stays unavailable; a mismatched observation never joins; learning stays separated and an owner can undo a decision")
+def _():
+    draft = next(v for v in state()["variants"] if v.get("platform") == "LinkedIn" and v.get("native"))
+    def seed(s, actor):
+        s["phase2"]["jobs"].append({"id": "cs-job-1", "state": "verified", "providerReference": "li-post-1", "approvedAt": clock[0] - 3600,
+                                    "manifest": {"channelId": LI, "platform": "LinkedIn", "variantId": draft["id"], "payload": {"text": draft["text"], "language": draft["language"]},
+                                                 "timing": {"timestamp": clock[0] - 3600}}, "events": [], "attempts": []})
+        return s
+    command(seed)
+    with connection() as db:
+        db.execute("""INSERT INTO pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at)
+                      VALUES(%s,%s,'linkedin','li-post-1','cs-job-1','impressions','2026-10',321,'count','available',now()),
+                            (%s,%s,'linkedin','li-post-1','cs-job-1','likes','2026-10',NULL,'count','unavailable',now()),
+                            (%s,%s,'linkedin','someone-else','cs-job-1','impressions','2026-10',999,'count','available',now())""", (wid, LI, wid, LI, wid, TH))
+    view = service.coworker.performance_view(wid, OWNER)
+    rows = [r for r in view["contentSkills"]["variants"] if r["variantId"] == draft["id"]]
+    row = rows[0] if rows else {}
+    metrics = row.get("metrics") or {}
+    hypothesis = next((h for h in view["hypotheses"] if h["dimension"] == "opening"), None)
+    try:
+        service.coworker.hypothesis_decide(wid, EDITOR, hypothesis["id"], "undo")
+        editor = "undone"
+    except AlphaError as error:
+        editor = error.status
+    undone = service.coworker.hypothesis_decide(wid, OWNER, hypothesis["id"], "undo")
+    learning = view["learning"]
+    preview = service.coworker.overlays_preview(wid, OWNER, {"platforms": ["LinkedIn"]})
+    return (len(rows) == 1 and row["formatId"] == "linkedin.post" and row["skillRoute"]["qualified"] is True
+            and metrics.get("impressions", {}).get("value") == 321 and metrics["impressions"]["definitionVersion"] == "2026-10"
+            and metrics.get("likes", {}).get("value") is None and metrics["likes"]["state"] == "unavailable"
+            and row["distribution"]["paidPromotion"] == "unknown" and view["contentSkills"]["rules"]["causal"] is False
+            and set(learning) >= {"preferences", "hypotheses", "labels"} and all(h["causal"] is False for h in learning["hypotheses"])
+            and editor == 403 and undone["verified"] and undone["status"] == "candidate" and preview["changesNothing"]), {
+        "row": {k: row.get(k) for k in ("formatId", "coverage", "provider")}, "undo": undone, "editor": editor}
+
+
 # === A / G / L ==============================================================================================================
 @scenario("A01", "attention", "“What needs my attention?” is ordered by fixed rules, explains why, respects the person's permissions and never makes engagement urgent")
 def _():
