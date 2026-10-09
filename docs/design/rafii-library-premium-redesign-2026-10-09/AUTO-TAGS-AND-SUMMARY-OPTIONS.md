@@ -38,9 +38,7 @@ Run locally on `11_Full_20min_Teaching_Script.pdf` (18 pages):
 - On your teaching script it produced: leading-tone seventh chords, minor, a-flat, diminished, major.
 
 
-1. **Now, free:** make the existing extractive output honest and useful.
-   - Key phrases appear as **suggested tags** the person accepts with one tap. They are never written into their tags silently.
-   - A **"From the file"** sentence is shown, never called an AI summary.
+1. **Free layer (built, see above).** James asked for tags to appear automatically, so they do; they never overwrite tags a person set, and they stay visibly marked as automatic.
 2. **AI layer:** choose A (no vendor, no quota, more engineering) or C (fastest, needs a free Cloudflare account and token; stops at the daily quota and falls back to step 1).
    - Every result is labelled as a model suggestion.
    - Every result is cached by content hash, so each file is analysed once.
