@@ -17,6 +17,8 @@ import psycopg
 from postriff_phase2.youtube.capacity import CapacityPolicy, CapacityController
 from postriff_phase2.youtube.model import YouTubeError
 from postriff_phase2.hosted_worker import PostgresWorker
+from postriff_phase2.youtube import privacy_erasure, workspace_provider_data
+from postriff_alpha.domain import AlphaError
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 PROJECT = 'synthetic-capacity-' + str(uuid4())
@@ -54,6 +56,38 @@ def reserve(index):
 
 
 try:
+    # Retain actual cleanup tombstones in PostgreSQL without treating them as
+    # pending work. Retryable holds still consume admission; no history is cut.
+    history = []
+    for index in range(40):
+        saved = {'id': 'retained-' + str(index), 'state': 'verified',
+                 'approvalDigest': 'original-' + str(index), 'approvedBy': 'synthetic-owner', 'approvedAt': NOW - 31 * 86400,
+                 'manifest': {'platform': 'YouTube', 'workspaceId': WORKSPACES[0],
+                              'channelId': 'synthetic-connection', 'payload': {'title': 'Submitted ' + str(index)}}}
+        if index < 20:
+            workspace_provider_data.scrub_job(saved, 'youtube_expired_data_removed', NOW)
+        else:
+            privacy_erasure.scrub_workspace({'phase2': {'jobs': [saved]}}, WORKSPACES[0], 'synthetic-connection', NOW)
+        history.append(saved)
+    capacity_state = {'phase2': {'jobs': history + [
+        {'id': 'current', 'state': 'approved', 'manifest': {'platform': 'YouTube'}}]}}
+    admission = CapacityController(connection, replace(policy, pending_per_workspace=2), clock=lambda: NOW)
+    with connection() as db:
+        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(capacity_state), WORKSPACES[0]))
+    with connection() as db:
+        persisted = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (WORKSPACES[0],)).fetchone()[0]
+        admission.assert_queue_capacity(persisted)
+        assert persisted == capacity_state and len(persisted['phase2']['jobs']) == 41
+        persisted['phase2']['jobs'].append({'id': 'retryable', 'state': 'held', 'manifest': {'platform': 'YouTube'}})
+        try:
+            admission.assert_queue_capacity(persisted)
+            raise AssertionError('Retryable held workflow bypassed queue admission')
+        except AlphaError as error:
+            assert error.code == 'youtube_queue_capacity'
+        admission.assert_queue_capacity(persisted, additional=0)
+        assert db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[0],)).fetchone()[0] == capacity_state
+        db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (WORKSPACES[0],))
+
     with ThreadPoolExecutor(max_workers=6) as pool:
         attempts = list(pool.map(reserve, range(12)))
     assert sum(ok for _, ok in attempts) == 5, attempts

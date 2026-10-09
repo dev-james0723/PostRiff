@@ -9,6 +9,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.youtube.capacity import CapacityPolicy, CapacityController, DEFAULT_LIMITS, budget_decision
 from postriff_phase2.youtube.model import YouTubeError
 from postriff_phase2.youtube.uploads import CHUNK_ALIGNMENT, CHUNK_SIZE, configured_chunk_size
+from postriff_phase2.youtube import privacy_erasure, workspace_provider_data
 import test_youtube_creator as creator_fixtures
 
 
@@ -71,6 +72,44 @@ class CapacityPolicyTests(unittest.TestCase):
         controller.assert_queue_capacity(state)
         state['phase2']['jobs'][0] = {'state': 'approved', 'manifest': {'platform': 'LinkedIn'}}
         controller.assert_queue_capacity(state)
+
+    def test_retained_erasure_history_does_not_exhaust_pending_admission(self):
+        controller = CapacityController(None, CapacityPolicy('synthetic', pending_per_workspace=2))
+        history = []
+        for index in range(40):
+            saved = {'id': f'history-{index}', 'state': 'verified', 'approvalDigest': f'original-{index}',
+                     'approvedBy': 'owner', 'approvedAt': 1,
+                     'manifest': {'platform': 'YouTube', 'workspaceId': 'workspace',
+                                  'channelId': 'connection', 'payload': {'title': f'Submitted {index}'}}}
+            if index < 20:
+                workspace_provider_data.scrub_job(saved, 'youtube_expired_data_removed', 2)
+            else:
+                privacy_erasure.scrub_workspace({'phase2': {'jobs': [saved]}}, 'workspace', 'connection', 2)
+            history.append(saved)
+        state = {'phase2': {'jobs': history + [{'id': 'current', 'state': 'approved',
+                                              'manifest': {'platform': 'YouTube'}}]}}
+        before = copy.deepcopy(state)
+        controller.assert_queue_capacity(state)
+        self.assertEqual(state, before)
+        self.assertEqual(len(state['phase2']['jobs']), 41)
+        state['phase2']['jobs'].append({'id': 'retryable', 'state': 'held', 'manifest': {'platform': 'YouTube'}})
+        with self.assertRaises(AlphaError) as denied:
+            controller.assert_queue_capacity(state)
+        self.assertEqual(denied.exception.code, 'youtube_queue_capacity')
+        controller.assert_queue_capacity(state, additional=0)
+
+    def test_only_canonical_permanent_held_markers_release_queue_slots(self):
+        controller = CapacityController(None, CapacityPolicy('synthetic', pending_per_workspace=1))
+        for marker in ('youtubeProviderDataRemoved', 'privacyErased'):
+            for value in (False, None, 1, 'true', {}, []):
+                state = {'phase2': {'jobs': [{'state': 'held', marker: value,
+                                            'manifest': {'platform': 'YouTube'}}]}}
+                with self.subTest(marker=marker, value=value), self.assertRaises(AlphaError):
+                    controller.assert_queue_capacity(state)
+            inconsistent = {'phase2': {'jobs': [{'state': 'approved', marker: True,
+                                               'manifest': {'platform': 'YouTube'}}]}}
+            with self.subTest(marker=marker, state='approved'), self.assertRaises(AlphaError):
+                controller.assert_queue_capacity(inconsistent)
 
     def test_chunks_are_aligned_and_memory_bounded(self):
         self.assertEqual(configured_chunk_size(), 8 * 1024 * 1024)
