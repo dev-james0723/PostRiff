@@ -23,7 +23,7 @@ ORDER = {"fail": 3, "blocked": 2, "unverified": 1, "pass": 0}
 def load(directory: Path) -> dict:
     """check name → list of (status, detail, source)."""
     results: dict = {}
-    for name in ("api-corpus.json", "validator-corpus.json", "e2e-chromium.json", "e2e-webkit.json"):
+    for name in ("contract-corpus.json", "api-corpus.json", "validator-corpus.json", "e2e-chromium.json", "e2e-webkit.json"):
         path = directory / name
         if not path.exists():
             continue

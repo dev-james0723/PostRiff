@@ -140,6 +140,13 @@ case "$mode" in
     start_stack || { record "$mode-stack" 1 0; exit 1; }
     run_py_corpus api_corpus api-corpus || failed=1
     run_py_corpus validator_corpus validator-corpus || failed=1
+    # The contract-layer negatives (no stack needed) are mapped to gates too: record them in this run so its gate
+    # records are complete (they also run in the unit step).
+    contract_status=0
+    AGENT_UI_EVIDENCE_DIR="$EVIDENCE" "$PY" -m agent_ui_acceptance.run_recorded test_agent_ui_acceptance_contract contract-corpus \
+      >"$EVIDENCE/contract-corpus.log" 2>&1 || contract_status=$?
+    if [ "$contract_status" -ne 0 ]; then tail -n 30 "$EVIDENCE/contract-corpus.log"; failed=1; fi
+    record contract-corpus "$contract_status" "$(grep -cE '\.\.\. (ok|FAIL|ERROR|skipped)' "$EVIDENCE/contract-corpus.log" || echo 0)"
     # 04-ACCEPTANCE bounded concurrency (1 / 5 / 20 sessions, fixture provider, loopback harness only): fails on any
     # cross-tenant read; per-session outcomes are evidence (a lane still blocked shows up as its status, not as a pass).
     RAFII_LIVE_CHECKS=1 "$PY" scripts/agent_ui_live.py concurrency --origin "http://127.0.0.1:$API_PORT" --levels 1,5,20 \

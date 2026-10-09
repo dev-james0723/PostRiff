@@ -58,7 +58,20 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
   // scene's own FAILURE (with diagnostics) and later scenes still try: one miss must never cascade into "blocked".
   if (t.shared.noRegion && !t.shared.regionSeen) blocked(t.shared.noRegion);
   const composer = await openPanel(t, page);
-  await page.evaluate(() => { window.__g = { mutations: 0, firstChildAt: null }; });
+  // One document-level observer installed BEFORE sending: it counts every change inside any generated region, so a region
+  // node that is replaced, or a stream that finishes before the region is located, is still measured (no per-node race).
+  await page.evaluate((sel) => {
+    window.__g = { mutations: 0, firstChildAt: null };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const el = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+        if (el && el.closest && el.closest(sel)) {
+          window.__g.mutations += 1;
+          if (!window.__g.firstChildAt && document.querySelector(`${sel} [data-genui]`)) window.__g.firstChildAt = performance.now();
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }, GENERATED);
   const startedAt = await page.evaluate(() => performance.now());
   await composer.fill(prompt);
   await composer.press('Enter');
@@ -87,12 +100,6 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
     t.shared.buildButtonNeeded = (t.shared.buildButtonNeeded || 0) + 1;
   }
   t.shared.regionSeen = true;
-  await page.evaluate((sel) => {
-    const nodes = document.querySelectorAll(sel);
-    const node = nodes[nodes.length - 1];
-    new MutationObserver(() => { window.__g.mutations += 1; if (!window.__g.firstChildAt && node.querySelector('*')) window.__g.firstChildAt = performance.now(); })
-      .observe(node, { childList: true, subtree: true, characterData: true });
-  }, `#rafii-panel ${GENERATED}`);
   if (wait === 'ready') await waitReady(page, timeout, t);
   return { region, startedAt };
 }
