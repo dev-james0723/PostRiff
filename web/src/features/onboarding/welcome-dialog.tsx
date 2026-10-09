@@ -21,7 +21,8 @@ const POINTS: { icon: keyof typeof Icons; text: string }[] = [
 export function WelcomeDialog({ open, onStart, onDismiss }: { open: boolean; onStart: () => void; onDismiss: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onDismiss()}>
-      <DialogContent className={cn(rafiiDialog, 'gap-5 sm:max-w-md')}>
+      {/* Never taller than the screen: on a landscape phone the dialog scrolls, so "Not now" can always be reached. */}
+      <DialogContent className={cn(rafiiDialog, 'max-h-[calc(100dvh-1.5rem)] gap-5 overflow-y-auto sm:max-w-md')}>
         <DialogHeader className='gap-1.5 pr-8'>
           <DialogTitle className='text-foreground text-xl font-medium tracking-tight'>
             Welcome to <em className='rafii-serif'>Rafii</em>
