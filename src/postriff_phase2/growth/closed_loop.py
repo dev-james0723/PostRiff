@@ -18,18 +18,69 @@ from .usage import MemoryUsageSink
 from .metric_schedule import enabled as metric_reads_enabled
 from .trends.beta import tracking
 
+OVERVIEW_TABLES=('pr_predictions','pr_postmortems','pr_creator_calibrations')
+AUDIENCE_TABLES=('pr_audience_clusters','pr_comment_judgments')
+ACTION_TABLES={'postmortem_lesson_approve':('pr_postmortems','pr_predictions','pr_genome_versions'),
+               'postmortem_dismiss':('pr_postmortems',),'audience_suggestion_create':AUDIENCE_TABLES,
+               'creator_calibration_propose':OVERVIEW_TABLES,'creator_calibration_approve':OVERVIEW_TABLES,
+               'creator_calibration_restore':OVERVIEW_TABLES}
+# Comments are read for owned posts on these platforms when the connection's comments_read is Direct.
+COMMENT_PLATFORMS={'Threads':'threads','Instagram':'instagram'}
 SUMMARY_MODEL='anthropic/claude-haiku-4.5'
 SUMMARY_ROUTE='cloud:vercel-ai-gateway:'+SUMMARY_MODEL
 ACTIONS=('postmortem_lesson_approve','postmortem_dismiss','audience_suggestion_create',
          'creator_calibration_propose','creator_calibration_approve','creator_calibration_restore')
 
 
-def collection_enabled(growth,workspace_id):
+HISTORY_LIMIT=100
+HISTORY_NOTICE=('Imported posts show one lifetime reading, taken at the post\'s age when it was read. They are not 1h, 24h '
+                'or 7d windows and are never used for reviews, comparisons, lessons or calibration.')
+_READ_STATES={'pending':'scheduled','claimed':'pending','unavailable':'unavailable','dead':'unavailable','cancelled':'unavailable','done':'unavailable'}
+
+
+def history_entry(post,read,observed):
+    """One imported post: a lifetime 'backfill' reading at its age at read time. A measured zero stays 0; a metric that
+    was not read stays None. `read` is (status, failure_class) of its backfill row; `observed` maps metric ->
+    (value, availability, observedAt)."""
+    from ..insights import INSIGHT_METRICS
+    provider=post['provider']
+    observed_at=max((o[2] for o in observed.values()),default=None)
+    metrics=[]
+    for metric in INSIGHT_METRICS.get(provider,()):
+        value,availability,_=observed.get(metric,(None,'unavailable',None))
+        ok=availability=='available' and value is not None
+        metrics.append({'metric':metric,'value':float(value) if ok else None,'availability':'available' if ok else 'unavailable'})
+    state='backfill' if observed else 'unscheduled' if read is None else _READ_STATES.get(read[0],'unavailable')
+    published=post.get('publishedAt')
+    return {'connectionId':post['connectionId'],'provider':provider,'platform':{'threads':'Threads','instagram':'Instagram'}.get(provider,provider),
+            'providerPostId':post['providerPostId'],'publishedAt':published,'mediaType':post.get('mediaType'),'permalink':post.get('permalink'),
+            'state':state,'observedAt':observed_at,
+            'ageSeconds':int(observed_at-published) if observed and published is not None and observed_at>=published else None,
+            'metrics':metrics if observed else [{**m,'availability':'unavailable'} for m in metrics]}
+
+
+def report_consent_current(body,state):
+    """A review is usable only under the AI permission it was made with (and while the explanation route is allowed)."""
+    consent=state.get('growthConsent') or {}
+    if SUMMARY_ROUTE not in (consent.get('routes') or []):
+        return False
+    return body.get('consentDigest') in (None,digest(consent))
+
+
+def collection_enabled(growth,workspace_id,cur=None):
+    """Same admission as the worker (env allowlist or growth_measurement enrollment); mounting is not enablement."""
+    from .metric_schedule import MetricScheduler
     reader=getattr(growth.hosted,'metric_reads',None)
     if not metric_reads_enabled(growth.env) or reader is None:
         return False
     admission=getattr(reader,'workspace_allowed',None)
-    return admission is None or (callable(admission) and bool(admission(workspace_id)))
+    if admission is None:
+        return True
+    if not callable(admission):
+        return False
+    if cur is not None and isinstance(reader,MetricScheduler):
+        return bool(admission(workspace_id,cur))
+    return bool(admission(workspace_id))
 
 
 class ClosedLoop:
@@ -54,6 +105,31 @@ class ClosedLoop:
         predictions={r[0]:{**r[1],'verifiedAt':float(r[2])} for r in cur.fetchall() if r[0] in {j['id'] for j in jobs}}
         return jobs,performance.attach_readings(cur,wid,posts),predictions
 
+    def history(self,cur,wid):
+        """The account's own imported posts (Direct analytics, no pending purge) with their latest backfill reading."""
+        from .readiness import MEASUREMENT_TABLES,present_tables
+        if not set(MEASUREMENT_TABLES)<=present_tables(cur,MEASUREMENT_TABLES):return []
+        cur.execute("""SELECT p.connection_id,p.provider,p.provider_post_id,extract(epoch from p.published_at),p.media_type,p.permalink
+                       FROM public.pr_owned_posts p WHERE p.workspace_id=%s AND p.source='history_import'
+                         AND EXISTS (SELECT 1 FROM public.pr_channel_capabilities c WHERE c.workspace_id=p.workspace_id
+                                     AND c.connection_id=p.connection_id AND c.capability='analytics' AND c.level='Direct')
+                         AND NOT EXISTS (SELECT 1 FROM public.pr_growth_purges g WHERE g.workspace_id=p.workspace_id AND g.connection_id=p.connection_id)
+                       ORDER BY p.published_at DESC NULLS LAST,p.provider_post_id LIMIT %s""",(wid,HISTORY_LIMIT))
+        posts=[{'connectionId':r[0],'provider':r[1],'providerPostId':r[2],'publishedAt':float(r[3]) if r[3] is not None else None,
+                'mediaType':r[4],'permalink':r[5]} for r in cur.fetchall()]
+        if not posts:return []
+        ids=[p['providerPostId'] for p in posts]
+        cur.execute("SELECT connection_id,provider,provider_post_id,status,failure_class FROM public.pr_metric_reads WHERE workspace_id=%s AND read_offset='backfill' AND provider_post_id=ANY(%s)",(wid,ids))
+        reads={(r[0],r[1],r[2]):(r[3],r[4]) for r in cur.fetchall()}
+        cur.execute("""SELECT DISTINCT ON (connection_id,provider,provider_post_id,metric) connection_id,provider,provider_post_id,metric,value,availability,extract(epoch from observed_at)
+                       FROM public.pr_metric_observations WHERE workspace_id=%s AND read_offset='backfill' AND provider_post_id=ANY(%s)
+                       ORDER BY connection_id,provider,provider_post_id,metric,observed_at DESC,ingested_at DESC,id DESC""",(wid,ids))
+        observed={}
+        for conn,provider,post_id,metric,value,availability,at in cur.fetchall():
+            observed.setdefault((conn,provider,post_id),{})[metric]=(float(value) if value is not None else None,availability,float(at))
+        return [history_entry(p,reads.get((p['connectionId'],p['provider'],p['providerPostId'])),
+                              observed.get((p['connectionId'],p['provider'],p['providerPostId']),{})) for p in posts]
+
     def _basis(self,cur,wid,state,job_id,horizon):
         if horizon not in performance.HORIZONS:raise AlphaError('Choose a reading window: 1h, 24h or 7d.')
         jobs,posts,predictions=self._observations(cur,wid,state)
@@ -65,10 +141,12 @@ class ClosedLoop:
         return result
 
     def overview(self,wid,token):
+        from .readiness import require_schema
         self.g.session(token);self.g.gate('postmortem')
         with self.repository.transaction(token,wid) as (cur,row,_):
+            require_schema(cur,OVERVIEW_TABLES)
             jobs,posts,predictions=self._observations(cur,wid,row[1])
-            enabled=collection_enabled(self.g,wid)
+            enabled=collection_enabled(self.g,wid,cur)
             tracked=tracking(cur,wid,{'phase2':{**row[1].get('phase2',{}),'jobs':jobs}},self.g.clock(),enabled=enabled,limit=300)
             windows={p['job_id']:{h['window']:h for h in p['horizons']} for p in tracked['posts']}
             cur.execute("SELECT connection_id FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='analytics' AND level='Direct'",(wid,))
@@ -90,10 +168,11 @@ class ClosedLoop:
             cur.execute('SELECT id::text,job_id,horizon,status,body FROM public.pr_postmortems WHERE workspace_id=%s AND expires_at>now() ORDER BY created_at DESC LIMIT 30',(wid,))
             reports=[]
             for mid,jid,h,status,body in cur.fetchall():
-                try:fresh=self._basis(cur,wid,row[1],jid,h)['basisDigest']==body['basisDigest']
+                try:fresh=self._basis(cur,wid,row[1],jid,h)['basisDigest']==body['basisDigest'] and report_consent_current(body,row[1])
                 except AlphaError:fresh=False
                 reports.append({**body,'id':mid,'status':status if fresh else 'stale'})
             return {'posts':entries,'reports':reports,'calibration':self._calibrations(cur,wid,row[1],posts,predictions),
+                    'history':self.history(cur,wid),'historyNotice':HISTORY_NOTICE,
                     'coverage':{'maximumPosts':300,'loadedPosts':len(jobs)},
                     'measurement':{'enabled':enabled,'analyticsConnections':len(connected & direct)},
                     'notice':'Readings keep their native metric and time window. No report changes your Genome automatically.'}
@@ -142,26 +221,61 @@ class ClosedLoop:
         except Exception as caught:error=caught
         def store(cur,state,principal,result):
             current(cur,state)
+            result={**result,'consentDigest':digest(state.get('growthConsent'))}
             cur.execute('INSERT INTO public.pr_postmortems(workspace_id,job_id,horizon,basis_digest,body) VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,job_id,horizon,basis_digest) DO UPDATE SET body=excluded.body RETURNING id::text,status',
                         (wid,basis['jobId'],basis['horizon'],basis['basisDigest'],json.dumps(result)))
             mid,status=cur.fetchone()
             return {**result,'id':mid,'status':status}
         return self.g._finish(wid,token,run,sink,result,error,store)
 
-    def _comments(self,cur,wid,state,days):
+    def comment_sources(self,cur,wid,state):
+        """Connected Threads/Instagram accounts, the ones whose comments_read is Direct, and the workspace's own posts on
+        them: verified Rafii publications and the account's imported history (no pending disconnect purge)."""
+        from .readiness import present_tables
+        phase2=state.get('phase2',{})
+        channels={c['id']:COMMENT_PLATFORMS[c['platform']] for c in phase2.get('channels',[])
+                  if not c.get('revoked') and c.get('platform') in COMMENT_PLATFORMS}
+        cur.execute("SELECT connection_id FROM public.pr_channel_capabilities WHERE workspace_id=%s AND capability='comments_read' AND level='Direct'",(wid,))
+        direct={r[0] for r in cur.fetchall()}&set(channels)
+        owned={(j.get('manifest',{}).get('channelId'),str(j.get('providerReference'))) for j in phase2.get('jobs',[])
+               if j.get('state')=='verified' and j.get('verification') and j.get('providerReference')
+               and j.get('manifest',{}).get('platform') in COMMENT_PLATFORMS}
+        if {'pr_owned_posts','pr_growth_purges'}<=present_tables(cur,('pr_owned_posts','pr_growth_purges')):
+            cur.execute("SELECT p.connection_id,p.provider_post_id FROM public.pr_owned_posts p WHERE p.workspace_id=%s AND NOT EXISTS (SELECT 1 FROM public.pr_growth_purges g WHERE g.workspace_id=p.workspace_id AND g.connection_id=p.connection_id)",(wid,))
+            owned|={(r[0],r[1]) for r in cur.fetchall()}
+        return {'channels':channels,'direct':direct,'owned':owned,'ownedDirect':{o for o in owned if o[0] in direct}}
+
+    def _comments(self,cur,wid,state,days,sources=None):
         if type(days) is not int or days not in (7,14,30):raise AlphaError('Choose 7, 14 or 30 days.')
-        permitted={c['id'] for c in state.get('phase2',{}).get('channels',[]) if not c.get('revoked') and c.get('platform')=='Threads'}
-        owned={(j.get('manifest',{}).get('channelId'),str(j.get('providerReference'))) for j in state.get('phase2',{}).get('jobs',[])
-               if j.get('state')=='verified' and j.get('verification') and j.get('manifest',{}).get('platform')=='Threads'}
-        cur.execute("SELECT t.id::text,t.connection_id,t.provider_post_id,t.text,extract(epoch from t.ingested_at) FROM public.pr_audience_threads t JOIN public.pr_channel_capabilities c ON c.workspace_id=t.workspace_id AND c.connection_id=t.connection_id AND c.capability='comments_read' AND c.level='Direct' WHERE t.workspace_id=%s AND t.provider='threads' AND t.tombstoned_at IS NULL AND t.ingested_at>=to_timestamp(%s) ORDER BY t.ingested_at DESC,t.id LIMIT 301",(wid,self.g.clock()-days*86400))
-        comments=[{'id':r[0],'connectionId':r[1],'postId':r[2],'text':miner.redact(r[3]),'digest':digest(r[3]),'at':float(r[4])}
-                  for r in cur.fetchall() if r[1] in permitted and (r[1],r[2]) in owned and r[3].strip()]
-        return comments
+        sources=sources or self.comment_sources(cur,wid,state)
+        if not sources['ownedDirect']:return []
+        cur.execute("SELECT t.id::text,t.connection_id,t.provider,t.provider_post_id,t.text,extract(epoch from coalesce(t.created_at_provider,t.ingested_at)) FROM public.pr_audience_threads t JOIN public.pr_channel_capabilities c ON c.workspace_id=t.workspace_id AND c.connection_id=t.connection_id AND c.capability='comments_read' AND c.level='Direct' WHERE t.workspace_id=%s AND t.provider IN ('threads','instagram') AND t.tombstoned_at IS NULL AND coalesce(t.created_at_provider,t.ingested_at)>=to_timestamp(%s) ORDER BY coalesce(t.created_at_provider,t.ingested_at) DESC,t.id LIMIT 301",(wid,self.g.clock()-days*86400))
+        return [{'id':r[0],'connectionId':r[1],'postId':r[3],'text':miner.redact(r[4]),'digest':digest(r[4]),'at':float(r[5])}
+                for r in cur.fetchall() if r[1] in sources['direct'] and sources['channels'].get(r[1])==r[2]
+                and (r[1],r[3]) in sources['owned'] and r[4].strip()]
+
+    @staticmethod
+    def comment_reason(sources,comments,state):
+        """Why there is nothing to analyze yet, as a bounded code (None when analysis can run)."""
+        consent=state.get('growthConsent',{})
+        if not sources['channels']:return 'no_connection'
+        if not sources['direct']:return 'comments_permission_required'
+        if not sources['ownedDirect']:return 'no_owned_posts'
+        if not comments:return 'no_comments'
+        if consent.get('audience') is not True or SUMMARY_ROUTE not in consent.get('routes',[]):return 'growth_consent_required'
+        return None
+
+    def largest_cohort(self,cur,wid,state):
+        _,posts,predictions=self._observations(cur,wid,state)
+        return calibration.propose(posts,predictions)['largestCohort']
 
     def audience(self,wid,token):
+        from .readiness import require_schema
         self.g.session(token);self.g.gate('audience')
         with self.repository.transaction(token,wid) as (cur,row,_):
-            state=row[1];comments=self._comments(cur,wid,state,30);index={c['id']:c for c in comments}
+            require_schema(cur,AUDIENCE_TABLES)
+            state=row[1];sources=self.comment_sources(cur,wid,state)
+            comments=self._comments(cur,wid,state,30,sources);index={c['id']:c for c in comments}
             cur.execute('SELECT id::text,body,source_id,extract(epoch from created_at) FROM public.pr_audience_clusters WHERE workspace_id=%s AND expires_at>now() ORDER BY created_at DESC,id ASC LIMIT 60',(wid,))
             items=[]
             for cid,body,source,at in cur.fetchall():
@@ -176,9 +290,10 @@ class ClosedLoop:
             conversion={'suggestedTopics':len(topics),'savedTopics':len(saved),'writtenTopics':len(written_topics),'rate':len(written_topics)/len(topics) if topics else None,
                         'basis':'Distinct retained suggestions used as sources in a draft, including suggestions not saved; not a randomized experiment.'}
             return {'clusters':[i for i in items if i['createdAt']==latest],'eligibleComments':len(comments),
-                    'conversion':conversion,
+                    'conversion':conversion,'reason':self.comment_reason(sources,comments,state),
+                    'sources':{'connections':len(sources['channels']),'commentsReadable':len(sources['direct']),'ownedPosts':len(sources['ownedDirect'])},
                     'maximumPerRun':miner.MAX_COMMENTS,'audienceConsent':state.get('growthConsent',{}).get('audience') is True,
-                    'coverage':'Threads comments already collected through an authorized account. Instagram remains unavailable pending connector and platform review.',
+                    'coverage':'Comments on your own Threads and Instagram posts, read through accounts that allow comment reading and re-checked for up to 30 days after publishing. Nothing is ever replied to from here.',
                     'notice':'Author handles are not sent. Contact patterns are removed before analysis. Sensitive or uncertain comments do not become suggestions.'}
 
     @staticmethod
@@ -193,7 +308,7 @@ class ClosedLoop:
             if consent.get('audience') is not True or SUMMARY_ROUTE not in consent.get('routes',[]):
                 raise AlphaError('The owner must allow comment analysis and the synthesis model.',403)
             available=self._comments(cur,wid,state,days)
-            if not available:raise AlphaError('No eligible comments on verified owned posts in this window.',409)
+            if not available:raise AlphaError('No eligible comments on your own Threads or Instagram posts in this window.',409,code='no_comments')
             return {'comments':available[:miner.MAX_COMMENTS],'available':len(available)}
         run=self.g._begin(wid,token,'audience',body,prepare)
         if 'replayed' in run:
@@ -264,6 +379,8 @@ class ClosedLoop:
         response={}
         def command(state,actor):return state
         def after(cur,state,actor):
+            from .readiness import require_schema
+            require_schema(cur,ACTION_TABLES[action])
             if action in ('postmortem_lesson_approve','postmortem_dismiss'):
                 cur.execute('SELECT body,status FROM public.pr_postmortems WHERE workspace_id=%s AND id::text=%s AND expires_at>now() FOR UPDATE',(wid,payload.get('reportId')))
                 row=cur.fetchone()
@@ -274,6 +391,8 @@ class ClosedLoop:
                     cur.execute("UPDATE public.pr_postmortems SET status='dismissed' WHERE workspace_id=%s AND id::text=%s",(wid,payload['reportId']))
                     return
                 if payload.get('confirmed') is not True:raise AlphaError('Confirm the exact lesson you reviewed.')
+                if not report_consent_current(report,state):
+                    raise AlphaError('AI permission changed since this review. Review the result again.',409,code='growth_input_changed')
                 basis=self._basis(cur,wid,state,report['jobId'],report['horizon'])
                 if basis['basisDigest']!=report['basisDigest']:raise AlphaError('Readings changed. Review a fresh report.',409)
                 lesson=next((l for l in basis['lessons'] if l['id']==payload.get('lessonId')),None)

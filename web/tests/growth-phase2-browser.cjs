@@ -11,6 +11,18 @@ async function api(method,url,body){const r=await fetch(base+url,{method,headers
 assert.equal((await api('GET','/api/auth/config')).execution,'dev-synthetic');
 const {workspaceId:wid}=await api('POST','/api/auth/verify',{plan:'studio'});
 execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid],{cwd:root});
+execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',principal,wid,'history'],{cwd:root});
+const catalog=await api('GET',`/api/workspaces/${wid}/growth/catalog`);
+for(const section of ['studio','results','audience','patterns','measurement'])assert.ok(catalog.readiness[section],section);
+assert.equal(catalog.readiness.studio.state,'ready');
+assert.deepEqual([catalog.readiness.results.state,catalog.readiness.results.reasonCodes,catalog.readiness.results.canRead,catalog.readiness.results.canRun],['setup_required',['growth_consent_required'],true,false]);
+assert.deepEqual(catalog.readiness.results.nextStep,{kind:'consent',href:'/app/growth?view=results&permissions=true'});
+assert.deepEqual([catalog.readiness.measurement.state,catalog.readiness.measurement.reasonCodes],['feature_disabled',['measurement_off']]);
+assert.deepEqual([catalog.readiness.patterns.state,catalog.readiness.patterns.reasonCodes],['insufficient_data',['sample_below_minimum']]);
+assert.ok(catalog.readiness.results.lastSuccessfulReadAt,'latest native reading of this workspace');
+const enrollment=await api('GET',`/api/workspaces/${wid}/growth/measurement/enrollment`);
+assert.deepEqual(Object.keys(enrollment).sort(),['admitted','collecting','eligible','feature','reason','status']);
+assert.deepEqual([enrollment.status,enrollment.eligible,enrollment.reason,enrollment.collecting],['none',false,'self_serve_paused',false]);
 const tours=Object.fromEntries([...fs.readFileSync(path.join(root,'web/src/features/onboarding/tours.ts'),'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m=>[m[1],1]));
 const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100},reducedMotion:'reduce'});
 await context.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
@@ -27,6 +39,18 @@ const v=await page.evaluate(async()=> (await window.axe.run('.growth-studio',{re
 assert.deepEqual(v,[],name+' accessibility');}
 try{
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded',timeout:120000});
+await page.locator('.feature-readiness[data-readiness-reasons~="growth_consent_required"]').waitFor();
+assert.match(await page.locator('.growth-status').innerText(),/Latest reading/);
+assert.match(await page.locator('.growth-status').innerText(),/Review and allow/);
+assert.equal(await page.getByText(/not enabled here yet/i).count(),0);
+await page.getByRole('heading',{name:'Your own posts, read once.',exact:true}).waitFor();
+const imported=page.locator('.growth-history-list > li').first();
+assert.match(await imported.innerText(),/Imported reading/);
+assert.match(await imported.innerText(),/Lifetime totals read 23 minutes after publishing/);
+assert.equal(await imported.locator('dd').filter({hasText:/^0$/}).count(),5);
+assert.equal(await imported.getByText('not read',{exact:true}).count(),1);
+checks.push('readiness states from the server: consent is an owner step, measurement collection off, patterns below fifty, no "not enabled here yet"');
+checks.push('imported history shows a lifetime reading at its age: measured zeros as 0, an unread metric as a dash, never a 1h/24h/7d window');
 await page.getByRole('button',{name:'1h',exact:true}).click();
 await page.getByRole('heading',{name:'Post readings are not enabled.',exact:true}).waitFor();
 assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
@@ -39,6 +63,7 @@ await page.getByText('AI permissions & daily allowances').click();
 await page.getByRole('checkbox',{name:'Allow comment analysis'}).check();
 await page.getByRole('checkbox',{name:'Allow growth AI models'}).check();
 await page.getByRole('button',{name:'Allow growth AI',exact:true}).click();
+await page.locator('.feature-readiness[data-readiness-reasons~="growth_consent_required"]').waitFor({state:'detached'});
 await page.getByRole('checkbox',{name:'Use the allowed AI models to review these readings within my daily allowance.'}).check();
 await page.getByRole('button',{name:'Review this result',exact:true}).click();
 await page.getByText('A lesson for your Genome?').waitFor({timeout:60000});
@@ -61,6 +86,8 @@ state=await api('GET',`/api/workspaces/${wid}`);assert.equal(state.state.sources
 checks.push('Threads privacy abstention, classified evidence, saved idea and normal draft boundary');
 await page.setViewportSize({width:390,height:844});await audit('mobile audience');await shot('audience-mobile');
 await page.getByRole('tab',{name:'Your audience'}).focus();await page.keyboard.press('ArrowRight');await page.getByRole('tabpanel').getByText('Your history sets the context.').waitFor();
+await page.locator('.feature-readiness[data-readiness-reasons~="sample_below_minimum"]').waitFor();
+assert.equal(await page.getByText(/not enabled here yet/i).count(),0);
 assert.equal(await page.getByRole('button',{name:'Prepare a calibration'}).isDisabled(),true);await audit('mobile patterns');await shot('patterns-mobile');
 await page.setViewportSize({width:320,height:740});await audit('narrow patterns');
 await page.getByRole('tab',{name:'Your results'}).click();await audit('narrow result');await shot('results-narrow');
@@ -75,9 +102,11 @@ execFileSync(python,['tests/phase2/growth_phase2_browser_fixture.py','55796',pri
 await page.goto(base+'/app/growth',{waitUntil:'domcontentloaded'});
 await page.getByRole('heading',{name:'Native post analytics are unavailable.',exact:true}).waitFor();
 assert.equal(await page.getByRole('button',{name:'Review this result',exact:true}).count(),0);
-assert.equal(await page.getByRole('link',{name:'Connect analytics'}).getAttribute('href'),'/app/channels');
+assert.equal(await page.locator('.feature-readiness[data-readiness-state="setup_required"]').getAttribute('data-readiness-reasons'),'analytics_connection_required');
+assert.equal(await page.getByRole('link',{name:'Connect an account'}).getAttribute('href'),'/app/channels');
+assert.equal(await page.getByText(/not enabled here yet/i).count(),0);
 await page.setViewportSize({width:390,height:844});await audit('mobile native analytics unavailable');await shot('native-analytics-unavailable-mobile');
-await page.getByRole('link',{name:'Connect analytics'}).click();
+await page.getByRole('link',{name:'Connect an account'}).click();
 await page.waitForURL(base+'/app/channels');
 await page.getByRole('heading',{name:'Accounts',exact:true}).waitFor();
 checks.push('missing native connection is explicit on mobile and the connection link opens the Accounts flow');

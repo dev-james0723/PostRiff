@@ -74,7 +74,7 @@ import type { HelpDocument, HelpDocumentSummary, SiteAgentBody, SiteAgentInsight
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
 import type { PhoneCall, PhoneInboundCode, PhoneInboundStatus, PhonePreferences, PhoneProviderReadiness, PhoneSettingsData } from '@/lib/phone/types';
 import type { TikTokCreatorInfo } from '@/lib/channels/tiktok-rules';
-import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody, GrowthOverview, Postmortem, AudienceInsights } from '@/lib/growth/types';
+import type { GrowthCatalog, PostCheck, PostRewrite, GenomeResponse, CreatorGenome, PerformanceFeedback, DraftCheckBody, GrowthOverview, Postmortem, AudienceInsights, MeasurementEnrollment } from '@/lib/growth/types';
 
 /** Value the API checks on every mutation (`hosted_app._origin`). */
 export const APP_GUARD_HEADER = { 'X-PostRiff-Request': 'founder-alpha' } as const;
@@ -149,6 +149,10 @@ export function createApi(getToken: TokenSource) {
     radarStart: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/start`, { confirmed: true }),
     radarAdvance: (w: string, id: string) => send<RadarScan>('POST', `${ws(w)}/growth/radar/${encodeURIComponent(id)}/advance`, {}, 90_000),
     growthCatalog: (w: string) => get<GrowthCatalog>(`${ws(w)}/growth/catalog`),
+    /* Owner-only opt-in to native post readings; returns only this workspace's own status. */
+    growthMeasurementEnrollment: (w: string) => get<MeasurementEnrollment>(`${ws(w)}/growth/measurement/enrollment`),
+    enrollGrowthMeasurement: (w: string) => send<MeasurementEnrollment>('POST', `${ws(w)}/growth/measurement/enrollment`, { confirmed: true }),
+    leaveGrowthMeasurement: (w: string) => send<MeasurementEnrollment>('DELETE', `${ws(w)}/growth/measurement/enrollment`),
     postDoctor: (w: string, body: DraftCheckBody) => send<PostCheck>('POST', `${ws(w)}/growth/check`, body, 30_000),
     postDoctorRewrite: (w: string, body: { checkId: string; model: string; facts: Record<string, string>; confirmed: boolean; requestKey: string }) => send<PostRewrite>('POST', `${ws(w)}/growth/rewrite`, body, 90_000),
     creatorGenome: (w: string) => get<GenomeResponse>(`${ws(w)}/growth/genome`),

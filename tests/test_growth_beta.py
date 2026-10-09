@@ -98,6 +98,46 @@ class BetaStatus(unittest.TestCase):
                 ("dead", False, "unavailable")):
             self.assertEqual(horizon_state({"status": status, "measured": measured}, 0, 100), expected)
 
+    def test_missed_windows_and_cancellations_keep_their_real_reason(self):
+        from postriff_phase2.growth.trends.beta import horizon_state
+        missed = {"status": "unavailable", "measured": False, "reason": "window_missed"}
+        self.assertEqual(horizon_state(missed, 0, 100), "missed")
+        self.assertEqual(horizon_state({**missed, "status": "done"}, 0, 100), "missed")
+        cases = (("not_admitted", True, "not_entitled"), ("not_admitted", False, "not_entitled"),
+                 ("analytics_scope_missing", True, "rights_unavailable"), ("not_eligible", True, "rights_unavailable"),
+                 ("analytics_scope_missing", False, "disconnected"), ("not_eligible", False, "disconnected"),
+                 (None, False, "disconnected"))
+        for reason, live, expected in cases:
+            with self.subTest(reason=reason, live=live):
+                row = {"status": "cancelled", "measured": False, "reason": reason, "credential_live": live}
+                self.assertEqual(horizon_state(row, 0, 100), expected)
+
+    def test_tracking_reads_credential_liveness_for_this_workspace_only(self):
+        from postriff_phase2.growth.trends.beta import tracking
+        class Cursor:
+            def __init__(self):
+                self.sql = []
+            def execute(self, sql, params=()):
+                self.sql.append((" ".join(sql.split()), params))
+                text = self.sql[-1][0]
+                self.rows = ([(True,)] if "to_regclass" in text else [("live",)] if "pr_channel_capabilities" in text
+                             else [("live",)] if "pr_encrypted_credentials" in text
+                             else [("job-1", "live", "threads", "p1", "1h", "cancelled", 3700.0, "not_admitted", False),
+                                   ("job-1", "live", "threads", "p1", "24h", "cancelled", 86500.0, "not_eligible", False),
+                                   ("job-1", "live", "threads", "p1", "7d", "unavailable", 604900.0, "window_missed", False)])
+            def fetchone(self):
+                return self.rows[0]
+            def fetchall(self):
+                return self.rows
+        cur = Cursor()
+        state = {"phase2": {"channels": [{"id": "live"}], "jobs": [{"id": "job-1", "state": "verified", "providerReference": "p1",
+                                                                    "verification": {"at": 100}, "manifest": {"platform": "Threads", "channelId": "live"}}]}}
+        result = tracking(cur, "w1", state, 200, enabled=True)
+        states = {h["window"]: h["state"] for h in result["posts"][0]["horizons"]}
+        self.assertEqual(states, {"t0": "unscheduled", "1h": "not_entitled", "24h": "rights_unavailable", "7d": "missed"})
+        credential = next(params for sql, params in cur.sql if "pr_encrypted_credentials" in sql)
+        self.assertEqual(credential, ("w1",))
+
     def test_growth_tracking_covers_all_visible_posts_without_dispatch(self):
         from postriff_phase2.growth.trends.beta import tracking
         class NoQueries:

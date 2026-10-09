@@ -1,6 +1,7 @@
 """Meaningful statistics, abstention, provenance and action-boundary checks; no network."""
 import copy
 import unittest
+from postriff_alpha.domain import AlphaError
 from postriff_phase2.growth import audience_miner as miner, creator_calibration as cal, performance, postmortem, questions
 from postriff_phase2.growth.decision_loop import DecisionLoop
 from postriff_phase2.growth.judgments import JudgmentService, subject_hash
@@ -143,5 +144,133 @@ class ClosedLoopTests(unittest.TestCase):
         self.assertEqual(cal.assignment('v3','a'),cal.assignment('v3','a'))
         with self.assertRaises(ValueError):cal.experiment_report([*accounts,accounts[0]],28)
 
+
+
+class History(unittest.TestCase):
+    def test_backfill_never_enters_a_reading_window_or_comparison(self):
+        from unittest.mock import patch
+        from postriff_phase2 import insights
+        row=('instagram','media-1',None,'views','2026-09',0,'count','available',1_759_617_440.0,1_759_617_440.0,'ig','backfill')
+        post={'id':'media-1','provider':'instagram','providerPostId':'media-1','connectionId':'ig','platform':'Instagram','format':'text','language':'en','timeBucket':'unknown'}
+        with patch.object(insights,'latest_observations',return_value=[row]):
+            attached=performance.attach_readings(None,'w',[post])
+        self.assertNotIn('readings',attached[0])
+        for horizon in performance.HORIZONS:
+            self.assertEqual(performance.compare(attached[0],attached,horizon)['status'],'unavailable')
+
+    def test_history_entry_is_a_lifetime_reading_at_its_age_with_zero_and_missing_kept_apart(self):
+        from postriff_phase2.growth.closed_loop import history_entry
+        published=1_759_616_041.0;observed=published+1399
+        entry=history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'media-1','publishedAt':published,
+                             'mediaType':'IMAGE','permalink':'https://www.instagram.com/p/x/'},
+                            ('done',None),{'reach':(0.0,'available',observed),'views':(0.0,'available',observed),'likes':(None,'unavailable',observed)})
+        self.assertEqual((entry['state'],entry['platform'],entry['ageSeconds'],entry['observedAt']),('backfill','Instagram',1399,observed))
+        values={m['metric']:(m['value'],m['availability']) for m in entry['metrics']}
+        self.assertEqual(values['reach'],(0.0,'available'))
+        self.assertEqual(values['likes'],(None,'unavailable'))
+        self.assertEqual(values['saved'],(None,'unavailable'))      # never read: missing, not zero
+        self.assertEqual([m['metric'] for m in entry['metrics']],['reach','views','likes','comments','saved','shares'])
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m2','publishedAt':published},('pending',None),{})['state'],'scheduled')
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m3','publishedAt':published},('unavailable','http_400'),{})['state'],'unavailable')
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m4','publishedAt':None},None,{})['state'],'unscheduled')
+
+    def test_a_review_made_under_older_consent_is_stale(self):
+        from postriff_phase2.contracts import digest
+        from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE,report_consent_current
+        consent={'routes':[SUMMARY_ROUTE],'audience':False,'at':1}
+        state={'growthConsent':consent}
+        self.assertTrue(report_consent_current({'consentDigest':digest(consent)},state))
+        self.assertTrue(report_consent_current({},state))
+        self.assertFalse(report_consent_current({'consentDigest':digest({**consent,'at':2})},state))
+        self.assertFalse(report_consent_current({},{'growthConsent':{'routes':[]}}))
+
+
+class RunCursor:
+    """Answers one paid run's statements: the request-key lookup, budget reservations and the run row."""
+
+    def __init__(self, world):
+        self.world, self.rows, self.rowcount = world, [], 1
+
+    def execute(self, sql, params=()):
+        text=' '.join(sql.split());w=self.world;w['sql'].append(text)
+        if 'unnest(%s::text[]) AS name' in text:self.rows=[(n,) for n in params[0]]
+        elif text.startswith('SELECT id::text,status,fingerprint,body,context_fingerprint FROM public.pr_post_doctor_runs'):
+            self.rows=[w['existing']] if w.get('existing') else []
+        elif text.startswith('UPDATE public.pr_growth_budgets'):self.rows=[] if w.get('limit_reached') else [(1,)]
+        else:self.rows=[]
+
+    def fetchone(self):return self.rows[0] if self.rows else None
+    def fetchall(self):return list(self.rows)
+    def __enter__(self):return self
+    def __exit__(self,*a):return False
+
+
+class RetrySemantics(unittest.TestCase):
+
+    def growth(self,env=None,**world):
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+        from postriff_phase2.growth.service import GrowthService,ROUTES
+        from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE
+        from growth_phase2_fixtures import ENV
+        w={'sql':[],**world}
+        state={'growthConsent':{'routes':[*ROUTES,SUMMARY_ROUTE],'audience':True}}
+        class Repository:
+            effects=[]
+            @contextmanager
+            def transaction(self,token,wid,**_):
+                yield RunCursor(w),(1,state,'owner',False,False,False,False),'actor'
+        class Connection:
+            def __enter__(self):return self
+            def __exit__(self,*a):return False
+            def cursor(self):return RunCursor(w)
+        hosted=SimpleNamespace(repository=Repository(),clock=lambda:1_760_000_000.0,connection_factory=Connection)
+        return GrowthService(hosted,env=dict(ENV if env is None else env)),w,state
+
+    BODY={'jobId':'job','horizon':'24h','confirmed':True,'requestKey':'retry-key-0123456789'}
+
+    def begin(self,growth):
+        return growth._begin('w','session','postmortem',dict(self.BODY),lambda cur,state,principal:{'basis':{}})
+
+    def test_a_key_whose_run_failed_without_usage_can_be_rotated_and_retried(self):
+        from postriff_phase2.contracts import digest
+        cases=(('failed','growth_request_failed'),('cancelled','growth_request_failed'),
+               ('unknown','growth_request_unknown'),('running','growth_request_pending'))
+        for status,code in cases:
+            with self.subTest(status=status):
+                growth,w,_=self.growth(existing=('run',status,digest(self.BODY),{},'ctx'))
+                with self.assertRaises(AlphaError) as caught:self.begin(growth)
+                self.assertEqual((caught.exception.status,caught.exception.code),(409,code))
+                self.assertFalse([t for t in w['sql'] if 'pr_growth_budgets' in t or t.startswith('INSERT INTO public.pr_post_doctor_runs')])
+
+    def test_budget_refusals_happen_before_any_run_row_so_the_key_stays_usable(self):
+        from growth_phase2_fixtures import ENV
+        unset={k:v for k,v in ENV.items() if 'USD_CAP' not in k}
+        growth,w,_=self.growth(env=unset)
+        with self.assertRaises(AlphaError) as caught:self.begin(growth)
+        self.assertEqual((caught.exception.status,caught.exception.code),(503,'growth_budget_unconfigured'))
+        self.assertFalse([t for t in w['sql'] if t.startswith('INSERT INTO public.pr_post_doctor_runs')])
+        growth,w,_=self.growth(limit_reached=True)
+        with self.assertRaises(AlphaError) as caught:self.begin(growth)
+        self.assertEqual((caught.exception.status,caught.exception.code),(429,'growth_daily_limit'))
+        self.assertFalse([t for t in w['sql'] if t.startswith('INSERT INTO public.pr_post_doctor_runs')])
+        growth,w,_=self.growth()
+        run=self.begin(growth)
+        self.assertEqual(len([t for t in w['sql'] if t.startswith('INSERT INTO public.pr_post_doctor_runs')]),1)
+        self.assertTrue(run['id'])
+
+    def test_finish_tells_a_clean_failure_from_an_uncertain_one(self):
+        from types import SimpleNamespace
+        from postriff_phase2.growth.usage import UsageEvent
+        for events,status,code in (([],'failed','growth_request_failed'),
+                                   ([UsageEvent(task='postmortem.explain',model='m',route='primary',status='timeout',latency_ms=1,workspace_id='w')],'unknown','growth_request_unknown')):
+            with self.subTest(status=status):
+                growth,w,state=self.growth()
+                run={'id':'run','context':growth._context(state),'prepared':{},'requirement':'edit'}
+                with self.assertRaises(AlphaError) as caught:
+                    growth._finish('w','session',run,SimpleNamespace(events=events),None,RuntimeError('provider timeout'))
+                self.assertEqual((caught.exception.status,caught.exception.code),(503,code))
+                update=next(t for t in w['sql'] if t.startswith('UPDATE public.pr_post_doctor_runs SET status=%s'))
+                self.assertIn("status='running'",update)
 
 if __name__=='__main__':unittest.main()
