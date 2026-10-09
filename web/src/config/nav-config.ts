@@ -98,6 +98,12 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'YouTube creator',
+        url: '/app/youtube',
+        icon: 'video',
+        items: []
+      },
+      {
         title: 'Inbox',
         url: '/app/inbox',
         icon: 'inbox',

@@ -54,12 +54,12 @@ export function isPostableImage(asset: AssetLike | null | undefined): boolean {
 }
 
 /** Preliminary browser check. The server also verifies the storage object and its immutable identity. */
-export function isPostableVideo(asset: AssetLike | null | undefined): boolean {
+export function isPostableVideo(asset: AssetLike | null | undefined, platform?: string): boolean {
   return kindOf(asset) === 'video' && isReady(asset) &&
     (asset?.mime === 'video/mp4' || asset?.mime === 'video/quicktime') &&
     asset?.durationSource === 'container' && typeof asset.duration === 'number' &&
-    asset.duration > 0 && asset.duration <= 180 &&
-    typeof asset.bytes === 'number' && asset.bytes > 0 && asset.bytes <= 100_000_000 &&
+    asset.duration > 0 && asset.duration <= (platform === 'YouTube' ? 43200 : 180) &&
+    typeof asset.bytes === 'number' && asset.bytes > 0 && asset.bytes <= (platform === 'YouTube' ? 256 * 1024 ** 3 : 100_000_000) &&
     asset.verified?.container === true && asset.verified.locationChecked === true;
 }
 

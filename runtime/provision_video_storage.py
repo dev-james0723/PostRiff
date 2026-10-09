@@ -18,6 +18,7 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 
 BUCKET = 'postriff-video'
 MAX_BYTES = 50_000_000
+PRODUCT_MAX_BYTES = 256 * 1024**3
 MIMES = ['video/mp4', 'video/quicktime']
 TIMEOUT = 12
 MAX_RESPONSE = 64 * 1024
@@ -89,7 +90,19 @@ def configuration(env):
     return project, {'Authorization': 'Bearer ' + secret, 'apikey': secret, 'Content-Type': 'application/json'}
 
 
-def verify(raw):
+def configured_limit(env):
+    """A reviewed storage ceiling; this neither upgrades a plan nor changes an existing bucket."""
+    raw = env.get('POSTRIFF_VIDEO_STORAGE_MAX_BYTES', str(MAX_BYTES))
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        raise ProvisionError('Configure a valid private video storage byte limit.') from None
+    if not 0 < limit <= PRODUCT_MAX_BYTES:
+        raise ProvisionError('Configure a valid private video storage byte limit.')
+    return limit
+
+
+def verify(raw, max_bytes=MAX_BYTES):
     try:
         found = json.loads(raw)
     except (ValueError, TypeError):
@@ -97,25 +110,26 @@ def verify(raw):
     if (not isinstance(found, dict) or found.get('id') != BUCKET or found.get('name', BUCKET) != BUCKET
             or found.get('public') is not False
             or type(found.get('file_size_limit')) is not int
-            or not 0 < found['file_size_limit'] <= MAX_BYTES
+            or not 0 < found['file_size_limit'] <= max_bytes
             or not isinstance(found.get('allowed_mime_types'), list)
             or sorted(found['allowed_mime_types']) != MIMES):
-        raise ProvisionError('Existing video bucket must be private, allow only MP4/MOV and have a limit of at most 50 MB. Existing settings were not changed.')
+        raise ProvisionError('Existing video bucket must be private, allow only MP4/MOV and fit the configured storage ceiling. Existing settings were not changed.')
     return found
 
 
 def provision(env, send=request):
     if str(env.get('RAFII_VIDEO_UPLOADS_ENABLED', '')).strip().lower() not in ('1', 'true', 'yes', 'on'):
         return {'status': 'disabled', 'changed': False}
+    max_bytes = configured_limit(env)
     project, headers = configuration(env)
     endpoint = project + '/storage/v1/bucket/' + BUCKET
     status, raw = send('GET', endpoint, headers)
     if status == 200:
-        verify(raw)
+        verify(raw, max_bytes)
         return {'status': 'verified', 'changed': False}
     if status != 404:
         raise ProvisionError('Private video bucket lookup failed. No creation was attempted.')
-    body = json.dumps({'id': BUCKET, 'name': BUCKET, 'public': False, 'file_size_limit': MAX_BYTES, 'allowed_mime_types': MIMES}).encode()
+    body = json.dumps({'id': BUCKET, 'name': BUCKET, 'public': False, 'file_size_limit': max_bytes, 'allowed_mime_types': MIMES}).encode()
     # A concurrent release may create this bucket. Reconcile by reading the same
     # target exactly once; never retry a POST with an unknown outcome.
     try:
@@ -125,7 +139,7 @@ def provision(env, send=request):
     status, raw = send('GET', endpoint, headers)
     if status != 200:
         raise ProvisionError('Private video bucket creation could not be verified. No retry or update was attempted.')
-    verify(raw)
+    verify(raw, max_bytes)
     return {'status': 'created' if created_status in (200, 201) else 'verified_after_create_attempt', 'changed': created_status in (200, 201)}
 
 

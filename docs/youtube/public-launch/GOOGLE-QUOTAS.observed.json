@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-08T21:55:27.215761+00:00",
+  "execution": "REAL GOOGLE CONSOLE CONFIGURATION AND QUOTA OBSERVATION",
+  "projectId": "rafii-youtube-production",
+  "projectNumber": "568838253270",
+  "service": "youtube.googleapis.com",
+  "status": "ENABLED; verified after owner-approved activation",
+  "analyticsServiceStatus": "youtubeanalytics.googleapis.com ENABLED; verified",
+  "source": "https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas?project=rafii-youtube-production",
+  "values": {
+    "Queries per day": 10000,
+    "Queries per minute": 1800000,
+    "Search Queries per day": 100,
+    "Search Queries per minute": 100,
+    "Video Batch Get Stats Queries per day": 10000,
+    "Video Batch Get Stats Queries per minute": 600,
+    "Video Uploads per day": 100,
+    "Video Uploads per minute": 100,
+    "Queries per minute per user": 180000
+  },
+  "displayedUsage": {
+    "allDisplayedProjectCounters": 0,
+    "perUserCounter": "not displayed"
+  },
+  "extension": {
+    "status": "NOT SUBMITTED",
+    "consolePreview": "Above100uploads/day or10000Queries/day requires the linked YouTube audit/quota form; no console request submitted",
+    "form": "https://support.google.com/youtube/contact/yt_api_form",
+    "proposedUploadsPerDay": 4000,
+    "proposedGeneralUnitsPerDay": 1500000,
+    "forecastApprovedByOwner": false
+  },
+  "notEstablished": [
+    "OAuth app verification",
+    "YouTube audit approval",
+    "public-upload eligibility",
+    "capacity for intended public workload",
+    "independent account consent"
+  ],
+  "note": "These are actual Console labels/values, not derived from old documentation. Default configured capacity is distinct from an approved extension and public-upload eligibility.",
+  "analytics": {
+    "observedAt": "2026-10-08T22:03:04.256463+00:00",
+    "execution": "LIVE GOOGLE CLOUD CONSOLE UI READ",
+    "service": "youtubeanalytics.googleapis.com",
+    "status": "ENABLED",
+    "source": "https://console.cloud.google.com/apis/api/youtubeanalytics.googleapis.com/quotas?project=rafii-youtube-production",
+    "values": [
+      {
+        "consoleLabel": "Queries per day",
+        "value": 100000,
+        "currentUsage": 0,
+        "currentUsagePercent": 0,
+        "adjustable": true
+      },
+      {
+        "consoleLabel": "Queries per minute",
+        "value": 720,
+        "currentUsage": 0,
+        "currentUsagePercent": 0,
+        "adjustable": true
+      },
+      {
+        "consoleLabel": "Queries per minute per user",
+        "value": 720,
+        "currentUsage": null,
+        "adjustable": true
+      }
+    ],
+    "quotaExtension": "NOT SUBMITTED"
+  }
+}

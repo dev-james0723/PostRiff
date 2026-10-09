@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import uuid
+from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
@@ -142,13 +143,18 @@ class DevProvider:
 
 class DevAssets:
     """In-memory private media boundary for the synthetic harness, with the video bucket's calls (chat-context SPEC §7.3):
-    the browser PUTs video bytes to a Supabase-shaped signed URL, which the browser scene forwards to `PUT /dev/upload/{token}`."""
+    legacy signed PUT and signed TUS use the real browser clients, with only storage simulated."""
     VIDEO_BUCKET = "postriff-video"
     file_bucket = "postriff-library"
+    TUS_ENDPOINT = "https://devharness.storage.supabase.co/storage/v1/upload/resumable"
+    TUS_CHUNK_BYTES = 6 * 1024 * 1024
 
     def __init__(self):
         self.objects = {}
         self.uploads = {}   # token → (workspace id, category, object name)
+        self.resumable_grants = {}
+        self.resumable_sessions = {}
+        self.upload_lock = threading.RLock()
         self.storage = self
 
     def signed_url(self, wid, kind, name, ttl=300):
@@ -183,6 +189,86 @@ class DevAssets:
         bucket = self.VIDEO_BUCKET if category == "video" else self.file_bucket
         return f"https://devharness.supabase.co/storage/v1/object/upload/sign/{bucket}/{workspace_id}/{category}/{object_name}?token={token}"
 
+    def signed_resumable_upload(self, workspace_id, object_name, mime):
+        if (not UUID.fullmatch(str(workspace_id)) or not isinstance(object_name, str)
+                or not re.fullmatch(r"[0-9a-f]{32}\.(mp4|mov)", object_name)
+                or mime not in ("video/mp4", "video/quicktime")):
+            raise AlphaError("Invalid synthetic video upload target.", 400)
+        signature = uuid.uuid4().hex
+        metadata = {"bucketName": self.VIDEO_BUCKET, "objectName": f"{workspace_id}/video/{object_name}",
+                    "contentType": mime, "cacheControl": "3600"}
+        with self.upload_lock:
+            self.resumable_grants[signature] = {"target": (workspace_id, "video", object_name),
+                "metadata": metadata, "expiresAt": time.time() + 2 * 3600}
+        return {"protocol": "tus", "endpoint": self.TUS_ENDPOINT, "headers": {"x-signature": signature},
+                "chunkBytes": self.TUS_CHUNK_BYTES, "metadata": dict(metadata)}
+
+    def resumable_request(self, method, session_id, headers, raw=b""):
+        """Synthetic TUS creation, offset reconciliation and immutable completion; no provider egress."""
+        headers = {key.lower(): value for key, value in headers.items()}
+        response = {"Tus-Resumable": "1.0.0", "Cache-Control": "no-store"}
+        if method == "OPTIONS":
+            return 204, {**response, "Tus-Version": "1.0.0", "Tus-Extension": "creation"}, b""
+        if headers.get("tus-resumable") != "1.0.0":
+            return 412, {**response, "Tus-Version": "1.0.0"}, b""
+        with self.upload_lock:
+            grant = self.resumable_grants.get(headers.get("x-signature"))
+            if not grant or grant["expiresAt"] <= time.time():
+                return 403, response, b""
+            if method == "POST" and not session_id:
+                length = headers.get("upload-length", "")
+                if not re.fullmatch(r"[1-9][0-9]*", length) or len(length) > 9 or raw:
+                    return 400, response, b""
+                length = int(length)
+                if length > self.bucket_info()["fileSizeLimit"]:
+                    return 413, response, b""
+                try:
+                    metadata = {}
+                    encoded = headers.get("upload-metadata", "")
+                    if len(encoded) > 16384:
+                        return 400, response, b""
+                    for entry in encoded.split(","):
+                        key, value = entry.split(" ", 1)
+                        if key in metadata:
+                            return 400, response, b""
+                        metadata[key] = base64.b64decode(value, validate=True).decode("utf-8")
+                except (ValueError, UnicodeError):
+                    return 400, response, b""
+                if metadata != grant["metadata"]:
+                    return 403, response, b""
+                if grant["target"] in self.objects:
+                    return 409, response, b""
+                session_id = uuid.uuid4().hex
+                self.resumable_sessions[session_id] = {"target": grant["target"], "metadata": metadata,
+                    "length": length, "offset": 0, "data": bytearray(), "expiresAt": time.time() + 24 * 3600}
+                return 201, {**response, "Location": f"{self.TUS_ENDPOINT}/{session_id}"}, b""
+            session = self.resumable_sessions.get(session_id)
+            if not session or session["expiresAt"] <= time.time():
+                return 404, response, b""
+            if session["target"] != grant["target"] or session["metadata"] != grant["metadata"]:
+                return 403, response, b""
+            response.update({"Upload-Length": str(session["length"]), "Upload-Offset": str(session["offset"])})
+            if method == "HEAD":
+                return 200, response, b""
+            if method != "PATCH":
+                return 405, response, b""
+            if headers.get("content-type") != "application/offset+octet-stream":
+                return 415, response, b""
+            if headers.get("upload-offset") != str(session["offset"]):
+                return 409, response, b""
+            if not raw or len(raw) > self.TUS_CHUNK_BYTES or session["offset"] + len(raw) > session["length"]:
+                return 413, response, b""
+            if session["target"] in self.objects:
+                return 409, response, b""
+            session["data"].extend(raw)
+            session["offset"] += len(raw)
+            if session["offset"] == session["length"]:
+                self.objects[session["target"]] = bytes(session["data"])
+                self.objects[("mime", session["target"][0], session["target"][2])] = session["metadata"]["contentType"]
+                session["data"].clear()
+            response["Upload-Offset"] = str(session["offset"])
+            return 204, response, b""
+
     def put_immutable(self, workspace_id, category, object_name, raw, content_type='image/jpeg'):
         key = (workspace_id, category, object_name)
         if key in self.objects: raise AlphaError('Immutable object exists.',409)
@@ -191,15 +277,16 @@ class DevAssets:
         return '/'.join(key)
 
     def receive_upload(self, token, raw, mime):
-        target = self.uploads.pop(token, None)
-        if target is None or not raw:
-            return False
-        workspace_id, category, object_name = target
-        if (workspace_id, category, object_name) in self.objects:
-            return False   # no upsert, like the real signed upload
-        self.objects[(workspace_id, category, object_name)] = raw
-        self.objects[("mime", workspace_id, object_name)] = mime
-        return True
+        with self.upload_lock:
+            target = self.uploads.pop(token, None)
+            if target is None or not raw:
+                return False
+            workspace_id, category, object_name = target
+            if (workspace_id, category, object_name) in self.objects:
+                return False   # no upsert, like the real signed upload
+            self.objects[(workspace_id, category, object_name)] = raw
+            self.objects[("mime", workspace_id, object_name)] = mime
+            return True
 
     def object_info(self, workspace_id, category, object_name):
         raw = self.get(workspace_id, category, object_name)
@@ -422,6 +509,20 @@ def main():
             status = "200 OK" if accepted else "400 Bad Request"
             start_response(status, [("Content-Type", "application/json"), ("Content-Length", "2")])
             return [b"{}"]
+        if path == "/dev/resumable" or path.startswith("/dev/resumable/"):
+            session_id = path[len("/dev/resumable/"):] if path.startswith("/dev/resumable/") else None
+            try:
+                length = int(environ.get("CONTENT_LENGTH") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > dev_assets.TUS_CHUNK_BYTES:
+                start_response("413 Content Too Large", [("Content-Length", "0")]); return [b""]
+            headers = {key[5:].replace("_", "-"): value for key, value in environ.items() if key.startswith("HTTP_")}
+            headers["Content-Type"] = environ.get("CONTENT_TYPE", "")
+            status, response_headers, raw = dev_assets.resumable_request(environ["REQUEST_METHOD"], session_id,
+                headers, environ["wsgi.input"].read(length))
+            start_response(f"{status} {HTTPStatus(status).phrase}", [*response_headers.items(), ("Content-Length", str(len(raw)))])
+            return [raw]
         if path == "/dev/consent":
             q = {k: v[0] for k, v in parse_qs(environ.get("QUERY_STRING", "")).items()}
             if environ["REQUEST_METHOD"] == "POST":

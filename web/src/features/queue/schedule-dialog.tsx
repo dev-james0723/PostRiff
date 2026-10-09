@@ -195,7 +195,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
-    (needsVideo ? isPostableVideo(candidate) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
+    (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
       && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
@@ -210,11 +210,12 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
+  const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
-      localTime &&
+      (youtubeNow || localTime) &&
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
@@ -400,7 +401,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           </div>
 
           <div className='grid gap-4 sm:grid-cols-2'>
-            <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
+            {!youtubeNow && <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
               <Label htmlFor='schedule-time'>Publish at</Label>
               <Input
                 id='schedule-time'
@@ -415,14 +416,14 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <span className='text-muted-foreground text-xs'>{timeZone}</span>
               {timePassed && <Note>Pick a future time.</Note>}
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
-            </div>
+            </div>}
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
               <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
             </div>
           </div>
 
-          {askFold && (
+          {!youtubeNow && askFold && (
             <div className='flex flex-col gap-1.5'>
               <Label id='schedule-fold-label'>This time happens twice that day</Label>
               <RadioGroup aria-labelledby='schedule-fold-label' value={String(fold)} onValueChange={(value) => setFold(value === '1' ? 1 : 0)}>

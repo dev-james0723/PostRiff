@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-10-08T18:25:03Z",
+  "product": "Rafii",
+  "canonicalDomain": "https://rafii.io",
+  "execution": "prepared_candidate",
+  "legalAttestationsAcceptedByAgent": false,
+  "productionProject": {
+    "id": "rafii-youtube-production",
+    "number": "568838253270",
+    "name": "Rafii YouTube Production",
+    "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+    "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
+    "oauthClientId": null,
+    "oauthConfiguration": "NOT CONFIGURED",
+    "apisEnabled": [
+      "youtube.googleapis.com",
+      "youtubeanalytics.googleapis.com"
+    ],
+    "oauthAudience": null,
+    "oauthPublishingStatus": null,
+    "verificationStatus": "NOT SUBMITTED",
+    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
+    "existingReferenceProjectId": "rafii-509720"
+  },
+  "workstreams": [
+    {
+      "id": "google_oauth_verification",
+      "status": "NOT SUBMITTED",
+      "portal": "https://console.cloud.google.com/auth/verification",
+      "applicationId": null,
+      "submittedAt": null,
+      "approvalReference": null,
+      "approvedAt": null,
+      "scopeCoverage": [],
+      "responses": [],
+      "requiredBeforeSubmission": [
+        "verified production domain and published branding",
+        "reviewed same-domain privacy policy",
+        "minimum actual scopes and justifications",
+        "truthful English end-to-end demonstration",
+        "owner facts and any required legal approval"
+      ],
+      "owner": "release agent prepares; owner performs withheld identity/legal/consent actions; Google decides"
+    },
+    {
+      "id": "youtube_compliance_audit",
+      "status": "NOT SUBMITTED",
+      "portal": "https://support.google.com/youtube/contact/yt_api_form",
+      "applicationId": null,
+      "submittedAt": null,
+      "packetFingerprint": null,
+      "approvalReference": null,
+      "approvedAt": null,
+      "responses": [],
+      "requiredBeforeSubmission": [
+        "operator identity/address/contacts",
+        "reviewer access and real feature evidence",
+        "reviewed privacy/terms/deletion/AI handling",
+        "owner personally accepts final attestations and any reviewer-access waiver",
+        "owner verifies confirmation email when requested"
+      ],
+      "owner": "audit agent prepares; owner accepts attestations and submits; YouTube decides",
+      "productionProjectNumber": "568838253270"
+    },
+    {
+      "id": "youtube_quota_extension",
+      "status": "NOT SUBMITTED",
+      "portal": "https://support.google.com/youtube/contact/yt_api_form",
+      "applicationId": null,
+      "submittedAt": null,
+      "approvedDailyVideoUploads": null,
+      "approvedDailySearchCalls": null,
+      "approvedDailyGeneralUnits": null,
+      "approvedAnalyticsQuota": null,
+      "approvalReference": null,
+      "approvedAt": null,
+      "responses": [],
+      "requiredBeforeSubmission": [
+        "live current allocations/usage by actual project and bucket",
+        "owner-selected measured or clearly forecast traffic model",
+        "separate requested upload and general values",
+        "compliance audit and owner final attestations"
+      ],
+      "owner": "quota agent prepares; owner selects forecast and submits attestations; YouTube decides"
+    },
+    {
+      "id": "project_public_upload_eligibility",
+      "status": "UNVERIFIED",
+      "applicationId": null,
+      "providerDecisionReference": null,
+      "providerAcceptanceReference": null,
+      "observedPolicyDate": "2026-10-08",
+      "currentOfficialDocumentation": "https://developers.google.com/youtube/v3/docs/videos/insert?hl=en",
+      "note": "Current videos.insert documentation and older revision-history restriction conflict. Neither establishes project-specific eligibility or review approval. Keep public-upload gate unverified until applicable requirements and owner-consented real acceptance are established."
+    }
+  ],
+  "withheldOwnerActions": [
+    "legal operator/contact confirmation",
+    "qualified review of public legal statements",
+    "required legal attestations and demo-account waiver",
+    "account OAuth consent",
+    "exact disposable private asset approval",
+    "exact public test-publication consent when eligible",
+    "review video and reviewer-access disclosure approval",
+    "identity verification, billing or credentials if actually unavoidable"
+  ],
+  "recordingRules": [
+    "Do not change NOT SUBMITTED merely because packet fields are prepared",
+    "Submission needs actual provider confirmation, timestamp and case/application identifier",
+    "Static form success text is not submission evidence",
+    "Approval requires actual Google decision and scope/project coverage",
+    "Record correction request and resubmission as separate dated events",
+    "Do not include secrets, raw customer data or passwords in this tracker"
+  ],
+  "updatedOn": "2026-10-08",
+  "stagingProject": {
+    "id": "rafii-509720",
+    "number": "81579135390",
+    "audience": "External",
+    "publishingStatus": "Testing",
+    "evidence": "Prior same-day acceptance public-rollout-20261008/RECEIPT.md; prior source, not revalidated in this mission.",
+    "productionUse": false
+  },
+  "currentProductionObservation": {
+    "url": "https://rafii.io",
+    "commit": "bb4ca5aa",
+    "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+    "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
+    "integrationBranchDeployed": false,
+    "youtubePublicLaunchReady": false,
+    "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+  },
+  "storageOwnerGate": {
+    "status": "BLOCKED OWNER BILLING",
+    "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
+    "observedPlan": "Free",
+    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "productionVideoBucket": "postriff-video",
+    "bucketPublic": false,
+    "bucketFileSizeLimitBytes": 50000000,
+    "freeGlobalProviderFileLimitMB": 50,
+    "largeVideoAcceptance": false,
+    "ownerBillingDecision": "PENDING EXISTING QUESTION",
+    "pricingEstimateUSDPerMonth": {
+      "proBase": 25,
+      "secondActiveMicroProject": 10,
+      "totalBeforeUsageTax": 35,
+      "status": "PUBLIC PRICE ESTIMATE ONLY; actual owner checkout required",
+      "source": "https://supabase.com/pricing"
+    },
+    "limitsSource": "https://supabase.com/docs/guides/storage/uploads/file-limits",
+    "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
+  }
+}

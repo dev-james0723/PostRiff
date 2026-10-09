@@ -1,10 +1,11 @@
 import io
+import os
 import json
 import base64
 import sys
 import unittest
 from contextlib import contextmanager
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -234,6 +235,15 @@ class HostedPhase2Acceptance(unittest.TestCase):
         status, _, result = invoke(app, 'POST', '/api/ideas/models/rescan', {'workspaceId': 'w'}, auth)
         self.assertEqual((status, result['models']), (200, []))
         service.ideas.rescan_models.assert_called_once_with('w', 't' * 32)
+
+    def test_health_reports_only_a_valid_deployment_commit(self):
+        app = HostedApplication(FakeService(), FakeWorker(), {}, "c" * 24)
+        for value, expected in (("a" * 40, "a" * 40), ("private-token-invalid", None), ("", None)):
+            with self.subTest(value=value), patch.dict(os.environ, {"VERCEL_GIT_COMMIT_SHA": value}):
+                status, _, health = invoke(app, "GET", "/api/health")
+                self.assertEqual(status, 200)
+                self.assertEqual(health["sourceRevision"], expected)
+                self.assertNotIn("private-token-invalid", json.dumps(health))
 
     def test_wsgi_auth_origin_and_cron_boundaries(self):
         app = HostedApplication(FakeService(), FakeWorker(), {"projectUrl": "https://project.supabase.co", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
