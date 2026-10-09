@@ -14,7 +14,7 @@ import tempfile
 import urllib.request
 
 VERSION = '26.2.6'
-BUNDLE_REVISION = VERSION + '-headless-minimal-2'
+BUNDLE_REVISION = VERSION + '-headless-minimal-3'
 DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
 SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
 
@@ -60,7 +60,11 @@ def main():
     if os.uname().sysname != 'Linux' or not shutil.which('dnf'):
         raise SystemExit('Renderer bundling requires the cloud Amazon Linux build image.')
     root = Path(__file__).resolve().parents[1] / '.document-runtime'
-    if (root / 'VERSION').exists() and (root / 'VERSION').read_text() == BUNDLE_REVISION:
+    archive = root.parent / '.document-runtime.tar.xz'
+    manifest = root.parent / '.document-runtime.tar.xz.sha256'
+    # Retain only the compressed artifact in the deployed function; the
+    # expanded native runtime is too large for the standard Python Lambda.
+    if archive.exists() and manifest.exists() and not root.exists():
         return
     if root.exists():
         shutil.rmtree(root)
@@ -177,13 +181,30 @@ def main():
                 pending.append(dep)
     (root / 'VERSION').write_text(BUNDLE_REVISION)
     bundle_bytes = sum(p.stat().st_size for p in root.rglob('*') if p.is_file())
-    print('Runtime bundle bytes', bundle_bytes)
-    # Current API dependencies occupy ~109 MB in the Vercel 2026-10-08 build.
-    # 385 MB for this renderer leaves headroom under the standard 500 MB
-    # preview function limit, independent of large-functions beta rollout.
+    print('Renderer expanded bytes', bundle_bytes)
     if bundle_bytes > 385_000_000:
-        raise SystemExit('Renderer exceeds standard-preview 385MB bundle budget')
-    print('Bundled checksum-verified LibreOffice', VERSION)
+        raise SystemExit('Expanded renderer exceeds verified 385MB /tmp budget')
+    # The function bundle must not contain the expanded 375MB Office tree.
+    # Python stdlib xz is available in both build and Lambda; the immutable
+    # archive is verified by SHA-256 before use and extracted into /tmp lazily.
+    compressed = archive.with_name(archive.name + '.new')
+    try:
+        with tarfile.open(compressed, mode='w:xz', preset=3) as tar:
+            tar.add(root, arcname='.', recursive=True)
+        archive_bytes = compressed.stat().st_size
+        if archive_bytes > 160_000_000:
+            raise SystemExit('Compressed renderer exceeds 160MB function budget')
+        with compressed.open('rb') as opened:
+            archive_sha = hashlib.file_digest(opened, 'sha256').hexdigest()
+        os.replace(compressed, archive)
+        manifest.write_text(archive_sha + '\\n')
+        shutil.rmtree(root)
+        print('Renderer compressed bytes', archive_bytes)
+        print('Renderer manifest SHA-256', archive_sha)
+        print('Bundled checksum-verified LibreOffice', VERSION)
+    finally:
+        if compressed.exists():
+            compressed.unlink()
 
 if __name__ == '__main__':
     main()
