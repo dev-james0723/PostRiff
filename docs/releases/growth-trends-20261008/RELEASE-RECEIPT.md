@@ -42,6 +42,19 @@ UNVERIFIED, BLOCKED. This file is updated as the release advances.
 - Running code at a522482e touches these tables only behind `to_regclass`
   guards (`growth/service.py` invalidate/sweep), on empty tables.
 
-### 103_feature_enrollments — pending
+### 103_feature_enrollments — VERIFIED applied
 
-Applied after the C0 CI run validates `postgres_feature_enrollments`.
+- Gate: C0 CI run 37866547621 (head 5038b16a) PASS — ci-python 4020 tests OK
+  (371 pre-existing skips), ci-postgres all suites exit 0 including
+  `postgres_feature_enrollments` (forced RLS, owner-only, idempotency, cohort
+  cap under a concurrent race, kill switch, denylist, read admission vs egress,
+  authenticated role denied), ci-web incl. `feature-readiness.test.cjs`,
+  typecheck/lint/build, browser.
+- Applied: `apply_migration` name `feature_enrollments_103`,
+  2026-10-09T01:16:09.533Z, SQL `migration-103-guarded.sql`.
+- Post-apply (01:16:21Z, read-only): table exists, 0 rows, RLS+force true, only
+  policy `pr_feature_enrollments_runtime` (service_role), 0 grants to
+  anon/authenticated/PUBLIC, ledger row sha b3b8b681bf78…, ledger 60 rows,
+  workspaces 5 (unchanged).
+- Running code at a522482e does not read this table; C0 code treats a missing
+  table as "not enrolled".

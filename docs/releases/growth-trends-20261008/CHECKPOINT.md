@@ -17,7 +17,7 @@ The Token Pilot registries for both D Festival and James-Au-Studio are at their
   `claude/trends-product-launch-20261009` (base 5038b16a); workflow
   `wf_681d3dd6-4aa`.
 - Production: a522482e (`dpl_HE8oWvF5TMF7xo63rgS26NSVB3WR`). Migrations 037/038
-  applied and verified 01:04:49Z. 103 pending CI.
+  applied and verified 01:04:49Z; 103 applied and verified 01:16:09Z.
 - Authorization: see RELEASE-RECEIPT.md.
 
 ## Next steps
