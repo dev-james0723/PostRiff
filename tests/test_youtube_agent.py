@@ -282,7 +282,9 @@ class AgentDatabase:
     @contextmanager
     def cursor(self): yield self
     def execute(self, sql, params=()):
-        if sql.startswith('SELECT id::text,state'):
+        if sql.startswith('SELECT to_regclass'):
+            self.result = (None, None, False)  # Legacy selector; indexed claims have real PG coverage.
+        elif sql.startswith('SELECT id::text,state'):
             self.result = [('workspace-one', copy.deepcopy(self.state))]
         elif sql.startswith('SELECT revision,state'):
             self.result = (self.revision, copy.deepcopy(self.state))

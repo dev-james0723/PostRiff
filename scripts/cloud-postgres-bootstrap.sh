@@ -84,7 +84,7 @@ cd -- "$jcb_pg_repo_root"
 # switches. Only the disposable cluster can be reached by the libpq defaults.
 # Keep concurrent fleet claims in their own clean cluster: prior fixture accounts
 # must not be blocked or mutated merely to make claim selection deterministic.
-for jcb_pg_group in creator fleet revocation agent_context workspace_provider_data privacy_erasure identity_fence openui_fence policy_acceptance; do
+for jcb_pg_group in creator fleet revocation agent_context workspace_provider_data privacy_erasure identity_fence openui_fence policy_acceptance operations_projection; do
   if [ "$jcb_pg_group" = creator ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_creator.py tests/phase2/postgres_video.py
       tests/phase2/postgres_consumer_campaign_worker.py tests/phase2/postgres_youtube_acceptance.py
@@ -104,8 +104,10 @@ for jcb_pg_group in creator fleet revocation agent_context workspace_provider_da
     jcb_pg_scripts=(tests/phase2/postgres_youtube_identity_fence.py)
   elif [ "$jcb_pg_group" = openui_fence ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_openui_fence.py)
-  else
+  elif [ "$jcb_pg_group" = policy_acceptance ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_policy_acceptance.py)
+  else
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_operations_projection.py)
   fi
 env -i \
   PATH="$PATH" HOME="$jcb_pg_home" TMPDIR="$jcb_pg_temp_root" \

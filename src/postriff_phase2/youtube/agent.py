@@ -416,7 +416,12 @@ class YouTubePublishingAgent:
             filters = " AND NOT (id=ANY(%s::uuid[])) AND coalesce((state#>>'{youtubeAgent,fleetLease,until}')::float8,0)<=%s"
             extra = (list(exclude_workspaces), self.clock())
         with self.service.connection_factory() as db, db.cursor() as cur:
-            cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
+            from .operations import planner_sql, schema_ready
+            indexed = schema_ready(cur)
+            if indexed:
+                cur.execute(planner_sql(fleet=fleet), (self.clock(), self.clock()) + extra)
+            else:
+                cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
                 AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
                 AND EXISTS(SELECT 1 FROM jsonb_array_elements(state#>'{youtubeAgent,policies}') p,
                     jsonb_array_elements(state#>'{youtubeAgent,drafts}') d
@@ -426,9 +431,20 @@ class YouTubePublishingAgent:
                       AND EXISTS(SELECT 1 FROM jsonb_array_elements(p->'drafts') e WHERE e->>'id'=d->>'id'))
                 """ + filters + """ ORDER BY coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0),id LIMIT 100""" +
                 (' FOR UPDATE SKIP LOCKED' if fleet else ''),
-                (self.clock(), self.clock(), self.clock() + 1800) + extra)
-            for workspace, raw in cur.fetchall():
+                    (self.clock(), self.clock(), self.clock() + 1800) + extra)
+            for selected in cur.fetchall():
+                if indexed:
+                    workspace = selected[0]
+                    cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace,))
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+                    raw = row[0]
+                else:
+                    workspace, raw = selected
                 state = json.loads(raw) if isinstance(raw, str) else raw
+                if 'accountDeletion' in state or 'accountBlock' in state:
+                    continue
                 for policy in root(state)['policies']:
                     if policy.get('status') != 'active' or not policy['startsAt'] <= self.clock() < policy['endsAt']:
                         continue

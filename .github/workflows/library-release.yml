@@ -30,7 +30,8 @@ jobs:
   library:
     if: ${{ inputs.prepare_dependency_lock != true }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # Cold-run apt setup consumed over 30 minutes before browser acceptance.
+    timeout-minutes: 60
     env:
       CI: 'true'
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:4439

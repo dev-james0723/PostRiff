@@ -200,9 +200,13 @@ def purge_expired(cur, now=None):
     channels = """EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(w.state#>'{phase2,channels}','[]'::jsonb)) c
         WHERE c->>'platform'='YouTube' AND c->>'evidenceSource'='live_provider' AND NOT c ? 'youtubeProviderDataRemoved'
           AND (jsonb_typeof(c->'youtubeIdentityIngestedAt') IS DISTINCT FROM 'number' OR jsonb_path_exists(c, '$.youtubeIdentityIngestedAt ? (@ <= $cutoff)', jsonb_build_object('cutoff', %s))))"""
-    cur.execute('SELECT id::text FROM public.pr_workspaces w WHERE (' + jobs + ' OR ' + channels + ') OR EXISTS('
-                'SELECT 1 FROM public.pr_youtube_uploads u WHERE u.workspace_id=w.id AND NOT u.state ? %s AND (' + _journal_expired().replace('state', 'u.state').replace('updated_at', 'u.updated_at') + ')) ORDER BY id LIMIT 100',
-                (now, cutoff, cutoff, REMOVED, cutoff, cutoff, cutoff))
+    from .operations import EXPIRY_SQL, schema_ready
+    if schema_ready(cur):
+        cur.execute(EXPIRY_SQL, (now, now))
+    else:
+        cur.execute('SELECT id::text FROM public.pr_workspaces w WHERE (' + jobs + ' OR ' + channels + ') OR EXISTS('
+                    'SELECT 1 FROM public.pr_youtube_uploads u WHERE u.workspace_id=w.id AND NOT u.state ? %s AND (' + _journal_expired().replace('state', 'u.state').replace('updated_at', 'u.updated_at') + ')) ORDER BY id LIMIT 100',
+                    (now, cutoff, cutoff, REMOVED, cutoff, cutoff, cutoff))
     workspaces = [row[0] for row in cur.fetchall()]
     for workspace in workspaces:
         cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE SKIP LOCKED', (workspace,))

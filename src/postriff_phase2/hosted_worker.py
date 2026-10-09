@@ -30,12 +30,15 @@ def configured_worker_limits(values=None):
     return jobs, seconds
 
 
-def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False):
+def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True):
     """The actual bounded selection, shared with disposable query-plan acceptance."""
     dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
     dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
     if youtube_only and exclude_youtube:
         raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+    if youtube_only and capacity_ready and operations_ready:
+        from .youtube.operations import WORKER_SQL
+        return WORKER_SQL
     platform_filter = (" AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
                        " AND coalesce(j#>>'{manifest,platform}','')<>'YouTube'" if exclude_youtube else '')
     return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
@@ -121,9 +124,26 @@ class PostgresWorker:
                 # Select only tenants with due work, oldest dispatch first. The
                 # durable cursor survives cron/worker restarts; a busy tenant
                 # cannot monopolize every chunk lease by sorting before others.
-                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube), (self.clock(), self.clock()))
-                for workspace_id, revision, raw_state in cur.fetchall():
+                from .youtube.operations import schema_ready
+                indexed = youtube_only and capacity_ready and schema_ready(cur)
+                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube,
+                                              operations_ready=indexed), (self.clock(), self.clock()))
+                for candidate in cur.fetchall():
+                    if indexed:
+                        workspace_id, revision = candidate
+                        # The selector owns the row lock. Fetch only the state
+                        # considered for this claim, rather than 100 histories.
+                        cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
+                        row = cur.fetchone()
+                        if not row:
+                            continue
+                        raw_state = row[0]
+                    else:
+                        workspace_id, revision, raw_state = candidate
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
+                    # Projections are selection hints, never account authority.
+                    if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
+                        continue
                     original = json.dumps(state, sort_keys=True)
                     if youtube_only or exclude_youtube:
                         # Invalidation can hold jobs too; the isolated lane must

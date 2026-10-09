@@ -284,6 +284,8 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).click();
+   // Observe actual modal teardown before the next action can scroll the page.
+   if(width===390)await page.locator('[data-slot="drawer-portal"]').waitFor({state:'detached',timeout:5000});
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();

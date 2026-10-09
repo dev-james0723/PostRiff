@@ -79,9 +79,12 @@ class YouTubeCreatorService:
     def fleet_schema_ready(self):
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT to_regclass('public.pr_youtube_cache'),to_regclass('public.pr_youtube_quota_daily'),
-                to_regclass('public.pr_worker_tenants')""")
+                to_regclass('public.pr_worker_tenants'),to_regclass('public.pr_youtube_operations'),
+                to_regclass('public.pr_youtube_planner_candidates'),
+                EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.pr_youtube_uploads')
+                  AND attname='youtube_api_expires_at' AND NOT attisdropped)""")
             row = cur.fetchone()
-        return bool(row and all(row))
+        return bool(row and len(row) == 6 and all(row))
 
     def claim_identity(self, *, excluded=()):
         """Claim-only seam for fleet concurrency acceptance; no provider request."""
