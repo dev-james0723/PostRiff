@@ -580,19 +580,22 @@ class CoworkerService:
         audience = _clean(payload.get("audience"), 400) or ((state.get("brandHub") or {}).get("audience") or "")
         brief = fact_pack.canonical_brief(pack, goal=goal, audience=audience, cta=_clean(payload.get("cta"), 160) or None)
         angles = fact_pack.angles(pack, brief)
-        channels = {c.get("id"): c for c in ((state.get("phase2") or {}).get("channels") or [])}
-        destinations = []
-        for item in (payload.get("destinations") or [])[:6]:
-            channel = channels.get(item.get("channelId"))
-            if channel is None or channel.get("revoked"):
-                raise AlphaError("Choose connected accounts from this workspace.", 400)
-            destinations.append({"platform": channel["platform"], "language": _clean(item.get("language") or channel.get("language") or "en", 20), "channelId": channel["id"]})
-        if not destinations:
-            raise AlphaError("Choose at least one account to write for.", 400)
+        destinations = _campaign_destinations(state, payload.get("destinations"))
         usable = [c for c in pack["claims"] if c["usableForDraft"]]
         # Content-addressed from inputs that do not change with the clock (the fact pack carries retrieval times, so its
         # hash would give every repeat a new id): the source's own content-derived id and the brief's goal, audience, CTA.
-        record_id = "sc_" + hashlib.sha256(json.dumps([workspace_id, artifact["id"], goal, audience, brief.get("cta")], ensure_ascii=False).encode()).hexdigest()[:12]
+        # Draft-only targets (a platform without an account, or a native format) join the identity, so the same source
+        # for other targets is another campaign; account-only requests keep their earlier identity (compatibility).
+        identity = [workspace_id, artifact["id"], goal, audience, brief.get("cta")]
+        if any(not d.get("channelId") or d.get("format") for d in destinations):
+            identity.append(sorted([d["platform"], d["language"], d.get("channelId") or "", d.get("format") or ""] for d in destinations))
+        record_id = "sc_" + hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()[:12]
+        fingerprint = _fingerprint(state, destinations)
+        base_id = None
+        if payload.get("regenerate") is True:
+            # An explicit regenerate is a new tracked revision; the earlier campaign and its drafts stay as they are.
+            revisions = [x for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id or x.get("baseId") == record_id]
+            base_id, record_id = record_id, f"{record_id}_r{len(revisions) + 1}"
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "edit")
@@ -604,8 +607,12 @@ class CoworkerService:
             commands = self.hosted.commands
             existing = next((x for x in ((state_.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id), None)
             if existing:
+                if existing.get("fingerprint") and existing["fingerprint"] != fingerprint and not existing.get("stale"):
+                    # Skills, voice or the capability projection changed since it was written: say so; never redraft silently.
+                    existing["stale"] = {"reason": "inputs_changed", "changed": sorted(k for k in fingerprint if fingerprint.get(k) != existing["fingerprint"].get(k)), "at": now}
                 box["record"], box["existing"] = existing, True
                 return existing
+            _mark_superseded(state_, artifact, record_id, now)
             source_id = None
             if pack["claims"]:
                 before = {s.get("id") for s in state_.get("sources") or []}
@@ -618,11 +625,12 @@ class CoworkerService:
                                     "retrievedAt": artifact["provenance"].get("retrievedAt"), "evidenceId": evidence_id, "factPackId": pack["id"], "format": artifact["format"]}
             created = commands(state_, principal, "raffi_campaign_create", {"goal": goal, "audience": audience or "Not specified",
                                                                              "facts": {f"claim_{i + 1}": c["text"][:200] for i, c in enumerate(usable[:12])},
-                                                                             "accountIds": [d["channelId"] for d in destinations]})
+                                                                             "accountIds": [d["channelId"] for d in destinations if d.get("channelId")]})
             campaign_id = next((c["id"] for c in reversed(((state_.get("raffi") or {}).get("campaignPlanning") or {}).get("campaigns") or []) if c.get("goal") == goal), None)
             record = {"id": record_id, "campaignId": campaign_id, "sourceId": source_id, "evidenceId": evidence_id,
                       "source": {k: artifact[k] for k in ("id", "format", "title", "provenance")}, "factPack": pack, "brief": brief, "angles": angles,
-                      "destinations": destinations, "drafts": [], "creativeBriefs": [], "status": "drafting", "createdAt": now, "createdBy": principal}
+                      "destinations": destinations, "drafts": [], "creativeBriefs": [], "status": "drafting", "createdAt": now, "createdBy": principal,
+                      "fingerprint": fingerprint, "requestKey": _clean(payload.get("requestKey"), 120) or None, **({"baseId": base_id} if base_id else {})}
             state_.setdefault("coworker", {}).setdefault("sourceCampaigns", [])
             state_["coworker"]["sourceCampaigns"] = state_["coworker"]["sourceCampaigns"][-19:] + [record]
             box["record"] = record
@@ -631,7 +639,8 @@ class CoworkerService:
 
         self._command(workspace_id, token, create, "edit", "source_campaign.created", record_id, {"claims": len(pack["claims"]), "usable": len(usable)})
         record = box["record"]
-        if box.get("existing") and record.get("status") != "drafting":
+        retry = bool(box.get("existing")) and payload.get("retry") is True and record.get("status") in ("needs_input", "ready_for_review")
+        if box.get("existing") and record.get("status") != "drafting" and not retry:
             # The same source and brief already made this campaign: answer with it and never draft over it (the
             # record id is content-addressed, so a repeat would otherwise replace its drafts with an error).
             return {"sourceCampaign": record, "verified": True, "existing": True, "creative": None}
@@ -652,7 +661,16 @@ class CoworkerService:
                                    "claims": [c["text"] for c in usable if not angle or c["claimId"] in angle["claimIds"] or len(angle["claimIds"]) > 1][:8],
                                    "exclusions": "Do not use any claim that is not listed here."}, ensure_ascii=False)
             key = f"source_campaign:{record_id}"
+            kept = [d for d in record.get("drafts") or [] if d.get("variantId")]
+            if retry:
+                # Only targets without a saved draft are written again, under a new writer key; finished drafts and the
+                # person's edits to them are never touched.
+                done = {(d.get("platform"), d.get("language"), d.get("channelId"), d.get("format")) for d in kept}
+                destinations = [d for d in record["destinations"] if (d["platform"], d["language"], d.get("channelId"), d.get("format")) not in done]
+                key = f"{key}:retry{int(record.get('attempts') or 1) + 1}"
             try:
+                if not destinations:
+                    raise AlphaError("Every target already has a draft.", 409, code="nothing_to_retry")
                 with skill_compiler.workflow_context("rafii-source-to-campaign"):
                     ideas.turn(workspace_id, token, conversation_id, {"text": "Write one post per destination from the campaign brief.", "material": material,
                                                                       "materialRef": {"type": "campaign", "id": record["campaignId"]}, "idempotencyKey": key,
@@ -664,10 +682,16 @@ class CoworkerService:
                 if run and run[1] == "completed":
                     applied = ideas.apply(workspace_id, token, self.repository.get(workspace_id, token)["revision"], run[0], run[2], separate=True,
                                           tag={"sourceCampaignId": record_id})
-                    drafts = [{"variantId": c.get("variantId"), "platform": c.get("platform"), "language": c.get("language"), "runId": run[0]}
+                    saved = {v["id"]: v for v in self._state(workspace_id, token).get("variants") or []}
+                    drafts = [{"variantId": c.get("variantId"), "platform": c.get("platform"), "language": c.get("language"), "runId": run[0],
+                               **({"channelId": c["channelId"]} if c.get("channelId") else {}),
+                               **({"format": saved[c["variantId"]]["format"]} if saved.get(c["variantId"], {}).get("format") else {})}
                               for c in applied.get("variantIds") or [] if isinstance(c, dict) and c.get("variantId")]
+                elif run is not None:
+                    drafts = [{"error": f"The writer run ended as {run[1]}.", "retryable": True}]
             except AlphaError as error:
-                drafts = [{"error": str(error)[:200]}]
+                drafts = [{"error": str(error)[:200], "code": getattr(error, "code", None), "retryable": getattr(error, "code", None) != "nothing_to_retry"}]
+            drafts = kept + drafts if retry else drafts
         state = self._state(workspace_id, token)
         variants = {v["id"]: v for v in state.get("variants") or []}
         claims_text = "\n".join(c["text"] for c in usable)
@@ -678,13 +702,25 @@ class CoworkerService:
                 unsupported = [v for v in humanizer.meaning_diff(claims_text, variant.get("text") or "") if v["code"] in ("number_added", "name_added", "anecdote_added", "feeling_added")]
                 draft["quality"] = {"evaluator": result["version"], "meaning": unsupported, "style": result["styleFindings"], "lint": result["stages"]["lint"][:5]}
                 draft["status"] = "needs_revision" if unsupported else "ready"
-        visual = [d["platform"] for d in destinations if d["platform"] in VISUAL_FIRST]
+        for draft in drafts:
+            native = (variants.get(draft.get("variantId")) or {}).get("native") or {}
+            if native:
+                # What the selected format still needs (an image, a video) and whether its platform route was qualified;
+                # a script is never a finished video and a missing asset never blocks the copy.
+                draft["media"] = native.get("media")
+                draft["skillRoute"] = {k: (native.get("skillRoute") or {}).get(k) for k in ("qualified", "missing", "cut")} if native.get("skillRoute") else None
+                draft["unresolved"] = native.get("unresolved") or []
+        visual = [d["platform"] for d in record["destinations"] if d["platform"] in VISUAL_FIRST]
         creative_plan = creative.plan_assets(state, {"message": brief["coreMessage"], "copy": brief["coreMessage"], "cta": brief.get("cta")}, visual, "image") if visual else None
 
         def finish(state_, _p):
             target = next(x for x in state_["coworker"]["sourceCampaigns"] if x["id"] == record_id)
             target["drafts"] = drafts
+            target["attempts"] = int(target.get("attempts") or 1) + (1 if retry else 0)
             target["creativeBriefs"] = creative_plan["plans"] if creative_plan else []
+            # Missing media is a saved brief and an explicit state, never a reason to drop the finished copy.
+            target["media"] = {"state": ("brief_saved" if creative_plan.get("missingAssets") else "planned") if creative_plan else "not_needed",
+                               "missingAssets": (creative_plan or {}).get("missingAssets") or []}
             target["status"] = "ready_for_review" if any(d.get("status") in ("ready", "needs_revision") for d in drafts) else ("needs_source" if not usable else "needs_input")
             target["updatedAt"] = self.clock()
             return copy.deepcopy(target)
@@ -706,6 +742,22 @@ class CoworkerService:
                 "creative": creative_plan and {"missingAssets": creative_plan["missingAssets"], "compiled": creative_plan["compiled"]}}
 
     # === Adaptive overlays (WP4) ===================================================================================================
+    def source_campaign_export(self, workspace_id, token, record_id):
+        """A manual-handoff package for one campaign's drafts: exact current text (the person's edits win), native fields
+        in order, attribution and a manifest with hashes. Never a publication receipt. Any member who can read may export."""
+        from .. import creation_capabilities
+        state = self._state(workspace_id, token)
+        record = next((x for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id), None)
+        if record is None:
+            raise AlphaError("That campaign isn't in this workspace.", 404, code="not_found")
+        variants = {v["id"]: v for v in state.get("variants") or []}
+        chosen = [variants[d["variantId"]] for d in record.get("drafts") or [] if d.get("variantId") in variants]
+        package = creation_capabilities.export_package(chosen, campaign_id=record_id, created_at=self.clock())
+        package["attribution"] = {"sourceTitle": (record.get("source") or {}).get("title"), "sourceUrl": ((record.get("source") or {}).get("provenance") or {}).get("url"),
+                                  "factPackId": (record.get("factPack") or {}).get("id"), "evidenceId": record.get("evidenceId")}
+        package["missing"] = [d for d in record.get("drafts") or [] if not d.get("variantId") or d["variantId"] not in variants]
+        return package
+
     def overlays_view(self, workspace_id, token):
         self._require("RAFII_ADAPTIVE_SKILLS_ENABLED")
         state = self._state(workspace_id, token)
@@ -1078,3 +1130,62 @@ class CoworkerService:
 
 def _clean(value, limit):
     return " ".join(str(value or "").split())[:limit]
+
+
+def _campaign_destinations(state, requested):
+    """Up to six targets. A connected account keeps its platform; a draft-only target names a platform (and optionally a
+    native format) without OAuth. Everything is validated against the creation projection; never another workspace's
+    account, never a substituted Page or profile."""
+    from .. import creation_capabilities
+    channels = {c.get("id"): c for c in ((state.get("phase2") or {}).get("channels") or [])}
+    out = []
+    for item in (requested or [])[:6]:
+        if not isinstance(item, dict):
+            raise AlphaError("Choose connected accounts from this workspace.", 400)
+        if item.get("channelId"):
+            channel = channels.get(item.get("channelId"))
+            if channel is None or channel.get("revoked") or (item.get("platform") and item["platform"] != channel.get("platform")):
+                raise AlphaError("Choose connected accounts from this workspace.", 400)
+            target = {"platform": channel["platform"], "language": _clean(item.get("language") or channel.get("language") or "en", 20), "channelId": channel["id"]}
+        elif isinstance(item.get("platform"), str):
+            target = {"platform": item["platform"], "language": _clean(item.get("language") or "en", 20)}
+        else:
+            raise AlphaError("Choose connected accounts from this workspace.", 400)
+        if isinstance(item.get("format"), str) and item["format"]:
+            target["format"] = item["format"]
+        out.append(target)
+    if not out:
+        raise AlphaError("Choose at least one account to write for.", 400)
+    creation_capabilities.validate_destinations(out)
+    return out
+
+
+def _fingerprint(state, destinations):
+    """Revisions a campaign's drafts depend on: the skill registry release, the creation projection and the workspace's
+    voice and brand. A change marks an existing campaign stale instead of silently reusing or redrafting it."""
+    from .. import creation_capabilities, skill_registry
+    try:
+        release = skill_registry.default_registry().release()
+    except Exception:  # noqa: BLE001
+        release = None
+    try:
+        capability = creation_capabilities.projection().revision
+    except Exception:  # noqa: BLE001
+        capability = None
+    revisions = overlays.revisions(state) if hasattr(overlays, "revisions") else {}
+    return {"registryRelease": release, "capabilityRevision": capability,
+            "voiceRevision": (revisions or {}).get("voiceRevision"), "brandRevision": (revisions or {}).get("brandRevision"),
+            "targets": hashlib.sha256(json.dumps(sorted([d["platform"], d["language"], d.get("channelId") or "", d.get("format") or ""] for d in destinations)).encode()).hexdigest()[:16]}
+
+
+def _mark_superseded(state, artifact, record_id, now):
+    """The same link with new content: earlier campaigns from it are marked stale (their drafts and any
+    approvals bound to their content hashes stay as they are and are re-checked before use; nothing is overwritten)."""
+    url = (artifact.get("provenance") or {}).get("url")
+    content = (artifact.get("provenance") or {}).get("contentHash")
+    for record in (state.get("coworker") or {}).get("sourceCampaigns") or []:
+        provenance = (record.get("source") or {}).get("provenance") or {}
+        # Only a link identifies "the same source" safely; two pasted texts with one title may be unrelated.
+        same_source = bool(url) and provenance.get("url") == url
+        if same_source and provenance.get("contentHash") != content and not record.get("stale"):
+            record["stale"] = {"reason": "source_changed", "supersededBy": record_id, "at": now}

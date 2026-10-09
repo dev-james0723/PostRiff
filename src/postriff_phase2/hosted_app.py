@@ -1075,6 +1075,10 @@ class HostedApplication:
                     raw = service.export(workspace_id, token)
                     start_response("200 OK", [("Content-Type", "application/zip"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("Content-Disposition", 'attachment; filename="postriff-private-drafts.zip"'), ("X-Content-Type-Options", "nosniff")])
                     return [raw]
+                if len(parts) == 5 and parts[3] == "drafts" and parts[4] == "export" and method == "POST":
+                    # Content Skills Integration: a manual-handoff package (files + manifest) for chosen drafts. Not a
+                    # publication receipt; nothing leaves the workspace except the response to this member.
+                    return self._json(start_response, 200, service.export_drafts(workspace_id, token, self._body(environ).get("variantIds")))
                 if len(parts) == 4 and parts[3] == "profile-export" and method == "GET":
                     raw = service.export_profile(workspace_id, token)
                     start_response("200 OK", [("Content-Type", "application/zip"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("Content-Disposition", 'attachment; filename="postriff-personal-voice.zip"'), ("X-Content-Type-Options", "nosniff")])

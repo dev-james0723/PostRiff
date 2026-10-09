@@ -1275,6 +1275,19 @@ class HostedWorkspaceService:
             return self.assets.storage.get(workspace_id, "media", poster["objectName"]), "image/jpeg"
         return self.assets.storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime", "application/octet-stream")
 
+    def export_drafts(self, workspace_id, token, variant_ids):
+        """Copy/export fidelity (spec §12): exact text, native fields in order, Unicode and attribution per chosen draft,
+        plus a manifest with sha256 per file. Private production notes never leave; `published` is always False."""
+        from .creation_capabilities import export_package
+        if not isinstance(variant_ids, list) or not variant_ids or len(variant_ids) > 50 or not all(isinstance(v, str) for v in variant_ids):
+            raise AlphaError("Choose 1–50 drafts to export.", 400, code="export_selection")
+        state = self.get(workspace_id, token)["state"]
+        by_id = {v.get("id"): v for v in state.get("variants") or [] if isinstance(v, dict)}
+        missing = [v for v in variant_ids if v not in by_id]
+        if missing:
+            raise AlphaError("Some drafts aren't in this workspace.", 404, code="not_found")
+        return export_package([by_id[v] for v in dict.fromkeys(variant_ids)], created_at=self.clock())
+
     def export(self, workspace_id, token):
         from .learning_service import export_files
         snapshot = self.get(workspace_id, token)
