@@ -35,6 +35,29 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       };
       const boot = await request('POST', '/api/auth/verify', { plan: 'studio' });
       const wid = boot.workspaceId;
+      const policyPage = await context.newPage();
+      await policyPage.goto(base + '/app/youtube');
+      const agree = policyPage.getByRole('button', { name: 'Agree to YouTube policies', exact: true });
+      await agree.waitFor();
+      assert.equal(await agree.isEnabled(), false, 'The synthetic user must explicitly check agreement.');
+      await policyPage.getByRole('checkbox', { name: 'I agree to these Privacy Policy and Terms revisions for my YouTube use in this workspace.', exact: true }).check();
+      const [accepted] = await Promise.all([
+        policyPage.waitForResponse(response => response.url().endsWith('/youtube-policy') && response.request().method() === 'POST'),
+        agree.click()
+      ]);
+      assert.ok(accepted.ok(), await accepted.text());
+      assert.equal((await accepted.json()).receipt.userId, principal);
+      await policyPage.goto(base + '/app/channels?connect=youtube&capability=publish');
+      await policyPage.waitForFunction(() => document.querySelector('[data-tour="connect-continue"]')?.disabled === false);
+      await policyPage.getByRole('button', { name: 'Cancel', exact: true }).click();
+      for (let reopening = 0; reopening < 2; reopening++) {
+        await policyPage.locator('[data-tour="channels-connect"]').first().click();
+        await policyPage.locator('[data-tour="connect-platform"]').filter({ hasText: 'YouTube' }).click();
+        await policyPage.waitForFunction(() => document.querySelector('[data-tour="connect-continue"]')?.disabled === false);
+        await policyPage.getByRole('button', { name: 'Cancel', exact: true }).click();
+      }
+      results.push({ width, check: 'SYNTHETIC explicit policy checkbox, holder receipt and cached connect-sheet reopen' });
+      await policyPage.close();
       const started = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, { capability: 'publish' });
       const connected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, { state: new URL(started.authorizeUrl).searchParams.get('state'), code: 'synthetic-code' });
       const cid = connected.connectionId;
@@ -197,6 +220,12 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       assert.deepEqual(crossPagePreview.request().postDataJSON().draftIds, [plan.result.id]);
       assert.deepEqual(crossPagePreview.request().postDataJSON().draftDigests, { [plan.result.id]: plan.result.digest });
       assert.ok(crossPagePreview.ok());
+      // This POST continues to the native synthetic backend; only list/history
+      // responses above are mocked. Retain both exact authority IDs for erasure.
+      const crossPagePolicy = await crossPagePreview.json();
+      assert.equal(crossPagePolicy.result.status, 'prepared');
+      assert.notEqual(crossPagePolicy.result.id, policy.id);
+      const nativePolicies = [policy, crossPagePolicy.result];
       const exactPolicyScope = agent.locator(`[data-youtube-policy-scope-draft="${plan.result.id}"]`);
       await exactPolicyScope.waitFor();
       assert.ok((await exactPolicyScope.textContent()).includes(plan.result.digest));
@@ -300,13 +329,72 @@ const proof = status => ({ status, execution: 'CLOUD SYNTHETIC APPLICATION BROWS
       await page.goto(base + '/app/youtube?channel=foreign-connection');
       await page.getByRole('heading', { name: 'Connect your creator channel', exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: 'Approve exact action', exact: true }).count(), 0);
+      // Actual synthetic disconnect/reconnect must show erased plans as
+      // permanently unusable, while preserving the customer's Library/title.
+      await request('DELETE', `/api/workspaces/${wid}/channels/${encodeURIComponent(cid)}`, {});
+      const reconnectStart = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/start`, {
+        capability: 'publish', input: { connectionId: cid }
+      });
+      const reconnected = await request('POST', `/api/workspaces/${wid}/channels/youtube/oauth/complete`, {
+        state: new URL(reconnectStart.authorizeUrl).searchParams.get('state'), code: 'synthetic-reconnect-code'
+      });
+      assert.equal(reconnected.connectionId, cid);
+      // Pagination fixtures were removed before disconnect. Verify the real
+      // tombstones and page bounds, so absence cannot be mistaken for archiving
+      // or an off-page record. The fixture owns one draft and two native policies.
+      const erasedView = await request('GET', `/api/workspaces/${wid}/youtube/${encodeURIComponent(cid)}/agent?limit=25`);
+      assert.deepEqual(erasedView.drafts.map(draft => draft.id), [plan.result.id]);
+      assert.deepEqual(erasedView.policies.map(policy => policy.id).sort(), nativePolicies.map(policy => policy.id).sort());
+      assert.deepEqual(erasedView.pagination, {
+        drafts: { hasMore: false, nextCursor: null }, policies: { hasMore: false, nextCursor: null }
+      });
+      const erasedDraft = erasedView.drafts[0];
+      assert.equal(erasedDraft.status, 'privacy_erased');
+      assert.equal(erasedDraft.privacyErased, true);
+      assert.equal(erasedDraft.readOnly, true);
+      assert.equal(erasedDraft.channelId, '');
+      assert.equal(erasedDraft.digest, plan.result.digest);
+      assert.equal(erasedDraft.assetId, plan.result.assetId);
+      assert.deepEqual(erasedDraft.publishOptions, plan.result.publishOptions);
+      for (const nativePolicy of nativePolicies) {
+        const erasedPolicy = erasedView.policies.find(policy => policy.id === nativePolicy.id);
+        assert.equal(erasedPolicy.status, 'revoked');
+        assert.equal(erasedPolicy.privacyErased, true);
+        assert.equal(erasedPolicy.channelId, '');
+        assert.equal(erasedPolicy.digest, nativePolicy.digest);
+      }
+      await page.goto(base + '/app/youtube?channel=' + cid);
+      const erasedPlans = page.getByRole('region', { name: 'YouTube publishing agent', exact: true });
+      const erasedPlan = erasedPlans.locator(`[data-youtube-agent-draft="${plan.result.id}"]`);
+      await erasedPlan.getByText('Data removed. This plan cannot run again.', { exact: false }).waitFor();
+      await erasedPlan.getByText(planTitle, { exact: true }).waitFor();
+      await erasedPlan.getByText('Read-only plan record. This view grants no new publishing approval.', { exact: true }).waitFor();
+      assert.equal(await erasedPlans.locator('[data-youtube-agent-draft]').count(), 1);
+      assert.equal(await erasedPlans.locator('[data-youtube-agent-policy]').count(), nativePolicies.length);
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Next publishing plans', exact: true }).isEnabled(), false);
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Next authority records', exact: true }).isEnabled(), false);
+      assert.equal(await erasedPlans.getByRole('button', { name: 'Approve and queue this plan', exact: true }).count(), 0);
+      assert.equal(await erasedPlans.getByRole('checkbox', { name: `Include ${planTitle} in autopilot policy`, exact: true }).count(), 0);
+      for (const nativePolicy of nativePolicies) {
+        const erasedAuthority = erasedPlans.locator(`[data-youtube-agent-policy="${nativePolicy.id}"]`);
+        await erasedAuthority.getByText('Channel data was removed and this authority cannot restart.', { exact: false }).waitFor();
+        await erasedAuthority.getByText('Read-only authority record. Prepare new authority to approve different future plans.', { exact: true }).waitFor();
+        assert.equal(await erasedAuthority.getByRole('button').count(), 0);
+      }
+      await page.getByText('Creator receipts and official change notifications', { exact: true }).click();
+      await page.getByText('YouTube data was removed. This operation cannot run again.', { exact: false }).first().waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Read back the accepted result', exact: true }).count(), 0);
+      const erasedOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+      assert.ok(erasedOverflow, 'Erased-operation notices must fit the mobile viewport.');
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-erased-${width}.png`), fullPage: true });
       assert.deepEqual(errors, []);
       results.push({ width, execution: 'cloud-synthetic', realGoogleE2E: false, independentCapabilities: 37,
         productionNotReady: true, officialUnsupportedCommunity: true, publicGateHeld: true, humanReviewBeforeWrite: true,
         distinctOAuthLaneConnections: true, explicitAgenticConsent: true, reviewableLibraryPlan: true,
         finiteThirtyDayAuthority: true, policyPreviewNotExecution: true, unapprovedAutopilotHeld: true,
         boundedAgentPageUiFixtures: true, exactSelectionAcrossPages: true, readOnlyExpiredAndArchivedHistory: true, historyOnlyOnExplicitOpen: true, archiveOnlyOnExplicitOwnerClick: true,
-        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true });
+        metadataPreserved: true, destructiveExactIdGuard: true, privateStreamKeyGuard: true, foreignConnectionRejected: true, workspaceCapacityVisible: true, noHorizontalOverflow: true,
+        erasedPlansAndReceiptsVisible: true, erasedOperationsPermanentlyHeld: true, genuineReconnectPreservesUserContent: true });
       await context.close();
     }
     writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2) + '\n');

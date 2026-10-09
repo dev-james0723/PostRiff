@@ -198,6 +198,32 @@ def _parent_run(cur, workspace_id, run_id) -> dict | None:
             "ageSeconds": float(row[6] or 0)}
 
 
+def _assert_parent_context(cur, auth, workspace_id, run_id) -> dict:
+    """Read the current server parent in the authenticated tenant and scope.
+
+    A cached UI handoff, projection or accepted revision is never authority for
+    reusing a YouTube-derived answer after its native context was removed.
+    """
+    from . import ui_projection
+    scope = getattr(auth, "scope", "workspace") or "workspace"
+    scope_key = getattr(auth, "scope_key", "") or ""
+    if str(getattr(auth, "workspace_id", "")) != str(workspace_id):
+        raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+    parent = _parent_run(cur, workspace_id, run_id)
+    if parent is None or not _run_in_scope(parent["runKey"], scope, scope_key):
+        raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+    ui_projection.assert_presentable_parent(parent["result"])
+    return parent
+
+
+def _assert_artifact_parent_context(cur, auth, workspace_id, artifact_id) -> dict:
+    head = _store_head(cur, auth, workspace_id, artifact_id)
+    parent = _assert_parent_context(cur, auth, workspace_id, head["runId"])
+    if str(parent["actor"]) != str(head["actor"]):
+        raise AlphaError("That view is unavailable.", 404, code="ui_artifact")
+    return head
+
+
 def _attempt_key_exists(cur, workspace_id, key) -> bool:
     cur.execute("/* rafii-ui:attempt_by_key */ SELECT id::text FROM public.pr_ui_attempts WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
     return cur.fetchone() is not None
@@ -460,6 +486,9 @@ class _Producer:
     def _append(self, kind, payload) -> dict:
         cur = self._cursor()
         try:
+            if kind == "ui.delta":
+                _lock_workspace(cur, self.workspace_id)
+                _assert_parent_context(cur, self.auth, self.workspace_id, self.artifact["runId"])
             event = _ui_store().append_event(cur, self.artifact["artifactId"], self.attempt["attemptId"], self._revision(), kind, payload)
             self._commit()
             return event
@@ -473,6 +502,8 @@ class _Producer:
     # --- the generator ----------------------------------------------------------------------------------------------------
     def frames(self):
         try:
+            with self.tx("read") as (cur, auth):
+                _assert_parent_context(cur, auth, self.workspace_id, self.artifact["runId"])
             for event in self.first_events:
                 yield self._frame(event)
             if self.done:
@@ -535,6 +566,10 @@ class _Producer:
 
     # --- one attempt ------------------------------------------------------------------------------------------------------
     def _presenter_items(self):
+        # A prebuilt plan does not bypass the current parent check. Release the
+        # short authorized transaction before starting any provider transport.
+        with self.tx("read") as (cur, auth):
+            _assert_parent_context(cur, auth, self.workspace_id, self.artifact["runId"])
         context = ui_presenter.PresenterContext(cfg=self.runtime.cfg, plan=self.plan, manifest=self.manifest, transport=getattr(self.runtime, "ui_transport", None),
                                                 deadline=self.deadline)
         return ui_presenter.stream_presentation(context, self.projection, self.artifact["artifactId"], self.attempt["attemptId"], mode=self.plan.mode,
@@ -640,6 +675,8 @@ class _Producer:
     def _checkpoint(self, source, flushed) -> _Outcome | None:
         cur = self._cursor()
         try:
+            _lock_workspace(cur, self.workspace_id)
+            _assert_parent_context(cur, self.auth, self.workspace_id, self.artifact["runId"])
             _ui_store().checkpoint(cur, self.attempt["attemptId"], _prefix_bytes(source, flushed), lease_owner=self.owner)
             self._commit()
             return None
@@ -709,6 +746,7 @@ class _Producer:
         failure, settled_here = None, False
         try:
             with self.tx("edit") as (cur, auth):
+                _assert_parent_context(cur, auth, self.workspace_id, self.artifact["runId"])
                 if _attempt_state(cur, self.workspace_id, attempt_id) not in LIVE_STATES:
                     failure = "closed"
                 else:
@@ -761,6 +799,7 @@ class _Producer:
         refused, event = None, None
         try:
             with self.tx("edit") as (cur, auth):
+                _assert_parent_context(cur, auth, self.workspace_id, self.artifact["runId"])
                 ui_metering.settle_attempt(self.runtime, cur, auth, original, usage)
                 _ui_store().finish_attempt(cur, original["attemptId"], "failed", "parse_rejected")
                 lease = _call(_ui_store().create_or_resume_artifact, cur, auth, self.artifact["runId"], self.artifact.get("slot") or "main",
@@ -972,12 +1011,7 @@ def _start_presentation(runtime, tx, workspace_id, request, *, started, request_
     from . import ui_capabilities, ui_projection
     with tx("edit") as (cur, auth):
         scope = getattr(auth, "scope", "workspace") or "workspace"
-        scope_key = getattr(auth, "scope_key", "") or ""
-        _sweep(runtime, cur, workspace_id)
-        parent = _parent_run(cur, workspace_id, request["parentRunId"])
-        if parent is None or not _run_in_scope(parent["runKey"], scope, scope_key):
-            # A founder run is never presented on a consumer route and vice versa (same 404 as a missing run).
-            raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+        parent = _assert_parent_context(cur, auth, workspace_id, request["parentRunId"])
         if (request.get("surface") == "founder") != (scope == "founder"):
             raise AlphaError("Unknown surface.", 400, code="ui_surface")
         if parent["actor"] != str(auth.principal):
@@ -985,6 +1019,7 @@ def _start_presentation(runtime, tx, workspace_id, request, *, started, request_
             raise AlphaError("Only the person who asked can start this view.", 403, code="ui_forbidden")
         if request.get("conversationId") and request["conversationId"].lower() != str(parent["conversationId"]).lower():
             raise AlphaError("That run is unavailable.", 404, code="ui_parent_run")
+        _sweep(runtime, cur, workspace_id)
         key, retry_of = request["idempotencyKey"], request.get("retryOfAttemptId")
         kind = "retry" if retry_of else "generate"
         if _attempt_key_exists(cur, workspace_id, key):
@@ -1062,10 +1097,10 @@ def _start_edit(runtime, tx, workspace_id, artifact_id, request, *, started, req
     if request.get("artifactId") and str(request["artifactId"]).lower() != str(artifact_id).lower():
         raise AlphaError("That view is unavailable.", 404, code="ui_artifact")
     with tx("edit") as (cur, auth):
-        _sweep(runtime, cur, workspace_id)
-        head = _store_head(cur, auth, workspace_id, artifact_id)
+        head = _assert_artifact_parent_context(cur, auth, workspace_id, artifact_id)
         if head["actor"] != str(auth.principal):
             raise AlphaError("Only the person who asked can change this view.", 403, code="ui_forbidden")
+        _sweep(runtime, cur, workspace_id)
         key = request["idempotencyKey"]
         base = {"revision": request["baseRevision"], "sourceHash": request["baseSourceHash"], "instruction": request["instruction"], "selection": request.get("selection")}
         if _attempt_key_exists(cur, workspace_id, key):
@@ -1153,6 +1188,9 @@ def _replay_frames(runtime, auth, workspace_id, artifact_id, events, live, reque
         return data
 
     try:
+        with _connection(runtime) as db:
+            _assert_artifact_parent_context(db.cursor(), auth, workspace_id, artifact_id)
+            db.commit()
         terminal = False
         for event in events:
             yield frame(event, first=frames == 0)
@@ -1168,6 +1206,7 @@ def _replay_frames(runtime, auth, workspace_id, artifact_id, events, live, reque
                 if not page_full:
                     _sleep(REPLAY_POLL_SECONDS)
                 cur = db.cursor()
+                _assert_artifact_parent_context(cur, auth, workspace_id, artifact_id)
                 fresh = store.events_after(cur, auth, artifact_id, last_seq, contracts.BOUNDS["replayPageEvents"])
                 still_live = _live(cur, workspace_id, artifact_id)
                 db.commit()
@@ -1199,6 +1238,7 @@ def _replay_stream(runtime, environ, start_response, workspace_id, auth, artifac
     started = time.monotonic()
     with _connection(runtime) as db:
         cur = db.cursor()
+        _assert_artifact_parent_context(cur, auth, workspace_id, artifact_id)
         events = _ui_store().events_after(cur, auth, artifact_id, after, contracts.BOUNDS["replayPageEvents"])
         live = _live(cur, workspace_id, artifact_id)
         db.commit()
@@ -1210,6 +1250,7 @@ def replay(runtime, environ, start_response, workspace_id, token, artifact_id, a
     """GET …/presentations/{a}/events?after= — authorized bounded replay + live tail; zero provider calls."""
     started = time.monotonic()
     with ui_http.ui_transaction(runtime, token, workspace_id, "read") as (cur, auth):
+        _assert_artifact_parent_context(cur, auth, workspace_id, artifact_id)
         events = _ui_store().events_after(cur, auth, artifact_id, int(after or 0), contracts.BOUNDS["replayPageEvents"])
         live = _live(cur, workspace_id, artifact_id)
         if live:

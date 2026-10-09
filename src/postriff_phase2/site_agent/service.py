@@ -77,9 +77,11 @@ class SiteAgentService:
                 "events": events["events"], "cursor": events["cursor"], "messageId": message_id, "message": body}
 
     def _history(self, cur, workspace_id, conversation_id):
+        from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT 6", (conversation_id, workspace_id))
         rows = list(reversed(cur.fetchall()))
-        return [{"role": role, "text": (body or {}).get("text") or ""} for role, body in rows if isinstance(body, dict) and (body.get("text") or "").strip()]
+        return [{"role": role, "text": (body or {}).get("text") or ""} for role, body in rows
+                if isinstance(body, dict) and (body.get("text") or "").strip() and history_eligible(role, body)]
 
     def _emit(self, cur, workspace_id, run_id, event_type, **body):
         self.ideas._insert_event(cur, workspace_id, run_id, safe_event(event_type, **body))

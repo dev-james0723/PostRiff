@@ -119,7 +119,11 @@ class CapacityController:
             raise AlphaError('Invalid pending YouTube queue admission.', 503, code='youtube_queue_capacity_contract')
         pending = sum(1 for job in (state.get('phase2') or {}).get('jobs', [])
                       if (job.get('manifest') or {}).get('platform') == 'YouTube'
-                      and job.get('state') not in ('verified', 'failed', 'canceled'))
+                      and job.get('state') not in ('verified', 'failed', 'canceled')
+                      # Erased jobs remain immutable history and cannot resume.
+                      # Ordinary held jobs still consume a pending queue slot.
+                      and not (job.get('state') == 'held' and (
+                          job.get('youtubeProviderDataRemoved') is True or job.get('privacyErased') is True)))
         if pending + additional > self.policy.pending_per_workspace:
             raise AlphaError('This workspace has reached its pending YouTube queue limit. Finish or cancel an existing workflow first.',
                              429, code='youtube_queue_capacity')

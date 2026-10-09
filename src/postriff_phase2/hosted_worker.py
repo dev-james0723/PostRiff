@@ -30,12 +30,15 @@ def configured_worker_limits(values=None):
     return jobs, seconds
 
 
-def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False):
+def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True):
     """The actual bounded selection, shared with disposable query-plan acceptance."""
     dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
     dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
     if youtube_only and exclude_youtube:
         raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+    if youtube_only and capacity_ready and operations_ready:
+        from .youtube.operations import WORKER_SQL
+        return WORKER_SQL
     platform_filter = (" AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
                        " AND coalesce(j#>>'{manifest,platform}','')<>'YouTube'" if exclude_youtube else '')
     return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
@@ -76,6 +79,8 @@ class PostgresWorker:
     def _approved(self, cur, workspace_id, state, job):
         from .billing import require_publishing
         try:
+            if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
+                return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())
             assert_job_authority(state, job, self.clock())
@@ -119,9 +124,26 @@ class PostgresWorker:
                 # Select only tenants with due work, oldest dispatch first. The
                 # durable cursor survives cron/worker restarts; a busy tenant
                 # cannot monopolize every chunk lease by sorting before others.
-                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube), (self.clock(), self.clock()))
-                for workspace_id, revision, raw_state in cur.fetchall():
+                from .youtube.operations import schema_ready
+                indexed = youtube_only and capacity_ready and schema_ready(cur)
+                cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube,
+                                              operations_ready=indexed), (self.clock(), self.clock()))
+                for candidate in cur.fetchall():
+                    if indexed:
+                        workspace_id, revision = candidate
+                        # The selector owns the row lock. Fetch only the state
+                        # considered for this claim, rather than 100 histories.
+                        cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
+                        row = cur.fetchone()
+                        if not row:
+                            continue
+                        raw_state = row[0]
+                    else:
+                        workspace_id, revision, raw_state = candidate
                     state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
+                    # Projections are selection hints, never account authority.
+                    if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
+                        continue
                     original = json.dumps(state, sort_keys=True)
                     if youtube_only or exclude_youtube:
                         # Invalidation can hold jobs too; the isolated lane must
@@ -153,7 +175,7 @@ class PostgresWorker:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
                         forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
-                                           and (stage != 'native_scheduled' or job.get('cancelRequested')))
+                                           and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
                             self._event(job, "canceled", "Canceled before provider submission")
                             continue
@@ -199,6 +221,18 @@ class PostgresWorker:
                             from . import product_events
                             product_events.publish_outcome(cur, workspace_id, job, "failed")
                             continue
+                        youtube_generation = None
+                        if is_youtube:
+                            from .youtube import workspace_provider_data as youtube_data
+                            cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE",
+                                        (workspace_id, job['manifest'].get('channelId')))
+                            credential = cur.fetchone()
+                            youtube_generation = credential[0] if credential else None
+                            prior_source = job.get(youtube_data.KEY) if isinstance(job.get(youtube_data.KEY), dict) else {}
+                            if (not youtube_generation or job.get(youtube_data.REMOVED)
+                                    or (prior_source and prior_source.get('authorizationGeneration') != youtube_generation)):
+                                youtube_data.scrub_job(job, 'youtube_authorization_data_removed', now)
+                                continue
                         previous_state = job['state']
                         job["leaseOwner"] = self.worker_id
                         job["leaseUntil"] = now + 45
@@ -212,6 +246,8 @@ class PostgresWorker:
                                 job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                                 self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if is_youtube:
+                            selected['youtubeAuthorizationGeneration'] = youtube_generation
                         if youtube_forward:
                             selected.update(youtubeForward=True, previousState=previous_state)
                         if instagram and not reconciliation:
@@ -245,6 +281,19 @@ class PostgresWorker:
                 if (job.get("leaseOwner") != self.worker_id or job.get("leaseId") != claimed["job"].get("leaseId")
                         or job.get('leaseUntil', 0) <= self.clock()):
                     return False
+                youtube_source = None
+                if job.get('manifest', {}).get('platform') == 'YouTube':
+                    from .youtube import workspace_provider_data as youtube_data
+                    try:
+                        generation = youtube_data.assert_completion(cur, claimed['workspaceId'], job, claimed, self.clock())
+                        youtube_source = youtube_data.source(claimed['workspaceId'], job, generation, self.clock())
+                        if youtube_source['expiresAt'] <= self.clock():
+                            raise AlphaError('The previous YouTube runtime output expired.', 409, code='youtube_stale_completion')
+                    except AlphaError:
+                        youtube_data.scrub_job(job, 'youtube_stale_result_removed', self.clock())
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
+                                    (json.dumps(state), claimed['workspaceId'], revision))
+                        return False
                 result = normalize_result(result, job, claimed['reconciliation'])
                 self._event(job, result["state"], result["confirmed"])
                 if result.get("reference"):
@@ -258,6 +307,8 @@ class PostgresWorker:
                 job['resultSchema'] = result.get('schema')
                 if result.get('progress'):
                     job['progress'] = result['progress']
+                if youtube_source is not None:
+                    job[youtube_data.KEY] = youtube_source
                 published = result['state'] == 'verified' and (job['manifest']['platform'] != 'YouTube' or (result.get('progress') or {}).get('stage') == 'published')
                 if published and self.on_verified:
                     try:
@@ -316,6 +367,21 @@ class PostgresWorker:
                 if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
                         or job.get('leaseUntil', 0) <= self.clock()):
                     return False
+                if job.get('state') in (*TERMINAL, 'held'):
+                    # Disconnect/cancellation may have ended a claimed operation
+                    # while verification was in flight. A later reconnect never
+                    # makes that same stale worker's lease a fresh approval.
+                    job['leaseOwner'], job['leaseUntil'] = None, 0
+                    cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
+                    return False
+                if job.get('manifest', {}).get('platform') == 'YouTube':
+                    from .youtube import workspace_provider_data as youtube_data
+                    try:
+                        youtube_data.assert_completion(cur, claimed['workspaceId'], job, claimed, self.clock())
+                    except AlphaError:
+                        youtube_data.scrub_job(job, 'youtube_stale_result_removed', self.clock())
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
+                        return False
                 youtube_cancel = (claimed.get('youtubeForward') and claimed['reconciliation']
                                   and claimed['job'].get('cancelRequested') is True)
                 if (claimed.get('youtubeForward') and claimed['reconciliation']

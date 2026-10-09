@@ -27,6 +27,8 @@ import json
 import os
 import re
 
+from postriff_alpha.domain import AlphaError
+
 from . import ui_contracts, ui_domain
 
 # --- journey signals ---------------------------------------------------------------------------------------------------
@@ -65,6 +67,26 @@ _ACK = re.compile(r"^\s*(?:ok(?:ay)?|k|sure|great|cool|nice|perfect|thanks?(?:\s
                   r"好|好的|好啊|好呀|好嘅|得|得啦|ok啦|收到|知道了|知道|明白|明白了|多謝|多谢|謝謝|谢谢|唔該|唔该|冇問題|没问题|係|是|不用|唔使)[\s!！.,，。~～]*$", re.I)
 
 _NOT = {"eligible": False, "slot": "main", "journeyIds": []}
+
+
+def has_youtube_context(value) -> bool:
+    """Only server provenance is attributable; user prose is never classified.
+
+    Presence of either marker fails closed even when its value is malformed or
+    empty. Legacy native facts need deterministic connection/channel evidence.
+    """
+    from ..youtube import agent_context
+    if not isinstance(value, dict):
+        return False
+    agent = value.get("agent")
+    marked = any(agent_context.KEY in item or agent_context.REMOVED in item
+                 for item in (value, agent) if isinstance(item, dict))
+    return marked or bool(agent_context.sources(value))
+
+
+def assert_presentable_parent(result) -> None:
+    if has_youtube_context(result):
+        raise AlphaError("This YouTube answer is unavailable as an interactive view.", 409, code="ui_not_eligible")
 
 
 def is_greeting_or_ack(text: str) -> bool:
@@ -114,6 +136,8 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
     """{eligible, slot, reason, journeyIds}. Deterministic; never raises for odd input (the caller also guards)."""
     result = result if isinstance(result, dict) else {}
     text = request_text if isinstance(request_text, str) else ""
+    if has_youtube_context(result):
+        return {**_NOT, "reason": "youtube_context"}
     if not (flags or {}).get("enabled"):
         return {**_NOT, "reason": "disabled"}
     if result.get("composedBy") != "manager":
@@ -256,6 +280,9 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
     server manifest (`manifest`, never sent to a model or browser as is) built from the same journeys for this member."""
     from . import ui_capabilities
     result = verified_result if isinstance(verified_result, dict) else {}
+    # Never copy a native answer into a separate artifact or strip its source
+    # marker and then send a derived projection to the presenter.
+    assert_presentable_parent(result)
     scope = getattr(auth, "scope", None) or "workspace"
     if surface not in ui_contracts.UI_SURFACES or (surface == "founder") != (scope == "founder"):
         surface = "founder" if scope == "founder" else "chat"
