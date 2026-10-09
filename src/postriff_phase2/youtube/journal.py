@@ -44,7 +44,8 @@ class UploadJournal:
 def purge_authorized_data(cur, workspace_id, connection_id):
     """Revocation deletes authorized content immediately; keep only content-free audit events."""
     for table in ('pr_youtube_cache', 'pr_youtube_reporting_coverage', 'pr_youtube_chat_cursor',
-                  'pr_youtube_uploads', 'pr_youtube_actions', 'pr_youtube_settings', 'pr_youtube_push'):
+                  'pr_youtube_uploads', 'pr_youtube_actions', 'pr_youtube_settings', 'pr_youtube_push',
+                  'pr_youtube_agent_history'):
         cur.execute('SELECT to_regclass(%s)', ('public.' + table,))
         if cur.fetchone()[0]:
             cur.execute('DELETE FROM public.' + table + ' WHERE workspace_id=%s AND connection_id=%s', (workspace_id, connection_id))

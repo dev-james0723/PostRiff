@@ -51,6 +51,8 @@ class CredentialRepository:
                            bool(self.refresh), False, SCOPES, 'UC' + 'a' * 22, NOW - 3600)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
+        elif sql.startswith('SELECT state FROM public.pr_workspaces'):
+            self.result = (self.state,)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):
             self.result = (self.access, 'synthetic-key')
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET access_ciphertext='):

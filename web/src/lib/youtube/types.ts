@@ -69,6 +69,17 @@ export interface YouTubeOverview {
       workspaceCeilings: Record<string, number>;
       workspaceUsageToday: Record<string, { reservedUnits: number; admittedRequests: number; delayedRequests: number }>;
       approvedQuotaEvidence: boolean;
+      analyticsAdmission?: {
+        unit: string;
+        configuredProjectDailyLimit: number;
+        configuredProjectRequestsPerMinute: number;
+        workspaceDailyLimit: number;
+        sharedWorkspaceRequestsPerMinute: number;
+        workspaceReservedRequestsToday: number;
+        workspaceAdmittedRequestsToday: number;
+        workspaceDelayedRequestsToday: number;
+        actualGoogleRemaining: null;
+      };
       pendingQueueLimit: number;
       requestsPerMinute: number;
       resetAt: number;
@@ -138,6 +149,7 @@ export interface YouTubeAgentDraft {
   assetId: string;
   variantId: string;
   status: 'proposed' | 'queued';
+  readOnly?: boolean;
   uploadWorkflow: 'upload_now' | 'upload_later';
   uploadAt: number;
   timing: { local: string; timeZone: string; fold: number; timestamp: number };
@@ -151,7 +163,7 @@ export interface YouTubeAgentPolicy {
   id: string;
   digest: string;
   channelId: string;
-  status: 'prepared' | 'active' | 'paused' | 'revoked';
+  status: 'prepared' | 'active' | 'paused' | 'revoked' | 'expired';
   drafts: { id: string; digest: string }[];
   assetIds: string[];
   timeZone: string;
@@ -161,10 +173,51 @@ export interface YouTubeAgentPolicy {
   intervention?: { code: string; message: string; at: number };
 }
 
+export interface YouTubeAgentPageOptions {
+  draftCursor?: string;
+  policyCursor?: string;
+  limit?: number;
+}
+
+export interface YouTubeAgentPage {
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface YouTubeAgentHistoryRecord {
+  recordKind: 'draft' | 'policy';
+  id: string;
+  status: 'archived';
+  historicalStatus: string;
+  archivedAt: string;
+  canReactivate: false;
+  digest?: string;
+  channelId?: string;
+  createdAt?: number;
+  authorityEndedAt?: number;
+  plannedAt?: number;
+  timeZone?: string;
+}
+
+export interface YouTubeAgentHistory {
+  items: YouTubeAgentHistoryRecord[];
+  nextCursor: string | null;
+  canReactivate: false;
+}
+
+export interface YouTubeAgentArchiveResult {
+  archived: number;
+  draftsArchived: number;
+  policiesArchived: number;
+  authorityReactivated: false;
+  residualGrowth: string[];
+}
+
 export interface YouTubeAgentOverview {
   channelId: string;
   drafts: YouTubeAgentDraft[];
   policies: YouTubeAgentPolicy[];
+  pagination: { drafts: YouTubeAgentPage; policies: YouTubeAgentPage };
   planningMode: string;
   executionState: string;
   autopilotGate: { canActivate: boolean; reason: string };

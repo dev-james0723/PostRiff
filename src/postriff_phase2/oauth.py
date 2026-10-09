@@ -921,10 +921,18 @@ class OAuthService:
     def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None):
         from .hosted import audit
         from .youtube.journal import purge_authorized_data
+        from .youtube.agent import revoke_connection_authority
         # Refresh or an authenticated API response may detect revocation. Purge in a separate commit.
         with self.repository.connection_factory() as db, db.cursor() as cur:
             if expected_access_token is None and expected_ciphertext is None:
                 return False  # No observed credential can authorize purging a possibly newer grant.
+            # Match consent/disconnect lock order: workspace first, credential second.
+            # The exact observed credential still fences a concurrent new grant.
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            workspace = cur.fetchone()
+            if not workspace:
+                return False
+            state = json.loads(workspace[0]) if isinstance(workspace[0], str) else workspace[0]
             cur.execute("SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
             observed = cur.fetchone()
             if not observed or (expected_ciphertext is not None and observed[0] != expected_ciphertext):
@@ -941,6 +949,15 @@ class OAuthService:
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='YouTube authorization revoked. Reconnect.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             purge_authorized_data(cur, workspace_id, connection_id)
             if changed:
+                state_changed = revoke_connection_authority(state, connection_id, None, self.clock(),
+                                                            reason='oauth_revoked')
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('id') == connection_id and channel.get('platform') == 'YouTube':
+                        state_changed = state_changed or channel.get('revoked') is not True
+                        channel['revoked'] = True
+                if state_changed:
+                    cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                                (json.dumps(state), workspace_id))
                 audit(cur, workspace_id, None, 'youtube.authorization_revoked', connection_id)
             return bool(changed)
 
@@ -1349,10 +1366,20 @@ class OAuthService:
             from .social_history import revoke_connection_samples
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
+            state_changed = bool(revoked_samples)
+            if stored[0] == 'youtube':
+                from .youtube.agent import revoke_connection_authority
+                state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),
+                                                            reason='connection_disconnected') or state_changed
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('id') == connection_id and channel.get('platform') == 'YouTube':
+                        state_changed = state_changed or channel.get('revoked') is not True
+                        channel['revoked'] = True
             if revoked_samples:
                 self.commands.engine.invalidate(state)
-                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
                 audit(cur, workspace_id, principal, 'voice.connection_samples_revoked', connection_id, {'samples': revoked_samples})
+            if state_changed:
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
             account_pictures.guarded(cur, account_pictures.remove, workspace_id, connection_id)
             from .growth.history_import import mark_for_purge
             mark_for_purge(cur, workspace_id, connection_id)   # imported history goes after commit (purge_after_disconnect)
@@ -1368,11 +1395,15 @@ class OAuthService:
         from .growth.history_import import purge_after_disconnect
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
-        try:
-            saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
-            revision = saved["revision"]
-        except AlphaError:
-            revision = snapshot["revision"]  # channel absent from state; credentials are already revoked
+        revision = snapshot["revision"]
+        if stored[0] != 'youtube':
+            try:
+                saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
+                revision = saved["revision"]
+            except AlphaError:
+                revision = snapshot["revision"]  # channel absent from state; credentials are already revoked
+        # YouTube state was revoked atomically with its credential. A second
+        # mutation here could incorrectly revoke a consent completed meanwhile.
         deferred = shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."
         if deferred:

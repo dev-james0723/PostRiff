@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "observedOn": "2026-10-08",
+  "observedOn": "2026-10-09",
   "execution": "MISSION EVIDENCE RECORD; NO PUBLIC LAUNCH CLAIM",
   "productionGoogleProject": {
     "id": "rafii-youtube-production",
@@ -17,9 +17,9 @@
     "oauthAudience": null,
     "oauthPublishingStatus": null,
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "RESOLVED via fresh tab in same Chrome session. OAuth setup still requires verified support/developer contacts and Google user-data policy agreement; no OAuth client or review submission exists.",
+    "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
     "existingReferenceProjectId": "rafii-509720",
-    "domainOwnership": "NOT VERIFIED: Google Search Console signed-in account lacks property; additive Spaceship TXT candidate prepared but unsaved, owner action-time confirmation pending"
+    "domainOwnership": "CURRENT READBACK REQUIRED: earlier candidate was unverified; concurrent PR138 reports verification, but current mission browser policy failure prevents confirmation. Do not resubmit DNS blindly."
   },
   "stagingGoogleProject": {
     "id": "rafii-509720",
@@ -31,12 +31,13 @@
   },
   "runningProduction": {
     "url": "https://rafii.io",
-    "commit": "bb4ca5aa",
-    "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
-    "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
-    "integrationBranchDeployed": false,
+    "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
+    "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
+    "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+    "integrationBranchDeployed": true,
+    "youtubeGateFixCandidateDeployed": false,
     "youtubePublicLaunchReady": false,
-    "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+    "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
   },
   "approvedProductionQuotas": {
     "dailyUploads": 100,
@@ -49,7 +50,8 @@
       "status": "VERIFIED DEFAULT; NOT AN EXTENSION"
     },
     "status": "VERIFIED CONFIGURED DEFAULT DATA API ALLOCATION; EXTENSION NOT SUBMITTED",
-    "note": "GOOGLE-QUOTAS.observed.json retains exact Console labels. This does not establish audit approval, public-upload eligibility or sufficient rollout capacity."
+    "note": "GOOGLE-QUOTAS.observed.json retains exact Console labels. This does not establish audit approval, public-upload eligibility or sufficient rollout capacity.",
+    "observedOn": "2026-10-08"
   },
   "submissions": {
     "googleOAuth": "NOT SUBMITTED",
@@ -67,19 +69,22 @@
     "youtubeDataApiEnabled": true,
     "youtubeAnalyticsApiEnabled": true
   },
-  "releaseGate": "Pre-reconciliation b0ca13a4 passed all GHA checks (main37850230732,99PG modules; Library37850230723,140browser checks), aux and Vercel preview. Production advanced to65b1ea83/PR135; current candidate merges and preserves its canonical-origin/Bluesky/passkey/proxy behavior. Fresh combined-source cloud validation and PR CI required before merge/deploy. Public/agentic/fleet flags remain off.",
+  "releaseGate": "Current production4a0bd786. Dirty-source JCB cknkhlfd0c passed499 Python/845 Node tests,10 disposable PostgreSQL modules, production build and synthetic Chromium1440/390/320 checks; sourceFingerprint8cb2e295de73dbde3c0fbf2d344f8fdbc87204cbdec8f7cb903cc6cb80c3d574. GitHub exact-head CI, merge and deployment remain pending. Public/agentic/fleet flags remain off.",
   "ownerInputsPending": [
     "verified operator/legal/contact facts",
     "legal approval/required attestations",
     "independent account OAuth consent",
     "exact approved disposable private test asset",
-    "separate explicit public test-publication consent after eligibility"
+    "separate explicit public test-publication consent after eligibility",
+    "storage and runtime/egress budget approval",
+    "browser reconnect and Google DNS ownership action",
+    "exact Rafii Stripe sandbox identity for webhook bypass rotation"
   ],
   "storage": {
     "status": "BLOCKED OWNER BILLING",
     "supabaseOrganizationId": "gztpsyvraqdcoklwpvdo",
     "observedPlan": "Free",
-    "observationSource": "Coordinating release agent live observation during mission 2026-10-08",
+    "observationSource": "Live Supabase plan/bucket metadata rechecked2026-10-09; no upgrade authorization received.",
     "productionVideoBucket": "postriff-video",
     "bucketPublic": false,
     "bucketFileSizeLimitBytes": 50000000,
@@ -117,11 +122,18 @@
       }
     },
     "verification": "Three capacity/worker tables enforce FORCE RLS; anon/authenticated SELECT denied; service_role allowed. Production eight creator tables similarly verified after 089.",
-    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls."
+    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls.",
+    "105": {
+      "status": "CLOUD VERIFIED; APPLICATION PENDING EXPIRED CONNECTOR WRITE SESSION",
+      "purpose": "Additive inert private agent history; no live authority migration or customer asset deletion",
+      "productionTableObserved": false,
+      "stagingTableObserved": false,
+      "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. Existing Supabase CLI account has no Rafii projects; exact configured-credential fallback is under review."
+    }
   },
-  "recordScope": "Dated baseline plus actual configuration actions; runningProduction is the earlier bb4ca5aa observation, not a claim of latest live version. Production branch advanced to65b1ea83; final coordinating release receipt and exact-SHA smoke supersede this snapshot.",
+  "recordScope": "Dated observations; current production4a0bd786 verified2026-10-09T17:17:09Z. Exact-SHA final receipt supersedes this snapshot. No public launch claim.",
   "productionEnvironmentChanges": {
-    "execution": "VERIFIED VERCEL CONFIGURATION; EFFECTIVE AFTER NEXT DEPLOYMENT",
+    "execution": "VERIFIED VERCEL CONFIGURATION AND RUNNING READBACK; PUBLIC/AGENTIC FLAGS REMAIN OFF",
     "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
     "values": {
       "NEXT_PUBLIC_APP_URL": "https://rafii.io",
@@ -130,5 +142,58 @@
     },
     "preserved": "This mission did not change global POSTRIFF_PUBLIC_BASE_URL, existing Gmail/Calendar grants or credentials. Separate PR135 canonical-origin migration is preserved; callback landing now rafii.io. Fresh Google callback registration/consent remains unverified.",
     "youtubeCallbackObserved": "Latest public YouTube and Gmail denied callbacks302 to rafii.io/channels/connect and rafii.io/connectors/connect; transport landing only, no provider acceptance."
+  },
+  "previousProductionObservations": [
+    {
+      "url": "https://rafii.io",
+      "commit": "bb4ca5aa",
+      "deploymentId": "dpl_AHypcnB4iRUv47iw3ZNQDEpuR4Wc",
+      "source": "Coordinating release agent current domain/deployment observation 2026-10-08",
+      "integrationBranchDeployed": false,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "Current Library retained; integration deploy remains gated on validated CI with YouTube public/agentic gates off."
+    },
+    {
+      "url": "https://rafii.io",
+      "commit": "94ca0dbd207cff9c4a20122f1a4f72adb20bf792",
+      "deploymentId": "dpl_F5FApgN9MnHZvybjbF9SvHtSB3xF",
+      "source": "Live canonical health + Vercel alias readback2026-10-09",
+      "integrationBranchDeployed": true,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "PR136 included in newer OpenUI PR137; new gate-fix candidate starts from current production."
+    },
+    {
+      "url": "https://rafii.io",
+      "commit": "4a0bd786ac43f50de9f00c4fbb63d6d65e7434ba",
+      "deploymentId": "dpl_7YesdY948N4cCwrzcM9ZhB5bhTU2",
+      "source": "Live canonical and protected health + Vercel readback2026-10-09T17:17:09Z",
+      "integrationBranchDeployed": true,
+      "youtubeGateFixCandidateDeployed": false,
+      "youtubePublicLaunchReady": false,
+      "libraryPreservation": "PR136/137, OpenUI PR146 and Google privacy PR147 preserved. Gate-fix candidate reconciled with4a0bd786; its deployment is still pending."
+    }
+  ],
+  "credentialRotation": {
+    "automationOriginalsRevoked": 3,
+    "oldReplayDenialVerified": 2,
+    "oldReplayDenialUnverified": 1,
+    "newSelectedBypassLoadedInCurrentProduction": true,
+    "stripeBypassStatus": "STILL PENDING EXACT RAFII SANDBOX CONTEXT",
+    "protectionPreserved": "all_except_custom_domains",
+    "valuesLoggedOrSaved": false
+  },
+  "analyticsAdmission": {
+    "status": "IMPLEMENTED AND SYNTHETIC CLOUD VERIFIED; CANDIDATE NOT DEPLOYED",
+    "dailyRequests": 100000,
+    "projectRequestsPerMinute": 720,
+    "workspaceDailyRequests": 2000,
+    "dataApiUnitCost": null,
+    "actualGoogleRemaining": null,
+    "quotaIncreaseApproved": false
+  },
+  "thumbnailReadback": {
+    "status": "WRITE ACCEPTANCE/RESOURCE OBSERVATION SEPARATE FROM IMAGE CONTENT",
+    "stableUrlsVerifyReplacementContent": false,
+    "newContentProviderAcceptance": "UNVERIFIED"
   }
 }

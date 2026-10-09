@@ -3,6 +3,20 @@ from urllib.parse import parse_qs
 from postriff_alpha.domain import AlphaError
 
 
+def agent_query(environ, fields):
+    values = parse_qs(environ.get('QUERY_STRING', ''), keep_blank_values=True)
+    if any(key not in fields or len(value) != 1 for key, value in values.items()):
+        raise AlphaError('Invalid publishing page query.', 400)
+    query = {key: value[0] for key, value in values.items()}
+    try:
+        limit = int(query.pop('limit', '25'))
+    except (ValueError, TypeError):
+        raise AlphaError('Choose a page size between 1 and 50.', 400) from None
+    if not 1 <= limit <= 50:
+        raise AlphaError('Choose a page size between 1 and 50.', 400)
+    return query, limit
+
+
 def handle(app, environ, start_response, service, token, method, parts):
     workspace, connection = parts[2], parts[4]
     youtube = service.youtube
@@ -12,7 +26,14 @@ def handle(app, environ, start_response, service, token, method, parts):
         agent = YouTubePublishingAgent(youtube)
         route = tail[1:]
         if method == 'GET' and route == []:
-            data = agent.overview(workspace, token, connection)
+            query, limit = agent_query(environ, {'draftCursor', 'policyCursor', 'limit'})
+            data = agent.overview(workspace, token, connection, draft_cursor=query.get('draftCursor'),
+                                  policy_cursor=query.get('policyCursor'), limit=limit)
+        elif method == 'GET' and len(route) == 2 and route[0] == 'history':
+            query, limit = agent_query(environ, {'cursor', 'limit'})
+            data = agent.history(workspace, token, connection, route[1], limit=limit, cursor=query.get('cursor'))
+        elif method == 'POST' and route == ['history', 'archive']:
+            data = agent.archive_history(workspace, token, connection, app._body(environ))
         elif method == 'POST' and route == ['drafts']:
             data = agent.prepare(workspace, token, connection, app._body(environ))
         elif method == 'POST' and len(route) == 3 and route[0] == 'drafts' and route[2] == 'approve':
