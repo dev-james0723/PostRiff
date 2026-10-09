@@ -387,9 +387,25 @@ class Failures(Base):
 
     def test_repair_can_succeed(self):
         self.validator.verdicts = ["reject", "accept"]
-        _, _, events = self.run_one(self.db.add_parent())
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            _, _, events = self.run_one(self.db.add_parent())
         self.assertEqual(events[-1]["kind"], "ui.ready")
         self.assertEqual(events[-1]["payload"]["providerAttempts"], 2)
+        # The first-pass rejection is measurable: code prefixes and counts only, never the statement ids or names behind them.
+        rejected = [json.loads(r.getMessage()) for r in logs.records if '"genui.validation_rejected"' in r.getMessage()]
+        self.assertEqual([(r["kind"], r["codes"]) for r in rejected], [("generate", {"component_denied": 1, "unresolved_ref": 1})])
+        self.assertNotIn("Bogus", " ".join(logs.output))
+
+    def test_rejection_log_is_a_fixed_vocabulary(self):
+        from postriff_phase2.agent_runtime_v2 import ui_stream as stream
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            stream._log_rejected("generate", ["type-mismatch:title", "missing-required:root", "unresolved_ref:x", "mydraftsecret", "source_not_query:s1"])
+        record = json.loads(logs.records[-1].getMessage())
+        self.assertEqual(set(record), {"event", "kind", "codes", "errorCount"})
+        self.assertEqual(record["codes"], {"missing-required": 1, "other": 1, "source_not_query": 1, "type-mismatch": 1, "unresolved_ref": 1})
+        self.assertEqual((record["kind"], record["errorCount"]), ("generate", 5))
+        for leaked in ("title", "root", "mydraftsecret", "s1"):
+            self.assertNotIn(leaked, json.dumps(record["codes"]) + record["kind"])
 
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
