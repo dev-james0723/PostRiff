@@ -197,7 +197,7 @@ def main():
         with compressed.open('rb') as opened:
             archive_sha = hashlib.file_digest(opened, 'sha256').hexdigest()
         os.replace(compressed, archive)
-        manifest.write_text(archive_sha + '\\n')
+        manifest.write_text(archive_sha + '\n')
         shutil.rmtree(root)
         print('Renderer compressed bytes', archive_bytes)
         print('Renderer manifest SHA-256', archive_sha)
