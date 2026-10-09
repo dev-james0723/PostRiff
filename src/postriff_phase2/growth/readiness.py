@@ -33,8 +33,10 @@ MEASUREMENT_FEATURE = "growth_measurement"
 MINIMUM_POSTS = 50
 NATIVE_PLATFORMS = {"Threads": "threads", "Instagram": "instagram"}
 CONNECT = "/app/channels"
-RESULTS_HREF = "/app/growth?view=results"
-AUDIENCE_HREF = "/app/growth?view=audience"
+# Consent steps open the permission panel on the Growth page; enrollment points at its control.
+RESULTS_HREF = "/app/growth?view=results&permissions=true"
+AUDIENCE_HREF = "/app/growth?view=audience&permissions=true"
+MEASUREMENT_HREF = "/app/growth#growth-measurement"
 DAILY_RUNS = {"postmortem": 10, "audience": 2}
 
 # Tables each section reads. 037/038 are additive and may be missing until applied.
@@ -111,7 +113,7 @@ def _admission_blockers(facts):
     if not m["on"] or m["admitted"]:
         return []
     if (m.get("eligibility") or {}).get("eligible"):
-        return [fr.blocker("setup_required", "measurement_enrollment_required", **_owner("consent", RESULTS_HREF, facts))]
+        return [fr.blocker("setup_required", "measurement_enrollment_required", **_owner("consent", MEASUREMENT_HREF, facts))]
     return [fr.blocker("not_entitled", "measurement_paused")]
 
 

@@ -88,7 +88,7 @@ class Compute(unittest.TestCase):
         enroll = R.compute(facts(measurement={"admitted": False, "legacy": False, "eligibility": {"eligible": True, "reason": "enrollment_open"}}))
         self.assertEqual((enroll["measurement"]["state"], enroll["measurement"]["reasonCodes"]),
                          ("setup_required", ["measurement_enrollment_required"]))
-        self.assertEqual(enroll["measurement"]["nextStep"], {"kind": "consent", "href": "/app/growth?view=results"})
+        self.assertEqual(enroll["measurement"]["nextStep"], {"kind": "consent", "href": "/app/growth#growth-measurement"})
         editor = R.compute(facts(role="editor", measurement={"admitted": False, "legacy": False,
                                                              "eligibility": {"eligible": True, "reason": "enrollment_open"}}))
         self.assertEqual(editor["measurement"]["nextStep"], {"kind": "contact_owner"})
@@ -115,6 +115,7 @@ class Compute(unittest.TestCase):
                 self.assertEqual((owner[name]["state"], owner[name]["canRead"], owner[name]["canRun"]), ("setup_required", True, False))
                 self.assertIn("growth_consent_required", owner[name]["reasonCodes"])
                 self.assertEqual(owner[name]["nextStep"]["kind"], "consent")
+                self.assertTrue(owner[name]["nextStep"]["href"].endswith("&permissions=true"))
         for role in ("admin", "editor", "approver", "viewer"):
             with self.subTest(role=role):
                 other = R.compute(facts(role=role, canEdit=role in ("admin", "editor"), consent={"summary": False, "audience": False}))

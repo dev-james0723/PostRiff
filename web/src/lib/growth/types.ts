@@ -16,6 +16,17 @@ export interface GrowthCatalog {
   audienceMiner: boolean;
   summaryRoute: string;
   audienceConsent: boolean;
+  /** Server-authoritative readiness per section; parse with `@/lib/feature-readiness` before use. */
+  readiness?: Partial<Record<GrowthSection, unknown>>;
+}
+export type GrowthSection = 'studio' | 'results' | 'audience' | 'patterns' | 'measurement';
+export interface MeasurementEnrollment {
+  feature: 'growth_measurement';
+  status: 'active' | 'revoked' | 'none';
+  eligible: boolean;
+  reason: string;
+  admitted: boolean;
+  collecting: boolean;
 }
 export interface Dimension {
   id: string;
@@ -92,7 +103,7 @@ export interface CalibrationVersion {
 export interface GrowthReadingWindow {
   horizon: '1h' | '24h' | '7d';
   available: boolean;
-  state?: 'measured' | 'pending_horizon' | 'scheduled' | 'pending' | 'disabled' | 'unsupported' | 'disconnected' | 'rights_unavailable' | 'unscheduled' | 'unavailable';
+  state?: 'measured' | 'pending_horizon' | 'scheduled' | 'pending' | 'disabled' | 'unsupported' | 'disconnected' | 'rights_unavailable' | 'unscheduled' | 'unavailable' | 'missed' | 'not_entitled' | 'backfill';
   dueAt?: number | null;
   reason?: string | null;
 }
@@ -102,7 +113,23 @@ export interface GrowthOverview {
   calibration: { versions: CalibrationVersion[]; largestCohort: number; minimumPosts: number; available: boolean; notice: string };
   coverage: { maximumPosts: number; loadedPosts: number };
   measurement?: { enabled: boolean; analyticsConnections: number };
+  history?: GrowthHistoryPost[];
+  historyNotice?: string;
   notice: string;
+}
+/** An imported post's lifetime reading at its age when read. Never a 1h/24h/7d window. */
+export interface GrowthHistoryPost {
+  connectionId: string;
+  provider: string;
+  platform: string;
+  providerPostId: string;
+  publishedAt: number | null;
+  mediaType?: string | null;
+  permalink?: string | null;
+  state: 'backfill' | 'scheduled' | 'pending' | 'unavailable' | 'unscheduled';
+  observedAt: number | null;
+  ageSeconds: number | null;
+  metrics: { metric: string; value: number | null; availability: string }[];
 }
 export interface AudienceCluster {
   id: string;
@@ -124,7 +151,10 @@ export interface AudienceInsights {
   audienceConsent: boolean;
   coverage: string;
   notice: string;
+  reason?: AudienceReason | null;
+  sources?: { connections: number; commentsReadable: number; ownedPosts: number };
 }
+export type AudienceReason = 'no_connection' | 'comments_permission_required' | 'no_owned_posts' | 'no_comments' | 'growth_consent_required';
 export interface PostRewrite {
   comparison?: PostComparison;
   runId: string;

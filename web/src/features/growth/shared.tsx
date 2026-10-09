@@ -6,7 +6,16 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useAct, useSnapshot } from '@/lib/api/hooks';
 import { useWorkspaceAccess } from '@/lib/auth/access';
 import { Button } from '@/components/ui/button';
-import type { GrowthCatalog, PostCheck } from '@/lib/growth/types';
+import { readinessOrUnverified, type FeatureReadiness } from '@/lib/feature-readiness';
+import type { GrowthCatalog, GrowthSection, PostCheck } from '@/lib/growth/types';
+
+const SECTIONS: GrowthSection[] = ['studio', 'results', 'audience', 'patterns', 'measurement'];
+
+/** Server readiness per Growth section; anything missing or malformed fails closed (nothing runs, retry only). */
+export function growthReadiness(catalog?: GrowthCatalog): Record<GrowthSection, FeatureReadiness> {
+  const raw = catalog?.readiness ?? {};
+  return Object.fromEntries(SECTIONS.map((section) => [section, readinessOrUnverified(raw[section])])) as Record<GrowthSection, FeatureReadiness>;
+}
 
 export function useGrowthCatalog() {
   const { api, workspaceId } = useWorkspaceApi();
