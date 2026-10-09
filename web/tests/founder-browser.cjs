@@ -167,9 +167,70 @@ async function sectionPass(page, tracker, width, mode, axeHere) {
       check(`${label}: no page error`, seen.pageErrors.length === 0, seen.pageErrors);
       check(`${label}: no console error`, seen.consoleErrors.length === 0, seen.consoleErrors);
       check(`${label}: no failed request`, seen.requestFailures.length === 0, seen.requestFailures);
-      if (id === 'customers') await customerDetailPass(page, tracker, width, mode);
+      if (id === 'customers') {
+        await customerDetailPass(page, tracker, width, mode);
+        if (mode === 'live') await liveWorkspaceRenamePass(page, tracker, width);
+      }
     });
   }
+}
+
+/** The consolidated Live workspace list must expose only the server-approved rename action and restore it. */
+async function liveWorkspaceRenamePass(page, tracker, width) {
+  const label = `${width}px live approved workspace rename`;
+  await attempt(`${label}: rename and restore`, async () => {
+    await page.goto(base + '/founder/customers?tab=workspaces', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('tab', { name: 'Workspaces', exact: true }).waitFor({ state: 'visible' });
+    const liveBefore = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+    const approved = liveBefore.workspaces.find((row) => row.renameAllowed === true);
+    check(`${label}: server identifies exactly one approved workspace`, Boolean(approved), liveBefore.workspaces.filter((row) => row.renameAllowed === true));
+    if (!approved) return;
+    await page.getByRole('textbox', { name: 'Search workspaces' }).fill(approved.id);
+    const rename = page.getByRole('button', { name: `Rename approved test workspace ${approved.name}`, exact: true });
+    await rename.waitFor({ state: 'visible' });
+    await rename.click();
+
+    let dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Rename approved test workspace', exact: true }) });
+    const input = dialog.getByRole('textbox', { name: 'Workspace name' });
+    const original = await input.inputValue();
+    const workspaceId = approved.id;
+    check(`${label}: dialog names the exact workspace`, (await dialog.innerText()).includes(workspaceId), await dialog.innerText());
+
+    const sample = `Fictional live acceptance ${width}`;
+    await input.fill(sample);
+    const saveResponse = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/workspace/live/rename') && response.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Save name', exact: true }).click();
+    const saved = await saveResponse;
+    check(`${label}: rename endpoint succeeds`, saved.status() === 200, await saved.text().catch(() => ''));
+    await page.getByRole('status').filter({ hasText: sample }).waitFor();
+    await settle(page, tracker);
+
+    const liveAfter = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+    const changed = liveAfter.workspaces.find((row) => row.id === workspaceId);
+    check(`${label}: canonical readback sees temporary name`, changed?.name === sample, changed);
+
+    const restoreButton = page.getByRole('button', { name: `Rename approved test workspace ${sample}`, exact: true });
+    await restoreButton.waitFor({ state: 'visible' });
+    await restoreButton.click();
+    dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Rename approved test workspace', exact: true }) });
+    const restoreInput = dialog.getByRole('textbox', { name: 'Workspace name' });
+    check(`${label}: restore starts from temporary name`, await restoreInput.inputValue() === sample, await restoreInput.inputValue());
+    await restoreInput.fill(original);
+    const restoreResponse = page.waitForResponse((response) => response.url().endsWith('/api/control/v2/workspace/live/rename') && response.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Save name', exact: true }).click();
+    const restored = await restoreResponse;
+    check(`${label}: restore endpoint succeeds`, restored.status() === 200, await restored.text().catch(() => ''));
+    await page.getByRole('status').filter({ hasText: original }).waitFor();
+    await settle(page, tracker);
+
+    const liveRestored = (await (await page.context().request.get(base + '/api/control/v2/workspace/live')).json()).data;
+    const final = liveRestored.workspaces.find((row) => row.id === workspaceId);
+    check(`${label}: canonical readback is restored`, final?.name === original, final);
+    const seen = drain(tracker);
+    check(`${label}: no failed control request`, seen.apiFailures.length === 0, seen.apiFailures);
+    check(`${label}: no page error`, seen.pageErrors.length === 0, seen.pageErrors);
+    check(`${label}: no console error`, seen.consoleErrors.length === 0, seen.consoleErrors);
+  });
 }
 
 /** The same selected account's metadata must open in Customer 360 in both modes, at every viewport. */

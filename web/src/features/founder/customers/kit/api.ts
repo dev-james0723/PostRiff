@@ -121,6 +121,24 @@ export function useTileMetric(spec: MetricSpec) {
   return useMetric({ ...spec, comparison: spec.comparison ?? tileComparison(spec.period) });
 }
 
+export function useRenameLiveWorkspace() {
+  const scope = useFounderScope();
+  const client = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: ({ workspaceId, name, revision }: { workspaceId: string; name: string; revision: number }) => {
+      if (!scope.ready || scope.mode !== 'live') throw new Error('Select Live before changing an approved test workspace.');
+      return scope.api.liveWorkspaceRename(workspaceId, name, revision);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: scope.key('records') }),
+        client.invalidateQueries({ queryKey: founderKeys.workspace('live', scope.environment) })
+      ]);
+    }
+  });
+}
+
 /* ---------- records (customers, workspaces, subscriptions, payments, usage, tickets) ---------- */
 
 export function useRecords(input: RecordsQueryInput | null) {

@@ -233,6 +233,13 @@ export interface DemoActionResult {
   [key: string]: unknown;
 }
 
+/** Verified result from the only Live business mutation exposed in Founder Control: an approved test-workspace rename. */
+export interface LiveWorkspaceRenameResult {
+  workspaceId: string;
+  name: string;
+  revision: number;
+}
+
 export const DEMO_SCENARIOS = [
   ['normal', 'Normal operation'],
   ['payment_failure', 'Payment failure'],
