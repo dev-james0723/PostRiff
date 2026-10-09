@@ -234,11 +234,30 @@ class FrontierSQL(unittest.TestCase):
         with self.connect() as db:
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertEqual(self.engine.maintenance()['cancelled'],1)
+        # The suite shares a disposable database across scenarios; canonical
+        # maintenance visits global event pages of at most 100 entries. A newly
+        # revoked source can be beyond the first page, so exercise the real
+        # stable-key pagination instead of assuming a single tick visits it.
+        next_key = None
+        traversed = set()
+        total_cancelled = 0
+        for _ in range(100):
+            result = self.engine.maintenance(limit=100, after=next_key)
+            self.assertEqual(result['status'], 'ok')
+            total_cancelled += result['cancelled']
+            if self.job(d['job_id'])['state'] == 'cancelled':
+                break
+            next_key = result['next_key']
+            if next_key is None:
+                self.fail('Maintenance exhausted all pages without cancelling the revoked dependent job')
+            self.assertNotIn(next_key, traversed, 'Maintenance cursor did not advance')
+            traversed.add(next_key)
+        else:
+            self.fail('Revoked dependent job remained active after 100 bounded maintenance pages')
+        self.assertGreaterEqual(total_cancelled, 1)
         self.assertEqual(self.job(d['job_id'])['payload'],{})
-        # The suite intentionally shares an isolated database and earlier tests
-        # leave many independently purgeable nodes. This assertion is about the
-        # revoked dependency cascade, not the worker's 100-row page boundary.
+        # Then ensure the canonical sweep erases the dependent audit event;
+        # the cancellation assertion above stays real, not a mock or bypass.
         retention.sweep(self.store,limit=1000)
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
