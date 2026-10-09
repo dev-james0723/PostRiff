@@ -242,7 +242,8 @@ class Revocation(Case):
         refs = (result.json() or {}).get("sourceRefs") or []
         draft = next((r.split(":", 1)[1] for r in refs if r.startswith(("draft:", "variant:"))), None)
         if not draft:
-            raise Blocked(f"BLOCKED lane D/E: binding {binding} returned no draft/variant sourceRef to delete (refs={refs[:5]})")
+            raise Blocked(f"BLOCKED harness: the harness view's first binding {binding} carries no deletable source (refs={refs[:3]}; automations have "
+                          "no delete command, cancel keeps the record). Service-level coverage: tests/phase2/postgres_agent_ui_store.py F-S13")
         snap = self.w.call(owner, "GET", f"/api/workspaces/{owner.workspace_id}")
         deleted = self.w.api.request("POST", f"/api/workspaces/{owner.workspace_id}/actions", owner.token,
                                      {"expectedRevision": snap["revision"], "action": "p2_variant_delete", "payload": {"variantId": draft}})
