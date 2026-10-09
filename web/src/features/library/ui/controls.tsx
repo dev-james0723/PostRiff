@@ -57,7 +57,8 @@ export function controlClass({
   );
 }
 
-type ButtonProps = Omit<ComponentProps<typeof Button>, 'size' | 'variant'>;
+/** Library controls take a plain class string (base-ui also allows a state function, which these never need). */
+type ButtonProps = Omit<ComponentProps<typeof Button>, 'size' | 'variant' | 'className'> & { className?: string };
 
 export function Control({
   tone = 'secondary',
