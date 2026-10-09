@@ -35,6 +35,8 @@ CATALOGUE = {
     "tiktok": {"operations": ["licensed_discovery", "authorized_owned_read", "permitted_trend_seeds"],
                "kinds": ["aggregate_metric", "owned_post", "trend_seed"],
                "blocker": "Commercial/owned operation rights required; Research API is excluded from this product."},
+    "facebook": {"operations": ["page_public_posts", "owned_read", "licensed_discovery"], "kinds": ["raw_post", "owned_post", "aggregate_metric"],
+                 "blocker": "Page Public Content Access (PPCA) requires separately verified Meta App Review and eligible public Page; managed-Page insights do not grant public Page discovery."},
     "instagram": {"operations": ["hashtag_discovery", "owned_read", "licensed_discovery"],
                   "kinds": ["raw_post", "owned_post", "aggregate_metric"],
                   "blocker": "Operation-specific Meta scopes/app review or licensed network rights required."},
