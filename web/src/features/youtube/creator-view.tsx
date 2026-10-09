@@ -434,7 +434,7 @@ export function YouTubeCreatorView() {
                   : 'Creator capabilities unavailable.'}
               </p>
             )}
-            <YouTubeAgentControls key={`youtube-agent:${channel}`} channel={channel} canPublic={Boolean(overview.data?.capabilities.schedule?.canExecute)} />
+            <YouTubeAgentControls key={`youtube-agent:${workspaceId}:${channel}`} channel={channel} canPublic={Boolean(overview.data?.capabilities.schedule?.canExecute)} />
             {overview.data && (
               <Panel title={overview.data.identity.snippet?.title || 'Channel identity'}>
                 <p className='text-sm'>Channel ID: {overview.data.channelId}</p>

@@ -627,6 +627,20 @@ class YouTubeCreatorService:
             audit(cur, workspace, actor, 'youtube.stream_secret_viewed', stream_id)
         return {'streamId': stream_id, 'cdn': stream.get('cdn'), 'sensitive': True, 'source': 'YouTube Live Streaming API'}
 
+    def _can_recover_upload(self, state, job, actor, saved):
+        if (saved.get('stage') != 'held' or job.get('state') != 'held'
+                or saved.get('cancelRequested') or job.get('cancelRequested')
+                or (not saved.get('videoId') and not saved.get('sessionCiphertext'))
+                or job.get('approvedBy') != actor
+                or not self.service.commands.engine.current(state, job['manifest'])):
+            return False
+        from .agent import assert_job_authority
+        try:
+            assert_job_authority(state, job, self.clock())
+        except AlphaError:
+            return False
+        return True
+
     def upload_recovery(self, workspace, token, connection, operation_key, body=None):
         actor, channel, state = self._member(workspace, token, connection, 'approve', fresh=body is not None)
         key = (workspace, connection, resource_id(operation_key, 'resource'))
@@ -637,10 +651,7 @@ class YouTubeCreatorService:
                         and job.get('manifest', {}).get('idempotencyKey') == operation_key), None)
             if not saved or not job or job['manifest'].get('providerAccountId') != channel:
                 raise AlphaError('The exact upload and its approval record are unavailable.', 404)
-            unsafe = (saved.get('stage') in ('failed', 'canceled', 'session_expired')
-                      or (not saved.get('videoId') and not saved.get('sessionCiphertext'))
-                      or job.get('approvedBy') != actor
-                      or not self.service.commands.engine.current(state, job['manifest']))
+            unsafe = not self._can_recover_upload(state, job, actor, saved)
             review = {'channelId': channel, 'operationKey': operation_key, 'videoId': saved.get('videoId'),
                       'options': saved['options'], 'stage': saved['stage'], 'errorCategory': saved.get('errorCategory'),
                       'bytesSent': saved['bytesSent'], 'totalBytes': saved['totalBytes'],
@@ -653,21 +664,30 @@ class YouTubeCreatorService:
                 raise AlphaError('Approve this exact recoverable upload first. Ended or unjournaled uploads cannot be restarted.', 409)
             # API authorization and independent project/eligibility gates are refreshed before releasing the hold.
             self.worker_api(job['manifest'])
-            if saved['stage'] != 'held':
-                return {'status': saved['stage'], 'resumed': False}
-            saved.setdefault('recoveryAttempts', []).append({'at': self.clock(), 'actor': actor, 'previousCategory': saved.get('errorCategory')})
-            saved.update(stage='uploaded_private' if saved.get('videoId') else 'uploading', retryAt=self.clock(), transientFailures=0)
-            from ..hosted import audit
-            with self.repository.transaction(token, workspace) as (cur, row, _):
+            from ..hosted import _membership, audit
+            with self.repository.transaction(token, workspace) as (cur, row, principal):
+                require(_membership(row), 'approve')
+                self.repository.assert_fresh(token, principal)
                 latest = json.loads(row[1]) if isinstance(row[1], str) else row[1]
                 latest_job = next((x for x in latest.get('phase2', {}).get('jobs', []) if x.get('id') == job['id']), None)
-                if (not latest_job or latest_job.get('approvalDigest') != job.get('approvalDigest')
-                        or not self.service.commands.engine.current(latest, latest_job['manifest'])):
-                    raise AlphaError('The upload approval changed before recovery.', 409)
+                if latest_job and latest_job.get('youtubeAgent'):
+                    require(_membership(row), 'owner')
+                if (principal != actor or not latest_job
+                        or latest_job.get('approvalDigest') != job.get('approvalDigest')
+                        or not self._can_recover_upload(latest, latest_job, principal, saved)):
+                    raise AlphaError('The upload approval, cancellation or authority changed before recovery.', 409)
                 cur.execute("SELECT 1 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL FOR NO KEY UPDATE", (workspace, connection))
                 if not cur.fetchone():
                     raise AlphaError('This upload connection was revoked before recovery.', 409, code='youtube_revoked_oauth')
-                self.journal.save(key, saved)
+                cur.execute('SELECT state FROM public.pr_youtube_uploads WHERE workspace_id=%s AND connection_id=%s AND operation_key=%s FOR UPDATE', key)
+                current_upload = cur.fetchone()
+                if not current_upload or fingerprint(current_upload[0]) != fingerprint(saved):
+                    raise AlphaError('The held upload changed or was removed before recovery.', 409)
+                saved.setdefault('recoveryAttempts', []).append({'at': self.clock(), 'actor': actor, 'previousCategory': saved.get('errorCategory')})
+                saved.update(stage='uploaded_private' if saved.get('videoId') else 'uploading', retryAt=self.clock(), transientFailures=0)
+                # Journal and job commit together; a purged journal is never recreated.
+                cur.execute('UPDATE public.pr_youtube_uploads SET state=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND operation_key=%s',
+                            (json.dumps(saved), *key))
                 latest_job.update(state='provider_accepted', nextAt=self.clock(), progress={'version': 2, **upload_view(saved)})
                 latest_job['youtubeRecoveryApproval'] = {'approvedBy': actor, 'digest': job['approvalDigest'],
                     'approvedAt': self.clock(), 'expiresAt': self.clock() + 36 * 3600}
@@ -722,7 +742,13 @@ class YouTubeCreatorService:
             current = api.owned('videos', plan['params']['videoId'])
             urls = {v.get('url') for v in current.get('snippet', {}).get('thumbnails', {}).values()}
             returned = {v.get('url') for item in result.get('items', []) for v in item.values() if isinstance(v, dict)}
-            return {'verified': bool((urls & returned) - {None}), 'method': 'videos.list', 'resourceId': current['id']}
+            # YouTube can reuse stable thumbnail URLs across image replacements.
+            # Resource URL overlap cannot prove that the approved bytes are served.
+            observed = (current.get('id') == plan['params']['videoId']
+                        and bool((urls & returned) - {None}))
+            return {'verified': False, 'method': 'videos.list', 'resourceId': current['id'],
+                    'resourceObserved': observed, 'contentVerified': False,
+                    'note': 'YouTube accepted the thumbnail write. Resource URLs do not verify the new image content.'}
         if resource == 'captions':
             video = (plan.get('body') or {}).get('snippet', {}).get('videoId') or (result.get('snippet') or {}).get('videoId') or plan.get('videoId')
             if not video:
@@ -786,6 +812,9 @@ class YouTubeCreatorService:
         receipt['verification'] = verification
         if verification.get('verified'):
             status = 'verified'
+        elif manifest['plan'].get('method') == 'thumbnails.set' and status == 'verified':
+            # Correct a prior URL-only receipt without repeating the accepted write.
+            status = 'accepted'
         from ..hosted import audit
         with self.service.connection_factory() as db, db.cursor() as cur:
             cur.execute('UPDATE public.pr_youtube_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND id::text=%s', (status, json.dumps(receipt), workspace, connection, action_id))

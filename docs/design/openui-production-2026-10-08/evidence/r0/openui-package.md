@@ -737,3 +737,14 @@ Each item is an executable assertion against the installed 0.3.2:
 - [ ] Re-ordering `Stack` children keeps the focused input when keyed by `statementId`.
 - [ ] The install log with `OPENUI_TELEMETRY_DISABLED=1` has no notice and no `~/.config/openui/telemetry.json`.
 - [ ] The production `next build` chunk grep finds no `cdn.jsdelivr.net/npm/@openuidev/devtools` and records whether `react-lang:library` code remains.
+
+
+## 2026-10-09 exact lockfile re-review after PR #137
+
+This addendum reviews the current production OpenUI dependency addition from `a522482e` to `94ca0dbd`; the historical R0 map above remains dated evidence. Current lock SHA256 is `1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5`, replacing the pre-OpenUI reviewed hash `c347e642ee841cdcc2ca1a8450c4acc09cd391ea6962735c7b1f31fe6c551504`.
+
+Official npm metadata and independently calculated tarball SHA512 match all six lock entries: direct `@openuidev/lang-core@0.3.2` / `@openuidev/react-lang@0.3.2`; transitive `@openuidev/devtools@0.2.2`, `@openuidev/observability@0.0.4`, `ci-info@4.4.0`, `lucide-react@0.575.0`. No existing package entry changed or was removed. React/React DOM 19.2.4 and Zod 4.6.5 satisfy the peer requirements; the optional MCP SDK is not installed. Registry source metadata: `https://registry.npmjs.org/<package>/<version>` for these exact packages; OpenUI upstream: <https://github.com/thesysdev/openui>.
+
+Fresh inspection of the exact published hashed modules confirms the install-telemetry opt-out, opt-in runtime telemetry, development devtools auto-mount/CDN risk and raw renderer observability described above. Current CI/Depot environment disables installation telemetry before npm ci. App controls are implemented: `core/openui.ts` imports the global devtools opt-out first, `renderer.tsx` passes `publishObservability={false}`, and the trusted validator rejects native Mutation and restricts bounded Query calls to read bindings. Production Vercel environment values were not inspected in this review; no prior production install-telemetry claim is made.
+
+`scripts/cloud-dependency-security.py` retains every prior validator and adds these exact package versions to its locked/installed graph, exact direct OpenUI pins and a required CI telemetry opt-out. The review used bounded Python HTTPS/archive inspection, JSON/Git comparison and AST checks; no dependency installation or local Node execution occurred. JCB `x3kgl2347m` failed at the inherited old hash before source tests. A subsequent shared cloud run must validate the repaired gate, a fresh zero-finding advisory result, native image/worker/formatter checks and application tests. Full byte-verification and source-control review receipt: external task artifact `gates-20261009/dependency-review/REVIEW.md` with `REGISTRY-INTEGRITY.json` and `OPENUI-SOURCE-INTEGRITY.json`.

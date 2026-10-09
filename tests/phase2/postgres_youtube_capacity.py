@@ -94,6 +94,54 @@ try:
     assert identity.snapshot(WORKSPACES[0])['workspaceUsageToday']['general'] == {
         'reservedUnits': 2, 'admittedRequests': 2, 'delayedRequests': 1}
 
+    # Analytics consumes request counts, never an invented Data API unit cost.
+    # Concurrent workspaces share the project lock/daily ceiling and keep their own allowance.
+    analytics_policy = replace(policy, project_key=PROJECT + '-analytics-daily', analytics_daily_limit=5,
+                               analytics_workspace_daily_limit=3, analytics_project_per_minute=720)
+    analytics = CapacityController(connection, analytics_policy, clock=lambda: NOW)
+    def analytics_attempt(index, target):
+        wid = WORKSPACES[index % 2]
+        try:
+            target.record(wid, 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+            return wid, True, None
+        except YouTubeError as error:
+            assert error.category == 'capacity_delay' and error.retry_at > NOW
+            return wid, False, error.capacity_reason
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        analytics_attempts = list(pool.map(lambda index: analytics_attempt(index, analytics), range(12)))
+    assert sum(ok for _, ok, _ in analytics_attempts) == 5, analytics_attempts
+    assert all(sum(ok and wid == target for wid, ok, _ in analytics_attempts) <= 3 for target in WORKSPACES)
+    with connection() as db:
+        assert db.execute("SELECT used_units,admitted_requests,denied_requests FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (analytics_policy.project_key,)).fetchone() == (5, 5, 7)
+        assert db.execute('SELECT count(*),count(*) FILTER(WHERE estimated_units IS NOT NULL) FROM public.pr_youtube_usage WHERE project_key=%s', (analytics_policy.project_key,)).fetchone() == (12, 0)
+        assert db.execute("SELECT count(*) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND bucket IN ('general','videoUploads')", (analytics_policy.project_key,)).fetchone()[0] == 0
+    analytics_own = analytics.snapshot(WORKSPACES[0])['analyticsAdmission']
+    assert analytics_own['workspaceReservedRequestsToday'] == sum(ok and wid == WORKSPACES[0] for wid, ok, _ in analytics_attempts)
+    assert 'analyticsRequests' not in analytics.snapshot(WORKSPACES[0])['workspaceUsageToday']
+    # Analytics exhaustion does not consume or overwrite the separate Data budget.
+    analytics.record(WORKSPACES[0], 'synthetic-connection', 'videos.insert', 'videoUploads', 1)
+
+    minute_policy = replace(analytics_policy, project_key=PROJECT + '-analytics-minute', analytics_daily_limit=100,
+                            analytics_workspace_daily_limit=100, analytics_project_per_minute=3)
+    analytics_minute = CapacityController(connection, minute_policy, clock=lambda: NOW)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        minute_attempts = list(pool.map(lambda index: analytics_attempt(index, analytics_minute), range(12)))
+    assert sum(ok for _, ok, _ in minute_attempts) == 3, minute_attempts
+    assert all(reason == 'analytics_project_rate' for _, ok, reason in minute_attempts if not ok)
+    # A different OAuth-client controller with the same project cannot obtain a fresh minute allowance.
+    same_project = CapacityController(connection, minute_policy, clock=lambda: NOW)
+    assert analytics_attempt(0, same_project)[1:] == (False, 'analytics_project_rate')
+    next_minute = CapacityController(connection, minute_policy, clock=lambda: NOW + 61)
+    next_minute.record(WORKSPACES[0], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+    with connection() as db:
+        assert db.execute("SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (minute_policy.project_key,)).fetchone()[0] == 4
+        assert db.execute("SELECT count(*) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket LIKE 'analyticsMinute:%%'", (minute_policy.project_key,)).fetchone()[0] == 2
+    workspace_policy = replace(minute_policy, project_key=PROJECT + '-analytics-workspace', requests_per_minute=1)
+    analytics_workspace = CapacityController(connection, workspace_policy, clock=lambda: NOW)
+    analytics_workspace.record(WORKSPACES[0], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+    assert analytics_attempt(0, analytics_workspace)[1:] == (False, 'workspace_rate')
+    analytics_workspace.record(WORKSPACES[1], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+
     for role in ('anon', 'authenticated'):
         for table in ('pr_youtube_quota_daily', 'pr_youtube_rate_windows', 'pr_worker_tenants'):
             with connection() as db:
@@ -149,8 +197,10 @@ try:
         db.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[0],))
         assert db.execute('SELECT count(*) FROM public.pr_youtube_quota_daily WHERE workspace_id=%s', (WORKSPACES[0],)).fetchone()[0] == 0
         assert db.execute('SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key=\'project\' AND bucket=\'videoUploads\'', (PROJECT,)).fetchone()[0] == 5
-    print('PASS: synthetic atomic concurrent admission, preconnection identity budget, denial metering, isolated rates, server-only RLS, durable fair worker claim, missing097 platform isolation and deletion without quota refund. No real Google calls or load acceptance.')
+        assert db.execute("SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (analytics_policy.project_key,)).fetchone()[0] == 5
+        assert db.execute("SELECT sum(used_units) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket LIKE 'analyticsMinute:%%'", (minute_policy.project_key,)).fetchone()[0] == 4
+    print('PASS: synthetic atomic concurrent admission, preconnection identity budget, denial metering, isolated rates, server-only RLS, concurrent Analytics request/day/project-minute admission and rollover, unknown Data costs, durable fair worker claim, missing097 platform isolation and deletion without quota refund. No real Google calls or load acceptance.')
 finally:
     with connection() as db:
         db.execute('DELETE FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])', (WORKSPACES + FAIR,))
-        db.execute('DELETE FROM public.pr_youtube_quota_daily WHERE project_key IN (%s,%s,%s)', (PROJECT, PROJECT + '-rate', PROJECT + '-identity'))
+        db.execute('DELETE FROM public.pr_youtube_quota_daily WHERE project_key=ANY(%s)', ([PROJECT, PROJECT + '-rate', PROJECT + '-identity', PROJECT + '-analytics-daily', PROJECT + '-analytics-minute', PROJECT + '-analytics-workspace'],))
