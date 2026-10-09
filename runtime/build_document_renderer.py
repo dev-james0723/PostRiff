@@ -14,9 +14,45 @@ import tempfile
 import urllib.request
 
 VERSION = '26.2.6'
-BUNDLE_REVISION = VERSION + '-elf-closure-2'
+BUNDLE_REVISION = VERSION + '-headless-minimal-1'
 DYNAMIC_PROVIDERS = ('libseccomp.so.2','libsoftokn3.so','libfreebl3.so','libfreeblpriv3.so','libnssckbi.so')
 SHA256 = '9833c61bfbec0905c6da54f82ef56123818661c9fec99706d9afece3ad7e9988'
+
+# Keep the exact Writer / Calc / Impress / Draw conversion stack. Core needs
+# ooofonts and images to satisfy its RPM dependencies; package only the fonts
+# and theme actually required by the private, headless document renderer.
+INSTALL_RPMS = frozenset({
+    'libobasis26.2-core', 'libobasis26.2-ooofonts', 'libobasis26.2-images',
+    'libobasis26.2-en-US', 'libobasis26.2-writer', 'libobasis26.2-calc',
+    'libobasis26.2-impress', 'libobasis26.2-draw', 'libobasis26.2-math',
+    'libobasis26.2-graphicfilter', 'libobasis26.2-xsltfilter',
+    'libobasis26.2-ooolinguistic',
+    'libreoffice26.2', 'libreoffice26.2-ure', 'libreoffice26.2-en-US',
+    'libreoffice26.2-writer', 'libreoffice26.2-calc',
+    'libreoffice26.2-impress', 'libreoffice26.2-draw',
+    'libreoffice26.2-math',
+})
+# Offline headless conversion does not use GUI artwork, templates, help,
+# database tooling, macro wizards or Apple/Works import filters. Do not remove
+# share/config/soffice.cfg or libclucene/libpdfiumlo: they are required even
+# in headless mode. Verified against DOCX/XLSX/PPTX, legacy DOC/XLS/PPT,
+# ODT/ODS/ODP, RTF, HTML, TXT and CSV round trips.
+OMIT_OFFICE_DIRS = (
+    'help', 'share/gallery', 'share/template', 'share/wizards',
+    'share/basic', 'share/tipoftheday', 'share/Scripts',
+    'share/xpdfimport', 'share/firebird', 'share/xdg',
+)
+OMIT_OFFICE_LIBS = (
+    'libldapbe2lo.so', 'libmysqlclo.so', 'libmwaw-0.3-lo.so.3',
+    'libetonyek-0.1-lo.so.1', 'libdbalo.so',
+    'libstaroffice-0.0-lo.so.0', 'libvbaobjlo.so', 'libvbaswobjlo.so',
+    'libClp.so.1', 'libCoinUtils.so.3', 'libCgl.so.1',
+    'libCbc.so.3', 'libCbcSolver.so.3', 'libwps-0.4-lo.so.4',
+)
+# FONTCONFIG_FILE in library_preview.py points at the bundled root/fonts;
+# curate there rather than copying the same full font families twice.
+FONT_PREFIXES = ('Carlito', 'Liberation', 'NotoSans', 'NotoSerif',
+                 'DejaVuSans', 'DejaVuSerif')
 
 def main():
     if os.uname().sysname != 'Linux' or not shutil.which('dnf'):
@@ -24,6 +60,8 @@ def main():
     root = Path(__file__).resolve().parents[1] / '.document-runtime'
     if (root / 'VERSION').exists() and (root / 'VERSION').read_text() == BUNDLE_REVISION:
         return
+    if root.exists():
+        shutil.rmtree(root)
     root.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='rafii-renderer-build-') as work:
         work = Path(work)
@@ -34,7 +72,18 @@ def main():
             raise SystemExit('Official LibreOffice archive checksum mismatch.')
         with tarfile.open(archive) as tar:
             tar.extractall(work / 'rpms', filter='data')
-        rpms = sorted(str(p) for p in (work / 'rpms').rglob('*.rpm'))
+        available = sorted((work / 'rpms').rglob('*.rpm'))
+        rpms = []
+        selected = set()
+        for rpm in available:
+            for package in INSTALL_RPMS:
+                if rpm.name.startswith(package + '-' + VERSION + '.'):
+                    rpms.append(str(rpm))
+                    selected.add(package)
+                    break
+        missing = INSTALL_RPMS - selected
+        if missing:
+            raise SystemExit('LibreOffice release missing required RPMs: ' + ', '.join(sorted(missing)))
         subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', 'libXinerama', 'cups-libs', 'dbus-glib', 'cairo', 'libseccomp', 'nss', 'fontconfig', 'dejavu-sans-fonts', 'dejavu-serif-fonts', *rpms], check=True)
     office = next(Path('/opt').glob('libreoffice26.2'))
     # RPM packages do not declare every dynamically loaded headless dependency.
@@ -51,13 +100,44 @@ def main():
     absent_providers = ['/usr/lib64/' + name for name in DYNAMIC_PROVIDERS if not (Path('/usr/lib64') / name).is_file()]
     if absent_providers:
         subprocess.run(['dnf', '-y', '--setopt=install_weak_deps=False', 'install', *absent_providers], check=True)
-    shutil.copytree(office, root / 'office', dirs_exist_ok=True, symlinks=False)
+
+    bundled = root / 'office'
+    shutil.copytree(office, bundled, dirs_exist_ok=True, symlinks=False)
+    # Minimal, deterministic fonts still support realistic document rasterization.
+    font_target = root / 'fonts'
+    font_target.mkdir(exist_ok=True)
+    font_source = bundled / 'share/fonts/truetype'
+    if font_source.exists():
+        for font in font_source.glob('*.ttf'):
+            if font.name.startswith(FONT_PREFIXES):
+                shutil.copy2(font, font_target / font.name)
+        shutil.rmtree(font_source.parent)
+    # Amazon Linux DejaVu fallback covers symbols/mono when absent in Office.
+    for font in Path('/usr/share/fonts').rglob('*.ttf'):
+        if font.name.startswith(('DejaVuSans', 'DejaVuSerif')) and not (font_target / font.name).exists():
+            shutil.copy2(font, font_target / font.name)
+    for relative in OMIT_OFFICE_DIRS:
+        candidate = bundled / relative
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+        elif candidate.exists():
+            candidate.unlink()
+    for theme in (bundled / 'share/config').glob('images_*'):
+        if theme.name != 'images_colibre.zip':
+            theme.unlink()
+    for library in OMIT_OFFICE_LIBS:
+        candidate = bundled / 'program' / library
+        if candidate.is_file():
+            candidate.unlink()
+    # Trace only retained ELF files. Otherwise optional deleted modules pull
+    # irrelevant shared libraries back into the function bundle.
+    link_env['LD_LIBRARY_PATH'] = str(bundled / 'program')
     libdir = root / 'lib'
     libdir.mkdir(exist_ok=True)
     # Office opens plugins and helper executables after startup. Inspect every
     # ELF rather than guessing from filename suffixes (oosplash has no .so).
     pending = []
-    for binary in (office / 'program').rglob('*'):
+    for binary in (bundled / 'program').rglob('*'):
         if binary.is_file():
             with binary.open('rb') as source:
                 if source.read(4) == b'\x7fELF':
@@ -75,7 +155,7 @@ def main():
         if str(binary) in seen:
             continue
         seen.add(str(binary))
-        if not binary.is_relative_to(office):
+        if not binary.is_relative_to(bundled):
             shutil.copy2(binary, libdir / binary.name, follow_symlinks=True)
         output = subprocess.run(['ldd', str(binary)], capture_output=True, text=True, env=link_env, check=False).stdout
         for path in re.findall(r'=>\s+(/[^\s]+)', output):
@@ -83,7 +163,6 @@ def main():
             # Use the function runtime's glibc and loader, never a copied loader.
             if dep.name not in {'libc.so.6', 'libm.so.6', 'libdl.so.2', 'libpthread.so.0', 'librt.so.1', 'libresolv.so.2'}:
                 pending.append(dep)
-    shutil.copytree('/usr/share/fonts', root / 'fonts', dirs_exist_ok=True, symlinks=False)
     (root / 'VERSION').write_text(BUNDLE_REVISION)
     print('Runtime bundle bytes', sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))
     print('Bundled checksum-verified LibreOffice', VERSION)
