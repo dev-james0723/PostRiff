@@ -146,6 +146,45 @@ class ClosedLoopTests(unittest.TestCase):
 
 
 
+class History(unittest.TestCase):
+    def test_backfill_never_enters_a_reading_window_or_comparison(self):
+        from unittest.mock import patch
+        from postriff_phase2 import insights
+        row=('instagram','media-1',None,'views','2026-09',0,'count','available',1_759_617_440.0,1_759_617_440.0,'ig','backfill')
+        post={'id':'media-1','provider':'instagram','providerPostId':'media-1','connectionId':'ig','platform':'Instagram','format':'text','language':'en','timeBucket':'unknown'}
+        with patch.object(insights,'latest_observations',return_value=[row]):
+            attached=performance.attach_readings(None,'w',[post])
+        self.assertNotIn('readings',attached[0])
+        for horizon in performance.HORIZONS:
+            self.assertEqual(performance.compare(attached[0],attached,horizon)['status'],'unavailable')
+
+    def test_history_entry_is_a_lifetime_reading_at_its_age_with_zero_and_missing_kept_apart(self):
+        from postriff_phase2.growth.closed_loop import history_entry
+        published=1_759_616_041.0;observed=published+1399
+        entry=history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'media-1','publishedAt':published,
+                             'mediaType':'IMAGE','permalink':'https://www.instagram.com/p/x/'},
+                            ('done',None),{'reach':(0.0,'available',observed),'views':(0.0,'available',observed),'likes':(None,'unavailable',observed)})
+        self.assertEqual((entry['state'],entry['platform'],entry['ageSeconds'],entry['observedAt']),('backfill','Instagram',1399,observed))
+        values={m['metric']:(m['value'],m['availability']) for m in entry['metrics']}
+        self.assertEqual(values['reach'],(0.0,'available'))
+        self.assertEqual(values['likes'],(None,'unavailable'))
+        self.assertEqual(values['saved'],(None,'unavailable'))      # never read: missing, not zero
+        self.assertEqual([m['metric'] for m in entry['metrics']],['reach','views','likes','comments','saved','shares'])
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m2','publishedAt':published},('pending',None),{})['state'],'scheduled')
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m3','publishedAt':published},('unavailable','http_400'),{})['state'],'unavailable')
+        self.assertEqual(history_entry({'connectionId':'ig','provider':'instagram','providerPostId':'m4','publishedAt':None},None,{})['state'],'unscheduled')
+
+    def test_a_review_made_under_older_consent_is_stale(self):
+        from postriff_phase2.contracts import digest
+        from postriff_phase2.growth.closed_loop import SUMMARY_ROUTE,report_consent_current
+        consent={'routes':[SUMMARY_ROUTE],'audience':False,'at':1}
+        state={'growthConsent':consent}
+        self.assertTrue(report_consent_current({'consentDigest':digest(consent)},state))
+        self.assertTrue(report_consent_current({},state))
+        self.assertFalse(report_consent_current({'consentDigest':digest({**consent,'at':2})},state))
+        self.assertFalse(report_consent_current({},{'growthConsent':{'routes':[]}}))
+
+
 class RunCursor:
     """Answers one paid run's statements: the request-key lookup, budget reservations and the run row."""
 

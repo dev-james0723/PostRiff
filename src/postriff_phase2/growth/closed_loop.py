@@ -32,6 +32,41 @@ ACTIONS=('postmortem_lesson_approve','postmortem_dismiss','audience_suggestion_c
          'creator_calibration_propose','creator_calibration_approve','creator_calibration_restore')
 
 
+HISTORY_LIMIT=100
+HISTORY_NOTICE=('Imported posts show one lifetime reading, taken at the post\'s age when it was read. They are not 1h, 24h '
+                'or 7d windows and are never used for reviews, comparisons, lessons or calibration.')
+_READ_STATES={'pending':'scheduled','claimed':'pending','unavailable':'unavailable','dead':'unavailable','cancelled':'unavailable','done':'unavailable'}
+
+
+def history_entry(post,read,observed):
+    """One imported post: a lifetime 'backfill' reading at its age at read time. A measured zero stays 0; a metric that
+    was not read stays None. `read` is (status, failure_class) of its backfill row; `observed` maps metric ->
+    (value, availability, observedAt)."""
+    from ..insights import INSIGHT_METRICS
+    provider=post['provider']
+    observed_at=max((o[2] for o in observed.values()),default=None)
+    metrics=[]
+    for metric in INSIGHT_METRICS.get(provider,()):
+        value,availability,_=observed.get(metric,(None,'unavailable',None))
+        ok=availability=='available' and value is not None
+        metrics.append({'metric':metric,'value':float(value) if ok else None,'availability':'available' if ok else 'unavailable'})
+    state='backfill' if observed else 'unscheduled' if read is None else _READ_STATES.get(read[0],'unavailable')
+    published=post.get('publishedAt')
+    return {'connectionId':post['connectionId'],'provider':provider,'platform':{'threads':'Threads','instagram':'Instagram'}.get(provider,provider),
+            'providerPostId':post['providerPostId'],'publishedAt':published,'mediaType':post.get('mediaType'),'permalink':post.get('permalink'),
+            'state':state,'observedAt':observed_at,
+            'ageSeconds':int(observed_at-published) if observed and published is not None and observed_at>=published else None,
+            'metrics':metrics if observed else [{**m,'availability':'unavailable'} for m in metrics]}
+
+
+def report_consent_current(body,state):
+    """A review is usable only under the AI permission it was made with (and while the explanation route is allowed)."""
+    consent=state.get('growthConsent') or {}
+    if SUMMARY_ROUTE not in (consent.get('routes') or []):
+        return False
+    return body.get('consentDigest') in (None,digest(consent))
+
+
 def collection_enabled(growth,workspace_id,cur=None):
     """Same admission as the worker (env allowlist or growth_measurement enrollment); mounting is not enablement."""
     from .metric_schedule import MetricScheduler
@@ -69,6 +104,31 @@ class ClosedLoop:
         cur.execute('SELECT job_id,body,extract(epoch from verified_at) FROM public.pr_predictions WHERE workspace_id=%s',(wid,))
         predictions={r[0]:{**r[1],'verifiedAt':float(r[2])} for r in cur.fetchall() if r[0] in {j['id'] for j in jobs}}
         return jobs,performance.attach_readings(cur,wid,posts),predictions
+
+    def history(self,cur,wid):
+        """The account's own imported posts (Direct analytics, no pending purge) with their latest backfill reading."""
+        from .readiness import MEASUREMENT_TABLES,present_tables
+        if not set(MEASUREMENT_TABLES)<=present_tables(cur,MEASUREMENT_TABLES):return []
+        cur.execute("""SELECT p.connection_id,p.provider,p.provider_post_id,extract(epoch from p.published_at),p.media_type,p.permalink
+                       FROM public.pr_owned_posts p WHERE p.workspace_id=%s AND p.source='history_import'
+                         AND EXISTS (SELECT 1 FROM public.pr_channel_capabilities c WHERE c.workspace_id=p.workspace_id
+                                     AND c.connection_id=p.connection_id AND c.capability='analytics' AND c.level='Direct')
+                         AND NOT EXISTS (SELECT 1 FROM public.pr_growth_purges g WHERE g.workspace_id=p.workspace_id AND g.connection_id=p.connection_id)
+                       ORDER BY p.published_at DESC NULLS LAST,p.provider_post_id LIMIT %s""",(wid,HISTORY_LIMIT))
+        posts=[{'connectionId':r[0],'provider':r[1],'providerPostId':r[2],'publishedAt':float(r[3]) if r[3] is not None else None,
+                'mediaType':r[4],'permalink':r[5]} for r in cur.fetchall()]
+        if not posts:return []
+        ids=[p['providerPostId'] for p in posts]
+        cur.execute("SELECT connection_id,provider,provider_post_id,status,failure_class FROM public.pr_metric_reads WHERE workspace_id=%s AND read_offset='backfill' AND provider_post_id=ANY(%s)",(wid,ids))
+        reads={(r[0],r[1],r[2]):(r[3],r[4]) for r in cur.fetchall()}
+        cur.execute("""SELECT DISTINCT ON (connection_id,provider,provider_post_id,metric) connection_id,provider,provider_post_id,metric,value,availability,extract(epoch from observed_at)
+                       FROM public.pr_metric_observations WHERE workspace_id=%s AND read_offset='backfill' AND provider_post_id=ANY(%s)
+                       ORDER BY connection_id,provider,provider_post_id,metric,observed_at DESC,ingested_at DESC,id DESC""",(wid,ids))
+        observed={}
+        for conn,provider,post_id,metric,value,availability,at in cur.fetchall():
+            observed.setdefault((conn,provider,post_id),{})[metric]=(float(value) if value is not None else None,availability,float(at))
+        return [history_entry(p,reads.get((p['connectionId'],p['provider'],p['providerPostId'])),
+                              observed.get((p['connectionId'],p['provider'],p['providerPostId']),{})) for p in posts]
 
     def _basis(self,cur,wid,state,job_id,horizon):
         if horizon not in performance.HORIZONS:raise AlphaError('Choose a reading window: 1h, 24h or 7d.')
@@ -108,10 +168,11 @@ class ClosedLoop:
             cur.execute('SELECT id::text,job_id,horizon,status,body FROM public.pr_postmortems WHERE workspace_id=%s AND expires_at>now() ORDER BY created_at DESC LIMIT 30',(wid,))
             reports=[]
             for mid,jid,h,status,body in cur.fetchall():
-                try:fresh=self._basis(cur,wid,row[1],jid,h)['basisDigest']==body['basisDigest']
+                try:fresh=self._basis(cur,wid,row[1],jid,h)['basisDigest']==body['basisDigest'] and report_consent_current(body,row[1])
                 except AlphaError:fresh=False
                 reports.append({**body,'id':mid,'status':status if fresh else 'stale'})
             return {'posts':entries,'reports':reports,'calibration':self._calibrations(cur,wid,row[1],posts,predictions),
+                    'history':self.history(cur,wid),'historyNotice':HISTORY_NOTICE,
                     'coverage':{'maximumPosts':300,'loadedPosts':len(jobs)},
                     'measurement':{'enabled':enabled,'analyticsConnections':len(connected & direct)},
                     'notice':'Readings keep their native metric and time window. No report changes your Genome automatically.'}
@@ -160,6 +221,7 @@ class ClosedLoop:
         except Exception as caught:error=caught
         def store(cur,state,principal,result):
             current(cur,state)
+            result={**result,'consentDigest':digest(state.get('growthConsent'))}
             cur.execute('INSERT INTO public.pr_postmortems(workspace_id,job_id,horizon,basis_digest,body) VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,job_id,horizon,basis_digest) DO UPDATE SET body=excluded.body RETURNING id::text,status',
                         (wid,basis['jobId'],basis['horizon'],basis['basisDigest'],json.dumps(result)))
             mid,status=cur.fetchone()
@@ -329,6 +391,8 @@ class ClosedLoop:
                     cur.execute("UPDATE public.pr_postmortems SET status='dismissed' WHERE workspace_id=%s AND id::text=%s",(wid,payload['reportId']))
                     return
                 if payload.get('confirmed') is not True:raise AlphaError('Confirm the exact lesson you reviewed.')
+                if not report_consent_current(report,state):
+                    raise AlphaError('AI permission changed since this review. Review the result again.',409,code='growth_input_changed')
                 basis=self._basis(cur,wid,state,report['jobId'],report['horizon'])
                 if basis['basisDigest']!=report['basisDigest']:raise AlphaError('Readings changed. Review a fresh report.',409)
                 lesson=next((l for l in basis['lessons'] if l['id']==payload.get('lessonId')),None)
