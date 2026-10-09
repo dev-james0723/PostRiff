@@ -34,6 +34,9 @@ FEATURES = {
 DENYLIST = "RAFII_FEATURE_WORKSPACE_DENYLIST"
 POLICY_VERSION = "self-serve-20261009-v1"
 MAX_COHORT = 10000
+# Enrollment changes per workspace+person in a fixed window (pr_auth_throttle).
+THROTTLE_LIMIT = 10
+THROTTLE_WINDOW_SECONDS = 600
 
 
 def _source(values):
@@ -151,6 +154,7 @@ def enroll(cur, workspace_id, feature, *, actor, role, values=None, audit=None):
         raise AlphaError("New workspaces cannot join right now.", 409, code="self_serve_paused")
     if not table_ready(cur):
         raise AlphaError("Enrollment is not available yet.", 503, code="enrollment_unavailable")
+    _throttle(cur, workspace_id, actor)
     cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("pr_feature_enrollments:" + feature,))
     cur.execute("SELECT status FROM public.pr_feature_enrollments WHERE workspace_id=%s AND feature=%s FOR UPDATE",
                 (workspace_id, feature))
@@ -179,12 +183,22 @@ def unenroll(cur, workspace_id, feature, *, actor, role, audit=None):
         raise AlphaError("Only the workspace owner can turn this off.", 403, code="owner_required")
     if not table_ready(cur):
         return {"feature": feature, "status": "revoked", "replayed": True}
+    _throttle(cur, workspace_id, actor)
     cur.execute("""UPDATE public.pr_feature_enrollments SET status='revoked',revoked_by=%s,revoked_at=now(),revision=revision+1
                    WHERE workspace_id=%s AND feature=%s AND status='active'""", (actor, workspace_id, feature))
     changed = cur.rowcount == 1
     if changed:
         _audit(cur, audit, workspace_id, actor, "feature.unenrolled", feature)
     return {"feature": feature, "status": "revoked", "replayed": not changed}
+
+
+def _throttle(cur, workspace_id, actor):
+    from .hosted import throttle  # lazy: hosted imports most of the app
+
+    try:
+        throttle(cur, f"feature_enrollment:{workspace_id}:{actor}", THROTTLE_LIMIT, THROTTLE_WINDOW_SECONDS)
+    except AlphaError as error:
+        raise AlphaError("Too many changes. Wait a few minutes and try again.", 429, code="rate_limited") from error
 
 
 def _audit(cur, audit, workspace_id, actor, kind, feature):

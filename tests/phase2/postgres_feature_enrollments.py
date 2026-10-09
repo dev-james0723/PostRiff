@@ -135,6 +135,13 @@ def main():
                 continue
             raise AssertionError("authenticated reached pr_feature_enrollments: " + statement[:40])
         db.execute("RESET ROLE")
+    # Rate limit: repeated toggling by one person is throttled (429), not unbounded.
+    with connect() as db, db.cursor() as cur:
+        db.execute("DELETE FROM public.pr_auth_throttle")
+        for _ in range(fe.THROTTLE_LIMIT):
+            fe.unenroll(cur, two, "growth_measurement", actor=TWO, role="owner")
+        refused("rate_limited", lambda: fe.unenroll(cur, two, "growth_measurement", actor=TWO, role="owner"))
+        db.execute("DELETE FROM public.pr_auth_throttle")
     print("postgres_feature_enrollments: ok")
     return 0
 
