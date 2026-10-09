@@ -714,6 +714,24 @@ class StageTests(unittest.TestCase):
             ('w3', 'c-unverified', 'identity'): ('mastodon', 'unknown', 'blocked', 'identity_known')})
         self.assertEqual(rows[('w1', 'c-ok', 'identity')][8], now - 100)
 
+    def test_projection_overlays_youtube_vault_facts_like_the_channels_card(self):
+        """An expired hourly access token with a working refresh grant is a connected channel, not an expired one; a retained
+        but disabled refresh grant needs new consent (client_binding_missing -> blocked). Without vault facts nothing changes."""
+        from postriff_phase2.channels import connection_state
+        now = NOW_EPOCH
+        channels = [('w1', 'yt-refresh', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w1', 'yt-binding', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w2', 'yt-none', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w2', 'li', 'LinkedIn', True, False, True, True, now - 60, 3, False, None)]
+        status = {('w1', 'yt-refresh'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': now - 60, 'revoked': False},
+                  ('w1', 'yt-binding'): {'refreshSupported': False, 'refreshBindingRequired': True, 'accessTokenExpiresAt': now - 60, 'revoked': False}}
+        rows = ops.project_connections(channels, {}, now, connection_state, status)
+        got = {key[1]: (row[5], row[6]) for key, row in rows.items()}
+        self.assertEqual(got, {'yt-refresh': ('ok', 'read_verified'), 'yt-binding': ('blocked', 'client_binding_missing'),
+                               'yt-none': ('expired', 'token_expired'), 'li': ('expired', 'token_expired')})
+        legacy = ops.project_connections(channels, {}, now, connection_state)
+        self.assertEqual({key[1]: row[5] for key, row in legacy.items()}, {'yt-refresh': 'expired', 'yt-binding': 'expired', 'yt-none': 'expired', 'li': 'expired'})
+
     def test_connection_health_refreshes_hourly_and_removes_vanished_connections(self):
         now = local_epoch('2026-10-01T08:05:30')
         channels = [('11111111-1111-1111-1111-111111111111', 'c-ok', 'LinkedIn', True, False, True, True, now + 30 * 86400, 2, True, now - 100)]

@@ -591,7 +591,8 @@ SNAPSHOT_UPSERT = ('INSERT INTO public.pr_operational_snapshots(minute,observed_
 CAPABILITIES = ('identity', 'publish', 'schedule', 'analytics', 'comments_read', 'reply', 'moderate', 'media_types', 'webhooks')
 LEVELS = ('Direct', 'Assisted', 'Bridge', 'Unsupported')
 CONNECTION_ID = re.compile(r'^[A-Za-z0-9_.:-]{1,80}$')
-HEALTH = {'reauthorization_required': 'blocked', 'scope_missing': 'blocked', 'identity_known': 'blocked', 'token_expired': 'expired'}
+HEALTH = {'reauthorization_required': 'blocked', 'scope_missing': 'blocked', 'identity_known': 'blocked', 'client_binding_missing': 'blocked',
+          'token_expired': 'expired'}
 EXPIRING_SECONDS = 7 * 86400
 MAX_CONNECTIONS = 5000
 REFRESH_SECONDS = 55 * 60
@@ -703,19 +704,28 @@ def provider_key(platform):
     return re.sub(r'[^a-z0-9]+', '_', str(platform or '').lower()).strip('_')[:40] or 'unknown'
 
 
-def project_connections(channels, levels, now, connection_state):
+def project_connections(channels, levels, now, connection_state, youtube_status=None):
     """Projection rows {(workspace, connection, capability): row} from the channel fields CHANNELS_SQL reads, classified by the
-    customer Channels card's own connection_state. Disconnected channels are not connections and are skipped."""
+    customer Channels card's own connection_state. Disconnected channels are not connections and are skipped.
+    `youtube_status` ({(workspace, connection): vault facts} from channels.youtube_credential_status) overlays the same
+    secret-free vault facts the Channels card uses, so an expired access token with a working refresh grant is not reported
+    as an expired connection, and a retained but disabled refresh grant is client_binding_missing."""
+    from postriff_phase2.channels import with_youtube_credential_status
     rows = {}
     for workspace_id, connection_id, platform, configured, revoked, identity, has_account, expires, scopes, capability_verified, verified_at in channels:
         if not connection_id or not CONNECTION_ID.fullmatch(str(connection_id)):
             continue
         expires_at = float(expires) if expires is not None else None
-        raw = connection_state({'configured': configured, 'revoked': revoked, 'identityVerified': identity, 'providerAccountId': 'present' if has_account else None,
-                                'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}, now)
+        channel = {'platform': platform, 'configured': configured, 'revoked': revoked, 'identityVerified': identity, 'providerAccountId': 'present' if has_account else None,
+                   'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}
+        if youtube_status is not None:
+            channel = with_youtube_credential_status(channel, youtube_status.get((workspace_id, connection_id)))
+        raw = connection_state(channel, now)
         if raw == 'disconnected':
             continue
-        state = HEALTH.get(raw) or ('expiring' if expires_at is not None and expires_at - now < EXPIRING_SECONDS else 'ok')
+        # A refreshable grant's access-token deadline is not a grant deadline: never 'expiring' for it.
+        refreshable = channel.get('refreshSupported') is True
+        state = HEALTH.get(raw) or ('expiring' if expires_at is not None and not refreshable and expires_at - now < EXPIRING_SECONDS else 'ok')
         for capability, level in sorted((levels.get((workspace_id, connection_id)) or {'identity': 'unknown'}).items()):
             if capability in CAPABILITIES:
                 rows[(workspace_id, connection_id, capability)] = (workspace_id, connection_id, capability, provider_key(platform), level if level in LEVELS else 'unknown',
@@ -764,7 +774,12 @@ def connection_health_stage(fstore, service, values, now):
                                 (sorted({row[0] for row in channels}), MAX_CONNECTIONS * len(CAPABILITIES) + 1))
                     for workspace_id, connection_id, capability, level in cur.fetchall():
                         levels.setdefault((workspace_id, connection_id), {})[capability] = level
-                rows = list(project_connections(channels, levels, now, connection_state).values())
+                youtube = None
+                youtube_workspaces = sorted({row[0] for row in channels if row[2] == 'YouTube'})
+                if youtube_workspaces and _table_exists(cur, 'public.pr_encrypted_credentials'):
+                    from postriff_phase2.channels import youtube_credential_status
+                    youtube = youtube_credential_status(cur, youtube_workspaces)   # metadata columns only, never ciphertext
+                rows = list(project_connections(channels, levels, now, connection_state, youtube).values())
                 if rows:
                     columns = list(zip(*rows))
                     cur.execute(CONNECTION_UPSERT, (now, *[list(column) for column in columns]))
