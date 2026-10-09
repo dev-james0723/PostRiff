@@ -213,6 +213,8 @@ export interface SuggestionChipsProps {
   caption: string;
   captionId: string;
   onPick: (suggestion: EditSuggestion) => void;
+  /** Escape on a chip closes the field (like everywhere else in it). */
+  onEscape?: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }
 
 /**
@@ -220,14 +222,17 @@ export interface SuggestionChipsProps {
  * Wraps on narrow screens (no truncation: CJK labels stay whole); 44 px targets on coarse pointers; a short fade-in that stops
  * under reduced motion (the OS setting and Rafii's own).
  */
-export function SuggestionChips({ suggestions, pressed, caption, captionId, onPick }: SuggestionChipsProps) {
+export function SuggestionChips({ suggestions, pressed, caption, captionId, onPick, onEscape }: SuggestionChipsProps) {
   if (!suggestions.length) return null;
   return (
     <div role='group' aria-labelledby={captionId} data-rafii-edit-suggestions='' className='flex min-w-0 flex-col gap-1.5'>
       <span id={captionId} className='text-muted-foreground text-xs'>{caption}</span>
       <div className='rafii-decorative-motion flex min-w-0 max-w-full flex-wrap gap-2'>
         {suggestions.map((suggestion, index) => (
-          <QuietButton key={suggestion.id} pressed={pressed === suggestion.id} onClick={() => onPick(suggestion)} onKeyDown={ignoreRepeat}
+          <QuietButton key={suggestion.id} pressed={pressed === suggestion.id} onClick={() => onPick(suggestion)} onKeyDown={(event) => {
+            ignoreRepeat(event);
+            onEscape?.(event);
+          }}
             style={{ animationDelay: `${index * 40}ms`, animationFillMode: 'backwards' }}
             className='animate-in fade-in-0 slide-in-from-bottom-1 duration-150 motion-reduce:animate-none max-w-full whitespace-normal text-left pointer-coarse:min-h-11'>
             {suggestion.label}
@@ -330,18 +335,19 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
     }
     setProblem(editProblemOf(result));
   };
+  // Escape closes the field from any of its controls (the field, a chip, Restore, Update view, Cancel), and stops there.
+  const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    onDone();
+  };
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && ime.current.composing(event)) event.preventDefault();
-  };
-  const onFormKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      onDone();
-    }
+    closeOnEscape(event);
   };
   const chips = blocked ? NONE : suggestions;
   return (
-    <form onSubmit={(event) => void submit(event)} onKeyDown={onFormKeyDown} className='rafii-quiet mt-2 flex min-w-0 max-w-full flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
+    <form onSubmit={(event) => void submit(event)} className='rafii-quiet mt-2 flex min-w-0 max-w-full flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
       <label htmlFor={inputId} className='flex flex-col gap-2 text-sm font-medium'>
         {l.t('whatShouldChange')}
         <input ref={input} id={inputId} aria-label={l.t('whatShouldChange')} value={field.text} maxLength={2000} onChange={(event) => dispatch({ type: 'type', text: event.target.value })}
@@ -349,21 +355,21 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
           placeholder={l.t('editPlaceholder')}
           className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base font-normal' />
       </label>
-      <SuggestionChips suggestions={chips} pressed={field.filled?.id ?? null} caption={l.t('suggestions')} captionId={captionId} onPick={pick} />
+      <SuggestionChips suggestions={chips} pressed={field.filled?.id ?? null} caption={l.t('suggestions')} captionId={captionId} onPick={pick} onEscape={closeOnEscape} />
       {canRestore(field) ? (
         <div className='flex'>
-          <QuietButton onClick={() => dispatch({ type: 'restore' })} className='pointer-coarse:min-h-11'>{l.t('restoreText')}</QuietButton>
+          <QuietButton onClick={() => dispatch({ type: 'restore' })} onKeyDown={closeOnEscape} className='pointer-coarse:min-h-11'>{l.t('restoreText')}</QuietButton>
         </div>
       ) : null}
       <p className='text-muted-foreground text-xs'>{l.t('editBilling')}</p>
       {blocked ? <p role='note' className='text-muted-foreground text-xs'>{l.t(blocked)}</p> : null}
       {problem && <p role='alert' className='text-destructive text-xs'>{l.t(problem)}</p>}
       <div className='flex flex-wrap gap-2'>
-        <button type='submit' disabled={!field.text.trim() || session.busy('edit') || Boolean(blocked)}
+        <button type='submit' disabled={!field.text.trim() || session.busy('edit') || Boolean(blocked)} onKeyDown={closeOnEscape}
           className='rafii-action rafii-focus min-h-9 rounded-[var(--rafii-radius-control)] px-3 text-sm disabled:opacity-60 pointer-coarse:min-h-11'>
           {l.t('updateView')}
         </button>
-        <QuietButton onClick={onDone} className='pointer-coarse:min-h-11'>{l.t('cancel')}</QuietButton>
+        <QuietButton onClick={onDone} onKeyDown={closeOnEscape} className='pointer-coarse:min-h-11'>{l.t('cancel')}</QuietButton>
       </div>
       {region}
     </form>

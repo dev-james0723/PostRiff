@@ -193,9 +193,11 @@ test('"Change this view" opens a focused field (fine pointers; a phone keeps the
   assert.match(edit, /const current = selectionNow\(\);[\s\S]*session\.edit\(instruction, current\)/);
   assert.match(edit, /liveSelection\(controller\?\.selection\(\), session\.getState\(\)\.view\?\.artifact\.safeState\)/);
   assert.doesNotMatch(edit, /safeState\?\.\['@selection'\]/, 'never the stale snapshot selection directly');
-  // Escape closes the panel from anywhere in the form (a focused chip too), and stops there.
-  assert.match(edit, /<form onSubmit=\{\(event\) => void submit\(event\)\} onKeyDown=\{onFormKeyDown\}/);
-  assert.match(edit, /const onFormKeyDown = [\s\S]*event\.key === 'Escape'[\s\S]*event\.stopPropagation\(\);[\s\S]*onDone\(\);/);
+  // Escape closes the field from any of its controls (a focused chip too), and stops there.
+  assert.match(edit, /const closeOnEscape = [\s\S]*?event\.key !== 'Escape'[\s\S]*?event\.stopPropagation\(\);\s*onDone\(\);/);
+  assert.match(edit, /const onInputKeyDown = [\s\S]*?closeOnEscape\(event\);/);
+  assert.match(edit, /onEscape=\{closeOnEscape\}/, 'chips');
+  assert.equal((edit.match(/onKeyDown=\{closeOnEscape\}/g) ?? []).length, 3, 'Restore, Update view and Cancel');
   // A chip tap only fills the field: no edit, no fetch, focus stays on the chip.
   const pick = edit.slice(edit.indexOf('const pick = '), edit.indexOf('const submit = '));
   assert.ok(pick.includes("dispatch({ type: 'pick'"));
@@ -320,11 +322,16 @@ test('a chip is a type="button" QuietButton that only calls onPick (no request);
   assert.equal([...html.matchAll(/<button type="button"/g)].length, 2);
   assert.match(html, /aria-pressed="true"[^>]*>Last 7 days</);
   assert.equal(artifactView.SuggestionChips({ suggestions: [], pressed: null, caption: 'x', captionId: 'y', onPick() {} }), null, 'no chips, no row');
-  // A held Enter/Space repeats: the repeat is dropped (it would re-toggle), the first press is not.
+  // A held Enter/Space repeats: the repeat is dropped (it would re-toggle), the first press is not; Escape goes to onEscape.
   let prevented = 0;
-  buttons[0].props.onKeyDown({ key: 'Enter', repeat: true, preventDefault: () => { prevented += 1; } });
-  buttons[0].props.onKeyDown({ key: 'Enter', repeat: false, preventDefault: () => { prevented += 1; } });
+  const escapes = [];
+  const withEscape = artifactView.SuggestionChips({ suggestions, pressed: null, caption: 'Suggestions', captionId: 'cap', onPick() {}, onEscape: (e) => escapes.push(e.key) });
+  const chipButton = withEscape.props.children[1].props.children[0];
+  chipButton.props.onKeyDown({ key: 'Enter', repeat: true, preventDefault: () => { prevented += 1; } });
+  chipButton.props.onKeyDown({ key: 'Enter', repeat: false, preventDefault: () => { prevented += 1; } });
   assert.equal(prevented, 1);
+  chipButton.props.onKeyDown({ key: 'Escape', repeat: false, preventDefault() {} });
+  assert.deepEqual(escapes, ['Enter', 'Enter', 'Escape'], 'every key reaches onEscape, which acts on Escape only');
 
   // The field: a tap fills it (pressed), a second tap clears it, typing makes the words the person's own, "Restore my text".
   const { editFieldReducer, EMPTY_FIELD, canRestore } = editForm;
