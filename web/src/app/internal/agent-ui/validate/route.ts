@@ -55,7 +55,9 @@ export async function POST(request: Request) {
   if (!input || input.contractVersion !== CONTRACT_VERSION) return deny(400, 'contract_mismatch');
   try {
     return Response.json(validateAndMergeUi(input), { status: 200, headers: HEADERS });
-  } catch {
+  } catch (error) {
+    // Error class only: the source and inputs are workspace data and never reach the log.
+    console.error(JSON.stringify({ event: 'genui.validator_error', error: error instanceof Error ? error.name : typeof error }));
     return Response.json({ accepted: false, errors: ['validator_error'] }, { status: 200, headers: HEADERS });
   }
 }
