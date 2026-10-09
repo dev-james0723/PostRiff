@@ -107,3 +107,48 @@ Remote browser harness (Chromium + WebKit) at 1440 × 900, 768 × 1024, 390 × 8
 types, long and Cantonese/Traditional Chinese/English names and > 200 items; screenshots return through the CI log.
 Existing Library acceptance (formats, collections, document viewer, inline media, transcripts, deletion) must keep
 passing. Real iPhone Safari remains a manual check (A066).
+
+## 9. After (head `ea99149e`, run `rjzngvv5pw`)
+
+Screenshots in `after/` come from the same remote harness as `before/`, on the final head. Run
+[rjzngvv5pw](https://depot.dev/orgs/jf34f85hr0/workflows/rjzngvv5pw) on Depot `depot-ubuntu-24.04-16` passed with remote
+exit 0; its receipt binds `sourceHead` ea99149e. The after workspace also holds the harness's 200+ bulk items and its
+long Cantonese/Traditional Chinese/English names, so the item counts differ from `before/`. All runs, failures included,
+are listed in `runs.md`.
+
+| View | Before | After |
+|---|---|---|
+| Desktop 1440 × 900 | `before/library-chromium-desktop-1440x900.jpg` | `after/library-chromium-desktop-1440x900.jpg` |
+| Desktop, item open | `before/library-chromium-desktop-1440x900-detail.jpg` (modal sheet) | `after/library-chromium-desktop-1440x900-detail.jpg` (docked inspector) |
+| Desktop, selection | `before/library-chromium-desktop-1440x900-selected.jpg` | `after/library-chromium-desktop-1440x900-selected.jpg` |
+| Tablet 768 × 1024 | `before/library-chromium-tablet-768x1024.jpg` | `after/library-chromium-tablet-768x1024.jpg` |
+| Phone 390 × 844 | `before/library-chromium-phone-390x844.jpg` | `after/library-chromium-phone-390x844.jpg` |
+| Phone, item open | `before/library-chromium-phone-390x844-detail.jpg` | `after/library-chromium-phone-390x844-detail.jpg` |
+| Phone, selection | `before/library-chromium-phone-390x844-selected.jpg` | `after/library-chromium-phone-390x844-selected.jpg` |
+| WebKit 1440 / 390 | `before/library-webkit-1440.jpg`, `before/library-webkit-390.jpg` | `after/library-webkit-1440.jpg`, `after/library-webkit-390.jpg` |
+
+New in `after/` (no before equivalent): `library-chromium-phone-landscape-844x390.jpg`, `library-chromium-zoom-200-1280x800.jpg`,
+`library-chromium-*-player.jpg` (Now Playing clearance).
+
+What changed, observed in the screenshots:
+
+- **One primary.** Add is the only filled control on the page. The empty state, inspector and bulk bar use secondary or
+  ghost controls (the harness also asserts exactly one `.rafii-action` in the Library page).
+- **Phone first view.** Before, Add sat on its own row and All/Unused/Used plus Filters took two more rows. The first card's
+  player pushed its title below the fold. After, the header holds Library and Add on one row, the filters are one
+  scrolling row, and the first two cards' titles are above the fold at 390 × 844 (A059 asserts the preview position).
+- **Cards.** "Unused" and "Stored privately" badges are gone. Each card shows its name, one meta line, and a status only when one
+  applies. Audio cards keep a compact player (play, timeline, Playback options) instead of the full player with speed and
+  volume on every tile. In narrow cards the time label gives way so the timeline stays usable.
+- **Desktop item view.** A non-modal docked inspector replaces the blurred modal sheet. The grid, filters and selection
+  stay visible and usable; the rail collapses to icons while it is open.
+- **Selection.** One compact bar: count, Select all shown, Search only these, then the actions, with Delete separated in
+  the destructive style. On phones both rows scroll inside themselves and fade at the edge.
+
+Known limits, unchanged by this redesign:
+
+- Short text documents (MD, CSV) show their real first page, so at tile size the text is tiny. That is honest, but it is
+  hard to read.
+- List view keeps an inline player on every audio and video row. The existing Library acceptance requires it.
+- The "New to Library?" tour prompt overlaps the header for 8 s on a first visit (app-wide onboarding).
+- Real iPhone Safari (A066) still needs a device.
