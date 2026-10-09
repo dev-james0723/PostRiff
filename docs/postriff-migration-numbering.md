@@ -35,7 +35,9 @@ Owner decision, 2026-09-25. It covers `migrations/postriff/NNN_*.sql` on every b
 | 069–070 | `069_founder_ops_bootstrap`, `070_founder_ops_settings` | Founder Admin v2 P1/P2 (`claude/founder-admin-p1p2`) | 069 makes `pr_bootstrap` prefer a customer workspace over the founder's internal ops workspace; 070 stores each founder's ops workspace (`rafii_control.founder_settings`). Scanned every remote branch and worktree on 2026-10-01: no other 069–079. 061 stayed unused. |
 | 071 | `071_founder_engineering_evidence` | Founder Admin (`claude/founder-activation`) | Hosted CI evidence for Advanced › Engineering: lifts 052's local-only manifest for `ci_attested` rows and lets `rafii_control_ingest` write check rows (verdict columns only) in its session environment. Additive and idempotent; creates no login. Written by `.github/workflows/founder-engineering-evidence.yml`. |
 | 080–089 | — | RAFII Product Growth v2 (PR #87) | Reserved by that session. |
-| 072–079, 090 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
+| 098–102 | `098_youtube_authorization_generation`, `099_youtube_policy_acceptance`, `100_social_cost_reservations` / `100_youtube_api_privacy_erasure`, `101_x_oauth_provider`, `102_agent_ui_artifacts` | concurrent YouTube, social, X and OpenUI branches | Observed on refs/worktrees on 2026-10-09 (100 is used twice by different branches). 098 and 102 were already applied in production by their owners. Not touched here. |
+| 103 | `103_feature_enrollments` | Growth Studio + Trends launch (`claude/growth-trends-launch-20261008`) | Additive: `pr_feature_enrollments` (service role only, forced RLS). Scanned every ref and worktree on 2026-10-09: no other 103. Apply before the code that reads it; the code treats a missing table as "not enrolled". |
+| 072–079, 104 and up | — | next new migration | Re-scan active refs and worktrees before choosing. |
 
 ## Inventory (scan of 2026-09-25 after `git fetch origin`, re-run after the release)
 

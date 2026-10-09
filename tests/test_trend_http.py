@@ -40,11 +40,42 @@ class TrendHTTPTests(unittest.TestCase):
             assert_schema(self, definition, data)
 
     def test_static_paths_never_interpreted_as_trend_ids(self):
-        for tail in (["methodology"], ["calibration"], ["language-patterns"], ["opportunities","whitespace"]):
+        for tail in (["methodology"], ["calibration"], ["language-patterns"], ["opportunities","whitespace"], ["enrollment"]):
             status, result = self.request(tail)
-            self.assertIn(status, (403, 503))
-            self.assertNotEqual(result["code"], "invalid_request")
+            self.assertIn(status, (200, 403))
+            self.assertNotEqual(result.get("code"), "invalid_request")
         self.assertEqual(self.request(["watches"])[0], 200)
+
+    def test_empty_stored_resources_are_honest_unavailable_not_errors(self):
+        # Flags off is the only 403; an empty store is not an outage (503).
+        self.assertEqual(self.request(["calibration"])[0], 403)
+        self.assertEqual(self.request(["opportunities","whitespace"])[0], 403)
+        self.svc.values.update(RAFII_TREND_CALIBRATION_ENABLED="1", RAFII_TREND_WHITESPACE_ENABLED="1")
+        for tail, empty in ((["calibration"], None), (["language-patterns"], []), (["opportunities","whitespace"], [])):
+            status, result = self.request(tail)
+            self.assertEqual(status, 200, tail)
+            self.assertEqual(result["data"], empty)
+            self.assertEqual(result["execution_state"], "unavailable")
+            self.assertIn("no_stored_result", result["limitations"])
+        assert_schema(self, "language_patterns_response", self.request(["language-patterns"])[1])
+
+    def test_methodology_is_the_code_registry_not_a_fake_projection(self):
+        from postriff_phase2.growth.trends.methods import metric_definitions
+        status, result = self.request(["methodology"])
+        self.assertEqual(status, 200)
+        assert_schema(self, "methodology_response", result)
+        data = result["data"]
+        self.assertEqual({d["id"] for d in data["definitions"]}, set(metric_definitions()))
+        self.assertEqual(data["method_id"], "trend.pipeline")
+        self.assertTrue(data["blind_spots"])
+        self.assertIn("methodology_from_code_registry", result["limitations"])
+        self.assertNotIn(("list", "methodology"), [c[:2] for c in self.store.calls], "never read as a stored projection")
+
+    def test_real_store_failure_is_still_503(self):
+        self.svc.values["RAFII_TREND_CALIBRATION_ENABLED"] = "1"
+        failure = type("Failure", (Exception,), {"sqlstate": "08006"})
+        with patch.object(self.store, "list_projections", side_effect=failure()):
+            self.assertEqual(self.request(["calibration"])[0], 503)
 
     def test_safe_auth_disabled_expired_and_foreign_errors(self):
         self.assertEqual(self.request([], token="")[0], 401)
@@ -135,8 +166,14 @@ class TrendHTTPTests(unittest.TestCase):
 
     def test_angle_generation_http_is_explicit_strict_and_private(self):
         self.svc.values["RAFII_TREND_MODEL_ENRICHMENT_ENABLED"] = "0"
-        payload = {"revision":1,"idempotency_key":"angles"}
+        payload = {"revision":1,"idempotency_key":"angles","confirmed":True}
+        self.assertEqual(self.request(["opportunities",OID,"angles"],method="POST",payload={"revision":1,"idempotency_key":"angles"})[0],400)
         self.assertEqual(self.request(["opportunities",OID,"angles"],method="POST",payload=payload)[1]["data"]["status"],"disabled")
+        with patch.object(self.svc,"generation_latest",return_value={"data":{"job":None}}) as latest:
+            self.assertEqual(self.request(["opportunities",OID,"generation-jobs","latest"])[0],200)
+            latest.assert_called_once_with(WID,"session",OID)
+            self.assertEqual(self.request(["opportunities",OID,"generation-jobs","latest"],method="POST")[0],404)
+            self.assertEqual(self.request(["opportunities",OID,"generation-jobs","latest"],query="x=1")[0],400)
         self.assertEqual(self.request(["opportunities",OID,"angles"])[0],404)
         self.assertEqual(self.request(["opportunities",OID,"angles"],method="POST",payload=payload,query="extra=1")[0],400)
         with patch.object(self.svc,"generation_status",return_value={"data":{"status":"queued"}}) as read:

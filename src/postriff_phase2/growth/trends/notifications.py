@@ -23,7 +23,8 @@ import time
 from postriff_alpha.domain import AlphaError
 from ...coworker import flags
 from ...notifications import planner, store as notification_store
-from . import config, contracts, opportunities
+from ... import feature_enrollment
+from . import admission, config, contracts, opportunities
 from .store import trust_lock
 
 ENTITY_TYPE = "trend_opportunity"
@@ -42,10 +43,34 @@ class Ineligible(ValueError):
     """Stable, non-sensitive reason. Never contains source text or a policy body."""
 
 
-def _enabled(workspace_id, values):
+def _flags_on(values):
     return (flags.enabled("RAFII_NOTIFICATIONS_V2_ENABLED", values)
-            and config.workspace_allowed(workspace_id, values)
             and all(config.enabled(name, values) for name in ("RADAR", "TRUST_RECEIPTS", "NOTIFICATIONS")))
+
+
+def _enabled(workspace_id, values, cur=None):
+    """In-app watch alerts follow read admission; nothing here is external egress.
+
+    The reviewed allowlist admits without a query. An active self-serve enrollment
+    admits only with a cursor (and only while the cohort switch is on). External
+    delivery is refused separately in delivery_eligibility for every workspace.
+    """
+    if not _flags_on(values):
+        return False
+    if config.workspace_allowed(workspace_id, values):
+        return True
+    return cur is not None and admission.admitted(cur, workspace_id, values)
+
+
+def href(trend_id):
+    """Deep link that reopens the watched trend (the UUID carries no content).
+
+    The notification store redacts digit runs that look like phone numbers, and a
+    dashed UUID can contain one. The compact 32-hex form can only be redacted when
+    it is all digits; that (about 1 in 3 million) case falls back to the page.
+    """
+    compact = contracts.uuid(trend_id).replace("-", "")
+    return HREF if compact.isdigit() else HREF + "?trend=" + compact
 
 
 def _binding(watch_id, watch_revision, opportunity_id, opportunity_revision, receipt_id):
@@ -201,10 +226,13 @@ def sweep(store, *, workspace_id, actor_id, opportunity_ids, values=None, now=No
         raise ValueError("invalid_sweep_bound")
     ids = list(dict.fromkeys(contracts.uuid(i) for i in opportunity_ids))
     result = {"checked": 0, "created": 0, "duplicates": 0, "skipped": {}, "remaining_opportunity_ids": ids[limit:], "execution_state": "in_app_outbox_only"}
-    if not _enabled(workspace_id, values):
+    if not _flags_on(values):
         result["skipped"]["feature_disabled"] = len(ids)
         return result
     with store.transaction(cursor) as cur:
+        if not _enabled(workspace_id, values, cur):
+            result["skipped"]["feature_disabled"] = len(ids)
+            return result
         trust_lock(cur)
         # Serialize dedupe/cooldown admission across workers in the existing DB transaction.
         cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("trend-notifications|" + workspace_id,))
@@ -239,7 +267,7 @@ def sweep(store, *, workspace_id, actor_id, opportunity_ids, values=None, now=No
                     binding = _binding(watch["watch_id"], watch["revision"], opportunity_id, opportunity["revision"], str(receipt["object_id"]))
                     emitted = notification_store.emit(cur, workspace_id=workspace_id, event_type=EVENT_TYPE,
                         dedupe_key=key, grouping_key=group, entity_type=ENTITY_TYPE, entity_id=binding,
-                        payload={"title": TITLE, "href": HREF}, actor=actor_id, now=now, occurred_at=now,
+                        payload={"title": TITLE, "href": href(transition["trend_id"])}, actor=actor_id, now=now, occurred_at=now,
                         expires_at=min(opportunities.epoch(r["expires_at"]) for r in (opportunity, trend, receipt)),
                         email_available=False, push_enabled=False, channel_filter={"in_app"})
                     result["created"] += int(emitted["created"])
@@ -256,7 +284,7 @@ def delivery_eligibility(store, *, cursor, workspace_id, actor_id, entity_id, no
     try:
         workspace_id, actor_id = contracts.uuid(workspace_id), contracts.uuid(actor_id)
         now = opportunities.epoch(now if now is not None else time.time())
-        if not _enabled(workspace_id, values):
+        if not _enabled(workspace_id, values, cursor):
             raise Ineligible("feature_disabled")
         trust_lock(cursor)
         watch_id, watch_revision, opportunity_id, revision, receipt_id = _decode(entity_id)
@@ -297,12 +325,20 @@ def tick(store, values=None, limit=20):
     try:
         allowed = sorted({contracts.uuid(v.strip()) for v in str(source.get("RAFII_TREND_WORKSPACE_ALLOWLIST", "")).split(",") if v.strip()})
     except ValueError:
-        return result
+        allowed = []
     allowed = [wid for wid in allowed if _enabled(wid, source)]
-    if not allowed:
+    # Enrolled workspaces get in-app watch alerts too, but only while the cohort
+    # switch is on; a closed cohort with no allowlist still has zero DB effects.
+    self_serve = (_flags_on(source) and config.enabled("INTELLIGENCE", source)
+                  and feature_enrollment.self_serve_open(admission.FEATURE, source))
+    if not allowed and not self_serve:
         return result  # Disabled means zero DB effects, including scan bookkeeping.
     now = opportunities.epoch(time.time())
     with store.transaction() as cur:
+        if self_serve:
+            allowed = sorted(set(allowed) | set(feature_enrollment.admitted_workspaces(cur, admission.FEATURE, source)))
+            if not allowed:
+                return result
         trust_lock(cur)
         cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('trend-notifications-tick-v1',0))")
         if not cur.fetchone()[0]:

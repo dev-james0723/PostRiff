@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from postriff_alpha.domain import AlphaError
 from ...permissions import require
-from . import config, contracts, opportunities, relevance, exposure_events
+from . import admission, config, contracts, opportunities, relevance, exposure_events
 
 PLATFORMS = ("bluesky", "reddit", "youtube", "x", "threads", "instagram", "tiktok", "linkedin", "facebook", "pinterest", "web")
 FILTER_KEYS = {"query", "platforms", "stages", "languages", "regions", "niches", "since", "until", "limit", "cursor", "method_bundle", "view", "platform", "language", "niche", "pool"}
@@ -29,12 +29,170 @@ FEATURES = {"calibration": "CALIBRATION", "language-patterns": "MODEL_ENRICHMENT
             "propagation": "GRAPH_GENOME", "saturation": "SATURATION", "forecast": "FORECASTS", "whitespace": "WHITESPACE", "lab": "OPPORTUNITY_LAB"}
 
 
+# Bounded limitation codes. The browser maps them to its own copy.
+NO_STORED_RESULT = "no_stored_result"
+DISPLAY_RIGHTS_UNAVAILABLE = "display_rights_unavailable"
+STAGE_UNQUALIFIED = "lifecycle_stage_unqualified"
+NICHE_UNAVAILABLE = "niche_grouping_unavailable"
+STAGE_VIEWS = ("rising", "breaking", "hot")
+PIPELINE_METHOD = "trend.pipeline"
+WATCH_TITLE_LOOKUPS = 50
+METHOD_BLIND_SPOTS = (
+    "Only sources with reviewed rights in this workspace's authorized scope are measured; absence here is not platform-wide absence.",
+    "Lifecycle stages (Picking up, Breaking out, Active now) are not claimed until a method is production-qualified.",
+    "Each metric needs its minimum number of sample windows; missing data stays empty with a reason instead of a guess.",
+    "Accuracy calibration needs comparable outcome history; until then no accuracy percentage is shown.",
+)
+
+
+def methodology(cur):
+    """Code registry definitions plus the newest stored pipeline method version.
+
+    The method version table is global code metadata (no workspace data). Its
+    qualification is reported as-is; registration never promotes a method.
+    """
+    from .methods import metric_definitions
+    definitions = metric_definitions()
+    stored = None
+    try:
+        cur.execute("SELECT to_regclass('public.pr_trend_method_versions') IS NOT NULL", ())
+        present = cur.fetchone()
+        if present and present[0]:
+            cur.execute("""SELECT version,qualification FROM public.pr_trend_method_versions
+                WHERE method_id=%s AND revoked_at IS NULL ORDER BY created_at DESC,version DESC LIMIT 1""", (PIPELINE_METHOD,))
+            stored = cur.fetchone()
+    except (AttributeError, TypeError):
+        stored = None
+    version = str(stored[0])[:200] if stored and stored[0] else "candidate-" + contracts.digest(definitions)[:12]
+    qualified = bool(stored and stored[1] == "qualified")
+    summary = ("Rafii counts what it can observe in reviewed sources and keeps every calculation tied to a trust receipt. "
+               + ("This method version is qualified." if qualified else
+                  "These are candidate definitions running in shadow; no method is production-qualified yet."))
+    return {"method_id": PIPELINE_METHOD, "version": version, "summary": summary,
+            "definitions": [{"id": key, "version": str(value["version"]), "unit": str(value["units"]), "formula": str(value["formula"])}
+                            for key, value in sorted(definitions.items())],
+            "blind_spots": list(METHOD_BLIND_SPOTS)}
+
+
+def lifecycle_qualified(cur):
+    """True only when some stored method version is explicitly qualified (never by default)."""
+    try:
+        cur.execute("SELECT to_regclass('public.pr_trend_method_versions') IS NOT NULL", ())
+        present = cur.fetchone()
+        if not present or not present[0]:
+            return False
+        cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_trend_method_versions WHERE qualification='qualified' AND revoked_at IS NULL)", ())
+        found = cur.fetchone()
+        return bool(found and found[0])
+    except (AttributeError, TypeError):
+        return False
+
+
+_CODE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+# Durable health status -> (availability, completeness). Health never claims completeness.
+_HEALTH = {"healthy": ("available", "unknown"), "partial": ("available", "partial"), "gap": ("stale", "gap"),
+           "unavailable": ("unavailable", "gap"), "revoked": ("unavailable", "unknown")}
+
+
+def source_health_rows(cur, scopes):
+    """Per-provider health and latest committed read for the caller's authorized scopes only."""
+    if not scopes:
+        return []
+    cur.execute("SELECT to_regclass('public.pr_trend_source_health') IS NOT NULL, to_regclass('public.pr_trend_ingestion_batches') IS NOT NULL", ())
+    present = cur.fetchone()
+    if not present or not present[0]:
+        return []
+    cur.execute("""SELECT DISTINCT ON (h.provider_id) h.provider_id,h.status,h.notes_code,h.observed_at
+        FROM public.pr_trend_source_health h WHERE h.scope_key=ANY(%s) ORDER BY h.provider_id,h.observed_at DESC""", (list(scopes),))
+    found = [{"provider_id": r[0], "status": r[1], "reason": r[2], "observed_at": r[3], "latest_successful_read": None}
+             for r in (cur.fetchall() or [])]
+    if found and present[1]:
+        cur.execute("""SELECT provider_id,max(committed_at) FROM public.pr_trend_ingestion_batches
+            WHERE scope_key=ANY(%s) GROUP BY provider_id""", (list(scopes),))
+        latest = {r[0]: r[1] for r in (cur.fetchall() or [])}
+        for item in found:
+            item["latest_successful_read"] = latest.get(item["provider_id"])
+    return found
+
+
+def health_view(rows):
+    """Bounded wire view: codes and timestamps only, never provider text."""
+    view = []
+    for item in rows[:20]:
+        availability, completeness = _HEALTH.get(item.get("status"), ("unavailable", "unknown"))
+        reason = item.get("reason")
+        latest = item.get("latest_successful_read")
+        try:
+            latest = opportunities.iso(latest) if latest is not None else None
+        except (ValueError, TypeError):
+            latest = None
+        view.append({"platform": str(item.get("provider_id", "unknown"))[:100], "availability": availability,
+                     "reason": reason if isinstance(reason, str) and _CODE.fullmatch(reason) else "unspecified",
+                     "latest_successful_read": latest, "completeness": completeness})
+    return view
+
+
+# Bounded, actionable reasons for an angle request that did not enqueue.
+GENERATION_REFUSALS = {
+    "generation_approved_facts_required": ("needs_facts", "approved_facts_required"),
+    "generation_brand_egress_required": ("needs_review", "brand_egress_consent_required"),
+    "generation_display_rights_required": ("needs_review", "display_rights_unavailable"),
+    "model_source_rights_denied": ("needs_review", "display_rights_unavailable"),
+    "model_scope_entitlement_required": ("needs_review", "display_rights_unavailable"),
+    "generation_boundaries_require_review": ("needs_review", "brand_boundaries_require_review"),
+    "generation_review_required": ("needs_review", "generation_review_required"),
+    "generation_policy_bounds": ("needs_review", "generation_review_required"),
+    "generation_budget_keys": ("needs_review", "generation_review_required"),
+    "model_policy_review_required": ("needs_review", "generation_review_required"),
+    "model_policy_bounds": ("needs_review", "generation_review_required"),
+    "model_budget_keys_required": ("needs_review", "generation_review_required"),
+    "model_policy_conflict": ("needs_review", "generation_review_required"),
+    "ambiguous_model_policy_binding": ("needs_review", "generation_review_required"),
+    "generation_opportunity_unavailable": ("needs_review", "evidence_changed"),
+    "generation_opportunity_decided": ("needs_review", "evidence_changed"),
+    "model_receipt_unavailable": ("needs_review", "evidence_changed"),
+    "model_receipt_superseded": ("needs_review", "evidence_changed"),
+}
+GENERATION_OUTCOME_REASONS = {"budget_unavailable": "model_budget_unconfigured", "queue_full": "queue_full"}
+PRECONDITION_FAILURES = {"approved_facts_required": {"approved_facts": False},
+                         "brand_egress_consent_required": {"brand_egress_consent": False},
+                         "display_rights_unavailable": {"display_rights": False}}
+
+
+def generation_refusal(code):
+    return GENERATION_REFUSALS.get(code, ("needs_review", "generation_unavailable"))
+
+
+def latest_generation_job(cur, scope_key, receipt_id):
+    """Newest angle job bound to this receipt in this workspace's own scope (read-only)."""
+    cur.execute("""SELECT job_id::text,state FROM public.pr_trend_jobs WHERE scope_key=%s AND kind='trend.model_generation'
+        AND payload->>'receipt_id'=%s AND payload->>'task'='angle_generate' ORDER BY created_at DESC,job_id DESC LIMIT 1""",
+                (scope_key, receipt_id))
+    found = cur.fetchone()
+    return {"job_id": str(found[0]), "status": str(found[1])} if found else None
+
+
+def generation_budget_available(cur, keys, cap):
+    """Same read the enqueue path applies; never reserves, creates or raises a budget."""
+    if not keys or type(cap) is not int:
+        return False
+    cur.execute("""SELECT dimension,cap_micro_usd-settled_micro_usd-reserved_micro_usd-unknown_micro_usd,
+        period_start<=clock_timestamp() AND period_end>clock_timestamp()
+        FROM public.pr_trend_budget_limits WHERE budget_key=ANY(%s)""", (list(keys),))
+    rows = cur.fetchall() or []
+    return (len(rows) == len(keys) and {"system", "provider", "workspace"} <= {r[0] for r in rows}
+            and all(r[2] and r[1] >= cap for r in rows))
+
+
 def error(code, status):
     messages = {"invalid_request": "The request contains an invalid field.", "unauthenticated": "Sign in to continue.",
                 "forbidden": "This feature or action is not available to this workspace member.", "not_found": "Record unavailable.",
                 "evidence_unavailable": "The retained evidence is no longer available under current permissions or retention.",
                 "revision_conflict": "The record or workspace context changed. Review the current version.",
-                "source_unavailable": "Stored trend data is currently unavailable.", "budget_or_rate_limited": "The operation is temporarily limited."}
+                "source_unavailable": "Stored trend data is currently unavailable.", "budget_or_rate_limited": "The operation is temporarily limited.",
+                "owner_required": "Only the workspace owner can change this.", "self_serve_paused": "New workspaces cannot join right now.",
+                "cohort_full": "This early-access group is full right now.", "workspace_not_eligible": "This workspace cannot join yet.",
+                "enrollment_unavailable": "Joining is not available yet."}
     return AlphaError(messages[code], status, code=code)
 
 
@@ -305,6 +463,20 @@ class TrendService:
     def _enabled(self, name):
         return config.enabled(name, self.values)
 
+    @staticmethod
+    def _health_coverage(workspace_id, health):
+        """Coverage for a response with no stored trend: what the sources say, not absence."""
+        if not health:
+            return coverage(scope="workspace:" + workspace_id)
+        reads = [h["latest_successful_read"] for h in health if h["latest_successful_read"]]
+        availability = ("available" if any(h["availability"] == "available" for h in health)
+                        else "stale" if any(h["availability"] == "stale" for h in health) else "unavailable")
+        return coverage({"availability": availability, "scope_ref": "workspace:" + workspace_id,
+                         "completeness": "gap" if any(h["completeness"] == "gap" for h in health) else "unknown",
+                         "latest_successful_read": max(reads, key=opportunities.epoch) if reads else None,
+                         "sources": [{"platform": h["platform"], "availability": h["availability"], "reason": h["reason"]} for h in health]},
+                        scope="workspace:" + workspace_id)
+
     @contextmanager
     def transaction(self, workspace_id, token, requirement="read"):
         workspace_id = ident(workspace_id)
@@ -317,7 +489,10 @@ class TrendService:
             with self.repository.transaction(token, workspace_id) as (cur, row, actor):
                 entered = True
                 require(self.hosted.ideas._member(row), requirement)
-                if not config.workspace_allowed(workspace_id, self.values):
+                # Read admission (reviewed allowlist OR active self-serve enrollment).
+                # Anything that dispatches provider/model/media work re-checks the
+                # reviewed egress allowlist and its budgets at its own boundary.
+                if not admission.admitted(cur, workspace_id, self.values):
                     raise error("forbidden", 403)
                 # Disabled deployments never construct a store or query an unapplied migration.
                 factory = self.store_factory
@@ -341,6 +516,10 @@ class TrendService:
                 raise error("revision_conflict", 409) from None
             if code in ("opportunity_unavailable", "projection_unavailable"):
                 raise error("evidence_unavailable", 410) from None
+            if code == "workspace_access_denied":
+                # Membership or write role refused by TrendStore: a permission
+                # answer, never an outage. (TrendStore writes allow owner/editor.)
+                raise error("forbidden", 403) from None
             raise error("source_unavailable", 503) from None
         except Exception as exc:
             if getattr(exc, "sqlstate", None) in ("42P01", "42703", "08006", "08003", "57P01"):
@@ -500,6 +679,20 @@ class TrendService:
             pool = selected.get('pool')
             if pool and kind != 'opportunity':
                 raise error('invalid_request', 400)
+            health = health_view(source_health_rows(cur, scopes)) if kind == "trend" else []
+            if selected["stages"] and not (self._enabled("STAGE_CLAIMS") and lifecycle_qualified(cur)):
+                # Picking up / Breaking out / Active now need a production-qualified
+                # lifecycle method. Until then: say so, never rank by a fake stage.
+                response = envelope([], as_of, cov=self._health_coverage(workspace_id, health),
+                                    limitations=[STAGE_UNQUALIFIED], execution_state="unavailable")
+                response["source_health"] = health
+                return response
+            extra_limitations = []
+            if selected["view"] == "niche" or selected["niches"]:
+                # No producer writes a niche field: grouping is honestly unavailable
+                # and general results are returned instead of an always-empty filter.
+                selected = {**selected, "niches": []}
+                extra_limitations.append(NICHE_UNAVAILABLE)
             binding = {"workspace": workspace_id, "actor": actor, "scopes": store.scope_signature(workspace_id, actor, cursor=cur),
                        "filters": contracts.digest(selected), "method_bundle": selected["method_bundle"], "as_of": as_of, "kind": kind,
                        "purpose": "model" if model_visible else "display"}
@@ -532,14 +725,18 @@ class TrendService:
             if pool:
                 output = output[:selected['limit']]
             cursor = self._cursor({**binding, "before": page["next_key"]}) if page.get("next_key") and not pool else None
-            cov = output[0].get("coverage") if output else coverage(scope="workspace:" + workspace_id)
-            limitations = ["Only stored results in the selected authorized scope; absence is not platform-wide absence."]
+            cov = output[0].get("coverage") if output else self._health_coverage(workspace_id, health)
+            limitations = ["Only stored results in the selected authorized scope; absence is not platform-wide absence."] + extra_limitations
             if pool:
                 limitations.append('A bounded recent opportunity pool; ordered by stored recency, not predicted performance. Existing planned work is unchanged.')
                 if not history_complete:
                     limitations.append('Recent exposure history exceeds the bounded read; recommendations are withheld.')
-            response = envelope(output, as_of, cov=cov, limitations=limitations,
-                            execution_state="partial" if len(output) < len(page["items"]) else "stored_result", next_cursor=cursor)
+            execution = "partial" if len(output) < len(page["items"]) else "stored_result"
+            if not output and health and all(h["availability"] != "available" for h in health):
+                execution = "unavailable"
+            response = envelope(output, as_of, cov=cov, limitations=limitations, execution_state=execution, next_cursor=cursor)
+            if kind == "trend":
+                response["source_health"] = health
             if kind == "opportunity":
                 response["exposure_token"] = None if model_visible else exposure_events.page_token(
                     self, store, cur, workspace_id, actor, state, output, as_of, now)
@@ -703,6 +900,10 @@ class TrendService:
         with self.transaction(workspace_id, token) as (store, cur, _row, actor, _state, _scopes):
             if resource in FEATURES and not self._enabled(FEATURES[resource]):
                 raise error("forbidden", 403)
+            if resource == "methodology" and not object_id:
+                # Served from the code method registry plus stored method versions.
+                # Nothing writes a 'methodology' projection, so none is pretended.
+                return envelope(methodology(cur), now, limitations=["methodology_from_code_registry"])
             kind = KINDS[resource]
             if object_id:
                 saved = self._get(store, cur, workspace_id, actor, kind, object_id, now)
@@ -725,12 +926,20 @@ class TrendService:
             else:
                 rows = store.list_projections(workspace_id, actor, kind=kind, limit=20, cursor=cur)
                 rows = rows["items"] if isinstance(rows, dict) else rows
+                stored_rows = bool(rows)
                 if model_visible:
                     rows = [r for r in rows if r.get("policy", {}).get("llm_process") is True]
+                    if stored_rows and not rows:
+                        # Stored, but not permitted for model processing: refuse, never "empty".
+                        raise error("forbidden", 403)
                 if resource == 'language-patterns':
                     rows = [r for r in rows if r.get('policy',{}).get('display_excerpt') is True]
                 if not rows:
-                    raise error("source_unavailable", 503)
+                    # Nothing stored in this workspace's authorized scope is not an
+                    # outage and not evidence of absence: an honest empty envelope.
+                    return envelope(None if resource in ("methodology", "calibration") else [], now,
+                                    limitations=[DISPLAY_RIGHTS_UNAVAILABLE if stored_rows else NO_STORED_RESULT],
+                                    execution_state="unavailable")
                 if resource == 'whitespace':
                     data = []
                     for saved in rows:
@@ -758,6 +967,9 @@ class TrendService:
                         except (AlphaError,contracts.ContractError):
                             continue
                         data.append(project_advanced(resource,current['payload']))
+                if not data:
+                    return envelope(None if resource in ("methodology", "calibration") else [], now,
+                                    limitations=[NO_STORED_RESULT], execution_state="unavailable")
                 if resource in ("methodology", "calibration"):
                     data = data[0]
             return envelope(data, now)
@@ -815,8 +1027,15 @@ class TrendService:
             return envelope(p, now, cov=trend["coverage"], limitations=trend["limitations"])
 
     def generate_angles(self, workspace_id, token, opportunity_id, payload):
-        """Explicit bounded enqueue on the existing writer. No model call in HTTP."""
-        if (not isinstance(payload, dict) or set(payload) != {"revision", "idempotency_key"}
+        """Explicit, confirmed, bounded enqueue on the existing writer. No model call in HTTP.
+
+        The person confirms after seeing the server-reported per-attempt cap. The
+        client idempotency key is the only key: a refresh or double click replays the
+        same job; only an explicit retry after a terminal state sends a new key.
+        Caps and budgets are read, never created or raised here.
+        """
+        if (not isinstance(payload, dict) or set(payload) != {"revision", "idempotency_key", "confirmed"}
+                or payload["confirmed"] is not True
                 or type(payload["revision"]) is not int or payload["revision"] < 1
                 or not isinstance(payload["idempotency_key"], str) or not 1 <= len(payload["idempotency_key"]) <= 200):
             raise error("invalid_request", 400)
@@ -832,20 +1051,69 @@ class TrendService:
                 raise error("evidence_unavailable", 410)
             generator = TrendGeneration(self.hosted, store=store, values=self.values)
             if not generator.enabled(workspace_id):
-                return envelope({"status": "disabled", "provider_attempts": 0}, now)
+                return envelope({"status": "disabled", "reason": self._generation_disabled_reason(), "provider_attempts": 0}, now)
             try:
                 loaded = generator._load(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", state)
             except contracts.ContractError as exc:
-                reason = getattr(exc, "code", "")
-                status = "needs_facts" if reason == "generation_approved_facts_required" else "needs_review"
-                return envelope({"status": status, "provider_attempts": 0}, now)
+                status, reason = generation_refusal(getattr(exc, "code", ""))
+                return envelope({"status": status, "reason": reason, "provider_attempts": 0}, now)
             bound = loaded["opportunity"]
             if bound["object_id"] != opportunity_id or bound["revision"] != payload["revision"]:
                 raise error("revision_conflict", 409)
+            cap = (loaded.get("config") or {}).get("approved_attempt_cap_microusd")
             if generator._cached(cur, workspace_id, actor, loaded):
                 return envelope({"status": "cached", "provider_attempts": 0}, now)
-            result = generator._enqueue_loaded(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", loaded, payload["idempotency_key"])
+            result = dict(generator._enqueue_loaded(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", loaded, payload["idempotency_key"]))
+            if result.get("status") in GENERATION_OUTCOME_REASONS:
+                result["reason"] = GENERATION_OUTCOME_REASONS[result["status"]]
+            if type(cap) is int:
+                result["attempt_cap_microusd"] = cap
             return envelope(result, now)
+
+    def _generation_disabled_reason(self):
+        if not all(self._enabled(n) for n in ("INTELLIGENCE", "RADAR", "TRUST_RECEIPTS", "MODEL_ENRICHMENT")):
+            return "generation_disabled"
+        # Read-admitted (e.g. enrolled) but not on the reviewed egress list: model
+        # budgets are reviewed per workspace and none exists for this one.
+        return "model_budget_unconfigured"
+
+    def generation_latest(self, workspace_id, token, opportunity_id):
+        """Read-only: the newest angle job for this opportunity's receipt, plus a preflight.
+
+        Lets a person leave and return to a running request, and shows the
+        server-reported per-attempt cap and preconditions before they confirm.
+        Nothing is enqueued, reserved or written.
+        """
+        from .generation import TrendGeneration
+        now = self.clock()
+        with self.transaction(workspace_id, token) as (store, cur, row, actor, state, _scopes):
+            exposure_events.require_flags(self)
+            current = self._get(store, cur, workspace_id, actor, "opportunity", opportunity_id, now)
+            op, trend = self._opportunity_read(store, cur, workspace_id, actor, current, state, now)
+            job = latest_generation_job(cur, "workspace:" + workspace_id, op["trust_receipt_id"])
+            preflight = {"ready": False, "reason": None, "attempt_cap_microusd": None, "approved_facts": None,
+                         "brand_egress_consent": None, "display_rights": None, "budget": None}
+            generator = TrendGeneration(self.hosted, store=store, values=self.values)
+            if not self.hosted.ideas._member(row).allows("edit"):
+                preflight["reason"] = "role_edit_required"
+            elif op["source_id"] or op["state"] not in ("candidate", "ready") or trend["verification_state"] != "verified":
+                preflight["reason"] = "evidence_changed"
+            elif not generator.enabled(workspace_id):
+                preflight["reason"] = self._generation_disabled_reason()
+            else:
+                try:
+                    loaded = generator._load(cur, workspace_id, actor, op["trust_receipt_id"], "angle_generate", state)
+                except contracts.ContractError as exc:
+                    _status, preflight["reason"] = generation_refusal(getattr(exc, "code", ""))
+                    preflight.update(PRECONDITION_FAILURES.get(preflight["reason"], {}))
+                else:
+                    config_ = loaded.get("config") or {}
+                    cap = config_.get("approved_attempt_cap_microusd")
+                    budget = generation_budget_available(cur, config_.get("budget_keys") or [], cap)
+                    preflight.update(attempt_cap_microusd=cap if type(cap) is int else None, approved_facts=True,
+                                     brand_egress_consent=True, display_rights=True, budget=budget,
+                                     ready=bool(budget), reason=None if budget else "model_budget_unconfigured")
+            return envelope({"job": job, "preflight": preflight}, now)
 
     def generation_status(self, workspace_id, token, job_id):
         ident(job_id)
@@ -858,11 +1126,25 @@ class TrendService:
             return envelope({"status": job[0], "job_id": job_id}, self.clock())
 
     def accept(self, workspace_id, token, opportunity_id, payload):
-        required = {"revision", "angle_id", "channel_id", "goal", "idempotency_key"}
-        if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - required - {"exposure_id"} or type(payload["revision"]) is not int or payload["revision"] < 1:
+        """Save to Ideas: a model angle (existing) or the person's own written angle (Option A).
+
+        Either way the source binds the exact opportunity revision, trust receipt,
+        context digest, selection digest and client idempotency key. A user-written
+        angle needs no model call or spend and stays marked user_authored/unqualified.
+        """
+        if not isinstance(payload, dict) or ("angle_id" in payload) == ("user_angle" in payload):
             raise error("invalid_request", 400)
-        if any(not isinstance(payload[k], str) or not 1 <= len(payload[k]) <= (1000 if k == "goal" else 200) for k in required - {"revision"}):
+        angle_key = "angle_id" if "angle_id" in payload else "user_angle"
+        required = {"revision", angle_key, "channel_id", "goal", "idempotency_key"}
+        if not required <= set(payload) or set(payload) - required - {"exposure_id"} or type(payload["revision"]) is not int or payload["revision"] < 1:
             raise error("invalid_request", 400)
+        if any(not isinstance(payload[k], str) or not 1 <= len(payload[k]) <= (1000 if k == "goal" else 200) for k in required - {"revision", "user_angle"}):
+            raise error("invalid_request", 400)
+        if angle_key == "user_angle":
+            try:
+                payload = {**payload, "user_angle": opportunities.clean_user_angle(payload["user_angle"])}
+            except ValueError:
+                raise error("invalid_request", 400) from None
         if "exposure_id" in payload:
             ident(payload["exposure_id"])
         now = self.clock()
@@ -908,6 +1190,18 @@ class TrendService:
                                 "retrievedAt": now, "rights": {"receipt_id": trend["trust_receipt_id"], "expires_at": item["expires_at"]}}
                         self.coworker._store_evidence(cur, workspace_id, "trend:" + opportunity_id, prov, item["excerpt"] or "")
             return envelope(result, now, cov=trend["coverage"], limitations=trend["limitations"])
+
+    def enrollment(self, workspace_id, token, method, payload=None):
+        """Owner self-serve enrollment; works before admission (it is how admission starts)."""
+        from .enrollment import TrendEnrollment
+        manager = TrendEnrollment(self)
+        if method == "GET":
+            return manager.get(workspace_id, token)
+        if method == "POST":
+            return manager.enroll(workspace_id, token, payload)
+        if method == "DELETE":
+            return manager.leave(workspace_id, token)
+        raise error("not_found", 404)
 
     def exposure(self, workspace_id, token, payload):
         return exposure_events.record(self, ident(workspace_id), token, payload)
@@ -1020,6 +1314,18 @@ class TrendService:
         return {"id": row["watch_id"], "revision": row.get("revision", 1), "trend_id": p["trend_id"],
                 "platforms": p["platforms"], "threshold": p["threshold"], "notification_policy": "in_app", "active": row["enabled"]}
 
+    def _watch_view(self, store, cur, workspace_id, actor, row, now, index):
+        """A watch plus the current trend title, so it can be recognised and reopened."""
+        data = self._watch(row)
+        title, available = None, False
+        if row.get("enabled") and index < WATCH_TITLE_LOOKUPS:
+            try:
+                current = self._current(store.get_projection(workspace_id, actor, "trend", ident(data["trend_id"]), cursor=cur), now)
+                title, available = str(current["payload"].get("canonical_topic", ""))[:300] or None, True
+            except AlphaError:
+                title, available = None, False
+        return {**data, "title": title, "trend_available": available}
+
     def watches(self, workspace_id, token, *, payload=None, watch_id=None, delete=False):
         now = self.clock()
         with self.transaction(workspace_id, token, "edit" if payload is not None or delete else "read") as (store, cur, _row, actor, _state, _scopes):
@@ -1034,7 +1340,8 @@ class TrendService:
                 data = self._watch(store.delete_watch(workspace_id, actor, ident(watch_id), expected_revision=revision,
                                                       idempotency_key=payload["idempotency_key"], cursor=cur))
             elif payload is None:
-                data = [self._watch(r) for r in store.list_watches(workspace_id, actor, cursor=cur)]
+                data = [self._watch_view(store, cur, workspace_id, actor, r, now, index)
+                        for index, r in enumerate(store.list_watches(workspace_id, actor, cursor=cur))]
             else:
                 if watch_id is not None:
                     # Storage currently supports immutable create and revisioned
@@ -1048,11 +1355,23 @@ class TrendService:
                     raise error("invalid_request", 400)
                 if payload["threshold"] not in ("stage_change", "coverage_change") or payload["notification_policy"] != "in_app":
                     raise error("invalid_request", 400)
+                if payload["threshold"] == "stage_change" and not self._enabled("STAGE_CLAIMS"):
+                    # The notifier never sends stage alerts while stage claims are off;
+                    # a watch that can never fire is not offered or stored.
+                    raise error("invalid_request", 400)
                 if not isinstance(payload["idempotency_key"], str) or not 1 <= len(payload["idempotency_key"]) <= 200:
                     raise error("invalid_request", 400)
                 self._get(store, cur, workspace_id, actor, "trend", payload["trend_id"], now)
-                data = self._watch(store.put_watch(workspace_id, actor, {k:v for k,v in payload.items() if k != "idempotency_key"},
-                                                   idempotency_key=payload["idempotency_key"], cursor=cur))
+                existing = next((w for w in store.list_watches(workspace_id, actor, cursor=cur)
+                                 if w.get("enabled") and w["payload"].get("trend_id") == payload["trend_id"]
+                                 and w["payload"].get("threshold") == payload["threshold"]
+                                 and sorted(w["payload"].get("platforms", [])) == sorted(payload["platforms"])), None)
+                if existing is not None:
+                    # A reload or second tab never creates a duplicate watch.
+                    data = self._watch(existing)
+                else:
+                    data = self._watch(store.put_watch(workspace_id, actor, {k:v for k,v in payload.items() if k != "idempotency_key"},
+                                                       idempotency_key=payload["idempotency_key"], cursor=cur))
             return envelope(data, now)
 
     def gated_mutation(self, workspace_id, token, feature=None):

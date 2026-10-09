@@ -87,6 +87,12 @@ class Cursor:
                                   and p["object_id"] == r["object_id"] and opportunities.epoch(p["available_at"]) <= now
                                   for p in s.projections.values())]
             self.result = [(oid,) for oid in sorted(ids) if after is None or oid > after][:limit]; return
+        if q.startswith("SELECT to_regclass('public.pr_feature_enrollments')"):
+            self.result = [(True,)]; return
+        if q.startswith("SELECT status FROM public.pr_feature_enrollments"):
+            self.result = [("active",)] if args[0] in s.enrolled else []; return
+        if q.startswith("SELECT workspace_id::text FROM public.pr_feature_enrollments"):
+            self.result = [(w,) for w in sorted(s.enrolled)]; return
         if q.startswith("SAVEPOINT"):
             s.saved_page = (copy.deepcopy(s.events), copy.deepcopy(s.deliveries)); return
         if q.startswith("ROLLBACK TO SAVEPOINT"):
@@ -154,6 +160,7 @@ class Storage:
         self.cursor_conflict = False
         self.tick_candidates, self.tick_lock = None, True
         self.manifest_inputs = None
+        self.enrolled = set()
         self.locked = []
         self.cur = Cursor(self)
 
@@ -221,7 +228,7 @@ class TrendNotifications(unittest.TestCase):
         event = next(iter(self.store.events.values()))
         self.assertEqual(event["type"], "opportunity.detected")
         self.assertEqual(event["entity_type"], "trend_opportunity")
-        self.assertEqual(event["payload"], {"title": N.TITLE, "href": "/app/trends"})
+        self.assertEqual(event["payload"], {"title": N.TITLE, "href": N.href(TID)})
         self.assertNotIn("PRIVATE", json.dumps(event, default=str))
         self.assertEqual([r["channel"] for r in self.store.deliveries.values()], ["in_app"])
         self.assertTrue(self.store.locked)
@@ -241,6 +248,40 @@ class TrendNotifications(unittest.TestCase):
             result = N.sweep(self.store, workspace_id=WID, actor_id=ACTOR, opportunity_ids=[OID], now=NOW, values=values)
             with self.subTest(flag=name): self.assertEqual(result["created"], 0)
         self.assertEqual(self.store.events, {})
+
+    def test_href_deep_links_the_watched_trend(self):
+        self.assertEqual(self.sweep()["created"], 1)
+        self.assertEqual(next(iter(self.store.events.values()))["payload"]["href"], N.href(TID))
+        # Real trend ids survive the store's phone-number redaction unchanged.
+        for trend_id in (str(uuid.UUID(int=0x1234567812344123812345678abcdef0)), str(uuid.uuid4())):
+            link = N.href(trend_id)
+            self.assertEqual(link, "/app/trends?trend=" + trend_id.replace("-", ""))
+            self.assertEqual(notification_store._clean_payload({"href": link})["href"], link)
+        # The all-digit id (the fixture's) would be redacted, so it links to the page instead.
+        self.assertEqual(N.href(TID), "/app/trends")
+
+    def test_in_app_alerts_follow_read_admission_but_external_delivery_never_does(self):
+        enrolled = {**{k: v for k, v in self.values.items() if k != "RAFII_TREND_WORKSPACE_ALLOWLIST"},
+                    "RAFII_TREND_SELF_SERVE_ENABLED": "1", "RAFII_TREND_SELF_SERVE_MAX_WORKSPACES": "5"}
+        self.values.clear(); self.values.update(enrolled)
+        self.assertEqual(self.sweep()["created"], 0, "not enrolled: nothing")
+        self.store.enrolled.add(WID)
+        self.assertEqual(self.sweep()["created"], 1, "enrolled: in-app watch alert, no provider egress")
+        self.assertTrue(self.verdict()["eligible"])
+        for channel in ("email", "push", "sms"):
+            self.assertEqual(self.verdict(channel=channel)["reason"], "trend_external_channel_not_authorized")
+        self.values["RAFII_TREND_SELF_SERVE_ENABLED"] = "0"
+        self.assertEqual(self.verdict()["reason"], "feature_disabled", "kill switch un-admits at once")
+
+    def test_tick_includes_enrolled_workspaces_only_when_self_serve_is_open(self):
+        values = {**{k: v for k, v in self.values.items() if k != "RAFII_TREND_WORKSPACE_ALLOWLIST"}}
+        self.assertEqual(N.tick(self.store, values=values)["status"], "disabled")
+        self.assertEqual(self.store.cur.storage.queries, [], "closed cohort and no allowlist: zero DB effects")
+        self.store.enrolled.add(WID)
+        values.update(RAFII_TREND_SELF_SERVE_ENABLED="1", RAFII_TREND_SELF_SERVE_MAX_WORKSPACES="5")
+        with patch.object(N.time, "time", return_value=NOW):
+            result = N.tick(self.store, values=values)
+        self.assertEqual((result["status"], result["workspaces"]), ("ok", 1))
 
     def test_watch_creation_is_opt_in_no_extra_boolean(self):
         self.assertNotIn("notifications", self.store.watches[0]["payload"])
