@@ -37,12 +37,25 @@ export default function PrivacyPage() {
     >
       <h2 id='who'>1. Who we are</h2>
       <p>
-        Rafii (“we”, “us”) operates the service at {siteConfig.url}. [Legal entity name, registered address and registration number — to be confirmed by counsel.] We are the controller of the account and workspace data described below.
+        Rafii is operated by Au Hin Sing (“we”, “us”) at {siteConfig.url}. Au Hin Sing is the controller of the account and workspace data described below. Contact us at <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> for privacy questions and requests.
       </p>
 
       <h2 id='collect'>2. What we collect</h2>
       <h3>Account data</h3>
-      <p>Your email address and, if you sign in with Google, the name and profile image your provider shares. Authentication is handled by Supabase Auth. We do not store passwords.</p>
+      <p>Your email address and the profile details you provide. Authentication is handled by Supabase Auth.</p>
+      <h3 id='google-sign-in'>Google sign-in data</h3>
+      <p>
+        When you choose Sign in with Google, Rafii requests the email and profile permissions shown on Google’s authorization screen. Google provides your account identifier, email address, email verification status, and available profile details such as your name and profile image. Rafii uses these details to create or identify your account, verify your sign-in, and display your profile. Google does not provide your Google password to Rafii.
+      </p>
+      <p>
+        These sign-in permissions do not allow Rafii to read your Gmail messages, Drive files, Calendar events, contacts or YouTube content. YouTube creator features require a separate connection and authorization, described in the Connected platforms section below.
+      </p>
+      <p>
+        Google processes the authorization step. Supabase Auth stores the identity and account profile used for authentication. Rafii’s application, hosted on Vercel, processes your authenticated account and session. Session cookies keep you signed in and are refreshed by Supabase Auth. These services process the data needed to provide sign-in and your Rafii account, as described in the Subprocessors section. The data is not sold or used for advertising.
+      </p>
+      <p>
+        Your sign-in identity and profile are retained while your Rafii account exists. You can request account deletion from Account → Privacy &amp; data or through the contact details below. Deletion removes the account identity after workspace deletion; the data-deletion page describes pending deletion retries and records that remain. You can also remove Rafii’s Google authorization in <a href='https://myaccount.google.com/connections' className='underline'>your Google Account connections</a>. Removing that authorization prevents future use of that grant; it does not itself delete your Rafii account or content you published elsewhere. To end your current Rafii session, also sign out of Rafii.
+      </p>
       <h3>Workspace content</h3>
       <p>Sources you paste or upload, the drafts generated from them, your edits, approvals, scheduling times, media you upload, and the receipts produced when a post is published. This content belongs to you.</p>
       <h3>Connected-account data</h3>
