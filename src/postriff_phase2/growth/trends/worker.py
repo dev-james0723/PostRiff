@@ -7,26 +7,66 @@ Maintenance is independent of rollout switches, including after rollback.
 from __future__ import annotations
 
 from dataclasses import fields
+from datetime import timedelta
 from decimal import Decimal
 import logging
 import random
+import re
 import time
 import urllib.error
 import uuid
 
 from . import config, retention, source_health, analytics_runtime, frontier_runtime
-from .contracts import ContractError, digest, instant
+from .contracts import ContractError, digest, instant, iso
 from .jobs import TrendJobs, partition_key
 from .planner import FrontierPlanner
 from .frontier import DiscoveryFrontier
-from .retry import fail_attempt
+from .retry import cooldown_seconds, fail_attempt, safe_label
 from . import quarantine
 from .policy import SourcePolicy, admit
-from .providers.base import Batch
+from .providers.base import Batch, ProviderTransportError
 from .providers.registry import ProviderRegistry, contract_runtime_version
 from .store import TrendStore, row, rows, utcnow
 
 LOG = logging.getLogger('postriff.trends')
+# Worker-owned cursor bookkeeping; stripped before any adapter sees the cursor.
+STALL_KEY = '_stall'
+# Consecutive committed batches with an unchanged cursor and the same poison index.
+STALL_BATCHES = 3
+_TOKEN = re.compile(r'[a-z][a-z_]{0,39}')
+
+
+def _exception_name(exc):
+    name = type(exc).__name__
+    return name if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,63}', name) else 'Exception'
+
+
+def _outcome(summary):
+    """Bounded state:reason label for one consumed outbox event; never content."""
+    effect = summary.get('effect') if isinstance(summary, dict) else None
+    effect = effect if isinstance(effect, dict) else {}
+    state, reason = effect.get('state'), effect.get('reason')
+    state = state if isinstance(state, str) and _TOKEN.fullmatch(state) else 'unknown'
+    reason = 'none' if reason is None else reason if isinstance(reason, str) and _TOKEN.fullmatch(reason) else 'unknown'
+    return state + ':' + reason
+
+
+def stall_cursor(previous, prior, batch):
+    """Return (cursor_value, consecutive stalled batches) for a committed batch.
+
+    A batch is stalled when it quarantined a frame yet left a non-empty cursor
+    unchanged. Repeating at the same first quarantine index means the same
+    deterministic poison is being re-read (the 2026-10-04 Jetstream pattern).
+    """
+    current = {k: v for k, v in dict(batch.cursor or {}).items() if k != STALL_KEY}
+    indexes = [e['index'] for e in batch.quarantined if isinstance(e, dict) and type(e.get('index')) is int]
+    if not indexes or not previous or current != previous:
+        return current, 0
+    index = min(indexes)
+    prior = prior if isinstance(prior, dict) else {}
+    count = prior['batches'] + 1 if prior.get('index') == index and type(prior.get('batches')) is int else 1
+    count = max(1, min(count, 10_000))
+    return {**current, STALL_KEY: {'batches': count, 'index': index}}, count
 
 
 def _scope_enabled(store, scope_key, values):
@@ -152,16 +192,23 @@ class TrendWorker:
             from .outbox import TrendOutbox
             pipeline = TrendPipeline(self.store)
             outbox = TrendOutbox(self.store)
-            processed = 0
+            processed, outcomes = 0, {}
             for _ in range(max_jobs):
                 if self.monotonic() - started >= max_seconds:
                     break
                 event = outbox.claim('trend.pipeline.v1', self.worker_id)
                 if not event:
                     break
-                outbox.consume(event, pipeline.consume)
+                label = _outcome(outbox.consume(event, pipeline.consume))
+                outcomes[label] = outcomes.get(label, 0) + 1
                 processed += 1
             result['processed'] = processed
+            result['pipeline'] = {'consumed': processed, 'outcomes': outcomes}
+            for label, count in sorted(outcomes.items()):
+                # Suppression used to be invisible ('done' either way). Bounded enums only.
+                state, reason = label.split(':', 1)
+                (LOG.warning if state in ('suppressed', 'unknown') else LOG.info)(
+                    'trend.pipeline state=%s reason=%s count=%d', state, reason, count)
             if self.monotonic() - started < max_seconds:
                 result['verification'] = pipeline.verify_pending(limit=5)
         if not all(config.enabled(x, self.values) for x in ('INTELLIGENCE', 'RADAR', 'PROVIDER_OPERATIONS')):
@@ -222,8 +269,10 @@ class TrendWorker:
                     frontier.dispatch_context(claim)
                 dispatched = True
                 result['dispatched'] += 1
+                stored_cursor = checkpoint['cursor_value'] or {}
+                adapter_cursor = {k: v for k, v in stored_cursor.items() if k != STALL_KEY}
                 # start() has committed. Adapter I/O is bounded and outside all locks.
-                batch = adapter(policy=policy, cursor=checkpoint['cursor_value'], now=self.clock(),
+                batch = adapter(policy=policy, cursor=adapter_cursor, now=self.clock(),
                                 payload=claim['payload'], reservation_microusd=amount)
                 if (not isinstance(batch, Batch) or len(batch.observations) > claim['payload'].get('max_items', 100)
                         or len(batch.observations) > cap.max_items or type(batch.bytes_received) is not int
@@ -242,6 +291,8 @@ class TrendWorker:
                     cost_source='table:trend-provider-contract-v1' if batch.cost_microusd is not None else 'unknown'))
                 self._admission(claim, registry)
                 completeness = 'gap' if batch.quarantined else batch.completeness
+                cursor_value, stalled = stall_cursor(adapter_cursor, stored_cursor.get(STALL_KEY), batch)
+                stall_cooldown = cooldown_seconds(stalled - STALL_BATCHES + 1) if stalled >= STALL_BATCHES else None
                 with self.store.transaction() as cur:
                     if 'frontier' in claim['payload']:
                         frontier.dispatch_context(claim, cursor=cur)
@@ -254,7 +305,7 @@ class TrendWorker:
                         accepted_count=len(batch.observations), cursor=cur)
                     self.jobs.complete_batch(claim, partition_key=partition,
                         expected_generation=checkpoint['generation'], batch_key=digest([claim['job_id'], claim['lease_generation']]),
-                        observations=batch.observations, cursor_value=batch.cursor or {},
+                        observations=batch.observations, cursor_value=cursor_value,
                         terminal_page=batch.terminal_page, coverage_state=completeness,
                         outbox_events=[{'event_key': 'batch:' + claim['job_id'], 'event_type': 'trend.ingested',
                             'payload': {'observation_ids': [o['observation_id'] for o in batch.observations],
@@ -262,14 +313,31 @@ class TrendWorker:
                                         'coverage_epoch': claim['payload']['coverage_epoch'],
                                         'completeness': completeness, 'markers': list(batch.markers)}}],
                         actual_micro_usd=accounting['actual_micro_usd'], usage_event_id=accounting['usage_event_id'], cursor=cur)
-                    source_health.record(self.store, claim['scope_key'], cap.provider_id,
-                        status='gap' if completeness == 'gap' else 'partial',
-                        reason_code=batch.reason_code or 'bounded_sample', cursor=cur)
+                    if stall_cooldown is not None:
+                        # The same poison re-read K times: open the breaker instead of
+                        # committing identical batches every slot. Not cleared by this batch.
+                        source_health.record(self.store, claim['scope_key'], cap.provider_id,
+                            status='gap', reason_code='cursor_stalled',
+                            next_allowed_at=iso(instant(self.clock()) + timedelta(seconds=stall_cooldown)),
+                            clear_pause=False, cursor=cur)
+                    else:
+                        # A committed, progressing batch is the only path that clears a pause.
+                        source_health.record(self.store, claim['scope_key'], cap.provider_id,
+                            status='gap' if completeness == 'gap' else 'partial',
+                            reason_code=batch.reason_code or 'bounded_sample', clear_pause=True, cursor=cur)
+                if stall_cooldown is not None:
+                    LOG.warning('trend.circuit_open provider=%s reason=cursor_stalled cooldown_seconds=%d',
+                                safe_label(cap.provider_id), stall_cooldown)
                 result['completed'] += 1
             except Exception as exc:
-                # Never log provider response text, URLs, account IDs or evidence.
+                # Never log provider response text, URLs, account IDs or evidence:
+                # only a safe code, the exception class name and an HTTP status.
                 code = exc.code if isinstance(exc, ContractError) else 'provider_or_commit_failure'
-                LOG.warning('trend.job_failed code=%s dispatched=%s', code, dispatched)
+                status = (exc.status if isinstance(exc, ProviderTransportError)
+                          else exc.code if isinstance(exc, urllib.error.HTTPError) else None)
+                status = status if type(status) is int and 100 <= status <= 599 else None
+                LOG.warning('trend.job_failed code=%s dispatched=%s exception=%s status=%s',
+                            code, dispatched, _exception_name(exc), status)
                 try:
                     unmetered = cap.billable_unit == 'unmetered_live_bytes_bounded' and amount == 0
                     if dispatched and accounting is None:
@@ -280,8 +348,7 @@ class TrendWorker:
                             workspace_id=claim['scope_key'][10:] if claim['scope_key'].startswith('workspace:') else None,
                             cost_usd=0 if unmetered else None,
                             cost_source='table:trend-provider-contract-v1' if unmetered else 'unknown'))
-                    fail_attempt(self.store, claim,
-                        status=exc.code if isinstance(exc, urllib.error.HTTPError) else None,
+                    fail_attempt(self.store, claim, status=status,
                         headers=exc.headers if isinstance(exc, urllib.error.HTTPError) else None,
                         dispatched=dispatched, proven_unbilled=not dispatched or unmetered,
                         jitter=random.random(), now=self.clock())
