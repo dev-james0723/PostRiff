@@ -42,7 +42,8 @@ export function SelectToggle({
             onChange(!checked, true);
           }
         }}
-        className='accent-foreground size-4 cursor-pointer'
+        // Above the label's enlarged hit area: a press on the box itself lands on the checkbox, around it on the label.
+        className='accent-foreground relative z-10 size-4 cursor-pointer'
       />
     </label>
   );

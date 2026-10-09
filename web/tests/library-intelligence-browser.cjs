@@ -42,6 +42,16 @@ async function addressSettles(page, predicate) {
   return page.waitForFunction(predicate, null, { timeout: 5000 }).then(() => true, () => false);
 }
 
+/**
+ * Evidence screenshots show settled UI, not a sheet halfway through opening: wait (up to 2 s) until no finite
+ * animation or transition is running. Infinite ones (spinners, a playing preview) are ignored.
+ */
+async function settled(page) {
+  await page
+    .waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity), null, { timeout: 2000 })
+    .catch(() => {});
+}
+
 /** A short real PCM WAV (440 Hz), so the audio path runs on genuine bytes. */
 function wav(seconds = 2, rate = 8000) {
   const samples = seconds * rate;
@@ -152,6 +162,7 @@ async function openLibrary(page, query = '') {
         await openLibrary(page);
         const label = `${engine} ${spec.name}`;
         // The first-view screenshot comes before any check, so a failing viewport still returns its picture.
+        await settled(page);
         await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}.png`) });
 
         // Redesign §4: exactly one filled primary on the page (Add); everything else is secondary, ghost or danger.
@@ -211,6 +222,7 @@ async function openLibrary(page, query = '') {
           await bar.waitFor({ timeout: 10000 });
           check(`${label}: keyboard selection shows batch actions`, /1 item selected/.test(await bar.innerText()));
           check(`${label}: selection is in the address`, await addressSettles(page, () => new URL(location.href).searchParams.has('sel')));
+          await settled(page);
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-selected.png`) });
           await page.keyboard.press('Escape');
           await bar.waitFor({ state: 'detached', timeout: 10000 });
@@ -225,6 +237,7 @@ async function openLibrary(page, query = '') {
           // A sheet/drawer below 1280 px, the docked inspector from 1280 px (redesign §6): focus moves into either.
           check(`${label}: focus moves into the detail panel`, await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"], [data-library-inspector]'))));
           check(`${label}: open item is in the address`, await addressSettles(page, () => Boolean(new URL(location.href).searchParams.get('asset'))));
+          await settled(page);
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-detail.png`) });
           await page.keyboard.press('Escape');
           await page.getByRole('button', { name: 'Close asset details' }).waitFor({ state: 'detached', timeout: 10000 });
@@ -260,6 +273,7 @@ async function openLibrary(page, query = '') {
           });
           const overlaps = clearance.lastBottom !== null && clearance.coveredTop !== null && clearance.lastBottom > clearance.coveredTop + 1 && (clearance.playerLeft === null || clearance.lastRight === null || clearance.lastRight > clearance.playerLeft);
           check(`${label}: last result clears Now Playing and the tab bar`, !overlaps, clearance);
+          await settled(page);
           await page.screenshot({ path: resolve(out, `library-${engine}-${spec.name}-player.png`) });
           await page.getByRole('button', { name: 'Close player', exact: true }).click();
 

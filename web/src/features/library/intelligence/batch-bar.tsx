@@ -30,6 +30,9 @@ import type { BatchKind, BatchParams, BatchRun } from './use-batch-actions';
 import { ComparisonView } from './versions-panel';
 import { Control, IconControl, ToolbarDivider, controlClass } from '../ui/controls';
 
+/** Below md a scrolling row fades out at its right edge; the end padding lets the last control scroll clear of the fade. */
+const SCROLL_FADE = 'max-md:pr-6 max-md:[mask-image:linear-gradient(to_right,#000_calc(100%_-_1.5rem),transparent)]';
+
 /** Glass with an opaque fill where transparency is reduced or unsupported (the global material covers the rest). */
 export const OPAQUE_GLASS_FALLBACK = '[@media(prefers-reduced-transparency:reduce)]:bg-popover [@media(prefers-reduced-transparency:reduce)]:backdrop-blur-none';
 
@@ -109,21 +112,24 @@ export function BatchBar({
       {run ? <RunReport run={run} items={selected} onRetry={onRetry} onDismiss={onDismissRun} /> : null}
       {count > 0 ? (
         <div className='flex flex-wrap items-center gap-1'>
-          <div className='flex min-w-0 items-center gap-1'>
+          <div className='flex max-w-full min-w-0 items-center gap-1'>
             <IconControl label='Clear selection' size='sm' onClick={onClear}>
               <Icons.close aria-hidden />
             </IconControl>
-            <span className='pr-1 text-sm font-medium whitespace-nowrap tabular-nums'>{countLabel(count)} selected</span>
-            {canSelectMore ? (
-              <Control tone='ghost' size='sm' onClick={onSelectAll}>
-                Select all shown
+            <span className='shrink-0 pr-1 text-sm font-medium whitespace-nowrap tabular-nums'>{countLabel(count)} selected</span>
+            {/* Narrow screens: the row scrolls inside itself and fades at the edge instead of cutting a label. */}
+            <div className={cn('scrollbar-hide flex min-w-0 items-center gap-1 overflow-x-auto', SCROLL_FADE)}>
+              {canSelectMore ? (
+                <Control tone='ghost' size='sm' className='shrink-0' onClick={onSelectAll}>
+                  Select all shown
+                </Control>
+              ) : null}
+              <Control tone='ghost' size='sm' className='shrink-0' active={searchWithin} aria-pressed={searchWithin} icon={searchWithin ? <Icons.check aria-hidden /> : undefined} onClick={() => onSearchWithin(!searchWithin)}>
+                Search only these
               </Control>
-            ) : null}
-            <Control tone='ghost' size='sm' active={searchWithin} aria-pressed={searchWithin} icon={searchWithin ? <Icons.check aria-hidden /> : undefined} onClick={() => onSearchWithin(!searchWithin)}>
-              Search only these
-            </Control>
+            </div>
           </div>
-          <div className='scrollbar-hide -mx-1 flex min-w-0 basis-full items-center gap-1 overflow-x-auto px-1 md:ml-auto md:basis-auto'>
+          <div className={cn('scrollbar-hide -mx-1 flex min-w-0 basis-full items-center gap-1 overflow-x-auto px-1 md:ml-auto md:basis-auto', SCROLL_FADE)}>
             {canEdit && collections.length ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
