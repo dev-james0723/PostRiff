@@ -382,9 +382,9 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
     components_line = ""
     if allowed and allowed != known:
         # A shared (`all`) prompt documents every component; this view may use only its journeys' groups (the validator policy).
-        components_line = ("## Components for this view\nUse only these components: " + ", ".join(allowed)
-                           + ".\nAny other component documented below is rejected for this view.\n\n")
-    instructions = (components_line + base_prompt.rstrip() + "\n\n" + bindings_section(manifest)).strip()
+        components_line = ("\n\n## Components for this view\nUse only these components: " + ", ".join(allowed)
+                           + ".\nAny other component documented above is rejected for this view.")
+    instructions = (base_prompt.rstrip() + "\n\n" + bindings_section(manifest) + components_line).strip()
     context = presenter_context(projection)
     blocks = [f"<context kind=\"UI_PROJECTION\">\n{_escape_block(_bounded_json(context, MAX_CONTEXT_BYTES))}\n</context>"]
     if mode == "patch":
