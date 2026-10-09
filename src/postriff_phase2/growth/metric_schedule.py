@@ -32,6 +32,7 @@ import uuid
 from postriff_alpha.domain import AlphaError
 
 from .. import feature_enrollment, insights
+from . import comment_sync
 
 FLAG = "POSTRIFF_METRIC_READS"
 WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
@@ -418,10 +419,29 @@ class MetricScheduler:
         status = fetched["status"]
         if status == 200:
             return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
-                    "readAt": read_at}
+                    "readAt": read_at, "comments": self._read_comments(row, grant, read_at)}
         if status in TERMINAL_HTTP:
             return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
         return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
+
+    def _read_comments(self, row, grant, now):
+        """One bounded comment page for a young owned post (growth/comment_sync). Never fails the reading; None when
+        not due, not permitted, out of time or unavailable."""
+        if (not comment_sync.due(row, now) or not comment_sync.scoped(grant.get("scopes"), row["provider"])
+                or self.monotonic() >= getattr(self, "_deadline", float("inf"))):
+            return None
+        try:
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute("SELECT level FROM public.pr_channel_capabilities WHERE workspace_id=%s AND connection_id=%s "
+                            "AND capability='comments_read'", (row["workspaceId"], row["connectionId"]))
+                level = cur.fetchone()
+            if not level or level[0] != "Direct":
+                return None
+            fetched = comment_sync.fetch(self.transport, grant["accessToken"], row["provider"], row["postId"])
+        except Exception as error:  # noqa: BLE001 - comments are optional; the native reading stands on its own
+            _note("metric_reads.comments_failed", error)
+            return None
+        return fetched["comments"] if fetched["status"] == 200 else None
 
     def complete(self, row, outcome):
         """Fence on this claim generation, unexpired lease and current rights."""
@@ -445,6 +465,10 @@ class MetricScheduler:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
                                                  outcome["found"], outcome["endpoint"], outcome.get("readAt", self.clock()),
                                                  read_offset=row["offset"], period_start=row["anchorAt"])
+                    # Same fenced transaction; comment reading is re-checked under lock, so a revoke that won blocks this.
+                    if outcome.get("comments") and comment_sync.comments_readable(cur, row["workspaceId"], row["connectionId"], row["provider"], lock=True):
+                        outcome["commentsStored"] = comment_sync.store(cur, row["workspaceId"], row["connectionId"], row["provider"],
+                                                                       row["postId"], outcome["comments"])
             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
                                       failure_class=%s, lease_owner=NULL, lease_until=NULL, updated_at=now()
@@ -477,9 +501,10 @@ class MetricScheduler:
         """Bounded cron step. Returns a status dict of counts; never raises."""
         counts = {"status": "ok", "claimed": 0, "done": 0, "retry": 0, "unavailable": 0, "cancelled": 0, "dead": 0, "deferred": 0,
                   "missed": 0}
-        counts.update(providerReads=0, providerErrors=0, costUnknownReads=0)
+        counts.update(providerReads=0, providerErrors=0, costUnknownReads=0, commentPages=0, commentsStored=0)
         try:
             deadline = self.monotonic() + max_seconds
+            self._deadline = deadline
             rows = self.claim(max_reads)
             counts["claimed"] = len(rows)
             grants = {}
@@ -489,6 +514,7 @@ class MetricScheduler:
                     counts["deferred"] = len(rows) - index
                     break
                 outcome = self.read(row, grants)
+                counts["commentPages"] += int(outcome.get("comments") is not None)
                 if outcome.get("providerRead"):
                     counts["providerReads"] += 1
                     counts["costUnknownReads"] += 1  # native response reports no invoice; never assert zero
@@ -501,6 +527,7 @@ class MetricScheduler:
                     continue
                 if not recorded:
                     continue
+                counts["commentsStored"] += int(outcome.get("commentsStored") or 0)
                 state = outcome["state"]
                 if state == "transient":
                     counts["retry" if row["attempts"] < row["maxAttempts"] else "dead"] += 1
