@@ -96,6 +96,7 @@ REQUIREMENT_KINDS = ('brand_verification', 'sensitive_scope', 'restricted_scope'
 APPROVAL_STATUSES = ('unknown', 'not_required_evidenced', 'testing_only', 'submitted', 'approved', 'rejected', 'suspended')
 EVIDENCE_REF = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:/-]{2,160}$')   # opaque references only: no query strings, fragments or credentials
 REGISTRY_VERSION = 1
+REGISTRY_STATE = {'adaptersLoaded': None}
 NEXT_ACTIONS = {
     'brand_verification': 'Record the Google brand verification decision for this exact project and client.',
     'sensitive_scope': 'Record the sensitive-scope decision for exactly these scopes; brand approval does not cover it.',
@@ -155,6 +156,7 @@ def registry_entries(adapters=None, decisions=None):
         except Exception:
             adapters = {}
     decisions = RECORDED_DECISIONS if decisions is None else decisions
+    REGISTRY_STATE['adaptersLoaded'] = bool(adapters)
     apps = [dict(SIGN_IN_APP)] + [{'provider': pid, 'appRef': pid, 'environment': 'production', 'product': 'social_connection', 'lane': 'standard',
                                     'requestedScopes': _requested_scopes(cls), 'kinds': REGISTRY_KINDS.get(pid, DEFAULT_KINDS)} for pid, cls in adapters.items()]
     entries = []
@@ -162,9 +164,17 @@ def registry_entries(adapters=None, decisions=None):
         requirements = []
         for kind in app['kinds']:
             recorded = decisions.get((app['provider'], app['appRef'], app['environment'], kind)) or {}
-            requirements.append({'kind': kind, 'requestedScopes': sorted(set(app['requestedScopes']) | set(recorded.get('requestedScopes') or ())),
-                                 'documentationRef': DOCUMENTATION.get(app['provider'], {}).get(kind),
-                                 **{key: value for key, value in recorded.items() if key not in ('requestedScopes', 'kind')}})
+            base = {'kind': kind, 'requestedScopes': sorted(app['requestedScopes']), 'documentationRef': DOCUMENTATION.get(app['provider'], {}).get(kind)}
+            try:
+                if not isinstance(recorded, dict):
+                    raise TypeError('decision must be a mapping')
+                extra = recorded.get('requestedScopes') or ()
+                if isinstance(extra, str) or not all(isinstance(scope, str) for scope in extra):
+                    raise TypeError('requestedScopes must be a list of strings')
+                requirements.append({**base, 'requestedScopes': sorted(set(app['requestedScopes']) | set(extra)),
+                                     **{key: value for key, value in recorded.items() if key not in ('requestedScopes', 'kind')}})
+            except (TypeError, ValueError):
+                requirements.append({**base, 'malformed': True})
         launch = LAUNCH_SCOPE.get(app['provider']) if app['appRef'] == app['provider'] else None
         entries.append({key: app[key] for key in ('provider', 'appRef', 'environment', 'product', 'lane')} | {'requirements': requirements,
                                                                                                          'launchScope': launch is not None, 'launch': launch})
@@ -174,8 +184,12 @@ def registry_entries(adapters=None, decisions=None):
 def evaluate_requirement(requirement, now, *, environment):
     """One requirement row with its effective standing: satisfied | stale | pending | check_required | blocked."""
     kind, status = requirement.get('kind'), requirement.get('status') or 'unknown'
-    if kind not in REQUIREMENT_KINDS or status not in APPROVAL_STATUSES:
+    if kind not in REQUIREMENT_KINDS or status not in APPROVAL_STATUSES or requirement.get('malformed'):
         raise ValueError('invalid approval requirement')
+    for field in ('requestedScopes', 'approvedScopes'):
+        value = requirement.get(field) or ()
+        if isinstance(value, str) or not isinstance(value, (list, tuple, set, frozenset)) or not all(isinstance(scope, str) for scope in value):
+            raise ValueError('invalid approval scopes')
     ref = requirement.get('providerReceiptRef')
     ref = ref if isinstance(ref, str) and EVIDENCE_REF.fullmatch(ref) else None
     requested, approved = set(requirement.get('requestedScopes') or ()), set(requirement.get('approvedScopes') or ())
@@ -196,7 +210,9 @@ def evaluate_requirement(requirement, now, *, environment):
         standing, blockers = 'check_required', ['no_decision_recorded']
     elif ref is None or _epoch(requirement.get('decidedAt')) is None:
         standing, blockers = 'check_required', ['decision_receipt_missing']
-    elif status == 'approved' and kind in ('sensitive_scope', 'restricted_scope', 'app_review') and not requested <= approved:
+    elif _epoch(requirement.get('decidedAt')) - now > CLOCK_SKEW_SECONDS:
+        standing, blockers = 'check_required', ['decision_time_in_future']
+    elif status in ('approved', 'not_required_evidenced') and kind in ('sensitive_scope', 'restricted_scope', 'app_review') and not requested <= approved:
         standing, blockers = 'blocked', ['approved_scopes_do_not_cover_request']
     elif expires is not None and expires <= now:
         standing, blockers = 'blocked', ['approval_expired']
@@ -205,7 +221,7 @@ def evaluate_requirement(requirement, now, *, environment):
     else:
         standing = 'satisfied'
     return {'kind': kind, 'status': status, 'standing': standing, 'blockers': blockers,
-            'requestedScopes': sorted(requested), 'approvedScopes': sorted(approved), 'missingScopes': sorted(requested - approved) if status == 'approved' else [],
+            'requestedScopes': sorted(requested), 'approvedScopes': sorted(approved), 'missingScopes': sorted(requested - approved) if status in ('approved', 'not_required_evidenced') else [],
             'requestedAt': _iso(_epoch(requirement.get('requestedAt'))), 'decidedAt': _iso(_epoch(requirement.get('decidedAt'))),
             'expiresAt': _iso(expires), 'providerReceiptRef': ref, 'verifiedBy': requirement.get('verifiedBy') if isinstance(requirement.get('verifiedBy'), str) else None,
             'freshness': envelope, 'ownerLane': requirement.get('ownerLane') or 'provider_app_owner', 'documentationRef': requirement.get('documentationRef'),
@@ -222,7 +238,7 @@ def evaluate_registry(entries, now):
         for req in entry['requirements']:
             try:
                 rows.append(evaluate_requirement(req, now, environment=entry['environment']))
-            except ValueError:
+            except (ValueError, TypeError, AttributeError):
                 rows.append({'kind': str(req.get('kind')), 'status': 'invalid', 'standing': 'blocked', 'blockers': ['invalid_registry_entry'], 'requestedScopes': [],
                              'approvedScopes': [], 'missingScopes': [], 'providerReceiptRef': None, 'documentationRef': None,
                              'freshness': freshness(now=now, observed_at=None, stale_after=REGISTRY_STALE_SECONDS, source='founder_connections.RECORDED_DECISIONS'),
@@ -294,7 +310,8 @@ def queue(items, limit=MAX_ITEMS):
     public = [{key: value for key, value in entry.items() if not key.startswith('_')} for entry in ordered[:limit]]
     by_priority = {name: sum(1 for entry in ordered if entry['priority'] == name) for name in PRIORITIES}
     return {'items': public, 'truncated': len(ordered) > limit, 'total': len(ordered), 'byPriority': by_priority,
-            'summary': {'tenants': {'value': len(tenants), 'countState': 'lower_bound' if partial else 'exact'},
+            'summary': {'tenants': {'value': None, 'countState': 'unknown'} if partial and not tenants else
+                                   {'value': len(tenants), 'countState': 'lower_bound' if partial else 'exact'},
                         'users': UNKNOWN, 'unassigned': sum(1 for entry in ordered if entry['owner']['assignmentState'] == 'unassigned'),
                         'launchBlockers': sum(1 for entry in ordered if entry['launchBlocker'])}}
 
@@ -309,7 +326,11 @@ CONNECTION_ATTENTION = {
 }
 RECONNECT_ACTION = {'kind': 'request_account_holder_reconnect', 'label': 'Ask the account holder to reconnect through the normal Channels flow. Founder cannot consent for them.',
                     'targetRef': None, 'requiresHuman': True, 'blockedBy': ['account_holder_consent']}
-COVERAGE_SQL = f'SELECT max(h."refreshedAt") AS latest, count(*) AS total FROM {CONNECTION_VIEW} h WHERE {excluded(H_WORKSPACE)}'
+# `connections` counts every projected connection (internal ones too, as the hourly stage caps all of them): at the stage cap
+# (founder_metrics_ops.MAX_CONNECTIONS) the projection may have dropped connections, so coverage is partial and counts lower bounds.
+COVERAGE_SQL = (f'SELECT max(h."refreshedAt") AS latest, count(*) AS total, count(DISTINCT (h."workspaceId", h."connectionId")) AS connections '
+                f'FROM {CONNECTION_VIEW} h')
+STAGE_CONNECTION_CAP = 5000   # must equal founder_metrics_ops.MAX_CONNECTIONS
 # One row per connection (the projection has one row per capability). The freshness envelope may use max("refreshedAt")
 # because connection_health_stage deletes every row it did not refresh in the same transaction.
 ATTENTION_SQL = (f'SELECT DISTINCT h."workspaceId" AS wid, h."connectionId" AS cid, h.provider, h."connectionState" AS cstate FROM {CONNECTION_VIEW} h '
@@ -367,7 +388,7 @@ def read_connection_health(service, now, environment):
     if coverage is None or rows is None:
         return _unobserved(now, environment, 'source_not_configured')
     coverage = coverage[0] if coverage else {}
-    truncated = len(rows) > MAX_CONNECTION_ROWS
+    truncated = len(rows) > MAX_CONNECTION_ROWS or int(coverage.get('connections') or 0) >= STAGE_CONNECTION_CAP
     items, envelope = connection_items(rows[:MAX_CONNECTION_ROWS], coverage, now, environment, truncated=truncated)
     return items, envelope, 'not_instrumented' if not coverage.get('latest') else 'connected'
 
@@ -408,7 +429,14 @@ def incident_items(rows, now, environment):
 def registry_items(evaluated, now, environment):
     out = []
     in_scope = [app for app in evaluated if app['launchScope']]
-    if not in_scope:
+    if not in_scope and LAUNCH_SCOPE:
+        envelope = freshness(now=now, observed_at=None, stale_after=REGISTRY_STALE_SECONDS, source='postriff_phase2.providers.ADAPTERS')
+        out.append(item(category='launch_scope', priority='P2', environment=environment, title='Launch provider is missing from the registry', reason='launch_provider_not_in_registry',
+                        summary='The recorded launch provider has no registry row (adapter catalogue unavailable or renamed). Its approval state is unknown.',
+                        owner_lane='connections', envelope=envelope, launch_blocker=True,
+                        next_action={'kind': 'restore_registry', 'label': 'Check that the provider adapter catalogue imports in this deployment.', 'targetRef': 'postriff_phase2.providers',
+                                     'requiresHuman': True, 'blockedBy': []}))
+    elif not in_scope:
         envelope = freshness(now=now, observed_at=None, stale_after=REGISTRY_STALE_SECONDS, source='founder_connections.LAUNCH_SCOPE')
         out.append(item(category='launch_scope', priority='P3', environment=environment, title='No launch provider scope is recorded', reason='launch_scope_not_recorded',
                         summary='Approval gaps cannot be ranked as launch blockers until the first launch provider and operation are chosen.', owner_lane='coordinator',

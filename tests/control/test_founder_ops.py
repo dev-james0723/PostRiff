@@ -729,6 +729,16 @@ class StageTests(unittest.TestCase):
         got = {key[1]: (row[5], row[6]) for key, row in rows.items()}
         self.assertEqual(got, {'yt-refresh': ('ok', 'read_verified'), 'yt-binding': ('blocked', 'client_binding_missing'),
                                'yt-none': ('expired', 'token_expired'), 'li': ('expired', 'token_expired')})
+        revoked = ops.project_connections([('w3', 'yt-revoked', 'YouTube', True, False, True, True, now + 3600, 3, False, None)], {}, now, connection_state,
+                                          {('w3', 'yt-revoked'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': now + 3600, 'revoked': True}})
+        self.assertEqual([(r[5], r[6]) for r in revoked.values()], [('blocked', 'reauthorization_required')], 'a vault-revoked grant needs reauthorization')
+        soon = now + 2 * 86400
+        near = ops.project_connections([('w4', 'yt-r', 'YouTube', True, False, True, True, soon, 3, False, None),
+                                        ('w4', 'yt-n', 'YouTube', True, False, True, True, now + 30 * 86400, 3, False, None)], {}, now, connection_state,
+                                       {('w4', 'yt-r'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False},
+                                        ('w4', 'yt-n'): {'refreshSupported': False, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False}})
+        self.assertEqual({k[1]: (r[5], r[7]) for k, r in near.items()}, {'yt-r': ('ok', soon), 'yt-n': ('expiring', soon)},
+                         'refreshable grants never read expiring; a non-refreshable one uses the vault deadline, not stale channel JSON')
         legacy = ops.project_connections(channels, {}, now, connection_state)
         self.assertEqual({key[1]: row[5] for key, row in legacy.items()}, {'yt-refresh': 'expired', 'yt-binding': 'expired', 'yt-none': 'expired', 'li': 'expired'})
 
@@ -745,6 +755,7 @@ class StageTests(unittest.TestCase):
         result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: failing), {}, now)
         self.assertEqual((result['status'], result['rows'], failing.commits), ('ok', 1, 1))
         self.assertTrue(any(sql == 'ROLLBACK TO SAVEPOINT youtube_overlay' for sql, _ in failing.statements))
+        self.assertEqual(result['youtubeOverlay'], 'unavailable', 'the fallback is reported, not silent')
         upsert = next(params for sql, params in failing.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
         self.assertEqual(upsert[6], ['expired'], 'without vault facts the classification is the previous one')
         working = ScriptedDB(script, tables=tables)
@@ -752,6 +763,7 @@ class StageTests(unittest.TestCase):
         upsert = next(params for sql, params in working.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
         self.assertEqual((upsert[6], upsert[7]), (['ok'], ['read_verified']), 'a refreshable YouTube grant is not an expired connection')
         self.assertTrue(any(sql == 'RELEASE SAVEPOINT youtube_overlay' for sql, _ in working.statements))
+        self.assertEqual(ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: ScriptedDB(script, tables=tables)), {}, now)['youtubeOverlay'], 'applied')
 
     def test_connection_health_refreshes_hourly_and_removes_vanished_connections(self):
         now = local_epoch('2026-10-01T08:05:30')
@@ -763,7 +775,7 @@ class StageTests(unittest.TestCase):
                               tables={'public.pr_connection_health', 'public.pr_channel_capabilities'}, deleted=2)
         fresh = db()
         result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: fresh), {}, now)
-        self.assertEqual(result, {'status': 'ok', 'connections': 1, 'rows': 1, 'removed': 2, 'truncated': False})
+        self.assertEqual(result, {'status': 'ok', 'connections': 1, 'rows': 1, 'removed': 2, 'truncated': False, 'youtubeOverlay': 'not_needed'})
         sql, params = next((sql, params) for sql, params in fresh.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
         self.assertEqual(params[0], now)
         self.assertEqual([column[0] for column in params[1:]], ['11111111-1111-1111-1111-111111111111', 'c-ok', 'publish', 'linkedin', 'Direct', 'ok', 'publish_verified',

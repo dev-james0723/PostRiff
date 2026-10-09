@@ -720,6 +720,8 @@ def project_connections(channels, levels, now, connection_state, youtube_status=
                    'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}
         if youtube_status is not None:
             channel = with_youtube_credential_status(channel, youtube_status.get((workspace_id, connection_id)))
+            if platform == 'YouTube' and channel.get('accessTokenExpiresAt') is not None:
+                expires_at = float(channel['accessTokenExpiresAt'])   # the vault deadline the classification used, not stale channel JSON
         raw = connection_state(channel, now)
         if raw == 'disconnected':
             continue
@@ -774,7 +776,7 @@ def connection_health_stage(fstore, service, values, now):
                                 (sorted({row[0] for row in channels}), MAX_CONNECTIONS * len(CAPABILITIES) + 1))
                     for workspace_id, connection_id, capability, level in cur.fetchall():
                         levels.setdefault((workspace_id, connection_id), {})[capability] = level
-                youtube = None
+                youtube, overlay = None, 'not_needed'
                 youtube_workspaces = sorted({row[0] for row in channels if row[2] == 'YouTube'})
                 if youtube_workspaces and _table_exists(cur, 'public.pr_encrypted_credentials'):
                     # Booleans, an expiry and the revoked flag reach Python; ciphertext presence is tested in SQL only. A savepoint keeps
@@ -782,11 +784,12 @@ def connection_health_stage(fstore, service, values, now):
                     from postriff_phase2.channels import youtube_credential_status
                     cur.execute('SAVEPOINT youtube_overlay')
                     try:
-                        youtube = youtube_credential_status(cur, youtube_workspaces)
+                        youtube, overlay = youtube_credential_status(cur, youtube_workspaces), 'applied'
                         cur.execute('RELEASE SAVEPOINT youtube_overlay')
-                    except Exception:   # noqa: BLE001
+                    except Exception as error:   # noqa: BLE001
                         cur.execute('ROLLBACK TO SAVEPOINT youtube_overlay')
-                        youtube = None
+                        youtube, overlay = None, 'unavailable'
+                        LOGGER.warning(json.dumps({'event': 'founder_ops.youtube_overlay_unavailable', 'error': type(error).__name__}, sort_keys=True))
                 rows = list(project_connections(channels, levels, now, connection_state, youtube).values())
                 if rows:
                     columns = list(zip(*rows))
@@ -794,7 +797,7 @@ def connection_health_stage(fstore, service, values, now):
                 cur.execute('DELETE FROM public.pr_connection_health WHERE refreshed_at < to_timestamp(%s)', (now,))
                 removed = max(0, cur.rowcount or 0)
             db.commit()
-        return {'status': 'ok', 'connections': len(channels), 'rows': len(rows), 'removed': removed, 'truncated': truncated}
+        return {'status': 'ok', 'connections': len(channels), 'rows': len(rows), 'removed': removed, 'truncated': truncated, 'youtubeOverlay': overlay}
     except Exception as error:
         return _failure('connection_health', now, error)
 

@@ -223,7 +223,7 @@ class StaleTelemetryTests(unittest.TestCase):   # A30
         self.assertEqual((state, envelope['freshness']), ('source_not_configured', 'unknown'))
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]['affected']['connections'], {'value': None, 'countState': 'unknown'})
-        self.assertEqual(fc.queue(items)['summary']['tenants']['countState'], 'lower_bound')
+        self.assertEqual(fc.queue(items)['summary']['tenants'], {'value': None, 'countState': 'unknown'}, 'nothing observed: unknown, not "at least 0"')
 
     def test_empty_projection_is_not_instrumented(self):
         items, envelope, state = fc.read_connection_health(types.SimpleNamespace(store=ReaderStub(coverage={'latest': None, 'total': 0})), NOW, 'production')
@@ -247,8 +247,10 @@ class StaleTelemetryTests(unittest.TestCase):   # A30
     def test_statements_are_fixed_and_exclude_internal_workspaces(self):
         reader = ReaderStub(coverage={'latest': fc._iso(NOW - 60), 'total': 1}, rows=[row('w1', 'c1', 'linkedin', 'token_expired')])
         fc.read_connection_health(types.SimpleNamespace(store=reader), NOW, 'production')
+        coverage_sql, rows_sql = reader.statements[0][1], reader.statements[1][1]
+        self.assertIn('rafii_control.workspace_classifications', rows_sql, 'item rows exclude internal/test/demo workspaces')
+        self.assertNotIn('"workspaceId" AS', coverage_sql, 'the coverage probe returns aggregates only, never identifiers')
         for _, sql, _, _ in reader.statements:
-            self.assertIn('rafii_control.workspace_classifications', sql)
             self.assertNotIn('ciphertext', sql)
             self.assertNotIn('pr_encrypted_credentials', sql)
 
@@ -264,7 +266,7 @@ class ReviewFindingTests(unittest.TestCase):
         self.assertEqual((state, envelope['freshness'], [i['safeReasonCode'] for i in items]), ('unavailable', 'unknown', ['connection_health_unavailable']))
         out = fc.attention(app_for(Broken(), FounderStoreStub()), PRINCIPAL, {'mode': 'live', 'now': NOW})
         self.assertEqual(out['sources']['connectionHealth']['state'], 'unavailable')
-        self.assertEqual(out['summary']['tenants']['countState'], 'lower_bound')
+        self.assertEqual(out['summary']['tenants'], {'value': None, 'countState': 'unknown'})
 
     def test_rows_query_missing_after_coverage_is_not_an_all_clear(self):
         class HalfMissing(ReaderStub):
@@ -297,6 +299,55 @@ class ReviewFindingTests(unittest.TestCase):
         bad = next(r for r in app['requirements'] if r['kind'] == 'api_audit')
         self.assertEqual((bad['standing'], bad['blockers']), ('blocked', ['invalid_registry_entry']))
         self.assertEqual(app['readiness'], 'blocked')
+
+
+class SecondReviewFindingTests(unittest.TestCase):
+    """Independent acceptance audit of PR #150 (second review)."""
+
+    def youtube(self, decisions):
+        adapters = {'youtube': types.SimpleNamespace(documented_scopes=('scope.read', 'scope.upload'), SCOPES={})}
+        return fc.evaluate_registry([e for e in fc.registry_entries(adapters, decisions) if e['provider'] == 'youtube'], NOW)[0]
+
+    def test_malformed_decisions_of_any_shape_block_only_their_row(self):
+        key = lambda kind: ('youtube', 'youtube', 'production', kind)
+        decisions = {key('sensitive_scope'): approved('sensitive_scope', ['scope.read'], approvedScopes=5),
+                     key('api_audit'): 'approved',
+                     key('quota_entitlement'): approved('quota_entitlement', [], requestedScopes=7),
+                     key('brand_verification'): approved('brand_verification', [], requestedScopes='scope.read')}
+        app = self.youtube(decisions)
+        got = {r['kind']: (r['standing'], r['blockers']) for r in app['requirements']}
+        for kind in ('sensitive_scope', 'api_audit', 'quota_entitlement', 'brand_verification'):
+            self.assertEqual(got[kind], ('blocked', ['invalid_registry_entry']), kind)
+        self.assertEqual(got['domain_ownership'][0], 'check_required')
+        original = fc.RECORDED_DECISIONS
+        fc.RECORDED_DECISIONS = decisions
+        try:
+            out = fc.attention(app_for(ReaderStub(coverage={'latest': fc._iso(NOW - 60), 'connections': 0}), FounderStoreStub()), PRINCIPAL, {'mode': 'live', 'now': NOW})
+        finally:
+            fc.RECORDED_DECISIONS = original
+        self.assertEqual(next(a for a in out['registry'] if a['provider'] == 'youtube')['readiness'], 'blocked')
+
+    def test_future_decision_time_and_not_required_scope_gap(self):
+        app = self.youtube({('youtube', 'youtube', 'production', 'brand_verification'): approved('brand_verification', [], decided=NOW + 3600),
+                            ('youtube', 'youtube', 'production', 'sensitive_scope'): approved('sensitive_scope', ['scope.read'], status='not_required_evidenced')})
+        got = {r['kind']: (r['standing'], r['blockers']) for r in app['requirements']}
+        self.assertEqual(got['brand_verification'], ('check_required', ['decision_time_in_future']))
+        self.assertEqual(got['sensitive_scope'], ('blocked', ['approved_scopes_do_not_cover_request']))
+
+    def test_projection_at_the_stage_cap_is_partial_not_complete(self):
+        reader = ReaderStub(coverage={'latest': fc._iso(NOW - 60), 'total': 9 * fc.STAGE_CONNECTION_CAP, 'connections': fc.STAGE_CONNECTION_CAP},
+                            rows=[row('w1', 'c1', 'linkedin', 'token_expired')])
+        items, envelope, _ = fc.read_connection_health(types.SimpleNamespace(store=reader), NOW, 'production')
+        self.assertEqual(envelope['coverage'], 'partial')
+        self.assertFalse(fc.green(envelope))
+        self.assertEqual(items[0]['affected']['tenants'], {'value': 1, 'countState': 'lower_bound'})
+        from rafii_control import founder_metrics_ops
+        self.assertEqual(fc.STAGE_CONNECTION_CAP, founder_metrics_ops.MAX_CONNECTIONS)
+
+    def test_missing_adapter_catalogue_is_not_reported_as_no_launch_scope(self):
+        evaluated = fc.evaluate_registry(fc.registry_entries(adapters={}), NOW)
+        items = fc.registry_items(evaluated, NOW, 'production')
+        self.assertEqual([(i['safeReasonCode'], i['launchBlocker']) for i in items], [('launch_provider_not_in_registry', True)])
 
 
 class RouteTests(unittest.TestCase):
@@ -398,12 +449,12 @@ class EndToEndAuthorizationTests(unittest.TestCase):
         self.app = ControlApplication(self.boundary, types.SimpleNamespace(store=self.store))
         self.app._founder_store = FounderStoreStub()
 
-    def call(self, query='mode=live', cookie=True):
+    def call(self, query='mode=live', cookie=True, session=None):
         import io
         env = dict(PATH_INFO='/api/control/v2/connections/attention', QUERY_STRING=query, REQUEST_METHOD='GET', CONTENT_LENGTH='0', HTTP_HOST='localhost:4449',
                    HTTP_ORIGIN=self.origin, **{'wsgi.input': io.BytesIO(b'')})
         if cookie:
-            token, session = self.boundary.exchange('verified-token', self.origin)
+            token, session = session or self.boundary.exchange('verified-token', self.origin)
             env.update(HTTP_COOKIE='__Host-rafii-control=' + token, HTTP_X_CSRF_TOKEN=session['csrfToken'])
         result = {}
         body = b''.join(self.app(env, lambda status, headers: result.update(status=int(status[:3]))))
@@ -427,6 +478,15 @@ class EndToEndAuthorizationTests(unittest.TestCase):
         status, _ = self.call()
         self.assertEqual(status, 403)
         self.assertEqual(self.reader.statements, [])
+
+    def test_operator_suspended_after_sign_in_is_denied_on_the_route(self):
+        session = self.boundary.exchange('verified-token', self.origin)
+        self.assertEqual(self.call(session=session)[0], 200)
+        self.reader.statements.clear()
+        self.store.operator_row['status'] = 'suspended'
+        status, _ = self.call(session=session)
+        self.assertIn(status, (401, 403))
+        self.assertEqual(self.reader.statements, [], 'a suspended operator never reaches the reader')
 
     def test_inactive_or_non_operator_identity_is_denied(self):
         self.store.operator_row['status'] = 'suspended'
