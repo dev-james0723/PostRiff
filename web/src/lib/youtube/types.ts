@@ -148,7 +148,8 @@ export interface YouTubeAgentDraft {
   channelId: string;
   assetId: string;
   variantId: string;
-  status: 'proposed' | 'queued';
+  status: 'proposed' | 'queued' | 'privacy_erased';
+  privacyErased?: boolean;
   readOnly?: boolean;
   metadataOrigin?: 'user_or_filename_suggestion' | 'chat_model_proposal_requires_video_review';
   uploadWorkflow: 'upload_now' | 'upload_later';
@@ -165,6 +166,7 @@ export interface YouTubeAgentPolicy {
   digest: string;
   channelId: string;
   status: 'prepared' | 'active' | 'paused' | 'revoked' | 'expired';
+  privacyErased?: boolean;
   drafts: { id: string; digest: string }[];
   assetIds: string[];
   timeZone: string;
@@ -231,4 +233,16 @@ export interface YouTubeAgentMutation<T> {
   queued: boolean;
   executed: false;
   providerVerified: false;
+}
+export interface YouTubePolicyStatus {
+  ready: boolean;
+  requiredForConnection: boolean;
+  accepted: boolean;
+  policy: {
+    id: string;
+    privacy: { revision: string; url: string; sha256: string };
+    terms: { revision: string; url: string; sha256: string };
+    publishedAt: number;
+  } | null;
+  receipt: { id: string; policyId: string; workspaceId: string; userId: string; acceptedAt: number } | null;
 }

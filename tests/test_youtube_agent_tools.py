@@ -60,11 +60,12 @@ def context(request=REQUEST):
         commands=SimpleNamespace(engine=SimpleNamespace(invalidate=Mock())))
     provider = SimpleNamespace(authorization_lane='agentic', client_id='agent-client', creator_enabled=True, execution_enabled=True)
     grant = {'provider': 'youtube', 'authorizationLane': 'agentic', 'providerAccountId': CHANNEL, 'scopes': [READ, ANALYTICS],
+             'authorizationGeneration': 'consent-generation-one',
              'accessToken': json.dumps({'v': 2, 'clientId': 'agent-client', 'authorizationLane': 'agentic', 'token': 'DO_NOT_LEAK_TOKEN'})}
     creator = SimpleNamespace(service=service, repository=repo, clock=lambda: NOW,
         oauth=SimpleNamespace(provider_for_connection=Mock(return_value=provider), token_for_worker=Mock(return_value=grant)),
         read=Mock(return_value=daily_report()))
-    def member(workspace, token, connection, right='read', fresh=False):
+    def member(workspace, token, connection, right='read', fresh=False, *, policy_required=True):
         if workspace != 'workspace-one' or token != 'session':
             raise AlphaError('Workspace unavailable.', 404)
         if not Membership.from_row(repo.role).allows(right):
@@ -72,6 +73,11 @@ def context(request=REQUEST):
         channel = _channel(repo.state, connection)
         return 'owner', channel['providerAccountId'], copy.deepcopy(repo.state)
     creator._member = member
+    def authorized(workspace, connection, generation, **_kwargs):
+        if (workspace != 'workspace-one' or connection != CONNECTION or generation != grant.get('authorizationGeneration')
+                or repo.state['phase2']['channels'][0].get('revoked')):
+            raise AlphaError('Synthetic revoked/replaced grant.', 409, code='youtube_revoked_oauth')
+    creator.journal = SimpleNamespace(assert_authorized=Mock(side_effect=authorized))
     creator.agent = YouTubePublishingAgent(creator)
     service.youtube = creator
     return RafiiRunContext(service=service, workspace_id='workspace-one', token='session', principal='owner',
@@ -274,6 +280,34 @@ class DraftToolTests(EnabledYouTubeToolsTest):
 
 
 class AnalyticsToolTests(EnabledYouTubeToolsTest):
+    def test_native_context_binds_exact_grant_and_rejects_late_disconnect_or_replacement(self):
+        for event in ('revoked', 'replaced'):
+            with self.subTest(event=event):
+                ctx = context(ANALYTICS_REQUEST)
+                def read(*_args):
+                    if event == 'revoked':
+                        ctx.service.repository.state['phase2']['channels'][0]['revoked'] = True
+                    else:
+                        ctx.service.youtube.oauth.token_for_worker.return_value['authorizationGeneration'] = 'consent-generation-two'
+                    return daily_report()
+                ctx.service.youtube.read.side_effect = read
+                with self.assertRaises(AlphaError):
+                    agent_tools.analytics_summary(ctx, read_args())
+                self.assertEqual(ctx.ledger.facts, [])
+                self.assertEqual(ctx.ledger.youtube_provider_context, [])
+
+    def test_missing_generation_and_voice_do_not_read_provider_data(self):
+        for event in ('missing_generation', 'voice'):
+            with self.subTest(event=event):
+                ctx = context(ANALYTICS_REQUEST)
+                if event == 'voice':
+                    ctx.modality = 'voice'
+                else:
+                    ctx.service.youtube.oauth.token_for_worker.return_value.pop('authorizationGeneration')
+                with self.assertRaises(AlphaError):
+                    agent_tools.analytics_summary(ctx, read_args())
+                ctx.service.youtube.read.assert_not_called()
+
     def test_read_exact_agentic_owned_nonmonetary_route_and_only_numeric_projection(self):
         ctx = context(ANALYTICS_REQUEST)
         result = agent_tools.analytics_summary(ctx, read_args())
@@ -289,6 +323,10 @@ class AnalyticsToolTests(EnabledYouTubeToolsTest):
         for secret in ('DO NOT LEAK', 'PRIVATE VIEWER', 'estimatedRevenue', 'DO_NOT_LEAK_TOKEN', 'columnHeaders', 'privateTitle'):
             self.assertNotIn(secret, serialized)
         self.assertTrue(result['data']['providerCoverageComplete'])
+        source = ctx.ledger.youtube_provider_context[0]
+        self.assertEqual((source['workspaceId'], source['connectionId'], source['channelId'], source['authorizationGeneration']),
+                         ('workspace-one', CONNECTION, CHANNEL, 'consent-generation-one'))
+        self.assertEqual(source['expiresAt'] - source['ingestedAt'], 30 * 86400)
         self.assertFalse(result['data']['projectionTruncated'])
         recommendation = agent_tools.recommendations(ctx, {'connectionId': CONNECTION})
         self.assertTrue(recommendation['data']['performanceEvidenceAvailable'])

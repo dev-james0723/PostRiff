@@ -300,8 +300,9 @@ try:
         # a Linux+CI flag alone must not authorize touching an unrelated cluster.
         directory = Path(db.execute("SELECT current_setting('data_directory')").fetchone()[0])
         assert directory.parent.name.startswith(('postriff-cw-pg-', 'consumer-pg-')), 'A fresh disposable runner cluster is required'
-        for table in ('pr_worker_tenants', 'pr_youtube_cache', 'pr_youtube_uploads', 'pr_youtube_quota_daily'):
-            assert db.execute('SELECT to_regclass(%s)', ('public.' + table,)).fetchone()[0], 'Apply reviewed 089/097 before fleet acceptance'
+        for table in ('pr_worker_tenants', 'pr_youtube_cache', 'pr_youtube_uploads', 'pr_youtube_quota_daily',
+                      'pr_youtube_operations', 'pr_youtube_planner_candidates'):
+            assert db.execute('SELECT to_regclass(%s)', ('public.' + table,)).fetchone()[0], 'Apply reviewed 089/097/104 before fleet acceptance'
         assert db.execute("SELECT count(*) FROM public.pr_encrypted_credentials WHERE provider='youtube'").fetchone()[0] == 0, 'Use a fresh cluster, not prior provider fixtures'
         assert db.execute('SELECT count(*) FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])', (WORKSPACES + OTHER_WORKSPACES,)).fetchone()[0] == 0
         metrics['runtime']['postgresVersion'] = db.execute('SHOW server_version').fetchone()[0]

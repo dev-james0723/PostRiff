@@ -190,6 +190,9 @@ def plan_prepare(ctx, args):
 
 def _analytics_gate(ctx, connection):
     _requested(ctx, analytics=True)
+    if ctx.modality == 'voice':
+        raise AlphaError('Ask for YouTube analytics in the text panel. This read is unavailable in voice.', 409,
+                         code='youtube_analytics_text_required')
     creator = _creator(ctx)
     # Membership and immutable channel identity precede access to server credentials.
     _actor, channel, _state = creator._member(ctx.workspace_id, ctx.token, connection, 'read')
@@ -209,7 +212,9 @@ def _analytics_gate(ctx, connection):
         raise AlphaError('Reconnect this channel to its exact agentic OAuth client.', 409, code='youtube_agentic_oauth_required')
     if not has_scopes(grant.get('scopes'), (READ, ANALYTICS)):
         raise AlphaError('Grant the actual channel-read and nonmonetary Analytics scopes first.', 409, code='youtube_agentic_scope_required')
-    return creator, channel
+    from .agent_context import source
+    provenance = source(ctx.workspace_id, connection, channel, grant.get('authorizationGeneration'), ctx.now())
+    return creator, channel, provenance
 
 
 def _range(args):
@@ -254,23 +259,27 @@ def _native_metrics(report, first, last):
 
 def analytics_summary(ctx, args):
     first, last = _range(args)
-    creator, channel = _analytics_gate(ctx, args['connectionId'])
+    creator, channel, provenance = _analytics_gate(ctx, args['connectionId'])
     # Existing creator read path rechecks role, throttles, exact client binding,
     # scope/capability and owned-channel identity. No monetary report or ids=mine.
     report = creator.read(ctx.workspace_id, ctx.token, args['connectionId'], 'analytics',
                           {'report': 'daily', 'startDate': first.isoformat(), 'endDate': last.isoformat()})
     if report.get('channelId') != channel or report.get('source') != 'YouTube Analytics API':
         raise AlphaError('The returned analytics do not match this authorized channel.', 409, code='youtube_identity_mismatch')
-    with ctx.workspace() as (_cur, _row, _actor, member, state):
+    with ctx.workspace() as (cur, _row, _actor, member, state):
         _membership(member, 'read')
         if _channel(state, args['connectionId'])['providerAccountId'] != channel:
             raise AlphaError('This connection changed during analytics retrieval.', 409, code='youtube_identity_mismatch')
+        from .agent_context import assert_current
+        assert_current(creator, ctx.workspace_id, [provenance], cursor=cur, now=ctx.now())
     native = _native_metrics(report, first, last)
     evidence = {'connectionId': args['connectionId'], 'channelId': channel, 'observedAt': ctx.now(), **native}
     ctx.ledger.facts.append({'kind': 'youtube_native_analytics', 'evidence': evidence,
                              'text': 'Requested nonmonetary YouTube analytics, selected unchanged native metric values and dates only.'})
+    if provenance not in ctx.ledger.youtube_provider_context:
+        ctx.ledger.youtube_provider_context.append(provenance)
     return {'ok': True, 'verified': True, 'data': evidence, 'providerState': 'read_only',
-            'modelDisclosure': 'Only requested selected native numeric metrics and their original dates are shared with this turn’s configured model. No revenue, viewer identities, video text or credentials.'}
+            'modelDisclosure': 'Requested native metrics and dates are shared with this turn’s configured reasoning models. The answer and evidence are kept in chat for up to 30 days and removed on disconnect. They are excluded from later AI history, optional follow-up models and saved model state. No revenue, viewer identities, video text or credentials.'}
 
 
 def recommendations(ctx, args):

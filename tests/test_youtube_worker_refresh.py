@@ -20,19 +20,20 @@ class WorkerDatabase:
         self.depth, self.result, self.rowcount = 0, None, 1
         self.capacity_ready, self.tenant_dispatches = capacity_ready, 0
         self.member_role = 'owner'
+        self.youtube_generation = 'synthetic-consent-generation'
         self.state = {'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(channels):
             channel = {'id': f'connection-{index}', 'platform': 'YouTube', 'configured': True,
                        'identityVerified': True, 'capabilityVerified': True, 'revoked': False,
                        'expiresAt': NOW - 1, 'verifiedAt': NOW - 3601, 'scopes': ['youtube.upload'],
                        'providerAccountId': f'UC-synthetic-{index}', 'capabilityVersion': 1}
-            manifest = {'channelId': channel['id'], 'platform': 'YouTube', 'actor': 'owner',
+            manifest = {'workspaceId': 'workspace', 'channelId': channel['id'], 'platform': 'YouTube', 'actor': 'owner',
                         'providerAccountId': channel['providerAccountId'], 'expiresAt': NOW + 3600,
                         'idempotencyKey': f'synthetic-{index}',
                         'capability': {'scopes': list(channel['scopes']), 'version': 1}}
             self.state['phase2']['channels'].append(channel)
             self.state['phase2']['jobs'].append({'id': f'job-{index}', 'manifest': manifest,
-                'approvedBy': 'owner', 'approvalDigest': digest(manifest), 'state': 'approved',
+                'approvedBy': 'owner', 'approvedAt': NOW, 'approvalDigest': digest(manifest), 'state': 'approved',
                 'attempts': [], 'events': []})
 
     @contextmanager
@@ -60,6 +61,10 @@ class WorkerDatabase:
             self.tenant_dispatches += 1
         elif sql.startswith('SELECT m.role,m.can_publish'):
             self.result = (self.member_role, True)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            assert params[0] == 'workspace'
+            channel = next((item for item in self.state['phase2']['channels'] if item['id'] == params[1]), None)
+            self.result = (self.youtube_generation,) if channel and not channel.get('revoked') else None
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
             self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
@@ -177,13 +182,16 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
 
     @patch('postriff_phase2.hosted_worker.assert_job_authority', side_effect=AlphaError('Synthetic paused Autopilot.', 409))
     def test_accepted_native_schedule_readback_survives_paused_autopilot(self, authority):
-        worker, db, _, order, _ = worker_for(1)
-        db.state['phase2']['jobs'][0].update(state='processing', progress={'stage': 'native_scheduled'},
-                                             youtubeAgent={'policyId': 'synthetic-paused-policy'})
-        self.assertTrue(worker.step())
-        self.assertEqual(order, [('reconcile', 'connection-0')])
+        for stage, state in (('native_scheduled', 'processing'), ('native_schedule_reconciling', 'uncertain')):
+            with self.subTest(stage=stage):
+                worker, db, _, order, _ = worker_for(1)
+                db.state['phase2']['jobs'][0].update(state=state, progress={'stage': stage},
+                                                     youtubeAgent={'policyId': 'synthetic-paused-policy'})
+                self.assertTrue(worker.step())
+                self.assertEqual(order, [('reconcile', 'connection-0')])
+                worker.social.submit.assert_not_called()
+                worker.social.youtube.oauth.reverify_for_worker.assert_not_called()
         authority.assert_not_called()
-        worker.social.submit.assert_not_called()
 
     @patch('postriff_phase2.billing.require_publishing')
     @patch('postriff_phase2.hosted_worker.assert_job_authority')
@@ -322,6 +330,26 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
                     worker.social.submit.assert_not_called()
                 else:
                     self.assertEqual(job['leaseId'], 'another-fence')
+
+    @patch('postriff_phase2.billing.require_publishing')
+    def test_disconnect_hold_or_terminal_state_survives_reconnect_during_refresh(self, _billing):
+        for stopped in ('held', 'canceled', 'failed', 'verified'):
+            with self.subTest(stopped=stopped):
+                worker, db, _, _, reverify = worker_for(1)
+
+                def disconnected_then_reconnected(workspace, connection):
+                    # The fresh identity/scopes can match exactly after reconnect.
+                    # The original operation's explicit hold still ends its lease.
+                    result = reverify(workspace, connection)
+                    db.state['phase2']['jobs'][0]['state'] = stopped
+                    return result
+
+                worker.social.youtube.oauth.reverify_for_worker.side_effect = disconnected_then_reconnected
+                self.assertTrue(worker.step())
+                job = db.state['phase2']['jobs'][0]
+                self.assertEqual((job['state'], job['attempts'], job['leaseUntil']), (stopped, [], 0))
+                worker.social.submit.assert_not_called()
+                worker.social.reconcile.assert_not_called()
 
     def test_age_deferral_never_applies_to_revoked_unverified_or_local_channels(self):
         worker, db, _, _, _ = worker_for(1)

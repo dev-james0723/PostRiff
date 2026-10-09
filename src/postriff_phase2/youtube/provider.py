@@ -54,6 +54,8 @@ class YouTubeProvider(OAuthProvider):
         self.real_transport = self.transport is default_transport()
         self.creator_enabled = bool(creator_enabled)
         self.project_evidence = project_evidence or {}
+        # An explicit public client binding is itself a policy-enforcement signal.
+        self.policy_public_binding = bool(production_reviewed or self.project_evidence.get('publicUploadEligibility'))
 
     @classmethod
     def mount(cls, values, transport=None):
@@ -68,6 +70,9 @@ class YouTubeProvider(OAuthProvider):
         agentic, agentic_diagnostic = cls.mount_agentic(values, transport)
         if adapter:
             adapter.agentic_provider = agentic
+            adapter.policy_public_binding = bool(adapter.policy_public_binding
+                or values.get('POSTRIFF_YOUTUBE_PUBLIC_BASE_URL')
+                or str(values.get(cls.env_prefix() + 'REVIEWED', '')).lower() == 'true')
         diagnostic['creatorEnabled'] = bool(adapter and adapter.creator_enabled)
         diagnostic['publicUploadGateVerified'] = bool(adapter and project_public_gate(adapter))
         diagnostic['authorizationLane'] = 'standard'

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -182,6 +183,8 @@ def review_payload(draft):
 
 
 def assert_draft_current(state, draft, now):
+    if draft.get('privacyErased'):
+        raise AlphaError('This plan contains erased YouTube API identity data. Prepare and approve a new plan.', 409, code='youtube_privacy_erased')
     if draft.get('digest') != draft_digest(draft):
         raise AlphaError('The publishing plan changed. Prepare a new plan.', 409)
     channel, asset = _channel(state, draft['connectionId']), _asset(state, draft['assetId'])
@@ -253,6 +256,8 @@ def activate_policy(state, connection, identifier, body, actor, now):
     policy = next((p for p in root(state)['policies'] if p.get('id') == identifier and p.get('connectionId') == connection), None)
     if not policy:
         raise AlphaError('YouTube policy unavailable.', 404)
+    if policy.get('privacyErased'):
+        raise AlphaError('This policy contains erased YouTube API identity data. Prepare a new policy.', 409, code='youtube_privacy_erased')
     if (body.get('confirmed') is not True or body.get('digest') != policy.get('digest')
             or policy.get('digest') != policy_digest(policy) or body.get('confirmationChannelId') != policy['channelId']):
         raise AlphaError('Confirm the exact channel, plans, source videos, times and limits.', 400)
@@ -283,6 +288,8 @@ def change_policy(state, connection, identifier, action, actor, now):
 
 
 def assert_policy(state, policy, draft, now):
+    if policy.get('privacyErased') or draft.get('privacyErased'):
+        raise AlphaError('Erased YouTube approvals cannot authorize publication.', 409, code='youtube_privacy_erased')
     if (policy.get('status') != 'active' or policy.get('digest') != policy_digest(policy)
             or not policy['startsAt'] <= now < policy['endsAt'] or not policy.get('grantedBy')
             or policy.get('channelId') != draft.get('channelId') or policy.get('connectionId') != draft.get('connectionId')
@@ -314,6 +321,8 @@ def assert_job_authority(state, job, now):
 
 def queue_draft(commands, state, connection, identifier, actor, now, *, policy=None):
     draft = find_draft(state, connection, identifier)
+    if draft.get('privacyErased'):
+        raise AlphaError('This plan contains erased YouTube API identity data. Prepare and approve a new plan.', 409, code='youtube_privacy_erased')
     if draft.get('jobId'):
         return draft  # Immutable job ID fences repeated manual/worker dispatch.
     variant = assert_draft_current(state, draft, now)
@@ -341,11 +350,13 @@ class YouTubePublishingAgent:
         self.creator, self.service = creator, creator.service
         self.repository, self.clock = creator.repository, creator.clock
 
-    def _member(self, workspace, token, connection, right='read', fresh=False):
-        return self.creator._member(workspace, token, connection, right, fresh=fresh)
+    def _member(self, workspace, token, connection, right='read', fresh=False, *, policy_required=True):
+        return self.creator._member(workspace, token, connection, right, fresh=fresh, policy_required=policy_required)
 
     def overview(self, workspace, token, connection, *, draft_cursor=None, policy_cursor=None, limit=25):
-        _, channel, state = self._member(workspace, token, connection)
+        # Local standing-authority controls stay visible for pause/revoke even
+        # when a legal revision blocks new Creator/provider execution.
+        _, channel, state = self._member(workspace, token, connection, policy_required=False)
         from .pagination import live_page
         data = state.get('youtubeAgent', {})
         drafts = live_page(data.get('drafts', []), workspace, connection, 'draft', self.clock(), limit=limit, cursor=draft_cursor)
@@ -359,7 +370,15 @@ class YouTubePublishingAgent:
             provider = self.creator.oauth.provider_for_connection(workspace, connection)
         except AlphaError:
             provider = None
-        view['autopilotGate'] = {'canActivate': bool(getattr(provider, 'authorization_lane', None) == 'agentic'
+        policy_ready = True
+        try:
+            with self.repository.transaction(token, workspace) as (cur, _, actor):
+                self.creator.oauth.youtube_policy.require_user(cur, workspace, actor, token, provider, force=True)
+        except AlphaError as error:
+            if error.code not in ('youtube_policy_not_ready', 'youtube_policy_acceptance_required', 'youtube_policy_interactive_required'):
+                raise
+            policy_ready = False
+        view['autopilotGate'] = {'canActivate': bool(policy_ready and getattr(provider, 'authorization_lane', None) == 'agentic'
             and getattr(provider, 'creator_enabled', False) and getattr(provider, 'execution_enabled', True) and project_public_gate(provider)),
             'reason': 'A separate, actually routed agentic OAuth client and verified Google/YouTube approvals are required.'}
         view['pauseNotice'] = 'Pause stops new uploads and API writes. A video already scheduled on YouTube must be cancelled separately in Creator.'
@@ -391,11 +410,11 @@ class YouTubePublishingAgent:
         return {'revision': result['revision'], 'result': result, 'queued': False,
                 'executed': False, 'providerVerified': False}
 
-    def _write(self, workspace, token, connection, body, operation, *, right='edit', fresh=False, billing=False):
+    def _write(self, workspace, token, connection, body, operation, *, right='edit', fresh=False, billing=False, policy_required=True):
         from ..billing import require_publishing
         from ..source_policy import stamp
         revision = body.get('revision')
-        self._member(workspace, token, connection, right, fresh=fresh)
+        self._member(workspace, token, connection, right, fresh=fresh, policy_required=policy_required)
         output = {}
         def apply(state, actor):
             output.update(operation(state, actor))
@@ -405,7 +424,7 @@ class YouTubePublishingAgent:
         saved = self.repository.command(workspace, token, revision, apply, requirement=right, step_up=fresh,
             audit_event=lambda state: ('youtube.agent_' + body.get('_event', 'changed'), connection,
                 {'draftId': output.get('id') if 'assetId' in output else None, 'policyId': output.get('id') if 'drafts' in output else None,
-                 'status': output.get('status'), 'channelId': output.get('channelId')}),
+                 'status': output.get('status'), 'connectionId': connection}),
             after=(lambda cur, state, actor: require_publishing(cur, workspace, self.clock())) if billing else None)
         from .pagination import projection
         public = projection(output, 'draft' if 'assetId' in output else 'policy', self.clock())
@@ -476,7 +495,8 @@ class YouTubePublishingAgent:
         if action not in ('pause', 'revoke'):
             raise AlphaError('YouTube policy action unavailable.', 404)
         return self._write(workspace, token, connection, {**body, '_event': 'policy_' + action},
-            lambda state, actor: change_policy(state, connection, identifier, action, actor, self.clock()), right='owner')
+            lambda state, actor: change_policy(state, connection, identifier, action, actor, self.clock()),
+            right='owner', policy_required=False)
 
     def _select_candidate(self, *, fleet=False, exclude_workspaces=()):
         """Fleet selection commits a 120-second fenced lease before OAuth I/O."""
@@ -487,7 +507,12 @@ class YouTubePublishingAgent:
             filters = " AND NOT (id=ANY(%s::uuid[])) AND coalesce((state#>>'{youtubeAgent,fleetLease,until}')::float8,0)<=%s"
             extra = (list(exclude_workspaces), self.clock())
         with self.service.connection_factory() as db, db.cursor() as cur:
-            cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
+            from .operations import planner_sql, schema_ready
+            indexed = schema_ready(cur)
+            if indexed:
+                cur.execute(planner_sql(fleet=fleet), (self.clock(), self.clock()) + extra)
+            else:
+                cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
                 AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
                 AND EXISTS(SELECT 1 FROM jsonb_array_elements(state#>'{youtubeAgent,policies}') p,
                     jsonb_array_elements(state#>'{youtubeAgent,drafts}') d
@@ -497,9 +522,35 @@ class YouTubePublishingAgent:
                       AND EXISTS(SELECT 1 FROM jsonb_array_elements(p->'drafts') e WHERE e->>'id'=d->>'id'))
                 """ + filters + """ ORDER BY coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0),id LIMIT 100""" +
                 (' FOR UPDATE SKIP LOCKED' if fleet else ''),
-                (self.clock(), self.clock(), self.clock() + 1800) + extra)
-            for workspace, raw in cur.fetchall():
+                    (self.clock(), self.clock(), self.clock() + 1800) + extra)
+            for selected in cur.fetchall():
+                if indexed:
+                    workspace = selected[0]
+                    cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (workspace,))
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+                    raw = row[0]
+                else:
+                    workspace, raw = selected
                 state = json.loads(raw) if isinstance(raw, str) else raw
+                if 'accountDeletion' in state or 'accountBlock' in state:
+                    continue
+                if fleet:
+                    # A projection read can precede another caller's commit.
+                    # Recheck the hydrated authority while holding its row lock.
+                    lease = root(state).get('fleetLease')
+                    if lease is not None and not isinstance(lease, dict):
+                        continue
+                    until = (lease or {}).get('until')
+                    until = 0 if until is None else until
+                    if type(until) not in (int, float):
+                        continue
+                    try:
+                        if not math.isfinite(until) or until > self.clock():
+                            continue
+                    except OverflowError:
+                        continue
                 for policy in root(state)['policies']:
                     if policy.get('status') != 'active' or not policy['startsAt'] <= self.clock() < policy['endsAt']:
                         continue
@@ -584,7 +635,7 @@ class YouTubePublishingAgent:
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                             (json.dumps(state), workspace, row[0]))
                 audit(cur, workspace, policy['grantedBy'], 'youtube.agent_dispatched', result['jobId'],
-                      {'policyId': policy_id, 'draftId': draft_id, 'channelId': policy['channelId']})
+                      {'policyId': policy_id, 'draftId': draft_id, 'connectionId': connection})
             return {'dispatched': True, 'jobId': result['jobId'], 'providerVerified': False}
         except AlphaError as error:
             if getattr(error, 'capacity_reason', None) == 'fleet_budget':

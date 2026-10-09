@@ -54,7 +54,7 @@ class FleetConfigTests(unittest.TestCase):
     def test_missing_schema_or_actual_creator_fails_before_work(self):
         service, worker = runtime()
         service.youtube.fleet_schema_ready.return_value = False
-        self.assertEqual(fleet.run_lane(service, worker, 'upload', ON)['blocker'], 'youtube_schema_089_097_required')
+        self.assertEqual(fleet.run_lane(service, worker, 'upload', ON)['blocker'], 'youtube_schema_089_097_104_required')
         worker.tick_youtube.assert_not_called()
         service.youtube.oauth.providers['youtube'].creator_enabled = False
         self.assertEqual(fleet.run_lane(service, worker, 'identity', ON)['blocker'], 'youtube_creator_unavailable')
@@ -157,7 +157,7 @@ class WorkerIsolationTests(unittest.TestCase):
         selected = worker.claim(youtube_only=True)
         self.assertEqual(selected['job']['id'], 'job-1')
         self.assertEqual(db.state['phase2']['jobs'][0], unchanged)
-        self.assertIn("j#>>'{manifest,platform}'='YouTube'", due_workspaces_sql(youtube_only=True))
+        self.assertIn("j#>>'{manifest,platform}'='YouTube'", due_workspaces_sql(youtube_only=True, operations_ready=False))
         self.assertIn("coalesce(j#>>'{manifest,platform}','')<>'YouTube'", due_workspaces_sql(exclude_youtube=True))
         with self.assertRaises(AlphaError):
             worker.claim(youtube_only=True, exclude_youtube=True)

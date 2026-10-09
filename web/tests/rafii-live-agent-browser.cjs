@@ -566,7 +566,13 @@ async function slashSection(browser) {
     check('slash: Enter picks /weather without sending: the input reads “/weather ”', Boolean(picked) && net.turns.length === turnsBefore, { value: await input.inputValue(), turns: net.turns.length - turnsBefore });
     check('slash: … and the menu closes', await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false));
 
+    await input.fill('');
+    const clearedBeforeEscape = await until(async () => (await input.inputValue()) === '' ? true : null, { timeout: 5000 });
+    if (!clearedBeforeEscape) throw new Error('Slash fixture could not clear the previously picked command.');
     await input.fill('/we');
+    const escapePrefixReady = await until(async () => input.evaluate((el) =>
+      el.value === '/we' && el.selectionStart === 3 && el.selectionEnd === 3), { timeout: 5000 });
+    if (!escapePrefixReady) throw new Error('Slash fixture requires the exact /we prefix and caret before Escape.');
     await menu.waitFor({ timeout: 10000 });
     await input.press('Escape');
     const escaped = await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false);
