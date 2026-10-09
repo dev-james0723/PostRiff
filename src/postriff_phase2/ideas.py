@@ -1391,6 +1391,8 @@ class IdeasService:
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
         self._check_capability_revision(payload, destinations)
+        if callable(getattr(runtime, "refuse_native_formats", None)):
+            runtime.refuse_native_formats(destinations)   # before any reservation or writing
         plan = intent.build_plan(parsed, destinations)
         if text and not recurring and not reworking and not chips:
             # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
@@ -2052,6 +2054,8 @@ class IdeasService:
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
         self._check_capability_revision(payload, destinations)
+        if callable(getattr(runtime, "refuse_native_formats", None)):
+            runtime.refuse_native_formats(destinations)   # before any reservation or writing
         if text and not chips and self._may_orchestrate(workspace_id, token, text, parsed, reading):
             # Home is the primary place to create, change or ask about automations (orchestration §7).
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))

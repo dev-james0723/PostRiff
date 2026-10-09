@@ -477,10 +477,10 @@ def export_package(variants, *, campaign_id=None, created_at=None):
         name = f"{index + 1:02d}-{slug}-{native.get('formatId') or 'text'}-{language}.txt".replace("/", "-")
         lines = [variant.get("text") or ""]
         fields = native.get("fields") or {}
-        for key in ("title", "description", "question", "options", "cta", "terms", "start", "end", "flair", "category", "content_warning"):
+        for key in ("title", "description", "question", "options", "sequence", "cta", "terms", "start", "end", "flair", "category", "content_warning", "spokenScript", "onScreenText"):
             if fields.get(key) and not (key == "title" and platform == "Xiaohongshu"):
                 lines.append(f"[{key}]\n{fields[key] if not isinstance(fields[key], list) else chr(10).join(map(str, fields[key]))}")
-        for key in ("slides", "segments"):
+        for key in ("slides", "segments", "frames"):
             for item in fields.get(key) or []:
                 lines.append(f"[{key[:-1]} {item.get('index')}]\n{item.get('text')}")
         if fields.get("altText"):

@@ -304,6 +304,14 @@ class ClaudeCliRuntime(AgentRuntime):
     def owns(self, model_id):
         return isinstance(model_id, str) and model_id in {f"{MODEL_PREFIX}{alias}" for alias in MODEL_ALIASES}
 
+    @staticmethod
+    def refuse_native_formats(destinations):
+        """This writer's contract has no native-format slots: a non-default format is refused before it runs, so two
+        formats on one account can never share one answer."""
+        from .creation_capabilities import DEFAULT_FORMATS
+        if any(d.get("format") and d["format"] != DEFAULT_FORMATS.get(d.get("platform")) for d in destinations or []):
+            raise AlphaError("This writer can't write native formats yet. Choose the default format or another writer.", 400, code="format_unsupported_by_route")
+
     def supported_platforms(self):
         # The creation projection decides what any route may draft for (one source, flag-gated); never a second list.
         from .agent_runtime import draftable_platforms
@@ -409,6 +417,7 @@ class ClaudeCliRuntime(AgentRuntime):
 
     # --- execution -----------------------------------------------------------------
     def dispatch(self, run_id, request, sink):
+        self.refuse_native_formats(request.get("destinations"))
         thread = threading.Thread(target=self.execute, args=(run_id, request, sink), name=f"claude-code-{run_id[:8]}", daemon=True)
         thread.start()
         return thread

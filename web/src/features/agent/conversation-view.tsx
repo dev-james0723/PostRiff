@@ -247,7 +247,13 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const restoreLanguages = languages.restore;
   useEffect(() => {
     const last = lastAssistant ? bodyOf(lastAssistant).destinations : undefined;
-    if (last && last.length > 0) restoreLanguages(last, draftPlatforms);
+    if (last && last.length > 0) {
+      restoreLanguages(last, draftPlatforms);
+      // The conversation keeps its native formats too, so "draft again" never falls back to the platform default.
+      const formats: Record<string, string> = {};
+      for (const d of last as { platform: string; channelId?: string; format?: string }[]) if (d.format) formats[d.channelId ?? d.platform] = d.format;
+      setNativeFormats(formats);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per assistant turn
   }, [lastAssistant]);
 

@@ -257,10 +257,11 @@ def variant_evidence(cur, workspace_id, state, now):
         metrics = {}
         for name, read in post["metrics"].items():
             state_ = "available" if read.get("value") is not None else "unavailable"
-            if state_ == "available" and observed is not None and now - observed > STALE_SECONDS:
+            seen = read.get("observedAt") if read.get("observedAt") is not None else observed   # each metric's own read time
+            if state_ == "available" and seen is not None and now - seen > STALE_SECONDS:
                 state_ = "stale"
             metrics[name] = {"value": read.get("value"), "state": state_, "definitionVersion": read.get("definitionVersion"),
-                             "window": read.get("readOffset"), "provider": post["provider"]}
+                             "window": read.get("readOffset"), "observedAt": seen, "provider": post["provider"]}
         expected = PRIMARY.get(post["provider"])
         if expected and expected not in metrics:
             metrics[expected] = {"value": None, "state": "not_reported", "definitionVersion": None, "window": None, "provider": post["provider"]}

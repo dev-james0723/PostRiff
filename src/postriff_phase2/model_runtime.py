@@ -924,7 +924,9 @@ class ServerModelRuntime(AgentRuntime):
             tag = locales.canonical(d["language"]) or d["language"]
             account_id = d.get("channelId")
             fmt = d.get("format") or _native_slots(d).get("format")
-            item = by_key.get((d["platform"], tag, account_id, fmt)) or by_key.get((d["platform"], tag, account_id, None))
+            # A formatless answer fits only when no other requested slot shares this platform, language and account.
+            siblings = [o for o in destinations if o["platform"] == d["platform"] and (locales.canonical(o["language"]) or o["language"]) == tag and o.get("channelId") == account_id]
+            item = by_key.get((d["platform"], tag, account_id, fmt)) or (by_key.get((d["platform"], tag, account_id, None)) if len(siblings) == 1 else None)
             same_locale = [other for other in destinations if other["platform"] == d["platform"] and (locales.canonical(other["language"]) or other["language"]) == tag]
             # Older responses may omit identity (account, format) only when the requested slot is unambiguous.
             if item is None and len(same_locale) == 1:

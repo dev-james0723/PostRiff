@@ -594,8 +594,11 @@ class CoworkerService:
         base_id = None
         if payload.get("regenerate") is True:
             # An explicit regenerate is a new tracked revision; the earlier campaign and its drafts stay as they are.
-            revisions = [x for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x["id"] == record_id or x.get("baseId") == record_id]
-            base_id, record_id = record_id, f"{record_id}_r{len(revisions) + 1}"
+            # Monotonic over the retained history (which is bounded): the next number is above every kept revision, so a
+            # trimmed list can never make a new regenerate collide with a kept one.
+            kept = [x["id"] for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x.get("baseId") == record_id]
+            numbers = [int(i.rsplit("_r", 1)[1]) for i in kept if i.rsplit("_r", 1)[-1].isdigit()]
+            base_id, record_id = record_id, f"{record_id}_r{max(numbers + [1]) + 1}"
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "edit")

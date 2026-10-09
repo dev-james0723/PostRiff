@@ -469,6 +469,38 @@ class LearningEvidenceTest(FlagIsolation):
         self.assertIn("not proven", summary["labels"]["hypotheses"])
 
 
+class ReviewFixTest(FlagIsolation):
+    """Regressions for the independent review (Codex CLI) findings."""
+
+    def test_formatless_answer_never_fills_two_formats_on_one_account(self):
+        from postriff_phase2.model_runtime import _Retry
+        destinations = [{"platform": "Instagram", "language": "en", "format": "instagram.carousel"}, {"platform": "Instagram", "language": "en", "format": "instagram.reel"}]
+        content = json.dumps({"variants": [{"platform": "Instagram", "language": "en", "text": "One answer", "sourceIds": []}]})
+        with self.assertRaises(_Retry):
+            ServerModelRuntime._parse(content, destinations, CONTEXT)
+
+    def test_a_chip_never_adds_a_default_post_for_a_formatted_account(self):
+        from postriff_phase2 import turn_references
+        merged = turn_references.merge_destinations([{"platform": "Instagram", "language": "en", "channelId": "ig", "format": "instagram.carousel"}],
+                                                    [{"platform": "Instagram", "channelId": "ig"}, {"platform": "LinkedIn", "channelId": "li"}])
+        self.assertEqual([(d["platform"], d.get("format")) for d in merged], [("Instagram", "instagram.carousel"), ("LinkedIn", None)])
+
+    def test_cli_route_refuses_native_formats_before_running(self):
+        from postriff_phase2.cli_runtime import ClaudeCliRuntime
+        ClaudeCliRuntime.refuse_native_formats([{"platform": "Instagram", "language": "en", "format": "instagram.post"}])
+        with self.assertRaises(AlphaError) as caught:
+            ClaudeCliRuntime.refuse_native_formats([{"platform": "Instagram", "language": "en", "format": "instagram.reel"}])
+        self.assertEqual(caught.exception.code, "format_unsupported_by_route")
+
+    def test_export_keeps_scripts_frames_and_sequence(self):
+        variant = {"platform": "Instagram", "language": "en", "format": "instagram.reel", "text": "Caption",
+                   "nativeFields": {"spokenScript": "Say this", "onScreenText": "Show this"}}
+        cc.attach_native([variant])
+        text = cc.export_package([variant])["files"][0]["text"]
+        self.assertIn("[spokenScript]\nSay this", text)
+        self.assertIn("[onScreenText]\nShow this", text)
+
+
 class PackReviewTest(FlagIsolation):
     """A17 (automated part): no shipped channel adapter or shared playbook demands hashtag quotas, promises reach, or
     tells the writer to invent experience. Editorial quality itself still needs the human/paired review."""
