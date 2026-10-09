@@ -62,6 +62,7 @@ export function YouTubePolicyAcceptance({ force = false, onAvailabilityChange }:
             <>
               <label htmlFor={checkboxId} className='flex items-start gap-2'>
                 <input id={checkboxId} type='checkbox' checked={checked} disabled={busy}
+                  aria-label='I agree to these Privacy Policy and Terms revisions for my YouTube use in this workspace.'
                   onChange={(event) => setChoice({ policyId: policy.id, confirmed: event.target.checked })} />
                 <span>I agree to these Privacy Policy and Terms revisions for my YouTube use in this workspace.</span>
               </label>
