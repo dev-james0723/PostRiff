@@ -20,7 +20,61 @@ import time
 
 VERSION = 'source-page-v1'
 SUPPORTED = {'pdf', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm', 'csv', 'json'}
-ROOT = Path(__file__).resolve().parents[2] / '.document-runtime'
+# The verified native renderer is shipped as an immutable, xz-compressed
+# artifact. Vercel's standard Python function limit applies to the deployed
+# archive, not to its expanded contents. Expand only when a document needs it.
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+_ARCHIVE = _PACKAGE_ROOT / '.document-runtime.tar.xz'
+_MANIFEST = _PACKAGE_ROOT / '.document-runtime.tar.xz.sha256'
+_RENDERER_BUILD = '26.2.6-headless-minimal-3'
+_ARCHIVE_ID = _MANIFEST.read_text().strip() if _MANIFEST.is_file() else ''
+ROOT = (Path(tempfile.gettempdir()) / ('rafii-document-' + _ARCHIVE_ID[:20])
+        if _ARCHIVE.is_file() else _PACKAGE_ROOT / '.document-runtime')
+
+def _ensure_renderer():
+    """Validate and atomically unpack the first-use native runtime into /tmp.
+
+    No network access, shell execution or external package download. A cross-
+    process flock serializes first-use unpacking within the Lambda instance.
+    """
+    if not _ARCHIVE.is_file():
+        return  # Existing local/development renderer, or unsupported format.
+    import fcntl
+    import hashlib
+    import tarfile
+    if not re.fullmatch(r'[a-f0-9]{64}', _ARCHIVE_ID):
+        raise RuntimeError('Document renderer checksum manifest unavailable')
+    if (ROOT / 'VERSION').is_file() and (ROOT / 'VERSION').read_text() == _RENDERER_BUILD:
+        return
+    lock_file = ROOT.with_name(ROOT.name + '.lock')
+    with lock_file.open('a+b') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if (ROOT / 'VERSION').is_file() and (ROOT / 'VERSION').read_text() == _RENDERER_BUILD:
+            return
+        if _ARCHIVE.stat().st_size > 160_000_000:
+            raise RuntimeError('Document renderer archive exceeds approved size')
+        with _ARCHIVE.open('rb') as archive:
+            if hashlib.file_digest(archive, 'sha256').hexdigest() != _ARCHIVE_ID:
+                raise RuntimeError('Document renderer archive integrity mismatch')
+        with tempfile.TemporaryDirectory(prefix='rafii-document-extract-', dir=tempfile.gettempdir()) as temporary:
+            stage = Path(temporary) / 'runtime'
+            stage.mkdir()
+            with tarfile.open(_ARCHIVE, 'r:xz') as tar:
+                members = tar.getmembers()
+                if len(members) > 25000 or sum(m.size for m in members) > 385_000_000:
+                    raise RuntimeError('Document renderer extracted size exceeds approved budget')
+                if any(not (m.isfile() or m.isdir()) for m in members):
+                    raise RuntimeError('Document renderer archive contains unsupported file types')
+                tar.extractall(stage, filter='data')
+            if ((stage / 'VERSION').read_text() != _RENDERER_BUILD
+                or not (stage / 'office/program/soffice.bin').is_file()
+                or not (stage / 'lib/libseccomp.so.2').is_file()):
+                raise RuntimeError('Document renderer archive contents invalid')
+            if ROOT.exists():
+                import shutil
+                shutil.rmtree(ROOT)
+            os.rename(stage, ROOT)
+
 
 def _deny_internet():
     import ctypes
@@ -189,6 +243,7 @@ def render(raw, extension, page_number=1, metadata=False):
             page.close()
 
 def _isolated_output(raw, extension, argument=None, maximum=3*1024*1024):
+    _ensure_renderer()
     env = {'PATH':os.environ.get('PATH','/usr/bin:/bin'), 'PYTHONPATH':os.pathsep.join(dict.fromkeys([str(Path(__file__).resolve().parents[1]),*sys.path])), 'PYTHONDONTWRITEBYTECODE':'1'}
     command = [sys.executable, '-m', 'postriff_phase2.library_preview', extension]
     if argument is not None: command.append(str(argument))
@@ -232,6 +287,7 @@ def extract_text_isolated(raw, extension):
     return data['text']
 
 if __name__ == '__main__':
+    _ensure_renderer()
     import resource
     resource.setrlimit(resource.RLIMIT_CPU, (40,40))
     resource.setrlimit(resource.RLIMIT_AS, (1536*1024*1024,1536*1024*1024))
