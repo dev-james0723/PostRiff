@@ -24,7 +24,7 @@ DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 NOW, TTL = 1800000000, 30 * 86400
 WORKSPACES = [str(uuid4()), str(uuid4()), str(uuid4())]
 CONNECTION = 'synthetic-projection-' + uuid4().hex
-MIGRATION = (ROOT / 'migrations/postriff/104_youtube_operations_projection.sql').read_text()
+MIGRATION = (ROOT / 'migrations/postriff/106_youtube_operations_projection.sql').read_text()
 TABLES = ('pr_youtube_operations', 'pr_youtube_planner_candidates')
 FUNCTIONS = (
     'public.pr_youtube_projection_number(jsonb)',
