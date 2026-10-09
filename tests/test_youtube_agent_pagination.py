@@ -82,14 +82,24 @@ class PagingTests(unittest.TestCase):
         value = state(); draft, policy = draft_and_policy(value)
         value['youtubeAgent']['fleetLease'] = {'id':'private-lease', 'authorization': {'grantedBy':'private-owner'}}
         value['youtubeAgent']['drafts'].append(copy.deepcopy(draft) | {'id':'foreign', 'connectionId':'other-channel'})
-        creator = SimpleNamespace(service=SimpleNamespace(),repository=SimpleNamespace(),clock=lambda:NOW,
-                                  oauth=SimpleNamespace(provider_for_connection=Mock(return_value=None)))
+        before = copy.deepcopy(value)
+        cursor, require_policy = Mock(), Mock()
+        @contextmanager
+        def transaction(token, workspace):
+            self.assertEqual((token, workspace), ('token', 'workspace'))
+            yield cursor, (1, copy.deepcopy(value), 'owner', False, False, False, False), 'owner'
+        creator = SimpleNamespace(service=SimpleNamespace(),repository=SimpleNamespace(transaction=transaction),clock=lambda:NOW,
+                                  oauth=SimpleNamespace(provider_for_connection=Mock(return_value=None),
+                                                        youtube_policy=SimpleNamespace(require_user=require_policy)))
         agent = YouTubePublishingAgent(creator); agent._member = Mock(return_value=('owner',CHANNEL,value))
         overview = agent.overview('workspace','token',CONNECTION)
         self.assertEqual(len(overview['drafts']), 1)
         self.assertNotIn('fleetLease', overview)
         self.assertNotIn('grantedBy', str(overview))
         self.assertIn('pagination', overview)
+        self.assertFalse(overview['autopilotGate']['canActivate'])
+        require_policy.assert_called_once_with(cursor, 'workspace', 'owner', 'token', None, force=True)
+        self.assertEqual(value, before, 'Reading overview cannot mutate standing authority or another channel.')
 
 
 class HistoryRouteTests(unittest.TestCase):

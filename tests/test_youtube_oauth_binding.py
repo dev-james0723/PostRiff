@@ -63,6 +63,9 @@ class CredentialRepository:
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', 'UC' + 'a' * 22, self.state)
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
+            if sql.endswith('FOR UPDATE'):
+                assert params == ('workspace',)
+                self.revocation_locks.append('workspace')
             self.result = (self.state,)
         elif sql.startswith('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials'):
             if "provider='youtube'" in sql and sql.endswith('FOR UPDATE'):

@@ -93,6 +93,9 @@ class ComposerDatabase:
             credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
             self.result = ((credential['token'], 'test') if credential and not credential['revoked'] else None)
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
+            if sql.endswith('FOR UPDATE'):
+                assert params == ('workspace',)
+                self.revocation_locks.append('workspace')
             self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
             self.state, self.revision = json.loads(params[0]), self.revision + 1

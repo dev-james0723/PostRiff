@@ -374,10 +374,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');markDiagnosticNavigation('goto',base+'/app/library');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
    await page.getByRole('button',{name:'Close asset details'}).click();
-   // Base UI retains an inert, hidden portal node after dismissal. Confirm
-   // that the overlay is no longer visible/interactable before scrolling,
-   // rather than requiring DOM removal (which the component does not promise).
-   if(width===390)await page.locator('[data-slot="drawer-portal"]').waitFor({state:'hidden',timeout:5000});
+   // The portal wrapper can have no bounding box while its fixed modal children
+   // are still open. Observe the actual hit-blocking viewport after dismissal;
+   // hidden also allows DOM removal when the exit transition completes.
+   if(width===390)await page.locator('[data-slot="drawer-viewport"]').waitFor({state:'hidden',timeout:5000});
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();

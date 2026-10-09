@@ -17,11 +17,15 @@ from postriff_phase2.youtube.agent import (
 from test_youtube_agent import CHANNEL, CONNECTION, NOW, body, draft_and_policy, state
 
 
+GENERATION = 'synthetic-consent-generation'
+
+
 class AuthorityDatabase:
     """Small transaction fixture; SQL operations affect independent credential/state rows."""
     def __init__(self, value):
         self.state, self.revision, self.result, self.rowcount = value, 1, None, 0
-        self.credentials = {CONNECTION: {'provider': 'youtube', 'access': 'synthetic-access', 'revoked': False},
+        self.credentials = {CONNECTION: {'provider': 'youtube', 'access': 'synthetic-access', 'revoked': False,
+                                        'generation': GENERATION},
                             'gmail-calendar': {'provider': 'google', 'access': 'synthetic-google-access', 'revoked': False}}
         self.workspace_locked, self.fail_state_write = False, False
         self.assert_fresh, self.mutate = Mock(), Mock(return_value={'revision': 3})
@@ -55,8 +59,13 @@ class AuthorityDatabase:
             row = self.credentials.get(params[1])
             self.result = (row['provider'], row['access'], 'synthetic-key') if row and not row['revoked'] else None
         elif sql.startswith('SELECT access_ciphertext,key_id FROM'):
+            assert self.workspace_locked, 'Revocation must lock workspace before credential.'
             row = self.credentials.get(params[1])
             self.result = (row['access'], 'synthetic-key') if row and row['provider'] == 'youtube' and not row['revoked'] else None
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            assert self.workspace_locked
+            row = self.credentials.get(params[1])
+            self.result = (row['generation'],) if row and row['provider'] == 'youtube' and not row['revoked'] else None
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET revoked_at='):
             assert self.workspace_locked, 'Credential and policy revocation must share the workspace lock.'
             self.credentials[params[1]].update(access='', revoked=True)
@@ -186,11 +195,21 @@ class ConnectionAuthorityTests(unittest.TestCase):
         oauth, database = oauth_fixture(value)
         before = copy.deepcopy(database.state)
         with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.youtube.journal.purge_authorized_data') as purge:
-            self.assertFalse(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-stale-access'))
+            self.assertFalse(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-stale-access', expected_generation=GENERATION))
             self.assertEqual(database.state, before)
             self.assertFalse(oauth.mark_youtube_revoked('workspace', CONNECTION))
+            self.assertFalse(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access'))
+            self.assertFalse(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access', expected_generation='synthetic-old-consent'))
+            self.assertEqual(database.state, before)
+            self.assertFalse(database.credentials[CONNECTION]['revoked'])
             purge.assert_not_called()
-            self.assertTrue(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access'))
+            def after_authority_write(*_args):
+                self.assertTrue(database.credentials[CONNECTION]['revoked'])
+                self.assertTrue(database.state['phase2']['channels'][0]['revoked'])
+                self.assertEqual(root(database.state)['policies'][0]['status'], 'revoked')
+                self.assertEqual(database.revision, 2)
+            purge.side_effect = after_authority_write
+            self.assertTrue(oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access', expected_generation=GENERATION))
             purge.assert_called_once_with(database, 'workspace', CONNECTION)
         self.assertTrue(database.credentials[CONNECTION]['revoked'])
         self.assertTrue(database.state['phase2']['channels'][0]['revoked'])
@@ -206,7 +225,7 @@ class ConnectionAuthorityTests(unittest.TestCase):
         database.fail_state_write = True
         with patch('postriff_phase2.hosted.audit'), patch('postriff_phase2.youtube.journal.purge_authorized_data'):
             with self.assertRaises(RuntimeError):
-                oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access')
+                oauth.mark_youtube_revoked('workspace', CONNECTION, expected_access_token='synthetic-access', expected_generation=GENERATION)
         self.assertEqual((database.state, database.credentials, database.revision), before)
 
     def test_generic_provider_disconnect_keeps_legacy_path_and_youtube_authority(self):
