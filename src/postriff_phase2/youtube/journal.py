@@ -1,7 +1,9 @@
 """Server-only, workspace-scoped journals. Commit intent before any remote write."""
 from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
+import time
 
 from postriff_alpha.domain import AlphaError
 
@@ -9,6 +11,92 @@ from postriff_alpha.domain import AlphaError
 class UploadJournal:
     def __init__(self, connection_factory, vault):
         self.connection_factory, self.vault = connection_factory, vault
+        # A shared service can execute several uploads concurrently. Keep each
+        # lock's exact consent generation in its execution context, never in a
+        # mutable instance-wide field or in the customer-visible journal state.
+        self._authorization = ContextVar('youtube_upload_authorization', default=None)
+
+    @staticmethod
+    def _authorization_error(changed=False):
+        error = AlphaError('This YouTube authorization was disconnected or replaced. Reconnect and review before continuing.',
+                           409, code='youtube_revoked_oauth')
+        # This is a local fence, not a provider revocation observation. In
+        # particular, an old worker must never purge a newer consent grant.
+        error.youtube_authorization_fence = True
+        error.youtube_authorization_changed = changed
+        return error
+
+    @staticmethod
+    def _schema(cur):
+        cur.execute("""SELECT EXISTS(SELECT 1 FROM pg_attribute
+            WHERE attrelid=to_regclass('public.pr_encrypted_credentials')
+              AND attname='authorization_generation' AND NOT attisdropped)""")
+        if not cur.fetchone()[0]:
+            raise AlphaError('YouTube publishing is temporarily unavailable. Try again later or contact Rafii support. No request was sent to YouTube.',
+                             503, code='youtube_authorization_schema')
+
+    @staticmethod
+    def _generation(cur, key, *, locked=False):
+        cur.execute("""SELECT authorization_generation::text FROM public.pr_encrypted_credentials
+            WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL"""
+            + (' FOR NO KEY UPDATE' if locked else ''), key[:2])
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def _assert_current(self, cur, key, *, locked=False):
+        expected = self._authorization.get()
+        if expected is None or expected[0] != tuple(key):
+            raise self._authorization_error(changed=True)
+        self.assert_authorized(key[0], key[1], expected[1], cursor=cur, locked=locked)
+        return self._retained(cur, key)
+
+    @staticmethod
+    def _retained(cur, key):
+        from .workspace_provider_data import REMOVED, INGESTED, RETENTION_SECONDS, number
+        cur.execute('SELECT state FROM public.pr_youtube_uploads WHERE workspace_id=%s AND connection_id=%s AND operation_key=%s', key)
+        row = cur.fetchone()
+        previous = row[0] if row else {}
+        if isinstance(previous, str):
+            previous = json.loads(previous)
+        ingested = number(previous.get(INGESTED))
+        if previous.get(REMOVED) or (ingested is not None and ingested + RETENTION_SECONDS <= time.time()):
+            error = AlphaError('This YouTube operation’s runtime data was removed. It cannot be resumed or uploaded again. Review any existing schedule directly in YouTube.',
+                               409, code='youtube_data_removed')
+            error.youtube_authorization_fence = True
+            error.youtube_authorization_changed = True
+            raise error
+        return previous
+
+    def assert_authorized(self, workspace, connection, generation, *, cursor=None, locked=False):
+        """Shared exact-grant fence for API calls and transactional cache saves.
+
+        A locked check must share the write's cursor so its credential lock
+        survives until that same transaction commits. Never retain it for I/O.
+        """
+        def check(cur):
+            if not isinstance(generation, str) or not generation:
+                raise self._authorization_error(changed=True)
+            if locked:
+                # Hosted disconnect locks workspace -> credential. Child-table
+                # foreign keys also acquire a workspace key-share lock, so take
+                # that lock first rather than letting the later INSERT reverse
+                # the order and deadlock with disconnect's workspace row lock.
+                cur.execute('SELECT id FROM public.pr_workspaces WHERE id=%s FOR KEY SHARE', (workspace,))
+                if not cur.fetchone():
+                    raise self._authorization_error()
+            current = self._generation(cur, (workspace, connection), locked=locked)
+            if current is None or current != generation:
+                raise self._authorization_error(changed=current is not None)
+        if cursor is not None:
+            check(cursor)
+        else:
+            with self.connection_factory() as db, db.cursor() as cur:
+                check(cur)
+
+    def assert_current(self, key):
+        """Read a fresh committed fence immediately before a provider request."""
+        with self.connection_factory() as db, db.cursor() as cur:
+            self._assert_current(cur, key)
 
     @contextmanager
     def lock(self, key):
@@ -19,9 +107,18 @@ class UploadJournal:
                 cur.execute('SELECT pg_try_advisory_lock(%s)', (number,))
                 if not cur.fetchone()[0]:
                     raise AlphaError('This upload is already being reconciled.', 409, code='youtube_operation_busy')
+                token = None
                 try:
+                    self._schema(cur)
+                    generation = self._generation(cur, key)
+                    if generation is None:
+                        raise self._authorization_error()
+                    self._retained(cur, key)
+                    token = self._authorization.set((tuple(key), generation))
                     yield
                 finally:
+                    if token is not None:
+                        self._authorization.reset(token)
                     cur.execute('SELECT pg_advisory_unlock(%s)', (number,))
 
     def load(self, key):
@@ -30,9 +127,28 @@ class UploadJournal:
             row = cur.fetchone()
         return row[0] if row else None
 
-    def save(self, key, state):
-        with self.connection_factory() as db, db.cursor() as cur:
-            cur.execute('INSERT INTO public.pr_youtube_uploads(workspace_id,connection_id,operation_key,state) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,connection_id,operation_key) DO UPDATE SET state=excluded.state,updated_at=now()', (*key, json.dumps(state)))
+    def save(self, key, state, *, cursor=None):
+        def write(cur):
+            # Serialize this save with disconnect/consent replacement. The
+            # credential lock and upsert commit together; no network operation
+            # runs while this short row lock is held.
+            previous = self._assert_current(cur, key, locked=True)
+            from .workspace_provider_data import INGESTED, number
+            # Only a database-retained server stamp may carry across saves.
+            # Old engine snapshots cannot invent a new expiry after cleanup.
+            saved = dict(state)
+            ingested = number(previous.get(INGESTED))
+            if ingested is None:
+                ingested = number(previous.get('createdAt'))
+            saved[INGESTED] = time.time() if ingested is None else ingested
+            cur.execute('INSERT INTO public.pr_youtube_uploads(workspace_id,connection_id,operation_key,state) VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT(workspace_id,connection_id,operation_key) DO UPDATE SET state=excluded.state,updated_at=now()', (*key, json.dumps(saved)))
+        if cursor is not None:
+            # Recovery already owns the credential/workspace transaction. A
+            # second connection would wait on its own uncommitted row lock.
+            write(cursor)
+        else:
+            with self.connection_factory() as db, db.cursor() as cur:
+                write(cur)
 
     def seal(self, value):
         return self.vault.encrypt(value)
@@ -43,16 +159,34 @@ class UploadJournal:
 
 def purge_authorized_data(cur, workspace_id, connection_id):
     """Revocation deletes authorized content immediately; keep only content-free audit events."""
+    from .agent_context import purge_connection
+    purge_connection(cur, workspace_id, connection_id)
+    from .workspace_provider_data import purge_connection as purge_workspace_outputs
+    purge_workspace_outputs(cur, workspace_id, connection_id)
+    # Audit subjects and AI provenance must be resolved while their canonical
+    # sources still exist. Keep erased operation tombstones and exact submitted
+    # inputs; they can never become executable approvals again.
+    from .privacy_erasure import purge_connection as purge_identity_snapshots
+    purge_identity_snapshots(cur, workspace_id, connection_id)
     for table in ('pr_youtube_cache', 'pr_youtube_reporting_coverage', 'pr_youtube_chat_cursor',
-                  'pr_youtube_uploads', 'pr_youtube_actions', 'pr_youtube_settings', 'pr_youtube_push',
-                  'pr_youtube_agent_history'):
+                  'pr_youtube_settings', 'pr_youtube_push', 'pr_channel_pictures', 'pr_youtube_agent_history'):
         cur.execute('SELECT to_regclass(%s)', ('public.' + table,))
         if cur.fetchone()[0]:
             cur.execute('DELETE FROM public.' + table + ' WHERE workspace_id=%s AND connection_id=%s', (workspace_id, connection_id))
     cur.execute("DELETE FROM public.pr_audience_threads WHERE workspace_id=%s AND connection_id=%s AND provider='youtube'", (workspace_id, connection_id))
 
 
-def purge_expired_data(cur):
+def purge_expired_data(cur, *, agent_context=False):
+    if agent_context:
+        # Chat/result scans belong to shared retention cron, never a foreground
+        # creator overview (which reuses this cache-expiry helper).
+        from .agent_context import purge_expired
+        purge_expired(cur)
+        from .workspace_provider_data import purge_expired as purge_workspace_outputs
+        purge_workspace_outputs(cur)
+        from .privacy_erasure import purge_expired as purge_identity_snapshots
+        purge_identity_snapshots(cur, purge_authorized=purge_authorized_data)
+        cur.execute("DELETE FROM public.pr_channel_pictures p USING public.pr_encrypted_credentials c WHERE p.workspace_id=c.workspace_id AND p.connection_id=c.connection_id AND c.provider='youtube' AND p.fetched_at<=now()-interval '30 days'")
     # Cascades also remove reply drafts and their saved approval context.
     cur.execute("DELETE FROM public.pr_audience_threads WHERE provider='youtube' AND ingested_at<=now()-interval '30 days'")
     cur.execute('DELETE FROM public.pr_youtube_cache WHERE expires_at<=now()')

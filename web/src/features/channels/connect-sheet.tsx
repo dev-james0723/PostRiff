@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
@@ -23,8 +23,10 @@ import { defaultConnectCapability } from '@/lib/channels/onboarding';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { useAuth } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
 import { CONTROL_48, SHEET_ELEVATED, STATEFUL_ACTION } from './rafii-materials';
+import { YouTubePolicyAcceptance } from '@/features/youtube/policy-acceptance';
 
 /** What opened the sheet: a provider tile, the header button, or a card's Reconnect. */
 export interface ConnectRequest {
@@ -114,6 +116,14 @@ export function ConnectSheet({
   const [inputValue, setInputValue] = useState('');
   const [checking, setChecking] = useState(false);
   const [notSeenYet, setNotSeenYet] = useState(false);
+  const { user } = useAuth();
+  const policyContext = `${workspaceId}:${user?.id}:${providerId}:${capability}`;
+  const [policyAvailability, setPolicyAvailability] = useState<{ context: string; allowed: boolean }>();
+  const policyAllowed = policyAvailability?.context === policyContext && policyAvailability.allowed;
+  const onPolicyAvailabilityChange = useCallback((allowed: boolean) => {
+    setPolicyAvailability((previous) => previous?.context === policyContext && previous.allowed === allowed
+      ? previous : { context: policyContext, allowed });
+  }, [policyContext]);
   const client = useQueryClient();
 
   const provider = useMemo(() => providers.find((p) => p.id === providerId), [providers, providerId]);
@@ -349,6 +359,11 @@ export function ConnectSheet({
                 </div>
               )}
 
+              {providerId === 'youtube' && (
+                <YouTubePolicyAcceptance key={policyContext}
+                  force={capability !== 'identity' && capability !== 'posts_read'}
+                  onAvailabilityChange={onPolicyAvailabilityChange} />
+              )}
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading' data-tour='connect-capability'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do
@@ -421,7 +436,7 @@ export function ConnectSheet({
                 className={cn(STATEFUL_ACTION, CONTROL_48)}
                 state={busy ? 'loading' : 'idle'}
                 loadingText='Preparing…'
-                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0 || needsInput}
+                disabled={!provider || provider.connectReady === false || provider.executionPaused || offered.length === 0 || needsInput || providerId === 'youtube' && !policyAllowed}
                 onClick={() => void start()}
               >
                 Continue

@@ -16,6 +16,7 @@ from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.youtube.model import READ, UPLOAD, MANAGE, ANALYTICS, MONEY
 from postriff_phase2.youtube.provider import YouTubeProvider
 from postriff_phase2.youtube.journal import purge_authorized_data
+from youtube_policy_fixture import register_synthetic_policy, accept_synthetic_policy
 
 ROOT = Path(__file__).resolve().parents[2]
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
@@ -35,6 +36,8 @@ with connection() as db:
     db.execute((ROOT / 'migrations/postriff/089_youtube_creator.sql').read_text())
     db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
     db.execute((ROOT / 'migrations/postriff/097_youtube_capacity.sql').read_text())
+    db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
+    db.execute((ROOT / 'migrations/postriff/098_youtube_authorization_generation.sql').read_text())
     db.execute('DELETE FROM public.pr_account_tombstones WHERE user_id=%s', (TWO,))
     db.execute("UPDATE public.pr_memberships SET status='active' WHERE user_id=%s", (TWO,))
     db.execute('UPDATE public.pr_profiles SET deleted_at=NULL WHERE user_id=%s', (TWO,))
@@ -102,6 +105,9 @@ service = HostedWorkspaceService(connection, verify, vault=vault, providers={'yo
 for token, plan in (('one', 'studio'), ('two', 'assist')):
     service.bootstrap(token, plan)
 wid, foreign = workspaces[ONE], workspaces[TWO]
+register_synthetic_policy(connection, service.oauth.public_base_url)
+accept_synthetic_policy(service, wid, 'one')
+accept_synthetic_policy(service, foreign, 'two')
 
 def authorize(workspace, token, feature='publish', conn=None):
     started = service.oauth.start(workspace, token, 'youtube', feature, {'connectionId': conn} if conn else {})
@@ -123,13 +129,20 @@ with connection() as db:
     assert 'synthetic-access' not in row[0] and 'synthetic-refresh' not in row[1]
     assert json.loads(vault.decrypt(row[1], row[2])) == {'clientId': provider.client_id, 'authorizationLane': provider.authorization_lane, 'rt': 'synthetic-refresh', 'v': 2}
 
+with connection() as db:
+    original_generation = db.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()[0]
 google.omit_refresh = True
 assert authorize(wid, 'one', 'manage_video', conn) == conn
+with connection() as db:
+    upgraded_generation = db.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()[0]
+assert upgraded_generation != original_generation, 'A new consent must invalidate in-flight old authorization.'
 with connection() as db:
     row = db.execute('SELECT refresh_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (wid, conn)).fetchone()
     assert json.loads(vault.decrypt(row[0], row[1]))['rt'] == 'synthetic-refresh'
     db.execute("UPDATE public.pr_encrypted_credentials SET access_expires_at=now()-interval '1 second' WHERE workspace_id=%s AND connection_id=%s", (wid, conn))
-assert service.oauth.token_for_worker(wid, conn)['scopes'] == sorted(google.scopes)
+refreshed_grant = service.oauth.token_for_worker(wid, conn)
+assert refreshed_grant['scopes'] == sorted(google.scopes)
+assert refreshed_grant['authorizationGeneration'] == upgraded_generation, 'Ordinary refresh must preserve consent generation.'
 overview = service.youtube.overview(wid, 'one', conn)
 assert len(overview['capabilities']) == 37
 assert overview['capabilities']['public_publish']['state'] == 'BLOCKED — GOOGLE APPROVAL'
@@ -305,12 +318,20 @@ service.youtube._cache(foreign, conn, 'private-test', {'secretCreatorData': 'oth
 # A distinct Brand Channel ID cannot prove that Google project/account revocation is isolated.
 with connection() as db:
     db.execute("UPDATE public.pr_encrypted_credentials SET provider_account_id=%s WHERE workspace_id=%s AND connection_id=%s", ('UC' + 'b' * 22, foreign, conn))
+    original_actions = {identifier: (original_digest, manifest.get('inputs')) for identifier, original_digest, manifest in db.execute(
+        'SELECT id::text,manifest_digest,manifest FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchall()}
 disconnected = service.oauth.disconnect(wid, 'one', conn)
 assert disconnected['disconnected'] and disconnected['remoteRevoked'] is False and disconnected['remoteRevocationDeferred'] is True and google.revocations == 0
 with connection() as db:
     db.execute("UPDATE public.pr_encrypted_credentials SET provider_account_id=%s WHERE workspace_id=%s AND connection_id=%s", (CHANNEL, foreign, conn))
     assert db.execute('SELECT count(*) FROM public.pr_youtube_cache WHERE workspace_id=%s', (wid,)).fetchone()[0] == 0
-    assert db.execute('SELECT count(*) FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchone()[0] == 0
+    erased_actions = db.execute('SELECT id::text,manifest_digest,manifest,status,receipt,secret_ciphertext,secret_key_id,user_inputs FROM public.pr_youtube_actions WHERE workspace_id=%s', (wid,)).fetchall()
+    assert len(erased_actions) == len(original_actions) > 0
+    for identifier, original_digest, manifest, status, receipt, ciphertext, key_id, inputs in erased_actions:
+        assert (original_digest, inputs) == original_actions[identifier]
+        assert status == 'privacy_erased' and manifest.get('privacyErased')
+        assert set(manifest) == {'schema', 'action', 'privacyErased', 'privacyErasedAt'}
+        assert receipt is None and ciphertext is None and key_id is None
     assert db.execute('SELECT count(*) FROM public.pr_youtube_cache WHERE workspace_id=%s', (foreign,)).fetchone()[0] >= 1
     db.execute("UPDATE public.pr_encrypted_credentials SET access_expires_at=now()-interval '1 second' WHERE workspace_id=%s AND connection_id=%s", (foreign, conn))
 google.fail_refresh = True

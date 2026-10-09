@@ -282,7 +282,9 @@ class AgentDatabase:
     @contextmanager
     def cursor(self): yield self
     def execute(self, sql, params=()):
-        if sql.startswith('SELECT id::text,state'):
+        if sql.startswith('SELECT to_regclass'):
+            self.result = (None, None, False)  # Legacy selector; indexed claims have real PG coverage.
+        elif sql.startswith('SELECT id::text,state'):
             self.result = [('workspace-one', copy.deepcopy(self.state))]
         elif sql.startswith('SELECT revision,state'):
             self.result = (self.revision, copy.deepcopy(self.state))
@@ -300,6 +302,33 @@ class AgentDatabase:
     def fetchall(self): return self.result
 
 
+class IndexedCandidateDatabase(AgentDatabase):
+    """A thin statement-snapshot hint precedes hydration of current source state."""
+    def __init__(self, states):
+        super().__init__(None)
+        self.states = copy.deepcopy(states)
+        self.hints = [(workspace,) for workspace in states]
+        self.hydrated, self.written = [], []
+
+    def execute(self, sql, params=()):
+        if sql.startswith('SELECT to_regclass'):
+            self.result = ('pr_youtube_operations', 'pr_youtube_planner_candidates', True)
+        elif sql.startswith('SELECT w.id::text'):
+            # Deliberately stale lease hints: do not filter these against the
+            # newer lease that the next source hydration will observe.
+            self.result = list(self.hints)
+        elif sql.startswith('SELECT state FROM public.pr_workspaces'):
+            workspace = params[0]
+            self.hydrated.append(workspace)
+            self.result = (copy.deepcopy(self.states[workspace]),)
+        elif sql.startswith('UPDATE public.pr_workspaces'):
+            workspace = params[1]
+            self.states[workspace] = json.loads(params[0])
+            self.written.append(workspace)
+        else:
+            raise AssertionError('Unexpected indexed candidate SQL: ' + sql)
+
+
 class DispatchTests(unittest.TestCase):
     def agent(self, db):
         service = SimpleNamespace(connection_factory=db.factory, commands=HostedPhase2Commands(clock=lambda: NOW))
@@ -307,6 +336,60 @@ class DispatchTests(unittest.TestCase):
             oauth=SimpleNamespace(reverify_for_worker=Mock(return_value={'ready': True})))
         agent = YouTubePublishingAgent(creator); agent._agentic_gate = Mock(return_value={'authorizationLane': 'agentic'})
         return agent
+
+    def indexed_states(self, first_lease):
+        first, later = state(), state()
+        draft_and_policy(first); draft_and_policy(later)
+        root(first)['fleetLease'] = copy.deepcopy(first_lease)
+        root(later)['fleetLease'] = {'id': 'expired-later-lease', 'until': NOW - 1}
+        return {'workspace-one': first, 'workspace-two': later}
+
+    def test_stale_indexed_hint_rechecks_hydrated_active_lease_and_selects_later_workspace(self):
+        lease = {'id': 'already-claimed-by-another-worker', 'until': NOW + 120,
+                 'authorization': {'policyId': 'retained-current-owner-authorization'}}
+        db = IndexedCandidateDatabase(self.indexed_states(lease))
+        untouched = copy.deepcopy(db.states['workspace-one'])
+        candidate = self.agent(db)._select_candidate(fleet=True)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate[0], 'workspace-two')
+        self.assertEqual(db.hydrated, ['workspace-one', 'workspace-two'])
+        self.assertEqual(db.written, ['workspace-two'])
+        self.assertEqual(db.states['workspace-one'], untouched, 'A stale hint cannot overwrite an active source lease or its authority.')
+        selected_lease = root(db.states['workspace-two'])['fleetLease']
+        self.assertEqual(selected_lease['id'], candidate[4])
+        self.assertEqual(selected_lease['until'], NOW + 120)
+        self.assertEqual(selected_lease['authorization'], candidate[5])
+
+    def test_indexed_hint_accepts_expired_equal_and_missing_lease_clocks(self):
+        for lease in ({'id': 'expired', 'until': NOW - 1}, {'id': 'expires-now', 'until': NOW},
+                      {'id': 'zero', 'until': 0}, {'id': 'missing-clock'}, {'id': 'null-clock', 'until': None}, None):
+            with self.subTest(lease=lease):
+                db = IndexedCandidateDatabase(self.indexed_states(lease))
+                approved = copy.deepcopy(root(db.states['workspace-one'])['policies'])
+                candidate = self.agent(db)._select_candidate(fleet=True)
+                self.assertIsNotNone(candidate)
+                self.assertEqual(candidate[0], 'workspace-one')
+                self.assertEqual(db.hydrated, ['workspace-one'])
+                self.assertEqual(db.written, ['workspace-one'])
+                new_lease = root(db.states['workspace-one'])['fleetLease']
+                self.assertEqual(new_lease['id'], candidate[4])
+                self.assertEqual(new_lease['until'], NOW + 120)
+                self.assertEqual(root(db.states['workspace-one'])['policies'], approved, 'Lease renewal does not rewrite standing approval.')
+
+    def test_stale_indexed_hint_rejects_bad_nonfinite_or_overflowed_source_lease(self):
+        bad_leases = ({'until': True}, {'until': '0'}, {'until': 'malformed'}, {'until': float('nan')},
+                      {'until': float('inf')}, {'until': float('-inf')}, {'until': 10 ** 400},
+                      False, [], 'malformed-lease')
+        for lease in bad_leases:
+            with self.subTest(lease=lease):
+                db = IndexedCandidateDatabase(self.indexed_states(lease))
+                original = db.states['workspace-one']
+                candidate = self.agent(db)._select_candidate(fleet=True)
+                self.assertIsNotNone(candidate)
+                self.assertEqual(candidate[0], 'workspace-two')
+                self.assertEqual(db.hydrated, ['workspace-one', 'workspace-two'])
+                self.assertEqual(db.written, ['workspace-two'])
+                self.assertIs(db.states['workspace-one'], original, 'Malformed lease state cannot be replaced through a stale indexed hint.')
 
     def test_dispatcher_queues_exact_plan_once_without_provider_submission(self):
         value = state(); draft_and_policy(value); db = AgentDatabase(value)
