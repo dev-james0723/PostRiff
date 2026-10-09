@@ -21,6 +21,7 @@ class ComposerDatabase:
         self.revision, self.role, self.can_publish, self.depth = 12, 'approver', False, 0
         self.rowcount, self.result, self.counts, self.audits = 1, None, {}, []
         self.revocation_locks = []
+        self.purge_context, self.purge_queries = None, []
         self.credentials, self.state = {}, {'variants': [{'id': 'draft'}], 'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(connections):
             connection = f'connection-{index}'
@@ -59,6 +60,14 @@ class ComposerDatabase:
             assert params == ('workspace',)
             self.revocation_locks.append('workspace')
             self.result = ('workspace',)
+        elif sql == "SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube'":
+            assert self.revocation_locks[-2:] == ['workspace', 'credential']
+            credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
+            # Purge still needs the canonical channel after the token is wiped.
+            # This SELECT deliberately includes already-revoked credentials.
+            self.result = (credential['account'],) if credential else None
+            self.purge_context = (*params, credential['account'] if credential else None)
+            self.purge_queries.append(('provenance', params))
         elif sql.startswith('SELECT provider_account_id,refresh_supported,'):
             credential = self.credentials.get(params[1]) if params[0] == 'workspace' else None
             self.result = ((credential['account'], credential['refresh'], credential['present'], credential['expires'])
@@ -87,6 +96,17 @@ class ComposerDatabase:
             self.credentials[params[2]]['scopes'] = list(params[0])
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET revoked_at='):
             self.credentials[params[1]].update(revoked=True, token='', refresh=False, scopes=[])
+        elif (sql.startswith('SELECT id::text,run_id::text,body FROM public.pr_messages WHERE workspace_id=')
+              or sql.startswith('SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=')):
+            workspace, connection, channel = self.purge_context
+            key, tag = params[1:3]
+            assert key == 'youtubeProviderContext'
+            assert json.loads(tag) == [{'provider': 'youtube', 'workspaceId': workspace, 'connectionId': connection}]
+            messages = sql.startswith('SELECT id::text,run_id::text,body')
+            expected = (workspace, key, tag, connection, channel) if messages else (workspace, key, tag, key, tag, connection, channel)
+            assert params == expected, 'Purge must use this exact workspace, connection and canonical channel.'
+            self.purge_queries.append(('messages' if messages else 'runs', params))
+            self.result = []  # This composer fixture contains no chat messages or agent runs.
         elif sql == 'SELECT to_regclass(%s)':
             self.result = (None,)  # This focused composer fixture has no optional creator journals.
         elif sql.startswith('DELETE FROM public.pr_audience_threads'):
@@ -100,6 +120,10 @@ class ComposerDatabase:
 
     def fetchone(self):
         return self.result
+
+    def fetchall(self):
+        assert isinstance(self.result, list), 'Only the modeled empty chat/run selections return row sets.'
+        return copy.deepcopy(self.result)
 
 
 def composer_for(connections=1):
@@ -271,6 +295,8 @@ class YouTubeComposerRefreshTests(unittest.TestCase):
                 self.assertEqual(db.state['phase2']['jobs'], [])
                 self.assertEqual(db.credentials['connection-0']['revoked'], change == 'identity')
                 self.assertEqual(db.revocation_locks, ['workspace', 'credential'] if change == 'identity' else [])
+                self.assertEqual([kind for kind, _ in db.purge_queries], ['provenance', 'messages', 'runs'] if change == 'identity' else [])
+                self.assertEqual(db.purge_context, ('workspace', 'connection-0', 'UC-synthetic-0') if change == 'identity' else None)
                 service.repository.mutate.assert_not_called()
 
     def test_stale_revocation_observation_cannot_purge_the_current_composer_grant(self):
@@ -280,10 +306,13 @@ class YouTubeComposerRefreshTests(unittest.TestCase):
         self.assertEqual(db.credentials['connection-0'], before)
         self.assertEqual(db.audits, [])
         self.assertEqual(db.revocation_locks, ['workspace', 'credential'])
+        self.assertEqual(db.purge_queries, [])
         self.assertTrue(oauth.mark_youtube_revoked('workspace', 'connection-0', expected_access_token=TOKEN))
         self.assertTrue(db.credentials['connection-0']['revoked'])
         self.assertEqual(db.credentials['connection-0']['token'], '')
         self.assertEqual(db.revocation_locks, ['workspace', 'credential'] * 2)
+        self.assertEqual([kind for kind, _ in db.purge_queries], ['provenance', 'messages', 'runs'])
+        self.assertEqual(db.purge_context, ('workspace', 'connection-0', 'UC-synthetic-0'))
 
     def test_missing_refresh_revocation_and_transient_rate_limits_fail_closed(self):
         for cause in ('missing_refresh', 'revoked'):
