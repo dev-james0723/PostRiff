@@ -1,0 +1,49 @@
+{
+  "status": "PASS",
+  "execution": "CLOUD SYNTHETIC APPLICATION BROWSER",
+  "published": false,
+  "genui": "default (flags off)",
+  "results": [
+    {
+      "width": 1440,
+      "draftable": [
+        "LinkedIn",
+        "Instagram",
+        "Threads",
+        "Facebook",
+        "X",
+        "Xiaohongshu"
+      ],
+      "revision": "cap_404f2b23c5c3a7a310a3",
+      "waves": [
+        "RAFII_CREATION_PROJECTION_ENABLED"
+      ],
+      "instagramFormats": 4,
+      "facebookFormats": 3,
+      "keyboard": true,
+      "overflow": 0,
+      "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-composer-1440.png"
+    },
+    {
+      "width": 390,
+      "draftable": [
+        "LinkedIn",
+        "Instagram",
+        "Threads",
+        "Facebook",
+        "X",
+        "Xiaohongshu"
+      ],
+      "revision": "cap_404f2b23c5c3a7a310a3",
+      "waves": [
+        "RAFII_CREATION_PROJECTION_ENABLED"
+      ],
+      "instagramFormats": 4,
+      "facebookFormats": 3,
+      "keyboard": true,
+      "overflow": 0,
+      "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-composer-390.png"
+    }
+  ],
+  "capturedAt": "2026-10-09T22:10:30.406Z"
+}
