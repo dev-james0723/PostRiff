@@ -83,6 +83,40 @@ class Accounting(unittest.TestCase):
         self.assertEqual(m.chain_for("generate"), m.PRESENTATION_CHAIN)
         self.assertEqual(m.chain_for("retry"), m.PRESENTATION_CHAIN)
 
+    def test_turn_with_a_presentation_allowance_gives_the_view_exactly_that_portion(self):
+        # Production 2026-10-09: the Manager settled 112,163 µ$ of its 88,000 µ$ estimate; with the D-A47 allowance the view's room
+        # is its own reserved portion, not what the Manager left over.
+        parent = self.db.add_parent(ceiling=88_000 + 40_000, spent=112_163, ui_allowance=40_000)
+        artifact, attempt = self.attempt(parent)
+        first = m.reserve_attempt(self.runtime, self.cur, auth(), artifact, attempt, self.plan(9_000))
+        self.assertEqual(first["room"], 40_000)
+        self.runtime.service.ledger.settle(self.cur, WS, self.db.ui_reservations()[0]["id"], "completed", 925)
+        artifact2, repair = self.attempt(parent, "repair")
+        second = m.reserve_attempt(self.runtime, self.cur, auth(), artifact2, repair, self.plan(9_100))
+        self.assertEqual(second["room"], 40_000 - 925)
+        plan = m.allowance(self.cur, WS, parent)
+        self.assertEqual((plan["allowance"], plan["room"]), (40_000, 40_000 - 925 - 9_100), "an open hold counts in full")
+        artifact3, third = self.attempt(parent, "retry")
+        with self.assertRaises(AlphaError) as raised:
+            m.reserve_attempt(self.runtime, self.cur, auth(), artifact3, third, self.plan(40_000))
+        self.assertEqual(raised.exception.code, "ui_budget", "the chain never exceeds its reserved portion")
+        # Unknown parent spend no longer blocks a portion that was reserved for the view up front.
+        parent_unknown = self.db.add_parent(ceiling=128_000, spent_state="unknown", ui_allowance=40_000)
+        artifact4, attempt4 = self.attempt(parent_unknown)
+        self.assertEqual(m.reserve_attempt(self.runtime, self.cur, auth(), artifact4, attempt4, self.plan(9_000))["room"], 40_000)
+        # An explicit edit keeps its own per-request chain, unchanged by the allowance.
+        _artifact5, edit = self.attempt(parent, "edit")
+        chain = m.chain_for("edit", edit["attemptId"])
+        self.assertEqual(m.allowance(self.cur, WS, parent, chain)["room"], 128_000)
+
+    def test_turn_without_an_allowance_keeps_the_original_combined_rule(self):
+        parent = self.db.add_parent(ceiling=88_000, spent=112_163)
+        artifact, attempt = self.attempt(parent)
+        with self.assertRaises(AlphaError) as raised:
+            m.reserve_attempt(self.runtime, self.cur, auth(), artifact, attempt, self.plan(9_000))
+        self.assertEqual(raised.exception.code, "ui_budget")
+        self.assertNotIn("allowance", m.allowance(self.cur, WS, parent))
+
     def test_unmetered_or_unknown_parent_has_no_room(self):
         for kwargs in ({"ceiling": None}, {"spent_state": "unknown"}, {"spent_state": "held"}):
             parent = self.db.add_parent(**kwargs)

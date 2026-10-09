@@ -72,18 +72,38 @@ USAGE_ROWS_SQL = (
     "(SELECT s.actual_usd_micro FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id "
     "AND s.cost_state IN ('actual','released') ORDER BY s.at LIMIT 1), "
     "EXISTS (SELECT 1 FROM public.pr_usage_ledger u WHERE u.workspace_id=r.workspace_id AND u.reservation_id=r.id AND u.cost_state='estimated_unknown'), "
-    "coalesce(r.meta->>'chain','') "
+    "coalesce(r.meta->>'chain',''), coalesce(r.meta->>'uiAllowanceUsdMicro','') "
     "FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND (r.idempotency_key=%s OR r.idempotency_key LIKE %s)")
+
+# The presentation part of a turn's admission plan (D-A47): one initial attempt and its single repair, each at the worst-case
+# input (the largest prompt asset, the full context block, a full-size rejected or base source and an edit instruction) and the
+# fixed output cap. The turn reserves it together with its own estimate under the same credit authority, so the combined plan is
+# covered when the turn is admitted, and how the Manager's own share settles can no longer take the view's room away.
+ALLOWANCE_ATTEMPTS = 2
+ALLOWANCE_PROMPT_BYTES = 64 * 1024 + 24 * 1024 + 128 * 1024 + 2 * 1024
+
+
+def presentation_allowance(cfg) -> int | None:
+    """The micro-USD a GenUI-eligible turn reserves for its presentation chain, or None when the presenter route is unpriced
+    (the turn then reserves only its own estimate and the original combined rule applies)."""
+    from .ui_presenter import MAX_OUTPUT_TOKENS, WORKLOAD
+    route = cfg.route(WORKLOAD, reason="presentation allowance")
+    if not getattr(route, "available", False) or not route.model:
+        return None
+    per_attempt = cfg.estimate_usd_micro(route.model, -(-ALLOWANCE_PROMPT_BYTES // 3) + 16, MAX_OUTPUT_TOKENS)
+    return ALLOWANCE_ATTEMPTS * per_attempt if type(per_attempt) is int and per_attempt > 0 else None
 
 
 def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTATION_CHAIN) -> dict:
     """{ceiling, parentSpent, chainUsed, room}: the room left for one more presenter attempt on `chain`. `room` is None when a
-    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered."""
+    figure it depends on is unknown (unknown is never zero) or the parent turn was not metered. A turn that reserved a
+    presentation allowance (D-A47) gives its presentation chain exactly that portion; other turns keep the original rule."""
     cur.execute(USAGE_ROWS_SQL, (workspace_id, parent_key(parent_run_id), parent_key(parent_run_id) + ":ui:%"))
-    ceiling, parent_spent, used = None, None, 0
-    for key, estimate, actual, _unknown, row_chain in cur.fetchall() or []:
+    ceiling, parent_spent, used, ui_allowance = None, None, 0, None
+    for key, estimate, actual, _unknown, row_chain, row_allowance in cur.fetchall() or []:
         if key == parent_key(parent_run_id):
             ceiling, parent_spent = int(estimate or 0), (int(actual) if actual is not None else None)
+            ui_allowance = int(row_allowance) if isinstance(row_allowance, str) and row_allowance.isdigit() else None
             continue
         if (row_chain or PRESENTATION_CHAIN) != chain:
             continue
@@ -91,6 +111,9 @@ def allowance(cur, workspace_id: str, parent_run_id: str, chain: str = PRESENTAT
         used += int(actual) if actual is not None else int(estimate or 0)
     if ceiling is None:
         return {"ceiling": None, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_unmetered"}
+    if chain == PRESENTATION_CHAIN and ui_allowance is not None:
+        return {"ceiling": ceiling, "parentSpent": parent_spent, "chainUsed": used, "room": ui_allowance - used, "reason": None,
+                "allowance": ui_allowance}
     if chain == PRESENTATION_CHAIN:
         if parent_spent is None:
             return {"ceiling": ceiling, "parentSpent": None, "chainUsed": used, "room": None, "reason": "parent_spend_unknown"}

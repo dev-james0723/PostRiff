@@ -447,6 +447,42 @@ assert rows("SELECT cost_state FROM public.pr_usage_ledger WHERE workspace_id=%s
 assert ui_metering.sweep_orphans(connection, ledger=service.ledger)["settledUnknown"] == 0
 checks.append("S17")
 
+# S18 D-A47: a turn that reserved a presentation allowance gives the view that portion even when the Manager overran its own
+# estimate (production 2026-10-09: 112,163 of 88,000 µ$ settled → the view was refused 'budget'); without it the old rule holds.
+with connection() as db:
+    conversation18 = str(db.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,'ui') RETURNING id", (wid, ONE)).fetchone()[0])
+    run18 = str(db.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact) "
+                           "VALUES(%s,%s,%s,'completed','rafii-agent','standard',%s,%s,%s,%s::jsonb) RETURNING id",
+                           (conversation18, wid, ONE, "a" * 64, "b" * 64, "agent:" + uuid.uuid4().hex,
+                            json.dumps({"version": 1, "result": {"composedBy": "manager", "usage": {"billing": "metered"}, "ui": {"eligible": True, "journeyIds": ["J01"]}, "answerText": "ok"}}))).fetchone()[0])
+allowance18 = ui_metering.presentation_allowance(cfg)
+assert type(allowance18) is int and allowance18 >= 2 * 9_000, allowance18
+with service.repository.transaction(OWNER, wid) as (cur, _row, principal):
+    held18 = service.ledger.reserve(cur, wid, principal, "text_model", 88_000 + allowance18, f"agent:{run18}", charge_batch=False, provider="openai",
+                                    model="gpt-6-sol", run_id=run18, meta={"via": "rafii_agent", "uiAllowanceUsdMicro": str(allowance18)})
+    service.ledger.settle(cur, wid, held18["reservationId"], "completed", 112_163)
+assert one("SELECT meta->>'uiAllowanceUsdMicro' FROM public.pr_usage_ledger WHERE id::text=%s", held18["reservationId"]) == (str(allowance18),)
+art18 = artifact(run18, conversation18)
+first18 = attempt(art18)
+with tx() as (cur, auth):
+    plan18 = ui_metering.allowance(cur, wid, run18)
+    assert (plan18["allowance"], plan18["room"], plan18["parentSpent"]) == (allowance18, allowance18, 112_163), plan18
+    hold = ui_metering.reserve_attempt(runtime, cur, auth, {"artifactId": art18, "runId": run18}, {"attemptId": first18, "kind": "generate"}, plan(9_000))
+    assert hold["room"] == allowance18
+over18 = attempt(art18, state="failed")
+with tx() as (cur, auth):
+    assert ui_metering.allowance(cur, wid, run18)["room"] == allowance18 - 9_000, "an open hold counts in full"
+    expect_error(lambda: ui_metering.reserve_attempt(runtime, cur, auth, {"artifactId": art18, "runId": run18}, {"attemptId": over18, "kind": "generate"},
+                                                     plan(allowance18)), status=402, code="ui_budget")
+run18b, conversation18b = parent_run(spent=112_163, ceiling=88_000)
+art18b = artifact(run18b, conversation18b)
+first18b = attempt(art18b)
+with tx() as (cur, auth):
+    assert "allowance" not in ui_metering.allowance(cur, wid, run18b)
+    expect_error(lambda: ui_metering.reserve_attempt(runtime, cur, auth, {"artifactId": art18b, "runId": run18b}, {"attemptId": first18b, "kind": "generate"}, plan(9_000)),
+                 status=402, code="ui_budget")
+checks.append("S18")
+
 for check in checks:
     print(f"PASS:{check}", flush=True)
 print(json.dumps({"script": "postgres_agent_ui_stream", "passed": checks}), flush=True)

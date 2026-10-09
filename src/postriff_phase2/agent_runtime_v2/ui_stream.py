@@ -37,6 +37,7 @@ import asyncio
 import dataclasses
 import inspect
 import json
+import re
 import logging
 import queue
 import threading
@@ -126,6 +127,24 @@ def _log_closed(route: str, outcome: str, started: float, frames: int, sent: int
     try:
         log.info(json.dumps({"event": "request.stream_closed", "route": route, "outcome": outcome, "durationMs": round((time.monotonic() - started) * 1000),
                              "frames": frames, "bytes": sent, "providerAttempts": provider_attempts, "requestId": request_id}))
+    except Exception:  # noqa: BLE001 — logging never breaks a stream
+        pass
+
+
+_CODE = re.compile(r"^[a-z][a-z_]{0,40}$")
+
+
+def _log_rejected(kind, errors) -> None:
+    """Content-free: the validator's code prefixes (the part before ':') with counts, never the statement ids, names or source
+    behind them, so first-pass rejections can be measured and fixed without logging what a view contained."""
+    try:
+        counts: dict = {}
+        for error in errors[:contracts.BOUNDS.get("statements", 512)]:
+            code = str(error).split(":", 1)[0]
+            code = code if _CODE.match(code) else "other"
+            counts[code] = counts.get(code, 0) + 1
+        log.info(json.dumps({"event": "genui.validation_rejected", "kind": kind if kind in ("generate", "repair", "retry", "edit") else "other",
+                             "codes": dict(sorted(counts.items())), "errorCount": len(errors)}))
     except Exception:  # noqa: BLE001 — logging never breaks a stream
         pass
 
@@ -468,6 +487,7 @@ class _Producer:
                     yield from self._ready(candidate, validation, outcome.usage)
                     return
                 errors = [str(e) for e in validation.get("errors") or []] or ["parse_rejected"]
+                _log_rejected(self.attempt.get("kind"), errors)
                 fatal = next((NOT_REPAIRABLE[e.split(":", 1)[0]] for e in errors if e.split(":", 1)[0] in NOT_REPAIRABLE), None)
                 if fatal is not None:
                     # The model can't fix this (seam down, deploy/asset skew, size, missing base): no second paid call.

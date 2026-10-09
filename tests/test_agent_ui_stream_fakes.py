@@ -72,7 +72,7 @@ class FakeDB:
 
     # helpers used by tests
     def add_parent(self, *, eligible=True, status="completed", composed="manager", billing="metered", age=5.0, actor=ME, ceiling=88_000, spent=30_000,
-                   spent_state="actual", journeys=("J01",), workspace=WS, run_key=None):
+                   spent_state="actual", journeys=("J01",), workspace=WS, run_key=None, ui_allowance=None):
         run_id, conversation = uid(), uid()
         result = {"composedBy": composed, "usage": {"billing": billing}, "ui": {"eligible": eligible, "journeyIds": list(journeys)},
                   "answerText": "Here are your drafts.", "references": [{"type": "draft", "id": "d1", "title": PRIVATE_CONTEXT_TEXT}]}
@@ -81,7 +81,7 @@ class FakeDB:
         if ceiling is not None:
             rid = uid()
             self.ledger.append({"id": rid, "kind": "reserve", "key": f"agent:{run_id}", "estimate": ceiling, "actual": None, "costState": "estimated",
-                                "reservationId": rid, "meta": {}, "runId": run_id, "workspaceId": workspace})
+                                "reservationId": rid, "meta": ({"uiAllowanceUsdMicro": str(ui_allowance)} if ui_allowance is not None else {}), "runId": run_id, "workspaceId": workspace})
             if spent_state == "actual":
                 self.ledger.append({"id": uid(), "kind": "settle", "key": f"settle:{rid}", "estimate": ceiling, "actual": spent, "costState": "actual",
                                     "reservationId": rid, "meta": {}, "runId": run_id, "workspaceId": workspace})
@@ -161,7 +161,8 @@ class FakeDB:
             if r["key"] == parent_key or r["key"].startswith(prefix):
                 terminal = self._terminal(r["id"])
                 unknown = any(x["reservationId"] == r["id"] and x["costState"] == "estimated_unknown" for x in self.ledger)
-                rows.append((r["key"], r["estimate"], terminal["actual"] if terminal else None, unknown, (r["meta"] or {}).get("chain") or ""))
+                rows.append((r["key"], r["estimate"], terminal["actual"] if terminal else None, unknown, (r["meta"] or {}).get("chain") or "",
+                             str((r["meta"] or {}).get("uiAllowanceUsdMicro") or "")))
         return rows
 
     def sql_attempt_reserved(self, reservation_id, attempt_id, workspace_id):

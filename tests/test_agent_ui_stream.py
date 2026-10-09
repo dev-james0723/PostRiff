@@ -387,9 +387,14 @@ class Failures(Base):
 
     def test_repair_can_succeed(self):
         self.validator.verdicts = ["reject", "accept"]
-        _, _, events = self.run_one(self.db.add_parent())
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            _, _, events = self.run_one(self.db.add_parent())
         self.assertEqual(events[-1]["kind"], "ui.ready")
         self.assertEqual(events[-1]["payload"]["providerAttempts"], 2)
+        # The first-pass rejection is measurable: code prefixes and counts only, never the statement ids or names behind them.
+        rejected = [json.loads(r.getMessage()) for r in logs.records if '"genui.validation_rejected"' in r.getMessage()]
+        self.assertEqual([(r["kind"], r["codes"]) for r in rejected], [("generate", {"component_denied": 1, "unresolved_ref": 1})])
+        self.assertNotIn("Bogus", " ".join(logs.output))
 
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
