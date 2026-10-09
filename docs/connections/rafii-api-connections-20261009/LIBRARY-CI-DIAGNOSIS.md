@@ -1,5 +1,7 @@
 # Library WebKit 1440 failure on PR #150: diagnosis
 
+> Superseded by CI-BLOCKER-TRIAGE.md §C1 (the audit adds the `uploadTrace` finding and the owner handoff). Outcome: attempt 2 of run 37986228759 PASSED on the identical head `19564282`, and the Library browser job passed on `ed8d4bb6` (job 114024124860).
+
 Recorded 2026-10-09. This is diagnosis only: the Library code, the test and its assertions are unchanged.
 
 ## Failure

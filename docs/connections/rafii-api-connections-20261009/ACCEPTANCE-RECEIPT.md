@@ -1,5 +1,7 @@
 # Rafii API Connections — session acceptance receipt
 
+> Historical record from session start (base `26d7e901`). The current state is in RELEASE-GATE-MATRIX.json, FINAL-ACCEPTANCE-REVIEW.md and CI-BLOCKER-TRIAGE.md. Since then: the launch scope was recorded as YouTube read-only, and James's latest instruction is no merge or deploy.
+
 Recorded 2026-10-09 (UTC) at the start of the implementation session.
 
 ## Authority

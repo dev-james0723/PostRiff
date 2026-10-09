@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
   "releaseId": "rafii-api-connections-20261009-founder-attention",
-  "observedAt": "2026-10-09T21:15:00Z",
+  "observedAt": "2026-10-09T22:30:00Z",
   "status": "READY_FOR_APPROVAL",
+  "statusMeaning": "Ready for human code review only. Not release-eligible: final-head CI pending, document-runtime blocked (Library/CI owner), merge/deploy not authorized, no production readback. See RELEASE-GATE-MATRIX.json.",
   "releaseRestriction": "James 2026-10-09 (latest): NO merge or deploy, even after green CI; no provider grants, real posts, purchases or new scope",
   "scope": {
     "provider": "all (Founder control plane)",
@@ -15,7 +16,7 @@
     "media": []
   },
   "source": {
-    "commit": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
+    "commit": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
     "merged": false,
     "branch": "claude/rafii-api-connections-20261009",
     "base": "26d7e901d1b7bd2bbb25d98c34d5989bad3f8559",
@@ -40,7 +41,15 @@
       "partial coverage rendered as Current",
       "comment accuracy on ciphertext presence"
     ],
-    "fixCommit": "1956428296f43dfa4550bbcd111a4b47670e6f7d"
+    "fixCommit": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
+    "secondReview": {
+      "critical": 0,
+      "high": 0,
+      "medium": 2,
+      "low": 9,
+      "fixCommit": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
+      "detail": "FINAL-ACCEPTANCE-REVIEW.md"
+    }
   },
   "productionEvidencePreDeploy": {
     "observedAt": "2026-10-09T20:25Z",
@@ -78,7 +87,7 @@
       "runUrl": "https://github.com/dev-james0723/PostRiff/pull/150/checks",
       "task": "GitHub checks on head 19564282: Control foundation 37986228842, Founder admin browser 37986228758, scenes 37986228760, Generative UI 37986228843, Growth 37986228761, local release gates 37986228831 all PASS; Library 37986228759 FAIL (WebKit 1440 /preview, pre-existing intermittent; see LIBRARY-CI-DIAGNOSIS.md) then rerun",
       "sourceSha": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
-      "status": "PASS (Library attempt 1 FAIL pre-existing intermittent WebKit /preview; attempt 2 PASS on identical head)",
+      "status": "PASS on 19564282 (Library attempt 2); final-head CI for 94f15668 PENDING - see RELEASE-GATE-MATRIX.json",
       "synthetic": true
     },
     {
@@ -97,8 +106,8 @@
     },
     {
       "runUrl": null,
-      "task": "local targeted unittest: test_founder_connections, test_founder_ops, test_founder_slices, test_boundary (109 tests)",
-      "sourceSha": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
+      "task": "local targeted unittest: test_founder_connections, test_founder_ops, test_founder_slices, test_boundary (114 tests at 94f15668; 109 at 19564282)",
+      "sourceSha": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
       "status": "PASS",
       "synthetic": true
     }
