@@ -9,57 +9,14 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { IconControl } from './ui/controls';
+import { ScrubWaveform, useAudioPeaks } from './scrub-waveform';
 import type { LibraryAsset } from './use-library';
 
-const WAVEFORM_BYTE_LIMIT = 16 * 1024 * 1024;
-const WAVEFORM_DURATION_LIMIT = 300;
 const PLAY_EVENT = 'rafii-library-inline-play';
 const timeLabel = (seconds: number) => {
   const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
 };
-
-/** Download/decode only after the user plays audio, with bounded bytes/duration/sample rate. */
-async function sourceWaveform(url: string, signal: AbortSignal): Promise<number[]> {
-  const response = await fetch(url, { signal });
-  if (!response.ok || !response.body || Number(response.headers.get('content-length') || 0) > WAVEFORM_BYTE_LIMIT) throw new Error('Waveform unavailable');
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  try {
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      length += part.value.byteLength;
-      if (length > WAVEFORM_BYTE_LIMIT) throw new Error('Waveform unavailable');
-      chunks.push(part.value);
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-  signal.throwIfAborted();
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  const context = new AudioContext({ sampleRate: 22050 });
-  try {
-    const audio = await context.decodeAudioData(bytes.buffer);
-    signal.throwIfAborted();
-    if (audio.duration > WAVEFORM_DURATION_LIMIT) throw new Error('Waveform unavailable');
-    const channels = Array.from({ length: Math.min(audio.numberOfChannels, 2) }, (_, channel) => audio.getChannelData(channel));
-    const peaks = Array.from({ length: 96 }, (_, bin) => {
-      const start = Math.floor(bin * audio.length / 96), end = Math.floor((bin + 1) * audio.length / 96);
-      let peak = 0;
-      const stride = Math.max(1, Math.floor((end - start) / 1024));
-      for (const channel of channels) for (let sample = start; sample < end; sample += stride) peak = Math.max(peak, Math.abs(channel[sample]));
-      return peak;
-    });
-    const max = Math.max(...peaks, 0.00001);
-    return peaks.map(peak => peak / max);
-  } finally { await context.close(); }
-}
-
 
 /*
  * One silent video preview at a time (redesign §5): the first visible video — or the one under the pointer or focus —
@@ -153,15 +110,9 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     loadedSource.current = playbackUrl;
     setMetadataReady(false);
   }, [playbackUrl]);
-  const waveformAllowed = !video && activated && metadataReady && duration > 0 && duration <= WAVEFORM_DURATION_LIMIT && (!asset.bytes || asset.bytes <= WAVEFORM_BYTE_LIMIT);
-  const waveform = useQuery({
-    queryKey: ['library-audio-waveform', workspaceId, asset.id, asset.hash],
-    queryFn: ({ signal }) => sourceWaveform(source.data!.url, signal),
-    enabled: waveformAllowed && Boolean(source.data?.url),
-    staleTime: Infinity,
-    gcTime: 60_000,
-    retry: false
-  });
+  // Every length and format the Library keeps: read piece by piece after the person first plays or opens the waveform.
+  const waveform = useAudioPeaks(`${workspaceId}:${asset.id}:${asset.hash ?? ''}`, source.data?.url, !video && activated, duration);
+  const scrub = useRef<{ resume: boolean; seekedAt: number } | null>(null);
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setReduce(preference.matches);
@@ -239,6 +190,30 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     restorePosition.current = null; savedPosition.current = value;
     media.current.currentTime = value; setPosition(value);
   };
+  // Voice Memos-style scrubbing: playback pauses under the finger, the audible position follows (throttled), and
+  // playback resumes where the drag or flick settles.
+  const scrubStart = () => {
+    const element = media.current;
+    if (!element) return;
+    scrub.current = { resume: !element.paused, seekedAt: 0 };
+    if (!element.paused) element.pause();
+  };
+  const scrubTo = (value: number) => {
+    const element = media.current;
+    if (!element || !scrub.current) return;
+    restorePosition.current = null; savedPosition.current = value; setPosition(value);
+    const now = performance.now();
+    if (now - scrub.current.seekedAt > 80) {
+      scrub.current.seekedAt = now;
+      if (typeof element.fastSeek === 'function') element.fastSeek(value); else element.currentTime = value;
+    }
+  };
+  const scrubEnd = (value: number) => {
+    const resume = scrub.current?.resume;
+    scrub.current = null;
+    seek(value);
+    if (resume && media.current) { announcePlay(); void media.current.play().catch(() => setFailure('Playback unavailable in this browser')); }
+  };
   const onMetadata = () => {
     const element = media.current;
     if (!element) return;
@@ -265,12 +240,12 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     onDurationChange: () => { if (media.current && Number.isFinite(media.current.duration)) setDuration(media.current.duration); },
     onTimeUpdate: () => {
       const element = media.current;
-      if (!element || element.readyState === 0 || element.seeking || restorePosition.current) return;
+      if (!element || element.readyState === 0 || element.seeking || restorePosition.current || scrub.current) return;
       savedPosition.current = element.currentTime; setPosition(element.currentTime);
     },
     onSeeked: () => {
       const element = media.current;
-      if (!element || element.readyState === 0 || (restorePosition.current && !restorePosition.current.applied)) return;
+      if (!element || element.readyState === 0 || scrub.current || (restorePosition.current && !restorePosition.current.applied)) return;
       restorePosition.current = null;
       savedPosition.current = element.currentTime; setPosition(element.currentTime);
     },
@@ -279,7 +254,6 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
     onEnded: () => { setPlaying(false); setUserPaused(true); },
     onError
   };
-  const progress = duration > 0 ? Math.min(1, position / duration) : 0;
   const busy = activated && source.isFetching && !source.data;
   const knownDuration = duration > 0 ? duration : (asset.duration ?? 0);
   return (
@@ -308,12 +282,28 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
               remains available in details, rather than inventing synchronization. */}
           {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
           <audio ref={node => { media.current = node; }} src={playbackUrl} preload={activated ? 'metadata' : 'none'} {...mediaEvents} />
-          {waveform.data ? <svg viewBox='0 0 384 64' preserveAspectRatio='none' aria-label='Waveform decoded from the original audio' role='img' data-waveform-source='original-audio' className={cn('w-[calc(100%-2rem)]', compact ? 'h-10' : 'h-16')}>
-            {waveform.data.map((peak, index) => <rect key={index} x={index * 4} y={32 - Math.max(1, peak * 56) / 2} width={2} height={Math.max(1, peak * 56)} rx={1} fill='currentColor' className={index / 96 <= progress ? 'text-foreground' : 'text-muted-foreground/50'} />)}
-          </svg> : <div className={cn('text-muted-foreground flex items-center gap-2 p-3 text-center', compact ? 'flex-row' : 'flex-col')}>
+          {activated ? <div className='w-full px-3'>
+            <ScrubWaveform
+              snapshot={waveform.snapshot}
+              duration={duration}
+              position={position}
+              media={media}
+              playing={playing}
+              reduce={reduce}
+              compact={compact}
+              disabled={!metadataReady || !duration}
+              label={`Audio waveform: drag left or right to move through ${title}`}
+              valueText={`${timeLabel(position)} of ${duration ? timeLabel(duration) : 'unknown length'}`}
+              onScrubStart={scrubStart}
+              onScrub={scrubTo}
+              onScrubEnd={scrubEnd}
+              onSeek={seek}
+            />
+          </div> : <button type='button' onClick={() => { setActivated(true); setUserPaused(true); }} disabled={!ready} className={cn('rafii-focus text-muted-foreground hover:text-foreground flex items-center gap-2 rounded-md p-3 text-center transition-colors duration-150', compact ? 'flex-row' : 'flex-col')}>
             <Icons.music aria-hidden className={compact ? 'size-5' : 'size-7'} />
-            <span className='text-xs'>{!activated ? (knownDuration > 0 ? `Audio · ${timeLabel(knownDuration)}` : 'Listen to this audio') : waveform.isFetching ? 'Reading audio waveform…' : 'Audio preview'}</span>
-          </div>}
+            <span className='text-xs'>{knownDuration > 0 ? `Audio · ${timeLabel(knownDuration)}` : 'Listen to this audio'}</span>
+            <span className='sr-only'>Show waveform</span>
+          </button>}
         </>}
       </div>
       <div className={cn('bg-card/95 z-10 flex min-w-0 flex-col', compact ? 'px-1' : 'absolute inset-x-0 bottom-0 border-t border-foreground/[0.06]')}>
@@ -347,7 +337,7 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
           </div>
         ) : null}
         {(source.isError || failure) ? <p role='status' className='text-muted-foreground px-2 pb-1.5 text-[11px]'>{failure || 'Private preview unavailable. Press play to retry.'}</p> : null}
-        {!video && activated && !waveform.data && !waveform.isFetching ? <p className='text-muted-foreground px-2 pb-1.5 text-[11px]'>{waveformAllowed ? 'Waveform unavailable for this audio codec.' : 'Waveform is available for supported audio up to 5 minutes / 16 MB.'}</p> : null}
+        {!video && waveform.status === 'error' ? <p className='text-muted-foreground px-2 pb-1.5 text-[11px]'>{waveform.error} Playback and the timeline still work.</p> : null}
       </div>
     </div>
   );
