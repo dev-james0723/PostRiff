@@ -628,10 +628,31 @@ def draft_edit(ctx: RafiiRunContext, args: dict) -> dict:
           {"layers": {"type": "array", "items": {"type": "string", "enum": ["identity", "workspace", "brand", "voice", "preferences", "campaigns", "task"]}, "maxItems": 7}},
           "Read Rafii's memory")
 def memory_context(ctx: RafiiRunContext, args: dict) -> dict:
-    from . import memory_layers
+    from dataclasses import replace
+    from . import authz, memory_layers, tool_adapter
     with ctx.workspace() as (cur, _row, _principal, member, state):
+        wanted = args.get("layers") or memory_layers.LAYERS
+        permitted, withheld = [], []
+        spec = tool_adapter.REGISTRY["memory_context"].spec
+        cap = authz.capability_for(spec)
+        surface = authz.tool_surface(spec, getattr(ctx, "specialist", None))
+        extra = {"identity": ("account",), "workspace": ("content", "connections"),
+                 "campaigns": ("campaigns",), "task": ("content",)}
+        for layer in wanted:
+            domains = extra.get(layer, ())
+            scoped = replace(cap, data_grants=tuple(sorted(set(cap.data_grants or ()) | set(domains))))
+            if authz.gate(ctx, scoped, surface=surface).outcome != "allow":
+                withheld.append(layer)
+                continue
+            permitted.append(layer)
+            if domains:
+                ctx.authz_used_source_domains = set(getattr(ctx, "authz_used_source_domains", ())) | set(domains)
         data = memory_layers.read(state, member=member, cur=cur, workspace_id=ctx.workspace_id, zone=ctx.zone, locale=ctx.locale, task=ctx.task,
-                                  layers=args.get("layers") or None)
+                                  layers=permitted)
+        if permitted:
+            authz.record_memory_context(ctx, state)
+        if withheld:
+            data["withheldLayers"] = withheld
     return {"ok": True, "verified": True, "data": data}
 
 

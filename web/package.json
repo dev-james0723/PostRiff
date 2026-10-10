@@ -27,6 +27,7 @@
     "test:creator-pipeline:ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh ui",
     "test:creator-pipeline:backend": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh backend",
     "test:creator-pipeline:browser": "cd .. && bash scripts/cloud-python-bootstrap.sh bash scripts/creator-pipeline-validation.sh browser",
+    "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
     "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
     "test:creator-pipeline:integration": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh backend && next typegen && npm run typecheck",

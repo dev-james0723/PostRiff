@@ -162,7 +162,7 @@ def _item(p, actor, since, evidence_state, summary):
     return {"id": p["id"], "type": p["type"], "ruleKey": p["ruleKey"], "polarity": p["polarity"], "scope": p["scope"],
             "scopeKey": scope_key(p["type"], p["ruleKey"], p["polarity"], p["scope"]), "statement": p["statement"], "applyWhen": p["applyWhen"],
             "params": p["params"], "evidenceState": evidence_state, "evidenceSummary": summary, "source": p["source"],
-            "status": "active", "since": since, "confirmedBy": actor, "proposalId": p["id"]}
+            "status": "active", "since": since, "confirmedBy": actor, "proposalId": p["id"], "replaces": p.get("replaces")}
 
 
 def _activate(learning, item):

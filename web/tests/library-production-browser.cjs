@@ -509,6 +509,11 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await context.request.post(base+'/dev/library/tick?workspace='+ws+'&assetId='+viewerTicket.assetId);
    await settleBeforeNavigation('show uploaded multipage PDF');markDiagnosticNavigation('reload',page.url());await page.reload();await search.fill('archive-viewer.pdf');
    await page.getByRole('button',{name:/Document archive-viewer, first-page preview/}).first().click();
+   await page.evaluate(() => {
+    const events = []; window.__documentViewerLifecycle = events;
+    const record = event => { if (events.length >= 80) events.shift(); events.push({type:event.type,key:event.key,tag:event.target?.tagName,label:event.target?.getAttribute?.('aria-label'),viewer:!!document.querySelector('[data-document-viewer]')}); };
+    for (const name of ['pointerdown','click','keydown','focusin','focusout']) document.addEventListener(name,record,true);
+   });
    await page.getByRole('button',{name:'Open document viewer',exact:true}).click();
    const reader=page.locator('[data-document-viewer]');await reader.waitFor({state:'visible'});
    const firstPage=reader.locator('img[data-document-page="1"]');await waitForLoadedRaster(firstPage,500,90000);
@@ -549,10 +554,17 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    }
    await reader.getByLabel('Document zoom',{exact:true}).selectOption('page');
    assert.ok(await reader.evaluate(element=>element.getBoundingClientRect().width<=innerWidth+1),'reader controls fit the viewport');
+   const assertViewerPresent = async stage => {
+    const state = await page.evaluate(() => ({present:!!document.querySelector('[data-document-viewer]'),events:window.__documentViewerLifecycle}));
+    assert.ok(state.present, `Document viewer unexpectedly closed ${stage}: ${JSON.stringify(state.events)}`);
+   };
+   await assertViewerPresent('before accessibility scan');
    await page.addScriptTag({path:require.resolve('axe-core')});
    const viewerAccessibility=await page.evaluate(async()=>{const result=await axe.run(document.querySelector('[data-document-viewer]'));return result.violations.filter(item=>['critical','serious'].includes(item.impact)).map(item=>({id:item.id,impact:item.impact,nodes:item.nodes.map(node=>node.target)}));});
    assert.deepEqual(viewerAccessibility,[],'document viewer serious/critical accessibility violations');
+   await assertViewerPresent('after accessibility scan');
    await page.screenshot({path:resolve(out,`document-viewer-${engine}-${width}.png`),fullPage:true});
+   await assertViewerPresent('after screenshot');
    await reader.getByRole('button',{name:'Close document viewer',exact:true}).click();
    await reader.waitFor({state:'hidden'});await page.getByRole('button',{name:'Close asset details'}).click();
    checks.push({engine,width,format:'pdf',viewer:'two actual pages; source text; sidebar; page jump; keyboard; zoom; rotation; current-page find; responsive close',execution:'real source bytes/UI/API/renderer/DB; synthetic identity/storage'});
