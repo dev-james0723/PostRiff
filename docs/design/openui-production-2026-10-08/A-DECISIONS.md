@@ -145,7 +145,7 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
   - G03 fails as soon as two first-pass misses, or one case that is not functional after its repair, are known. Otherwise a short sample stays unverified.
 
   Freezing and cost:
-  - The corpus is frozen at the merge commit of the PR that introduced it. The release test pins its hash, the first 30 cases byte for byte, and the edits and faults.
+  - The corpus is frozen at the merge commit of PR #157, which introduced it. The release test pins its hash, the first 30 cases byte for byte, and the edits and faults.
   - Any change to a case, its order or the threshold is a new corpus. It needs a new decision and a new corpus id, and results from different corpora are never pooled.
   - A full live run costs about 4.7 USD at run-3 rates. Run 3 cost 2.29 USD for 27 cases plus 8 edits, about 0.065 USD per generation including its Manager turn; a full run is 72 generations (60 normal, 9 edits and 3 fault cases).
   - The runner's per-case estimate rises from 0.06 to 0.07 USD so that it stays conservative. A paid run still needs DP-2 approval. Within the existing 5 USD canary cap, the headroom is about 0.3 USD.

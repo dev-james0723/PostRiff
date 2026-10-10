@@ -185,7 +185,7 @@ def sample_plan() -> dict:
               {"caseId": "F-retry", "kind": "fault", "fault": "explicit Try again after a failure", "expect": "cost/consent shown first; a new attempt, never automatic"}]
     return {"contractVersion": "rafii-genui/1",
             "corpus": {"id": G03_CORPUS_ID, "decision": "D-A53", "decidedBy": "James, 2026-10-09", "normalCases": len(normal), "sha256": corpus_sha256(normal),
-                       "frozen": "at the merge commit of the PR that introduced it; cases 1–30 are the v1 corpus byte for byte",
+                       "frozen": "at the merge commit of PR #157, which introduced it; cases 1–30 are the v1 corpus byte for byte",
                        "rule": "fixed before any measurement; the denominator never changes; no case is dropped or replaced because it fails",
                        "followUps": list(V2_FOLLOW_UPS)},
             "normal": normal, "edits": edits, "faults": faults, "runOrder": run_order(normal, edits),
