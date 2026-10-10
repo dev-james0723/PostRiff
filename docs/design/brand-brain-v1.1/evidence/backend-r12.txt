@@ -53,4 +53,3 @@ PASS: persisted import, exact grant, personalized binding, viewer denial, revoca
 {"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_growth_phase1.py"]}
 Generating route types...
 ✓ Types generated successfully
-
