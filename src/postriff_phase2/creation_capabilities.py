@@ -59,6 +59,7 @@ ERRORS = {
     "unknown_language": "Choose supported destinations.",
     "schema_revision_mismatch": "Rafii's platform list changed. Reload and choose your destinations again.",
     "field_not_allowed": "That draft field isn't part of this platform's format.",
+    "format_not_enabled": "Choose a native format this platform supports.",
 }
 
 
@@ -167,6 +168,10 @@ class _Projection:
             self.registry, release = None, None
         self.release = release
         self.rollout = rollout(values)
+        # Native formats beyond each platform's default (Story, Reel, carousel, thread…) are part of the rollout: with
+        # every wave off, none is offered or accepted, so a request means exactly what it did before. Rows keep every
+        # format, so drafts saved while a wave was on still review and export the same after a rollback.
+        self.formats_enabled = any(self.rollout["flags"].values())
         rows = []
         for platform, skill_id in CHANNEL_SKILLS.items():
             rows.append(self._row(platform, skill_id))
@@ -196,6 +201,7 @@ class _Projection:
             blocker = ("no_native_formats", f"{skill_id} declares no native formats.")
         original = platform in ORIGINAL_PLATFORMS
         exposed = original or self.rollout["all"] or platform in self.rollout["extra"]
+        default_format = DEFAULT_FORMATS.get(platform) or (formats[0]["id"] if formats else None)
         if blocker:
             draft = {"state": "blocked", "reason": blocker[0], "detail": blocker[1]}
         elif not exposed:
@@ -221,7 +227,7 @@ class _Projection:
             "skill": {"id": skill_id, "version": loaded["version"] if loaded else None, "sha256": loaded["sha256"] if loaded else None,
                       "registryVersion": (entry or {}).get("version"), "required": ["postriff-content-craft", "postriff-adapter-contract", skill_id]},
             "formats": formats,
-            "defaultFormat": DEFAULT_FORMATS.get(platform) or (formats[0]["id"] if formats else None),
+            "defaultFormat": default_format,
             "limits": _limits(platform),
             "operations": operations,
             "qualification": {
@@ -236,11 +242,16 @@ class _Projection:
     def draftable(self):
         return tuple(row["platform"] for row in self.rows if row["operations"]["draft"]["state"] == "ready")
 
+    def offered_formats(self, row):
+        """The formats a new request may name: every format while a wave is on, only the default while all are off."""
+        return row["formats"] if self.formats_enabled else [f for f in row["formats"] if f["id"] == row["defaultFormat"]]
+
     def public(self):
         """The versioned facet the browser reads. Method only: no skill bodies, prompts or private packages."""
+        rows = self.rows if self.formats_enabled else [{**row, "formats": self.offered_formats(row)} for row in self.rows]
         return {"schema": SCHEMA, "revision": self.revision, "registryRelease": self.release,
                 "rollout": {"waves": [name for name, on in self.rollout["flags"].items() if on]},
-                "originalPlatforms": list(ORIGINAL_PLATFORMS), "draftable": list(self.draftable()), "platforms": self.rows}
+                "originalPlatforms": list(ORIGINAL_PLATFORMS), "draftable": list(self.draftable()), "platforms": rows}
 
 
 _CACHE = {}
@@ -303,6 +314,8 @@ def validate_destinations(destinations, values=None, revision=None, proj=None):
                 raise _error("unknown_format")
             if fmt not in ids:
                 raise _error("format_platform_mismatch" if any(fmt in {f["id"] for f in r["formats"]} for r in proj.rows) else "unknown_format")
+            if not proj.formats_enabled and fmt != row["defaultFormat"]:
+                raise _error("format_not_enabled")
         channel_id = d.get("channelId") if isinstance(d.get("channelId"), str) else None
         key = (platform, tag, channel_id, fmt or DEFAULT_FORMATS.get(platform))
         if key in seen:
@@ -471,13 +484,21 @@ def validate_native_fields(platform, format_id, fields, proj=None):
 
 
 # -- export ---------------------------------------------------------------------------------
+def _item_text(item):
+    """One entry of a list field as text: an ordered {"index","text"} item exports its text, never its dict form."""
+    return str(item.get("text") or "") if isinstance(item, dict) else str(item)
+
+
 def export_package(variants, *, campaign_id=None, created_at=None):
     """A manual-handoff package: one file per variant (exact text, native fields in order, attribution) plus a
     manifest with sha256 per file. Never a publication receipt: `published` is always False."""
     files, manifest = [], []
     proj = None
     for index, variant in enumerate(variants or []):
-        native = current_native(variant, proj)
+        try:
+            native = current_native(variant, proj)
+        except Exception:  # noqa: BLE001 - an unreadable projection exports the exact text, never fails the handoff
+            native = {}
         platform = variant.get("platform") or "draft"
         slug = re.sub(r"[^a-z0-9]+", "-", platform.lower()).strip("-") or "draft"
         language = variant.get("language") or "und"
@@ -486,7 +507,7 @@ def export_package(variants, *, campaign_id=None, created_at=None):
         fields = native.get("fields") or {}
         for key in ("title", "description", "question", "options", "sequence", "cta", "terms", "start", "end", "flair", "category", "content_warning", "spokenScript", "onScreenText"):
             if fields.get(key) and not (key == "title" and platform == "Xiaohongshu"):
-                lines.append(f"[{key}]\n{fields[key] if not isinstance(fields[key], list) else chr(10).join(map(str, fields[key]))}")
+                lines.append(f"[{key}]\n{fields[key] if not isinstance(fields[key], list) else chr(10).join(_item_text(item) for item in fields[key])}")
         for key in ("slides", "segments", "frames"):
             for item in fields.get(key) or []:
                 lines.append(f"[{key[:-1]} {item.get('index')}]\n{item.get('text')}")
@@ -494,7 +515,8 @@ def export_package(variants, *, campaign_id=None, created_at=None):
             lines.append(f"[alt text]\n{fields['altText']}")
         if variant.get("sourceIds"):
             lines.append("[sources]\n" + "\n".join(variant["sourceIds"]))
-        body = "\n\n".join(lines).rstrip() + "\n"
+        # A lone surrogate (broken emoji from a paste) is replaced, so the file, its bytes and its hash always agree.
+        body = ("\n\n".join(lines).rstrip() + "\n").encode("utf-8", "replace").decode("utf-8")
         data = body.encode("utf-8")
         files.append({"name": name, "mime": "text/plain; charset=utf-8", "text": body})
         manifest.append({"file": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data), "platform": platform,

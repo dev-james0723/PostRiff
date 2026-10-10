@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import shutil
+import hashlib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -111,6 +112,32 @@ class RolloutTest(FlagIsolation):
                 agent_runtime.check_destinations([{"platform": p, "language": "en"} for p in cc.ORIGINAL_PLATFORMS])
         self.assertEqual(agent_runtime.PLATFORMS, cc.ORIGINAL_PLATFORMS)
         self.assertEqual(agent_runtime.DEFAULT_REQUEST_DESTINATIONS, ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"}))
+
+    def test_native_formats_are_offered_and_accepted_only_while_a_wave_is_on(self):
+        """Security review P2-1: with every flag off nothing changes, not even on the original five. The facet offers only
+        each platform's default format (so the composer shows no picker and the writer prompt is unchanged), a named
+        Story, Reel or carousel is refused, and a draft saved while a wave was on still reviews and exports."""
+        cc._CACHE.clear()
+        with env(OFF):
+            facet = cc.projection().public()
+            instagram = next(r for r in facet["platforms"] if r["platform"] == "Instagram")
+            self.assertEqual([f["id"] for f in instagram["formats"]], ["instagram.post"])
+            self.assertTrue(all(len(r["formats"]) <= 1 for r in facet["platforms"]))
+            for platform, fmt in (("Instagram", "instagram.story"), ("Instagram", "instagram.reel"), ("Instagram", "instagram.carousel"), ("X", "x.thread"), ("LinkedIn", "linkedin.document")):
+                with self.assertRaises(AlphaError) as caught:
+                    agent_runtime.check_destinations([{"platform": platform, "language": "en", "format": fmt}])
+                self.assertEqual(caught.exception.code, "format_not_enabled", fmt)
+            agent_runtime.check_destinations([{"platform": "Instagram", "language": "en", "format": "instagram.post"}])
+            # Rollback keeps saved native drafts: the full format table still describes them.
+            story = cc.native_draft({"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Copy."})
+            self.assertEqual(story["formatId"], "instagram.story")
+            self.assertEqual(story["readiness"]["publish"], "export_only")
+            self.assertEqual(len(cc.export_package([{"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Copy."}])["files"]), 1)
+        cc._CACHE.clear()
+        with env(WAVE1):
+            agent_runtime.check_destinations([{"platform": "Instagram", "language": "en", "format": "instagram.story"}])
+            instagram = next(r for r in cc.projection().public()["platforms"] if r["platform"] == "Instagram")
+            self.assertEqual(len(instagram["formats"]), 4)
 
     def test_failed_projection_falls_back_to_the_five(self):
         with env(ALL), mock.patch.object(cc, "projection", side_effect=RuntimeError("registry unreadable")):
@@ -514,6 +541,27 @@ class ReviewFixTest(FlagIsolation):
         text = cc.export_package([variant])["files"][0]["text"]
         self.assertIn("[spokenScript]\nSay this", text)
         self.assertIn("[onScreenText]\nShow this", text)
+
+    def test_export_writes_list_items_as_text_and_survives_broken_unicode(self):
+        """Security review P3: poll options export as their text, a lone surrogate never 500s and the hash matches the
+        bytes, and an unreadable projection still exports the exact text."""
+        variant = {"platform": "X", "language": "en", "format": "x.thread", "text": "First \ud83c post",
+                   "nativeFields": {"sequence": [{"index": 1, "text": "Second post"}, {"index": 2, "text": "Third post"}]}}
+        package = cc.export_package([variant])
+        body = package["files"][0]["text"]
+        self.assertIn("[sequence]\nSecond post\nThird post", body)
+        self.assertNotIn("'index'", body)
+        self.assertEqual(hashlib.sha256(body.encode("utf-8")).hexdigest(), package["manifest"][0]["sha256"])
+        with mock.patch.object(cc, "projection", side_effect=RuntimeError("registry unreadable")):
+            plain = cc.export_package([{"platform": "LinkedIn", "language": "en", "text": "Exact text"}])
+        self.assertTrue(plain["files"][0]["text"].startswith("Exact text"))
+        self.assertFalse(plain["published"])
+
+    def test_agent_rewrite_keeps_the_drafts_native_format(self):
+        """Security review P3: rewriting a Story asks for that Story's slot, never a new default post."""
+        source = (ROOT / "src/postriff_phase2/agent_runtime_v2/domain_tools.py").read_text()
+        body = source[source.index("def draft_rewrite"):source.index("key = \"agent-rewrite:\"")]
+        self.assertIn('destination["format"] = variant["format"]', body)
 
 
 class PackReviewTest(FlagIsolation):

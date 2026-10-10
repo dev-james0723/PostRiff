@@ -405,7 +405,8 @@ class Phase2Store(Store):
         # A native format other than the platform's default (a Story, Reel, carousel…) has no format-aware publisher:
         # it is never approved as a default post. Export it and post it by hand (creation projection, spec §12).
         from .creation_capabilities import DEFAULT_FORMATS, EXPORT_ONLY_NOTE
-        if v.get("format") and v["format"] != DEFAULT_FORMATS.get(c["platform"]):
+        native_format = (v.get("native") or {}).get("formatId") if isinstance(v.get("native"), dict) else None
+        if any(f and f != DEFAULT_FORMATS.get(c["platform"]) for f in (v.get("format"), native_format)):
             raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.

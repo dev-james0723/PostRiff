@@ -4,8 +4,7 @@
  * and kept in one place so every page reads the same shapes.
  */
 
-import type { CreationCatalog } from '@/lib/creation/capabilities';
-import type { NativeDraft } from '@/lib/creation/native-draft';
+import type { CreationCatalog, NativeDraft } from '@/lib/creation/capabilities';
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
 import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 

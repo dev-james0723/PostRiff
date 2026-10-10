@@ -790,6 +790,61 @@ def _():
         "row": {k: row.get(k) for k in ("formatId", "coverage", "provider")}, "undo": undone, "editor": editor}
 
 
+@scenario("CS06", "content_skills", "a replayed regenerate returns the revision it already made (no new run); a live retry claim refuses a concurrent retry and a stale one is taken over once; a reused source keeps the person's unapproved fact unapproved and out of the campaign")
+def _():
+    request = {**CS_REQUEST, "title": "Bread class (keys)", "goal": "Invite neighbours with request keys"}
+    base = service.coworker.source_campaign(wid, OWNER, request)["sourceCampaign"]
+
+    def run_count():
+        with connection() as db:
+            return db.execute("SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s", (wid,)).fetchone()[0]
+    first = service.coworker.source_campaign(wid, OWNER, {**request, "regenerate": True, "requestKey": "cs06-regenerate-a"})["sourceCampaign"]
+    runs = run_count()
+    replay = service.coworker.source_campaign(wid, OWNER, {**request, "regenerate": True, "requestKey": "cs06-regenerate-a"})
+    replay_ok = bool(replay.get("existing")) and replay["sourceCampaign"]["id"] == first["id"] and run_count() == runs
+    second = service.coworker.source_campaign(wid, OWNER, {**request, "regenerate": True, "requestKey": "cs06-regenerate-b"})["sourceCampaign"]
+    numbered = second["id"] not in (first["id"], base["id"]) and second["baseId"] == base["id"]
+
+    # Retry claims: a failed campaign, then a retry another request already claimed.
+    failing_request = {**request, "title": "Bread class (claim)", "goal": "Invite neighbours after a claim"}
+    original_turn = service.ideas.turn
+    service.ideas.turn = lambda *a, **k: (_ for _ in ()).throw(AlphaError("The writer is unavailable.", 503))
+    try:
+        failed = service.coworker.source_campaign(wid, OWNER, failing_request)["sourceCampaign"]
+    finally:
+        service.ideas.turn = original_turn
+
+    def claim(at):
+        def apply(s, _actor):
+            record_ = next(x for x in s["coworker"]["sourceCampaigns"] if x["id"] == failed["id"])
+            record_["status"], record_["retrying"] = "drafting", {"attempt": 2, "at": at, "by": "another-request"}
+        return apply
+    command(claim(service.coworker.clock()))
+    try:
+        service.coworker.source_campaign(wid, OWNER, {**failing_request, "retry": True})
+        busy = False
+    except AlphaError as error:
+        busy = error.code == "campaign_busy"
+    command(claim(service.coworker.clock() - 3600))
+    taken = service.coworker.source_campaign(wid, OWNER, {**failing_request, "retry": True})["sourceCampaign"]
+    taken_ok = taken["status"] == "ready_for_review" and taken["attempts"] == 2 and "retrying" not in taken
+
+    # The person unapproves a fact on the reused source; a later regenerate must not approve it again.
+    source = next(x for x in state()["sources"] if x["id"] == base["sourceId"])
+    origin = source.get("origin")
+    keep = [f["id"] for f in source["facts"] if f.get("approved")][:1]
+    dropped = [f for f in source["facts"] if f.get("approved") and f["id"] not in keep]
+    act("approve_source", {"sourceId": source["id"], "factIds": keep})
+    third = service.coworker.source_campaign(wid, OWNER, {**request, "regenerate": True, "requestKey": "cs06-regenerate-c"})["sourceCampaign"]
+    after = next(x for x in state()["sources"] if x["id"] == base["sourceId"])
+    planning = next(c for c in state()["raffi"]["campaignPlanning"]["campaigns"] if c["id"] == third["campaignId"])
+    unapproved_stays = (bool(dropped) and all(not f.get("approved") for f in after["facts"] if f["id"] in {d["id"] for d in dropped})
+                        and not any(d["text"][:60] in json.dumps(planning.get("facts"), ensure_ascii=False) for d in dropped) and after.get("origin") == origin)
+    act("approve_source", {"sourceId": source["id"], "factIds": keep + [d["id"] for d in dropped]})
+    return replay_ok and numbered and busy and taken_ok and unapproved_stays, {
+        "replay": replay_ok, "numbered": [first["id"], second["id"]], "busy": busy, "taken": [taken["status"], taken["attempts"]], "unapprovedStays": unapproved_stays}
+
+
 # === A / G / L ==============================================================================================================
 @scenario("A01", "attention", "“What needs my attention?” is ordered by fixed rules, explains why, respects the person's permissions and never makes engagement urgent")
 def _():

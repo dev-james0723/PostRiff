@@ -62,9 +62,9 @@
   },
   {
    "id": "postriff-content-engine",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "kind": "knowledge",
-   "sha256": "sha256:bef9fe3135847c250a519b2c99a774c9aebc14ca0ffc4b95be5489176428c147",
+   "sha256": "sha256:d4df512be50110d9f494eb88431998740d5ae380da0826cbf9f8965df8aaca3e",
    "description": "Use when creating, researching, localizing, reviewing, or scheduling social content for a PostRiff workspace, in any language and for any channel the workspace has connected.",
    "intents": [
     "*"
@@ -111,7 +111,7 @@
      "id": "postriff-content-engine"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "1.2.0"
   },
   {
    "id": "postriff-content-craft",
@@ -2044,9 +2044,9 @@
   },
   {
    "id": "postriff-channel-x",
-   "version": "1.0.1",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:f6d4528c36f74206d28dfd83c3b42a3d985942752335e358cc68156280957b82",
+   "sha256": "sha256:2f59dec0c18e30a26298e61ba47ea4165b1648df1a898bf85e54e9b6e7e35e9c",
    "description": "Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.",
    "intents": [
     "*"
@@ -2100,7 +2100,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.1"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-channel-xiaohongshu",

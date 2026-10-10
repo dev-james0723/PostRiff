@@ -528,6 +528,9 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
         destination = {"platform": platform, "language": variant.get("language") or "en"}
         if platform == variant.get("platform") and variant.get("channelId"):
             destination["channelId"] = variant["channelId"]
+        if platform == variant.get("platform") and variant.get("format"):
+            # A rewrite of a Story stays that Story (its own slot), never a new default post for the same account.
+            destination["format"] = variant["format"]
     key = "agent-rewrite:" + hashlib.sha256(f"{ctx.trace_id}|{args['draftId']}|{args['instruction']}|{platform}".encode()).hexdigest()[:40]
     request = {"text": "", "intentText": args["instruction"], "idea": args["instruction"], "material": before_text, "idempotencyKey": key, "timeZone": ctx.zone,
                "materialRef": {"type": "draft", "id": args["draftId"], "title": f"{variant.get('platform')} draft"}, "destinations": [destination]}

@@ -591,14 +591,18 @@ class CoworkerService:
             identity.append(sorted([d["platform"], d["language"], d.get("channelId") or "", d.get("format") or ""] for d in destinations))
         record_id = "sc_" + hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()[:12]
         fingerprint = _fingerprint(state, destinations)
+        request_key = _clean(payload.get("requestKey"), 120) or None
         base_id = None
         if payload.get("regenerate") is True:
             # An explicit regenerate is a new tracked revision; the earlier campaign and its drafts stay as they are.
             # Monotonic over the retained history (which is bounded): the next number is above every kept revision, so a
             # trimmed list can never make a new regenerate collide with a kept one.
-            kept = [x["id"] for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x.get("baseId") == record_id]
-            numbers = [int(i.rsplit("_r", 1)[1]) for i in kept if i.rsplit("_r", 1)[-1].isdigit()]
-            base_id, record_id = record_id, f"{record_id}_r{max(numbers + [1]) + 1}"
+            kept_records = [x for x in ((state.get("coworker") or {}).get("sourceCampaigns") or []) if x.get("baseId") == record_id]
+            replay = next((x["id"] for x in kept_records if request_key and x.get("requestKey") == request_key), None)
+            numbers = [int(x["id"].rsplit("_r", 1)[1]) for x in kept_records if x["id"].rsplit("_r", 1)[-1].isdigit()]
+            # A replayed regenerate (a network retry, a double click) carries the same request key and gets the revision
+            # it already made, never another paid draft.
+            base_id, record_id = record_id, replay or f"{record_id}_r{max(numbers + [1]) + 1}"
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.hosted.ideas._member(row), "edit")
@@ -613,6 +617,19 @@ class CoworkerService:
                 if existing.get("fingerprint") and existing["fingerprint"] != fingerprint and not existing.get("stale"):
                     # Skills, voice or the capability projection changed since it was written: say so; never redraft silently.
                     existing["stale"] = {"reason": "inputs_changed", "changed": sorted(k for k in fingerprint if fingerprint.get(k) != existing["fingerprint"].get(k)), "at": now}
+                claim = existing.get("retrying") or {}
+                claim_live = bool(claim) and now - float(claim.get("at") or 0) < RETRY_CLAIM_SECONDS
+                if base_id and existing.get("requestKey") != request_key:
+                    # Two different regenerates raced for the same revision number; the second never drafts into the first.
+                    box["busy"] = True
+                elif payload.get("retry") is True and (existing.get("status") in ("needs_input", "ready_for_review") or (claim and not claim_live)):
+                    # Claimed in this transaction, so a concurrent retry sees it and stops. A stale claim (the retry died)
+                    # is taken over under the same attempt number, so the writer key and its run are reused, not repeated.
+                    attempt = int(claim.get("attempt") or 0) or int(existing.get("attempts") or 1) + 1
+                    existing["status"], existing["retrying"] = "drafting", {"attempt": attempt, "at": now, "by": principal}
+                    box["retry"] = attempt
+                elif payload.get("retry") is True and claim_live:
+                    box["busy"] = True
                 box["record"], box["existing"] = existing, True
                 return existing
             _mark_superseded(state_, artifact, record_id, now)
@@ -623,17 +640,21 @@ class CoworkerService:
                 from postriff_alpha.domain import clean as domain_clean
                 fingerprint_ = hashlib.sha256(("text" + domain_clean(source_text, 20000)).encode()).hexdigest()
                 source = next((x for x in state_.get("sources") or [] if x.get("fingerprint") == fingerprint_ and x.get("active")), None)
+                reused = source is not None
                 if source is None:
                     before = {x.get("id") for x in state_.get("sources") or []}
                     commands(state_, principal, "source", {"kind": "text", "title": artifact["title"][:200], "text": source_text})
                     source = next(x for x in state_["sources"] if x.get("id") not in before)
                 source_id = source["id"]
-                fact_ids = [f["id"] for f, claim in zip(source["facts"], pack["claims"]) if claim["usableForDraft"]]
-                if not all(f.get("approved") for f in source["facts"] if f["id"] in fact_ids):
-                    approved = [f["id"] for f in source["facts"] if f.get("approved")]
-                    commands(state_, principal, "approve_source", {"sourceId": source_id, "factIds": list(dict.fromkeys(approved + fact_ids))})
-                source["origin"] = {"kind": "source_to_campaign", **{k: artifact["provenance"].get(k) for k in ("provider", "accessMethod", "url", "host", "publishedAt", "author", "contentHash", "evidenceType", "representedScope")},
-                                    "retrievedAt": artifact["provenance"].get("retrievedAt"), "evidenceId": evidence_id, "factPackId": pack["id"], "format": artifact["format"]}
+                if reused:
+                    # A source the person already has keeps their fact decisions exactly: nothing is re-approved (a claim
+                    # they unapproved stays out) and its origin is theirs. The campaign drafts only from approved facts.
+                    usable[:] = [claim for f, claim in zip(source["facts"], pack["claims"]) if claim["usableForDraft"] and f.get("approved")]
+                else:
+                    fact_ids = [f["id"] for f, claim in zip(source["facts"], pack["claims"]) if claim["usableForDraft"]]
+                    commands(state_, principal, "approve_source", {"sourceId": source_id, "factIds": fact_ids})
+                    source["origin"] = {"kind": "source_to_campaign", **{k: artifact["provenance"].get(k) for k in ("provider", "accessMethod", "url", "host", "publishedAt", "author", "contentHash", "evidenceType", "representedScope")},
+                                        "retrievedAt": artifact["provenance"].get("retrievedAt"), "evidenceId": evidence_id, "factPackId": pack["id"], "format": artifact["format"]}
             created = commands(state_, principal, "raffi_campaign_create", {"goal": goal, "audience": audience or "Not specified",
                                                                              "facts": {f"claim_{i + 1}": c["text"][:200] for i, c in enumerate(usable[:12])},
                                                                              "accountIds": [d["channelId"] for d in destinations if d.get("channelId")]})
@@ -641,7 +662,7 @@ class CoworkerService:
             record = {"id": record_id, "campaignId": campaign_id, "sourceId": source_id, "evidenceId": evidence_id,
                       "source": {k: artifact[k] for k in ("id", "format", "title", "provenance")}, "factPack": pack, "brief": brief, "angles": angles,
                       "destinations": destinations, "drafts": [], "creativeBriefs": [], "status": "drafting", "createdAt": now, "createdBy": principal,
-                      "fingerprint": fingerprint, "requestKey": _clean(payload.get("requestKey"), 120) or None, **({"baseId": base_id} if base_id else {})}
+                      "fingerprint": fingerprint, "requestKey": request_key, **({"baseId": base_id} if base_id else {})}
             state_.setdefault("coworker", {}).setdefault("sourceCampaigns", [])
             state_["coworker"]["sourceCampaigns"] = state_["coworker"]["sourceCampaigns"][-19:] + [record]
             box["record"] = record
@@ -650,7 +671,9 @@ class CoworkerService:
 
         self._command(workspace_id, token, create, "edit", "source_campaign.created", record_id, {"claims": len(pack["claims"]), "usable": len(usable)})
         record = box["record"]
-        retry = bool(box.get("existing")) and payload.get("retry") is True and record.get("status") in ("needs_input", "ready_for_review")
+        if box.get("busy"):
+            raise AlphaError("This campaign is already being drafted. Try again in a moment.", 409, code="campaign_busy")
+        retry = box.get("retry")
         if box.get("existing") and record.get("status") != "drafting" and not retry:
             # The same source and brief already made this campaign: answer with it and never draft over it (the
             # record id is content-addressed, so a repeat would otherwise replace its drafts with an error).
@@ -678,7 +701,7 @@ class CoworkerService:
                 # person's edits to them are never touched.
                 done = {(d.get("platform"), d.get("language"), d.get("channelId"), d.get("format")) for d in kept}
                 destinations = [d for d in record.get("destinations") or destinations if (d["platform"], d["language"], d.get("channelId"), d.get("format")) not in done]
-                key = f"{key}:retry{int(record.get('attempts') or 1) + 1}"
+                key = f"{key}:retry{retry}"
             try:
                 if not destinations:
                     raise AlphaError("Every target already has a draft.", 409, code="nothing_to_retry")
@@ -727,7 +750,8 @@ class CoworkerService:
         def finish(state_, _p):
             target = next(x for x in state_["coworker"]["sourceCampaigns"] if x["id"] == record_id)
             target["drafts"] = drafts
-            target["attempts"] = int(target.get("attempts") or 1) + (1 if retry else 0)
+            target["attempts"] = retry or int(target.get("attempts") or 1)
+            target.pop("retrying", None)
             target["creativeBriefs"] = creative_plan["plans"] if creative_plan else []
             # Missing media is a saved brief and an explicit state, never a reason to drop the finished copy.
             target["media"] = {"state": ("brief_saved" if creative_plan.get("missingAssets") else "planned") if creative_plan else "not_needed",
@@ -1202,6 +1226,10 @@ def _campaign_destinations(state, requested):
         raise AlphaError("Choose at least one account to write for.", 400)
     creation_capabilities.validate_destinations(out)
     return out
+
+
+# A retry claim older than this is treated as abandoned (the process died mid-draft) and may be taken over.
+RETRY_CLAIM_SECONDS = 15 * 60
 
 
 def _fingerprint(state, destinations):

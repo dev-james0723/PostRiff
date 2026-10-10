@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { draftFacts } from '../src/lib/creation/native-draft.ts';
+import { draftFacts, reviewFactsEnabled } from '../src/lib/creation/capabilities.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const byKey = (facts) => Object.fromEntries(facts.map((f) => [f.key, f]));
@@ -98,4 +98,13 @@ test('the home results, the conversation card and the saved-draft sheet all rend
   assert.match(read('agent/variant-card.tsx'), /<NativeDraftFacts variant=\{variant\}/);
   assert.match(read('agent/home/idea-splits.tsx'), /<NativeDraftFacts variant=\{current\.variant\}/);
   assert.match(read('pipeline/detail-sheet.tsx'), /<NativeDraftFacts/);
+});
+
+test('the facts appear only while a creation wave is on, so a flags-off deployment is unchanged', () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/creation-catalog.json'), 'utf8'));
+  assert.ok(catalog.rollout.waves.length > 0);
+  assert.equal(reviewFactsEnabled(catalog), true);
+  for (const value of [undefined, null, {}, { ...catalog, rollout: { waves: [] } }, { ...catalog, rollout: undefined }, { ...catalog, schema: 'other' }]) {
+    assert.equal(reviewFactsEnabled(value), false);
+  }
 });
