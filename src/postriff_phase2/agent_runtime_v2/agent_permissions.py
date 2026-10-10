@@ -1,6 +1,6 @@
 """Rafii agent permissions: presets, the consent store, receipts and revocation (rafii-agent-authz/1, CF-2 §2–§7, §16).
 
-Migration 107 holds the rows; this module is the only writer, and only session-authenticated HTTP handlers call its
+Migration 109 holds the rows; this module is the only writer, and only session-authenticated HTTP handlers call its
 write functions (PI-3: never from a tool context, never with an API token).
 
 - A person with no row, or whose row is marked `ended_at` (membership ended), resolves to the legacy baseline:
@@ -213,6 +213,15 @@ def catalogue_diff(before: Grants, after: Grants, *, member, state, now: float |
                 denied.add(cap.capability_id)
             elif b.outcome != "deny" and rank(a.required) < rank(b.required):
                 widened.add(cap.capability_id)
+    # A preset can add a tool to the Manager even when a specialist could already
+    # reach it. That is still a widening and must require the person's confirmation.
+    from . import capability_registry
+    newly_reachable = capability_registry.reach("manager", after) - capability_registry.reach("manager", before)
+    for capability_id in newly_reachable:
+        cap = authz.capability_by_id(capability_id)
+        if cap and any(authz.decide(cap, surface=surface, member=member, grants=after, state=state, actor=actor, now=now).outcome != "deny"
+                       for surface in authz.capability_surfaces(cap)):
+            widened.add(capability_id)
     looser = set(SPEND.get(after.spend_confirmation, ())) < set(SPEND.get(before.spend_confirmation if before.source == "explicit" else "none", ()))
     return CatalogueDiff(frozenset(widened), frozenset(denied), looser)
 
@@ -241,7 +250,7 @@ def _ui_activations(cur, event: RevocationEvent) -> int:
     """H4: unused GenUI activations of this person can no longer be executed."""
     if not event.denied_now or not _table(cur, "pr_ui_activations"):
         return 0
-    cur.execute("UPDATE public.pr_ui_activations SET used_at=now() WHERE workspace_id=%s AND (principal=%s OR %s IS NULL) AND used_at IS NULL AND expires_at>now()",
+    cur.execute("UPDATE public.pr_ui_activations SET used_at=now() WHERE workspace_id=%s AND (principal=%s::uuid OR %s::uuid IS NULL) AND used_at IS NULL AND expires_at>now()",
                 (event.workspace_id, event.user_id, event.user_id))
     return cur.rowcount or 0
 
@@ -250,7 +259,7 @@ def _autopilot(cur, event: RevocationEvent) -> int:
     """H5: a bounded autopilot policy that covers a capability denied now stops."""
     if not event.denied_now:
         return 0
-    cur.execute("UPDATE public.pr_agent_autopilot_policies SET revoked_at=now(),revoked_epoch=%s,revoke_reason=%s WHERE workspace_id=%s AND (user_id=%s OR %s IS NULL) "
+    cur.execute("UPDATE public.pr_agent_autopilot_policies SET revoked_at=now(),revoked_epoch=%s,revoke_reason=%s WHERE workspace_id=%s AND (user_id=%s::uuid OR %s::uuid IS NULL) "
                 "AND revoked_at IS NULL AND capability_ids && %s::text[]",
                 (event.epoch_after, "membership_ended" if event.reason == "membership_ended" else "permission_changed", event.workspace_id, event.user_id, event.user_id,
                  sorted(event.denied_now)))

@@ -11,6 +11,7 @@ import logging
 import re
 import sys
 import unittest
+from types import SimpleNamespace
 from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
@@ -28,9 +29,9 @@ domain_tools.ensure_registered()
 NOW = 1_790_000_000.0
 WS, OTHER_WS, ME = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "owner-1"
 OWNER, EDITOR, VIEWER, APPROVER = (Membership.from_row(r) for r in ("owner", "editor", "viewer", "approver"))
-# migrations/postriff/107_agent_permissions.sql must stay byte-identical to the frozen CF-2 proposal
-# (docs/design/rafii-agent-os/migrations/107_agent_permissions.sql on the contracts branch, PR #160).
-FROZEN_107_SHA256 = "d77370c038d1e249ba63eaf3d2f6d09338586e9582da7770d172875ded9888da"
+# migrations/postriff/109_agent_permissions.sql must stay byte-identical to the frozen CF-2 proposal
+# (docs/design/rafii-agent-os/migrations/109_agent_permissions.sql on the contracts branch, PR #160).
+FROZEN_109_SHA256 = "927b88451d57b270a0d766f9626384a0e41dfe7b62f027de47710d32b24fee48"
 # Capabilities added after the freeze (CF-1 §7: since > 1). They are never part of LEGACY_BASELINE_V1.
 POST_FREEZE = {"tool.library_browse"}
 
@@ -62,24 +63,40 @@ def decide(c, g, *, member=OWNER, actor=None, state=None, view=None, target=None
 
 
 class ModeConfigTest(unittest.TestCase):
-    def test_off_unless_mode_set_and_workspace_listed(self):
+    def test_dark_by_default_and_fail_closed_activation(self):
         self.assertEqual(config.RuntimeConfig.from_environment({}).permissions_for(WS), "off")
-        cfg = config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_MODE": "shadow"})
-        self.assertEqual(cfg.permissions_for(WS), "off", "an empty allowlist is no workspace")
-        cfg = config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_MODE": "enforce", "RAFII_AGENT_PERMISSIONS_WORKSPACES": WS.upper()})
-        self.assertEqual((cfg.permissions_for(WS), cfg.permissions_for(OTHER_WS)), ("enforce", "off"))
-        cfg = config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_MODE": "shadow", "RAFII_AGENT_PERMISSIONS_WORKSPACES": "*"})
-        self.assertEqual((cfg.permissions_for(WS), cfg.permissions_for(OTHER_WS), cfg.permissions_for(None)), ("shadow", "shadow", "off"))
-        for typo in ("on", "1", "ENFORCED", "true"):
-            cfg = config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_MODE": typo, "RAFII_AGENT_PERMISSIONS_WORKSPACES": "*"})
-            self.assertEqual(cfg.permissions_for(WS), "off", typo)
+        env = {"RAFII_AGENT_PERMISSIONS_ENABLED": "1", "RAFII_AGENT_PERMISSIONS_WORKSPACES": WS.upper()}
+        cfg = config.RuntimeConfig.from_environment(env)
+        self.assertEqual((cfg.permissions_for(WS), cfg.permissions_for(OTHER_WS)), ("shadow", "off"))
+        self.assertEqual(config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_ENABLED": "1"}).permissions_for(WS), "off")
+        cfg = config.RuntimeConfig.from_environment({**env, "RAFII_AGENT_PERMISSIONS_ENFORCED": "1"})
+        self.assertEqual(cfg.permissions_for(WS), "shadow", "task engine missing")
+        cfg.task_engine_for = lambda ws: "on"
+        self.assertEqual(cfg.permissions_for(WS), "shadow", "enforcement adapters incomplete")
+        with mock.patch.object(authz, "ENFORCEMENT_POINTS", set(authz.REQUIRED_ENFORCEMENT_POINTS)):
+            self.assertEqual(cfg.permissions_for(WS), "enforce")
+            cfg.flags["RAFII_GENUI_ENABLED"] = True
+            self.assertEqual(cfg.permissions_for(WS), "shadow", "no verified current-release receipt provider")
+            cfg.release_sha = "a" * 40
+            cfg.permissions_gate_reader = lambda workspace, sha: workspace == WS and sha == "a" * 40
+            self.assertEqual(cfg.permissions_for(WS), "enforce")
+            cfg.release_sha = "b" * 40
+            self.assertEqual(cfg.permissions_for(WS), "shadow", "a stale receipt cannot authorize another release")
 
-    def test_mode_is_not_a_public_flag_and_changes_nothing_else(self):
-        plain = config.RuntimeConfig.from_environment({})
-        on = config.RuntimeConfig.from_environment({"RAFII_AGENT_PERMISSIONS_MODE": "enforce", "RAFII_AGENT_PERMISSIONS_WORKSPACES": "*"})
-        self.assertEqual(plain.public(), on.public())
-        self.assertNotIn("RAFII_AGENT_PERMISSIONS_MODE", config.FLAGS)
-        self.assertEqual(authz.mode_for(object(), WS), "off", "a config without the reader is off")
+    def test_task_engine_canonical_switches_are_fail_closed(self):
+        flags = {"RAFII_AGENT_V2_ENABLED": "1", "RAFII_TASK_ENGINE_ENABLED": "1", "RAFII_TASK_ENGINE_WORKSPACES": WS}
+        self.assertEqual(config.RuntimeConfig.from_environment(flags).task_engine_for(WS), "shadow")
+        cfg = config.RuntimeConfig.from_environment({**flags, "RAFII_TASK_ENGINE_AUTHORITATIVE": "1"})
+        self.assertEqual((cfg.task_engine_for(WS), cfg.task_engine_for(OTHER_WS)), ("on", "off"))
+        self.assertFalse(cfg.task_engine_background_for(WS))
+        for off in ({}, {"RAFII_AGENT_TASKS_ENABLED": "1", "RAFII_AGENT_TASKS_AUTHORITATIVE": "1"},
+                    {**flags, "RAFII_AGENT_V2_ENABLED": "0"}, {**flags, "RAFII_TASK_ENGINE_WORKSPACES": ""}):
+            self.assertEqual(config.RuntimeConfig.from_environment(off).task_engine_for(WS), "off")
+
+    def test_permissions_do_not_change_genui_contract_flags(self):
+        from postriff_phase2.agent_runtime_v2 import ui_contracts
+        self.assertFalse(set(ui_contracts.FLAGS) & {"RAFII_AGENT_PERMISSIONS_ENABLED", "RAFII_AGENT_PERMISSIONS_ENFORCED"})
+        self.assertEqual(authz.mode_for(object(), WS), "off")
 
 
 class BaselineTest(unittest.TestCase):
@@ -92,19 +109,30 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(len([c for c in frozen if c.startswith("ui.action.") or (c.startswith("tool.") and c[5:] in ("draft_edit", "schedule_propose"))]) > 0, True)
         self.assertEqual(json.loads(authz.BASELINE_FILE.read_text())["catalogueGeneration"], authz.CATALOGUE_GENERATION)
 
-    def test_legacy_is_exactly_today_for_every_tool(self):
+    def test_legacy_confirmations_are_equal_on_every_registered_surface(self):
         legacy = grants("legacy")
+        ended = ap.legacy(WS, ME, ended=True)
+        equivalent = ap.from_scopes(WS, ME, ap.preset_scopes("legacy_equivalent"), preset="custom", baseline="legacy_v1", spend="none")
         for c in authz.catalogue():
-            d = decide(c, legacy)
-            self.assertEqual((d.outcome, d.required), ("allow", "proposal" if c.approval else "none"), c.capability_id)
-            self.assertEqual(d.reason, "allowed")
+            if c.capability_id not in authz.LEGACY_BASELINE_V1:
+                continue
+            for surface in authz.capability_surfaces(c):
+                d = decide(c, legacy, surface=surface)
+                self.assertEqual(d.required, surface.legacy_confirmation, (c.capability_id, surface.name))
+                for g in (ended, equivalent):
+                    other = decide(c, g, surface=surface)
+                    self.assertEqual((other.outcome, other.required), (d.outcome, d.required), (c.capability_id, surface.name, g))
         late = cap("help_search", capability_id="tool.library_browse", since=2)
         self.assertEqual(decide(late, legacy).reason, "not_in_baseline")
 
     def test_legacy_role_rules_are_unchanged(self):
-        legacy = grants("legacy")
         for c in authz.catalogue():
-            self.assertEqual(decide(c, legacy, member=VIEWER).outcome == "deny", not VIEWER.allows(c.permission), c.capability_id)
+            if c.kind == "native_only" or c.capability_id not in authz.LEGACY_BASELINE_V1:
+                continue
+            for surface in authz.capability_surfaces(c):
+                result = decide(c, grants("legacy"), member=VIEWER, surface=surface)
+                if not VIEWER.allows(c.permission):
+                    self.assertEqual(result.reason, "role", c.capability_id)
 
 
 class DecideTest(unittest.TestCase):
@@ -297,11 +325,11 @@ class GrantsAndPresetsTest(unittest.TestCase):
         self.assertFalse(authz.token_changed(a.token(), a.token()))
         self.assertNotEqual(ap.legacy(WS, ME).token(), ap.legacy(WS, ME, user_epoch=2, ended=True).token(), "an ended row never looks like never-chosen")
 
-    def test_presets_from_legacy_never_widen_and_none_narrows(self):
+    def test_manager_reach_expansion_is_a_widening_and_none_narrows(self):
         legacy = grants("legacy")
         for preset in ("recommended", "full"):
             diff = ap.catalogue_diff(legacy, grants(preset), member=OWNER, state={}, now=NOW)
-            self.assertEqual(diff.widened, frozenset(), preset)
+            self.assertTrue({"tool.campaign_link", "tool.campaign_unlink", "tool.draft_edit"} & diff.widened, preset)
         none = ap.catalogue_diff(legacy, grants("none"), member=OWNER, state={}, now=NOW)
         self.assertTrue(none.denied_now and not none.widened)
         self.assertNotIn("tool.help_search", none.denied_now, "help and navigation stay available under Off")
@@ -444,11 +472,14 @@ class Service:
 
 
 def ctx_for(mode="off", *, workspace=WS, role="owner", request_text="Link the draft", service=None, listed=WS):
-    env = {} if mode == "off" else {"RAFII_AGENT_PERMISSIONS_MODE": mode, "RAFII_AGENT_PERMISSIONS_WORKSPACES": listed}
     service = service or Service(role)
+    # Isolate the E1 adapter, independently of the separate production activation tests.
+    cfg = config.RuntimeConfig.from_environment({})
+    cfg.permissions_for = lambda w: mode if listed == "*" or w == listed else "off"
     return rt_context.RafiiRunContext(service=service, workspace_id=workspace, token="t" * 40, principal=ME, membership=Membership.from_row(role),
                                       conversation_id="conv-1", trace_id=contracts.new_trace_id(), now=lambda: NOW,
-                                      config=config.RuntimeConfig.from_environment(env), request_text=request_text)
+                                      config=cfg, request_text=request_text)
+
 
 
 CALLS = [("campaign_items", {"campaignId": "c1"}), ("campaign_link", {"campaignId": "c1", "draftIds": ["d1"]}), ("help_search", {"query": "how do I schedule"}),
@@ -604,15 +635,76 @@ class StepUpTest(unittest.TestCase):
         self.assertEqual(hosted_identity.verified_method_time(jwt({"sub": ME, "iat": NOW}), ME), (None, 0), "a refreshed token's iat is not a sign-in")
 
 
+class TaskStepGateTest(unittest.TestCase):
+    def evaluate(self, mode, *, kind="tool", capability="tool.draft_edit", member=OWNER, task_extra=None, step_extra=None, actor_kind="agent"):
+        cur = mock.Mock()
+        cur.fetchone.return_value = ({},)
+        task = {"workspaceId": WS, "createdBy": ME, "authzToken": "a" * 64, **(task_extra or {})}
+        step = {"kind": kind, "capabilityId": capability, **(step_extra or {})}
+        with mock.patch.object(authz, "_step_member", return_value=member):
+            return authz.decide_for_step(cur, task, step, actor=authz.Actor(actor_kind, ME), now=NOW,
+                                         config=SimpleNamespace(permissions_for=lambda ws: mode))
+
+    def test_shadow_equals_off_even_when_grants_deny_or_fail(self):
+        with mock.patch.object(ap, "load", side_effect=AssertionError("off read grants")):
+            legacy = self.evaluate("off")
+        for effect in (None, RuntimeError("unavailable")):
+            with mock.patch.object(ap, "load", return_value=grants("none"), side_effect=effect):
+                self.assertEqual(self.evaluate("shadow"), legacy)
+        with mock.patch.object(ap, "load", return_value=grants("none")):
+            self.assertEqual(self.evaluate("enforce").verdict, "deny")
+
+    def test_only_external_cron_observer_survives_inactive_creator(self):
+        step = {"observesExternal": True, "delegateType": "publish_job"}
+        with mock.patch.object(ap, "load", side_effect=AssertionError("observer read grants")):
+            self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="cron", step_extra=step).verdict, "observe")
+            self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="agent", step_extra=step).verdict, "deny")
+            self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="cron", step_extra={**step, "observesExternal": False}).verdict, "deny")
+            self.assertEqual(self.evaluate("enforce", kind="delegate", actor_kind="cron", step_extra=step).verdict, "allow")
+            self.assertEqual(self.evaluate("enforce", kind="delegate", actor_kind="cron", step_extra=step, task_extra={"cancelRequestedAt": NOW}).verdict, "observe")
+
+    def test_step_reloads_grants_and_preserves_proposal_floor(self):
+        with mock.patch.object(ap, "load", side_effect=[grants("recommended"), grants("none")]) as reader:
+            self.assertEqual(self.evaluate("enforce").verdict, "allow")
+            self.assertEqual(self.evaluate("enforce").verdict, "deny")
+            self.assertEqual(reader.call_count, 2)
+        with mock.patch.object(ap, "load", return_value=grants("full")):
+            verdict = self.evaluate("enforce", capability="tool.schedule_propose")
+            self.assertEqual(verdict.required_permission, "approve")
+            self.assertEqual(verdict.approver_policy, "role_approve")
+        self.assertEqual(self.evaluate("enforce", capability="tool.unknown").verdict, "deny")
+
+
+class ContextGateTest(unittest.TestCase):
+    def test_actual_registry_and_only_allow_reads(self):
+        args = dict(cur=object(), state={}, workspace_id=WS, principal=ME, member=OWNER, now=NOW)
+        off = SimpleNamespace(permissions_for=lambda w: "off")
+        with mock.patch.object(ap, "load", side_effect=AssertionError("off read grants")):
+            self.assertEqual(authz.context_gate("context.screen_outline", config=off, **args), "allow")
+        for mode in ("shadow", "enforce"):
+            cfg = SimpleNamespace(permissions_for=lambda w, mode=mode: mode)
+            with mock.patch.object(ap, "load", return_value=grants("none")):
+                self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow" if mode == "shadow" else "deny")
+            with mock.patch.object(ap, "load", return_value=grants("legacy")):
+                self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow")
+            with mock.patch.object(ap, "load", side_effect=RuntimeError("store unavailable")):
+                self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow" if mode == "shadow" else "deny")
+            self.assertEqual(authz.context_gate("context.unknown", config=cfg, **args), "allow" if mode == "shadow" else "deny")
+        cfg = SimpleNamespace(permissions_for=lambda w: "enforce")
+        for outcome in ("confirm", "approve", "step_up", "deny"):
+            with mock.patch.object(ap, "load", return_value=grants()), mock.patch.object(authz, "decide", return_value=SimpleNamespace(outcome=outcome, reason="test")):
+                self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "deny", outcome)
+
+
 class ContractTest(unittest.TestCase):
-    def test_migration_107_is_the_frozen_proposal(self):
-        sql = (ROOT / "migrations/postriff/107_agent_permissions.sql").read_bytes()
-        self.assertEqual(hashlib.sha256(sql).hexdigest(), FROZEN_107_SHA256)
-        frozen = ROOT / "docs/design/rafii-agent-os/migrations/107_agent_permissions.sql"
+    def test_migration_109_is_the_frozen_proposal(self):
+        sql = (ROOT / "migrations/postriff/109_agent_permissions.sql").read_bytes()
+        self.assertEqual(hashlib.sha256(sql).hexdigest(), FROZEN_109_SHA256)
+        frozen = ROOT / "docs/design/rafii-agent-os/migrations/109_agent_permissions.sql"
         if frozen.exists():
             self.assertEqual(sql, frozen.read_bytes())
         harness = (ROOT / "tests/phase2/rls.sql").read_text()
-        self.assertIn("migrations/postriff/107_agent_permissions.sql", harness)
+        self.assertIn("migrations/postriff/109_agent_permissions.sql", harness)
 
     def test_one_error_vocabulary(self):
         fixture = json.loads((ROOT / "tests/fixtures/agent_tasks/contracts/error-codes.json").read_text())
@@ -626,7 +718,7 @@ class ContractTest(unittest.TestCase):
         cf2 = ROOT / "docs/design/rafii-agent-os/CF-2-authz-consent.md"
         if cf2.exists():   # once the contracts PR is merged: the table there is the source
             table = cf2.read_text().split("### 13.1 Errors")[1].split("### 13.2")[0]
-            self.assertEqual(set(re.findall(r"^\| `(\w+)` \|", table, re.M)), set(agent_error_codes.ERRORS))
+            self.assertEqual({code for line in table.splitlines() if line.startswith("| `") for code in re.findall(r"`(\w+)`", line.split(" | ")[0])}, set(agent_error_codes.ERRORS))
         self.assertTrue(set(authz.REASON_CODES) >= {"role", "category_off", "membership_missing", "permissions_changed"})
 
     def test_every_membership_end_path_ends_agent_permissions(self):

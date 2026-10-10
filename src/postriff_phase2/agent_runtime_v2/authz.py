@@ -197,7 +197,7 @@ def capability_for(spec) -> Capability:
 
 def tool_surface(spec, agent: str | None = None) -> Surface:
     from . import capability_registry
-    name = "manager" if agent is None else "specialist"
+    name = "manager" if agent in (None, "rafii_manager") else "specialist"
     binding = capability_registry.surface(name, spec.name)
     return Surface(name, spec.name, binding.legacy_confirmation)
 
@@ -277,6 +277,7 @@ def decide(cap: Capability, *, surface: Surface, member, grants, state: dict | N
     token = grants.token() if grants is not None else ""
 
     def out(outcome, reason, **kw):
+        kw.setdefault("required", surface.legacy_confirmation)
         return _d(cap, outcome, reason, token=token, **kw)
 
     legacy = surface.legacy_confirmation
@@ -697,6 +698,96 @@ def step_verdict(decision: Decision, *, earlier_token: str | None = None, spend_
     if reason is None:
         reason = "permission_revoked" if earlier_token and earlier_token != decision.token else "permission_missing"
     return StepVerdict("deny", None, reason, **common)
+
+
+def _step_member(cur, workspace_id: str, principal: str):
+    from ..permissions import Membership
+    cur.execute("SELECT m.role,m.can_publish,m.can_reply,m.can_moderate,m.can_manage_connections FROM public.pr_memberships m "
+                "JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s "
+                "AND m.status='active' AND p.deleted_at IS NULL", (workspace_id, principal))
+    row = cur.fetchone()
+    return Membership.from_row(*row) if row else None
+
+
+def _legacy_step_token(member) -> str:
+    summary = member.summary() if member is not None else {"role": None}
+    material = "legacy_v1|" + "|".join(f"{key}={summary[key]}" for key in sorted(summary))
+    return hashlib.sha256(material.encode()).hexdigest()
+
+
+def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, config=None) -> StepVerdict:
+    """CF-2/CF-3 claim seam. Use the existing transaction and trusted runtime config.
+
+    The task creator's current grants apply, even when another person approves.
+    Off/shadow preserve the legacy membership/role verdict and token byte for byte.
+    Non-tool lifecycle rows retain their own engine checks; they grant no authority
+    to a later tool or provider dispatch. No provider request occurs here.
+    """
+    from . import agent_permissions, capability_registry
+    workspace_id, creator = task["workspaceId"], task["createdBy"]
+    member = _step_member(cur, workspace_id, creator)
+    legacy_token = _legacy_step_token(member)
+    common = dict(token=legacy_token, required_permission="read", approver_policy="task_owner", requires_step_up=False)
+    observer = (actor.kind == "cron" and step.get("kind") == "delegate" and step.get("observesExternal") is True
+                and step.get("delegateType") in ("publish_job", "automation_item")
+                and (task.get("cancelRequestedAt") is not None or member is None))
+    if observer:
+        return StepVerdict("observe", None, None, "allowed", **common)
+    if member is None:
+        return StepVerdict("deny", None, "member_inactive", "membership_missing", **common)
+    mode = mode_for(config, workspace_id)
+    if step.get("kind") != "tool":
+        if step.get("kind") not in ("delegate", "wait", "approval", "model", "continuation"):
+            return StepVerdict("deny", None, "feature_unavailable", "feature_off", **common)
+        return StepVerdict("allow" if member.allows("read") else "deny", None,
+                           None if member.allows("read") else "permission_missing", "allowed" if member.allows("read") else "role", **common)
+    try:
+        policy = capability_registry.get(step.get("capabilityId") or "")
+        if policy is None:
+            policy = capability_registry.for_tool(step.get("capabilityId") or "")
+        if policy is None or policy.kind != "tool" or policy.tenant != "workspace":
+            raise LookupError("step capability is not a workspace tool")
+        cap = _registry_capability(policy)
+        common["required_permission"] = cap.permission
+        common["approver_policy"] = "role_approve" if cap.approval else "task_owner"
+        legacy_result = StepVerdict("allow" if member.allows(cap.permission) else "deny", None,
+                                   None if member.allows(cap.permission) else "permission_missing",
+                                   "allowed" if member.allows(cap.permission) else "role", **common)
+        if mode == "off":
+            return legacy_result
+        # A recorded surface must resolve exactly. Older steps use an existing tool
+        # binding; no invented lower confirmation is substituted for a missing one.
+        recorded = step.get("surface")
+        if recorded:
+            binding = capability_registry.surface(recorded, step.get("bindingRef") or cap.name)
+        else:
+            bindings = [b for b in capability_registry.bindings(cap.capability_id) if b.surface in ("manager", "specialist", "tool")]
+            if not bindings:
+                raise LookupError("step tool has no registered surface")
+            binding = max(bindings, key=lambda b: CONFIRMATIONS.index(b.legacy_confirmation))
+        cur.execute("SELECT state FROM public.pr_workspaces WHERE id=%s", (workspace_id,))
+        row = cur.fetchone()
+        if not row or not isinstance(row[0], dict):
+            raise LookupError("workspace state unavailable")
+        state = row[0]
+        grants = agent_permissions.load(cur, workspace_id, creator, now=now)
+        target = step.get("inputs") if isinstance(step.get("inputs"), dict) else None
+        decision = decide(cap, surface=Surface(binding.surface, binding.binding_ref, binding.legacy_confirmation), member=member,
+                          grants=grants, state=state, actor=Actor(actor.kind, creator, actor.request_text, actor.evidence),
+                          provider_view=provider_view(state, now) if cap.provider_scopes else None, target=target, now=now)
+        result = step_verdict(decision, earlier_token=step.get("authzToken") or task.get("authzToken"),
+                              spend_only=decision.outcome == "confirm" and cap.cost in SPEND.get(grants.spend_confirmation, ())
+                              and cap.confirmation == "none" and binding.legacy_confirmation == "none")
+        if mode == "shadow":
+            log.info(json.dumps({"event": "agent.authz.shadow", "wouldOutcome": decision.outcome,
+                                 "wouldRequired": decision.required, "wouldReason": decision.reason, "capabilityId": cap.capability_id}))
+            return legacy_result
+        return result
+    except Exception as error:  # same legacy result in shadow; no contents or credentials in diagnostics
+        log.error(json.dumps({"event": "agent.authz.step_error", "mode": mode, "errorClass": type(error).__name__}))
+        if mode == "shadow" and "legacy_result" in locals():
+            return legacy_result
+        return StepVerdict("deny", None, "feature_unavailable", "feature_off", **common)
 
 
 def token_changed(before: str | None, after: str | None) -> bool:

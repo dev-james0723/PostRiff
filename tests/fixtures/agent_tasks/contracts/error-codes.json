@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "CF-2 §13",
+  "source": "CF-2 \u00a713",
   "errors": {
     "agent_permissions_unavailable": 404,
     "agent_permissions_changed": 409,
@@ -31,7 +31,11 @@
     "undo_conflict": 409,
     "proposal_closed": 409,
     "proposal_expired": 409,
-    "proposal_stale": 409
+    "proposal_stale": 409,
+    "proposal_digest": 409,
+    "approve_required": 403,
+    "edit_required": 403,
+    "owner_required": 403
   },
   "results": [
     "needs_confirmation",

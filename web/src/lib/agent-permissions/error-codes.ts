@@ -34,6 +34,10 @@ export const AGENT_ERRORS = {
   undo_conflict: 409,
   proposal_closed: 409,
   proposal_expired: 409,
+  proposal_digest: 409,
+  approve_required: 403,
+  edit_required: 403,
+  owner_required: 403,
   proposal_stale: 409
 } as const;
 
