@@ -28,7 +28,7 @@ if [ "${1:---core}" != --core ]; then
 import base64,hashlib,json
 from pathlib import Path
 root=Path('.jcb-artifacts/library-metadata')
-names=['browser-receipt.json']+[f'{browser}-{width}-{step}.png' for browser in ('chromium','webkit') for width in (1440,390) for step in ('preview','undo-conflict')]
+names=['browser-receipt.json','browser-failure.json','browser-failure.png']+[f'{browser}-{width}-{step}.png' for browser in ('chromium','webkit') for width in (1440,390) for step in ('preview','undo-conflict')]
 for name in names:
  path=root/name
  if path.is_file() and not path.is_symlink() and path.stat().st_size<1024*1024:

@@ -13,6 +13,7 @@ execFileSync('python', ['-c', "from pathlib import Path; import psycopg; db=psyc
 
 (async () => {
   const checks = [];
+  let activePage = null;
   for (const [engine, browserType] of Object.entries({ chromium, webkit })) {
     const browser = await browserType.launch({ headless: true });
     try {
@@ -36,9 +37,13 @@ execFileSync('python', ['-c', "from pathlib import Path; import psycopg; db=psyc
         assert.equal(group.status(), 200, await group.text());
         const groupId = (await group.json()).collections[0].id;
         const page = await context.newPage();
+        activePage = page;
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(base + '/app/library', { waitUntil: 'domcontentloaded' });
+        const welcome = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Welcome to Rafii' }) });
+        await welcome.getByRole('button', { name: 'Not now', exact: true }).click();
+        await welcome.waitFor({ state: 'hidden' });
         const batch = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Organize selected assets' }) });
         async function chooseBatch() {
         await page.getByText('Organize selected assets', { exact: true }).click();
@@ -109,6 +114,12 @@ execFileSync('python', ['-c', "from pathlib import Path; import psycopg; db=psyc
         assert.deepEqual(errors, [], 'No page errors');
         await context.close();
       }
+    } catch (error) {
+      if (activePage && !activePage.isClosed()) {
+        await activePage.screenshot({ path: resolve(out, 'browser-failure.png'), fullPage: true }).catch(() => {});
+        writeFileSync(resolve(out, 'browser-failure.json'), JSON.stringify({ error: String(error).slice(0, 8000), url: activePage.url(), text: (await activePage.locator('body').innerText().catch(() => '')).slice(0, 24000) }, null, 2));
+      }
+      throw error;
     } finally { await browser.close(); }
   }
   const receipt = { execution: 'real cloud Next/API/disposable PostgreSQL; synthetic identities and pending assets; no file/provider calls', status: 'PASS', checks };
