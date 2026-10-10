@@ -591,7 +591,13 @@ SNAPSHOT_UPSERT = ('INSERT INTO public.pr_operational_snapshots(minute,observed_
 CAPABILITIES = ('identity', 'publish', 'schedule', 'analytics', 'comments_read', 'reply', 'moderate', 'media_types', 'webhooks')
 LEVELS = ('Direct', 'Assisted', 'Bridge', 'Unsupported')
 CONNECTION_ID = re.compile(r'^[A-Za-z0-9_.:-]{1,80}$')
-HEALTH = {'reauthorization_required': 'blocked', 'scope_missing': 'blocked', 'identity_known': 'blocked', 'token_expired': 'expired'}
+HEALTH = {'reauthorization_required': 'blocked', 'scope_missing': 'blocked', 'identity_known': 'blocked', 'client_binding_missing': 'blocked',
+          'token_expired': 'expired'}
+# connection_state values public.pr_connection_health accepts (migration 060 CHECK). A Channels-card state outside it is stored as
+# the state with the same remedy: a retained but disabled YouTube refresh grant (client_binding_missing) needs the account holder's
+# new consent, i.e. reauthorization. Storing the raw value would violate the CHECK and abort every hourly refresh.
+STORED_CONNECTION_STATES = ('identity_known', 'scope_missing', 'token_expired', 'reauthorization_required', 'read_verified', 'publish_verified')
+STORED_AS = {'client_binding_missing': 'reauthorization_required'}
 EXPIRING_SECONDS = 7 * 86400
 MAX_CONNECTIONS = 5000
 REFRESH_SECONDS = 55 * 60
@@ -599,14 +605,22 @@ REFRESH_MINUTES = range(5, 10)       # an empty projection is retried once an ho
 PURGE_LOCAL_HOUR, PURGE_LOCAL_MINUTES = 3, range(0, 10)
 PURGES = (('public.pr_request_metrics', 'minute', RETENTION_DAYS), ('public.pr_operational_snapshots', 'minute', RETENTION_DAYS),
           ('public.pr_connection_health', 'refreshed_at', 7))
-CHANNELS_SQL = ("SELECT w.id::text, c->>'id', c->>'platform', c->'configured', c->'revoked', c->'identityVerified', coalesce(c->>'providerAccountId','')<>'', "
+CHANNELS_SQL = ("SELECT DISTINCT ON (w.id::text, c->>'id') w.id::text, c->>'id', c->>'platform', c->'configured', c->'revoked', c->'identityVerified', coalesce(c->>'providerAccountId','')<>'', "
                 "CASE WHEN jsonb_typeof(c->'expiresAt')='number' THEN (c->>'expiresAt')::double precision END, "
                 "CASE WHEN jsonb_typeof(c->'scopes')='array' THEN jsonb_array_length(c->'scopes') ELSE 0 END, c->'capabilityVerified', "
                 "CASE WHEN jsonb_typeof(c->'verifiedAt')='number' THEN (c->>'verifiedAt')::double precision END "
                 "FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(w.state->'phase2'->'channels')='array' "
-                "THEN w.state->'phase2'->'channels' ELSE '[]'::jsonb END) AS c "
-                "WHERE jsonb_typeof(c)='object' AND c->'configured' IS NOT NULL AND c->'configured' NOT IN ('false'::jsonb,'null'::jsonb) "
-                "ORDER BY 1, 2 LIMIT %s")
+                "THEN w.state->'phase2'->'channels' ELSE '[]'::jsonb END) WITH ORDINALITY AS e(c, ord) "
+                "WHERE jsonb_typeof(c)='object' AND c->'configured' IS NOT NULL AND c->'configured' NOT IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) "
+                # Rows the projection would skip are filtered here, so the MAX_CONNECTIONS cap counts projectable connections and
+                # a capped run leaves exactly MAX_CONNECTIONS connections (the reader's partial-coverage signal): invalid ids, and
+                # configured channels that are neither revoked, verified nor tied to an account (connection_state 'disconnected').
+                # Falsy follows Python truthiness. Residual: a YouTube channel revoked only in the vault, with no verified identity
+                # and no account id in its JSON, is filtered here (the connect path always records the account id).
+                "AND c->>'id' ~ '^[A-Za-z0-9_.:-]{1,80}$' "
+                "AND NOT (coalesce(c->'revoked','null'::jsonb) IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) "
+                "AND coalesce(c->'identityVerified','null'::jsonb) IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) AND coalesce(c->>'providerAccountId','')='') "
+                "ORDER BY w.id::text, c->>'id', e.ord DESC LIMIT %s")   # one row per (workspace, connection id), the last entry wins as before
 CONNECTION_UPSERT = ('INSERT INTO public.pr_connection_health(workspace_id,connection_id,capability,provider,level,state,connection_state,expires_at,last_sync_at,refreshed_at) '
                      'SELECT u.w::uuid,u.c,u.cap,u.p,u.l,u.s,u.cs,to_timestamp(u.e),to_timestamp(u.v),to_timestamp(%s) '
                      'FROM unnest(%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::float8[],%s::float8[]) AS u(w,c,cap,p,l,s,cs,e,v) '
@@ -703,23 +717,37 @@ def provider_key(platform):
     return re.sub(r'[^a-z0-9]+', '_', str(platform or '').lower()).strip('_')[:40] or 'unknown'
 
 
-def project_connections(channels, levels, now, connection_state):
+def project_connections(channels, levels, now, connection_state, youtube_status=None):
     """Projection rows {(workspace, connection, capability): row} from the channel fields CHANNELS_SQL reads, classified by the
-    customer Channels card's own connection_state. Disconnected channels are not connections and are skipped."""
+    customer Channels card's own connection_state. Disconnected channels are not connections and are skipped.
+    `youtube_status` ({(workspace, connection): vault facts} from channels.youtube_credential_status) overlays the same
+    secret-free vault facts the Channels card uses, so an expired access token with a working refresh grant is not reported
+    as an expired connection, and a retained but disabled refresh grant is client_binding_missing."""
+    from postriff_phase2.channels import with_youtube_credential_status
     rows = {}
     for workspace_id, connection_id, platform, configured, revoked, identity, has_account, expires, scopes, capability_verified, verified_at in channels:
         if not connection_id or not CONNECTION_ID.fullmatch(str(connection_id)):
             continue
         expires_at = float(expires) if expires is not None else None
-        raw = connection_state({'configured': configured, 'revoked': revoked, 'identityVerified': identity, 'providerAccountId': 'present' if has_account else None,
-                                'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}, now)
+        channel = {'platform': platform, 'configured': configured, 'revoked': revoked, 'identityVerified': identity, 'providerAccountId': 'present' if has_account else None,
+                   'expiresAt': expires_at if expires_at is not None else 0, 'scopes': bool(scopes), 'capabilityVerified': capability_verified}
+        if youtube_status is not None:
+            channel = with_youtube_credential_status(channel, youtube_status.get((workspace_id, connection_id)))
+            if platform == 'YouTube' and channel.get('accessTokenExpiresAt') is not None:
+                expires_at = float(channel['accessTokenExpiresAt'])   # the vault deadline the classification used, not stale channel JSON
+        raw = connection_state(channel, now)
         if raw == 'disconnected':
             continue
-        state = HEALTH.get(raw) or ('expiring' if expires_at is not None and expires_at - now < EXPIRING_SECONDS else 'ok')
+        # A refreshable grant's access-token deadline is not a grant deadline: never 'expiring' for it.
+        refreshable = channel.get('refreshSupported') is True
+        state = HEALTH.get(raw) or ('expiring' if expires_at is not None and not refreshable and expires_at - now < EXPIRING_SECONDS else 'ok')
+        stored = STORED_AS.get(raw, raw)
+        # A refreshable grant has no grant deadline to report (founder_risk reads expires_at as one).
+        deadline = None if refreshable else expires_at
         for capability, level in sorted((levels.get((workspace_id, connection_id)) or {'identity': 'unknown'}).items()):
             if capability in CAPABILITIES:
                 rows[(workspace_id, connection_id, capability)] = (workspace_id, connection_id, capability, provider_key(platform), level if level in LEVELS else 'unknown',
-                                                                    state, raw, expires_at, None if verified_at is None else float(verified_at))
+                                                                    state, stored, deadline, None if verified_at is None else float(verified_at))
     return rows
 
 
@@ -764,14 +792,28 @@ def connection_health_stage(fstore, service, values, now):
                                 (sorted({row[0] for row in channels}), MAX_CONNECTIONS * len(CAPABILITIES) + 1))
                     for workspace_id, connection_id, capability, level in cur.fetchall():
                         levels.setdefault((workspace_id, connection_id), {})[capability] = level
-                rows = list(project_connections(channels, levels, now, connection_state).values())
+                youtube, overlay = None, 'not_needed'
+                youtube_workspaces = sorted({row[0] for row in channels if row[2] == 'YouTube'})
+                if youtube_workspaces and _table_exists(cur, 'public.pr_encrypted_credentials'):
+                    # Booleans, an expiry and the revoked flag reach Python; ciphertext presence is tested in SQL only. A savepoint keeps
+                    # this optional overlay from ever aborting the refresh: on any error the projection falls back to channel state.
+                    from postriff_phase2.channels import youtube_credential_status
+                    cur.execute('SAVEPOINT youtube_overlay')
+                    try:
+                        youtube, overlay = youtube_credential_status(cur, youtube_workspaces), 'applied'
+                        cur.execute('RELEASE SAVEPOINT youtube_overlay')
+                    except Exception as error:   # noqa: BLE001
+                        cur.execute('ROLLBACK TO SAVEPOINT youtube_overlay')
+                        youtube, overlay = None, 'unavailable'
+                        LOGGER.warning(json.dumps({'event': 'founder_ops.youtube_overlay_unavailable', 'error': type(error).__name__}, sort_keys=True))
+                rows = list(project_connections(channels, levels, now, connection_state, youtube).values())
                 if rows:
                     columns = list(zip(*rows))
                     cur.execute(CONNECTION_UPSERT, (now, *[list(column) for column in columns]))
                 cur.execute('DELETE FROM public.pr_connection_health WHERE refreshed_at < to_timestamp(%s)', (now,))
                 removed = max(0, cur.rowcount or 0)
             db.commit()
-        return {'status': 'ok', 'connections': len(channels), 'rows': len(rows), 'removed': removed, 'truncated': truncated}
+        return {'status': 'ok', 'connections': len(channels), 'rows': len(rows), 'removed': removed, 'truncated': truncated, 'youtubeOverlay': overlay}
     except Exception as error:
         return _failure('connection_health', now, error)
 

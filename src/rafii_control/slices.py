@@ -23,6 +23,7 @@ SLICES = (
     'founder_support',           # primary in-app tickets and explicit audited identity reveal
     'founder_policy',            # approved, configurable entitlement and provider spend defaults
     'founder_activation',        # full-activation gates and bounded telemetry health
+    'founder_connections',       # Connections attention queue and provider approval registry (read-only)
 )
 STATE = {'loaded': False, 'failed': {}}
 
