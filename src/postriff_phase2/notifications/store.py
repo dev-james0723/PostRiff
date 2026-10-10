@@ -26,8 +26,8 @@ def _clean_payload(payload):
         value = (payload or {}).get(key)
         if value is None:
             continue
-        if key == 'href' and isinstance(value, str) and re.fullmatch(r'/app/phone/verify-call\?challenge=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value):
-            # An opaque challenge UUID can contain long digit runs. Preserve only this exact
+        if key == 'href' and isinstance(value, str) and re.fullmatch(r'/app/(?:phone/verify-call\?challenge=|tasks\?task=)[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value):
+            # An opaque challenge/task UUID can contain long digit runs. Preserve only these exact
             # server-generated route; keep existing redaction for every other payload/link.
             out[key] = value
         elif isinstance(value, str):
