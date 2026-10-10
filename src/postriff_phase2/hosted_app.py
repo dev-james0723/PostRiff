@@ -962,6 +962,14 @@ class HostedApplication:
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
                     return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) in (6, 7) and parts[4:6] == ["metadata", "changes"] and method == "GET":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, changes.history(workspace_id, token) if len(parts) == 6 else changes.read(workspace_id, token, parts[6]))
+                if len(parts) == 6 and parts[4] == "metadata" and parts[5] in ("preview", "apply", "undo") and method == "POST":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, getattr(changes, parts[5])(workspace_id, token, self._body(environ)))
                 if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
                     return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
                 if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":

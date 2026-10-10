@@ -33,6 +33,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { EASE_OUT } from '@/lib/ease';
 import { formatBytes } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import { LibraryBatchOrganizer, LibraryMetadataHistory } from './library-metadata-preview';
 import { CollectionManager, useLibraryCollections } from './library-organizer';
 import { blankLocation, checkDuration, checkVideoFile, extractFrames, readVideoMetadata, videoDurationLimit, videoPolicyFromCatalog, videoSizeLimit } from '../agent/attachments/video-file';
 import { kindOf } from '@/lib/media/asset-kinds';
@@ -599,6 +600,8 @@ export function LibraryView() {
           }
         />
 
+        {canEdit && visible.length > 0 ? <LibraryBatchOrganizer key={workspaceId} assets={visible} collections={collections.data?.collections ?? []} /> : null}
+
         {visible.length === 0 ? (
           // No matches is not an empty library (DNA §13.5): say what can be cleared.
           <StateMessage
@@ -720,6 +723,7 @@ export function LibraryView() {
         </div> : null}
         {fileFailure ? <StateMessage kind='error' layout='inline' title='Upload needs attention' description={fileFailure} action={pendingFile.current ? <div className='flex gap-2'><Button variant='glass' onClick={() => void uploadLibraryFile(pendingFile.current!.file)}>Retry</Button><Button variant='quiet' onClick={() => { const pending = pendingFile.current; if (pending) void (pending.video ? api.abortVideoUpload(workspaceId, pending.assetId) : api.deleteLibraryFile(workspaceId, pending.assetId)).then(() => { if (pending?.fingerprint) clearVideoResume(workspaceId, pending.fingerprint); pendingFile.current = null; setFileFailure(null); void client.invalidateQueries({ queryKey: ['library-assets', workspaceId] }); }).catch((e) => toast.error(e instanceof Error ? e.message : 'Could not remove upload')); }}>Remove pending upload</Button></div> : undefined} /> : null}
         <CollectionManager canEdit={canEdit} />
+        {canEdit ? <LibraryMetadataHistory key={workspaceId} /> : null}
         {library.storage ? <p className='text-muted-foreground text-xs'>{formatBytes(library.storage.usedBytes)} of {formatBytes(library.storage.limitBytes)} workspace storage used</p> : null}
         {library.normalized.isError ? <StateMessage kind='error' layout='inline' title='Documents could not be loaded' description='Your media remains available. Retry to load the full Library.' action={<Button variant='glass' onClick={() => void library.normalized.refetch()}>Retry Library</Button>} /> : null}
         {/* Unsupported, offline and refused are different states (DNA §20.1), each with its own reason. */}
