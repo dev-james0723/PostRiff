@@ -501,6 +501,175 @@ class EndToEndAuthorizationTests(unittest.TestCase):
         status, _ = self.call('mode=staging')
         self.assertEqual(status, 400)
 
+    def test_production_route_requires_a_fresh_mfa_founder_session(self):
+        """Production Control: an aal1 or stale-MFA identity never gets a session; an aal1 session row, a session minted for
+        another environment and a non-founder role are refused on the route itself. None of them reaches the reader."""
+        from control.test_boundary import NOW as BOUNDARY_NOW
+        from rafii_control.auth import Boundary, Config, VerifiedIdentity, digest
+        from rafii_control.http import ControlApplication
+        production_operator = dict(self.store.operator_row, environment='production')
+        self.store.operator = lambda user, environment: dict(production_operator) if user == self.user and environment == 'production' else None
+        identity = {'value': VerifiedIdentity(self.user, 'aal1', 's' * 32, BOUNDARY_NOW)}
+        boundary = Boundary(Config(True, 'production', self.origin), self.store, lambda token: identity['value'], clock=lambda: BOUNDARY_NOW)
+        self.boundary, self.app = boundary, ControlApplication(boundary, types.SimpleNamespace(store=self.store))
+        self.app._founder_store = FounderStoreStub()
+        with self.assertRaisesRegex(ControlError, 'STEP_UP_REQUIRED'):
+            boundary.exchange('verified-token', self.origin)
+        identity['value'] = VerifiedIdentity(self.user, 'aal2', 's' * 32, BOUNDARY_NOW - 301)
+        with self.assertRaisesRegex(ControlError, 'STEP_UP_REQUIRED'):
+            boundary.exchange('verified-token', self.origin)
+        identity['value'] = VerifiedIdentity(self.user, 'aal2', 's' * 32, BOUNDARY_NOW)
+        token, session = boundary.exchange('verified-token', self.origin)
+        self.assertEqual(self.call(session=(token, session))[0], 200, 'a fresh-MFA founder session reads the queue in production')
+        self.reader.statements.clear()
+        self.store.sessions[digest(token)]['assurance'] = 'aal1'
+        self.assertEqual(self.call(session=(token, session))[0], 403, 'an aal1 session is refused')
+        self.store.sessions[digest(token)].update(assurance='aal2', environment='local')
+        self.assertEqual(self.call(session=(token, session))[0], 401, 'a session minted for another environment is refused')
+        self.store.sessions[digest(token)]['environment'] = 'production'
+        production_operator['role'] = 'support'
+        self.assertEqual(self.call(session=(token, session))[0], 403, 'only the founder role reads Connections')
+        self.assertEqual(self.reader.statements, [], 'no refused request reaches the reader')
+
+    def test_unexpected_failure_returns_a_fixed_error_without_private_detail(self):
+        """A handler crash answers 503 SOURCE_UNAVAILABLE with fixed text: no exception message, token, workspace or SQL."""
+        original = fc.build
+        fc.build = lambda **_: (_ for _ in ()).throw(RuntimeError('ya29.secret-token w-secret-1 SELECT * FROM pr_encrypted_credentials'))
+        try:
+            status, body = self.call()
+        finally:
+            fc.build = original
+        self.assertEqual((status, body['code']), (503, 'SOURCE_UNAVAILABLE'))
+        for forbidden in ('ya29', 'secret', 'w-secret-1', 'SELECT', 'pr_encrypted_credentials'):
+            self.assertNotIn(forbidden, json.dumps(body))
+
+
+class RecordingConnection:
+    """psycopg-shaped connection for the real PostgresStore: records every statement and answers by SQL fragment."""
+
+    def __init__(self, role, answers, log):
+        self.role, self.answers, self.log, self.row_factory = role, answers, log, None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def transaction(self):
+        import contextlib
+
+        @contextlib.contextmanager
+        def scope():
+            self.log.append((self.role, 'BEGIN'))
+            yield
+            self.log.append((self.role, 'COMMIT'))
+        return scope()
+
+    def execute(self, sql, params=()):
+        self.log.append((self.role, sql))
+        rows = [{'name': self.role, 'rolsuper': False, 'rolbypassrls': False}] if 'FROM pg_roles' in sql else \
+            next((list(value) for fragment, value in self.answers.items() if fragment in sql), [])
+        return types.SimpleNamespace(fetchall=lambda: list(rows), fetchone=lambda: rows[0] if rows else None)
+
+
+class ReleaseAcceptanceTests(unittest.TestCase):
+    """PR #150 release gates that were previously proven by inspection only: the Live route issues SELECTs only (reader role in
+    a read-only transaction; incidents through the session role), opens no network connection, and leaks nothing private."""
+
+    def setUp(self):
+        slices.load()
+
+    def live_app(self, rows, incidents=(), latest=None):
+        from rafii_control.founder_cron import PostgresFounderStore
+        from rafii_control.store import PostgresStore
+        log = []
+        answers = {'max(h."refreshedAt")': [{'latest': latest or fc._iso(NOW - 600), 'total': len(rows), 'connections': len(rows)}],
+                   'SELECT DISTINCT h."workspaceId"': rows, 'FROM rafii_control.founder_incidents': list(incidents)}
+        store = PostgresStore(lambda: RecordingConnection('rafii_control_session', answers, log),
+                              lambda: RecordingConnection('rafii_control_reader', answers, log), 'production')
+        app = types.SimpleNamespace(queries=types.SimpleNamespace(store=store), founder_store=lambda: PostgresFounderStore(store, 'production'),
+                                    boundary=types.SimpleNamespace(config=types.SimpleNamespace(environment='production')))
+        return app, log
+
+    def test_live_route_only_selects_and_never_opens_a_network_connection(self):
+        import socket
+        from unittest import mock
+        incident = {'id': '7f0c0000-0000-4000-8000-000000000001', 'environment': 'production', 'detector': 'publish_failure_rate', 'scope': 'global',
+                    'episode_key': 'publish_failure_rate:global:1', 'severity': 'warning', 'state': 'open', 'opened_at': NOW - 900, 'acknowledged_at': None,
+                    'resolved_at': None, 'evidence': {'failed': 2}, 'affected_count': 2, 'version': 1}
+        app, log = self.live_app([row('11111111-1111-4111-8111-111111111111', 'yt-1', 'youtube', 'client_binding_missing')], [incident])
+        refuse = mock.Mock(side_effect=AssertionError('the attention route must not open a network connection'))
+        with mock.patch.object(socket.socket, 'connect', refuse), mock.patch.object(socket, 'create_connection', refuse), \
+                mock.patch.object(socket, 'getaddrinfo', refuse):
+            out = fc.attention(app, PRINCIPAL, {'mode': 'live', 'now': NOW})
+        refuse.assert_not_called()
+        self.assertEqual((out['sources']['connectionHealth']['state'], out['sources']['incidents']['state']), ('connected', 'connected'))
+        self.assertIn('client_binding_missing', [i['safeReasonCode'] for i in out['items']])
+        statements = [(role, sql) for role, sql in log if sql not in ('BEGIN', 'COMMIT')]
+        self.assertTrue(statements)
+        for role, sql in statements:
+            verb = sql.lstrip().split(None, 1)[0].upper()
+            self.assertIn(verb, ('SELECT', 'SET'), f'{role} issued a non-read statement: {sql[:80]}')
+            self.assertNotRegex(sql.upper(), r'\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|ALTER|CREATE|DROP|GRANT|NOTIFY|NEXTVAL|PG_ADVISORY)\b')
+            self.assertNotIn('pr_encrypted_credentials', sql, 'the route never reads the credential vault')
+        reader = [sql for role, sql in statements if role == 'rafii_control_reader']
+        self.assertEqual(reader.count('SET TRANSACTION READ ONLY'), 2, 'both projection reads run in a read-only reader transaction')
+        self.assertTrue(any('rafii_control.business_connection_health' in sql for sql in reader))
+        session = [sql for role, sql in statements if role == 'rafii_control_session']
+        self.assertTrue(any('FROM rafii_control.founder_incidents' in sql for sql in session))
+
+    def test_responses_carry_no_tokens_credentials_or_workspace_identifiers(self):
+        secret_workspace = '22222222-2222-4222-8222-222222222222'
+        decisions = {('youtube', 'youtube', 'production', 'brand_verification'):
+                     approved('brand_verification', [], ref='https://console.example/receipt?access_token=ya29.leak', accessToken='ya29.leak',
+                              refreshToken='1//refresh-leak', clientSecret='GOCSPX-leak', workspaceId=secret_workspace)}
+        app, _ = self.live_app([row(secret_workspace, 'conn-private-9', 'youtube', 'reauthorization_required'),
+                                row(secret_workspace, 'conn-private-8', 'linkedin', 'token_expired')])
+        original = fc.registry_entries
+        fc.registry_entries = lambda adapters=None, decisions_=None: original(adapters, decisions)
+        try:
+            live = fc.attention(app, PRINCIPAL, {'mode': 'live', 'now': NOW})
+        finally:
+            fc.registry_entries = original
+        demo = fc.attention(types.SimpleNamespace(), PRINCIPAL, {'mode': 'demo', 'now': NOW})
+        brand = next(req for app_ in live['registry'] if app_['provider'] == 'youtube' for req in app_['requirements'] if req['kind'] == 'brand_verification')
+        self.assertIsNone(brand['providerReceiptRef'], 'a reference carrying a query string is not accepted as evidence')
+        self.assertEqual(brand['standing'], 'check_required')
+        for body in (json.dumps(live), json.dumps(demo)):
+            for forbidden in (secret_workspace, 'conn-private', 'ya29', '1//refresh', 'GOCSPX', 'access_token', 'refreshToken', 'clientSecret',
+                              'ciphertext', '_tenantKeys', 'workspaceId'):
+                self.assertNotIn(forbidden, body)
+
+    def test_youtube_vault_states_reach_the_queue_with_the_right_classification(self):
+        """Vault facts -> hourly classification -> attention item, end to end: refreshable is healthy and absent from the queue;
+        expired without refresh, revoked and client_binding_missing each surface as reconnect items with their own reason."""
+        from postriff_phase2.channels import connection_state
+        from rafii_control import founder_metrics_ops as ops
+        channel = lambda cid: ('33333333-3333-4333-8333-333333333333', cid, 'YouTube', True, False, True, True, NOW - 60, 3, False, None)
+        facts = {'refreshable': {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': NOW - 60, 'revoked': False},
+                 'expired': {'refreshSupported': False, 'refreshBindingRequired': False, 'accessTokenExpiresAt': NOW - 60, 'revoked': False},
+                 'revoked': {'refreshSupported': False, 'refreshBindingRequired': False, 'accessTokenExpiresAt': NOW + 3600, 'revoked': True},
+                 'binding': {'refreshSupported': False, 'refreshBindingRequired': True, 'accessTokenExpiresAt': NOW - 60, 'revoked': False}}
+        projected = ops.project_connections([channel(cid) for cid in facts], {}, NOW, connection_state,
+                                            {('33333333-3333-4333-8333-333333333333', cid): status for cid, status in facts.items()})
+        raw = {key[1]: (r[5], r[6]) for key, r in projected.items()}
+        self.assertEqual(raw, {'refreshable': ('ok', 'read_verified'), 'expired': ('expired', 'token_expired'),
+                               'revoked': ('blocked', 'reauthorization_required'), 'binding': ('blocked', 'client_binding_missing')})
+        rows = [row(r[0], r[1], r[3], r[6]) for r in projected.values()]
+        items, _ = fc.connection_items([r for r in rows if r['cstate'] in fc.CONNECTION_ATTENTION], {'latest': NOW - 600}, NOW, 'production')
+        self.assertEqual(sorted(i['safeReasonCode'] for i in items), ['client_binding_missing', 'reauthorization_required', 'token_expired'])
+        self.assertTrue(all(i['category'] == 'reconnect_required' and i['nextAction']['requiresHuman'] for i in items))
+        self.assertNotIn('read_verified', [i['safeReasonCode'] for i in items], 'a refreshable grant is not an attention item')
+
+    def test_projection_stamp_from_the_future_is_unknown_not_fresh(self):
+        app, _ = self.live_app([row('w1', 'c1', 'linkedin', 'token_expired')], latest=fc._iso(NOW + fc.CLOCK_SKEW_SECONDS + 60))
+        out = fc.attention(app, PRINCIPAL, {'mode': 'live', 'now': NOW})
+        envelope = out['sources']['connectionHealth']['freshness']
+        self.assertEqual((envelope['freshness'], envelope['reason']), ('unknown', 'clock_skew'))
+        self.assertFalse(fc.green(envelope))
+        self.assertIn('connection_health_clock_skew', [i['safeReasonCode'] for i in out['items']])
+
 
 if __name__ == '__main__':
     unittest.main()

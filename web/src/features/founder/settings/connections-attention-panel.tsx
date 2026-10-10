@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { StateMessage } from '@/components/rafii';
 import { founderFetch } from '@/lib/founder/api';
 import type { Envelope } from '@/lib/founder/types';
-import { useFounderScope } from '../customers/kit/api';
-import { Panel } from '../customers/kit/page-frame';
+import { failureOf, useFounderScope } from '../customers/kit/api';
+import { Panel, RetryAction } from '../customers/kit/page-frame';
 
 type Count = { value: number | null; countState: 'exact' | 'estimated' | 'lower_bound' | 'unknown' };
 type Freshness = { freshness: 'fresh' | 'stale' | 'unknown' | 'not_applicable'; coverage?: string | null; observedAt: string | null; lastCheckedAt: string | null; reason: string | null };
@@ -40,6 +40,14 @@ export function freshnessLabel(envelope: Freshness): string {
   return 'Check required';
 }
 
+/** Sources the queue could not read: their impact is unknown, so the panel says so instead of looking clear. */
+export function degradedSources(sources: Attention['sources']): string[] {
+  const out: string[] = [];
+  if (sources.connectionHealth.state !== 'connected') out.push(`connection health (${sources.connectionHealth.state.replaceAll('_', ' ')})`);
+  if (sources.incidents.state !== 'connected') out.push(`incidents (${sources.incidents.state.replaceAll('_', ' ')})`);
+  return out;
+}
+
 export function ConnectionsAttentionPanel() {
   const scope = useFounderScope();
   const query = useQuery({
@@ -50,13 +58,21 @@ export function ConnectionsAttentionPanel() {
   return (
     <Panel title='Connections needing attention' description='What is wrong, who is affected, who owns it and what happens next. Health is the last hourly observation, not live token validity.'>
       {query.isPending ? <p className='text-muted-foreground text-sm'>Loading connections…</p> : query.isError ? (
-        <StateMessage kind='error' layout='inline' title='Connections unavailable' description='The attention queue could not be read. Nothing has been counted as healthy.' />
+        failureOf(query.error).status === 403 ? (
+          <StateMessage kind='permission' layout='inline' title='Connections are not available to this operator' description='Reading the attention queue needs the control.read capability.' />
+        ) : (
+          <StateMessage kind='error' layout='inline' title='Connections unavailable' description='The attention queue could not be read. Nothing has been counted as healthy.'
+            action={<RetryAction onRetry={() => void query.refetch()} />} />
+        )
       ) : query.data ? (
         <div className='flex flex-col gap-3'>
           <p className='text-muted-foreground text-sm'>
             {formatCount(query.data.summary.tenants, 'Workspaces affected')} · {query.data.summary.launchBlockers} launch blocker(s) · {query.data.summary.unassigned} unassigned ·
             Connection health: {freshnessLabel(query.data.sources.connectionHealth.freshness)}
           </p>
+          {degradedSources(query.data.sources).length > 0 && (
+            <p role='status' className='text-sm'>Not readable: {degradedSources(query.data.sources).join(', ')}. Their impact is unknown, not zero.</p>
+          )}
           {query.data.items.length === 0 && <p className='text-sm'>No open items from the observed sources.</p>}
           {query.data.items.map((item) => (
             <details key={item.id} className='rafii-quiet rounded-lg p-3'>
