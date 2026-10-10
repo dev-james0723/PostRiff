@@ -20,7 +20,7 @@ const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const clientPath=process.env.LIBRARY_PREVIEW_CLIENT||path.resolve(__dirname,'../src/lib/api/client.ts');
 const compiled=ts.transpileModule(fs.readFileSync(clientPath,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const clientScript=`window.__client=(function(){const exports={};const require=name=>{throw new Error('client.ts must not import '+name+' at runtime')};${compiled}\nreturn exports;})();`;
-const ASSET='c41a49cea2be4a8c97f63f2213ffe2e2';
+const ASSET='a'.repeat(32);
 const PREVIEW=/^\/api\/workspaces\/w\/library\/files\/[a-f0-9]{32}\/preview$/;
 const ACCESS_CONTROL=/\/api\/workspaces\/w\/library\/files\/[a-f0-9]{32}\/preview due to access control checks\.$/;
 const NEXT_DOCUMENT_DELAY_MS=1500;
