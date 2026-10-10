@@ -9,12 +9,14 @@
  * Keyboard: every chip and its remove control are buttons; Escape closes the open details and returns focus to its chip.
  * Screen readers: the list is labelled, each chip says when it won't be used, and removals are announced politely.
  */
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import type { AgentApi } from '@/lib/agent-runtime/client';
 import { cn } from '@/lib/utils';
+import { currentUiContext, onUiScopeChange, registryVersion } from '@/features/agent/generative-ui/state/registry';
+import { flushConversation } from '@/features/agent/generative-ui/surfaces/session';
 import { currentPageContext } from '../use-page-context';
 import type { PanelState } from '../store';
 import { checkedLine, chipLabel, chips, noSelection, previewBody, statusLine, t, used, whyLine, type LensItem, type LensLanguage, type LensPreview } from './model';
@@ -38,20 +40,11 @@ const ICON: Record<string, IconName> = {
 /** Chips shown before "N more". */
 const VISIBLE = 4;
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [current, setCurrent] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setCurrent(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-  return current;
-}
-
 /**
  * The preview for the panel as it is now: refetched when the page, its selection, the conversation or the attached images
  * change, and again when it expires. Never sent the message being typed.
  */
-export function useContextLensPreview({ enabled, api, workspaceId, conversationId, pathname, page, images, ttlSeconds }: {
+export function useContextLensPreview({ enabled, api, workspaceId, conversationId, pathname, page, images, uiScope, ttlSeconds }: {
   enabled: boolean;
   api: AgentApi;
   workspaceId: string | null | undefined;
@@ -59,19 +52,29 @@ export function useContextLensPreview({ enabled, api, workspaceId, conversationI
   pathname: string;
   page: PanelState['page'];
   images: readonly { assetId: string }[];
+  uiScope: string | null;
   ttlSeconds: number;
 }) {
-  const key = useDebounced(JSON.stringify([pathname, page ?? null, conversationId, images.map((image) => image.assetId)]), 250);
+  // Selections and their saved revisions change outside React. Re-read the same registry used by send, including when a
+  // generated view is touched or disposed, so its selection cannot travel invisibly with the next message.
+  const uiVersion = useSyncExternalStore(onUiScopeChange, registryVersion, registryVersion);
+  const key = JSON.stringify([pathname, page ?? null, conversationId, images.map((image) => image.assetId), uiScope, uiScope ? uiVersion : null]);
+  const pageContext = currentPageContext(pathname);
   const ttl = Math.max(30, ttlSeconds) * 1000;
   return useQuery({
     queryKey: ['agent-runtime', 'context-lens', workspaceId ?? null, key],
-    queryFn: ({ signal }) => api.contextLens(workspaceId as string, previewBody({ conversationId, pageContext: currentPageContext(pathname), attachments: images }), signal),
+    queryFn: async ({ signal }) => {
+      // Match send's save-before-read order: the server resolves a pick from the stored view state, never client claims.
+      await flushConversation(uiScope, conversationId);
+      signal.throwIfAborted();
+      return api.contextLens(workspaceId as string, previewBody({ conversationId, pageContext, attachments: images,
+        uiContext: currentUiContext(uiScope, conversationId) }), signal);
+    },
     enabled: enabled && Boolean(workspaceId),
     staleTime: ttl,
     refetchInterval: enabled ? ttl : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
-    placeholderData: keepPreviousData,
     retry: 1
   });
 }

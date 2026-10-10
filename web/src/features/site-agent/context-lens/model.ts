@@ -252,11 +252,11 @@ export function noSelection(preview: LensPreview | null, text: string, removed: 
   return !preview.items.some((item) => NAMED.includes(item.kind) && item.status === 'included' && !removed.has(item.id));
 }
 
-/** The removals to send with the next message: only ids the current preview lists as removable (a stale one is dropped). */
-export function exclusionsFor(preview: LensPreview | null, removed: ReadonlySet<string>): string[] {
-  if (!preview) return [];
-  const listed = new Set(preview.items.filter((item) => item.removable && (item.status === 'included' || item.status === 'removed')).map((item) => item.id));
-  return [...removed].filter((id) => listed.has(id)).sort().slice(0, 48);
+/** Keep explicit removals through a loading/failed preview. Server ids scope page items to their route; the panel
+ * clears all removals on a workspace/conversation change. Missing preview data must never restore removed context. */
+export function exclusionsFor(_preview: LensPreview | null, removed: ReadonlySet<string>): string[] {
+  const removable = /^(?:style|(?:selection|ref):[A-Za-z0-9_.:-]{1,120}:[A-Za-z0-9_.:-]{1,120}|(?:screen|visible_state|attachment|view_selection):[A-Za-z0-9_.:-]{1,120})$/;
+  return [...removed].filter((id) => removable.test(id)).sort().slice(0, 48);
 }
 
 /**
@@ -283,10 +283,12 @@ export function used(item: LensItem, removed: ReadonlySet<string>): boolean {
  * The preview request for the current panel state: the page, the conversation and the attached images, never the message
  * being typed. Removals stay in the panel until the message is sent (the server re-resolves everything then).
  */
-export function previewBody(input: { conversationId: string | null; pageContext: unknown; attachments: readonly { assetId: string }[] }): Record<string, unknown> {
+export function previewBody(input: { conversationId: string | null; pageContext: unknown; attachments: readonly { assetId: string }[];
+  uiContext?: { artifactId: string; artifactRevision: number; stateRevision: number } }): Record<string, unknown> {
   return {
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     pageContext: input.pageContext,
-    ...(input.attachments.length ? { attachments: input.attachments.map((item) => ({ assetId: item.assetId, role: 'reference' })) } : {})
+    ...(input.attachments.length ? { attachments: input.attachments.map((item) => ({ assetId: item.assetId, role: 'reference' })) } : {}),
+    ...(input.uiContext ? { uiContext: input.uiContext } : {})
   };
 }

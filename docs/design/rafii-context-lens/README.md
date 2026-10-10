@@ -1,7 +1,7 @@
 # Context Lens: one permission-checked context resolver and inspectable context chips
 
 Agent Experience Program, lane C5: **P0.6** (server context resolver) and **P1.1** (Context Lens chips in the Rafii panel).
-Status: shipped **off**. Base: `origin/consumer-saas` `de4e5907`.
+Status: **IMPLEMENTED, UNVERIFIED**; flags default off, no deployment or activation receipt yet. Base: `origin/consumer-saas` `de4e5907`.
 
 ## Flags (server-enforced, default off)
 
@@ -9,7 +9,7 @@ Status: shipped **off**. Base: `origin/consumer-saas` `de4e5907`.
 |---|---|---|
 | `RAFII_CONTEXT_LENS_ENABLED` | off | Turns the resolver, the preview route and the panel chips on, only for the listed workspaces and only where `RAFII_AGENT_V2_ENABLED` is on. |
 | `RAFII_CONTEXT_LENS_WORKSPACES` | empty | Comma-separated workspace ids. **Empty = nowhere.** `*` = every workspace (explicit). |
-| `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` | off | **DP-17 (pending James).** Sends the page's view values (filters, date ranges, tabs) to the model, wrapped as data. Needs the lens on as well. Stays off. |
+| `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` | off | **DP-17 approved, acceptance pending.** Sends the page's view values (filters, date ranges, tabs) to the model, wrapped as data. Needs the lens on as well. Stays off. |
 
 None of these is in `RuntimeConfig.FLAGS`, so `GET agent/status` is byte-identical when the lens is off. When it is on for a workspace, status gains `contextLens: {enabled, version, visibleState, previewTtlSeconds}`.
 
@@ -57,7 +57,7 @@ With the lens on, APP_STATE gains one key, `contextLens: {version, note, removed
 
 ## Lane B1 (CF-2) hook
 
-`context_lens.agent_gate` binds to `agent_runtime_v2.authz.gate` and `capability_registry` by name when both exist on the base, and calls them with the CF-1 §10 context capability ids. Absent (today) means the existing role and workspace checks only. Any error is a deny: an item is left out, never added. B1's own mode (off/shadow/enforce) decides.
+`context_lens.agent_gate` calls the explicit CF-2 `authz.context_gate` seam in the current transaction with the CF-1 context capability id, current state, member, configuration and time. Only an exact `allow` includes data; confirmations and unknown outcomes do not. Absent (today) means the existing role and workspace checks only. Any error is a deny: an item is left out, never added. B1's own mode (off/shadow/enforce) decides.
 
 ## Panel (P1.1)
 
@@ -74,6 +74,8 @@ With the lens on, APP_STATE gains one key, `contextLens: {version, note, removed
 
 1. Merge with all flags off (no behaviour change).
 2. Canary: `RAFII_CONTEXT_LENS_ENABLED=1`, `RAFII_CONTEXT_LENS_WORKSPACES=<canary id>`.
-3. DP-17 is a separate decision; `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` stays off until James decides.
+3. DP-17 was approved in the original human transcript at 2026-10-10T01:05:39Z, initially for the approved workspace only; `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` stays off until its acceptance and canary configuration are verified.
 
 No migration. No new table.
+
+Takeover repairs: a page/workspace change immediately invalidates displayed preview data. Explicit removals survive loading or failed previews, so sending during a refresh cannot silently restore context. CF-2 integration uses its declared transaction-scoped context gate instead of guessed tool APIs.

@@ -12,12 +12,13 @@ import json
 import sys
 import types
 import unittest
+from unittest.mock import patch
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.agent_runtime_v2 import config, context_lens
+from postriff_phase2.agent_runtime_v2 import config, context_lens, creative
 from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
 from postriff_phase2.permissions import Membership
 from postriff_phase2.site_agent import contracts as site_contracts
@@ -179,6 +180,73 @@ class RemovalTests(unittest.TestCase):
         self.assertEqual(state["contextLens"]["removedByPerson"], ["style", "view_selection"])
 
 
+class AttachmentRemovalTests(unittest.TestCase):
+    def setUp(self):
+        self.ids = [letter * 32 for letter in "abc"]
+        self.state = workspace_state()
+        self.state["phase2"]["assets"] = [{"id": ident, "mime": "image/jpeg", "processing": "decoded"} for ident in self.ids]
+        ids = self.ids
+
+        class Cur:
+            def execute(self, sql, *_args):
+                self.sql = sql
+
+            def fetchall(self):
+                return [({"assetId": ident}, at) for at, ident in enumerate(ids)] if "pr_attachments" in self.sql else []
+
+        self.cur = Cur()
+        self.ctx = make_ctx(service=FakeService(self.state), attachments=[{"assetId": self.ids[1]}])
+        self.excluded = frozenset({self.ids[1]})
+        self.ctx.context_lens = context_lens.resolve(inputs(queue_page(), self.state), ON,
+                                                    frozenset({f"attachment:{self.ids[1]}"}), NOW, gate=ALLOW)
+
+        @contextmanager
+        def workspace():
+            yield self.cur, None, "owner-1", self.ctx.membership, self.state
+
+        self.ctx.workspace = workspace
+
+    def test_recorded_image_removal_preserves_original_numbering_and_storage(self):
+        images = creative.conversation_images(self.cur, self.state, "ws-one", "conv-1", excluded=self.excluded)
+        self.assertEqual([(i["assetId"], i["index"]) for i in images], [(self.ids[0], 1), (self.ids[2], 3)])
+        self.assertEqual(len(creative.conversation_images(self.cur, self.state, "ws-one", "conv-1")), 3, "next turn still has all uploads")
+        self.assertEqual(context_lens.removed_attachment_ids(self.ctx.context_lens), self.excluded)
+        self.assertEqual(creative.image_list(self.ctx, {})["data"]["images"], images)
+        self.assertNotIn(self.ids[1], self.ctx.ledger.known_ids)
+
+    def test_removed_image_cannot_be_looked_up_by_id_number_default_or_bytes(self):
+        for args in ({"assetId": self.ids[1]}, {"index": 2}, {}):
+            with self.subTest(args=args), self.assertRaises(AlphaError) as caught:
+                creative._resolve_asset(self.ctx, self.cur, self.state, args)
+            self.assertEqual(caught.exception.status, 404)
+        with self.assertRaises(AlphaError):
+            creative._bytes(self.ctx, self.state["phase2"]["assets"][1])
+        self.assertEqual(creative._resolve_asset(self.ctx, self.cur, self.state, {"index": 3})["id"], self.ids[2])
+        self.assertEqual(creative._resolve_asset(self.ctx, self.cur, self.state, {"index": -1})["id"], self.ids[2])
+        self.ctx.context_lens = None
+        self.assertEqual(creative._resolve_asset(self.ctx, self.cur, self.state, {"assetId": self.ids[1]})["id"], self.ids[1], "legacy/off turn unchanged")
+
+    def test_removed_reference_cannot_reserve_generation_or_call_vision(self):
+        self.ctx.image_studio = SimpleNamespace(route=lambda *_a, **_kw: SimpleNamespace(available=True))
+        self.ctx.service.assets = object()
+        self.ctx.service.ledger = SimpleNamespace(reserve=lambda *_a, **_k: self.fail("must not reserve for removed media"))
+        self.ctx.vision = SimpleNamespace(analyze=lambda *_a, **_kw: self.fail("must not call vision"))
+        with self.assertRaises(AlphaError) as caught:
+            creative._generate(self.ctx, {"prompt": "Use the photo", "referenceAssetIds": [self.ids[1]]}, operation="generate")
+        self.assertEqual(caught.exception.status, 404)
+        with self.assertRaises(AlphaError):
+            creative.image_analyze(self.ctx, {"assetId": self.ids[1], "question": "What is here?"})
+
+    def test_removed_image_is_not_resolved_from_ordinals_or_a_generated_view_alias(self):
+        runtime = AgentRuntimeService.__new__(AgentRuntimeService)
+        _focus, notes = runtime._resolve(self.cur, self.state, "ws-one", "conv-1", "Describe the second image", queue_page(), excluded_assets=self.excluded)
+        self.assertNotIn(self.ids[1], json.dumps(notes))
+        self.assertIsNone(notes[-1]["resolvedTo"])
+        selection = {"references": [{"id": self.ids[1], "kind": "image"}], "note": "caption about the removed photo"}
+        self.assertIsNone(context_lens.effective_ui_selection(selection, self.excluded))
+        self.assertIs(context_lens.effective_ui_selection(selection, frozenset()), selection)
+
+
 class FallbackTests(unittest.TestCase):
     """Every path after `turn` reads the filtered payload: here the site-agent fallback."""
 
@@ -233,6 +301,18 @@ class FallbackTests(unittest.TestCase):
         runtime, seen = self.runtime(context_lens.Settings())
         runtime.turn("ws-one", "t", dict(self.PAYLOAD))
         self.assertEqual(seen, self.PAYLOAD)
+
+    def test_approval_cannot_resume_saved_photo_context_after_a_removal(self):
+        runtime, _seen = self.runtime(context_lens.Settings(enabled=True, workspaces=frozenset({"*"})))
+        runtime._front_door = lambda *_a, **_k: {"mode": "confirm"}
+        runtime._decide_turn = lambda *_a, **_k: self.fail("saved model input must not resume")
+        payload = {**self.PAYLOAD, "message": "yes", "contextLens": {"exclude": ["attachment:" + "b" * 32]}}
+        with self.assertRaises(AlphaError) as caught:
+            runtime.turn("ws-one", "t", payload)
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, "context_lens_saved_context"))
+        runtime._front_door = lambda *_a, **_k: {"mode": "reject"}
+        runtime._decide_turn = lambda *_a, **_k: {"rejected": True}
+        self.assertTrue(runtime.turn("ws-one", "t", payload)["rejected"], "declining never restores model input")
 
 
 class ManagerTurnTests(unittest.TestCase):
@@ -330,6 +410,30 @@ class InjectionTests(unittest.TestCase):
 
 
 class PermissionTests(unittest.TestCase):
+    def test_final_deny_replaces_an_earlier_allow_in_page_focus_raw_input_and_audit(self):
+        authz = types.ModuleType("postriff_phase2.agent_runtime_v2.authz")
+        decisions = iter(["allow", "allow", "deny", "deny"])
+        authz.context_gate = lambda *_a, **_kw: next(decisions)
+        runtime = SimpleNamespace(clock=lambda: NOW, cfg=None)
+        turn = context_lens.ManagerTurn(runtime, "ws-one", {}, ON)
+        page = queue_page()
+        with patch.dict(sys.modules, {authz.__name__: authz}):
+            initial = turn.check_page(None, workspace_state(), Membership.from_row("owner"), "owner-1", page)
+            self.assertEqual(initial["selectedEntity"]["id"], "d1")
+            notes, _selection, _style = turn.finish(None, workspace_state(), Membership.from_row("owner"), "owner-1", initial,
+                text="Shorten this", focus=initial["selectedEntity"], references=[], resolved=[], attachments=[], conversation_id="conv-1",
+                history=[], images=[], plan=None, last=None, open_items=[], style=None, ui_context=None, ui_selection=None,
+                refs_note=[{"resolvedTo": initial["selectedEntity"]}],
+                resolve_focus=lambda final: (final["selectedEntity"], [] if final["selectedEntity"] is None else [{"resolvedTo": final["selectedEntity"]}]))
+        self.assertIsNone(turn.effective_page["selectedEntity"])
+        self.assertEqual(turn.effective_page["outline"], [])
+        self.assertIsNone(turn.focus)
+        self.assertEqual(notes, [context_lens.unresolved_note(turn.lens)])
+        self.assertEqual({i["kind"]: i["status"] for i in turn.lens["items"]}["selection"], "denied")
+        raw = context_lens.effective_raw_page({"route": "/app/queue", "selectedEntity": page["selectedEntity"], "outline": page["outline"]}, turn.effective_page)
+        self.assertIsNone(site_contracts.page_context(raw)["selectedEntity"])
+        self.assertEqual(raw["outline"], [])
+
     def test_a_gate_deny_takes_the_selection_and_screen_away(self):
         page = queue_page()
         lens = context_lens.resolve(inputs(page), ON, frozenset(), NOW, gate=DENY)
@@ -341,34 +445,45 @@ class PermissionTests(unittest.TestCase):
         self.assertEqual(effective["outline"], [])
         self.assertEqual(context_lens.app_state(lens, page)["contextLens"]["notAvailable"], ["screen", "selection"])
 
-    def test_agent_gate_binds_to_lane_b1_when_present_and_fails_closed(self):
+    def test_agent_gate_uses_the_declared_transaction_scoped_context_seam(self):
         self.assertEqual(context_lens.agent_gate("context.page_summary", workspace_id="w", principal="p", member=None), "allow", "absent on this base")
         package = "postriff_phase2.agent_runtime_v2"
-        registry = types.ModuleType(package + ".capability_registry")
-        registry.get = lambda cap_id: SimpleNamespace(capability_id=cap_id)
         authz = types.ModuleType(package + ".authz")
         seen = []
+        cursor, member, cfg = object(), object(), object()
+        state = {"sources": []}
 
-        def gate(view, cap, args, surface):
-            seen.append((view.workspace_id, cap.capability_id, args, surface))
-            return SimpleNamespace(outcome="deny" if cap.capability_id == "context.screen_outline" else "allow")
+        def gate(capability_id, **kwargs):
+            seen.append((capability_id, kwargs))
+            return "deny" if capability_id == "context.screen_outline" else "allow"
 
-        authz.gate = gate
+        authz.context_gate = gate
         parent = sys.modules[package]
-        sys.modules[registry.__name__], sys.modules[authz.__name__] = registry, authz
-        setattr(parent, "capability_registry", registry)
+        sys.modules[authz.__name__] = authz
         setattr(parent, "authz", authz)
+        kwargs = dict(workspace_id="w", principal="p", member=member, config=cfg, cur=cursor, state=state, now=NOW)
         try:
-            self.assertEqual(context_lens.agent_gate("context.page_summary", workspace_id="w", principal="p", member=None), "allow")
-            self.assertEqual(context_lens.agent_gate("context.screen_outline", workspace_id="w", principal="p", member=None), "deny")
-            self.assertEqual(seen[0], ("w", "context.page_summary", {}, "manager"))
-            authz.gate = lambda *_a: (_ for _ in ()).throw(RuntimeError("boom"))
-            self.assertEqual(context_lens.agent_gate("context.page_summary", workspace_id="w", principal="p", member=None), "deny", "fail closed")
+            self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "allow")
+            self.assertEqual(seen[0], ("context.page_summary", kwargs))
+            self.assertEqual(context_lens.agent_gate("context.screen_outline", **kwargs), "deny")
+            for outcome in ("confirm", "approve", "step_up", "unknown", None):
+                authz.context_gate = lambda *_a, **_k: outcome
+                self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "deny")
+            authz.context_gate = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+            self.assertEqual(context_lens.agent_gate("context.page_summary", **kwargs), "deny", "fail closed")
         finally:
-            for name in ("capability_registry", "authz"):
-                sys.modules.pop(f"{package}.{name}", None)
-                if hasattr(parent, name):
-                    delattr(parent, name)
+            sys.modules.pop(authz.__name__, None)
+            if hasattr(parent, "authz"):
+                delattr(parent, "authz")
+
+    def test_unrecognized_context_gate_results_never_include_screen_data(self):
+        page = queue_page(visibleState={"tab": "scheduled"})
+        for outcome in ("confirm", "approve", "step_up", None):
+            lens = context_lens.resolve(inputs(page), ON_VISIBLE, frozenset(), NOW, gate=lambda *_a, **_k: outcome)
+            effective = context_lens.effective_page(page, lens)
+            self.assertIsNone(effective["selectedEntity"])
+            self.assertEqual(effective["outline"], [])
+            self.assertFalse(effective.get("visibleState"))
 
     def test_status_names_the_lens_only_when_on(self):
         runtime = AgentRuntimeService(FakeService(), config.RuntimeConfig.from_environment({"RAFII_AGENT_V2_ENABLED": "1"}))

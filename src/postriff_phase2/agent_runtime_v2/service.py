@@ -99,10 +99,12 @@ class AgentRuntimeService:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured turn.", 400)
         from ..site_agent import contracts as site_contracts
+        lens_excluded = frozenset()
         if context_lens.scope_for(self, workspace_id).enabled:
             # Context Lens: what the person removed leaves the payload before anything reads it (front door, commands,
             # Manager, site-agent fallback, writing pipeline). Off: the payload is untouched.
-            payload = context_lens.filter_payload(payload, context_lens.exclusions(payload))
+            lens_excluded = context_lens.exclusions(payload)
+            payload = context_lens.filter_payload(payload, lens_excluded)
         text = clean(payload.get("message", ""), MAX_MESSAGE)
         modality = payload.get("modality") if payload.get("modality") in contracts.MODALITIES else "text"
         # Chat-context SPEC §9: each attachment has a role for this turn; role-less means `reference` (the panel's images).
@@ -141,6 +143,10 @@ class AgentRuntimeService:
             with repo.transaction(token, workspace_id) as (cur, row, principal):
                 attachments = self._attach(cur, ideas._state(row), workspace_id, conversation_id, principal, attachments_in, ideas._member(row))
         if decision["mode"] in ("confirm", "reject", "choose"):
+            if decision["mode"] != "reject" and context_lens.excluded_attachment_ids(lens_excluded):
+                # A saved continuation already contains its old model input; never claim we removed an image from it.
+                raise AlphaError("Start a new message to continue without the removed photo; this approval keeps its saved context.",
+                                 409, code="context_lens_saved_context")
             return self._decide_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id, decision, zone, attachments)
         if decision["mode"] == "cancel":
             return self._cancel_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id)
@@ -465,13 +471,14 @@ class AgentRuntimeService:
             state = self.service.ideas._state(row)
             if lens is not None:
                 page = lens.check_page(cur, state, member, principal, page)
-            focus, refs_note = self._resolve(cur, state, workspace_id, conversation_id, text, page)
+            excluded_assets = context_lens.excluded_attachment_ids(lens.excluded) if lens is not None else frozenset()
+            focus, refs_note = (None, []) if lens is not None else self._resolve(cur, state, workspace_id, conversation_id, text, page)
             chips = chip_refs.parse({"references": payload.get("references")})
             resolved_chips = chip_refs.resolved_ids(state, {"references": chips["references"], "attachments": []}) + \
                 [{"kind": a.get("kind") or "image", "id": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]
             focus = self._chip_focus(focus, resolved_chips)
             plan = task_state.active(cur, workspace_id, conversation_id)
-            images = creative.conversation_images(cur, state, workspace_id, conversation_id)
+            images = creative.conversation_images(cur, state, workspace_id, conversation_id, excluded=excluded_assets)
             if plan is not None and _sync_task(self, cur, workspace_id, plan, state):
                 task_state.save(cur, self.service.ideas, workspace_id, plan)
                 plan = plan if plan.status == "running" else None
@@ -483,15 +490,23 @@ class AgentRuntimeService:
             style = agent_style.load(cur, principal)
             ui_context, ui_selection = ui_turn_context(self.cfg, cur, workspace_id, principal, member, payload.get("uiContext"))
             if lens is not None:
+                ui_selection = context_lens.effective_ui_selection(ui_selection, excluded_assets)
+                def resolve_final_page(final_page):
+                    final_focus, final_notes = self._resolve(cur, state, workspace_id, conversation_id, text, final_page, excluded_assets=excluded_assets)
+                    return self._chip_focus(final_focus, resolved_chips), final_notes
+
                 refs_note, ui_selection, style = lens.finish(cur, state, member, principal, page, text=text, focus=focus, references=chips["references"],
                                                              resolved=resolved_chips, attachments=attachments, conversation_id=conversation_id, history=history,
                                                              images=images, plan=plan, last=last, open_items=open_items, style=style, ui_context=ui_context,
-                                                             ui_selection=ui_selection, refs_note=refs_note)
+                                                             ui_selection=ui_selection, refs_note=refs_note, resolve_focus=resolve_final_page)
+                page, focus = lens.effective_page, lens.focus
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, page=page, zone=zone, locale=payload.get("locale") if isinstance(payload.get("locale"), str) else None,
                               writer_model=payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None, attachments=attachments,
                               conversation_assets=images, focus=focus, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
+                              vision=self.vision, request_text=text,
+                              page_raw=context_lens.effective_raw_page(payload.get("pageContext"), page) if lens is not None else
+                                  payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
                               style=style, command=commands.parse(payload.get("command")), ui_context=ui_context, ui_selection=ui_selection,
                               voice_choice=voice_choice(payload))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
@@ -585,7 +600,7 @@ class AgentRuntimeService:
             return {"type": "draft", "id": posts[0]["id"]}
         return focus
 
-    def _resolve(self, cur, state, workspace_id, conversation_id, text, page):
+    def _resolve(self, cur, state, workspace_id, conversation_id, text, page, *, excluded_assets=frozenset()):
         """Deterministic references before any model reasoning (spec §3.5): the page item, "that draft", ordinals, "the second image"."""
         from ..site_agent import references
         cur.execute("SELECT body->'siteAgent'->'refs' FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s AND role='assistant' AND body ? 'siteAgent' ORDER BY seq DESC LIMIT 4",
@@ -600,10 +615,10 @@ class AgentRuntimeService:
         match = _IMAGE_ORDINAL.search(text)
         if match:
             from .creative import conversation_images
-            images = conversation_images(cur, state, workspace_id, conversation_id)
+            images = conversation_images(cur, state, workspace_id, conversation_id, excluded=excluded_assets)
             index = _ORDINALS.get((match.group(1) or match.group(2) or "").lower())
-            if index is not None and images and -len(images) <= index <= len(images) and index != 0:
-                chosen = images[index - 1] if index > 0 else images[index]
+            chosen = creative._image_at(images, index) if index is not None else None
+            if chosen is not None:
                 notes.append({"phrase": match.group(0), "resolvedTo": {"type": "asset", "id": chosen["assetId"], "index": chosen["index"]}, "source": "conversation images"})
             else:
                 notes.append({"phrase": match.group(0), "resolvedTo": None, "note": f"this conversation has {len(images)} image(s)"})

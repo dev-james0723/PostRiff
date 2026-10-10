@@ -16,6 +16,8 @@ import json
 import os
 import sys
 import uuid
+import types
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -263,5 +265,53 @@ hidden = refused(lambda: context_lens.preview(off, wid, OWNER, {"pageContext": P
 check("preview: off is today's unknown route", (hidden.status, str(hidden)) == (404, "This hosted route is unavailable."), (hidden.status, str(hidden)))
 removed_preview = context_lens.preview(on, wid, OWNER, {"pageContext": PAGE, "contextLens": {"exclude": [f"selection:draft:{draft['id']}"]}})
 check("preview: a removal shows as removed", {i["id"]: i["status"] for i in removed_preview["items"]}.get(f"selection:draft:{draft['id']}") == "removed", removed_preview["items"])
+
+# 7. AttachImage has already recorded a photo before send. Removal must hide that stored copy for this turn too.
+from postriff_phase2 import attachment_rows
+from postriff_phase2.agent_runtime_v2 import creative
+
+photo_ids = ["a" * 32, "b" * 32]
+
+
+def add_photos(state, _actor):
+    state.setdefault("phase2", {}).setdefault("assets", []).extend(
+        {"id": ident, "mime": "image/jpeg", "processing": "decoded", "hash": ident, "width": 10, "height": 10} for ident in photo_ids)
+    return state
+
+
+service.repository.command(wid, OWNER, service.get(wid, OWNER)["revision"], add_photos)
+photo_conversation = ideas.create_conversation(wid, OWNER, "photos")["conversationId"]
+with service.repository.transaction(OWNER, wid) as (cur, row, principal):
+    state = ideas._state(row)
+    for order, ident in enumerate(photo_ids):
+        asset = next(a for a in state["phase2"]["assets"] if a["id"] == ident)
+        attachment_rows.record(cur, wid, photo_conversation, principal, asset, now=clock[0] + order)
+photo_payload = {"conversationId": photo_conversation, "pageContext": {"route": "/app/library"},
+                 "attachments": [{"assetId": photo_ids[0], "role": "reference"}], "contextLens": {"exclude": [f"attachment:{photo_ids[0]}"]}}
+photo_preview = context_lens.preview(on, wid, OWNER, photo_payload)
+check("removed photo: preview counts only the remaining conversation image",
+      next(i for i in photo_preview["items"] if i["kind"] == "conversation")["images"] == 1)
+SCRIPTS.set(rafii_manager=[[reply("Which photo should I use?")]])
+result = on.turn(wid, OWNER, {**photo_payload, "message": "Describe the first image", "idempotencyKey": uuid.uuid4().hex})
+photo_state = block(on.seen[-1])[1]
+check("removed photo: no stored copy or ordinal id reaches the model", photo_ids[0] not in json.dumps(photo_state), photo_state)
+check("removed photo: the next image keeps its original number", photo_state["conversationImages"] == [{"index": 2, "assetId": photo_ids[1], "origin": "attached"}],
+      photo_state["conversationImages"])
+check("removed photo: trace records the removal", any(i["id"] == f"attachment:{photo_ids[0]}" and i["status"] == "removed"
+      for i in trace_of(result["runId"])["contextLens"]["items"]))
+with service.repository.transaction(OWNER, wid) as (cur, row, _principal):
+    kept_photos = creative.conversation_images(cur, ideas._state(row), wid, photo_conversation)
+check("removed photo: both uploads remain available for a later turn", [i["assetId"] for i in kept_photos] == photo_ids)
+
+# A final CF2 denial must replace the initial page/focus, including when a grant expires between the two reads.
+authz = types.ModuleType("postriff_phase2.agent_runtime_v2.authz")
+decisions = iter(["allow", "allow", "deny", "deny"])
+authz.context_gate = lambda *_a, **_k: next(decisions)
+with patch.dict(sys.modules, {authz.__name__: authz}):
+    denied_run, denied_items, _ = turn(on, "Shorten this draft")
+denied_state = block(denied_items)[1]
+check("final deny: page, screen, resolved references all agree with the trace", denied_state["page"]["entity"] is None and "screen" not in denied_state
+      and draft["id"] not in json.dumps(denied_state["resolvedReferences"]), denied_state)
+check("final deny: audit records the decision used by the model", {i["kind"]: i["status"] for i in trace_of(denied_run["runId"])["contextLens"]["items"]}["selection"] == "denied")
 
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": passed}, indent=2))

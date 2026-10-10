@@ -28,7 +28,7 @@ ever added that the person could not already see: every item is checked with the
 exists on this base (fail closed). Titles and labels go back to the person's own screen only; the model receives ids,
 kinds and the existing APP_STATE fields, all inside the JSON-escaped data block with a data-only note.
 
-Sending new visible state (filters, date ranges, tab state) to the model is James's pending decision DP-17:
+Sending new visible state (filters, date ranges, tab state) to the model is James's approved, separately gated decision DP-17:
 `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` stays off; with it off, `visibleState` never reaches the model (today's behaviour).
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ from postriff_alpha.domain import AlphaError
 VERSION = "rafii-context-lens/1"
 ENABLED_FLAG = "RAFII_CONTEXT_LENS_ENABLED"
 WORKSPACES_ENV = "RAFII_CONTEXT_LENS_WORKSPACES"
-VISIBLE_STATE_FLAG = "RAFII_CONTEXT_VISIBLE_STATE_ENABLED"   # DP-17 (pending): stays off
+VISIBLE_STATE_FLAG = "RAFII_CONTEXT_VISIBLE_STATE_ENABLED"   # DP-17: rollout remains off until acceptance
 PREVIEW_TTL_SECONDS = 120          # a preview describes the page as it was; the client refreshes it, the turn re-resolves
 MAX_EXCLUSIONS = 48
 MAX_DETAIL = 60
@@ -204,6 +204,24 @@ def removed_ids(payload) -> frozenset:
     return frozenset(i for i in ((raw or {}).get("removed") or []) if isinstance(i, str)) if isinstance(raw, dict) else frozenset()
 
 
+def excluded_attachment_ids(excluded) -> frozenset:
+    """Per-turn asset removals also apply to copies already recorded on the conversation."""
+    return frozenset(i.split(":", 1)[1] for i in excluded if isinstance(i, str) and i.startswith("attachment:"))
+
+
+def removed_attachment_ids(lens) -> frozenset:
+    """The resolved turn lens is carried by Manager/specialist contexts; no persistent asset is changed."""
+    return excluded_attachment_ids(i.get("id", "") for i in (lens or {}).get("items", [])
+                                   if i.get("kind") == "attachment" and i.get("status") == "removed")
+
+
+def effective_ui_selection(selection, excluded_assets):
+    """A generated selection can name the same removed photo. Drop its bundled note as well as its ids."""
+    if any(ref.get("id") in excluded_assets for ref in (selection or {}).get("references", []) if isinstance(ref, dict)):
+        return None
+    return selection
+
+
 # --- per-item checks ---------------------------------------------------------------------------------------------------------
 def _find(items, ident):
     return next((i for i in items or [] if isinstance(i, dict) and i.get("id") == ident), None)
@@ -270,24 +288,24 @@ def reference_detail(state: dict, kind: str, ident: str) -> str | None:
     return None
 
 
-def agent_gate(capability_id: str, *, workspace_id, principal, member, config=None) -> str:
-    """Lane B1's CF-2 gate for one context item, when that module exists on this base: "allow" | "deny".
+def agent_gate(capability_id: str, *, workspace_id, principal, member, config=None, cur=None, state=None, now=0.0) -> str:
+    """Use CF-2's context gate in the existing transaction; only an explicit allow includes data.
 
-    Absent (today's base) → "allow": the existing role and workspace checks above already apply. Present → its own mode
-    decides (off = allow, shadow = log + allow, enforce = the decision). Any error → "deny" (fail closed: an item is
-    left out, never added)."""
+    Before the permissions module ships, existing workspace/role checks apply. Import failures inside an installed
+    permissions module fail closed. CF-2 owns off/shadow/enforce semantics and content-free shadow telemetry.
+    """
+    from importlib import import_module
+    name = f"{__package__}.authz"
     try:
-        from . import authz, capability_registry  # type: ignore[attr-defined]  # lanes B1 / A1 (CF-1, CF-2)
-    except ImportError:
-        return "allow"
+        authz = import_module(name)
+    except ModuleNotFoundError as error:
+        return "allow" if error.name == name else "deny"
+    except Exception:  # noqa: BLE001 — a broken permission module cannot grant context access
+        return "deny"
     try:
-        lookup = getattr(capability_registry, "get", None) or getattr(capability_registry, "capability", None)
-        cap = lookup(capability_id) if lookup else capability_registry.CONTEXT_CAPABILITIES[capability_id]
-        from types import SimpleNamespace
-        view = SimpleNamespace(workspace_id=workspace_id, principal=principal, membership=member, config=config, specialist=None)
-        decision = authz.gate(view, cap, {}, "manager")
-        outcome = getattr(decision, "outcome", None) or (decision.get("outcome") if isinstance(decision, dict) else None)
-        return "deny" if outcome == "deny" else "allow"
+        decision = authz.context_gate(capability_id, cur=cur, state=state or {}, workspace_id=workspace_id,
+                                      principal=principal, member=member, config=config, now=now)
+        return "allow" if decision == "allow" else "deny"
     except Exception:  # noqa: BLE001 — an unreadable permission is a "no"
         return "deny"
 
@@ -341,7 +359,7 @@ def resolve(inputs: Inputs, scope: Scope, excluded: frozenset, now: float, *, re
     member, page = inputs.member, inputs.page or {}
     reads = bool(member is not None and member.allows("read"))
     key = page.get("routeId") or "unknown"
-    gate_kw = {"workspace_id": inputs.workspace_id, "principal": inputs.principal, "member": member, "config": inputs.config}
+    gate_kw = {"workspace_id": inputs.workspace_id, "principal": inputs.principal, "member": member, "config": inputs.config, "cur": inputs.cur, "state": inputs.state, "now": now}
     page_item = _item("page", "page", "unavailable" if page.get("stale") else "included", removable=False, source="page", now=now, ttl=PREVIEW_TTL_SECONDS,
                       routeId=page.get("routeId"), title=page.get("title"), reason="unknown_page" if page.get("stale") else None)
     items = [_item("workspace", "workspace", "included", removable=False, source="workspace", now=now, role=getattr(member, "role", None)), page_item]
@@ -357,11 +375,13 @@ def resolve(inputs: Inputs, scope: Scope, excluded: frozenset, now: float, *, re
         ident, kind = selection_id(entity), entity["type"]
         found, detail = entity_detail(inputs.state, kind, entity["id"], inputs.cur, inputs.workspace_id)
         common = {"removable": True, "source": "page", "now": now, "ttl": PREVIEW_TTL_SECONDS, "entityType": kind}
-        if not reads:
+        if kind == "asset" and entity["id"] in excluded_attachment_ids(excluded):
+            items.append(_removed(ident, "selection", "page", now))
+        elif not reads:
             items.append(_item(ident, "selection", "denied", reason="role", **common))
         elif not found:
             items.append(_item(ident, "selection", "unavailable", reason="not_in_workspace", **common))
-        elif gate(CONTEXT_CAPABILITIES["selection"], **gate_kw) == "deny":
+        elif gate(CONTEXT_CAPABILITIES["selection"], **gate_kw) != "allow":
             items.append(_item(ident, "selection", "denied", reason="agent_permission", **common))
         else:
             items.append(_item(ident, "selection", "included", entityId=entity["id"], detail=detail, **common))
@@ -372,17 +392,17 @@ def resolve(inputs: Inputs, scope: Scope, excluded: frozenset, now: float, *, re
     if f"screen:{key}" in removed:
         items.append(_removed(f"screen:{key}", "screen", "screen", now))
     elif outline:
-        allowed = reads and gate(CONTEXT_CAPABILITIES["screen"], **gate_kw) != "deny"
+        allowed = reads and gate(CONTEXT_CAPABILITIES["screen"], **gate_kw) == "allow"
         items.append(_item(f"screen:{key}", "screen", "included" if allowed else "denied", removable=True, source="screen", now=now, ttl=PREVIEW_TTL_SECONDS,
                            count=len(outline), reason=None if allowed else ("role" if not reads else "agent_permission")))
 
-    # DP-17 (pending): the page's view values (filters, dates, tabs) are listed and sent only with their own flag.
+    # DP-17: the page's view values (filters, dates, tabs) are listed and sent only with their own flag.
     visible = page.get("visibleState") or {}
     if scope.visible_state:
         if f"visible_state:{key}" in removed:
             items.append(_removed(f"visible_state:{key}", "visible_state", "page", now))
         elif visible:
-            allowed = reads and gate(CONTEXT_CAPABILITIES["visible_state"], **gate_kw) != "deny"
+            allowed = reads and gate(CONTEXT_CAPABILITIES["visible_state"], **gate_kw) == "allow"
             items.append(_item(f"visible_state:{key}", "visible_state", "included" if allowed else "denied", removable=True, source="page", now=now,
                                ttl=PREVIEW_TTL_SECONDS, keys=sorted(visible)[:12], reason=None if allowed else "agent_permission"))
 
@@ -405,7 +425,7 @@ def resolve(inputs: Inputs, scope: Scope, excluded: frozenset, now: float, *, re
         items.append(_item(f"attachment:{attachment.get('assetId')}", "attachment", status, removable=True, source="composer", now=now, permission="edit",
                            mediaKind=asset_kinds.kind_of(asset) if ready else None, role=attachment.get("role") or "reference",
                            reason={"unavailable": "not_in_workspace", "denied": "role"}.get(status)))
-    items += [_removed(i, "attachment", "composer", now, permission="edit") for i in sorted(removed) if i.startswith("attachment:")]
+    items += [_removed(i, "attachment", "composer", now, permission="edit") for i in sorted(removed | excluded) if i.startswith("attachment:")]
 
     # What the person picked in an interactive view (re-resolved from stored UI state by today's code).
     picked = [r for r in ((inputs.ui_selection or {}).get("references") or []) if isinstance(r, dict) and r.get("id")][:12]
@@ -453,6 +473,13 @@ def effective_page(page: dict, lens: dict) -> dict:
     if out.get("visibleState") and not included(lens, "visible_state"):
         out["visibleState"] = {}
     return out
+
+
+def effective_raw_page(raw, page):
+    """Consumers of the raw route payload receive the same final permission decision as APP_STATE."""
+    if not isinstance(raw, dict):
+        return None
+    return {**raw, **{key: page.get(key) for key in ("selectedEntity", "outline", "visibleState")}}
 
 
 def app_state(lens: dict, page: dict) -> dict:
@@ -505,6 +532,8 @@ class ManagerTurn:
         self.excluded, self.removed = _excluded_on(payload), removed_ids(payload)
         self.lens: dict | None = None
         self.page: dict | None = None      # the validated page as sent, before the lens took anything away
+        self.effective_page: dict | None = None
+        self.focus: dict | None = None
 
     @classmethod
     def start(cls, runtime, workspace_id, payload) -> "ManagerTurn | None":
@@ -522,7 +551,7 @@ class ManagerTurn:
         return effective_page(page, lens)
 
     def finish(self, cur, state, member, principal, page, *, text, focus, references, resolved, attachments, conversation_id, history, images,
-               plan, last, open_items, style, ui_context, ui_selection, refs_note):
+               plan, last, open_items, style, ui_context, ui_selection, refs_note, resolve_focus=None):
         """(refs_note, ui_selection, style) for the Manager; the lens itself is kept for the trace and APP_STATE."""
         from . import style as agent_style
         # The final lens lists the page as sent (so a dropped selection shows as unavailable), never the page the Manager gets.
@@ -533,6 +562,13 @@ class ManagerTurn:
                                     ui_selection=ui_selection, text=text, focus=focus),
                        self.scope, self.excluded, self.runtime.clock(), removed=self.removed)
         self.lens = lens
+        self.effective_page = effective_page(self.page if self.page is not None else page, lens)
+        if resolve_focus is not None:
+            # The final gate can revoke an earlier allow. Resolve every model-facing page reference from THIS decision.
+            focus, refs_note = resolve_focus(self.effective_page)
+            named = any(i["status"] == "included" and i["kind"] in ("selection", "reference", "attachment", "view_selection") for i in lens["items"])
+            lens["ambiguity"] = {"status": "no_selection"} if DEICTIC.search(text or "") and focus is None and not named else None
+        self.focus = focus
         if any(i["kind"] == "view_selection" and i["status"] == "removed" for i in lens["items"]):
             ui_selection = None   # only a selection the person removed; anything else stays exactly as today
         if "style" in self.excluded:
@@ -581,11 +617,13 @@ def preview(runtime, workspace_id, token, payload) -> dict:
                 raise AlphaError("Conversation unavailable.", 404)
             plan = task_state.active(cur, workspace_id, conversation_id)
             counts = {"history_count": len(runtime._history(cur, workspace_id, conversation_id)),
-                      "images_count": len(creative.conversation_images(cur, state, workspace_id, conversation_id)),
+                      "images_count": len(creative.conversation_images(cur, state, workspace_id, conversation_id,
+                                                                      excluded=excluded_attachment_ids(_excluded_on(payload)))),
                       "task_title": plan.title if plan is not None else None,
                       "approvals_count": len(approvals.open_proposals(cur, workspace_id, conversation_id, now)),
                       "last_task": plan is None and task_state.latest(cur, workspace_id, conversation_id) is not None}
         ui_context, ui_selection = ui_turn_context(runtime.cfg, cur, workspace_id, principal, member, payload.get("uiContext"))
+        ui_selection = effective_ui_selection(ui_selection, excluded_attachment_ids(_excluded_on(payload)))
         inputs = Inputs(workspace_id=workspace_id, principal=principal, member=member, state=state, page=page, references=refs,
                         resolved=chip_refs.resolved_ids(state, {"references": refs, "attachments": []}), attachments=attachments,
                         conversation_id=conversation_id, style=agent_style.load(cur, principal), ui_context=ui_context, ui_selection=ui_selection,

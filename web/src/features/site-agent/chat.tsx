@@ -132,6 +132,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   const lensOn = Boolean(agentOn && agent.status?.contextLens?.enabled);
   const [lensRemoved, setLensRemoved] = useState<ReadonlySet<string>>(() => new Set());
   const lens = useContextLensPreview({ enabled: lensOn, api: agent.api, workspaceId, conversationId, pathname, page, images,
+                                       uiScope: agent.status?.genui?.enabled ? uiScope : null,
                                        ttlSeconds: agent.status?.contextLens?.previewTtlSeconds ?? 120 });
   const lensPreview = lensOn ? (lens.data ?? null) : null;
   useEffect(() => {
@@ -166,6 +167,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   const end = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
+  // Identity changes even after A → B → A: an old response must not clear a new conversation's exclusions or uploads.
+  const composerScope = useRef({ workspaceId, conversationId });
+  if (composerScope.current.workspaceId !== workspaceId || composerScope.current.conversationId !== conversationId) {
+    composerScope.current = { workspaceId, conversationId };
+  }
 
   useEffect(() => {
     setNotes([]);
@@ -260,6 +266,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
       panelStore.setBusy(w, true);
       const ticket = AUTO.begin();
       const current = panelStore.get();
+      const sentScope = composerScope.current;
       try {
         const pageContext = currentPageContext(pathname);
         let result: SiteAgentTurnResult;
@@ -293,9 +300,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
             ...(uiContext ? { uiContext } : {}),
             ...(exclude.length ? { contextLens: { exclude } } : {})
           });
+          if (composerScope.current !== sentScope) return;
           setImages([]);
           if (status?.contextLens?.enabled) {
-            setLensRemoved(new Set());
+            setLensRemoved((pending) => pending === lensRemoved ? new Set() : pending);
             void client.invalidateQueries({ queryKey: ['agent-runtime', 'context-lens', w] });
           }
           // A turn answered here may build its one interactive view (the slot starts it; history never does).
@@ -317,7 +325,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
           blocks = result.message?.siteAgent?.blocks;
           answerId = result.messageId ?? null;
         }
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         panelStore.setConversation(w, result.conversationId);
         if (result.runId && !result.delegated) panelStore.setLive(result.runId, { events: result.events ?? [], composing: Boolean(result.needsCompose) });
         await client.invalidateQueries({ queryKey: keys.messages(w, result.conversationId) });
@@ -335,7 +343,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
         // "Take me to …" or "show me how": the answer's own link or guide, once, and only for the newest request.
         if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) runAuto(autoActionsOf(blocks, 'text'));
       } catch (error) {
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         setOptimistic(null);
         // No reply means the request may still have run (a link, a saved draft); only the server's own error says what happened.
         setFailure({ text: message, message: error instanceof ApiError ? error.message : "Rafii's answer didn't arrive. If you asked for a change, check before asking again: it may already have been made." });
