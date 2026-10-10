@@ -341,7 +341,7 @@ function PresetOption({ id, title, summary, note, checked, onSelect }: { id: str
         checked ? 'rafii-glass-selected' : 'rafii-glass'
       )}
     >
-      <input type='radio' name='agent-preset' value={id} checked={checked} onChange={onSelect} className='mt-1 size-4 shrink-0' />
+      <input type='radio' aria-label={title} name='agent-preset' value={id} checked={checked} onChange={onSelect} className='mt-1 size-4 shrink-0' />
       <span className='flex min-w-0 flex-col gap-0.5'>
         <span className='text-foreground text-sm font-medium break-words'>{title}</span>
         <span className='text-muted-foreground text-xs leading-relaxed break-words'>{summary}</span>
