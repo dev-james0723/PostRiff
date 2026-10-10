@@ -43,6 +43,7 @@ import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
+import { timeDefaults } from '@/lib/time';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { activityRows, isSiteAgentBody, suggestionsFor } from '@/lib/site-agent/panel-logic';
@@ -57,6 +58,8 @@ import { flushConversation } from '@/features/agent/generative-ui/surfaces/sessi
 import { useConsumerUiTransport } from '@/features/agent/generative-ui/surfaces/transport';
 import { cn } from '@/lib/utils';
 import { SiteAgentAnswer } from './answer';
+import { ContextLens, useContextLensPreview } from './context-lens/context-lens';
+import { exclusionsFor, lensLanguage, type LensItem } from './context-lens/model';
 import { DelegatedMessage } from './delegated';
 import { RafiiAvatar } from './rafii-avatar';
 import { panelStore, usePanel } from './store';
@@ -124,6 +127,25 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   }, [workspaceId, conversationId]);
   const live = usePanel((s) => s.live);
   const page = usePanel((s) => s.page);
+  // Context Lens (only when the server reports it on for this workspace): what the next typed message will use, and what the
+  // person removed from it. Removals apply to the next message only and never follow a switch of workspace or conversation.
+  const lensOn = Boolean(agentOn && agent.status?.contextLens?.enabled);
+  const [lensRemoved, setLensRemoved] = useState<ReadonlySet<string>>(() => new Set());
+  const lens = useContextLensPreview({ enabled: lensOn, api: agent.api, workspaceId, conversationId, pathname, page, images,
+                                       uiScope: agent.status?.genui?.enabled ? uiScope : null,
+                                       ttlSeconds: agent.status?.contextLens?.previewTtlSeconds ?? 120 });
+  const lensPreview = lensOn ? (lens.data ?? null) : null;
+  useEffect(() => {
+    setLensRemoved(new Set());
+  }, [workspaceId, conversationId]);
+  const toggleLens = useCallback((item: LensItem) => {
+    setLensRemoved((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }, []);
   const thread = useMessages(conversationId);
   const messages = useMemo(() => thread.data?.messages ?? [], [thread.data]);
 
@@ -145,6 +167,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   const end = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
+  // Identity changes even after A → B → A: an old response must not clear a new conversation's exclusions or uploads.
+  const composerScope = useRef({ workspaceId, conversationId });
+  if (composerScope.current.workspaceId !== workspaceId || composerScope.current.conversationId !== conversationId) {
+    composerScope.current = { workspaceId, conversationId };
+  }
 
   useEffect(() => {
     setNotes([]);
@@ -239,6 +266,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
       panelStore.setBusy(w, true);
       const ticket = AUTO.begin();
       const current = panelStore.get();
+      const sentScope = composerScope.current;
       try {
         const pageContext = currentPageContext(pathname);
         let result: SiteAgentTurnResult;
@@ -255,6 +283,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
           const conversation = current.conversations[w] ?? null;
           if (genuiOn) await flushConversation(uiScope, conversation);
           const uiContext = genuiOn ? (extra?.uiContext ?? currentUiContext(uiScope, conversation)) : undefined;
+          // Context Lens: the chips the person removed go with the message; the server leaves them out of this turn.
+          const exclude = status?.contextLens?.enabled ? exclusionsFor(lensPreview, lensRemoved) : [];
           // The Agent Runtime answers (same conversation; it falls back to the site agent by itself when it must).
           const response = await agent.api.turn(w, {
             message,
@@ -267,9 +297,15 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
             timeZone,
             model: choice.model,
             ...(command ? { command } : {}),
-            ...(uiContext ? { uiContext } : {})
+            ...(uiContext ? { uiContext } : {}),
+            ...(exclude.length ? { contextLens: { exclude } } : {})
           });
+          if (composerScope.current !== sentScope) return;
           setImages([]);
+          if (status?.contextLens?.enabled) {
+            setLensRemoved((pending) => pending === lensRemoved ? new Set() : pending);
+            void client.invalidateQueries({ queryKey: ['agent-runtime', 'context-lens', w] });
+          }
           // A turn answered here may build its one interactive view (the slot starts it; history never does).
           if (genuiOn && uiScope && response.runId && response.result?.ui?.eligible) markFresh(uiScope, response.runId);
           voiceSession.typedExchange(message, response.result);
@@ -289,7 +325,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
           blocks = result.message?.siteAgent?.blocks;
           answerId = result.messageId ?? null;
         }
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         panelStore.setConversation(w, result.conversationId);
         if (result.runId && !result.delegated) panelStore.setLive(result.runId, { events: result.events ?? [], composing: Boolean(result.needsCompose) });
         await client.invalidateQueries({ queryKey: keys.messages(w, result.conversationId) });
@@ -307,7 +343,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
         // "Take me to …" or "show me how": the answer's own link or guide, once, and only for the newest request.
         if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) runAuto(autoActionsOf(blocks, 'text'));
       } catch (error) {
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         setOptimistic(null);
         // No reply means the request may still have run (a link, a saved draft); only the server's own error says what happened.
         setFailure({ text: message, message: error instanceof ApiError ? error.message : "Rafii's answer didn't arrive. If you asked for a change, check before asking again: it may already have been made." });
@@ -317,7 +353,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
         panelStore.setBusy(w, false);
       }
     },
-    [agent.api, agent.status, api, choice.model, client, images, pathname, runAuto, runCommand, timeZone, uiScope, workspaceId]
+    [agent.api, agent.status, api, choice.model, client, images, lensPreview, lensRemoved, pathname, runAuto, runCommand, timeZone, uiScope, workspaceId]
   );
   const continueFromView = useCallback((request: ContinueRequest) => {
     void send(request.message, { uiContext: { artifactId: request.artifactId, artifactRevision: request.artifactRevision, stateRevision: request.stateRevision } });
@@ -484,6 +520,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
             <Button type='button' variant='quiet' size='xs' onClick={() => void agent.refetchStatus()}>Check again</Button>
           </div>
         ) : null}
+        {lensOn && (
+          <ContextLens preview={lensPreview} loading={lens.isLoading} failed={lens.isError} onRetry={() => void lens.refetch()} removed={lensRemoved}
+            onToggle={toggleLens} text={text} lang={lensLanguage(timeDefaults().locale)} timeZone={timeZone} onNewConversation={startOver} />
+        )}
         <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
         <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <Button type='button' variant='quiet' size='icon-control' aria-label='Add or create' aria-haspopup='dialog' onClick={() => setCapabilitiesOpen(true)}><Icons.add className='size-5' /></Button>

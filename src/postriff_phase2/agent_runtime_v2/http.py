@@ -11,6 +11,8 @@ Mounted by hosted_app with the same session, request guard, origin checks and JS
     GET  tasks/{task}?cursor=                task plan + step events (cursor replay)
     POST approvals/decide                    apply | dismiss an agent proposal (site agent apply path + verification)
     POST attachments                         add an image to the conversation (private media path)
+    POST context-lens                        Context Lens preview: what the next typed turn would use (only when its flag is on;
+                                             otherwise this route does not exist)
     POST voice/sessions                      start GPT-Live: SDP offer in, SDP answer out (server-held key)
     POST voice/sessions/{v}/transcript       text of what was said (no audio)
     POST voice/sessions/{v}/end              end and settle the session
@@ -79,6 +81,11 @@ def handle(app, environ, start_response, service, token, method, parts):
         return app._json(start_response, 200, runtime_service.decide(runtime, workspace_id, token, app._body(environ)))
     if resource == "attachments" and not rest and method == "POST":
         return app._json(start_response, 201, runtime_service.attach_upload(runtime, workspace_id, token, app._body(environ)))
+    if resource == "context-lens" and not rest and method == "POST":
+        from . import context_lens
+        if context_lens.settings_for(runtime).enabled:
+            # Off (the default): the route stays the same 404 as before, and the body is never read.
+            return app._json(start_response, 200, context_lens.preview(runtime, workspace_id, token, app._body(environ)))
     if resource == "voice" and rest[:1] == ["sessions"] and method == "POST":
         from .live import VoiceSessions
         voice = VoiceSessions(runtime, transport=runtime.live_transport)

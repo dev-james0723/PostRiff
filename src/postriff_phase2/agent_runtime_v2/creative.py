@@ -24,7 +24,7 @@ from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_ope
 from postriff_alpha.domain import AlphaError, clean
 
 from .. import asset_kinds, media_consent
-from . import config as runtime_config, contracts
+from . import config as runtime_config, context_lens, contracts
 from .context import RafiiRunContext
 from .tool_adapter import register
 
@@ -228,7 +228,7 @@ class VisionAnalyzer:
 
 
 # --- conversation images ("the second image") --------------------------------------------------------------------------
-def conversation_images(cur, state: dict, workspace_id: str, conversation_id: str) -> list[dict]:
+def conversation_images(cur, state: dict, workspace_id: str, conversation_id: str, *, excluded=frozenset()) -> list[dict]:
     """Images of this conversation in order: attached ones (pr_attachments) and ones Rafii made here (asset lineage). Each
     names its kind; an upload that isn't ready yet (chat-context SPEC §7.6) isn't listed."""
     assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and asset_kinds.is_ready(a)}
@@ -249,7 +249,18 @@ def conversation_images(cur, state: dict, workspace_id: str, conversation_id: st
     items.sort(key=lambda item: item["at"])
     for index, item in enumerate(items, 1):
         item["index"] = index
-    return items
+    # Keep stable numbers: removing image 2 must never silently make image 3 become image 2.
+    return [item for item in items if item["assetId"] not in excluded]
+
+
+def _excluded_assets(ctx) -> frozenset:
+    return context_lens.removed_attachment_ids(getattr(ctx, "context_lens", None))
+
+
+def _image_at(images, index):
+    if index > 0:
+        return next((image for image in images if image["index"] == index), None)
+    return images[index] if index < 0 and -len(images) <= index else None
 
 
 NEEDS_ATTACHMENT = ("Attach that photo or video to a message first: Rafii looks at a Library photo or video only when it is attached "
@@ -284,7 +295,9 @@ def _needs_attachment(refused: NeedsAttachment) -> dict:
 
 
 def _resolve_asset(ctx: RafiiRunContext, cur, state, args) -> dict:
-    assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
+    excluded = _excluded_assets(ctx)
+    assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", [])
+              if isinstance(a, dict) and not a.get("deleted") and a.get("id") not in excluded}
     if args.get("assetId"):
         asset = assets.get(args["assetId"])
         if asset is None:
@@ -293,9 +306,9 @@ def _resolve_asset(ctx: RafiiRunContext, cur, state, args) -> dict:
         _require_attached(ctx, cur, state, asset["id"])
         return asset
     if args.get("index") is not None:
-        images = conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id)
+        images = conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id, excluded=excluded)
         index = args["index"]
-        chosen = images[index - 1] if 1 <= index <= len(images) else images[index] if index < 0 and -len(images) <= index else None
+        chosen = _image_at(images, index)
         if chosen is None:
             raise AlphaError(f"This conversation has {len(images)} image(s); there is no image {index}.", 404, code="not_found")
         return assets[chosen["assetId"]]
@@ -310,6 +323,8 @@ def _missing():
 
 def _bytes(ctx: RafiiRunContext, asset: dict) -> tuple[bytes, str]:
     """The image a model sees: the photo, or a video's poster (served as image/jpeg, never the video's own mime)."""
+    if asset["id"] in _excluded_assets(ctx):
+        return _missing()
     raw, mime = ctx.service.media(ctx.workspace_id, ctx.token, asset["id"])
     return raw, mime or "image/jpeg"
 
@@ -338,7 +353,7 @@ def _consent_blocked(ctx: RafiiRunContext, state: dict, purpose: str, route) -> 
           {}, "Listed the conversation's images")
 def image_list(ctx: RafiiRunContext, args: dict) -> dict:
     with ctx.workspace() as (cur, _row, _principal, _member, state):
-        images = conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id)
+        images = conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id, excluded=_excluded_assets(ctx))
     for item in images:
         ctx.ledger.reference("asset", item["assetId"], f"image {item['index']}")
     return {"ok": True, "verified": True, "data": {"images": images}}
@@ -413,10 +428,7 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
             if operation in ("edit", "variant"):
                 parent = _resolve_asset(ctx, cur, state, args)
             for extra in (args.get("referenceAssetIds") or [])[:3]:
-                ref = next((a for a in (state.get("phase2") or {}).get("assets", []) if a.get("id") == extra and not a.get("deleted")), None)
-                if ref is None:
-                    raise AlphaError("A reference image is not in this workspace.", 404, code="not_found")
-                _require_attached(ctx, cur, state, ref["id"])
+                ref = _resolve_asset(ctx, cur, state, {"assetId": extra})
                 sources.append(ref)
         except NeedsAttachment as refused:
             return _needs_attachment(refused)
