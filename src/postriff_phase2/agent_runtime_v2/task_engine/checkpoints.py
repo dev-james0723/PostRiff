@@ -46,10 +46,11 @@ def live(cur, workspace_id: str, task_id: str) -> dict | None:
             "approvals": int(row[6] or 0), "claimExpiresAt": float(row[7]) if row[7] is not None else None}
 
 
-def store_run(cur, ideas, task: dict, state_json: str, proposal_ids: list, *, writer_model: str | None, stored_at: float) -> str | None:
+def store_run(cur, ideas, task: dict, state_json: str, proposal_ids: list, *, writer_model: str | None, stored_at: float, config=None) -> str | None:
     """Keep a paused run's state (never on the member-readable run artifact). Over 1 MiB → none (deterministic path)."""
     payload = {"state": state_json, "proposalIds": [p for p in proposal_ids if isinstance(p, str)][:10], "storedAt": stored_at,
-               "writerModel": writer_model if isinstance(writer_model, str) else None}
+               "writerModel": writer_model if isinstance(writer_model, str) else None,
+               "permissionToken": permission_token(cur, task, config)}
     text = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     if len(text.encode("utf-8")) > model.CHECKPOINT_MAX_BYTES - 1024:
         store.log_event("checkpoint_too_large", taskId=task["taskId"])
@@ -97,7 +98,7 @@ def needs_continue(cur, ideas, task: dict) -> None:
     ensure_continuation(cur, task, state="blocked", reason_code="needs_input")
 
 
-def claim(cur, workspace_id: str, task_id: str, principal: str, claimer: str, *, proposal_id: str | None = None) -> tuple[str, dict] | None:
+def claim(cur, workspace_id: str, task_id: str, principal: str, claimer: str, *, proposal_id: str | None = None, config=None) -> tuple[str, dict] | None:
     """(checkpoint id, payload) for the creator's own request, or None. A runtime or SDK change discards it (runtime_changed)."""
     task = store.load_task(cur, workspace_id, task_id)
     if task is None or task["createdBy"] != str(principal):
@@ -114,6 +115,14 @@ def claim(cur, workspace_id: str, task_id: str, principal: str, claimer: str, *,
     if (row[2] != runtime_version() or row[3] != sdk_version()
             or model.sha256(json.dumps(row[1] or {}, ensure_ascii=False, sort_keys=True, default=str)) != row[4]):
         discard(cur, row[0], "runtime_changed")
+        return None
+    from . import authz_seam
+    if authz_seam.membership(cur, workspace_id, principal) is None:
+        discard(cur, row[0], "permission_revoked")
+        return None
+    expected = (row[1] or {}).get("permissionToken")
+    if expected != permission_token(cur, task, config):
+        discard(cur, row[0], "permission_revoked")
         return None
     return row[0], dict(row[1] or {})
 
@@ -184,3 +193,28 @@ def sweep(cur, workspace_id) -> dict:
     cur.execute("UPDATE public.pr_agent_checkpoints SET state='discarded',payload='{}'::jsonb,discard_reason='expired',updated_at=now() "
                 "WHERE workspace_id=%s AND state IN ('available','claimed') AND expires_at <= now() RETURNING 1", (workspace_id,))
     return {"released": released, "discarded": len(cur.fetchall())}
+
+
+def permission_token(cur, task, config=None):
+    """Bind saved private context to the creator's current grants and role.
+
+    A changed grant set requires a fresh context assembly, even when a push
+    invalidation was missed. Missing optional CF2 keeps the explicit legacy token;
+    an installed but broken CF2 fails instead of silently downgrading.
+    """
+    from importlib import import_module
+    from . import authz_seam
+    member = authz_seam.membership(cur, task["workspaceId"], task["createdBy"])
+    role_token = authz_seam.legacy_token(member)
+    try:
+        authz = import_module("postriff_phase2.agent_runtime_v2.authz")
+    except ModuleNotFoundError as error:
+        if error.name != "postriff_phase2.agent_runtime_v2.authz":
+            raise
+        return role_token
+    mode = authz.mode_for(config, task["workspaceId"])
+    if mode != "enforce":
+        return role_token
+    import time
+    grants = authz.load_grants(cur, task["workspaceId"], task["createdBy"], now=time.time(), mode=mode)
+    return model.sha256(role_token + "|" + grants.token())

@@ -111,9 +111,9 @@ def renew(cur, table: str, row_id: str, *, lease_owner: str, timeout_seconds: in
 def still_owned(cur, table: str, row_id: str, *, lease_owner: str, live_state: str = "running", lock: bool = True) -> bool:
     """The finish guard: the row is still live and still ours. On False the caller writes nothing (lease lost)."""
     table = _ident(table)
-    cur.execute(f"SELECT state, lease_owner FROM public.{table} WHERE id::text=%s" + (" FOR UPDATE" if lock else ""), (str(row_id),))
+    cur.execute(f"SELECT state, lease_owner, lease_expires_at > now() FROM public.{table} WHERE id::text=%s" + (" FOR UPDATE" if lock else ""), (str(row_id),))
     row = cur.fetchone()
-    return bool(row) and row[0] == live_state and row[1] == lease_owner
+    return bool(row) and row[0] == live_state and row[1] == lease_owner and row[2] is True
 
 
 def expired_candidates(cur, table: str, *, live_state: str = "running", limit: int = 50, workspace_id: str | None = None) -> list[str]:

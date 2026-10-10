@@ -60,7 +60,10 @@ def present(state: dict, ref: dict) -> bool:
     if fn is None:
         return False          # fail closed: a target kind nobody can re-read is treated as changed
     try:
-        return bool(fn(state, str(ref.get("id") or "")))
+        ident = str(ref.get("id") or "")
+        if not fn(state, ident):
+            return False
+        return "revision" not in ref or revision(state, ref["type"], ident) == ref["revision"]
     except Exception:  # noqa: BLE001
         return False
 
@@ -77,7 +80,17 @@ def _channel(state, ident):
     return any(c.get("id") == ident for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict))
 
 
-def planned_refs(ctx, inputs):
+def revision(state, kind, ident):
+    if kind == 'draft':
+        item = next((v for v in state.get('variants', []) if v.get('id') == ident), {})
+        return item.get('revision')
+    if kind == 'campaign':
+        items = ((state.get('raffi') or {}).get('campaignPlanning') or {}).get('campaigns') or []
+        return next((c.get('version') for c in items if c.get('id') == ident), None)
+    return None
+
+
+def planned_refs(ctx, inputs, *, state=None):
     """Only targets observed in this human turn may enter a durable plan."""
     from postriff_alpha.domain import AlphaError
     known = set(ctx.ledger.known_ids) | {str(r.get("id")).lower() for r in ctx.chip_refs if isinstance(r, dict) and r.get("id")}
@@ -93,5 +106,8 @@ def planned_refs(ctx, inputs):
         for ident in values:
             if not isinstance(ident, str) or ident.lower() not in known or kind is None:
                 raise AlphaError("Read the target or select its reference before planning this step.", 400, code="tool_input")
-            refs.append({"type": kind, "id": ident})
+            if state is None:
+                state = ctx.snapshot()["state"]
+            version = revision(state, kind, ident)
+            refs.append({"type": kind, "id": ident, **({"revision": version} if version is not None else {})})
     return refs

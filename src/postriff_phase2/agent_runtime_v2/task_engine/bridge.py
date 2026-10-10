@@ -218,7 +218,7 @@ def dispatch_bound(ctx, tool, args):
             raise errors.error("task_forbidden")
         step = store.load_step(cur, ctx.workspace_id, task["taskId"], args["stepId"])
         if step is None:
-            raise errors.error("step_unavailable")
+            raise errors.error("step_unknown")
         if step["kind"] == "model":
             model_step = True
         else:
@@ -231,7 +231,7 @@ def dispatch_bound(ctx, tool, args):
             claim = None
         else:
             claim = executor.claim_next(cur, ctx.service.ideas, workspace_id=ctx.workspace_id, executor="inline", principal=principal,
-                                        task_id=task["taskId"], step_key=step["stepKey"], seconds_left=ctx.remaining() or 240,
+                                        task_id=task["taskId"], step_key=step["stepKey"], seconds_left=240 if ctx.remaining() is None else ctx.remaining(),
                                         owner=executor.lease_owner("inline"), actor_kind="agent", request_text=ctx.request_text,
                                         run_id=ctx.run_id, config=ctx.config)
         if model_step:
@@ -245,7 +245,7 @@ def dispatch_bound(ctx, tool, args):
         return dispatch(ctx, tool, args)
     from types import SimpleNamespace
     runtime = SimpleNamespace(service=ctx.service, cfg=ctx.config, clock=ctx.now, image_studio=ctx.image_studio, vision=ctx.vision)
-    result = executor.execute(runtime, claim, token=ctx.token, seconds_left=ctx.remaining() or 240, return_result=True)
+    result = executor.execute(runtime, claim, token=ctx.token, seconds_left=240 if ctx.remaining() is None else ctx.remaining(), return_result=True)
     with ctx.workspace() as (cur, _row, _principal, _member, _state):
         ctx.task = task_state.load(cur, ctx.workspace_id, task["taskId"])
     return result

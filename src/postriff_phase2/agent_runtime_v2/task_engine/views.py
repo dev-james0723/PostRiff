@@ -74,7 +74,7 @@ def summary(task: dict, steps: list[dict], approvals: list[dict], principal: str
             "needsMe": needs_me(task, steps, approvals, principal, member), "progress": counts,
             "current": {"stepKey": current["stepKey"], "label": current["label"], "state": current["state"]} if current else None,
             "spend": {"spentUsdMicro": int(task["spentUsdMicro"] or 0), "unknown": bool(task["spendUnknown"])} if _owner(member) else None,
-            "can": {"cancel": is_open and (creator or _owner(member)), "retry": creator and any(model.retryable(f, int(task["attemptsLeft"])) for f in store.facts(steps)),
+            "can": {"cancel": is_open and (creator or _owner(member)), "retry": creator and any(model.can_retry(s, task) for s in steps),
                     "continue": creator and is_open},
             "nextWakeAt": iso(task["nextWakeAt"]), "expiresAt": iso(task["expiresAt"]), "createdAt": iso(task["createdAt"]), "updatedAt": iso(task["updatedAt"]),
             "finishedAt": iso(task["finishedAt"]), "href": f"/app/agent/{task['conversationId']}?task={task['taskId']}"}
@@ -113,7 +113,7 @@ def step_view(cur, task: dict, step: dict, steps: list[dict], compensations: dic
             "generation": int(step["generation"]), "retryClass": step["retryClass"], "nextAttemptAt": iso(step["nextAttemptAt"]),
             "timeoutSeconds": int(step["timeoutSeconds"]), "reasonCode": step["reasonCode"], "reason": step["reason"], "verified": bool(step["verified"]),
             "outputs": step["outputs"], "entities": step["entities"], "delegate": delegate, "undo": undo,
-            "can": {"retry": creator and model.retryable(fact, int(task["attemptsLeft"])) or (creator and step["state"] == "blocked" and step["kind"] in ("tool", "delegate")),
+            "can": {"retry": creator and model.can_retry(step, task),
                     "undo": creator and undo is not None}}
 
 

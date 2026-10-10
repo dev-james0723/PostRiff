@@ -93,6 +93,17 @@ def claim_next(cur, ideas, *, workspace_id: str, executor: str, principal: str |
     params = {"workspace_id": workspace_id, "executor": executor, "principal": principal, "task_id": task_id,
               "kinds": INLINE_KINDS if executor == "inline" else CRON_KINDS, "seconds_left": int(max(0, seconds_left)),
               "engine_on": flags.enabled_for(workspace_id, config), "step_key": step_key}
+    if params["engine_on"]:
+        cur.execute("SELECT id::text FROM public.pr_agent_tasks WHERE workspace_id=%s AND attempts_left=0 AND state IN ('queued','running','blocked','awaiting_approval') "
+                    "AND (%s::uuid IS NULL OR id=%s::uuid) AND (%s='cron' OR created_by=%s::uuid)",
+                    (workspace_id, task_id, task_id, executor, principal))
+        for (exhausted_id,) in cur.fetchall():
+            exhausted = store.lock_task(cur, ideas, workspace_id, exhausted_id)
+            for work in store.load_steps(cur, workspace_id, exhausted_id):
+                if work["kind"] != "delegate" and work["state"] in ("queued", "blocked", "awaiting_approval"):
+                    store.set_step(cur, work, state="failed", reason_code="retry_budget_exhausted", reason="This task has used its attempt budget.")
+                    store.close_pending_approvals(cur, workspace_id, exhausted_id, "superseded", step_ids={work["stepId"]})
+            store.refresh(cur, ideas, exhausted)
     cur.execute(CLAIM_SQL, params)
     row = cur.fetchone()
     if not row:
@@ -103,7 +114,7 @@ def claim_next(cur, ideas, *, workspace_id: str, executor: str, principal: str |
     actor = authz_seam.Actor(actor_kind if executor == "inline" else "cron", task["createdBy"], request_text if executor == "inline" else "")
     evidence = _approval_evidence(cur, task, step)
     if evidence is not None and step["kind"] == "tool":
-        actor = authz_seam.Actor("approval", task["createdBy"], "", {"approvalId": evidence["approvalId"], "digest": evidence["digest"]})
+        actor = authz_seam.Actor("approval", task["createdBy"], "", evidence)
     verdict = authz_seam.decide_for_step(cur, task, step, actor=actor, now=time.time(),
                                          allowed_before=store.allowed_before(cur, workspace_id, claimed_task), config=config)
     if verdict.token != task["authzToken"]:
@@ -193,11 +204,15 @@ def _json(value):
 def _approval_evidence(cur, task, step) -> dict | None:
     """An approved (not yet consumed) approval for exactly this step generation, or for the explicit approval step gating it."""
     cur.execute("SELECT a.id::text,a.digest FROM public.pr_agent_approvals a JOIN public.pr_agent_steps s ON s.id=a.step_id "
-                "WHERE a.task_id::text=%s AND a.workspace_id=%s AND a.state='approved' AND ((a.step_id::text=%s AND a.generation=%s) "
+                "WHERE a.task_id::text=%s AND a.workspace_id=%s AND a.state='approved' AND a.capability_id IS NOT DISTINCT FROM %s AND a.input_digest IS NOT DISTINCT FROM %s AND a.generation=%s AND ((a.step_id::text=%s AND a.generation=%s) "
                 "OR (s.kind='approval' AND s.inputs->>'approves'=%s)) ORDER BY a.decided_at DESC LIMIT 1",
-                (task["taskId"], task["workspaceId"], step["stepId"], int(step["generation"]), step["stepKey"]))
+                (task["taskId"], task["workspaceId"], step["capabilityId"], step["inputDigest"], int(step["generation"]), step["stepId"], int(step["generation"]), step["stepKey"]))
     row = cur.fetchone()
-    return {"approvalId": row[0], "digest": row[1]} if row else None
+    if not row:
+        return None
+    from .approvals import authority_record
+    approval = store.load_approval(cur, task["workspaceId"], row[0])
+    return {"approvalId": row[0], "digest": row[1], "approval": authority_record(approval)}
 
 
 def consume_approval(cur, evidence: dict) -> None:
@@ -304,10 +319,10 @@ def _context(runtime, claim: Claim, *, token, service, member, seconds_left: flo
     def cancelled() -> bool:
         # Before every non-READ effect: the person cancelled the task, or this attempt was reaped / is no longer ours.
         with store.service_tx(runtime.service, task["workspaceId"]) as cur:
-            cur.execute("SELECT t.cancel_requested_at IS NOT NULL, a.state, a.lease_owner FROM public.pr_agent_tasks t JOIN public.pr_agent_step_attempts a "
+            cur.execute("SELECT t.cancel_requested_at IS NOT NULL, a.state, a.lease_owner, a.lease_expires_at>now() FROM public.pr_agent_tasks t JOIN public.pr_agent_step_attempts a "
                         "ON a.task_id=t.id WHERE a.id::text=%s", (claim.attempt_id,))
             row = cur.fetchone()
-            if not row or row[0] or row[1] != "running" or row[2] != claim.lease_owner:
+            if not row or row[0] or row[1] != "running" or row[2] != claim.lease_owner or not row[3]:
                 return True
             if time.monotonic() - heartbeat["at"] >= leases.HEARTBEAT_EVERY_SECONDS:
                 leases.renew(cur, "pr_agent_step_attempts", claim.attempt_id, lease_owner=claim.lease_owner, timeout_seconds=int(step["timeoutSeconds"]))
@@ -317,7 +332,7 @@ def _context(runtime, claim: Claim, *, token, service, member, seconds_left: flo
     # The step binding (CF-3 §8.1): a receipt-aware executor commits the receipt in its own domain transaction (receipts.commit_in).
     ctx.step_binding = {"taskId": task["taskId"], "stepId": step["stepId"], "stepKey": step["stepKey"], "effectKey": step["effectKey"],
                         "attemptId": claim.attempt_id, "attemptNo": claim.attempt_no, "leaseOwner": claim.lease_owner, "inputDigest": step["inputDigest"], "workspaceId": task["workspaceId"],
-                        "principal": task["createdBy"], "traceId": claim.trace_id}
+                        "principal": task["createdBy"], "traceId": claim.trace_id, "approvalId": (claim.approval_evidence or {}).get("approvalId")}
     from .spend import bind_service
     bind_service(ctx)
     # A durable plan may use only ids validated when it was created.
@@ -398,7 +413,7 @@ def finish(runtime, claim: Claim, result: dict, *, ctx=None, elapsed_ms: int = 0
             from .approvals import request_approval
             _finish_attempt(cur, claim.attempt_id, "failed", "budget", "budget_ceiling", timings)
             verdict = authz_seam.StepVerdict("approve", "spend", "budget", "cost_limit", task["authzToken"])
-            request_approval(cur, ideas, task, step, verdict, trace_id=claim.trace_id)
+            request_approval(cur, ideas, task, step, verdict, trace_id=claim.trace_id, spend_limit=result.get("requiredBudgetCeilingUsdMicro"))
             store.refresh(cur, ideas, task)
             return {"stepKey": step["stepKey"], "state": "awaiting_approval"}
         ok = bool(result.get("ok", True)) and not result.get("needsUser")
@@ -539,7 +554,11 @@ def _reap_one(runtime, workspace_id: str, attempt_id: str, *, authoritative=True
         _settle_unknown(runtime, cur, workspace_id, attempt_id)
         if not authoritative:
             return "rollbackSettled"
-        receipt = store.receipt(cur, workspace_id, step["effectKey"], lock=True) if step["effectKey"] else None
+        effect_key = step["effectKey"]
+        if not effect_key and step["kind"] == "model":
+            cur.execute("SELECT effect_key FROM public.pr_agent_receipts WHERE workspace_id=%s AND attempt_id::text=%s ORDER BY updated_at DESC LIMIT 1", (workspace_id, attempt_id))
+            effect_key = (cur.fetchone() or [None])[0]
+        receipt = store.receipt(cur, workspace_id, effect_key, lock=True) if effect_key else None
         decision = leases.reaped(receipt_done=bool(receipt and receipt["state"] == "done" and receipt["outcome"] == "applied"),
                                  receipt_verified=bool(receipt and receipt.get("verified")), retry_class=step["retryClass"], attempts=int(step["attempts"]),
                                  max_attempts=int(step["maxAttempts"]), task_attempts_left=int(task["attemptsLeft"]))
@@ -669,7 +688,7 @@ def expire_task(cur, ideas, workspace_id: str, task_id: str) -> int:
 
 
 # --- the cron claim loop (phase 4; only on /api/cron/agent-tasks with RAFII_AGENT_TASKS_BACKGROUND) --------------------
-def claim_loop(runtime, *, budget_seconds: float = 40.0, max_claims: int = 50) -> dict:
+def claim_loop(runtime, *, budget_seconds: float = 60.0, max_claims: int = 50) -> dict:
     from . import flags
     started = time.monotonic()
     counts = {"claimed": 0, "handled": 0, "executed": 0, "deferred": 0}

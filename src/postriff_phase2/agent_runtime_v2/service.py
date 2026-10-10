@@ -70,12 +70,15 @@ class AgentRuntimeService:
         self.followup_transport = None
         self.clock = clock or getattr(service, "clock", None) or time.time
         domain_tools.ensure_registered()
+        from .task_engine import approvals as task_approvals
+        task_approvals.install()
 
     # --- public status -----------------------------------------------------------------------------------------------
     def status(self, workspace_id, token) -> dict:
         with self.service.repository.transaction(token, workspace_id) as (_cur, row, _principal):
             member = self.service.ideas._member(row)
             require(member, "read")
+        from .task_engine import flags as task_flags
         voice = self.cfg.route("voice_front_end", reason="status")
         manager = self.cfg.route("standard_reasoning", reason="status")
         return {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
@@ -84,7 +87,7 @@ class AgentRuntimeService:
                           "blocker": voice.blocker if not voice.available else
                           (None if self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") else "Voice Mode is not enabled on this deployment.")},
                 "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker},
-                "genui": self.cfg.genui_for(workspace_id)}
+                "genui": self.cfg.genui_for(workspace_id), "tasks": {"enabled": task_flags.enabled_for(workspace_id, self.cfg)}}
 
     # --- turn --------------------------------------------------------------------------------------------------------
     def turn(self, workspace_id, token, payload) -> dict:
@@ -917,7 +920,7 @@ class AgentRuntimeService:
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
             if reservation is not None:
-                self.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
+                getattr(ctx, "continuation_ledger", self.service.ledger).settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
             # This turn's provider attempts as pr_ai_call_events rows (Founder Admin §8.B), under a savepoint: never fails the settle.
             from .manager import record_calls
             record_calls(cur, ctx, reservation)
@@ -1093,7 +1096,7 @@ class AgentRuntimeService:
             task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
             if task is not None:
                 engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, _interrupted_proposals(interruptions), writer_model=writer_model,
-                                             stored_at=self.clock())
+                                             stored_at=self.clock(), config=self.cfg)
                 return None
             raise AlphaError("Task checkpoint unavailable.", 503)
         cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (task_id, workspace_id))
@@ -1116,7 +1119,7 @@ class AgentRuntimeService:
             try:
                 task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
                 if task is not None:
-                    engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, proposal_ids, writer_model=writer_model, stored_at=self.clock())
+                    engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, proposal_ids, writer_model=writer_model, stored_at=self.clock(), config=self.cfg)
             except Exception:
                 cur.execute("ROLLBACK TO SAVEPOINT shadow_checkpoint")
             finally:
@@ -1152,6 +1155,14 @@ class AgentRuntimeService:
         from ..youtube.agent_context import KEY
         if pending.get(KEY):
             return None
+        continuation = None
+        continuation_ledger = self.service.ledger
+        if _engine_on(workspace_id):
+            from .task_engine import continuations
+            continuation = continuations.begin(self, workspace_id, token, task_id, run_id, trace_id)
+            if continuation is None:
+                return None
+            continuation_binding, continuation_ledger = continuation
         workload = "standard_reasoning"
         reservation = None
         if self.model_factory is None:
@@ -1159,15 +1170,19 @@ class AgentRuntimeService:
             route = self.cfg.route(workload, reason="resume after approval")
             estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
             if estimate is None:
+                if continuation:
+                    continuations.finish(self, continuation_binding, ok=False, code="price_unknown")
                 return None
             try:
                 with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
                     authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], estimate, route, run_id)
-                    reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
+                    reservation = continuation_ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
                                                               provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
                                                               meta={"via": "rafii_agent_resume", "traceId": trace_id, **extra_meta})
                     reservation = {**reservation, "estimateUsdMicro": estimate}
-            except AlphaError:
+            except AlphaError as error:
+                if continuation:
+                    continuations.finish(self, continuation_binding, ok=False, code=error.code)
                 return None
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
@@ -1178,7 +1193,9 @@ class AgentRuntimeService:
                               vision=self.vision, request_text="", style=style,
                               writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
-        ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        ctx.continuation_ledger = continuation_ledger
+        resume_budget = 200 if continuation else TURN_BUDGET_SECONDS
+        ctx.deadline = time.monotonic() + resume_budget
         ctx.ledger.changed.extend(dict(change) for change in approved)  # the approval the application applied and verified
         try:
             manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
@@ -1200,23 +1217,28 @@ class AgentRuntimeService:
                 return await Runner.run(manager, state, context=ctx, max_turns=8, run_config=RunConfig(workflow_name="rafii.turn.resume", trace_id=trace_id,
                                                                                                       group_id=conversation_id, trace_include_sensitive_data=False))
             try:
-                result = asyncio.run(manager_mod.drive(ctx, resume(), TURN_BUDGET_SECONDS))
+                result = asyncio.run(manager_mod.drive(ctx, resume(), resume_budget))
                 reply = result.final_output if not result.interruptions else None
             except Exception as error:  # noqa: BLE001 — the approval stands; only the Manager's wording is lost
                 fallback_reason = getattr(error, "code", None) or type(error).__name__
                 note = "Your approval was applied and checked."
-            return self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
+            response = self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
                                   workload=workload, why="resume after approval", spans=collector.take(trace_id), elapsed_ms=round((time.monotonic() - started) * 1000),
                                   superseded=[])
+            if continuation:
+                continuations.finish(self, continuation_binding, ok=fallback_reason is None, code=fallback_reason)
+            return response
         except Exception as error:  # noqa: BLE001 — the approval stands: settle what the resume spent, answer deterministically
+            if continuation:
+                continuations.finish(self, continuation_binding, ok=False, code="resume_failed")
             log.error(json.dumps({"event": "agent_resume.failed", "errorClass": type(error).__name__, "traceId": trace_id}))
             if reservation is not None:
                 with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
                     spent = self._spend(ctx.ledger, None)
                     if not ctx.ledger.spans:
-                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
+                        continuation_ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                     else:
-                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                        continuation_ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
                     from .manager import record_calls
                     record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             return None
@@ -1524,7 +1546,7 @@ def _claim_checkpoint(runtime: "AgentRuntimeService", workspace_id, token, conve
     with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
         task_id = engine_checkpoints.find_task_for_proposal(cur, workspace_id, conversation_id, proposal_id)
         if task_id is not None:
-            claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id)
+            claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id, config=runtime.cfg)
             if claimed is None:
                 return None
             checkpoint_id, payload = claimed
@@ -1543,7 +1565,7 @@ def _claim_checkpoint(runtime: "AgentRuntimeService", workspace_id, token, conve
         task = bridge.adopt(cur, runtime.service.ideas, workspace_id, task_id)
         if task is None:
             return None
-        claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id)
+        claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id, config=runtime.cfg)
         if claimed is None:
             return None
         checkpoint_id, pending = claimed

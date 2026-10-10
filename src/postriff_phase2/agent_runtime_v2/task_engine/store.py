@@ -414,10 +414,14 @@ def build_step(task: dict, spec: dict, key: str, earlier: list[str]) -> dict:
         if "stepId" in inputs or len(json.dumps(inputs, default=str)) > 16000:
             raise AlphaError("Invalid tool input.", 400, code="tool_input")
         tool_adapter._check_schema(tool.schema, inputs)     # 400 tool_input when the inputs don't validate (never at run time)
-        risk = model.EFFECT_RISK[tool.spec.effect]
-        paid = capability in model.PAID_CAPABILITIES
-        rules = model.defaults("tool", risk, paid=paid, receipt_tx=capability in RECEIPT_TX)
-        background = bool(spec.get("background")) and risk == "R0" and capability in BACKGROUND_READS
+        from .. import capability_registry
+        cap = capability_registry.for_tool(capability)
+        risk = cap.risk
+        rules = model.defaults("tool", risk, paid=cap.paid, receipt_tx=cap.idempotency in ("receipt_tx", "native_key"))
+        # CF1 owns capability policy. CF3 limits can only make those bounds stricter.
+        retry_class = "never" if cap.retry_class == "never" else "manual" if cap.retry_class == "manual" or rules.retry_class == "manual" else rules.retry_class
+        rules = model.StepDefaults(min(rules.timeout_seconds, int(cap.timeout_seconds)), retry_class, min(rules.max_attempts, cap.max_attempts))
+        background = bool(spec.get("background")) and risk == "R0" and cap.background_eligible
         row.update({"capabilityId": capability, "capabilityVersion": 1, "riskClass": risk, "effect": tool.spec.effect, "backgroundAllowed": background,
                     "inputs": inputs, "inputDigest": model.input_digest(capability, inputs), "retryClass": rules.retry_class,
                     "maxAttempts": max(1, min(rules.max_attempts, int(spec.get("maxAttempts") or rules.max_attempts))),

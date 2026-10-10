@@ -25,7 +25,7 @@ _DECISIONS = ("approve", "reject")
 
 
 def request_approval(cur, ideas, task: dict, step: dict, verdict: authz_seam.StepVerdict | None, *, kind: str = "agent_action",
-                     gated: dict | None = None, trace_id: str | None = None) -> str:
+                     gated: dict | None = None, trace_id: str | None = None, spend_limit: int | None = None) -> str:
     """Suspend `step` on a new approval for the task's creator. For an explicit `approval` step, `gated` is the tool step it
     approves (its capability, inputs and targets are what the digest binds)."""
     subject = gated or step
@@ -40,6 +40,9 @@ def request_approval(cur, ideas, task: dict, step: dict, verdict: authz_seam.Ste
     summary = {"what": "agent_action", "capabilityId": subject["capabilityId"], "risk": risk,
                "step": {"label": subject["label"], "note": "The person's own plan label, quoted as data."},
                "targets": [{"type": t.get("type"), "id": t.get("id")} for t in subject["targetRefs"]][:10]}
+    if kind == "spend" and isinstance(spend_limit, int) and spend_limit > 0:
+        summary["budgetCeilingUsdMicro"] = spend_limit
+        summary["what"] = "increase_task_spending_limit"
     approval_id = store.insert_approval(
         cur, task=task, step=step, kind=kind, risk=risk, confirmation="approval_step_up" if step_up else "native", digest=digest, summary=summary,
         required_permission=(verdict.required_permission if verdict and verdict.required_permission in ("edit", "approve", "owner") else "edit"),
@@ -49,7 +52,7 @@ def request_approval(cur, ideas, task: dict, step: dict, verdict: authz_seam.Ste
         capability_id=subject["capabilityId"], input_digest=subject["inputDigest"], inputs=subject["inputs"] or {}, target_refs=subject["targetRefs"],
         trace_id=trace_id, requires_step_up=step_up)
     store.set_step(cur, step, state="awaiting_approval", reason_code=None, reason="Waiting for your approval.")
-    store.emit(cur, ideas, task, "approval", approvalId=approval_id, stepKey=step["stepKey"], state="pending", kind=kind)
+    store.emit(cur, ideas, task, "approval", approvalId=approval_id, stepKey=step["stepKey"], state="pending", approvalKind=kind)
     store.log_event("approval_requested", taskId=task["taskId"], stepKey=step["stepKey"], approvalId=approval_id, kind=kind, traceId=trace_id)
     return approval_id
 
@@ -134,6 +137,7 @@ def validate_payload(payload) -> tuple[str, str, str]:
 def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, payload: dict, *, surface: str = "task_center") -> dict:
     """POST approvals/{approvalId}/decide. Returns the decision response; raises the frozen CF-2 §13.1 codes."""
     from . import views
+    started = time.monotonic()
     decision, digest, decision_key = validate_payload(payload)
     service, ideas = runtime.service, runtime.service.ideas
     deferred: AlphaError | None = None
@@ -181,10 +185,13 @@ def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, p
             raise AlphaError("Sign in again to confirm this.", 403, code="step_up_required")
         else:
             subject = gated or own
+            if own["kind"] == "model":
+                subject = {**own, "kind": "tool", "capabilityId": approval["capabilityId"], "inputs": approval["inputs"],
+                           "inputDigest": approval["inputDigest"], "targetRefs": approval["targetRefs"], "riskClass": approval["riskClass"]}
             verdict = authz_seam.decide_for_step(cur, task, subject, actor=authz_seam.Actor("approval", task["createdBy"], "",
                                                                                          {"approvalId": approval["approvalId"], "digest": digest}),
                                                  now=time.time(), allowed_before=True, config=getattr(runtime, "cfg", None))
-            if verdict.verdict == "deny" and decision == "approve":
+            if (verdict.verdict not in ("allow", "approve") or (verdict.verdict == "step_up" and not approval["requiresStepUp"])) and decision == "approve":
                 store.close_approval(cur, approval, "revoked", surface="system")
                 store.set_step(cur, own, state="blocked", reason_code=verdict.reason_code or "permission_revoked", reason="Rafii is no longer allowed to do this.")
                 store.emit(cur, ideas, task, "revocation", stepKey=own["stepKey"], reasonCode=verdict.reason_code)
@@ -197,6 +204,9 @@ def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, p
                 store.close_approval(cur, approval, "rejected", surface=surface, decided_by=principal, decision_key=decision_key, outcome=outcome)
                 _reject_step(cur, ideas, task, own, gated)
             else:
+                limit = (approval.get("summary") or {}).get("budgetCeilingUsdMicro")
+                if approval["kind"] == "spend" and isinstance(limit, int) and limit > 0:
+                    cur.execute("UPDATE public.pr_agent_tasks SET budget_ceiling_usd_micro=greatest(budget_ceiling_usd_micro,%s) WHERE id::text=%s", (limit, task["taskId"]))
                 outcome = {"state": "approved", "outcome": "approved", "verified": True, "checks": []}
                 store.close_approval(cur, approval, "approved", surface=surface, decided_by=principal, decision_key=decision_key, outcome=outcome)
                 if own["kind"] == "approval":
@@ -215,10 +225,11 @@ def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, p
     resumed, executed = "none", []
     if creator and decision == "approve":
         from . import executor
-        executed = executor.drive_inline(runtime, workspace_id, token, principal, task["taskId"], actor_kind="approval")
+        applied_model = execute_approved_model(runtime, workspace_id, token, task, approval, seconds_left=240-(time.monotonic()-started))
+        executed = [applied_model] if applied_model is not None else executor.drive_inline(runtime, workspace_id, token, principal, task["taskId"], actor_kind="approval", seconds=max(0,240-(time.monotonic()-started)))
         resumed = "inline" if executed else "none"
         if _has_checkpoint(runtime, workspace_id, task["taskId"]):
-            resumed = continue_after_decision(runtime, workspace_id, token, task["taskId"], decision_key).get("resumed", "needs_continue")
+            resumed = continue_after_decision(runtime, workspace_id, token, task["taskId"], decision_key, seconds_left=240-(time.monotonic()-started)).get("resumed", "needs_continue")
     with service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         member = ideas._member(row)
         current = store.load_task(cur, workspace_id, task["taskId"])
@@ -357,3 +368,141 @@ def continue_after_decision(runtime, workspace_id, token, task_id, key, *, secon
     if seconds_left < 215:
         return {"resumed": "needs_continue"}
     return actions._resume(runtime, workspace_id, token, task, checkpoint, "approval:" + model.sha256(key)[:64])
+
+
+def request_from_context(ctx, capability, args, decision):
+    """CF2 E8 adapter: suspend a concrete, creator-owned call before execution."""
+    from . import flags, targets
+    from .. import task_state
+    if not flags.enabled_for(ctx.workspace_id, ctx.config):
+        return None
+    name = capability.name
+    clean = {k:v for k,v in args.items() if k != 'stepId'}
+    refs = targets.planned_refs(ctx, clean)
+    with ctx.workspace() as (cur, _row, principal, _member, _state):
+        task = store.lock_task(cur,ctx.service.ideas,ctx.workspace_id,ctx.task.task_id) if ctx.task else None
+        if task is None:
+            task,_ = store.create_task(cur,ctx.service.ideas,workspace_id=ctx.workspace_id,conversation_id=ctx.conversation_id,created_by=principal,
+                                      origin='chat',title='Confirm Rafii action',request_key='approval:'+ctx.trace_id,
+                                      payload={'capability':name,'inputs':clean},steps=[{'label':'Confirm action','kind':'model'}],trace_id=ctx.trace_id)
+        if task['createdBy'] != principal or not targets.all_present(cur,ctx.workspace_id,refs):
+            raise errors.error('task_forbidden')
+        key=args.get('stepId')
+        if key:
+            own=store.load_step(cur,ctx.workspace_id,task['taskId'],key)
+            if own is None:
+                raise errors.error('step_unknown')
+        else:
+            steps=store.load_steps(cur,ctx.workspace_id,task['taskId'])
+            own=next((s for s in steps if s['kind']=='model' and s['state'] in ('queued','running')),None)
+            if own is None:
+                store.add_steps(cur,task,[{'label':'Confirm action','kind':'model'}])
+                own=store.load_steps(cur,ctx.workspace_id,task['taskId'])[-1]
+        subject={**own,'kind':'tool','capabilityId':name,'riskClass':capability.risk,'inputs':clean,
+                 'inputDigest':model.input_digest(name,clean),'targetRefs':refs}
+        digest=model.approval_digest(name,subject['inputDigest'],refs,capability.risk if capability.risk in ('R1','R2','R3') else 'R1',int(subject['generation']))
+        prior=next((a for a in store.approvals_for(cur,ctx.workspace_id,task['taskId']) if a['stepId']==own['stepId'] and a['state']=='pending' and a['digest']==digest),None)
+        if prior is None:
+            verdict=authz_seam.StepVerdict('approve','agent_action',None,decision.reason,decision.token,
+                                          capability.permission,'task_owner',False)
+            aid=request_approval(cur,ctx.service.ideas,task,subject,verdict,trace_id=ctx.trace_id)
+            prior=store.load_approval(cur,ctx.workspace_id,aid)
+        store.refresh(cur,ctx.service.ideas,task)
+        ctx.task=task_state.load(cur,ctx.workspace_id,task['taskId'])
+        return {k:prior[k] for k in ('approvalId','summary','expiresAt')}
+
+
+def install():
+    """Install the actual E8 callback. Readiness remains an integration decision."""
+    try:
+        from .. import authz
+    except ModuleNotFoundError as error:
+        if error.name != 'postriff_phase2.agent_runtime_v2.authz':
+            raise
+        return False
+    except ImportError:
+        # The pre-CF2 package has no authz module.
+        from importlib.util import find_spec
+        if find_spec('postriff_phase2.agent_runtime_v2.authz') is not None:
+            raise
+        return False
+    authz.register_approval_requester(request_from_context)
+    resolver = getattr(authz, "register_approval_actor_resolver", None)
+    if resolver:
+        resolver(resolve_bound_actor)
+    return True
+
+
+def authority_record(approval):
+    """The canonical, content-free view consumed by CF2's pure decision function."""
+    from .. import capability_registry
+    capability=capability_registry.for_tool(approval['capabilityId'])
+    return {'approvalId':approval['approvalId'],'capabilityId':capability.capability_id,'digest':approval['digest'],
+            'state':approval['state'],'requestedFor':approval['requestedFor'],'expiresAt':approval['expiresAt'],'consumedAt':approval['consumedAt']}
+
+
+def resolve_bound_actor(cur, ctx, capability, args, now):
+    """CF2 E1/E2: a consumed approval belongs only to its still-live server attempt.
+
+    Consumption excludes other claims. This projection lets that one claim finish
+    while every work transaction still rechecks current grants and its live lease.
+    No request-supplied evidence is accepted.
+    """
+    b=getattr(ctx,'step_binding',None)
+    if not isinstance(b,dict) or not b.get('approvalId'):
+        return None
+    if b.get('workspaceId') != ctx.workspace_id or b.get('principal') != ctx.principal:
+        return None
+    name=capability.name
+    clean={k:v for k,v in (args or {}).items() if k != 'stepId'}
+    approval=store.load_approval(cur,ctx.workspace_id,b['approvalId'])
+    if (not approval or approval['taskId'] != b.get('taskId') or approval['requestedFor'] != ctx.principal
+            or approval['capabilityId'] != name or approval['inputDigest'] != model.input_digest(name,clean)
+            or approval['state'] != 'consumed' or approval['expiresAt'] <= now):
+        return None
+    cur.execute("SELECT a.generation,s.generation,a.started_at<=p.consumed_at FROM public.pr_agent_step_attempts a "
+                "JOIN public.pr_agent_steps s ON s.id=a.step_id JOIN public.pr_agent_approvals p ON p.id::text=%s "
+                "WHERE a.id::text=%s AND a.task_id::text=%s AND a.step_id::text=%s AND a.workspace_id=%s AND a.actor=%s "
+                "AND a.state='running' AND a.lease_owner=%s AND a.lease_expires_at>now()",
+                (b['approvalId'],b.get('attemptId'),b.get('taskId'),b.get('stepId'),ctx.workspace_id,ctx.principal,b.get('leaseOwner')))
+    row=cur.fetchone()
+    if not row or row[0] != approval['generation'] or row[1] != row[0] or not row[2]:
+        return None
+    record=authority_record(approval)
+    record.update(state='approved',consumedAt=None)
+    return authz_seam.Actor('approval',ctx.principal,'',{'approvalId':approval['approvalId'],'approval':record,'digest':approval['digest']})
+
+
+def execute_approved_model(runtime,workspace_id,token,task,approval,*,seconds_left=240):
+    """An owner decision can run exactly the stored approved call without another model."""
+    from .. import domain_tools,task_state,tool_adapter
+    from ..context import RafiiRunContext
+    domain_tools.ensure_registered()
+    with runtime.service.repository.transaction(token,workspace_id) as (cur,row,principal):
+        own,gated=_gated_step(cur,task,approval)
+        current=store.load_approval(cur,workspace_id,approval['approvalId'])
+        if own['kind'] != 'model' or principal != task['createdBy'] or not current or current['state'] != 'approved' or approval['kind']=='proposal':
+            return None
+        tool=tool_adapter.REGISTRY.get(approval['capabilityId'])
+        if tool is None:
+            return None
+        plan=task_state.load(cur,workspace_id,task['taskId'])
+        member=runtime.service.ideas._member(row)
+    ctx=RafiiRunContext(runtime.service,workspace_id,token,principal,member,task['conversationId'],executor_trace(),task=plan,config=runtime.cfg)
+    ctx.deadline=time.monotonic()+max(0,seconds_left)
+    for ref in approval['targetRefs']:
+        ctx.ledger.reference(ref['type'],ref['id'])
+    from .model_calls import dispatch
+    result=dispatch(ctx,tool,{**(approval['inputs'] or {}),'stepId':own['stepKey']})
+    with store.service_tx(runtime.service,workspace_id) as cur:
+        current=store.load_step(cur,workspace_id,task['taskId'],own['stepKey'])
+        if result.get('verified') and result.get('ok', True) and current['state'] == 'running':
+            store.set_step(cur,current,state='completed',verified=True,reason_code=None,reason=None)
+            store.refresh(cur,runtime.service.ideas,store.load_task(cur,workspace_id,task['taskId']))
+        state=current['state']
+    return {'stepKey':own['stepKey'],'state':state,'verified':bool(result.get('verified'))}
+
+
+def executor_trace():
+    from .executor import new_trace
+    return new_trace()

@@ -11,7 +11,8 @@ from . import authz_seam, errors, executor, model, store, targets
 
 
 def dispatch(ctx, tool, args):
-    from .. import task_state, tool_adapter
+    from .. import capability_registry, task_state, tool_adapter
+    capability = capability_registry.for_tool(tool.name)
     clean = {k: v for k, v in args.items() if k != "stepId"}
     digest = model.input_digest(tool.name, clean)
     with ctx.workspace() as (cur, _row, principal, _member, _state):
@@ -31,12 +32,17 @@ def dispatch(ctx, tool, args):
             raise errors.error("task_conflict")
         if task["attemptsLeft"] <= 0:
             raise errors.error("retry_budget_exhausted")
-        refs = targets.planned_refs(ctx, clean)
+        refs = targets.planned_refs(ctx, clean, state=_state)
         if not targets.all_present(cur, ctx.workspace_id, refs):
             raise errors.error("task_conflict")
+        remaining = ctx.remaining()
+        if (240 if remaining is None else remaining) < capability.timeout_seconds + 30:
+            store.set_step(cur,step,state="blocked",reason_code="needs_conversation",reason="Continue when there is time to finish this step.")
+            store.refresh(cur,ctx.service.ideas,task)
+            return {"ok":False,"needsUser":True,"code":"task_conflict"}
         subject = {**step, "kind": "tool", "capabilityId": tool.name, "inputs": clean, "inputDigest": digest, "effect": tool.spec.effect,
-                   "riskClass": model.EFFECT_RISK.get(tool.spec.effect, "R3"), "targetRefs": refs, "effectKey": key,
-                   "timeoutSeconds": min(180 if tool.name in model.PAID_CAPABILITIES else 30, max(1,int(ctx.remaining() or 240)-30))}
+                   "riskClass": capability.risk, "targetRefs": refs, "effectKey": key,
+                   "timeoutSeconds": int(capability.timeout_seconds)}
         actor = authz_seam.Actor("agent" if ctx.request_text else "continuation", principal, ctx.request_text)
         evidence = executor._approval_evidence(cur, task, subject)
         if evidence:
@@ -70,19 +76,39 @@ def dispatch(ctx, tool, args):
     bound = copy.copy(ctx)
     bound.step_binding = {"taskId":task["taskId"],"stepId":step["stepId"],"stepKey":step["stepKey"],"effectKey":key,
                           "attemptId":aid,"attemptNo":attempt_no,"leaseOwner":owner,"inputDigest":digest,"workspaceId":ctx.workspace_id,
-                          "principal":ctx.principal,"traceId":ctx.trace_id,"modelCall":True,"capabilityId":tool.name}
+                          "principal":ctx.principal,"traceId":ctx.trace_id,"modelCall":True,"capabilityId":tool.name,"riskClass":subject["riskClass"],"inputs":clean,"approvalId":(evidence or {}).get("approvalId")}
+    def cancelled():
+        from ... import leases
+        if ctx.cancelled():
+            return True
+        with store.service_tx(ctx.service, ctx.workspace_id) as cur:
+            current = store.load_task(cur, ctx.workspace_id, task["taskId"])
+            current_step = store.load_step(cur, ctx.workspace_id, task["taskId"], step["stepKey"])
+            return (current is None or current["cancelRequestedAt"] is not None or current_step["state"] in ("blocked", "cancelled")
+                    or not leases.still_owned(cur, "pr_agent_step_attempts", aid, lease_owner=owner))
+    bound.cancelled = cancelled
     from .spend import bind_service
     bind_service(bound)
+    changed_start = len(ctx.ledger.changed)
     started = time.monotonic()
-    result = tool_adapter.execute(bound,tool,args)
+    nested_args = args if "stepId" in (tool.schema.get("properties") or {}) else clean
+    result = tool_adapter.execute(bound,tool,nested_args)
     with store.service_tx(ctx.service,ctx.workspace_id) as cur:
         from ... import leases
         if not leases.still_owned(cur,"pr_agent_step_attempts",aid,lease_owner=owner):
             return {"ok":False,"code":"task_conflict","error":"This attempt no longer owns the step."}
+        if result.get("code") == "budget_ceiling":
+            from .approvals import request_approval
+            executor._finish_attempt(cur,aid,"failed","budget","budget_ceiling")
+            verdict = authz_seam.StepVerdict("approve","spend","budget","cost_limit",task["authzToken"])
+            request_approval(cur,ctx.service.ideas,task,subject,verdict,trace_id=ctx.trace_id,spend_limit=result.get("requiredBudgetCeilingUsdMicro"))
+            store.refresh(cur,ctx.service.ideas,task)
+            ctx.task = task_state.load(cur,ctx.workspace_id,task["taskId"])
+            return result
         ok = bool(result.get("ok",True)) and not result.get("needsUser")
         executor._finish_attempt(cur,aid,"succeeded" if ok else "failed",None if ok else executor._category(result,subject),result.get("code"),{"ms":round((time.monotonic()-started)*1000)})
         if tool.spec.effect != "READ" and ok:
-            refs = [{"type":c.get("type"),"id":c.get("id"),"change":c.get("change")} for c in ctx.ledger.changed if c.get("id")]
+            refs = [{"type":c.get("type"),"id":c.get("id"),"change":c.get("change")} for c in ctx.ledger.changed[changed_start:] if c.get("id")]
             store.receipt_done(cur,ctx.workspace_id,key,outcome="applied",verified=bool(result.get("verified",False)),result={"changedRefs":refs,"checks":result.get("checks") or []})
         current = store.load_task(cur,ctx.workspace_id,task["taskId"])
         store.refresh(cur,ctx.service.ideas,current)

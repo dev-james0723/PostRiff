@@ -165,7 +165,10 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
             raise errors.error("undo_expired")
         if record["state"] != "available":
             raise errors.error("undo_unavailable" if record["state"] == "applied" else "undo_conflict")
-        if compensation.current_digest(cur, workspace_id, record, step["capabilityId"]) != record["postImageDigest"]:
+        original_receipt = store.receipt(cur, workspace_id, record["effectKey"])
+        capability_id = (original_receipt or {}).get("capabilityId") or step["capabilityId"]
+        step = {**step, "capabilityId": capability_id}
+        if compensation.current_digest(cur, workspace_id, record, capability_id) != record["postImageDigest"]:
             raise errors.error("undo_conflict")
         domain_tools.ensure_registered()
         tool = tool_adapter.REGISTRY.get(record["inverseCapabilityId"])
@@ -228,6 +231,7 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
 def continue_task(runtime, workspace_id: str, token: str, task_id: str, payload: dict, *, request_id: str | None = None) -> dict:
     """The creator's Continue: queued engine steps run inline; a paused Manager run resumes from its checkpoint (a metered turn,
     reserved like any other); otherwise a turn bound to the task continues the conversation."""
+    started = time.monotonic()
     payload = payload if isinstance(payload, dict) else {}
     key = _key(payload)
     body_digest = model.sha256({"taskId": task_id, "modality": payload.get("modality") or "text"})
@@ -243,9 +247,19 @@ def continue_task(runtime, workspace_id: str, token: str, task_id: str, payload:
             raise errors.error("task_terminal")
         has_checkpoint = checkpoints.available(cur, workspace_id, task_id)
         steps = store.load_steps(cur, workspace_id, task_id)
-    executed = executor.drive_inline(runtime, workspace_id, token, principal, task_id, actor_kind="continuation", request_id=request_id)
+    from .approvals import execute_approved_model
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, _p):
+        approved = [a for a in store.approvals_for(cur, workspace_id, task_id) if a['state'] == 'approved' and a['kind'] != 'proposal']
+    executed = []
+    for approval in approved:
+        result = execute_approved_model(runtime, workspace_id, token, task, approval, seconds_left=240-(time.monotonic()-started))
+        if result is not None:
+            executed.append(result)
+    executed.extend(executor.drive_inline(runtime, workspace_id, token, principal, task_id, actor_kind="continuation", request_id=request_id, seconds=max(0,240-(time.monotonic()-started))))
     response: dict
-    if has_checkpoint is not None:
+    if has_checkpoint is not None and 240-(time.monotonic()-started) < 215:
+        response = {"taskId":task_id,"resumed":"needs_continue","executed":executed}
+    elif has_checkpoint is not None:
         response = _resume(runtime, workspace_id, token, task, has_checkpoint, key)
     elif not executed and any(s["kind"] == "model" and s["state"] in ("blocked", "queued") for s in steps):
         turn = runtime.turn(workspace_id, token, {"conversationId": task["conversationId"], "message": "Continue", "idempotencyKey": "continue:" + key[:90],
@@ -271,7 +285,7 @@ def _resume(runtime, workspace_id, token, task, checkpoint, key) -> dict:
         applied = [p for p in checkpoint["proposalIds"]
                    if ((legacy.find(cur, workspace_id, conversation_id, p) or {}).get("proposal") or {}).get("status") == "applied"]
     with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
-        claimed = checkpoints.claim(cur, workspace_id, task["taskId"], principal, "req:" + model.sha256(key)[:60])
+        claimed = checkpoints.claim(cur, workspace_id, task["taskId"], principal, "req:" + model.sha256(key)[:60], config=getattr(runtime, "cfg", None))
     if claimed is None:
         return {"taskId": task["taskId"], "resumed": "none"}
     trace_id = contracts.new_trace_id()

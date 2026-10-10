@@ -136,23 +136,15 @@ class RafiiRunContext:
     authz_mode: str = "off"                   # 'off' | 'shadow' | 'enforce' (CF-2 §8.2); 'off' = today
     step_binding: dict | None = None          # {taskId, stepKey, generation, kind: 'tool'|'model'} when a task step runs this turn (CF-3)
 
-    def effect_key(self, args: dict | None = None) -> str | None:
-        """The task engine's effect key for this tool call (CF-3 §8.1), or None when no task step is bound, so the tools
-        keep their trace-based keys exactly as today."""
-        cap = getattr(self.active_capability, "capability_id", None)
-        return contracts.effect_key(self.step_binding, cap, args)
-
-    def effect_key(self, args, capability_id=None):
-        """Stable key for a server-bound step; None preserves an unbound caller's legacy key."""
-        binding = getattr(self, "step_binding", None)
-        if not isinstance(binding, dict) or not binding.get("effectKey"):
+    def effect_key(self, args: dict | None = None, capability_id=None) -> str | None:
+        """The current server-bound effect; unbound callers keep their legacy key."""
+        binding = self.step_binding
+        if not isinstance(binding, dict):
             return None
-        if binding.get("kind") != "model":
+        if binding.get("effectKey"):
             return binding["effectKey"]
-        from .task_engine import model
-        clean = {k: v for k, v in args.items() if k != "stepId"}
-        suffix = model.sha256(str(capability_id or binding.get("capabilityId") or "") + "|" + model.input_digest(capability_id or "", clean))[:16]
-        return binding["effectKey"] + ":" + suffix
+        cap = capability_id or getattr(self.active_capability, "capability_id", None)
+        return contracts.effect_key(binding, cap, args)
 
     # --- workspace access ------------------------------------------------------------------------------------------
     def remaining(self) -> float | None:

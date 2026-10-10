@@ -53,7 +53,7 @@ def commit_command(cur, ctx, *, verified, changed_refs, compensation_result=None
     task = store.load_task(cur, b["workspaceId"], b["taskId"])
     step = next(s for s in store.load_steps(cur, b["workspaceId"], b["taskId"]) if s["stepId"] == b["stepId"])
     if b.get("modelCall"):
-        step = {**step, "effectKey": b["effectKey"], "capabilityId": b["capabilityId"], "inputDigest": b["inputDigest"]}
+        step = {**step, "effectKey": b["effectKey"], "capabilityId": b["capabilityId"], "inputDigest": b["inputDigest"], "riskClass": b["riskClass"], "inputs": b["inputs"]}
     undo = compensation.capture(cur, task, step, compensation_result or {}, changed_refs) if verified else {"available": False}
     commit_in(cur, ctx, verified=verified, result={"checks": [{"name": "domain_state_re_read", "ok": verified}],
                                                  "changedRefs": changed_refs, "compensation": undo, "costState": "none"})

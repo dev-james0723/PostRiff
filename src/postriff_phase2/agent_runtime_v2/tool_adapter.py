@@ -134,7 +134,10 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         ctx.activity(spec.name, tool.label, spec.effect, status, started, code=code)
         if status == "failed":
             ctx.ledger.error(code, str(error)[:300])
-        return {"ok": False, "code": code, "error": str(error)}
+        result = {"ok": False, "code": code, "error": str(error)}
+        if code == "budget_ceiling" and getattr(error, "required_budget_ceiling_usd_micro", None):
+            result["requiredBudgetCeilingUsdMicro"] = error.required_budget_ceiling_usd_micro
+        return result
     except Exception as error:  # noqa: BLE001 — a broken tool is a failed step, never a crashed turn
         log.error(json.dumps({"event": "agent_tool.failed", "tool": spec.name, "errorClass": type(error).__name__, "traceId": ctx.trace_id}))
         ctx.activity(spec.name, tool.label, spec.effect, "failed", started, code="tool_error")

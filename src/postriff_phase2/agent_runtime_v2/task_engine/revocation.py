@@ -50,6 +50,10 @@ def tasks(cur, event):
         task = store.lock_task(cur, ideas, event.workspace_id, task_id)
         steps = store.load_steps(cur, event.workspace_id, task_id, lock=True)
         affected = False
+        cur.execute("SELECT DISTINCT step_id::text FROM public.pr_agent_approvals WHERE task_id::text=%s AND capability_id=ANY(%s::text[]) "
+                    "UNION SELECT DISTINCT step_id::text FROM public.pr_agent_receipts WHERE task_id::text=%s AND capability_id=ANY(%s::text[])",
+                    (task_id,list(caps),task_id,list(caps)))
+        bound_steps = {r[0] for r in cur.fetchall()}
         if ended:
             cur.execute("UPDATE public.pr_agent_tasks SET cancel_requested_at=coalesce(cancel_requested_at,now()), "
                         "cancel_requested_by=coalesce(cancel_requested_by,created_by),authz_token=%s,updated_at=now() WHERE id::text=%s",
@@ -61,7 +65,7 @@ def tasks(cur, event):
             observer = step["kind"] == "delegate" and step["observesExternal"] and step["delegateType"] in ("publish_job", "automation_item")
             if ended and observer:
                 store.set_step(cur, step, state="queued", next_attempt_at=time.time(), reason_code=None, reason=None)
-            elif ended or str(step.get("capabilityId") or "").removeprefix("tool.") in caps:
+            elif ended or str(step.get("capabilityId") or "").removeprefix("tool.") in caps or step["stepId"] in bound_steps:
                 store.set_step(cur, step, state="cancelled" if ended else "blocked", reason_code="cancelled_by_revocation" if ended else "permission_revoked",
                                reason="Your permissions changed.", next_attempt_at=None)
                 store.close_pending_approvals(cur, event.workspace_id, task_id, "revoked", step_ids={step["stepId"]})

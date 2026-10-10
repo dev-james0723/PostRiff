@@ -30,7 +30,7 @@ class TaskLedger:
         # conservative estimate while open/unknown. Never count an unknown as zero.
         cur.execute("SELECT coalesce(sum(coalesce(s.actual_usd_micro,CASE WHEN s.cost_state='released' THEN 0 ELSE r.estimated_usd_micro END)),0) "
                     "FROM public.pr_usage_ledger r LEFT JOIN LATERAL (SELECT actual_usd_micro,cost_state FROM public.pr_usage_ledger "
-                    "WHERE workspace_id=r.workspace_id AND reservation_id=r.id AND kind='settle' "
+                    "WHERE workspace_id=r.workspace_id AND reservation_id=r.id AND kind IN ('settle','release') "
                     "ORDER BY CASE WHEN cost_state IN ('actual','released') THEN 0 ELSE 1 END,at DESC LIMIT 1) s ON true "
                     "WHERE r.workspace_id=%s AND r.run_id=%s AND r.kind='reserve'", (workspace_id, b["taskId"]))
         committed = int(cur.fetchone()[0])
@@ -38,7 +38,9 @@ class TaskLedger:
         cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, key))
         duplicate = cur.fetchone() is not None
         if not duplicate and ceiling is not None and committed + estimated_usd_micro > int(ceiling):
-            raise AlphaError("This task needs a higher spending limit before it can continue.", 403, code="budget_ceiling")
+            error = AlphaError("This task needs a higher spending limit before it can continue.", 403, code="budget_ceiling")
+            error.required_budget_ceiling_usd_micro = committed + estimated_usd_micro
+            raise error
         meta = {**(kwargs.pop("meta", None) or {}), "traceId": b["traceId"], "taskId": b["taskId"], "stepKey": b["stepKey"]}
         kwargs.update(run_id=b["taskId"], job_id=b["attemptId"], meta=meta)
         reservation = self._ledger.reserve(cur, workspace_id, member_id, dimension, estimated_usd_micro, key, **kwargs)
@@ -50,7 +52,7 @@ class TaskLedger:
         result = self._ledger.settle(cur, workspace_id, reservation_id, outcome, actual_usd_micro, idempotency_key)
         b = self.binding
         cur.execute("UPDATE public.pr_agent_step_attempts SET cost_state=CASE WHEN %s THEN 'unknown' ELSE 'known' END "
-                    "WHERE id::text=%s AND reservation_id=%s", (outcome == 'unknown' or actual_usd_micro is None, b["attemptId"], reservation_id))
+                    "WHERE id::text=%s AND reservation_id=%s", (result.get('state') not in ('actual','released'), b["attemptId"], reservation_id))
         cur.execute("UPDATE public.pr_agent_tasks SET spent_usd_micro=(SELECT coalesce(sum(actual_usd_micro),0) FROM public.pr_usage_ledger "
                     "WHERE workspace_id=%s AND run_id=%s AND kind='settle' AND cost_state='actual'), "
                     "spend_unknown=EXISTS(SELECT 1 FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.run_id=%s AND r.kind='reserve' "
@@ -65,8 +67,12 @@ def bind_service(ctx):
     ledger = getattr(ctx.service, "ledger", None)
     if not b or not b.get("effectKey") or ledger is None:
         return
-    service = copy.copy(ctx.service)
-    service.ledger = TaskLedger(ledger, b)
-    service.ideas = copy.copy(ctx.service.ideas)
-    service.ideas.ledger = service.ledger
-    ctx.service = service
+    class BoundService:
+        def __init__(self, service):
+            self._service = service
+            self.ledger = TaskLedger(ledger, b)
+            self.ideas = copy.copy(service.ideas)
+            self.ideas.ledger = self.ledger
+        def __getattr__(self, name):
+            return getattr(self._service, name)
+    ctx.service = BoundService(ctx.service)

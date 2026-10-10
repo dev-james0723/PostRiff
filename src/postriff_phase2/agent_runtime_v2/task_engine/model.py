@@ -114,6 +114,12 @@ def retryable(step: StepFacts, task_attempts_left: int) -> bool:
                                          "cancelled_by_person", "cancelled_by_revocation", "task_superseded"))
 
 
+def can_retry(step, task):
+    return (task["state"] in OPEN_STATES and step["state"] in ("failed", "blocked")
+            and step["kind"] in ("tool", "delegate", "wait") and step["retryClass"] != "never"
+            and int(step["generation"]) < MAX_GENERATION and int(task["attemptsLeft"]) > 0)
+
+
 def derive(steps: list[StepFacts], *, cancel_requested: bool, attempts_left: int) -> tuple[str, str | None, bool]:
     """(state, reason_code, partial) of a task from its steps (CF-3 §4.2), with two refinements recorded in the PR:
     a cancel never closes a task while an external-effect observer is open (§4.4), and a queued step whose dependency is
@@ -138,7 +144,9 @@ def derive(steps: list[StepFacts], *, cancel_requested: bool, attempts_left: int
     if any(s.state == "queued" for s in steps):
         # Queued behind something that can no longer finish: nothing more will happen without a person.
         return "blocked", "step_failed", False
-    if not steps or all(s.state == "completed" for s in steps):
+    if not steps:
+        return "queued", None, False
+    if all(s.state == "completed" for s in steps):
         return "completed", None, False
     if all(s.state == "cancelled" for s in steps):
         reason = next((s.reason_code for s in steps if s.reason_code), None)
