@@ -125,6 +125,7 @@ class RafiiRunContext:
     ui_context: dict | None = None            # validated uiContext {artifactId, artifactRevision, stateRevision} (rafii-genui/1)
     ui_selection: dict | None = None          # selection re-resolved from persisted UI state {references, note}
     voice_choice: dict | None = None          # {mode, sourceIds} the person chose for drafting; never swapped by the model
+    context_lens: dict | None = None          # the Context Lens this turn used (context_lens.py), None when the lens is off
     clients: list = field(default_factory=list)  # AsyncOpenAI clients this run created, closed inside its own event loop
     # --- seams for rafii-agent-authz/1 (CF-2 §8.1) and the task engine (CF-3 §8.1), declared once here (X11) so lanes B1
     # and A2 never edit this file. Every default is "absent", which is exactly today's behaviour: nothing in this release
