@@ -385,7 +385,8 @@ class UniversalLibrary:
                 raise AlphaError('The source file changed during rendering.',409)
             rendered = render_isolated(raw,a['extension'],page)
             image = rendered.pop('image')
-            # Reserve derived bytes under the same workspace lock as uploads.
+            # Rendering stays outside the lock. Fence the bounded immutable preview
+            # write and provenance save together so deletion cannot purge before a late write.
             with self.service.repository.transaction(t,w) as (cur,row,p):
                 current = self._row(cur,w,i,True)
                 if current['processing_status'] not in READY or (current.get('provenance') or {}).get('thumbnail',{}).get('claim')!=claim:
@@ -393,15 +394,11 @@ class UniversalLibrary:
                 self.assert_capacity(cur,self.service.ideas._state(row),w,len(image))
                 pending['bytes'] = previous.get('bytes',0)+len(image)
                 cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
-            try:
-                store.put_immutable(w,'media',name,image,'image/jpeg')
-                stored = True
-            except AlphaError as error:
-                if error.status!=409: raise
-            with self.service.repository.transaction(t,w) as (cur,row,p):
-                current = self._row(cur,w,i,True)
-                if current['processing_status'] not in READY or (current.get('provenance') or {}).get('thumbnail',{}).get('claim')!=claim:
-                    raise AlphaError('This file is no longer available.',404)
+                try:
+                    store.put_immutable(w,'media',name,image,'image/jpeg')
+                    stored = True
+                except AlphaError as error:
+                    if error.status!=409: raise
                 page_data = {k:rendered[k] for k in ('width','height','text')}
                 pages[str(page)] = page_data
                 pending.update(state='ready',pageCount=rendered['pageCount'],pages=pages,attempts=0,objectName=self._preview_object(a))
@@ -520,11 +517,18 @@ class UniversalLibrary:
         return {'processed':processed,'removed':removed,'failed':failed}
 
     def purge_workspace(self,cur,w):
-        cur.execute('SELECT object_name FROM public.pr_library_assets WHERE workspace_id=%s',(w,))
-        for (o,) in cur.fetchall():
-            self._store().delete(w,'file',o)
-        for p in self._store().list_prefix(f'{w}/file',bucket=self.bucket):
-            self._store().delete(w,'file',p.rsplit('/',1)[-1])
+        # Account deletion owns the whole workspace; retain rows if any storage cleanup fails.
+        s = self._store()
+        cur.execute('SELECT id::text,object_name,sha256,provenance FROM public.pr_library_assets WHERE workspace_id=%s',(w,))
+        for i,o,sha,provenance in cur.fetchall():
+            s.delete(w,'file',o)
+            for preview_name in self._preview_objects({'id':i,'sha256':sha,'provenance':provenance}):
+                s.delete(w,'media',preview_name)
+        for p in s.list_prefix(f'{w}/file',bucket=self.bucket):
+            s.delete(w,'file',p.rsplit('/',1)[-1])
+        # Older renderer versions and interrupted previews can leave no current row pointer.
+        for p in s.list_prefix(f'{w}/media'):
+            s.delete(w,'media',p.rsplit('/',1)[-1])
         cur.execute('DELETE FROM public.pr_library_assets WHERE workspace_id=%s',(w,))
 
     def _retract_source(self,cur,row,w,p,a):

@@ -253,13 +253,11 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
    assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
-   // The processing badge appears before the authenticated first-page fetch starts.
-   // Verify the uploaded document's actual thumbnail before the fixture setup reloads
-   // its document; WebKit reports that otherwise-interrupted fetch as a page error.
-   const markdownThumbnail=page.locator('[data-library-thumbnail="md"][data-thumbnail-preview="first-page-raster"] img').first();
-   await markdownThumbnail.waitFor({state:'visible',timeout:90000});
-   await page.waitForFunction(image=>image.complete&&image.naturalWidth>0,await markdownThumbnail.elementHandle(),{timeout:15000});
-   checks.push({engine,width,format:'md',thumbnail:'actual source-page JPEG decoded before fixture navigation'});
+   // The thumbnail container can still be a preparing placeholder: frontend
+   // indexing/auth work may start its preview fetch after the backend is ready.
+   // Finish this owned preview before any later forced navigation destroys it.
+   await waitForLoadedRaster(page.getByRole('img',{name:'First page of rehearsal-'+width+'.md',exact:true}).first(),500,90000);
+    checks.push({engine,width,format:'md',thumbnail:'actual source-page JPEG decoded before fixture navigation'});
    const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4')),videoTraceStart=storageTrace.length;
    if(engine==='chromium'){
     await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
@@ -379,11 +377,60 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');markDiagnosticNavigation('goto',base+'/app/library');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
-   await page.getByRole('button',{name:'Close asset details'}).click();
-   // The portal wrapper can have no bounding box while its fixed modal children
-   // are still open. Observe the actual hit-blocking viewport after dismissal;
-   // hidden also allows DOM removal when the exit transition completes.
-   if(width===390)await page.locator('[data-slot="drawer-viewport"]').waitFor({state:'hidden',timeout:5000});
+   // Observe only this fresh mobile open/close. Capture fixture-safe structure,
+   // never content or URLs, so a recurrence can distinguish lost input from reopen.
+   const mobileCloseObservation=width===390?await page.evaluateHandle(()=>{
+    const events=[],limit=12;let dropped=0;
+    const describe=element=>{
+     const node=element instanceof Element?element:null;
+     const slot=node?.getAttribute('data-slot');
+     return {tag:node?.tagName??null,slot:['drawer-viewport','drawer-popup','drawer-content','drawer-close','button'].includes(slot)?slot:null,close:Boolean(node?.closest('[aria-label="Close asset details"]'))};
+    };
+    const state=()=>['drawer-viewport','drawer-popup'].map(slot=>{
+     const element=document.querySelector(`[data-slot="${slot}"]`);
+     return {slot,present:Boolean(element),open:Boolean(element?.hasAttribute('data-open')),starting:Boolean(element?.hasAttribute('data-starting-style')),ending:Boolean(element?.hasAttribute('data-ending-style'))};
+    });
+    const record=value=>{if(events.length<limit)events.push({atMs:Math.round(performance.now()),...value});else dropped++;};
+    let previous=JSON.stringify(state());record({event:'initial',state:JSON.parse(previous)});
+    const capture=event=>record({event:event.type,trusted:event.isTrusted,target:describe(event.target)});
+    const types=['pointerdown','pointerup','click'];types.forEach(type=>document.addEventListener(type,capture,true));
+    const observer=new MutationObserver(()=>{
+     const current=JSON.stringify(state());if(current!==previous){previous=current;record({event:'drawer-state',state:JSON.parse(current)});}
+    });
+    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['data-open','data-starting-style','data-ending-style']});
+    return {
+     snapshot:()=>{
+      const popup=document.querySelector('[data-slot="drawer-popup"]');
+      const button=document.querySelector('[aria-label="Close asset details"]');
+      const rect=button?.getBoundingClientRect();
+      return {events,dropped,state:state(),focus:describe(document.activeElement),closeBounds:rect?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null,closeHit:rect?describe(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)):null,animations:popup?popup.getAnimations().slice(0,4).map(animation=>({state:animation.playState,pending:animation.pending})):[]};
+     },
+     dispose:()=>{observer.disconnect();types.forEach(type=>document.removeEventListener(type,capture,true));}
+    };
+   }):null;
+   try{
+    if(width===390)await page.waitForFunction(()=>{
+     const popup=document.querySelector('[data-slot="drawer-popup"]');
+     return popup?.isConnected&&popup.hasAttribute('data-open')&&!popup.hasAttribute('data-starting-style')&&!popup.hasAttribute('data-ending-style')&&popup.getAnimations().every(animation=>!animation.pending&&animation.playState!=='running');
+    },null,{timeout:5000});
+    await page.getByRole('button',{name:'Close asset details'}).click();
+    // The portal wrapper can have no bounding box while its fixed modal children
+    // are still open. Observe the actual hit-blocking viewport after dismissal;
+    // hidden also allows DOM removal when the exit transition completes.
+    if(width===390)await page.locator('[data-slot="drawer-viewport"]').waitFor({state:'hidden',timeout:5000});
+   }catch(error){
+    if(mobileCloseObservation){
+     let diagnostics={diagnosticsUnavailable:true};
+     try{diagnostics=await mobileCloseObservation.evaluate(observation=>observation.snapshot());}catch{/* A crashed page must retain the original test failure. */}
+     throw new Error(`${error.message}\nAsset close diagnostics: ${JSON.stringify(diagnostics)}`,{cause:error});
+    }
+    throw error;
+   }finally{
+    if(mobileCloseObservation){
+     try{await mobileCloseObservation.evaluate(observation=>observation.dispose());}catch{/* Diagnostic-only cleanup is best effort after page loss. */}
+     try{await mobileCloseObservation.dispose();}catch{/* The browser may already have disposed the observation handle. */}
+    }
+   }
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();
