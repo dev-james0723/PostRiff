@@ -571,6 +571,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               <Link href='/app/queue' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center rounded-md text-xs underline-offset-2 hover:underline'>
                 Open Queue
               </Link>
+              {agent.status?.tasks?.enabled && <Link href='/app/tasks' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center rounded-md text-xs underline-offset-2 hover:underline'>
+                Tasks
+              </Link>}
             </div>
           </div>
 

@@ -13,10 +13,11 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import RenderResults from './render-result';
 import useThemeSwitching from './use-theme-switching';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
+import { useTaskNavGroups } from '@/features/agent-tasks/nav';
 
 export default function KBar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const filteredGroups = useFilteredNavGroups(navGroups);
+  const filteredGroups = useFilteredNavGroups(useTaskNavGroups(navGroups));
 
   // These action are for the navigation
   const actions = useMemo(() => {
