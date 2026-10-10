@@ -261,7 +261,7 @@ def _poll_delegate(cur, ideas, task, step) -> None:
         if not model.retryable(store.facts([step])[0], int(task["attemptsLeft"])):
             store.cancel_dependents(cur, store.load_steps(cur, task["workspaceId"], task["taskId"]), step["stepKey"])
     elif result.state == "blocked":
-        store.set_step(cur, step, state="blocked", reason_code=result.reason_code, reason=result.reason)
+        store.set_step(cur, step, state="blocked", reason_code=result.reason_code, reason=result.reason, outputs=_merge(step["outputs"], result.outputs))
     else:
         # Still in flight (e.g. a publish job the queue holds as `uncertain`): keep observing; a poll is not a retry.
         store.set_step(cur, step, state="queued", next_attempt_at=time.time() + model.DELEGATE_POLL_SECONDS, reason=result.reason,
