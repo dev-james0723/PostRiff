@@ -138,6 +138,7 @@ REJECTION_CODES = frozenset((
     "component_denied", "duplicate_statement", "excess_args", "form_name_invalid", "href_not_allowed", "incomplete", "mutation_forbidden",
     "query_args_count", "query_args_shape", "query_binding_denied", "query_defaults_forbidden", "query_inline", "refresh_invalid",
     "root_invalid", "source_not_query", "state_name_invalid", "unexplained_deletion", "unknown_component", "unresolved_ref",
+    "unreachable_statement", "query_as_child", "query_arg_placeholder",                       # D-A52 (stricter generate/arguments rules)
     "fence_in_source", "library_unsupported", "missing_base", "nesting_too_deep", "parse_exception", "revision_conflict",
     "source_too_large", "parse_rejected",
     "missing-required", "null-required", "unknown-component", "inline-reserved", "excess-args", "type-mismatch",
