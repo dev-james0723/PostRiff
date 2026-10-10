@@ -67,6 +67,8 @@ class ProbeCursor:
         self.store.queries.append((sql, params))
         if "to_regclass" in sql:
             self.result = [{"ready": self.store.ready}]
+        elif "pr_trend_ingestion_batches" in sql:
+            self.result = [{"trips": 1}]  # Circuit-breaker opening count (retry.breaker_openings).
         elif "FROM public.pr_trend_jobs" in sql:
             self.result = copy.deepcopy(self.store.candidates)
         elif "FROM public.pr_trend_entitlements" in sql:
@@ -729,6 +731,93 @@ class WorkerRecoveryAndDeletion(WorkerHarness):
         self.assertEqual(kw["coverage_state"], "gap")
         self.assertEqual(kw["outbox_events"][0]["payload"]["markers"], list(markers))
         self.assertEqual(self.health.call_args.kwargs["status"], "gap")
+
+    def test_nested_v2_inactive_account_from_real_fold_revokes_author(self):
+        from postriff_phase2.growth.trends.providers import bluesky
+        from test_trend_providers import marker, bpolicy, ARG_TIMES, DID
+        folded = bluesky.fold_frames([marker("account", 11, active=False, status="deactivated")], policy=bpolicy(), **ARG_TIMES)
+        self.batch = replace(self.batch, observations=(), markers=folded.markers)
+        self.assertEqual(self.worker.tick()["completed"], 1)
+        complete = self.jobs.complete_batch.call_args.kwargs
+        self.revoke.assert_called_once_with(self.store, "fixture", "fixture:" + DID, cursor=complete["cursor"])
+
+    def test_typed_transport_status_reaches_retry_classification_and_logs_class_only(self):
+        from postriff_phase2.growth.trends.providers.base import ProviderTransportError
+        from postriff_phase2.growth.trends.retry import decide
+        for status, expected in ((503, "provider_transient"), (400, "provider_request_terminal"), (None, "provider_transient")):
+            with self.subTest(status=status):
+                self.adapter.side_effect = ProviderTransportError("provider_handshake_rejected", status=status)
+                with patch.object(W, "fail_attempt") as failed, self.assertLogs("postriff.trends", level="WARNING") as logs:
+                    self.worker.tick()
+                self.assertEqual(failed.call_args.kwargs["status"], status)
+                self.assertEqual(logs.output, ["WARNING:postriff.trends:trend.job_failed code=provider_handshake_rejected "
+                                               "dispatched=True exception=ProviderTransportError status=%s" % status])
+                decision = decide(status=status, now=NOW, attempt=1, max_attempts=3, dispatched=True, proven_unbilled=True)
+                self.assertEqual(decision.code, expected)
+
+    def test_successful_batch_explicitly_clears_breaker(self):
+        self.assertEqual(self.worker.tick()["completed"], 1)
+        self.assertTrue(self.health.call_args.kwargs["clear_pause"])
+        self.assertEqual(self.health.call_args.kwargs["status"], "partial")
+
+    def test_repeated_identical_cursor_quarantine_marks_cursor_stalled_and_pauses(self):
+        poison = ({"index": 1, "reason_code": "jetstream_invalid_frame"},)
+        self.patch(W.quarantine, "record_batch")
+        self.batch = replace(self.batch, cursor={"sequence": 10}, completeness="gap", quarantined=poison)
+        seen = []
+        for expected in (1, 2):
+            self.assertEqual(self.worker.tick()["completed"], 1)
+            seen.append(self.adapter.call_args.kwargs["cursor"])
+            kw = self.jobs.complete_batch.call_args.kwargs
+            self.assertEqual(kw["cursor_value"], {"sequence": 10, "_stall": {"batches": expected, "index": 1}})
+            self.assertTrue(self.health.call_args.kwargs["clear_pause"])
+            self.checkpoint = {"generation": self.checkpoint["generation"] + 1, "cursor_value": kw["cursor_value"]}
+        with self.assertLogs("postriff.trends", level="WARNING") as logs:
+            self.assertEqual(self.worker.tick()["completed"], 1)
+        kw = self.jobs.complete_batch.call_args.kwargs
+        self.assertEqual(kw["cursor_value"]["_stall"], {"batches": 3, "index": 1})
+        health = self.health.call_args.kwargs
+        self.assertEqual((health["status"], health["reason_code"]), ("gap", "cursor_stalled"))
+        self.assertEqual(health["next_allowed_at"], "2026-09-27T12:15:00Z")
+        self.assertFalse(health["clear_pause"])
+        self.assertIn("trend.circuit_open provider=fixture reason=cursor_stalled cooldown_seconds=900", " ".join(logs.output))
+        # The adapter never sees the worker-owned stall bookkeeping.
+        self.assertEqual(seen, [{"sequence": 10}, {"sequence": 10}])
+        self.assertEqual(self.adapter.call_args.kwargs["cursor"], {"sequence": 10})
+        # A later half-open probe that is still stuck escalates; an advancing cursor resets.
+        self.checkpoint = {"generation": 10, "cursor_value": kw["cursor_value"]}
+        with self.assertLogs("postriff.trends", level="WARNING"):
+            self.worker.tick()
+        self.assertEqual(self.health.call_args.kwargs["next_allowed_at"], "2026-09-27T13:00:00Z")
+        self.batch = replace(self.batch, cursor={"sequence": 11})
+        self.worker.tick()
+        self.assertEqual(self.jobs.complete_batch.call_args.kwargs["cursor_value"], {"sequence": 11})
+        self.assertTrue(self.health.call_args.kwargs["clear_pause"])
+        # A different poison index, or no stored cursor at all, is not the same stall.
+        self.checkpoint = {"generation": 11, "cursor_value": {"sequence": 10, "_stall": {"batches": 2, "index": 4}}}
+        self.batch = replace(self.batch, cursor={"sequence": 10})
+        self.worker.tick()
+        self.assertEqual(self.jobs.complete_batch.call_args.kwargs["cursor_value"]["_stall"], {"batches": 1, "index": 1})
+        self.checkpoint = {"generation": 12, "cursor_value": {}}
+        self.batch = replace(self.batch, cursor=None)
+        self.worker.tick()
+        self.assertEqual(self.jobs.complete_batch.call_args.kwargs["cursor_value"], {})
+
+    def test_pipeline_outcomes_are_aggregated_and_logged_with_bounded_enums(self):
+        self.pending_events = [{"event_id": str(n)} for n in range(4)]
+        outcomes = iter([{"state": "done", "replayed": False, "effect": {"state": "suppressed", "reason": "no_current_sources"}},
+                         {"state": "done", "replayed": False, "effect": {"state": "suppressed", "reason": "no_current_sources"}},
+                         {"state": "done", "replayed": False, "effect": {"state": "complete", "reason": None}},
+                         {"state": "done", "replayed": False, "effect": {"state": "Private Text", "reason": "did:plc:secret"}}])
+        self.outbox.consume.side_effect = lambda event, handler: next(outcomes)
+        with self.assertLogs("postriff.trends", level="INFO") as logs:
+            result = self.worker.tick(max_jobs=4)
+        self.assertEqual(result["pipeline"], {"consumed": 4, "outcomes": {"suppressed:no_current_sources": 2,
+                                                                          "complete:none": 1, "unknown:unknown": 1}})
+        text = " ".join(logs.output)
+        self.assertIn("trend.pipeline state=suppressed reason=no_current_sources count=2", text)
+        self.assertIn("trend.pipeline state=complete reason=none count=1", text)
+        self.assertNotIn("secret", text); self.assertNotIn("Private", text)
 
     def test_account_revocation_failure_prevents_batch_or_cursor_commit(self):
         self.batch = replace(self.batch, markers=({"kind": "account", "did": "did:plc:synthetic", "active": False},))

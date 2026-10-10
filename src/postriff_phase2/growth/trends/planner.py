@@ -94,6 +94,15 @@ class FrontierPlanner:
         if health and (health['status'] == 'revoked' or
                        health.get('next_allowed_at') and instant(health['next_allowed_at']) > instant(at)):
             raise ContractError('source_paused')
+        if health and health.get('next_allowed_at'):
+            # Half-open: a lapsed pause that no committed batch has cleared yet
+            # admits at most ONE in-flight ingest job (the recovery probe) per
+            # scope/provider. Planner slots and frontier requests wait for it.
+            cur.execute("""SELECT EXISTS(SELECT 1 FROM public.pr_trend_jobs WHERE scope_key=%s AND provider_id=%s
+                AND kind='trend.ingest' AND state IN ('queued','leased','running','retry_wait')) AS busy""",
+                        (scope_key, provider_id))
+            if row(cur)['busy']:
+                raise ContractError('source_probe_in_flight')
         cur.execute('SELECT * FROM public.pr_trend_budget_limits WHERE budget_key=ANY(%s) ORDER BY budget_key FOR SHARE',
                     (controls['budget_keys'],))
         budgets = rows(cur)

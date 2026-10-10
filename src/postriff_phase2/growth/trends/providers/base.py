@@ -14,6 +14,18 @@ from ..contracts import ContractError, SCHEMA_VERSION, canonical, digest, instan
 from ..policy import SourcePolicy
 
 
+class ProviderTransportError(ContractError):
+    """Typed, content-free transport failure: a safe code plus HTTP status and/or close code.
+
+    Never carries a provider body, URL, header or exception message. The worker
+    passes ``status`` to retry classification (4xx terminal, 5xx/None transient).
+    """
+    def __init__(self, code: str, *, status: int | None = None, close_code: int | None = None):
+        super().__init__(code)
+        self.status = status if type(status) is int and 100 <= status <= 599 else None
+        self.close_code = close_code if type(close_code) is int and 1000 <= close_code <= 4999 else None
+
+
 @dataclass(frozen=True)
 class Batch:
     observations: tuple[dict, ...] = ()

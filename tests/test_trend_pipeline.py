@@ -98,6 +98,238 @@ class PipelineHelpers(OfflineCase):
         event['payload']['coverage_interval']={'start':spec['start'],'end':spec['end']}
         self.assertEqual(_coverage(event,f['scope'],spec['start'],spec['end'])['completeness'],'complete_within_scope')
 
+    def test_ingestion_payload_keeps_explicit_gap_reasons_as_counts_only(self):
+        from postriff_phase2.growth.trends.outbox import ingestion_payload
+        markers=[{'kind':'gap','reason_code':'cursor_too_old','previous_sequence':26613419375},
+                 {'kind':'gap','reason_code':'cursor_outdated'},{'kind':'gap','reason_code':'private free text'},
+                 {'kind':'account','did':'did:plc:private','active':False}]
+        value=ingestion_payload({'markers':markers,'completeness':'gap'})
+        self.assertEqual(value,{'completeness':'gap','marker_counts':{'gap':3,'gap_cursor_too_old':1,'gap_cursor_outdated':1,'account':1}})
+        # Retention re-sanitizes stored payloads: the derived counts are stable.
+        self.assertEqual(ingestion_payload(value),value)
+        self.assertEqual(ingestion_payload({'marker_counts':{'gap_private':1,'gap_cursor_future':2}}),{'marker_counts':{'gap_cursor_future':2}})
+        self.assertNotIn('26613419375',json.dumps(value));self.assertNotIn('private',json.dumps(value))
+
+    def test_outbox_consume_returns_bounded_effect_summary(self):
+        from contextlib import contextmanager
+        class Cursor:
+            description=();rowcount=0
+            def __init__(self,valid):self.valid,self.result=valid,None
+            def execute(self,sql,args=None):
+                self.rowcount=0
+                if sql.lstrip().startswith('UPDATE'):self.rowcount,self.result=1,None
+                elif 'SELECT 1 FROM public.pr_trend_outbox_consumers' in sql:self.result={'ok':1}
+                elif 'FROM public.pr_trend_outbox_consumers' in sql:self.result={'state':'leased'}
+                elif 'trend_node_valid' in sql:self.result={'valid':self.valid}
+                elif 'FROM public.pr_trend_outbox WHERE' in sql:
+                    self.result={'scope_key':'shared:fixture','event_id':'e','event_type':'trend.ingested','node_id':'n','payload':{}}
+                else:raise AssertionError(sql)
+            def fetchone(self):return self.result
+        class Store:
+            def __init__(self,cur):self.cur=cur
+            @contextmanager
+            def transaction(self,cursor=None):yield cursor or self.cur
+        claim={'consumer':'trend.pipeline.v1','scope_key':'shared:fixture','event_id':'e','lease_owner':'w','lease_generation':1}
+        cases=[({'state':'suppressed','reason':'no_current_sources','receipts':[]},{'state':'suppressed','reason':'no_current_sources'}),
+               ({'state':'complete','receipts':[1],'reason':'free text'},{'state':'complete','reason':None}),
+               ({'state':'ignored','reason':'different_event_type'},{'state':'ignored','reason':'different_event_type'}),
+               (None,{'state':'unknown','reason':None}),({'state':['x'],'reason':{}},{'state':'unknown','reason':None})]
+        for returned,expected in cases:
+            with self.subTest(returned=returned):
+                result=TrendOutbox(Store(Cursor(True))).consume(claim,lambda cur,event:returned)
+                self.assertEqual(result,{'state':'done','replayed':False,'effect':expected})
+        from unittest.mock import Mock
+        effect=Mock()
+        result=TrendOutbox(Store(Cursor(False))).consume(claim,effect)
+        effect.assert_not_called()
+        self.assertEqual(result,{'state':'suppressed','replayed':False,'effect':{'state':'suppressed','reason':'event_node_invalid'}})
+
+
+def _drain_to(test, store, event, effect):
+    """Consume ``event`` under a private consumer name, skipping other suites' events.
+
+    Claims are globally ordered by creation time; a fresh consumer name keeps
+    other consumers' progress untouched. Bounded; never waits or sleeps.
+    """
+    outbox=TrendOutbox(store);consumer='renewal-test-'+uuid.uuid4().hex[:12]
+    for _ in range(2000):
+        claim=outbox.claim(consumer,'renewal-worker',lease_seconds=300)
+        if claim is None:continue
+        if claim['event_id']!=event['event_id']:
+            outbox.consume(claim,lambda cur,other:None);continue
+        return outbox.consume(claim,effect)
+    test.fail('bounded outbox claim loop never reached the renewal event')
+
+
+@unittest.skipUnless(os.environ.get('TREND_PIPELINE_TEST_DSN') or os.environ.get('POSTRIFF_TEST_DSN'),'dedicated local PostgreSQL DSN required')
+class RenewedContractPipeline(unittest.TestCase):
+    """Production-shaped provider-contract renewal (2026-10-03 incident).
+
+    Observations arrive stamped with the pinned runtime protocol (as
+    bluesky.normalize_frame does) under a policy bound to a RENEWED review row
+    whose manifest.protocol names that protocol, while the original
+    protocol-named row expires. Before the fix every trend.ingested event was
+    suppressed (no_current_sources) and every stored observation became invalid.
+    """
+    @classmethod
+    def setUpClass(cls):
+        import psycopg
+        cls.dsn=dedicated_test_dsn();cls.now=datetime.now(timezone.utc)
+        cls.start=contracts.iso(cls.now-timedelta(days=35));cls.end=contracts.iso(cls.now+timedelta(days=2))
+        cls.actor=str(uuid.uuid4());cls.workspace=str(uuid.uuid4())
+        with psycopg.connect(cls.dsn) as db:
+            for table in ('pr_profiles','pr_workspaces','pr_memberships'):
+                db.execute('DROP POLICY IF EXISTS trend_pipeline_service_test ON '+table)
+                db.execute('CREATE POLICY trend_pipeline_service_test ON '+table+' FOR ALL TO service_role USING(true) WITH CHECK(true)')
+            db.execute('INSERT INTO auth.users(id) VALUES(%s)',(cls.actor,))
+            db.execute('INSERT INTO pr_profiles(user_id) VALUES(%s)',(cls.actor,))
+            db.execute('INSERT INTO pr_workspaces(id) VALUES(%s)',(cls.workspace,))
+            db.execute("INSERT INTO pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'owner','active')",(cls.workspace,cls.actor))
+        def connect():
+            db=psycopg.connect(cls.dsn);db.execute('SET ROLE service_role');return db
+        # Live store: database-stamped knowledge times exactly like the worker path.
+        cls.store=TrendStore(connect);cls.data=fixture()
+        cls.cutoff=contracts.iso(cls.now.replace(minute=0,second=0,microsecond=0))
+        cls.delta=contracts.instant(cls.cutoff)-contracts.instant(cls.data['decision_cutoff'])
+
+    def seed(self, label, *, count=24, legacy=0):
+        scope='shared:renewal-'+label+'-'+uuid.uuid4().hex[:8];provider='bluesky-renewal-'+uuid.uuid4().hex[:8]
+        proto='jetstream-v2-json@fixture'+uuid.uuid4().hex[:8];renewed='stage2-full-fixture-'+uuid.uuid4().hex[:8]
+        self.store.ensure_scope(scope)
+        self.store.grant_entitlement(self.workspace,scope,['retrieve','derive_metrics','share_across_workspaces'],self.end)
+        rights={name:{'state':'allow','policy_ref':'renewal-policy','audience_scope':scope,'expires_at':self.end} for name in contracts.PERMISSIONS}
+        # Original protocol-named review row (expires first) and the renewed review row.
+        self.store.register_contract(provider,proto,list(contracts.PERMISSIONS),self.start,contracts.iso(self.now+timedelta(days=1)),{})
+        self.store.register_contract(provider,renewed,list(contracts.PERMISSIONS),self.start,self.end,
+            {'protocol':proto,'endpoint':'wss://fixture.invalid/subscribe','billable_unit':'unmetered_live_bytes_bounded'})
+        self.store.register_policy({'id':'renewal-policy','version':'policy-renewed-v2','provider_id':provider,'operation':'live_sample',
+            'scope_key':scope,'rights':rights,'reviewed_by':'synthetic-test','review_ref':'synthetic-only','effective_at':self.start,
+            'expires_at':self.end,'retention_seconds':40*86400,'readiness':'ready','revoked_at':None},provider_contract_version=renewed)
+        epoch='scheduled:'+contracts.digest([scope,label])
+        sources=[]
+        for source in self.data['observations'][:300][-(count+legacy):]:
+            o=deepcopy(source)
+            o.update(scope_key=scope,provider_id=provider,rights=deepcopy(rights),retention_until=self.end,coverage_epoch=epoch,
+                     provider_contract_version=proto,source_policy_version='policy-renewed-v2',observation_id=str(uuid.uuid4()))
+            o['deletion_key']=o['observation_id']
+            for name in ('event_at','received_at','available_at'):o[name]=contracts.iso(contracts.instant(o[name])+self.delta)
+            sources.append(o)
+        return {'scope':scope,'provider':provider,'proto':proto,'renewed':renewed,'epoch':epoch,
+                'legacy':sources[:legacy],'fresh':sources[legacy:]}
+
+    def ingest(self, s, *, markers=None, expire_protocol_first=False):
+        with self.store.transaction() as cur:
+            for o in s['legacy']+s['fresh']:self.store.put_observation(o,cursor=cur)
+            if s['legacy']:
+                # Pre-fix rows (2026-10-04 shape): bound to the protocol-named row.
+                cur.execute('UPDATE public.pr_trend_observations SET provider_contract_version=%s WHERE scope_key=%s AND observation_id=ANY(%s::uuid[])',
+                            (s['proto'],s['scope'],[o['observation_id'] for o in s['legacy']]))
+            if expire_protocol_first:self.expire_protocol(s,cur)
+            cur.execute('SELECT clock_timestamp() AS cutoff');cutoff=row(cur)['cutoff']
+            shift=(contracts.instant(cutoff).replace(minute=0,second=0,microsecond=0)-contracts.instant(self.cutoff)).total_seconds()
+            if shift:
+                cur.execute("UPDATE public.pr_trend_observations SET event_at=event_at+(%s*interval '1 second') WHERE scope_key=%s",(shift,s['scope']))
+            payload={'observation_ids':[o['observation_id'] for o in s['fresh']],'provider_id':s['provider'],
+                     'coverage_epoch':s['epoch'],'completeness':'gap','decision_cutoff':cutoff}
+            if markers is not None:payload['markers']=markers
+            return TrendOutbox(self.store).enqueue(s['scope'],'batch:'+str(uuid.uuid4()),'trend.ingested',payload,cursor=cur)
+
+    def expire_protocol(self, s, cur=None):
+        with self.store.transaction(cur) as c:
+            c.execute("UPDATE public.pr_trend_provider_contracts SET expires_at=clock_timestamp()-interval '1 second' WHERE provider_id=%s AND version=%s",
+                      (s['provider'],s['proto']))
+
+    def consume(self, event):
+        seen={}
+        def effect(cur,current):
+            seen.update(TrendPipeline(self.store).consume(cur,current));return seen
+        return _drain_to(self,self.store,event,effect),seen
+
+    def count(self, scope, sql):
+        with self.store.transaction() as cur:
+            cur.execute('SELECT count(*) AS n FROM '+sql,(scope,));return row(cur)['n']
+
+    def assert_materialized(self, s, result, summary):
+        self.assertEqual(summary['effect'],{'state':'complete','reason':None})
+        self.assertEqual(result['state'],'complete');self.assertTrue(result['receipts'])
+        self.assertGreater(self.count(s['scope'],'public.pr_trend_input_manifests WHERE scope_key=%s'),0)
+        self.assertGreater(self.count(s['scope'],"public.pr_trend_projections WHERE scope_key=%s AND kind='membership'"),0)
+        self.assertGreater(self.count(s['scope'],"public.pr_trend_projections WHERE scope_key=%s AND kind='trend'"),0)
+        with self.store.transaction() as cur:
+            cur.execute('SELECT verification_state,payload FROM public.pr_trend_trust_receipts WHERE scope_key=%s',(s['scope'],))
+            receipts=rows(cur)
+            self.assertTrue(receipts);self.assertEqual({r['verification_state'] for r in receipts},{'verified'})
+            self.assertEqual({r['payload']['coverage']['completeness'] for r in receipts},{'gap'})
+            cur.execute('SELECT DISTINCT provider_contract_version,provenance->>%s AS runtime FROM public.pr_trend_observations WHERE scope_key=%s AND observation_id=ANY(%s::uuid[])',
+                        ('runtime_protocol',s['scope'],[o['observation_id'] for o in s['fresh']]))
+            self.assertEqual(rows(cur),[{'provider_contract_version':s['renewed'],'runtime':s['proto']}])
+        return receipts
+
+    def trend(self, s):
+        with self.store.transaction() as cur:
+            cur.execute("SELECT object_id FROM public.pr_trend_projections WHERE scope_key=%s AND kind='trend' ORDER BY revision DESC LIMIT 1",(s['scope'],))
+            trend_id=row(cur)['object_id']
+        return self.store.get_projection(self.workspace,self.actor,'trend',trend_id)
+
+    def nodes_valid(self, s):
+        with self.store.transaction() as cur:
+            cur.execute('SELECT bool_and(postriff_private.trend_node_valid(scope_key,observation_id)) AS valid FROM public.pr_trend_observations WHERE scope_key=%s AND observation_id=ANY(%s::uuid[])',
+                        (s['scope'],[o['observation_id'] for o in s['fresh']]))
+            return row(cur)['valid']
+
+    def test_renewed_contract_materializes_survives_protocol_expiry_and_revocation_wins(self):
+        s=self.seed('markers')
+        event=self.ingest(s,markers=[{'kind':'gap','reason_code':'cursor_too_old','previous_sequence':26613419375}])
+        self.assertEqual(event['payload']['marker_counts'],{'gap':1,'gap_cursor_too_old':1})
+        summary,result=self.consume(event)
+        self.assert_materialized(s,result,summary)
+        projected=self.trend(s)
+        self.assertEqual((projected['validity'],projected['verification_state']),('valid','verified'))
+        # The protocol-named row expiring (2026-10-05 in production) changes nothing.
+        self.expire_protocol(s)
+        self.assertTrue(self.nodes_valid(s))
+        projected=self.trend(s)
+        self.assertEqual((projected['validity'],projected['verification_state']),('valid','verified'))
+        self.assertIsNotNone(projected['payload'])
+        # Fail closed: revoking the authorizing renewed row revokes every derivative.
+        with self.store.transaction() as cur:
+            cur.execute('UPDATE public.pr_trend_provider_contracts SET revoked_at=clock_timestamp() WHERE provider_id=%s AND version=%s',(s['provider'],s['renewed']))
+        self.assertFalse(self.nodes_valid(s))
+        projected=self.trend(s)
+        self.assertEqual((projected['validity'],projected['verification_state']),('revoked','policy_revoked'))
+        self.assertIsNone(projected['payload'])
+
+    def test_production_payload_without_marker_counts_and_expired_legacy_rows_is_not_truncated(self):
+        # Production state after 2026-10-05: protocol row expired, 344-style legacy
+        # rows bound to it inside the 28-day window, payload without marker_counts.
+        s=self.seed('legacy',legacy=6)
+        event=self.ingest(s,expire_protocol_first=True)
+        self.assertNotIn('marker_counts',event['payload'])
+        self.assertEqual(event['payload']['completeness'],'gap')
+        summary,result=self.consume(event)
+        self.assert_materialized(s,result,summary)
+        # Aged-out legacy rows are excluded, not reported as a rights truncation.
+        self.assertFalse(result['truncated'])
+        legacy={o['observation_id'] for o in s['legacy']}
+        with self.store.transaction() as cur:
+            cur.execute('SELECT manifest_id FROM public.pr_trend_trust_receipts WHERE scope_key=%s',(s['scope'],))
+            for saved in rows(cur):
+                manifest=decode_manifest(self.store.get_manifest(s['scope'],saved['manifest_id'],cursor=cur))
+                self.assertFalse(legacy & {o['observation_id'] for o in manifest['source_revisions']})
+                self.assertTrue({o['observation_id'] for o in s['fresh']} <= {o['observation_id'] for o in manifest['source_revisions']})
+
+    def test_no_eligible_sources_is_truthfully_suppressed_with_zero_artifacts(self):
+        s=self.seed('suppressed',count=8)
+        event=self.ingest(s)
+        with self.store.transaction() as cur:
+            cur.execute('UPDATE public.pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s',(s['scope'],))
+        summary,result=self.consume(event)
+        self.assertEqual(summary,{'state':'done','replayed':False,'effect':{'state':'suppressed','reason':'no_current_sources'}})
+        self.assertEqual((result['state'],result['reason'],result['receipts']),('suppressed','no_current_sources',[]))
+        for table in ('public.pr_trend_input_manifests WHERE scope_key=%s','public.pr_trend_projections WHERE scope_key=%s',
+                      'public.pr_trend_trust_receipts WHERE scope_key=%s'):
+            self.assertEqual(self.count(s['scope'],table),0,table)
+
 
 @unittest.skipUnless(os.environ.get('TREND_PIPELINE_TEST_DSN') or os.environ.get('POSTRIFF_TEST_DSN'),'dedicated local PostgreSQL DSN required')
 class DurablePipeline(unittest.TestCase):
