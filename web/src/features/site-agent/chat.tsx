@@ -175,6 +175,10 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
 
   useEffect(() => {
     setNotes([]);
+    // An explicit selected passage is composer text. It must not follow a switch to another workspace.
+    setText('');
+    setFailure(null);
+    setOptimistic(null);
   }, [workspaceId]);
 
   // A conversation that no longer exists here (another workspace's id, or removed) starts a new one.
@@ -183,11 +187,12 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface =
   }, [thread.error, workspaceId]);
 
   // "Ask Rafii about this" links hand in a question; the person still sends it.
+  const pendingPrefill = usePanel((state) => state.prefill);
   useEffect(() => {
-    const prefill = panelStore.takePrefill();
-    if (prefill) setText(prefill);
+    const prefill = panelStore.takePrefill(workspaceId);
+    if (prefill) setText((current) => current.trim() ? `${current}\n\n${prefill}` : prefill);
     if (autoFocus) input.current?.focus({ preventScroll: true });
-  }, [autoFocus]);
+  }, [autoFocus, pendingPrefill, workspaceId]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end', behavior: reduced ? 'auto' : 'smooth' });
