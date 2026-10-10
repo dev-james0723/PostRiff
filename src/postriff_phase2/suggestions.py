@@ -114,3 +114,14 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
     else:
         raise AlphaError("Unsupported suggestion action.")
     return {"suggestionId": item["id"], "status": item["status"], "actionRef": item.get("actionRef")}
+
+
+def current(state: dict, suggestion_id: str, now: float) -> dict:
+    """Read-only current evidence for a native action preview; never trusts a client reason."""
+    item = next((i for i in (state.get('raffi') or {}).get('suggestions', []) if i.get('id') == suggestion_id), None)
+    if not item or item.get('status') not in ('open', 'accepted'):
+        raise AlphaError('Suggestion unavailable.', 404)
+    candidate = next((entry for entry in _evidence(state, now) if digest({'kind': entry['kind'], 'evidence': entry['evidence']}) == item.get('identity')), None)
+    if candidate is None:
+        raise AlphaError('This suggestion is no longer current.', 409)
+    return {**item, **candidate}

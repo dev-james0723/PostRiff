@@ -70,10 +70,7 @@ class GoldenTests(unittest.TestCase):
                 with self.subTest(config=name, settings=settings):
                     runtime = AgentRuntimeService(FakeService(), config.RuntimeConfig.from_environment(env))
                     runtime.context_lens_settings = settings
-                    # PR152 independently added a default-OFF flag after this frozen baseline.
-                    expected = {**GOLDEN["status"][name], "flags": {**GOLDEN["status"][name]["flags"],
-                                "RAFII_AGENT_LIBRARY_BROWSE_ENABLED": False}}
-                    self.assertEqual(runtime.status("ws-one", "t"), expected)
+                    self.assertEqual(runtime.status("ws-one", "t"), {**GOLDEN["status"][name], "flags": {**GOLDEN["status"][name]["flags"], "RAFII_AGENT_LIBRARY_BROWSE_ENABLED": False}, "tasks": {"enabled": False}})
 
     def test_flags_default_off_and_an_empty_allowlist_is_nowhere(self):
         agent = config.RuntimeConfig.from_environment({"RAFII_AGENT_V2_ENABLED": "1"})

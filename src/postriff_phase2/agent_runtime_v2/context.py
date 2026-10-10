@@ -141,11 +141,15 @@ class RafiiRunContext:
     authz_mode: str = "off"                   # 'off' | 'shadow' | 'enforce' (CF-2 §8.2); 'off' = today
     step_binding: dict | None = None          # {taskId, stepKey, generation, kind: 'tool'|'model'} when a task step runs this turn (CF-3)
 
-    def effect_key(self, args: dict | None = None) -> str | None:
-        """The task engine's effect key for this tool call (CF-3 §8.1), or None when no task step is bound, so the tools
-        keep their trace-based keys exactly as today."""
-        cap = getattr(self.active_capability, "capability_id", None)
-        return contracts.effect_key(self.step_binding, cap, args)
+    def effect_key(self, args: dict | None = None, capability_id=None) -> str | None:
+        """The current server-bound effect; unbound callers keep their legacy key."""
+        binding = self.step_binding
+        if not isinstance(binding, dict):
+            return None
+        if binding.get("effectKey"):
+            return binding["effectKey"]
+        cap = capability_id or getattr(self.active_capability, "capability_id", None)
+        return contracts.effect_key(binding, cap, args)
 
     # --- workspace access ------------------------------------------------------------------------------------------
     def remaining(self) -> float | None:
@@ -167,7 +171,10 @@ class RafiiRunContext:
             if principal != self.principal:
                 raise AlphaError("Workspace unavailable.", 403)
             self.membership = member
-            yield cur, row, principal, member, ideas._state(row)
+            state = ideas._state(row)
+            from . import authz
+            authz.recheck(cur, self, state=state, member=member)
+            yield cur, row, principal, member, state
 
     def snapshot(self) -> dict:
         """The authoritative workspace state as it is now (re-read after every mutation)."""
@@ -181,7 +188,7 @@ class RafiiRunContext:
         from ..site_agent import tools as site_tools
         # The runtime is a cloud processor: site reads give it memory and sources only as their egress settings allow.
         return site_tools.Context(state=state, membership=member, principal=self.principal, workspace_id=self.workspace_id, cur=cur, service=self.service,
-                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone, egress="cloud")
+                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone, config=self.config, request_text=self.request_text, egress="cloud")
 
     def for_agent(self, agent: str | None) -> "RafiiRunContext":
         """A view of this context for one agent's tool call: same ledger, same identity, its own attribution."""

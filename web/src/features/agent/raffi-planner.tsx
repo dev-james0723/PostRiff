@@ -120,10 +120,11 @@ export function RaffiPlanner({ state, revision, canEdit }: { state: SnapshotStat
           {/* The evidence behind each suggestion stays one hover away, not a line of ids under every item. */}
           {suggestions.filter((item) => item.status === 'open' || item.status === 'accepted').slice(-4).toReversed().map((item) => <li key={item.id} className='rafii-quiet flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--rafii-radius-control)] px-3 py-2'>
             <p className='min-w-0 flex-[1_1_12rem] text-sm' title={item.evidence.length ? `Based on ${item.evidence.map((entry) => `${entry.type} ${entry.id.slice(0, 8)}`).join(', ')}` : undefined}>{item.reason}</p>
-            {canEdit && <div className='flex flex-wrap gap-1'><Button variant='action' size='sm' className='min-h-11' disabled={busy} aria-label={`Review: ${item.reason}`} onClick={() => void openSuggestion(item.id)}>Review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} aria-label={`Dismiss: ${item.reason}`} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button>{item.status === 'open' && <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_snooze', { suggestionId: item.id, until: Date.now() / 1000 + 86400 })}>Snooze 1 day</Button>}</div>}
+            {canEdit && <div className='flex flex-wrap gap-1'>{['campaign_gap', 'upcoming_event'].includes(item.kind) && <Link className='px-3 py-2 text-sm underline' href={`/app/creator-pipeline?suggestion=${encodeURIComponent(item.id)}`}>Prepare task</Link>}<Button variant='action' size='sm' className='min-h-11' disabled={busy} aria-label={`Review: ${item.reason}`} onClick={() => void openSuggestion(item.id)}>Review</Button><Button variant='quiet' size='sm' className='min-h-11' disabled={busy} aria-label={`Dismiss: ${item.reason}`} onClick={() => void act('raffi_suggestion_dismiss', { suggestionId: item.id })}>Dismiss</Button>{item.status === 'open' && <Button variant='quiet' size='sm' className='min-h-11' disabled={busy} onClick={() => void act('raffi_suggestion_snooze', { suggestionId: item.id, until: Date.now() / 1000 + 86400 })}>Snooze 1 day</Button>}</div>}
           </li>)}
         </ul>
       </Surface>
-    </section>
+    <Link href='/app/creator-pipeline' className='underline text-sm'>Creator Pipeline · tasks and experiments</Link>
+      </section>
   );
 }

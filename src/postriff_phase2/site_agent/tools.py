@@ -145,13 +145,20 @@ class Context:
     cloud memory setting allows and sources only where their cloud sharing is on (reads.py). An unnamed reader is a
     cloud reader."""
 
-    def __init__(self, *, state, membership, principal, workspace_id, cur=None, service=None, now=None, page=None, model_id=None, zone="UTC", egress="cloud"):
+    def __init__(self, *, state, membership, principal, workspace_id, cur=None, service=None, now=None, page=None, model_id=None, zone="UTC", egress="cloud", config=None, request_text=""):
         if egress not in EGRESS_READERS:
             raise ValueError(f"unknown reader {egress!r}")
         self.state, self.membership, self.principal, self.workspace_id = state, membership, principal, workspace_id
         self.cur, self.service, self.now, self.page, self.model_id = cur, service, now if now is not None else time.time(), page or {}, model_id
         self.zone = zone or "UTC"
         self.egress = egress
+        from ..agent_runtime_v2 import authz
+        self.config = config if config is not None else authz.runtime_config_for(service)
+        self.request_text = request_text
+        self.authz_mode = authz.mode_for(self.config, workspace_id)
+        self.grants = None
+        if self.authz_mode != "off" and cur is not None:
+            authz.bind_context(self, cur=cur, state=state, member=membership)
 
     @property
     def cloud_reader(self):
@@ -177,10 +184,15 @@ def run(tool_id: str, args: dict, ctx: Context) -> tuple[dict, dict]:
         requirement = REQUIREMENT.get(tool_id, "read")
         if not ctx.membership.allows(requirement):
             raise AlphaError("Your role can't do this.", 403, code="tool_forbidden")
+        from ..agent_runtime_v2 import authz, capability_registry
+        if not authz.IN_TOOL.get() and ctx.authz_mode != "off":
+            decision = authz.gate_site(ctx, capability_registry.site_capability(tool_id), tool_id, args)
+            if decision.outcome == "deny":
+                raise AlphaError("Rafii is not allowed to read or change this with your current permissions.", 403, code="agent_permission_denied")
         result = EXECUTORS[tool_id](ctx, **args)
         record["status"] = "verified" if result["verified"] else ("unverified" if result["ok"] else "failed")
     except AlphaError as error:
-        record["status"] = "blocked" if error.code in ("tool_unknown", "tool_input", "tool_forbidden") else "failed"
+        record["status"] = "blocked" if error.code in ("tool_unknown", "tool_input", "tool_forbidden", "agent_permission_denied") else "failed"
         record["code"] = error.code or ("not_found" if error.status == 404 else "failed")
         result = contracts.result(None, now=ctx.now, ok=False, verified=False, warnings=[str(error)])
     record["latencyMs"] = round((time.monotonic() - started) * 1000, 1)
