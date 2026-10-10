@@ -135,3 +135,40 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
   - Selection privacy. An edit's `<selection>` block carries only types, ids, order, the visible list, the list id and a count. Titles are display text kept with the view and never reach a prompt (state/selection.ts; ui_store.selection_note does the same for the Manager); before this the edit and edit-repair paths sent them. The generate path already carried refs only.
 
 - 2026-10-10 takeover repair: founder UI eligibility now receives authenticated founder scope from the runtime context and checks the founder feature flag. Workspace scope stays the default; a result body cannot promote itself to founder scope. Successful founder collection reads qualify J09, while failed/blocked reads do not. Query-as-child and copied-placeholder rejection follow aliases/reactive initializers with bounded traversal. Remote JCB `b8wc869st3` passed 314 Python tests, 196 web tests and 5 PostgreSQL groups; this is synthetic validation, not live G03 acceptance.
+- D-A53 (2026-10-09, AMENDS G03 in 04-ACCEPTANCE and acceptance.json; decided by James on 2026-10-09 as DP-1) The G03 first-pass gate is measured on a FIXED 60-case live corpus. D-A51 is the Library browse decision (#152) and D-A52 is reserved for C3.
+
+  The rule:
+  - Old: at least 29 of 30 normal cases (96.7%) first-pass valid, and all 30 functional after at most one repair.
+  - New: at least 59 of 60 normal cases (98.3%) first-pass valid, and all 60 functional after at most one allowed repair. Fixtures and fallbacks still never count as generated success.
+  - The corpus was fixed and documented before any measurement. The denominator never changes afterwards, and no case is dropped or replaced because it fails.
+
+  The corpus (`g03-live-60/v2`, the `normal` list of `scripts/agent_ui_live.py plan`):
+  - sha256 `ef9e061b3705f7617b5467f6b1e8e9b904aa5fd5d0538d1a5a9299e937dbe4e3`, over the canonical JSON of the 60 cases (sorted keys, no spaces).
+  - Cases 1–30 are the earlier 30-case sample, byte for byte and in the same order. The frozen copy is `tests/agent_ui_acceptance/fixtures/g03-corpus-v1.json`.
+  - Cases 31–60 are new: d, e and f for each of J01–J09, then CMP-d, CMP-e and CMP-f. They were written from 01-ENGINEERING-SPEC §4 and the journey definitions only, not from any pending prompt change.
+  - Of the new cases, 10 are Hong Kong Cantonese in Traditional Chinese and 2 mix English and Chinese. 13 are follow-ups that only make sense as a later turn of their journey's conversation (`corpus.followUps`).
+  - They also cover partial, empty and unknown data, multi-journey asks, filters, date ranges and time zones, comparisons and charts, and read-only founder summaries for J09 on the founder surface.
+  - The 9 edit cases and 3 fault cases are unchanged.
+
+  Feasibility review (2026-10-09, before any measurement, after review of #157):
+  - Spec §2.3 keeps plain questions native: the Presenter runs only for an explicit view request or a rich tool result. A case whose spec-correct answer has no view could never be functional, so the frozen corpus could never pass.
+  - 20 of the 30 new cases had no explicit view request under the base's deterministic predicate (`ui_projection.wants_ui` at de4e5907): J01-d, J01-f, J02-e, J03-d, J03-e, J03-f, J04-d, J04-e, J04-f, J05-d, J05-f, J06-e, J07-d, J08-d, J08-e, J09-d, J09-e, CMP-d, CMP-e and CMP-f. Several were follow-ups that could be answered from the conversation alone.
+  - Each was reworded to ask to see its answer (a table, agenda, timeline, gallery, list, side-by-side comparison or breakdown), keeping its language, follow-up position, data conditions and difficulty. The prompt-fix branch was not consulted. The release test now requires every new case to pass `wants_ui`.
+  - The 30 v1 cases are frozen byte for byte and were not reworded. 14 of them have no explicit view request and rely on a rich tool result: J02-b, J02-c, J03-a, J04-a, J04-b, J05-b, J06-c, J08-b, J08-c, J09-a, J09-b, CMP-a, CMP-b and CMP-c.
+  - Rule, pending James's confirmation before merge: a planned case answered natively, with no view, is not functional, so it fails G03. The denominator stays 60.
+  - Open, outside this corpus: on the base, `ui_projection.eligibility` calls `detect_journeys` at workspace scope (ui_projection.py:148), and the founder Manager has only founder_* tools, so a founder turn comes out `plain_answer` and is never eligible (code reading plus a synthetic-result probe; no live call). Until that is fixed, J09-a to J09-f (3 of them v1 cases) cannot produce a view, and G03 cannot pass on any corpus that includes J09. Run 3 measured 27 cases and 8 edits, without the founder cases.
+
+  Running and counting:
+  - The run order is fixed (`runOrder`). For each journey, its first three cases run in one new conversation, then its edit runs in that same conversation (`"start": "continue"`, on the view of `<J>-a`), then its new three cases run in a second new conversation. J01–J08 and the composites run in the consumer chat first, and the founder panel comes last: J09-1, J09-edit, then J09-2. Nothing is reopened, because the founder panel's "New conversation" clears its in-memory thread. The cold case is J01-a.
+  - `ingest` counts only the plan's case ids. Any other id is reported as unplanned.
+  - Only each case's first attempt counts. A case's artifact is the earliest one of its own; an artifact first seen under an earlier case (for example, re-rendered after a reload) stays with that case. A case run more than once under its id (more than one turn, or more than one artifact of its own) counts as a first-pass miss and as not functional, whatever a later attempt did. Server artifacts that no case counts are listed as `uncountedArtifacts` for review; the fault cases account for some of them.
+  - G03 fails as soon as two first-pass misses, or one case that is not functional after its repair, are known. Otherwise a short sample stays unverified.
+
+  Freezing and cost:
+  - The corpus is frozen at the merge commit of PR #157, which introduced it. The release test pins its hash, the first 30 cases byte for byte, and the edits and faults.
+  - Any change to a case, its order or the threshold after that merge is a new corpus. It needs a new decision and a new corpus id, and results from different corpora are never pooled. The feasibility rewording above happened before the merge, with nothing measured, so the id stays `g03-live-60/v2` and only the pinned hash changed (it was `69d6bee3…`).
+  - A full live run costs about 4.7 USD at run-3 rates. Run 3 cost 2.29 USD for 27 cases plus 8 edits, about 0.065 USD per generation including its Manager turn; a full run is 72 generations (60 normal, 9 edits and 3 fault cases).
+  - The runner's per-case estimate rises from 0.06 to 0.07 USD so that it stays conservative. A paid run still needs DP-2 approval. Within the existing 5 USD canary cap, the headroom is about 0.3 USD.
+  - This change made no live model calls and measured nothing.
+
+- 2026-10-10 takeover reconciliation: D-A52 presenter repairs and D-A53 fixed-corpus measurement both remain in force. The earlier 5 USD canary estimate above is historical: James later authorized a cumulative 20 USD model-test cap (original session human turn 12375), including already incurred usage. Unknown settlements and concurrent spend must be reconciled before new live calls. No new budget is created by this merge.
