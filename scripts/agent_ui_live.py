@@ -4,7 +4,8 @@ Two ways to measure a deployed origin, neither of which ever puts a credential o
 
 * BROWSER mode (production sign-in is a passkey in a real browser). The release owner drives the real UI; this script only
   prints what to run and turns the results into evidence:
-      plan             the fixed sample plan (30 normal generations = 3 prompts × J01–J09 + 3 composite; 9 edits; fault cases)
+      plan             the fixed sample plan: the frozen G03 corpus of 60 normal generations (6 prompts × J01–J09 + 6 composite;
+                       D-A53), 9 edits, fault cases, and the run order (each edit right after its journey's first conversation; J09 in the founder panel)
       browser-snippet  JavaScript to evaluate in the signed-in page: installs window.__rafiiLive, which tags each case, observes
                        lane C's performance marks 'rafii-genui:first-component' / 'rafii-genui:ready' (detail {artifactId,
                        revision}) and the resource timing of the turn and presentation requests, runs the G04 probe in-page
@@ -59,9 +60,20 @@ from agent_ui_acceptance.client import Api  # noqa: E402
 EVIDENCE_DIR = ROOT / "docs/design/openui-production-2026-10-08/evidence/g"
 TOKEN_ENV = "RAFII_LIVE_SESSION_TOKEN"
 MAX_BUDGET_USD = 25.0
-DEFAULT_CASE_ESTIMATE_USD = 0.06       # one Manager turn + one presentation (+ at most one repair), conservative
+# One Manager turn + one presentation (+ at most one repair). Run 3 (2026-10-09) cost 2.29 USD for 27 cases + 8 edits, about
+# 0.065 USD per generation with the Manager turn, so 0.07 stays conservative.
+DEFAULT_CASE_ESTIMATE_USD = 0.07
 FIRST_COMPONENT_P95_MS = 8000
 FULL_UI_P95_MS = 30000
+
+# --- the G03 live corpus (D-A53, James 2026-10-09) ----------------------------------------------------------------------------
+# FIXED before any measurement: the denominator never changes afterwards, and no case is dropped or replaced because it fails.
+# v1 (JOURNEY_PROMPTS / COMPOSITE_PROMPTS, cases a–c) stays byte-identical and first; v2 appends cases d–f per journey and
+# CMP-d..f. Each journey's d–f run as one conversation, so a follow-up refers to the turn before it. Changing, dropping,
+# replacing or reordering a case is a new corpus: it needs a new decision and a new G03_CORPUS_ID, and the pinned hash in
+# tests/agent_ui_acceptance/test_agent_ui_acceptance_release.py fails until then.
+G03_CORPUS_ID = "g03-live-60/v2"
+G03_FIRST_PASS_AT_LEAST = 59           # of 60 (98.3%) first-pass valid; all 60 functional after at most one repair
 
 JOURNEY_PROMPTS = {
     "J01": ("Compare my latest LinkedIn and Threads drafts side by side", "Show my unscheduled drafts in a table with platform and language",
@@ -88,19 +100,101 @@ COMPOSITE_PROMPTS = ("Pick two Library photos for my recital post, draft a Linke
 EDIT_CASES = {"J01": "Compare only the two selected drafts", "J02": "Change the period to next month", "J03": "Show only videos",
               "J04": "Add a column with the evidence for each trait", "J05": "Add a chart of progress by step", "J06": "Change the period to the last 7 days",
               "J07": "Sort the sources by date, newest first", "J08": "Show only paused automations", "J09": "Add last week for comparison"}
+# v2 (D-A53): cases d, e, f per journey, written from 01-ENGINEERING-SPEC §4 J01–J09. About a third are Hong Kong Cantonese in
+# Traditional Chinese and some mix English and Chinese; several ask for data that may be partial, empty or unknown (the truthful
+# answer is the pass); J09 stays read-only on the founder surface. The ids in V2_FOLLOW_UPS only make sense as a later turn of
+# their journey's conversation. Every v2 case asks to SEE something (a table, agenda, timeline, gallery, list, comparison or
+# chart): spec §2.3 keeps plain questions native, so a case whose correct answer has no view could never be functional. The
+# feasibility review that reworded 20 of them to say so, before anything was measured, is recorded in D-A53.
+JOURNEY_PROMPTS_V2 = {
+    "J01": ("Pull up every draft I've touched in the last two weeks in a table with platform, language and when I last edited it, and put the English and Chinese versions side by side",
+            "將第二篇同第四篇並排比較吓，邊篇比較啱 Instagram？我揀咗嘅寫手同語氣唔好改",
+            "Of those two, which one isn't scheduled yet? Show me the draft with its current revision so I can edit it"),
+    "J02": ("下個禮拜每日幾點出帖？用香港時間排個 agenda 出嚟，撞時間嘅幫我標示",
+            "Now show that same week as an agenda in New York time and flag anything that lands between midnight and 6am there",
+            "Has anything in the publishing queue failed or got stuck since 1 October? Group it by platform with the original scheduled time and time zone"),
+    "J03": ("Search my Library for anything about Chopin (photos, audio, documents, links) and show it as a gallery with previews and where each item came from",
+            "淨係要相同片，由新到舊排序，再幫我揀頭兩樣用嚟寫稿",
+            "Have I got any audio from my September concerts in the Library? List all of it with the length and recording date of each"),
+    "J04": ("Which of my sources is Rafii allowed to learn my voice from? 我想用表格睇埋每個 source 嘅 cloud consent 狀態",
+            "For the ones that aren't eligible, show me the reason for each in a table, and whether my last voice-learning job actually finished",
+            "Rafii 而家覺得我寫嘢係咩風格？已經學咗嘅同仲係建議緊嘅用表格分開列，每樣都要有證據同信心度"),
+    "J05": ("Break my current campaign down by channel in a table: which posts belong to it, what status each one is in, and what it's waiting on",
+            "仲有邊幾步未做完？用時間線顯示，邊樣卡住邊樣都要標明",
+            "If I push the launch post back three days, which later steps does that affect? Just show me on the campaign timeline; don't change anything yet"),
+    "J06": ("Chart my Instagram vs YouTube views for 1-30 September, day by day in Hong Kong time, and show how many posts each day is based on",
+            "有幾日冇數，幫我用表格逐日列返出嚟，分清楚邊啲係真係零、邊啲係未有數據",
+            "Drill into the best day on that chart: which posts drove it, with likes, comments and saves, and when those numbers were last updated"),
+    "J07": ("幫我執好我儲低咗關於拉赫曼尼諾夫第二號鋼琴協奏曲嘅資料，做個列表，每個來源都要有日期同連結",
+            "Put those sources in a comparison matrix: what each one says, its date, and which of my drafts already cites it",
+            "Show the research briefs I made this month with how many citations each has and the date of its newest source"),
+    "J08": ("Which of my automations run on weekends? Show me the schedule and next run of each in a table, in its own time zone and in Hong Kong time",
+            "For the weekly one, show me the last five runs as a timeline, with what each one produced and any errors",
+            "我嘅 Instagram 同 YouTube 連接有冇出問題？有嘅話逐個話我知喺 app 入面點整返"),
+    "J09": ("Give me a breakdown of this month's model cost by provider and by surface, and show which days have incomplete cost data",
+            "Drill into the most expensive day: show me the runs and workspaces that drove it in a table. Read-only, I only want to look",
+            "今個月 MRR 同上個月比較係點？冇真實數據支持嘅數字就唔好估，話我知缺咗啲咩"),
+}
+COMPOSITE_PROMPTS_V2 = ("Find the Library photo from my last recital that got the most saves on Instagram, draft a Threads post around it in my voice, and slot it into next week's calendar where nothing collides; show me the week as an agenda",
+                        "將頭先份草稿改做 LinkedIn 版本，加埋我儲低嘅研究來源，再放入而家個 campaign 度，同原本嗰份並排比較",
+                        "Campaign 入面已經出咗嘅 posts 表現點？Show it in a table next to the campaign plan, and tell me which upcoming steps still have no content")
+V2_FOLLOW_UPS = ("J01-e", "J01-f", "J02-e", "J03-e", "J04-e", "J05-e", "J05-f", "J06-e", "J06-f", "J07-e", "J08-e", "J09-e", "CMP-e")
+
+
+def _surface(journey: str) -> str:
+    return "founder" if journey == "J09" else "chat"
+
+
+def _cases(journey_prompts: dict, composite: tuple, first: int) -> list:
+    out = [{"caseId": f"{j}-{chr(97 + first + i)}", "journey": j, "kind": "generate", "surface": _surface(j), "prompt": p}
+           for j, prompts in journey_prompts.items() for i, p in enumerate(prompts)]
+    return out + [{"caseId": f"CMP-{chr(97 + first + i)}", "journey": "composite", "kind": "generate", "surface": "chat", "prompt": p}
+                  for i, p in enumerate(composite)]
+
+
+def corpus_sha256(normal: list) -> str:
+    return hashlib.sha256(json.dumps(normal, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def run_order(normal: list, edits: list) -> list:
+    """Deterministic: one entry per conversation step. Per journey: its v1 cases as one new conversation, then its edit in
+    that same conversation ("continue": edit the base case's view while it is still in the thread), then its v2 cases as a
+    second new conversation. Consumer chat first (J01–J08, then the composites), then the founder panel (J09-1, J09-edit,
+    J09-2). Nothing is ever reopened: the founder panel's "New conversation" clears its in-memory thread."""
+    groups: list = []
+    edit_of = {edit["baseCase"]: edit for edit in edits}
+    for journey in [*JOURNEY_PROMPTS, "composite"]:
+        mine = [c for c in normal if c["journey"] == journey]
+        prefix = "CMP" if journey == "composite" else journey
+        for part, cases in ((1, mine[:3]), (2, mine[3:])):
+            name = f"{prefix}-{part}"
+            groups.append({"conversation": name, "journey": journey, "surface": _surface(journey), "start": "new", "cases": [c["caseId"] for c in cases]})
+            for case in cases:
+                edit = edit_of.get(case["caseId"])
+                if edit is not None:
+                    groups.append({"conversation": name, "journey": edit["journey"], "surface": edit["surface"], "start": "continue",
+                                   "editOf": edit["baseCase"], "cases": [edit["caseId"]]})
+    return sorted(groups, key=lambda g: g["surface"] == "founder")     # stable: order within each surface is kept
+
+
+def run_sequence(plan: dict) -> list:
+    return [case_id for group in plan["runOrder"] for case_id in group["cases"]]
 
 
 def sample_plan() -> dict:
-    normal = [{"caseId": f"{j}-{chr(97 + i)}", "journey": j, "kind": "generate", "surface": "founder" if j == "J09" else "chat", "prompt": p}
-              for j, prompts in JOURNEY_PROMPTS.items() for i, p in enumerate(prompts)]
-    normal += [{"caseId": f"CMP-{chr(97 + i)}", "journey": "composite", "kind": "generate", "surface": "chat", "prompt": p} for i, p in enumerate(COMPOSITE_PROMPTS)]
+    normal = _cases(JOURNEY_PROMPTS, COMPOSITE_PROMPTS, 0) + _cases(JOURNEY_PROMPTS_V2, COMPOSITE_PROMPTS_V2, 3)
     edits = [{"caseId": f"{j}-edit", "journey": j, "kind": "edit", "baseCase": f"{j}-a", "surface": "founder" if j == "J09" else "chat", "instruction": text}
              for j, text in EDIT_CASES.items()]
     faults = [{"caseId": "F-cancel", "kind": "fault", "fault": "user cancel mid-stream", "expect": "ui.canceled; native answer kept; settled once"},
               {"caseId": "F-disconnect", "kind": "fault", "fault": "close the tab mid-stream", "expect": "interrupted; settled once; reopen shows last valid revision"},
               {"caseId": "F-retry", "kind": "fault", "fault": "explicit Try again after a failure", "expect": "cost/consent shown first; a new attempt, never automatic"}]
-    return {"contractVersion": "rafii-genui/1", "normal": normal, "edits": edits, "faults": faults,
-            "denominators": {"G03": {"firstPassValidAtLeast": 29, "of": len(normal), "functionalAfterOneRepair": len(normal)}},
+    return {"contractVersion": "rafii-genui/1",
+            "corpus": {"id": G03_CORPUS_ID, "decision": "D-A53", "decidedBy": "James, 2026-10-09", "normalCases": len(normal), "sha256": corpus_sha256(normal),
+                       "frozen": "at the merge commit of PR #157, which introduced it; cases 1–30 are the v1 corpus byte for byte",
+                       "rule": "fixed before any measurement; the denominator never changes; no case is dropped or replaced because it fails",
+                       "followUps": list(V2_FOLLOW_UPS)},
+            "normal": normal, "edits": edits, "faults": faults, "runOrder": run_order(normal, edits),
+            "denominators": {"G03": {"firstPassValidAtLeast": G03_FIRST_PASS_AT_LEAST, "of": len(normal), "functionalAfterOneRepair": len(normal)}},
             "targets": {"G17": {"firstUsefulComponentP95Ms": FIRST_COMPONENT_P95_MS, "fullUiP95Ms": FULL_UI_P95_MS, "localInteractionP95Ms": 200}},
             "note": "Engineering acceptance sample, not a statistical guarantee. Fault-injected malformed/truncated output is the CI harness's job."}
 
@@ -207,13 +301,16 @@ def gate_records(verdicts: dict, *, sha: str, origin: str, data_scope: str, evid
 
 
 def merge_browser(files) -> dict:
-    """Several window.__rafiiLive.collect() files (e.g. the consumer chat page and the founder panel) as one collection."""
+    """Several window.__rafiiLive.collect() files (e.g. the consumer chat page and the founder panel, or one page before and
+    after a reload) as one collection. Each mark and resource keeps its page's performance.timeOrigin as `_origin`, so items
+    from different pages order by wall-clock time (`_when`); timings are still taken within one page."""
     merged = {"cases": {}, "marks": [], "resources": []}
     for file in files:
         data = json.loads(Path(file).read_text(encoding="utf-8"))
+        origin = data.get("timeOrigin") if isinstance(data.get("timeOrigin"), (int, float)) else 0.0
         merged["cases"].update(data.get("cases") or {})
-        merged["marks"] += data.get("marks") or []
-        merged["resources"] += data.get("resources") or []
+        merged["marks"] += [{**m, "_origin": origin} for m in data.get("marks") or [] if isinstance(m, dict)]
+        merged["resources"] += [{**r, "_origin": origin} for r in data.get("resources") or [] if isinstance(r, dict)]
         for key in ("probe", "filterCheck", "hiddenCheck", "userAgent", "faults"):
             if data.get(key) is not None and key not in merged:
                 merged[key] = data[key]
@@ -332,35 +429,81 @@ def _ms(a, b):
     return round((db - da).total_seconds() * 1000, 1)
 
 
+FIRST_MARK, READY_MARK = "rafii-genui:first-component", "rafii-genui:ready"
+
+
+def _when(item: dict, key: str) -> float:
+    """Wall-clock order of a browser mark/resource: its page's timeOrigin (set by merge_browser) plus its startTime."""
+    value = item.get(key)
+    return float(item.get("_origin") or 0.0) + (float(value) if isinstance(value, (int, float)) else 0.0)
+
+
 def ingest(browser: dict, rows: list, plan: dict) -> dict:
-    """Join browser marks (by artifactId) with server attempt rows; compute the G03/G04/G05/G17/G18 verdicts."""
+    """Join browser marks (by artifactId) with server attempt rows; compute the G03/G04/G05/G17/G18 verdicts.
+
+    G03 counts the plan's fixed corpus only (D-A53), and only each case's FIRST attempt: a case id outside the plan is
+    reported as unplanned and never counted; a planned case without a collection stays missing. A generate case's artifact is
+    the earliest one of its own (an artifact first seen under an earlier case, e.g. re-rendered after a reload, belongs to that
+    case). A case run more than once under its id (more than one turn, or more than one artifact of its own) is `repeated`:
+    it is neither first-pass valid nor functional, whatever a later attempt did, so a failed case can never be replaced by
+    running it again. Explicit retries are also repeated; only the first attempt's direct repair at the same target revision
+    may count. Functional requires the matching accepted revision to render. Server artifacts no case counts are listed as
+    `uncountedArtifacts` for review (fault cases make some).
+    Cases are listed in run order, so the cold case is the first case run."""
     by_artifact: dict = {}
     for row in rows:
         by_artifact.setdefault(str(row.get("artifact_id")), []).append(row)
-    marks = browser.get("marks") or []
-    resources = browser.get("resources") or []
+    marks = sorted((m for m in browser.get("marks") or [] if isinstance(m, dict)), key=lambda m: _when(m, "at"))
+    resources = sorted((r for r in browser.get("resources") or [] if isinstance(r, dict)), key=lambda r: _when(r, "start"))
     cases = []
     plan_cases = {c["caseId"]: c for c in plan["normal"] + plan["edits"]}
-    for case_id, meta in sorted((browser.get("cases") or {}).items()):
-        mine = [m for m in marks if m.get("caseId") == case_id]
-        first = next((m for m in mine if m["name"] == "rafii-genui:first-component"), None)
-        ready = next((m for m in mine if m["name"] == "rafii-genui:ready"), None)
-        artifact = (ready or first or {}).get("artifactId")
-        res = [r for r in resources if r.get("caseId") == case_id]
-        turn = next((r for r in res if r["route"].endswith("/agent/turns")), None)
-        present = next((r for r in res if re.search(r"/agent/ui/presentations(/:id/edits)?$", r["route"])), None)
-        attempts = sorted(by_artifact.get(str(artifact), []), key=lambda r: str(r.get("admitted_at")))
+
+    def kind_of(case_id):
+        return (plan_cases.get(case_id) or {}).get("kind") or ("edit" if case_id.endswith("-edit") else "generate")
+
+    owner: dict = {}                          # artifactId -> the generate case it was first seen under (marks are in time order)
+    for m in marks:
+        if m.get("artifactId") and m.get("caseId") and kind_of(str(m["caseId"])) == "generate":
+            owner.setdefault(m["artifactId"], m["caseId"])
+    order = {case_id: index for index, case_id in enumerate(run_sequence(plan))}
+    for case_id, meta in sorted((browser.get("cases") or {}).items(), key=lambda item: (order.get(item[0], len(order)), item[0])):
         planned = plan_cases.get(case_id, {})
-        kind = planned.get("kind") or ("edit" if case_id.endswith("-edit") else "generate")
-        relevant = [a for a in attempts if (a.get("kind") in ("edit",) if kind == "edit" else a.get("kind") in ("generate", "repair"))]
-        initial = next((a for a in relevant if a.get("kind") in ("generate", "edit")), None)
-        repair = next((a for a in relevant if a.get("kind") == "repair"), None)
+        kind = kind_of(case_id)
+        mine = [m for m in marks if m.get("caseId") == case_id]
+        seen = list(dict.fromkeys(m["artifactId"] for m in mine if m.get("artifactId")))
+        own = [a for a in seen if owner.get(a) == case_id] if kind == "generate" else seen
+        artifact = own[0] if own else None
+        res = [r for r in resources if r.get("caseId") == case_id]
+        turns = [r for r in res if str(r.get("route") or "").endswith("/agent/turns")]
+        turn = turns[0] if turns else None
+        present = next((r for r in res if re.search(r"/agent/ui/presentations(/:id/edits)?$", str(r.get("route") or ""))), None)
+        attempts = sorted(by_artifact.get(str(artifact), []), key=lambda r: str(r.get("admitted_at")))
+        roots = [a for a in attempts if a.get("kind") == kind]
+        initial = roots[0] if roots else None
+        initial_id = (initial or {}).get("attempt_id")
+        target = (initial or {}).get("target_revision")
+        chain_known = bool(initial_id) and isinstance(target, int) and not isinstance(target, bool) and target > 0
+        # A repair belongs to one failed attempt and its target revision, not to every case sharing the artifact.
+        # In particular, a later edit's repair and a repair of an explicit retry cannot rescue the original generation.
+        repairs = [a for a in attempts if chain_known and a.get("kind") == "repair"
+                   and a.get("retry_of") == initial_id and a.get("target_revision") == target]
+        retries = [a for a in attempts if chain_known and a.get("kind") == "retry" and a.get("target_revision") == target]
+        repeated = (len(own) > 1 or len(roots) > 1 or len(repairs) > 1 or bool(retries)
+                    or (kind == "generate" and len(turns) > 1))
+        repair = repairs[0] if repairs else None
+        relevant = ([initial] if initial else []) + repairs
         final = repair or initial or {}
+        first = next((m for m in mine if m.get("name") == FIRST_MARK and m.get("artifactId") == artifact
+                      and m.get("revision") == target), None)
+        ready = next((m for m in mine if m.get("name") == READY_MARK and m.get("artifactId") == artifact
+                      and m.get("revision") == target), None)
+        functional = bool(chain_known and not repeated and ready and final.get("state") == "ready" and final.get("accepted") is True)
         cost = sum(int(a["cost_usd_micro"]) for a in relevant if a.get("cost_usd_micro") is not None)
         cases.append({
-            "caseId": case_id, "journey": planned.get("journey"), "kind": kind, "artifactId": artifact, "revision": (ready or {}).get("revision"),
-            "firstPassValid": bool(initial and initial.get("state") == "ready" and initial.get("accepted") is not False),
-            "repaired": bool(repair), "functional": final.get("state") == "ready", "reason": final.get("reason"),
+            "caseId": case_id, "journey": planned.get("journey"), "kind": kind, "planned": bool(planned), "repeated": repeated,
+            "turns": len(turns), "artifactId": artifact, "revision": (ready or {}).get("revision"),
+            "firstPassValid": bool(chain_known and not repeated and initial.get("state") == "ready" and initial.get("accepted") is True),
+            "repaired": bool(repair), "functional": functional, "reason": final.get("reason"),
             "providerAttempts": sum(int(a.get("provider_attempts") or 0) for a in relevant), "sourceHash": final.get("source_hash"),
             "statementCount": final.get("statement_count"), "componentNames": final.get("component_names"), "queryNames": final.get("query_names"),
             "actionIds": final.get("action_ids"), "costUsdMicro": cost if relevant else None,
@@ -371,19 +514,31 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
                        "presentationStartToReadyMs": round(ready["at"] - present["start"], 1) if ready and present else None,
                        "turnStartToReadyMs": round(ready["at"] - turn["start"], 1) if ready and turn else None,
                        "rendered": bool(ready)},
-            "usable": bool(ready) and final.get("state") == "ready",
+            "usable": functional,
         })
-    normal = [c for c in cases if c["kind"] == "generate"]
-    edits = [c for c in cases if c["kind"] == "edit"]
+    normal = [c for c in cases if c["kind"] == "generate" and c["planned"]]
+    edits = [c for c in cases if c["kind"] == "edit" and c["planned"]]
+    unplanned = [c["caseId"] for c in cases if not c["planned"]]
+    counted = {c["artifactId"] for c in cases if c["planned"] and c["artifactId"]}
+    uncounted = sorted({str(r.get("artifact_id")) for r in rows if r.get("artifact_id") and r.get("kind") in ("generate", "repair")} - counted)
     missing_normal = sorted(set(c["caseId"] for c in plan["normal"]) - {c["caseId"] for c in normal})
     missing_edits = sorted(set(c["caseId"] for c in plan["edits"]) - {c["caseId"] for c in edits})
     first_pass = sum(1 for c in normal if c["firstPassValid"])
     functional = sum(1 for c in normal if c["functional"])
     warm = normal[1:] if len(normal) > 1 else []
-    g03 = ("unverified" if missing_normal else "pass" if first_pass >= 29 and functional == len(plan["normal"]) else "fail")
+    need = plan["denominators"]["G03"]
+    misses = len(normal) - first_pass
+    # The denominator is fixed: known misses beyond the allowance or a non-functional case fail the gate even while other
+    # cases are missing; otherwise a short sample stays unverified.
+    g03 = ("fail" if misses > need["of"] - need["firstPassValidAtLeast"] or functional < len(normal) else
+           "unverified" if missing_normal else
+           "pass" if first_pass >= need["firstPassValidAtLeast"] and functional == need["functionalAfterOneRepair"] == len(plan["normal"]) else "fail")
     fc = p95([c["client"]["presentationStartToFirstComponentMs"] for c in warm])
     full = p95([c["client"]["presentationStartToReadyMs"] for c in warm])
-    g17 = "unverified" if missing_normal or fc is None or full is None else ("pass" if fc <= FIRST_COMPONENT_P95_MS and full <= FULL_UI_P95_MS else "fail")
+    timings_complete = all(c["client"]["presentationStartToFirstComponentMs"] is not None
+                           and c["client"]["presentationStartToReadyMs"] is not None for c in warm)
+    g17 = "unverified" if missing_normal or not timings_complete or fc is None or full is None else (
+        "pass" if fc <= FIRST_COMPONENT_P95_MS and full <= FULL_UI_P95_MS else "fail")
     probe = browser.get("probe") or {}
     frames = [f for f in probe.get("frames") or [] if f.get("event") != "ui.heartbeat"]
     g04 = "unverified"
@@ -395,8 +550,10 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
     return {
         "cases": cases,
         "verdicts": {
-            "G03": {"status": g03, "firstPassValid": first_pass, "functional": functional, "normalCases": len(normal), "required": len(plan["normal"]),
-                    "missingCases": missing_normal},
+            "G03": {"status": g03, "firstPassValid": first_pass, "firstPassValidAtLeast": need["firstPassValidAtLeast"], "functional": functional,
+                    "normalCases": len(normal), "required": len(plan["normal"]), "missingCases": missing_normal,
+                    "repeatedCases": [c["caseId"] for c in normal if c["repeated"]], "unplannedCases": unplanned, "uncountedArtifacts": uncounted,
+                    "corpus": {"id": plan["corpus"]["id"], "sha256": plan["corpus"]["sha256"]}},
             "G10-live": {"status": "unverified" if missing_edits else ("pass" if all(c["functional"] for c in edits) else "fail"), "edits": len(edits),
                          "missingCases": missing_edits},
             "G17": {"status": g17, "firstUsefulComponentP95Ms": fc, "fullUiP95Ms": full, "coldCase": normal[0]["caseId"] if normal else None,
@@ -415,27 +572,30 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
 
 
 # --- API mode ------------------------------------------------------------------------------------------------------------------
-def api_case(api: Api, token: str, workspace: str, case: dict, budget: Budget) -> dict:
+def api_case(api: Api, token: str, workspace: str, case: dict, budget: Budget, conversation_id: str | None = None) -> dict:
+    """One normal case as one turn (+ its presentation). `conversation_id` continues the case's conversation; the returned
+    `_conversationId` is for the caller only and is removed before anything is written."""
     from agent_ui_acceptance.client import new_key
     if not budget.admit():
-        return {"caseId": case["caseId"], "status": "unverified", "reason": "budget cap reached before this case"}
+        return {"caseId": case["caseId"], "status": "unverified", "reason": "budget cap reached before this case", "_conversationId": conversation_id}
     t0 = time.monotonic()
-    turn = api.request("POST", f"/api/workspaces/{workspace}/agent/turns", token, {"message": case["prompt"], "idempotencyKey": new_key("live"),
-                                                                                    "modality": "text"}, timeout=180)
+    body = {"message": case["prompt"], "idempotencyKey": new_key("live"), "modality": "text", **({"conversationId": conversation_id} if conversation_id else {})}
+    turn = api.request("POST", f"/api/workspaces/{workspace}/agent/turns", token, body, timeout=180)
     t_turn = time.monotonic()
     raw = turn.json() or {}
     result = {**(raw.get("result") if isinstance(raw.get("result"), dict) else {}), **{k: raw[k] for k in ("runId", "conversationId", "messageId") if raw.get(k)}}
+    conversation = result.get("conversationId") or conversation_id
     turn_cost = ((result.get("usage") or {}).get("costUsdMicro"))
     if turn.status not in (200, 201) or not (result.get("ui") or {}).get("eligible"):
         budget.charge(turn_cost)
         return {"caseId": case["caseId"], "status": "fail" if turn.status not in (200, 201) else "not_eligible", "turnStatus": turn.status,
-                "ui": {k: (result.get("ui") or {}).get(k) for k in ("eligible", "reason", "journeyIds")}}
+                "ui": {k: (result.get("ui") or {}).get(k) for k in ("eligible", "reason", "journeyIds")}, "_conversationId": conversation}
     t_admit = time.monotonic()
     stream = api.stream("POST", f"/api/workspaces/{workspace}/agent/ui/presentations", token,
                         {"parentRunId": result["runId"], "slot": "main", "surface": "chat", "idempotencyKey": new_key("livep")}, timeout=60)
     if stream.body_if_json is not None:
         budget.charge(turn_cost)
-        return {"caseId": case["caseId"], "status": "fail", "presentationStatus": stream.status}
+        return {"caseId": case["caseId"], "status": "fail", "presentationStatus": stream.status, "_conversationId": conversation}
     first_delta = ready = None
     events = []
     for event in stream.iter_events(max_seconds=90):
@@ -456,7 +616,31 @@ def api_case(api: Api, token: str, workspace: str, case: dict, budget: Budget) -
             "admissionToFirstDeltaMs": round((first_delta - t_admit) * 1000, 1) if first_delta else None,
             "admissionToReadyMs": round((ready["at"] - t_admit) * 1000, 1) if ready else None,
             "timeOrigin": "client monotonic clock; t0 = POST …/presentations sent (API mode, no browser render)",
-            "costUsdMicro": ui_cost, "costKnown": ui_cost is not None}
+            "costUsdMicro": ui_cost, "costKnown": ui_cost is not None, "_conversationId": conversation}
+
+
+def run_conversations(api, token: str, workspace: str, plan: dict, selected, budget: Budget, case_fn=None):
+    """API mode: the plan's normal cases in run order, one conversation per "new" runOrder entry (each later turn passes the
+    conversation id its first turn returned; edit entries run in browser mode only). Founder cases are only listed: they
+    need the founder surface (browser mode).
+    `selected` (a set of case ids, or None for all) keeps run order; a follow-up run without its earlier turns starts a new
+    conversation, so such a result is not corpus evidence."""
+    case_fn = case_fn or api_case
+    by_id = {c["caseId"]: c for c in plan["normal"]}
+    results, founder = [], []
+    for group in plan["runOrder"]:
+        conversation = None
+        for case_id in group["cases"]:
+            case = by_id.get(case_id)
+            if case is None or (selected is not None and case_id not in selected):
+                continue                                   # edits run in browser mode only
+            if group["surface"] == "founder":
+                founder.append(case_id)
+                continue
+            result = case_fn(api, token, workspace, case, budget, conversation_id=conversation)
+            conversation = result.pop("_conversationId", None) or conversation
+            results.append(result)
+    return results, founder
 
 
 def stream_check(api: Api, token: str, workspace: str) -> dict:
@@ -538,7 +722,7 @@ def main(argv=None) -> int:
                            help="JSON from window.__rafiiLive.collect() (+ probe/filterCheck/hiddenCheck); one file per page (consumer, founder)")
             p.add_argument("--server-rows", type=Path, required=True, help="JSON array from server-sql")
         if name == "run":
-            p.add_argument("--cases", default="normal", help="normal | all | comma list of case ids")
+            p.add_argument("--cases", default="normal", help="normal | all | comma list of case ids (always run in plan run order, one conversation per runOrder entry)")
         if name == "concurrency":
             p.add_argument("--levels", default="1,5,20")
     args = parser.parse_args(argv)
@@ -610,9 +794,8 @@ def main(argv=None) -> int:
         print(json.dumps({"written": str(path), "G04-probe": result["status"]}))
         return 0 if result["status"] == "pass" else 1
     budget = Budget(args.budget_usd, args.case_estimate_usd)
-    chosen = plan["normal"] if args.cases in ("normal", "all") else [c for c in plan["normal"] if c["caseId"] in args.cases.split(",")]
-    cases = [api_case(api, token, args.workspace, case, budget) for case in chosen if case["surface"] != "founder"]
-    founder = [c["caseId"] for c in chosen if c["surface"] == "founder"]
+    selected = None if args.cases in ("normal", "all") else set(args.cases.split(","))
+    cases, founder = run_conversations(api, token, args.workspace, plan, selected, budget)
     ready = [c for c in cases if c.get("status") == "ready"]
     payload = {"kind": "live-provider", "mode": "api", "candidateSha": sha, "origin": args.origin, "dataScope": scope_hash(args.workspace),
                "recordedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"), "budget": budget.report(), "cases": cases,
