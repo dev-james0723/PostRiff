@@ -946,11 +946,34 @@ def _():
         speaker["activeRevision"] = revision
         return s
     command(approved_voice)
-    SCRIPTS.set(rafii_manager=[[function_call("ask_brand_intelligence", {"input": f"Does draft {STATE['draft']} sound like the person? Evidence per finding."}, call_id="m1")],
-                               [reply("Some traits match your profile and some differ; each finding shows what it is based on. This isn't a claim that it is exactly your voice.")]],
-                brand_intelligence=[[function_call("voice_check", {"draftId": STATE["draft"]}, call_id="b1")], [assistant_message("Findings attached.")]])
-    result = turn("Does this draft sound like me?", conversationId=STATE["conversation"])
-    SCRIPTS.complete()
+
+    def ask():
+        SCRIPTS.set(rafii_manager=[[function_call("ask_brand_intelligence", {"input": f"Does draft {STATE['draft']} sound like the person? Evidence per finding."}, call_id="m1")],
+                                   [reply("Some traits match your profile and some differ; each finding shows what it is based on. This isn't a claim that it is exactly your voice.")]],
+                    brand_intelligence=[[function_call("voice_check", {"draftId": STATE["draft"]}, call_id="b1")], [assistant_message("Findings attached.")]])
+        asked = turn("Does this draft sound like me?", conversationId=STATE["conversation"])
+        SCRIPTS.complete()
+        return asked
+
+    # The runtime is a cloud processor: without the owner's cloud memory setting its voice check names no stored trait (HF-1).
+    withheld = ask()
+    shown = json.dumps(message_body(withheld["messageId"]), ensure_ascii=False)
+    assert "Opens with a short question" not in shown and "Keeps paragraphs to two sentences" not in shown, shown[:2000]
+    previous = service.get(wid, OWNER)["state"].get("memoryEgress")
+
+    def egress(value):
+        def apply(s, actor):
+            if value is None:
+                s.pop("memoryEgress", None)
+            else:
+                s["memoryEgress"] = {"decidedBy": actor, **value}
+            return s
+        return apply
+    command(egress({"cloud": True, "decidedAt": clock[0], "shareablePrivacy": ["public", "workspace_only"]}))
+    try:
+        result = ask()
+    finally:
+        command(egress(previous))   # the scenarios after this one (MEM01) read a workspace without cloud memory
     body = result["result"]
     tool = next(a for a in body["toolActivity"] if a["tool"] == "voice_check")
     assert tool["status"] in ("verified", "unverified") and tool["specialist"] == "brand_intelligence", tool

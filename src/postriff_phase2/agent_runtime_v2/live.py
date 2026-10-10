@@ -384,12 +384,14 @@ class VoiceSessions:
 
     def _history(self, cur, workspace_id, conversation_id) -> str:
         """The same conversation, in words, so voice continues what text started (text-only; no ids)."""
+        from ..site_agent.contracts import cloud_withheld
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT 16", (conversation_id, workspace_id))
         lines = []
         for role, body in reversed(cur.fetchall()):
             text = ((body or {}).get("text") or "").strip() if isinstance(body, dict) else ""
-            if text and role in ("user", "assistant") and history_eligible(role, body):
+            # The realtime voice model is a cloud model: a site-agent answer kept from cloud models is not its history.
+            if text and role in ("user", "assistant") and history_eligible(role, body) and not cloud_withheld(body):
                 lines.append(("User: " if role == "user" else "Rafii: ") + contracts.speakable(text, 500))
         if not lines:
             return ""
