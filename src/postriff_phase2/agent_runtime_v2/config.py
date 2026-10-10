@@ -263,7 +263,11 @@ class RuntimeConfig:
 
     def public(self) -> dict:
         """What the browser and traces may see: flags, aliases and availability. Never a credential."""
-        return {"flags": dict(self.flags), "models": dict(self.models), "provider": self.provider,
+        # Permission/task rollout switches have dedicated authenticated endpoints.
+        # Keeping them out preserves the existing off/shadow status contract.
+        public_flags = {key: value for key, value in self.flags.items()
+                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_"))}
+        return {"flags": public_flags, "models": dict(self.models), "provider": self.provider,
                 "voiceAvailable": self.has_openai_key and self.enabled("RAFII_VOICE_ENABLED"),
                 "imageAvailable": self.provider is not None and self.enabled("RAFII_IMAGE_AGENT_ENABLED")}
 

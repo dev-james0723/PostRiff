@@ -130,6 +130,8 @@ class PostgresWorkspaceRepository:
                     raise blocked_error()
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
+                from .agent_runtime_v2 import authz
+                authz.recheck_transaction(cur, workspace_id, principal, row)
                 yield cur, row, principal
 
     def assert_fresh(self, token, principal):

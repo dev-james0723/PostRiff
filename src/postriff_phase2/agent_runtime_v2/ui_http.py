@@ -46,6 +46,8 @@ class UiAuth:
     authz_mode: str = "off"
     authz_state: dict = field(default_factory=dict, repr=False)
     now: float | None = None
+    authz_provider_view: object = None
+    verified_activation: str | None = None
 
     def allows(self, requirement: str) -> bool:
         return bool(self.member.allows(requirement))
@@ -67,15 +69,17 @@ def ui_transaction(runtime, token, workspace_id, need: str = "read"):
         mode = "off" if scope == "founder" else authz.mode_for(runtime.cfg, workspace_id)
         at = runtime.clock() if callable(getattr(runtime, "clock", None)) else __import__("time").time()
         grants = None
+        providers = None
         if mode != "off":
             try:
                 grants = authz.load_grants(cur, workspace_id, str(principal), now=at, mode=mode)
+                providers = authz.load_provider_view(cur, runtime.service.ideas._state(row), workspace_id, at, mode=mode)
             except Exception as error:
                 if mode == "enforce":
                     raise authz.AuthzError("Rafii's permissions could not be checked.", "agent_permission_denied") from error
         yield cur, UiAuth(workspace_id=workspace_id, principal=str(principal), member=member, role=getattr(member, "role", "") or "",
                           scope=scope, scope_key=scope_key, workspace_revision=row[0] if row else None,
-                          grants=grants, config=runtime.cfg, authz_mode=mode, authz_state=runtime.service.ideas._state(row) if mode != "off" else {}, now=at)
+                          grants=grants, config=runtime.cfg, authz_mode=mode, authz_state=runtime.service.ideas._state(row) if mode != "off" else {}, now=at, authz_provider_view=providers)
 
 
 def flags_for(runtime, workspace_id) -> dict:

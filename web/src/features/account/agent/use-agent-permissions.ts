@@ -6,7 +6,7 @@
  * showing an error. A change is never reported as saved until the server returns its receipt.
  */
 import { useMemo } from 'react';
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AgentPermissionsError, createAgentPermissionsApi } from '@/lib/api/agent-permissions';
 import type { AgentPermissionsView, PermissionSource, PresetId, ScopeChanges, SpendConfirmation } from '@/lib/api/agent-permissions-types';
 import { newRequestKey, putBody } from '@/lib/agent-permissions/model';
@@ -27,7 +27,7 @@ export function useAgentPermissionsApi() {
 }
 
 /** True when the query failed only because permissions are not turned on for this workspace. */
-export function permissionsOff(query: Pick<UseQueryResult, 'error'>): boolean {
+export function permissionsOff(query: { error: unknown }): boolean {
   return query.error instanceof AgentPermissionsError && query.error.code === 'agent_permissions_unavailable';
 }
 

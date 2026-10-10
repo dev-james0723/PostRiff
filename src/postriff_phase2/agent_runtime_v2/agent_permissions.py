@@ -257,12 +257,12 @@ def _ui_activations(cur, event: RevocationEvent) -> int:
 
 def _autopilot(cur, event: RevocationEvent) -> int:
     """H5: a bounded autopilot policy that covers a capability denied now stops."""
-    if not event.denied_now:
+    if not event.denied_now and event.reason != "revoked_all":
         return 0
     cur.execute("UPDATE public.pr_agent_autopilot_policies SET revoked_at=now(),revoked_epoch=%s,revoke_reason=%s WHERE workspace_id=%s AND (user_id=%s::uuid OR %s::uuid IS NULL) "
-                "AND revoked_at IS NULL AND capability_ids && %s::text[]",
+                "AND revoked_at IS NULL AND (%s OR capability_ids && %s::text[])",
                 (event.epoch_after, "membership_ended" if event.reason == "membership_ended" else "permission_changed", event.workspace_id, event.user_id, event.user_id,
-                 sorted(event.denied_now)))
+                 event.reason == "revoked_all", sorted(event.denied_now)))
     return cur.rowcount or 0
 
 
@@ -285,6 +285,12 @@ def _proposals(cur, event: RevocationEvent) -> int:
                 changed += 1
                 dirty = True
         if dirty:
+            from ..site_agent import proposals as proposal_rules
+            by_id = {p.get("id"): p for p in body["siteAgent"]["proposals"] if isinstance(p, dict)}
+            body["siteAgent"]["blocks"] = [
+                {**b, "proposal": proposal_rules.view(by_id[b["proposal"]["id"]], time.time())}
+                if b.get("type") == "proposal_diff" and (b.get("proposal") or {}).get("id") in by_id else b
+                for b in body["siteAgent"].get("blocks") or []]
             cur.execute("UPDATE public.pr_messages SET body=%s::jsonb WHERE id=%s AND workspace_id=%s", (json.dumps(body), mid, event.workspace_id))
     return changed
 
@@ -349,10 +355,15 @@ def consent_effect(cur, workspace_id, before, after, principal, *, config=None, 
     keys = set()
     for key, reader in authz.CONSENT_READERS.items():
         try:
-            if reader(before, None) and not reader(after, None):
-                keys.add(key)
+            was_allowed = reader(before, None)
         except Exception:
-            continue
+            was_allowed = False
+        try:
+            is_allowed = reader(after, None)
+        except Exception:
+            is_allowed = False
+        if was_allowed and not is_allowed:
+            keys.add(key)
     for cap in authz.catalogue():
         if keys & set(cap.consents):
             denied.add(cap.capability_id)
@@ -512,7 +523,7 @@ def _write(cur, *, workspace_id, user_id, actor, kind, source, before: Grants, p
     epoch = current + 1
     after_token = replace(before, user_epoch=epoch, source="legacy" if ended else "explicit", preset="legacy" if ended else preset,
                           baseline=None if ended else baseline, ended=ended).token()
-    invalidated = _run_handlers(cur, RevocationEvent(workspace_id, user_id, frozenset(denied), after_token, None, revoke_reason, epoch), mode=mode) if denied else {}
+    invalidated = _run_handlers(cur, RevocationEvent(workspace_id, user_id, frozenset(denied), after_token, None, revoke_reason, epoch), mode=mode) if denied or revoke_reason == "revoked_all" else {}
     step_up_at = step_up.get("at") if step_up else None
     cur.execute("INSERT INTO public.pr_agent_permission_state(workspace_id,user_id,epoch,preset,preset_version,baseline,spend_confirmation,consent_version,"
                 "copy_digest,catalogue_generation,catalogue_digest,decided_by,decided_at,step_up_at,ended_at,updated_at) "
@@ -613,7 +624,10 @@ def revoke(cur, *, workspace_id, principal, member, state, token, payload, now, 
         return replay
     before = load(cur, workspace_id, principal, now=now)
     if all_:
-        preset, scopes, spend, baseline = "none", {}, "all", None
+        # Revoking all cannot resurrect a specifically denied public/help capability.
+        # Retain negative scopes only; they grant no access, and preserve a legacy cap.
+        scopes = {key: value for key, value in before.scopes().items() if key.startswith("capability:") and value == "off"}
+        preset, spend, baseline = "none", "all", before.baseline or ("legacy_v1" if before.source == "legacy" else None)
     else:
         explicit = before.source == "explicit"
         scopes = before.scopes() if explicit else preset_scopes("legacy_equivalent")
@@ -634,9 +648,6 @@ def revoke(cur, *, workspace_id, principal, member, state, token, payload, now, 
     receipt_id = _write(cur, workspace_id=workspace_id, user_id=principal, actor=principal, kind="revoked_all" if all_ else "revoked", source=source,
                         before=before, preset=preset, scopes=scopes, spend=spend, baseline=baseline, widened=False, step_up=None, key=key, print_=print_,
                         now=now, revoke_reason="revoked_all" if all_ else "revoked", denied=diff.denied_now, mode=mode)
-    if all_:
-        cur.execute("UPDATE public.pr_agent_autopilot_policies SET revoked_at=now(),revoked_epoch=%s,revoke_reason='revoked' WHERE workspace_id=%s AND user_id=%s "
-                    "AND revoked_at IS NULL", (before.user_epoch + 1, workspace_id, principal))
     _audit(cur, workspace_id, principal, "agent.permission.revoked_all" if all_ else "agent.permission.revoked", principal,
            {"receiptId": receipt_id, "scopes": len(scopes_in), "epoch": before.user_epoch + 1})
     return receipt_view(cur, workspace_id, receipt_id)

@@ -489,10 +489,23 @@ def provider_view_current(cur, state, workspace_id, now):
     return provider_view(state, now, {cid: value for (wid, cid), value in status.items() if str(wid) == str(workspace_id)})
 
 
+
+def load_provider_view(cur, state, workspace_id, now, *, mode):
+    """Shadow diagnostics must not leave the caller's PostgreSQL transaction aborted."""
+    if mode != "shadow":
+        return provider_view_current(cur, state, workspace_id, now)
+    cur.execute("SAVEPOINT agent_provider_shadow_read")
+    try:
+        return provider_view_current(cur, state, workspace_id, now)
+    finally:
+        cur.execute("ROLLBACK TO SAVEPOINT agent_provider_shadow_read")
+        cur.execute("RELEASE SAVEPOINT agent_provider_shadow_read")
+
+
 def provider_check(view: ProviderView | None, scope: ProviderScope, target: Mapping | None = None, *, now: float) -> str | None:
     """Why this provider grant is missing (a REASON_CODES value), or None when it is there."""
     channels = [c for c in (view.channels if view else ()) if str(c.get("platform") or "").lower() == scope.provider.lower()]
-    wanted = (target or {}).get("channelId") if isinstance(target, Mapping) else None
+    wanted = ((target or {}).get("channelId") or (target or {}).get("connectionId")) if isinstance(target, Mapping) else None
     if wanted:
         channels = [c for c in channels if c.get("id") == wanted]
     if not channels:
@@ -545,6 +558,7 @@ def catalogue_digest() -> str:
 
 # --- modes and the E1 gate ----------------------------------------------------------------------------------------------
 IN_TOOL: contextvars.ContextVar[bool] = contextvars.ContextVar("rafii_authz_in_tool", default=False)
+ACTIVE_CONTEXT: contextvars.ContextVar = contextvars.ContextVar("rafii_authz_active_context", default=None)
 # Set by the task engine (CF-3 §10.1): fn(ctx, capability, args, decision) -> {approvalId, summary, expiresAt} | None.
 APPROVAL_REQUESTER: list[Callable] = []
 
@@ -556,7 +570,8 @@ def register_approval_requester(fn: Callable) -> None:
 # Startup adapters declare actual installed enforcement points. The partial store/E1/E11
 # recovery must never make enforce selectable while E2–E10 are still unwired.
 REQUIRED_ENFORCEMENT_POINTS = frozenset(f"E{i}" for i in range(1, 13))
-ENFORCEMENT_POINTS: set[str] = {"E1", "E11"}
+# E8 is registered by the integrated task-engine approval adapter only after validation.
+ENFORCEMENT_POINTS: set[str] = {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E9", "E10", "E11", "E12"}
 
 
 def enforcement_ready() -> bool:
@@ -636,7 +651,8 @@ def bind_context(ctx, *, cur=None, state=None, member=None):
     try:
         now = ctx.now() if callable(ctx.now) else ctx.now
         ctx.grants = load_grants(cur, ctx.workspace_id, ctx.principal, now=now, mode=ctx.authz_mode)
-        ctx.authz_provider_view = provider_view_current(cur, state or {}, ctx.workspace_id, now)
+        ctx.authz_provider_view = load_provider_view(cur, state or {}, ctx.workspace_id, now, mode=ctx.authz_mode)
+        filter_context(ctx)
     except Exception as error:
         log.error(json.dumps({"event": "agent.authz.load_error", "mode": ctx.authz_mode, "errorClass": type(error).__name__}))
         ctx.grants = None
@@ -649,11 +665,12 @@ def active_tool(ctx, spec, args, agent=None):
     """Scope E2's capability to this executor only, including nested tool calls."""
     names = ("active_capability", "authz_actor", "authz_args", "authz_surface")
     before = {name: getattr(ctx, name, None) for name in names}
+    marker = ACTIVE_CONTEXT.set(ctx)
     try:
         if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "off" and spec.tenant != "founder":
             try:
                 ctx.active_capability = capability_for(spec)
-                ctx.authz_actor = Actor("agent", ctx.principal, ctx.request_text or "", getattr(ctx, "authz_evidence", None))
+                ctx.authz_actor = getattr(ctx, "authz_actor", None) or Actor("agent", ctx.principal, ctx.request_text or "", getattr(ctx, "authz_evidence", None))
                 ctx.authz_args = args
                 ctx.authz_surface = tool_surface(spec, agent)
             except Exception:
@@ -662,8 +679,21 @@ def active_tool(ctx, spec, args, agent=None):
                     raise AuthzError("Rafii cannot verify this capability.", "agent_permission_denied")
         yield
     finally:
+        ACTIVE_CONTEXT.reset(marker)
         for name, value in before.items():
             setattr(ctx, name, value)
+
+
+def recheck_transaction(cur, workspace_id, principal, row):
+    """Cover repository.command and bound GenUI transactions as well as ctx.workspace."""
+    ctx = ACTIVE_CONTEXT.get()
+    if ctx is None or mode_for(getattr(ctx, "config", None), workspace_id) == "off":
+        return
+    if str(ctx.workspace_id) != str(workspace_id) or str(ctx.principal) != str(principal):
+        raise AuthzError("Workspace unavailable.", "agent_permission_revoked")
+    from ..permissions import Membership
+    state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+    recheck(cur, ctx, state=state, member=Membership.from_row(*row[2:7]))
 
 
 def recheck(cur, ctx, *, state, member):
@@ -774,6 +804,98 @@ def filter_tools(ctx, names, *, agent=None):
     return candidates if mode == "shadow" else kept
 
 
+
+
+def filter_context(ctx):
+    """Keep private context fields out of system instructions and tool fallback context too."""
+    if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "enforce":
+        return
+    from . import capability_registry
+    def allowed(ident):
+        decision = gate(ctx, capability_registry.get(ident), surface=capability_registry.surface("context", ident))
+        return decision.outcome == "allow"
+    if not allowed("context.memory_layers"):
+        if hasattr(ctx, "style"):
+            ctx.style = None
+    elif getattr(ctx, "style", None):
+        ctx.authz_used_capabilities = set(getattr(ctx, "authz_used_capabilities", ())) | {"context.memory_layers"}
+    if not allowed("context.page_summary"):
+        for key, empty in (("page", {}), ("page_raw", None), ("focus", None), ("ui_selection", None), ("chip_refs", [])):
+            if hasattr(ctx, key):
+                setattr(ctx, key, empty)
+    elif not allowed("context.screen_outline"):
+        for key in ("page", "page_raw"):
+            value = getattr(ctx, key, None)
+            if isinstance(value, dict):
+                setattr(ctx, key, {k: v for k, v in value.items() if k not in ("outline", "screen", "screenOutline", "visibleState")})
+    if not allowed("context.attention"):
+        for key, empty in (("focus", None), ("ui_selection", None), ("chip_refs", []), ("conversation_assets", []), ("attachments", [])):
+            if hasattr(ctx, key):
+                setattr(ctx, key, empty)
+
+
+def filter_app_state(ctx, app_state):
+    """E11 applies even when Context Lens UI is disabled; shadow remains byte-identical."""
+    mode = mode_for(getattr(ctx, "config", None), ctx.workspace_id)
+    if mode == "off":
+        return app_state
+    from . import capability_registry
+    fields = {
+        "context.page_summary": ("page", "resolvedReferences", "chips", "selectedEntity"),
+        "context.screen_outline": ("screen", "screenOutline", "visibleState"),
+        "context.memory_layers": ("memory", "memoryLayers", "style", "brand"),
+        "context.attention": ("activeTask", "lastTask", "pendingApprovals", "attention", "conversationImages", "attachedThisTurn", "viewSelection"),
+        "context.connections": ("connections", "connectionHealth"),
+    }
+    out = dict(app_state)
+    used = set(getattr(ctx, "authz_used_capabilities", set()))
+    for ident, keys in fields.items():
+        decision = gate(ctx, capability_registry.get(ident), surface=capability_registry.surface("context", ident))
+        if mode == "enforce" and decision.outcome != "allow":
+            for key in keys:
+                if key in out:
+                    out[key] = [] if isinstance(out[key], list) else None
+        elif mode == "enforce" and any(out.get(key) for key in keys):
+            used.add(ident)
+    if mode == "enforce":
+        ctx.authz_used_capabilities = used
+    return out if mode == "enforce" else app_state
+
+
+def history_eligible(cur, ctx, role, body):
+    """Exclude earlier derived prose after current consent narrows; never rewrite history."""
+    if role != "assistant" or mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "enforce":
+        return True
+    run_id = body.get("runId") or (body.get("siteAgent") or {}).get("runId")
+    if not run_id:
+        return getattr(getattr(ctx, "grants", None), "source", None) == "legacy"
+    cur.execute("SELECT artifact->'trace'->'authz' FROM public.pr_agent_runs WHERE workspace_id=%s AND id::text=%s", (ctx.workspace_id, run_id))
+    row = cur.fetchone()
+    provenance = row[0] if row else None
+    if not isinstance(provenance, dict):
+        return getattr(getattr(ctx, "grants", None), "source", None) == "legacy"
+    from . import capability_registry
+    for ident in provenance.get("capabilities") or []:
+        cap = capability_registry.get(ident)
+        surfaces = capability_registry.bindings(ident) if cap else ()
+        if not cap or not surfaces or gate(ctx, cap, surface=surfaces[0]).outcome != "allow":
+            return False
+    return True
+
+
+def trace_for(ctx):
+    """Server-only provenance for the next request's revocation filter."""
+    if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "enforce":
+        return None
+    from . import capability_registry
+    used = set(getattr(ctx, "authz_used_capabilities", set()))
+    for item in getattr(getattr(ctx, "ledger", None), "tool_activity", []):
+        if item.get("status") == "verified" and capability_registry.get("tool." + str(item.get("tool", ""))):
+            used.add("tool." + item["tool"])
+    grants = getattr(ctx, "grants", None)
+    return {"capabilities": sorted(used), "token": grants.token() if grants else "unavailable"}
+
+
 def context_gate(capability_id: str, *, cur, state: dict, workspace_id: str,
                  principal: str, member, config, now: float) -> str:
     """CF-2 E11. Existing transaction only; diagnostics cannot change shadow output."""
@@ -836,7 +958,7 @@ def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = No
             return _d(cap, "deny", "membership_missing")
         member = service.ideas._member(row)
         state = service.ideas._state(row)
-        grants = agent_permissions.load(cur, ctx.workspace_id, principal, now=now)
+        grants = load_grants(cur, ctx.workspace_id, principal, now=now, mode=mode_for(ctx.config, ctx.workspace_id))
         view = provider_view_current(cur, state, ctx.workspace_id, now) if cap.provider_scopes else None
         return decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor, provider_view=view, target=args, now=now)
 

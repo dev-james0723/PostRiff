@@ -10,12 +10,14 @@ Remote run: PYTHONPATH=src:tests python scripts/postriff_pg_suite.py postgres_ag
 from __future__ import annotations
 
 import os
+import json
 import sys
 import time
 import unittest
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -236,6 +238,8 @@ class AgentPermissionsPostgres(unittest.TestCase):
         self.assertEqual(revoked["receipt"]["invalidated"], {})
         self.assertEqual(self.activation_state(activation), activation_before)
         self.assertIsNone(self.one("SELECT revoked_at FROM public.pr_agent_autopilot_policies WHERE id=%s", (policy,))[0])
+        self.revoke(mode="shadow")
+        self.assertIsNone(self.one("SELECT revoked_at FROM public.pr_agent_autopilot_policies WHERE id=%s", (policy,))[0])
 
     def test_enforce_revokes_only_this_person_live_unused_activations(self):
         owner = self.choose()
@@ -274,7 +278,7 @@ class AgentPermissionsPostgres(unittest.TestCase):
         event = store.RevocationEvent(self.wid, None, frozenset({"context.page_summary"}), "d" * 64, None, "workspace_consent_narrowed", 2)
         with self.service.repository.transaction(self.owner_token, self.wid) as (cur, _row, _principal):
             result = store._run_handlers(cur, event, mode="enforce")
-        self.assertEqual(result, {"ui_activations": 2, "autopilot": 2})
+        self.assertEqual(result, {"proposals": 0, "ui_activations": 2, "autopilot": 2})
         for activation in (mine, theirs):
             self.assertIsNotNone(self.activation_state(activation)[0])
         for activation in (foreign, expired):
@@ -283,6 +287,53 @@ class AgentPermissionsPostgres(unittest.TestCase):
             self.assertEqual(self.one("SELECT revoked_epoch FROM public.pr_agent_autopilot_policies WHERE id=%s", (pid,))[0], 2)
         for pid in (unrelated, foreign_policy):
             self.assertIsNone(self.one("SELECT revoked_at FROM public.pr_agent_autopilot_policies WHERE id=%s", (pid,))[0])
+
+    def test_shadow_provider_query_error_does_not_poison_outer_transaction(self):
+        ctx = SimpleNamespace(workspace_id=self.wid,principal=self.owner,config=SimpleNamespace(permissions_for=lambda w:'shadow'),now=lambda:self.now)
+        def broken(cur,*_):
+            cur.execute('SELECT missing_column FROM public.pr_workspaces LIMIT 1')
+        with self.service.repository.transaction(self.owner_token,self.wid) as (cur,row,_principal):
+            with mock.patch.object(authz,'provider_view_current',side_effect=broken):
+                authz.bind_context(ctx,cur=cur,state=self.service.ideas._state(row),member=self.service.ideas._member(row))
+            cur.execute('SELECT 1')
+            self.assertEqual(cur.fetchone(),(1,))
+        self.assertEqual(ctx.authz_mode,'shadow')
+
+    def test_executor_repository_command_cannot_bypass_current_grants(self):
+        from postriff_phase2.agent_runtime_v2 import domain_tools, tool_adapter
+        from postriff_phase2.permissions import Membership
+        domain_tools.ensure_registered()
+        self.choose('none')
+        revision = self.service.repository.get(self.wid,self.owner_token)['revision']
+        ctx = SimpleNamespace(workspace_id=self.wid,principal=self.owner,request_text='Edit this draft',
+                              config=SimpleNamespace(permissions_for=lambda w:'enforce'),now=lambda:self.now,
+                              service=self.service,token=self.owner_token,membership=Membership.from_row('owner'))
+        called = []
+        with authz.active_tool(ctx,tool_adapter.REGISTRY['draft_edit'].spec,{},'rafii_manager'):
+            with self.assertRaises(AlphaError) as caught:
+                self.service.repository.command(self.wid,self.owner_token,revision,
+                                                lambda state,actor: called.append(True) or state,requirement='edit')
+        self.assertEqual(caught.exception.code,'agent_permission_revoked')
+        self.assertEqual(called,[])
+        self.assertEqual(self.service.repository.get(self.wid,self.owner_token)['revision'],revision)
+        self.assertIsNone(authz.ACTIVE_CONTEXT.get())
+
+    def test_proposal_invalidation_keeps_other_people_and_updates_native_diff(self):
+        self.choose()
+        own = {"id": "own-proposal", "type": "schedule_draft", "status": "proposed", "createdBy": self.owner,
+               "createdAt": self.now, "expiresAt": self.now+3600, "summary": "Owner proposal"}
+        other = {**own, "id": "other-proposal", "createdBy": self.editor}
+        body = {"siteAgent": {"proposals": [own, other], "blocks": [{"type":"proposal_diff", "proposal":own}]}}
+        with connection() as db:
+            conversation = db.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,'Proposal test') RETURNING id", (self.wid,self.owner)).fetchone()[0]
+            mid = db.execute("INSERT INTO public.pr_messages(workspace_id,conversation_id,seq,role,body) VALUES(%s,%s,1,'assistant',%s::jsonb) RETURNING id", (self.wid,conversation,json.dumps(body))).fetchone()[0]
+        event = store.RevocationEvent(self.wid,self.owner,frozenset({'tool.schedule_propose'}),'e'*64,None,'permission_changed',2)
+        with self.service.repository.transaction(self.owner_token,self.wid) as (cur,_row,_principal):
+            self.assertEqual(store._proposals(cur,event),1)
+        after = self.one("SELECT body FROM public.pr_messages WHERE id=%s",(mid,))[0]['siteAgent']
+        self.assertEqual(after['proposals'][0]['closedReason'],'permission_revoked')
+        self.assertEqual(after['proposals'][1]['status'],'proposed')
+        self.assertEqual(after['blocks'][0]['proposal']['status'],'dismissed')
 
     def test_handler_failure_rolls_back_activation_policy_receipt_grants_and_audit(self):
         saved = self.choose()
@@ -327,7 +378,7 @@ class AgentPermissionsPostgres(unittest.TestCase):
                     if cap.capability_id == "context.page_summary":
                         self.assertEqual(new.outcome, "deny")
         self.revoke()
-        self.assertEqual(self.one("SELECT count(*),count(*) FILTER (WHERE revoked_at IS NULL) FROM public.pr_agent_grants WHERE workspace_id=%s AND user_id=%s", (self.wid, self.owner)), (len(after.scopes()), 0))
+        self.assertEqual(self.one("SELECT count(*),count(*) FILTER (WHERE revoked_at IS NULL AND mode IS DISTINCT FROM 'off') FROM public.pr_agent_grants WHERE workspace_id=%s AND user_id=%s", (self.wid, self.owner)), (len(after.scopes()), 0))
         self.assertEqual(len(self.route(rest=["history"])["items"]), 2)
         with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
             with connection() as db:

@@ -245,6 +245,9 @@ def execute_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, n
                 (auth.workspace_id, key, auth.principal, artifact["id"], request["artifactRevision"], binding.action_id, digest, request["activationId"]))
     if binding.two_phase:
         return Deferred(binding, key, inputs, reconcile=False)
+    if getattr(auth, "authz_mode", "off") == "enforce":
+        from dataclasses import replace
+        auth = replace(auth, verified_activation=request["activationId"])
     dctx = _context(runtime, cur, auth, artifact, effective, inputs, now)
     cur.execute("SAVEPOINT ui_action_command")
     try:

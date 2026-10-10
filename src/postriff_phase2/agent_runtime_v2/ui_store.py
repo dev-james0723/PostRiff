@@ -720,10 +720,24 @@ def checkpoint(conn_or_cur, attempt_id, source, *, lease_owner):
         commit()
 
 
+
+def permission_revoked(auth, manifest):
+    """One read-time boundary shared by source replay, snapshots and selections."""
+    if getattr(auth, "authz_mode", "off") != "enforce":
+        return False
+    from . import ui_capabilities, ui_domain
+    return any(binding is None or not ui_capabilities.permission_allows(auth, binding, kind=kind)
+               for kind, key, ident, registry in (("query", "queries", "name", ui_domain.QUERIES), ("action", "actions", "actionId", ui_domain.ACTIONS))
+               for entry in manifest.get(key) or []
+               for binding in [registry.get(entry.get(ident)) if isinstance(entry, dict) else None])
+
+
 def events_after(cur, auth, artifact_id, after, limit):
     """Authorized bounded replay: events with seq > after, oldest first (at most BOUNDS.replayPageEvents). Compacted deltas of
     finished attempts leave seq gaps; a client accepts them (the server is authoritative) and reads the snapshot on a terminal."""
     record = _load(cur, auth, artifact_id)
+    if permission_revoked(auth, record["manifest"]):
+        return []
     after = int(after) if type(after) is int and after >= 0 else 0
     limit = max(1, min(int(limit or contracts.BOUNDS["replayPageEvents"]), contracts.BOUNDS["replayPageEvents"]))
     cur.execute("SELECT seq, attempt_id::text, revision, kind, payload, at FROM public.pr_ui_events WHERE artifact_id::text=%s AND workspace_id=%s AND seq > %s "
@@ -1057,6 +1071,8 @@ def persist_ui_state(cur, auth, artifact_id, expected_state_revision, patch):
     if not isinstance(patch, dict):
         raise AlphaError("patch must be an object.", 400, code="ui_state_patch")
     record = _load(cur, auth, artifact_id, lock=True)
+    if permission_revoked(auth, record["manifest"]):
+        raise AlphaError("Rafii's permission for this view changed.", 403, code="agent_permission_revoked")
     if record["revision"] < 1 or record["validationState"] != "accepted":
         raise AlphaError("This view is not ready yet.", 409, code="ui_not_ready")
     if not compatibility(record)["supported"]:
@@ -1119,7 +1135,7 @@ def selection_context(cur, auth, ui_context):
         record = _load(cur, auth, ui_context["artifactId"])
     except AlphaError:
         return None
-    if record["revision"] < 1:
+    if record["revision"] < 1 or permission_revoked(auth, record["manifest"]):
         return None
     wanted = ui_context.get("stateRevision")
     selection = _selection_at(cur, record, wanted if type(wanted) is int and wanted >= 0 else record["stateRevision"])
@@ -1208,16 +1224,9 @@ def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
     revisions = [{"revision": r, "kind": k, "sourceHash": h, "attemptId": a, "libraryVersion": v or "", "createdAt": _iso(c)} for r, k, h, a, v, c in cur.fetchall()]
     artifact = contracts.public_artifact(record)
     display = display_for(record, attempt, compat, revoked)
-    revoked_by_permission = False
-    if getattr(auth, "authz_mode", "off") == "enforce":
-        from . import ui_capabilities
-        # Permission narrowing is independent of an expired view's historical
-        # display contract. current() intentionally rejects expired execution.
-        revoked_by_permission = any(not ui_capabilities.permission_allows(auth, binding, kind)
-                                    for kind, key in (("query", "queries"), ("action", "actions"))
-                                    for binding in record["manifest"].get(key) or [])
-        if revoked_by_permission:
-            display = {"mode": "fallback", "reason": "agent_permission_revoked", "updating": False}
+    revoked_by_permission = permission_revoked(auth, record["manifest"])
+    if revoked_by_permission:
+        display = {"mode": "fallback", "reason": "agent_permission_revoked", "updating": False}
 
     if display["mode"] != "generated":
         artifact["canonicalSource"] = None          # an old library or unfinished source is never rendered: native fallback
@@ -1265,6 +1274,10 @@ def replay_view(cur, auth, artifact_id, after, limit=None) -> dict:
     """ext: events after `after` plus the current attempt and whether anything more can arrive: what a reconnecting client (or the
     founder's polling transport) needs to resume without any provider call."""
     record = _load(cur, auth, artifact_id)
+    if permission_revoked(auth, record["manifest"]):
+        last = max(0, record["nextSeq"] - 1)
+        return {"artifactId": record["artifactId"], "events": [], "cursor": last, "lastSeq": last,
+                "done": True, "attempt": None, "revokedByPermission": True}
     events = events_after(cur, auth, artifact_id, after, limit or contracts.BOUNDS["replayPageEvents"])
     attempt = _attempt(cur, record.get("generationAttemptId"))
     live = attempt is not None and attempt["state"] in LIVE_STATES

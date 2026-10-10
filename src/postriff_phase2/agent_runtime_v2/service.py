@@ -74,6 +74,9 @@ class AgentRuntimeService:
         # makes no provider call unless a test sets one.
         self.followup_transport = None
         self.clock = clock or getattr(service, "clock", None) or time.time
+        if getattr(self.cfg, "permissions_gate_reader", None) is None and model_factory is None and callable(getattr(service, "connection_factory", None)):
+            from . import release_gates
+            self.cfg.permissions_gate_reader = release_gates.reader(service.connection_factory, self.cfg, clock=self.clock)
         domain_tools.ensure_registered()
 
     # --- public status -----------------------------------------------------------------------------------------------
@@ -485,7 +488,7 @@ class AgentRuntimeService:
                 plan = plan if plan.status == "running" else None
             last = task_state.latest(cur, workspace_id, conversation_id) if plan is None else None
             open_items = approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())
-            history = self._history(cur, workspace_id, conversation_id)
+            history = self._history(cur, workspace_id, conversation_id, principal=principal, member=member, state=state)
             from .live import recent_transcript
             spoken = recent_transcript(cur, workspace_id, conversation_id)
             style = agent_style.load(cur, principal)
@@ -627,12 +630,20 @@ class AgentRuntimeService:
                 notes.append({"phrase": match.group(0), "resolvedTo": None, "note": f"this conversation has {len(images)} image(s)"})
         return resolved.get("entity"), notes
 
-    def _history(self, cur, workspace_id, conversation_id) -> list[dict]:
+    def _history(self, cur, workspace_id, conversation_id, *, principal=None, member=None, state=None) -> list[dict]:
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT %s", (conversation_id, workspace_id, HISTORY_MESSAGES))
+        rows = cur.fetchall()
+        from . import authz
+        from types import SimpleNamespace
+        history_ctx = SimpleNamespace(config=self.cfg, workspace_id=workspace_id, principal=principal, membership=member, now=self.clock)
+        if authz.mode_for(self.cfg, workspace_id) != "off":
+            authz.bind_context(history_ctx, cur=cur, state=state, member=member)
         out = []
-        for role, body in reversed(cur.fetchall()):
+        for role, body in reversed(rows):
             if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body):
+                continue
+            if not authz.history_eligible(cur, history_ctx, role, body):
                 continue
             words = (body.get("text") or "").strip()
             if not words:
@@ -645,6 +656,8 @@ class AgentRuntimeService:
         """Bounded, labelled context (spec §15). Exact ids stay in machine context; every block says what kind of data it is.
         `extra_state` holds the Context Lens keys (None when it is off: byte-identical to before, tests/test_context_lens.py)."""
         from ..site_agent import contracts as site_contracts
+        from . import authz
+        authz.filter_context(ctx)
         app_state = {"kind": "APP_STATE", "page": site_contracts.page_summary(ctx.page), "timeZone": ctx.zone, "now": site_contracts.iso(ctx.now()),
                      "modality": ctx.modality, "member": ctx.membership.summary(), "resolvedReferences": refs_note,
                      "activeTask": ctx.task.view() if ctx.task is not None else None,
@@ -665,6 +678,8 @@ class AgentRuntimeService:
             app_state["screen"] = screen
         if extra_state:
             app_state.update(extra_state)
+        from . import authz
+        app_state = authz.filter_app_state(ctx, app_state)
         for asset_id in app_state["attachedThisTurn"]:
             ctx.ledger.known_ids.add(asset_id.lower())
         for item in images:
@@ -926,6 +941,10 @@ class AgentRuntimeService:
                 extra = {"traceHookError": getattr(hook, "__name__", "hook")}
             if isinstance(extra, dict):
                 trace.update({k: v for k, v in extra.items() if k not in trace})
+        from . import authz
+        permission_trace = authz.trace_for(ctx)
+        if permission_trace is not None:
+            trace["authz"] = permission_trace
         if ledger.research:
             # rafii-genui/1 J07: the pages this turn's research returned, for a generated view's research_results binding.
             pages = [page for item in ledger.research for page in item.get("pages") or []][:12]

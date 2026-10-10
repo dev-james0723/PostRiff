@@ -269,6 +269,10 @@ def run_tool(dctx, name: str, args: dict, *, zone: str | None = None):
     ctx = RafiiRunContext(service=dctx.service, workspace_id=dctx.workspace_id, token=None, principal=dctx.principal, membership=dctx.member,
                           conversation_id=dctx.artifact["conversation_id"], trace_id=contracts.new_trace_id(), modality="text", zone=zone or dctx.zone,
                           run_id=dctx.artifact.get("parent_run_id"), now=lambda: dctx.now, config=getattr(dctx.runtime, "cfg", None), request_text="")
+    from .. import authz
+    authz.bind_context(ctx, cur=dctx.cur, state=dctx.state, member=dctx.member)
+    if getattr(dctx.auth, "verified_activation", None) and getattr(dctx.auth, "authz_mode", "off") == "enforce":
+        ctx.authz_actor = authz.Actor("human_ui", ctx.principal, evidence={"activationId": dctx.auth.verified_activation, "capabilityId": "tool." + name})
     return tool_adapter.execute(ctx, tool, args, scope=frozenset({name})), ctx
 
 

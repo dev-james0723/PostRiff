@@ -432,7 +432,7 @@ class Repo:
         if workspace_id != self.workspace:
             raise AlphaError("Workspace unavailable.", 403)
         self.transactions += 1
-        yield None, ("row",), ME
+        yield SimpleNamespace(execute=lambda *a: None, fetchall=lambda: [], fetchone=lambda: None), ("row",), ME
 
     def get(self, workspace_id, token):
         return {"revision": self.revision, "state": copy.deepcopy(self.state), "membership": {"role": self.role}}
@@ -499,7 +499,7 @@ def run(ctx):
 class ToolGateTest(unittest.TestCase):
     def test_off_reads_nothing(self):
         with mock.patch.object(authz, "evaluate_tool", side_effect=AssertionError("evaluated in off mode")), \
-                mock.patch.object(ap, "load", side_effect=AssertionError("grants read in off mode")):
+                mock.patch.object(authz, "load_grants", side_effect=AssertionError("grants read in off mode")):
             outputs, *_ = run(ctx_for("off"))
             # Listed workspace, mode off; and a mode on but this workspace not listed: both are off.
             run(ctx_for("off", listed=WS))
@@ -510,16 +510,16 @@ class ToolGateTest(unittest.TestCase):
         """Shadow mode computes every decision, even would-denies, and the turn is byte-for-byte the off-mode turn."""
         golden = run(ctx_for("off"))
         nothing = ap.from_scopes(WS, ME, {}, preset="none")
-        with mock.patch.object(ap, "load", return_value=nothing), self.assertLogs("postriff.agent_runtime", logging.INFO) as logs:
+        with mock.patch.object(authz, "load_grants", return_value=nothing), self.assertLogs("postriff.agent_runtime", logging.INFO) as logs:
             shadow = run(ctx_for("shadow"))
         self.assertEqual(shadow, golden)
         events = [json.loads(line.split(":", 2)[2]) for line in logs.output if "agent.authz" in line]
         self.assertTrue(any(e["event"] == "agent.authz.shadow" and e["wouldOutcome"] == "deny" and e["capabilityId"] == "tool.campaign_link" for e in events))
         self.assertTrue(all("token" not in e and "t" * 40 not in json.dumps(e) for e in events), "no session token in logs")
-        with mock.patch.object(ap, "load", side_effect=RuntimeError("store down")):
+        with mock.patch.object(authz, "load_grants", side_effect=RuntimeError("store down")):
             self.assertEqual(run(ctx_for("shadow")), golden, "a failing evaluation in shadow mode changes nothing")
         # Legacy people under shadow: zero would-deny lines for today's tools (the canary requirement).
-        with mock.patch.object(ap, "load", return_value=ap.legacy(WS, ME)), self.assertLogs("postriff.agent_runtime", logging.INFO) as logs:
+        with mock.patch.object(authz, "load_grants", return_value=ap.legacy(WS, ME)), self.assertLogs("postriff.agent_runtime", logging.INFO) as logs:
             logging.getLogger("postriff.agent_runtime").info("marker")
             self.assertEqual(run(ctx_for("shadow")), golden)
         self.assertFalse([line for line in logs.output if '"wouldOutcome": "deny"' in line])
@@ -527,25 +527,25 @@ class ToolGateTest(unittest.TestCase):
     def test_enforce_denies_before_the_executor(self):
         nothing = ap.from_scopes(WS, ME, {}, preset="none")
         ctx = ctx_for("enforce")
-        with mock.patch.object(ap, "load", return_value=nothing):
+        with mock.patch.object(authz, "load_grants", return_value=nothing):
             out = tool_adapter.execute(ctx, tool_adapter.REGISTRY["campaign_link"], {"campaignId": "c1", "draftIds": ["d1"]}, agent="campaign")
             helped = tool_adapter.execute(ctx, tool_adapter.REGISTRY["help_search"], {"query": "schedule"})
         self.assertEqual((out["ok"], out["code"], out["reason"], out["settingsHref"]), (False, "agent_permission_denied", "category_off", "/app/account/agent"))
         self.assertEqual(ctx.service.repository.commands, [], "nothing changed")
         self.assertEqual(ctx.ledger.tool_activity[0]["status"], "blocked")
         self.assertNotEqual(helped.get("code"), "agent_permission_denied", "help stays available under Off")
-        with mock.patch.object(ap, "load", return_value=ap.legacy(WS, ME)):
+        with mock.patch.object(authz, "load_grants", return_value=ap.legacy(WS, ME)):
             self.assertEqual(run(ctx_for("enforce")), run(ctx_for("off")), "enforce with no choice on record is today's behaviour")
 
     def test_enforce_asks_for_confirmation_under_ask(self):
         ask = grants("custom", {"category:create_edit": "ask"})
         ctx = ctx_for("enforce")
-        with mock.patch.object(ap, "load", return_value=ask):
+        with mock.patch.object(authz, "load_grants", return_value=ask):
             out = tool_adapter.execute(ctx, tool_adapter.REGISTRY["campaign_link"], {"campaignId": "c1", "draftIds": ["d1"]}, agent="campaign")
         self.assertEqual((out["code"], out["needsUser"], out["approvalId"]), ("needs_confirmation", True, None))
         self.assertEqual(ctx.service.repository.commands, [])
         requested = []
-        with mock.patch.object(ap, "load", return_value=ask), mock.patch.object(authz, "APPROVAL_REQUESTER", [lambda *a: requested.append(a) or {"approvalId": "ap1", "expiresAt": NOW + 60}]):
+        with mock.patch.object(authz, "load_grants", return_value=ask), mock.patch.object(authz, "APPROVAL_REQUESTER", [lambda *a: requested.append(a) or {"approvalId": "ap1", "expiresAt": NOW + 60}]):
             out = tool_adapter.execute(ctx_for("enforce"), tool_adapter.REGISTRY["campaign_link"], {"campaignId": "c1", "draftIds": ["d1"]}, agent="campaign")
         self.assertEqual(out["approvalId"], "ap1")
         self.assertEqual(len(requested), 1)
@@ -553,7 +553,7 @@ class ToolGateTest(unittest.TestCase):
     def test_revocation_applies_to_the_next_tool_call_and_to_resumed_jobs(self):
         state = {"grants": grants("recommended", epoch=1)}
         ctx = ctx_for("enforce")
-        with mock.patch.object(ap, "load", side_effect=lambda *a, **k: state["grants"]):
+        with mock.patch.object(authz, "load_grants", side_effect=lambda *a, **k: state["grants"]):
             first = tool_adapter.execute(ctx, tool_adapter.REGISTRY["campaign_link"], {"campaignId": "c1", "draftIds": ["d1"]}, agent="campaign")
             self.assertTrue(first["ok"], first)
             state["grants"] = grants("custom", {"capability:tool.campaign_unlink": "off"}, epoch=2)
@@ -647,17 +647,17 @@ class TaskStepGateTest(unittest.TestCase):
                                          config=SimpleNamespace(permissions_for=lambda ws: mode))
 
     def test_shadow_equals_off_even_when_grants_deny_or_fail(self):
-        with mock.patch.object(ap, "load", side_effect=AssertionError("off read grants")):
+        with mock.patch.object(authz, "load_grants", side_effect=AssertionError("off read grants")):
             legacy = self.evaluate("off")
         for effect in (None, RuntimeError("unavailable")):
-            with mock.patch.object(ap, "load", return_value=grants("none"), side_effect=effect):
+            with mock.patch.object(authz, "load_grants", return_value=grants("none"), side_effect=effect):
                 self.assertEqual(self.evaluate("shadow"), legacy)
-        with mock.patch.object(ap, "load", return_value=grants("none")):
+        with mock.patch.object(authz, "load_grants", return_value=grants("none")):
             self.assertEqual(self.evaluate("enforce").verdict, "deny")
 
     def test_only_external_cron_observer_survives_inactive_creator(self):
         step = {"observesExternal": True, "delegateType": "publish_job"}
-        with mock.patch.object(ap, "load", side_effect=AssertionError("observer read grants")):
+        with mock.patch.object(authz, "load_grants", side_effect=AssertionError("observer read grants")):
             self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="cron", step_extra=step).verdict, "observe")
             self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="agent", step_extra=step).verdict, "deny")
             self.assertEqual(self.evaluate("enforce", kind="delegate", member=None, actor_kind="cron", step_extra={**step, "observesExternal": False}).verdict, "deny")
@@ -665,11 +665,11 @@ class TaskStepGateTest(unittest.TestCase):
             self.assertEqual(self.evaluate("enforce", kind="delegate", actor_kind="cron", step_extra=step, task_extra={"cancelRequestedAt": NOW}).verdict, "observe")
 
     def test_step_reloads_grants_and_preserves_proposal_floor(self):
-        with mock.patch.object(ap, "load", side_effect=[grants("recommended"), grants("none")]) as reader:
+        with mock.patch.object(authz, "load_grants", side_effect=[grants("recommended"), grants("none")]) as reader:
             self.assertEqual(self.evaluate("enforce").verdict, "allow")
             self.assertEqual(self.evaluate("enforce").verdict, "deny")
             self.assertEqual(reader.call_count, 2)
-        with mock.patch.object(ap, "load", return_value=grants("full")):
+        with mock.patch.object(authz, "load_grants", return_value=grants("full")):
             verdict = self.evaluate("enforce", capability="tool.schedule_propose")
             self.assertEqual(verdict.required_permission, "approve")
             self.assertEqual(verdict.approver_policy, "role_approve")
@@ -680,20 +680,20 @@ class ContextGateTest(unittest.TestCase):
     def test_actual_registry_and_only_allow_reads(self):
         args = dict(cur=object(), state={}, workspace_id=WS, principal=ME, member=OWNER, now=NOW)
         off = SimpleNamespace(permissions_for=lambda w: "off")
-        with mock.patch.object(ap, "load", side_effect=AssertionError("off read grants")):
+        with mock.patch.object(authz, "load_grants", side_effect=AssertionError("off read grants")):
             self.assertEqual(authz.context_gate("context.screen_outline", config=off, **args), "allow")
         for mode in ("shadow", "enforce"):
             cfg = SimpleNamespace(permissions_for=lambda w, mode=mode: mode)
-            with mock.patch.object(ap, "load", return_value=grants("none")):
+            with mock.patch.object(authz, "load_grants", return_value=grants("none")):
                 self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow" if mode == "shadow" else "deny")
-            with mock.patch.object(ap, "load", return_value=grants("legacy")):
+            with mock.patch.object(authz, "load_grants", return_value=grants("legacy")):
                 self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow")
-            with mock.patch.object(ap, "load", side_effect=RuntimeError("store unavailable")):
+            with mock.patch.object(authz, "load_grants", side_effect=RuntimeError("store unavailable")):
                 self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "allow" if mode == "shadow" else "deny")
             self.assertEqual(authz.context_gate("context.unknown", config=cfg, **args), "allow" if mode == "shadow" else "deny")
         cfg = SimpleNamespace(permissions_for=lambda w: "enforce")
         for outcome in ("confirm", "approve", "step_up", "deny"):
-            with mock.patch.object(ap, "load", return_value=grants()), mock.patch.object(authz, "decide", return_value=SimpleNamespace(outcome=outcome, reason="test")):
+            with mock.patch.object(authz, "load_grants", return_value=grants()), mock.patch.object(authz, "decide", return_value=SimpleNamespace(outcome=outcome, reason="test")):
                 self.assertEqual(authz.context_gate("context.screen_outline", config=cfg, **args), "deny", outcome)
 
 
