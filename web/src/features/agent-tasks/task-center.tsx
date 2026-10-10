@@ -11,10 +11,11 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { usePreferences } from '@/lib/preferences';
 import { ApiError } from '@/lib/api/client';
-import { createTaskApi, taskRequestKey, forgetTaskRequest, type TaskActionResult, type TaskDetail, type TaskView, type TaskResponse, type TaskState, type TaskApproval } from '@/lib/agent-runtime/tasks';
+import { createTaskApi, taskRequestKey, forgetTaskRequest, readPendingTask, savePendingTask, clearPendingTask, runTaskRequest, type TaskRequest, type TaskDetail, type TaskView, type TaskResponse, type TaskState, type TaskApproval } from '@/lib/agent-runtime/tasks';
 import { isOpen, language, receiptVerified, safeTaskHref, stateLabel, summaryLines, text, type CopyKey, type Language } from './model';
 
-type Pending = { title: CopyKey; note: CopyKey; key: string; identity: string; taskId: string; version?: number; approval?: TaskApproval; uncertain: boolean; run: (key: string) => Promise<TaskActionResult> };
+type Pending = { title: TaskRequest['kind']; note: CopyKey; key: string; identity: string; taskId: string; version?: number; approval?: TaskApproval; uncertain: boolean; request: TaskRequest };
+function actionNote(kind: TaskRequest['kind']): CopyKey { return kind === 'cancel' ? 'cancelNote' : kind === 'undo' ? 'undoNote' : ['approve', 'reject'].includes(kind) ? 'reviewNote' : 'continueNote'; }
 const panel = 'rounded-xl border border-border bg-card p-4 sm:p-5';
 
 export function TaskCenter() {
@@ -40,8 +41,11 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
   const [scope, setScope] = useState<'mine' | 'workspace'>('mine');
   const owner = checkAccess(access, { permission: 'owner' });
   const effectiveScope = owner ? scope : 'mine';
-  const [selected, setSelected] = useState<string | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
+  const requestScope = `${user?.id}:${workspaceId}`;
+  const [recovered] = useState(() => readPendingTask(requestScope));
+  const [selected, setSelected] = useState<string | null>(recovered?.request.taskId ?? null);
+  const [pending, setPending] = useState<Pending | null>(() => recovered ? { ...recovered, taskId: recovered.request.taskId,
+    title: recovered.request.kind, note: actionNote(recovered.request.kind), version: recovered.request.version, uncertain: true } : null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
@@ -69,23 +73,24 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
   const unavailable = list.error instanceof ApiError && list.error.status === 404 || list.data?.pages[0]?.engine === 'disabled';
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('task');
-    if (id && /^[a-zA-Z0-9-]{1,100}$/.test(id)) setSelected(id);
+    if (!recovered && id && /^[a-zA-Z0-9-]{1,100}$/.test(id)) setSelected(id);
   }, []);
   useEffect(() => { if (selected && task) heading.current?.focus(); }, [selected, Boolean(task)]);
   useEffect(() => { if (pending) confirmation.current?.focus(); }, [pending]);
-  useEffect(() => { setPending(null); setActionError(''); }, [selected]);
+  useEffect(() => { setPending((value) => value?.taskId === selected ? value : null); setActionError(''); }, [selected]);
   const format = (value?: string | null) => {
     if (!value || !Number.isFinite(Date.parse(value))) return '';
     return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(value));
   };
-  function ask(title: CopyKey, note: CopyKey, run: Pending['run'], approval?: TaskApproval, target = '') {
+  function ask(request: TaskRequest, approval?: TaskApproval) {
     if (!task || lock.current || pending?.uncertain) return;
-    const identity = [user?.id, workspaceId, task.taskId, title, task.version, approval?.approvalId, approval?.digest, target].join(':');
-    setActionError(''); setNotice(''); setPending({ title, note, run, key: taskRequestKey(identity), identity, taskId: task.taskId,
+    const identity = [user?.id, workspaceId, task.taskId, request.kind, task.version, approval?.approvalId, approval?.digest, request.step?.stepKey, request.step?.generation, request.step?.undo?.compensationId].join(':');
+    setActionError(''); setNotice(''); setPending({ title: request.kind, note: actionNote(request.kind), request, key: taskRequestKey(identity), identity, taskId: task.taskId,
       version: task.version, approval: approval ? structuredClone(approval) : undefined, uncertain: false });
   }
   const blocked = busy || pending?.uncertain === true;
-  const currentApproval = pending?.approval && task?.approvals?.find((a) => a.approvalId === pending.approval!.approvalId);
+  const currentApproval = pending?.request.approval && task?.approvals?.find((a) => a.approvalId === pending.request.approval!.approvalId);
+  const confirmationApproval = pending?.approval ?? (currentApproval?.digest === pending?.request.approval?.digest ? currentApproval : undefined);
   const pendingCurrent = !pending || pending.uncertain || (task?.version === pending.version && (!pending.approval ||
     Boolean(currentApproval?.can.decide && currentApproval.state === 'pending' && !currentApproval.requiresStepUp &&
       currentApproval.digest === pending.approval.digest && Date.parse(currentApproval.expiresAt) > Date.now())));
@@ -93,14 +98,17 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
     if (!pending || !task || pending.taskId !== task.taskId || lock.current || !pendingCurrent) return;
     lock.current = true; setBusy(true); setActionError('');
     try {
-      await pending.run(pending.key);
+      savePendingTask(requestScope, { request: pending.request, key: pending.key, identity: pending.identity });
+      await runTaskRequest(api, workspaceId, pending.request, pending.key);
       forgetTaskRequest(pending.identity);
+      clearPendingTask(requestScope);
       setPending(null); setNotice(t('submitted'));
       await client.invalidateQueries({ queryKey: queryPrefix });
     } catch (error) {
       // Keep the same request and idempotency key when a response is lost.
       setActionError(error instanceof Error ? error.message : t('unavailable'));
       const uncertain = !(error instanceof ApiError && error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status));
+      if (!uncertain) clearPendingTask(requestScope);
       setPending((value) => value ? { ...value, uncertain } : value);
       await client.invalidateQueries({ queryKey: queryPrefix });
     } finally { lock.current = false; setBusy(false); }
@@ -141,13 +149,13 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
               {task.spend && <p className='mt-2 text-sm text-muted-foreground'>{new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(task.spend.spentUsdMicro / 1000000)}{task.spend.unknown ? ` · ${t('unknownCost')}` : ''}</p>}
               <div className='mt-4 flex flex-wrap items-center gap-2'>
                 {href && <Link className='text-sm underline underline-offset-4' href={href}>{t('conversation')}</Link>}
-                {task.can?.continue && <Button disabled={blocked} variant='quiet' onClick={() => ask('continue', 'continueNote', (key) => api.continue(workspaceId, task.taskId, key))}>{t('continue')}</Button>}
-                {task.can?.cancel && <Button disabled={blocked} variant='quiet' onClick={() => ask('cancel', 'cancelNote', (key) => api.cancel(workspaceId, task.taskId, task.version, key))}>{t('cancel')}</Button>}
+                {task.can?.continue && <Button disabled={blocked} variant='quiet' onClick={() => ask({ kind: 'continue', taskId: task.taskId, version: task.version })}>{t('continue')}</Button>}
+                {task.can?.cancel && <Button disabled={blocked} variant='quiet' onClick={() => ask({ kind: 'cancel', taskId: task.taskId, version: task.version })}>{t('cancel')}</Button>}
               </div>
             </div>
             {pending && <div className={`${panel} border-primary/40`} role='region' aria-label={t(pending.title)}>
               <h3 ref={confirmation} tabIndex={-1} className='font-medium outline-none'>{t(pending.title)}</h3><p className='mt-2 text-sm'>{t(pending.note)}</p>
-              {pending.approval && <dl className='mt-3 space-y-3'>{summaryLines(pending.approval.summary).lines.map((line, i) => <div key={i}><dt className='text-xs text-muted-foreground'>{line.label}</dt><dd className='mt-1 whitespace-pre-wrap break-words text-sm'>{line.value}</dd></div>)}</dl>}
+              {confirmationApproval && <dl className='mt-3 space-y-3'>{summaryLines(confirmationApproval.summary).lines.map((line, i) => <div key={i}><dt className='text-xs text-muted-foreground'>{line.label}</dt><dd className='mt-1 whitespace-pre-wrap break-words text-sm'>{line.value}</dd></div>)}</dl>}
               {!pendingCurrent && <p role='status' className='mt-2 text-sm'>{t('changed')}</p>}
               {pending.uncertain && <p role='status' className='mt-2 text-sm'>{t('uncertain')}</p>}
               {actionError && <p role='alert' className='mt-2 text-sm text-destructive'>{actionError}</p>}
@@ -162,8 +170,8 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
                   {!summary.complete && <p className='mt-3 text-sm'>{t('incomplete')}</p>}
                   <p className='mt-3 text-xs text-muted-foreground'>{expired ? t('expired') : format(approval.expiresAt)}</p>
                   {approval.requiresStepUp && <p className='mt-2 text-sm'>{t('stepUp')}</p>}
-                  {canDecide && <div className='mt-4 flex flex-wrap gap-2'><Button disabled={blocked || !summary.complete} onClick={() => ask('approve', 'reviewNote', (key) => api.decide(workspaceId, approval, 'approve', key, timeZone), approval)}>{t('approve')}</Button>
-                    <Button disabled={blocked} variant='quiet' onClick={() => ask('reject', 'reviewNote', (key) => api.decide(workspaceId, approval, 'reject', key, timeZone), approval)}>{t('reject')}</Button></div>}
+                  {canDecide && <div className='mt-4 flex flex-wrap gap-2'><Button disabled={blocked || !summary.complete} onClick={() => ask({ kind: 'approve', taskId: task.taskId, version: task.version, approval: { approvalId: approval.approvalId, digest: approval.digest }, timeZone }, approval)}>{t('approve')}</Button>
+                    <Button disabled={blocked} variant='quiet' onClick={() => ask({ kind: 'reject', taskId: task.taskId, version: task.version, approval: { approvalId: approval.approvalId, digest: approval.digest }, timeZone }, approval)}>{t('reject')}</Button></div>}
                 </article>;
               })}
             </div></section>}
@@ -175,8 +183,8 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
                 {step.nextAttemptAt && <time className='mt-2 block text-xs text-muted-foreground'>{format(step.nextAttemptAt)}</time>}
                 <div className='mt-3 flex flex-wrap items-center gap-2'>
                   {safeTaskHref(step.delegate?.href) && <Link className='text-sm underline underline-offset-4' href={safeTaskHref(step.delegate?.href)!}>{t('result')}</Link>}
-                  {step.can.retry && <Button variant='quiet' disabled={blocked} onClick={() => ask('retry', 'continueNote', (key) => api.retry(workspaceId, task.taskId, step, key), undefined, `${step.stepKey}:${step.generation}`)}>{t('retry')}</Button>}
-                  {step.can.undo && step.undo && Date.parse(step.undo.undoUntil) > Date.now() && <Button variant='quiet' disabled={blocked} onClick={() => ask('undo', 'undoNote', (key) => api.undo(workspaceId, task.taskId, step, key), undefined, step.undo!.compensationId)}>{t('undo')}</Button>}
+                  {step.can.retry && <Button variant='quiet' disabled={blocked} onClick={() => ask({ kind: 'retry', taskId: task.taskId, version: task.version, step: { stepKey: step.stepKey, generation: step.generation, undo: null } })}>{t('retry')}</Button>}
+                  {step.can.undo && step.undo && Date.parse(step.undo.undoUntil) > Date.now() && <Button variant='quiet' disabled={blocked} onClick={() => ask({ kind: 'undo', taskId: task.taskId, version: task.version, step: { stepKey: step.stepKey, generation: step.generation, undo: step.undo } })}>{t('undo')}</Button>}
                 </div>
               </li>)}
             </ol></section>}

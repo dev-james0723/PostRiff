@@ -57,6 +57,35 @@ function sample() {
       check(`${name} ${width}: selected detail receives keyboard focus`, await heading.evaluate((el) => el === document.activeElement));
       check(`${name} ${width}: review body is complete`, await page.locator('dd').filter({ hasText: longBody }).textContent() === longBody);
       check(`${name} ${width}: queued provider receipt is unverified`, await page.getByText('Not verified · applied', { exact: true }).isVisible());
+      // Review remains bound to the captured action while the live detail changes.
+      const approvalRegion = page.getByRole('region', { name: 'Approve this action', exact: true });
+      await page.getByRole('button', { name: 'Approve this action', exact: true }).click();
+      check(`${name} ${width}: confirmation contains the captured complete preview`, await approvalRegion.locator('dd').filter({ hasText: longBody }).textContent() === longBody);
+      const changedBody = 'A different action arrived while this review was open.';
+      task = { ...task, approvals: [{ ...task.approvals[0], digest: 'new-review-digest', summary: { platform: 'Threads', body: changedBody } }] };
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await page.locator('article dd').filter({ hasText: changedBody }).waitFor();
+      await approvalRegion.locator('button:disabled').filter({ hasText: /^Confirm$/ }).waitFor();
+      check(`${name} ${width}: changed approval cannot replace the captured preview`, await approvalRegion.locator('dd').filter({ hasText: longBody }).textContent() === longBody);
+      check(`${name} ${width}: changed digest disables submission with zero decision requests`, approvals.length === 0);
+      await approvalRegion.getByRole('button', { name: 'Go back', exact: true }).click();
+      // Availability and expiry must invalidate an open review even when digest/version do not move.
+      for (const invalidation of ['withdrawn', 'expired']) {
+        task = sample();
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await page.locator('article dd').filter({ hasText: longBody }).waitFor();
+        await page.getByRole('button', { name: 'Approve this action', exact: true }).click();
+        task = { ...task, approvals: [{ ...task.approvals[0], ...(invalidation === 'withdrawn'
+          ? { can: { decide: false, why: 'permission' } }
+          : { expiresAt: new Date(Date.now() - 1000).toISOString() }) }] };
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await approvalRegion.locator('button:disabled').filter({ hasText: /^Confirm$/ }).waitFor();
+        check(`${name} ${width}: ${invalidation} approval disables an already-open confirmation`, approvals.length === 0);
+        await approvalRegion.getByRole('button', { name: 'Go back', exact: true }).click();
+      }
+      task = sample();
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await page.getByRole('button', { name: 'Approve this action', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Approve this action', exact: true }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await page.getByRole('region', { name: 'Approve this action', exact: true }).waitFor({ state: 'hidden' });
@@ -64,10 +93,31 @@ function sample() {
       check(`${name} ${width}: accepted request does not invent completed task`, (await heading.locator('..').textContent()).includes('Awaiting approval'));
       await page.getByRole('button', { name: 'Cancel task', exact: true }).click();
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
-      await page.getByRole('region', { name: 'Cancel task', exact: true }).getByRole('alert').waitFor();
+      const cancelRegion = page.getByRole('region', { name: 'Cancel task', exact: true });
+      await cancelRegion.getByRole('alert').waitFor();
+      check(`${name} ${width}: uncertain request cannot be dismissed`, await cancelRegion.getByRole('button', { name: 'Go back', exact: true }).isDisabled());
+      check(`${name} ${width}: uncertain request cannot be replaced by another action`, await page.getByRole('button', { name: 'Approve this action', exact: true }).isDisabled()
+        && await page.getByRole('button', { name: 'Cancel task', exact: true }).isDisabled());
+      check(`${name} ${width}: uncertain request locks task selection and owner scope`, await page.getByRole('button', { name: /Prepare autumn campaign/ }).isDisabled()
+        && await page.getByRole('combobox', { name: 'Workspace tasks', exact: true }).isDisabled());
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await page.getByRole('region', { name: 'Cancel task', exact: true }).waitFor({ state: 'hidden' });
       check(`${name} ${width}: uncertain retry retains exact idempotency key`, cancels.length === 2 && cancels[0].idempotencyKey === cancels[1].idempotencyKey && cancels[1].expectedVersion === 8);
+      // A navigation/reload does not turn a lost response into permission for a new key.
+      dropFirst = true;
+      await page.getByRole('button', { name: 'Cancel task', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await cancelRegion.getByRole('alert').waitFor();
+      check(`${name} ${width}: completed reconciliation released the previous request key`, cancels[2].idempotencyKey !== cancels[0].idempotencyKey);
+      task = { ...task, version: 9 };
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await heading.waitFor();
+      await cancelRegion.waitFor();
+      check(`${name} ${width}: remount restores uncertainty without resubmitting automatically`, cancels.length === 3);
+      check(`${name} ${width}: restored uncertainty still cannot be dismissed`, await cancelRegion.getByRole('button', { name: 'Go back', exact: true }).isDisabled());
+      await cancelRegion.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await cancelRegion.waitFor({ state: 'hidden' });
+      check(`${name} ${width}: reload after server version bump reuses the original request body and key`, cancels.length === 4 && JSON.stringify(cancels[2]) === JSON.stringify(cancels[3]) && cancels[3].expectedVersion === 8);
       task = { ...task, can: { cancel: false, retry: false, continue: false }, approvals: [{ ...task.approvals[0], summary: { body: 'x'.repeat(50001) } }] };
       await page.getByRole('button', { name: 'Refresh', exact: true }).click();
       await page.getByText('The complete action cannot be shown here.', { exact: false }).waitFor();
