@@ -2,9 +2,11 @@
 
 Each class pins one fix and, next to it, the golden behaviour of what is allowed today:
 
-- memory egress on agent reads: brand.summary, voice.profile and memory.summary give a cloud reader (the Agent Runtime,
-  or a cloud writer the panel hands its answer to) only what the owner's cloud memory setting allows; content.search
-  leaves out sources whose cloud sharing is off. A member reading their own workspace sees exactly what they saw before.
+- memory egress on agent reads: brand.summary, voice.profile, voice.check and memory.summary give a cloud reader (the
+  Agent Runtime, or a cloud writer the panel hands its answer to) only what the owner's cloud memory setting allows, and
+  never a voice profile built from writing samples; content.search leaves out sources whose cloud sharing is off. A
+  member reading their own workspace (the panel, GenUI binding queries) sees exactly what they saw before.
+- an answer the panel kept from cloud models is marked, and is never a cloud model's conversation history or Live speech.
 - notification_list output is wrapped as untrusted data.
 - ideas.cancel stops an Agent Runtime run (agent:/task:/voice:) only for the member who started it.
 - API tokens never read Agent Runtime or site-agent run events.
@@ -96,13 +98,39 @@ class MemoryEgressReadsTest(unittest.TestCase):
         # memory.projection(state, "cloud"): only public/workspace_only boundaries; private and unlabelled are withheld.
         self.assertEqual(values, {"Topics": "BOUNDARYPUBLICMARK politics", "Family": None, "Health": None})
         self.assertEqual(data["learned"][0]["statement"], "LEARNEDMARK never use emoji")
-        sampled = tools.run("brand.summary", {}, ctx(brand_state(True, evidence=True), "cloud"))[1]["data"]
-        self.assertIsNone(sampled["voice"]["writingExample"], "a sample's raw example never travels through the generic memory channel")
         bodies = tools.run("memory.summary", {}, ctx(brand_state(True), "cloud"))[1]["data"]["bodies"]
         self.assertIn("PURPOSEMARK", bodies["IDENTITY.md"])
         self.assertNotIn("BOUNDARYUNLABELLEDMARK", json.dumps(bodies))
 
+    def test_cloud_reader_gets_no_sample_based_voice_without_a_route_grant(self):
+        """memory.projection(state, "cloud") and memory_layers mark a sample-based profile stale unless an exact voice
+        route grant covers every sample; a site read has no writer route, so a cloud reader gets no part of it."""
+        from postriff_phase2 import memory
+        state = brand_state(True, evidence=True)
+        self.assertNotIn("OBSERVATIONMARK", json.dumps(memory.projection(state, "cloud")["files"]))
+        brand = tools.run("brand.summary", {}, ctx(state, "cloud"))[1]
+        self.assertIsNone(brand["data"]["voice"])
+        self.assertEqual(brand["data"]["withheld"], {"reason": "sample_route_grant_required", "voice": True})
+        self.assertFalse(brand["data"]["empty"], "stored but withheld is not 'nothing stored'")
+        for marker in ("TONEMARK", "OBSERVATIONMARK", "UNKNOWNMARK", "EXAMPLEMARK"):
+            self.assertNotIn(marker, json.dumps(brand))
+        # The rest is what the workspace-wide grant allows (memory.projection keeps identity, public boundaries, learned).
+        self.assertEqual(brand["data"]["identity"]["purpose"], "PURPOSEMARK purpose")
+        self.assertEqual(brand["data"]["learned"][0]["statement"], "LEARNEDMARK never use emoji")
+        voice = tools.run("voice.profile", {"platform": "LinkedIn"}, ctx(state, "cloud"))[1]
+        self.assertIsNone(voice["data"]["voice"])
+        self.assertEqual(voice["data"]["learnedByScope"], {"LinkedIn · all languages": ["LEARNEDMARK never use emoji"]})
+        self.assertEqual(voice["data"]["withheld"]["reason"], "sample_route_grant_required")
+        self.assertEqual(leaked(voice), ["LEARNEDMARK"])
+        # memory.summary (bodies from the projection) and brand.summary now agree: no active voice for a cloud reader.
+        self.assertNotIn("TONEMARK", json.dumps(tools.run("memory.summary", {}, ctx(state, "cloud"))[1]))
+        off = tools.run("brand.summary", {}, ctx(brand_state(False, evidence=True), "cloud"))[1]["data"]["withheld"]
+        self.assertEqual((off["reason"], off["voice"]), ("cloud_memory_off", True))
+
     def test_golden_a_member_reading_their_own_workspace_sees_what_they_saw_before(self):
+        sampled = tools.run("brand.summary", {}, ctx(brand_state(True, evidence=True), "local"))[1]["data"]
+        self.assertEqual((sampled["voice"]["tone"], sampled["voice"]["writingExample"]), ("TONEMARK", "EXAMPLEMARK a sample paragraph"))
+        self.assertNotIn("withheld", sampled)
         for cloud in (None, False, True):
             data = tools.run("brand.summary", {}, ctx(brand_state(cloud), "local"))[1]["data"]
             self.assertNotIn("withheld", data)
@@ -150,6 +178,109 @@ class MemoryEgressReadsTest(unittest.TestCase):
                 self.assertTrue(output["ok"])
                 self.assertEqual(leaked(output), [], tool_id)
                 self.assertEqual(leaked(tool_adapter.model_output(output)), [], tool_id)
+
+
+CHECKED = "Hello there. Try one slow scale today."
+
+
+def voice_check_state(cloud=None, evidence=False):
+    state = brand_state(cloud, evidence)
+    state["variants"] = [{"id": "v-check", "platform": "LinkedIn", "language": "en", "text": CHECKED, "revision": 1}]
+    return state
+
+
+class VoiceCheckEgressTest(unittest.TestCase):
+    """voice.check compares text with the stored voice; its findings name the stored traits, so they are memory text."""
+
+    CASES = ({"text": CHECKED, "platform": "LinkedIn"}, {"text": CHECKED}, {"draftId": "v-check"})
+
+    def test_cloud_reader_gets_no_voice_or_learned_text_while_cloud_memory_is_off(self):
+        for cloud in (None, False):
+            for evidence in (False, True):
+                for args in self.CASES:
+                    with self.subTest(cloud=cloud, evidence=evidence, args=args):
+                        record, result = tools.run("voice.check", args, ctx(voice_check_state(cloud, evidence), "cloud"))
+                        self.assertTrue(result["ok"], result)
+                        self.assertEqual(leaked(result), [])
+                        data = result["data"]
+                        self.assertEqual((data["findings"], data["profile"]["learned"], data["profile"]["tone"]), ([], [], None))
+                        self.assertEqual(data["withheld"], {"reason": "cloud_memory_off", "voice": True, "learned": 1})
+                        self.assertFalse(data["empty"], "stored but withheld is not 'nothing stored'")
+                        self.assertFalse(result["verified"])
+                        self.assertEqual(data["measured"]["sentences"], 2, "the text's own measurements are not memory")
+
+    def test_cloud_reader_gets_no_sample_based_profile_without_a_route_grant(self):
+        result = tools.run("voice.check", {"text": CHECKED, "platform": "LinkedIn"}, ctx(voice_check_state(True, evidence=True), "cloud"))[1]
+        self.assertEqual(leaked(result), ["LEARNEDMARK"], "learned preferences travel with cloud memory on; the sample-based profile does not")
+        self.assertEqual(result["data"]["withheld"], {"reason": "sample_route_grant_required", "voice": True})
+        self.assertEqual([f["source"] for f in result["data"]["findings"]], ["learned preference (LinkedIn · all languages)"])
+
+    def test_golden_a_member_and_a_permitted_cloud_reader_get_the_check_as_before(self):
+        from postriff_phase2.site_agent import contracts as site_contracts, reads, routes, voice_check as checker
+        for cloud, evidence, egress in ((None, False, "local"), (False, True, "local"), (True, True, "local"), (True, False, "local"), (True, False, "cloud")):
+            state = voice_check_state(cloud, evidence)
+            for args in self.CASES:
+                with self.subTest(cloud=cloud, evidence=evidence, egress=egress, args=args):
+                    platform = args.get("platform") or ("LinkedIn" if args.get("draftId") else None)
+                    found = checker.analyze(state, CHECKED, platform)
+                    expected = site_contracts.result({**found, "draftId": args.get("draftId"), "platform": platform,
+                                                      "subject": "LinkedIn draft" if args.get("draftId") else "the quoted text",
+                                                      "href": reads._draft_href("v-check") if args.get("draftId") else None, "profileHref": routes.href("brand")},
+                                                     now=NOW, verified=not found["empty"])
+                    result = tools.run("voice.check", args, ctx(state, egress))[1]
+                    self.assertEqual(result, expected)
+                    self.assertIn("OBSERVATIONMARK", json.dumps(result))
+
+    def test_agent_runtime_voice_check_carries_no_memory_text_while_cloud_memory_is_off(self):
+        from postriff_phase2.agent_runtime_v2 import tool_adapter
+        from postriff_phase2.agent_runtime_v2.context import EffectLedger, RafiiRunContext
+        state = voice_check_state(False)
+        run = SimpleNamespace(principal=OWNER, workspace_id=WS, service=None, now=lambda: NOW, page={}, writer_model=None, zone="UTC",
+                              ledger=EffectLedger(), request_text="Does this sound like me?")
+
+        @contextmanager
+        def workspace():
+            yield None, None, OWNER, Membership.from_row("owner"), copy.deepcopy(state)
+        run.workspace = workspace
+        run.site_context = lambda cur, member, snapshot: RafiiRunContext.site_context(run, cur, member, snapshot)
+        for args in self.CASES:
+            with self.subTest(args=args):
+                output = tool_adapter._site_executor("voice.check")(run, args)
+                self.assertTrue(output["ok"])
+                self.assertEqual(leaked(output), [])
+                self.assertEqual(leaked(tool_adapter.model_output(output)), [])
+
+    def test_withheld_check_composes_as_stored_not_shared(self):
+        """The runtime's evidence view composes a withheld check as 'stored, not shared', never as 'no profile'."""
+        from postriff_phase2.site_agent import compose_reads
+        result = tools.run("voice.check", {"text": CHECKED}, ctx(voice_check_state(False), "cloud"))[1]
+        composed = compose_reads.compose("voice_check", {"intent": "voice_check", "language": "en", "entities": {"platforms": [], "days": []}},
+                                         {"voice.check": result}, "Does this sound like me?")
+        lines = " ".join(composed["lines"])
+        self.assertIn("cloud memory", lines)
+        self.assertNotIn("no approved voice profile", lines.lower())
+        self.assertEqual(leaked(composed), [])
+
+
+class GenUiDraftEvidenceReaderTest(unittest.TestCase):
+    """GenUI binding queries (ui_queries / ui_actions) answer the member's browser and call no model: they read as the member."""
+
+    def dctx(self, state):
+        from postriff_phase2.agent_runtime_v2.ui_domain import common
+        return common.DomainContext(runtime=None, cur=None, auth=None, workspace_id=WS, principal=OWNER, member=Membership.from_row("owner"), state=state,
+                                    revision=1, artifact={}, manifest={}, now=NOW, _bound=object())
+
+    def test_domain_reads_name_the_member_as_their_reader(self):
+        self.assertEqual(self.dctx(voice_check_state(False)).site_context().egress, "local")
+
+    def test_golden_draft_evidence_voice_fit_is_unchanged_while_cloud_memory_is_off(self):
+        from postriff_phase2.agent_runtime_v2.ui_domain import drafts
+        from postriff_phase2.site_agent import reads
+        state = voice_check_state(False)
+        data = drafts.draft_evidence(self.dctx(state), {"draftId": "v-check"}, None)["data"]
+        check = reads.voice_check(ctx(state, "local"), draftId="v-check")["data"]
+        self.assertEqual(data["voiceFit"], {k: check.get(k) for k in ("empty", "findings", "basis", "summary", "platform") if k in check})
+        self.assertIn("OBSERVATIONMARK", json.dumps(data["voiceFit"]))
 
 
 def search_state():
@@ -228,6 +359,227 @@ class PanelCloudWriterTest(unittest.TestCase):
         launch = [("content.search", {"query": "budget"})]   # only the local-only source holds this word
         local = ctx(search_state(), "local")
         self.assertFalse(reads.cloud_may_read(local, launch, {"content.search": tools.run("content.search", launch[0][1], local)[1]}))
+
+    def test_voice_checks_and_sample_based_voices_are_gated_too(self):
+        from postriff_phase2.site_agent import reads
+        shareable = voice_check_state(True)
+        shareable["speaker"]["revisions"][0]["profile"]["fields"] = []
+        sampled = voice_check_state(True, evidence=True)
+        sampled["speaker"]["revisions"][0]["profile"]["fields"] = []
+        check = [("voice.check", {"text": CHECKED})]
+        for state, planned, expected in ((voice_check_state(False), check, False), (sampled, check, False), (shareable, check, True),
+                                         (sampled, [("brand.summary", {})], False), (sampled, [("voice.profile", {})], False), (shareable, [("voice.profile", {})], True)):
+            local = ctx(state, "local")
+            results = {tool_id: tools.run(tool_id, args, local)[1] for tool_id, args in planned}
+            with self.subTest(tools=planned, egress=state.get("memoryEgress"), sampled=state is sampled):
+                self.assertIs(reads.cloud_may_read(local, planned, results), expected)
+
+
+CONVERSATION = "c0000000-0000-0000-0000-0000000000c1"
+
+
+class PanelStore:
+    """One conversation's messages and runs, answering the statements a site-agent turn and compose send."""
+
+    def __init__(self):
+        self.messages, self.runs = [], {}
+
+    def cursor(self):
+        return PanelCursor(self)
+
+
+class PanelCursor:
+    def __init__(self, store):
+        self.store, self._one, self._all = store, None, []
+
+    def execute(self, sql, params=()):
+        store, self._one, self._all = self.store, None, []
+        if sql.startswith("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key"):
+            self._one = next(((rid,) for rid, r in store.runs.items() if r["key"] == params[1]), None)
+        elif sql.startswith("INSERT INTO public.pr_agent_runs"):
+            rid = f"run-{len(store.runs) + 1}"
+            store.runs[rid] = {"key": params[-1], "status": "running", "model": params[3], "artifact": {}, "usage": {}}
+            self._one = (rid,)
+        elif sql.startswith("UPDATE public.pr_agent_runs SET artifact="):
+            store.runs[params[1]]["artifact"] = json.loads(params[0])
+        elif sql.startswith("UPDATE public.pr_agent_runs SET usage="):
+            store.runs[params[1]]["usage"] = json.loads(params[0])
+        elif sql.startswith("UPDATE public.pr_agent_runs SET status='completed'"):
+            store.runs[params[3]].update(status="completed", artifact=json.loads(params[0]), usage=json.loads(params[2]))
+        elif sql.startswith("SELECT status,conversation_id::text,model"):
+            run = store.runs.get(params[0])
+            self._one = (run["status"], CONVERSATION, run["model"], "quick", run["artifact"], run["usage"], OWNER, run["key"], NOW) if run else None
+        elif sql.startswith("SELECT role,body FROM public.pr_messages"):
+            limit = params[2] if len(params) > 2 else (16 if "LIMIT 16" in sql else 6)
+            self._all = [(m["role"], copy.deepcopy(m["body"])) for m in reversed(store.messages)][:limit]
+        elif sql.startswith("SELECT id::text,body FROM public.pr_messages") and "run_id" in sql:
+            found = next((m for m in reversed(store.messages) if m["run"] == params[2] and m["role"] == "assistant"), None)
+            self._one = (found["id"], copy.deepcopy(found["body"])) if found else None
+        elif sql.startswith("SELECT body FROM public.pr_messages") and "role='assistant'" in sql:
+            found = next((m for m in reversed(store.messages) if m["role"] == "assistant"), None)
+            self._one = (copy.deepcopy(found["body"]),) if found else None
+
+    def fetchone(self):
+        return self._one
+
+    def fetchall(self):
+        return self._all
+
+
+class Writer:
+    """A structured writer call that records every prompt it is given."""
+
+    def __init__(self, local, answer="Here it is, more simply."):
+        self.local, self.model, self.prompts, self.answer = local, "writer-under-test", [], answer
+        self.alias = None
+
+    def __call__(self, system, user, schema):
+        self.prompts.append(user)
+        return {"answer": self.answer, "citations": [], "facts": [], "actions": [], "sufficient": False, "followUps": [], "missing": []}
+
+
+def panel(state):
+    from postriff_phase2.site_agent.service import SiteAgentService
+    store = PanelStore()
+    cur = store.cursor()
+
+    def append(_cur, _workspace, _conversation, role, body, run_id=None):
+        store.messages.append({"id": f"message-{len(store.messages) + 1}", "role": role, "body": json.loads(json.dumps(body)), "run": run_id})
+        return {"messageId": store.messages[-1]["id"]}
+
+    def settle(_cur, workspace, conversation, run_id, body):
+        for message in store.messages:
+            if message["run"] == run_id and message["role"] == "assistant":
+                message["body"] = json.loads(json.dumps(body))
+                return
+        append(_cur, workspace, conversation, "assistant", body, run_id)
+
+    ideas = SimpleNamespace(_member=lambda row: Membership.from_row("owner"), _state=lambda row: copy.deepcopy(state), _conversation=lambda *a: None,
+                            _append_message=append, _settle_message=settle, _insert_event=lambda *a: None, _lock_run_events=lambda *a: None,
+                            _events_for=lambda _cur, _workspace, _run, cursor: {"events": [], "cursor": cursor},
+                            _select_runtime=lambda model_id: SimpleNamespace(cost_class="paid"))
+
+    @contextmanager
+    def transaction(_token, _workspace):
+        yield cur, (0, state), OWNER
+    core = SimpleNamespace(ideas=ideas, repository=SimpleNamespace(transaction=transaction), clock=lambda: NOW, commands=None, oauth=None,
+                           ledger=SimpleNamespace(reserve=lambda *a, **k: {"reservationId": "reservation-1"}, settle=lambda *a, **k: None))
+    return SiteAgentService(core), store
+
+
+def ask(agent, text, key, writer=None):
+    agent.model = writer
+    payload = {"message": text, "conversationId": CONVERSATION, "idempotencyKey": key, **({"model": "writer-under-test"} if writer is not None else {})}
+    result = agent.turn(WS, "session", payload)
+    if result.get("needsCompose"):
+        result = agent.compose(WS, "session", result["runId"])
+    return result
+
+
+class PanelHistoryEgressTest(unittest.TestCase):
+    """An answer Rafii built from memory a cloud model may not read is never conversation history for a cloud model."""
+
+    BRAND = "What is our brand voice?"
+    FOLLOW_UP = "Can you say that more simply?"
+
+    def test_a_held_back_answer_never_reaches_a_cloud_writer_on_the_next_turn(self):
+        for first in (None, Writer(local=False)):
+            with self.subTest(first_turn_writer="cloud" if first else "none"):
+                agent, store = panel(brand_state(False))
+                ask(agent, self.BRAND, "turn-1", first)
+                answer = store.messages[1]["body"]
+                self.assertTrue(leaked(answer["text"]), "the member's own answer quotes their Brand Brain, as before")
+                self.assertIs(answer["siteAgent"]["cloudWithheld"], True)
+                if first is not None:
+                    self.assertEqual(first.prompts, [], "the cloud writer never phrased the held-back answer")
+                cloud = Writer(local=False)
+                ask(agent, self.FOLLOW_UP, "turn-2", cloud)
+                self.assertEqual(len(cloud.prompts), 1, "the follow-up is phrased by the cloud writer")
+                self.assertEqual(leaked(cloud.prompts), [], "zero memory text in the cloud writer's prompt")
+                self.assertIn(self.BRAND, cloud.prompts[0], "the member's own words stay in the history")
+
+    def test_the_pending_artifact_for_a_cloud_writer_carries_no_held_back_history(self):
+        agent, store = panel(brand_state(False))
+        ask(agent, self.BRAND, "turn-1")
+        agent.model = Writer(local=False)
+        started = agent.turn(WS, "session", {"message": self.FOLLOW_UP, "conversationId": CONVERSATION, "idempotencyKey": "turn-2", "model": "writer-under-test"})
+        self.assertTrue(started["needsCompose"])
+        pending = store.runs[started["runId"]]["artifact"]["pending"]
+        self.assertEqual(pending["providerClass"], "cloud")
+        self.assertEqual(leaked(pending), [])
+        self.assertEqual([h["role"] for h in pending["history"]], ["user"])
+
+    def test_an_answer_a_local_writer_phrased_from_held_back_memory_is_marked_too(self):
+        agent, store = panel(brand_state(False))
+        local = Writer(local=True, answer="Your voice is TONEMARK, and you avoid emoji (LEARNEDMARK).")
+        ask(agent, self.BRAND, "turn-1", local)
+        self.assertEqual(len(local.prompts), 1, "a local writer reads the member's memory, as before")
+        self.assertTrue(leaked(local.prompts))
+        answer = store.messages[1]["body"]
+        self.assertEqual(answer["siteAgent"]["model"]["composedBy"], "model")
+        self.assertIs(answer["siteAgent"]["cloudWithheld"], True)
+        cloud = Writer(local=False)
+        ask(agent, self.FOLLOW_UP, "turn-2", cloud)
+        self.assertEqual(leaked(cloud.prompts), [])
+
+    def test_golden_local_writers_and_shareable_answers_keep_their_history(self):
+        agent, store = panel(brand_state(False))
+        ask(agent, self.BRAND, "turn-1")
+        local = Writer(local=True)
+        ask(agent, self.FOLLOW_UP, "turn-2", local)
+        self.assertIn("TONEMARK", local.prompts[0], "a local writer still reads the whole conversation")
+        state = brand_state(True)
+        state["speaker"]["revisions"][0]["profile"]["fields"] = []
+        agent, store = panel(state)
+        ask(agent, self.BRAND, "turn-1")
+        self.assertNotIn("cloudWithheld", store.messages[1]["body"]["siteAgent"], "nothing withheld: the answer is stored exactly as before")
+        cloud = Writer(local=False)
+        ask(agent, self.FOLLOW_UP, "turn-2", cloud)
+        self.assertIn("TONEMARK", cloud.prompts[0], "cloud memory allowed the voice: the cloud writer reads the earlier answer as before")
+
+    def test_every_model_history_reader_drops_held_back_answers(self):
+        from postriff_phase2.agent_runtime_v2.live import VoiceSessions
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+        from postriff_phase2.site_agent.service import SiteAgentService
+        held = {"text": "Your tone is TONEMARK.", "siteAgent": {"version": 1, "cloudWithheld": True}}
+        rows = [("assistant", {"text": "An unrelated answer."}), ("assistant", held), ("user", {"text": "What is our brand voice?"}), ("user", {"text": "And now?"})]
+        cursor = lambda: PanelCursor(SimpleNamespace(messages=[{"role": r, "body": b, "run": None, "id": str(i)} for i, (r, b) in enumerate(rows)], runs={}))  # noqa: E731
+        histories = {"manager": AgentRuntimeService._history(SimpleNamespace(), cursor(), WS, CONVERSATION),
+                     "voice": VoiceSessions._history(SimpleNamespace(), cursor(), WS, CONVERSATION),
+                     "site (cloud writer)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION, cloud=True),
+                     "site (default)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION)}
+        for name, history in histories.items():
+            with self.subTest(reader=name):
+                self.assertNotIn("TONEMARK", str(history))
+                self.assertIn("unrelated answer", str(history))
+                self.assertIn("What is our brand voice?", str(history))
+        local = SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION, cloud=False)
+        self.assertIn("TONEMARK", str(local), "a local writer's history is unchanged")
+
+    def test_a_voice_fallback_never_speaks_a_held_back_answer_through_the_live_model(self):
+        """Voice Mode hands `speakableSummary` to the cloud Live session (session.commentary.append); the panel keeps the answer."""
+        from postriff_phase2.agent_runtime_v2 import contracts as runtime_contracts
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+        for state, held in ((brand_state(False), True), (brand_state(True, evidence=True), True)):
+            agent, _ = panel(state)
+            runtime = SimpleNamespace(service=SimpleNamespace(site_agent=agent))
+            with self.subTest(egress=state.get("memoryEgress")):
+                out = AgentRuntimeService._fallback(runtime, WS, "session", {"conversationId": CONVERSATION, "idempotencyKey": "voice-1"}, self.BRAND, "voice",
+                                                    runtime_contracts.new_trace_id(), reason="budget")["result"]
+                self.assertEqual(leaked(out["speakableSummary"]), [])
+                self.assertIn("panel", out["speakableSummary"])
+                self.assertTrue(leaked(out["answerText"]), "the panel still shows the member their own answer")
+        # Golden: text turns, and voice answers with nothing held back, speak the answer as before.
+        shareable = brand_state(True)
+        shareable["speaker"]["revisions"][0]["profile"]["fields"] = []
+        for state, modality in ((brand_state(False), "text"), (shareable, "voice")):
+            agent, _ = panel(state)
+            runtime = SimpleNamespace(service=SimpleNamespace(site_agent=agent))
+            with self.subTest(modality=modality):
+                out = AgentRuntimeService._fallback(runtime, WS, "session", {"conversationId": CONVERSATION, "idempotencyKey": "turn-1"}, self.BRAND, modality,
+                                                    runtime_contracts.new_trace_id())["result"]
+                self.assertEqual(out["speakableSummary"], runtime_contracts.speakable(out["answerText"]))
+                self.assertIn("TONEMARK", out["speakableSummary"])
 
 
 class NotificationListUntrustedTest(unittest.TestCase):
@@ -601,7 +953,9 @@ class ColdImportTest(unittest.TestCase):
         import subprocess
         for module in ("postriff_phase2.hosted", "postriff_phase2.site_agent.service", "postriff_phase2.site_agent.tools", "postriff_phase2.notifications.detector",
                        "postriff_phase2.agent_runtime_v2.ui_domain.automations", "postriff_phase2.agent_runtime_v2.context", "postriff_phase2.ideas",
-                       "postriff_phase2.coworker.agent_tools", "postriff_phase2.permissions", "postriff_phase2.api_tokens"):
+                       "postriff_phase2.coworker.agent_tools", "postriff_phase2.permissions", "postriff_phase2.api_tokens",
+                       "postriff_phase2.site_agent.compose_reads", "postriff_phase2.site_agent.contracts", "postriff_phase2.agent_runtime_v2.ui_domain.common",
+                       "postriff_phase2.agent_runtime_v2.service", "postriff_phase2.agent_runtime_v2.live"):
             with self.subTest(module=module):
                 done = subprocess.run([sys.executable, "-c", f"import {module}"], cwd=str(ROOT), env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin"},
                                       capture_output=True, text=True, timeout=60)

@@ -60,15 +60,24 @@ def _excerpt(text, limit=140):
 # --- memory egress ---------------------------------------------------------------------------------------------------
 # A cloud reader (tools.Context.egress) gets workspace memory only as a cloud writing route would: nothing while the
 # owner has not allowed cloud memory (state.memoryEgress, read as memory_layers.cloud_allowed and memory.projection read
-# it), and even then no private, local-only or unlabelled boundary and no raw writing-sample example. A local reader
-# (the member, in Rafii's own answer) reads everything it read before.
+# it), and even then no private, local-only or unlabelled boundary and no voice profile built from writing samples. A
+# local reader (the member, in Rafii's own answer) reads everything it read before.
 CLOUD_MEMORY_OFF = ("The owner hasn't allowed cloud memory, so Brand Brain, voice and learned-preference content isn't sent to a cloud model. "
                     "It stays on the Brand and Memory pages.")
+CLOUD_SAMPLE_VOICE = ("This voice profile was built from writing samples, and a sample reaches only the writer it was shared with, "
+                      "so the profile isn't sent to a cloud model here. It stays on the Brand page.")
 CLOUD_SOURCES_OFF = "Sources with cloud sharing off were not searched for a cloud model. Allow sharing for a source on the Memory page."
 
 
 def _cloud_memory_allowed(state):
     return memory.egress(state).get("cloud") is True
+
+
+def _sample_voice(profile):
+    """A profile built from writing samples. memory.projection shares it with a cloud route only when each sample's exact
+    voice-route grant covers that route ("a workspace-wide memory grant cannot expand a sample's exact-route grant") and
+    marks it stale otherwise, as memory_layers reads it. A site read names no writer route, so no grant covers it."""
+    return bool(profile.get("evidenceSourceIds"))
 
 
 def _cloud_shared_source(source):
@@ -94,30 +103,35 @@ def brand_summary(ctx):
     identity = {key: hub.get(key) or None for key in ("purpose", "audience", "subject", "mode", "speaker")}
     identity["identitySentence"] = you.get("identitySentence") or None
     identity["layers"] = hub.get("layers") or []
-    voice = None
+    voice, sampled = None, False
     if revision and not (revision.get("stale") or profile.get("status") == "stale"):
-        # A sample-based profile's example is the sample's own text: it never travels through the generic memory channel.
-        example = "" if cloud and profile.get("evidenceSourceIds") else profile.get("writingExample") or ""
-        voice = {"revision": revision.get("revision"), "approvedAt": revision.get("approvedAt"), "tone": profile.get("tone") or None,
-                 "observations": [str(o) for o in profile.get("observations") or []][:12], "writingExample": _excerpt(example, 400) or None,
-                 "unknowns": [str(u) for u in profile.get("unknowns") or []][:6]}
-    stored = any(identity[k] for k in ("purpose", "audience", "subject", "mode", "speaker", "identitySentence")) or voice or boundaries or learned
+        # A cloud reader gets no part of a sample-based profile (tone, observations, example, unknowns): only that it exists.
+        sampled = cloud and _sample_voice(profile)
+        if not sampled:
+            voice = {"revision": revision.get("revision"), "approvedAt": revision.get("approvedAt"), "tone": profile.get("tone") or None,
+                     "observations": [str(o) for o in profile.get("observations") or []][:12], "writingExample": _excerpt(profile.get("writingExample") or "", 400) or None,
+                     "unknowns": [str(u) for u in profile.get("unknowns") or []][:6]}
+    stored = any(identity[k] for k in ("purpose", "audience", "subject", "mode", "speaker", "identitySentence")) or voice or sampled or boundaries or learned
     if cloud and not _cloud_memory_allowed(state):
         # What exists, never what it says: the answer can say "stored, not shared", not "nothing stored".
-        withheld = {"reason": "cloud_memory_off", "voice": voice is not None, "boundaries": len(boundaries), "learned": len(learned)}
+        withheld = {"reason": "cloud_memory_off", "voice": voice is not None or sampled, "boundaries": len(boundaries), "learned": len(learned)}
         return contracts.result({"identity": {**{key: None for key in identity}, "layers": []}, "voice": None, "boundaries": [], "learned": [], "empty": not stored,
                                  "withheld": withheld, "href": routes.href("memory"), "brandHref": routes.href("brand")},
                                 now=ctx.now, verified=False, warnings=[CLOUD_MEMORY_OFF])
-    return contracts.result({"identity": identity, "voice": voice, "boundaries": boundaries, "learned": learned, "empty": not stored,
-                             "href": routes.href("memory"), "brandHref": routes.href("brand")}, now=ctx.now)
+    data = {"identity": identity, "voice": voice, "boundaries": boundaries, "learned": learned, "empty": not stored,
+            "href": routes.href("memory"), "brandHref": routes.href("brand")}
+    if sampled:
+        return contracts.result({**data, "withheld": {"reason": "sample_route_grant_required", "voice": True}}, now=ctx.now, warnings=[CLOUD_SAMPLE_VOICE])
+    return contracts.result(data, now=ctx.now)
 
 
 def voice_profile(ctx, platform=None):
     brand = brand_summary(ctx)["data"]
     withheld = brand.get("withheld")
+    memory_off = (withheld or {}).get("reason") == "cloud_memory_off"
     items = learning.active_items(ctx.state)
     by_scope: dict[str, list[str]] = {}
-    for item in [] if withheld else items:
+    for item in [] if memory_off else items:
         scope = item.get("scope") or {}
         if platform and scope.get("platform") not in (None, platform):
             continue
@@ -127,8 +141,10 @@ def voice_profile(ctx, platform=None):
     data = {"voice": brand["voice"], "learnedByScope": by_scope, "samples": samples, "provisional": bool(speaker.get("provisional")),
             "platformSpecific": sorted({(i.get("scope") or {}).get("platform") for i in items if (i.get("scope") or {}).get("platform")}),
             "href": routes.href("brand")}
-    if withheld:
+    if memory_off:
         return contracts.result({**data, "withheld": withheld}, now=ctx.now, verified=False, warnings=[CLOUD_MEMORY_OFF])
+    if withheld:
+        return contracts.result({**data, "withheld": withheld}, now=ctx.now, verified=bool(items), warnings=[CLOUD_SAMPLE_VOICE])
     return contracts.result(data, now=ctx.now, verified=brand["voice"] is not None or bool(items))
 
 
@@ -300,7 +316,7 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
 
 
 # Reads whose cloud view can differ from the member's own (memory egress, source cloud sharing).
-CLOUD_GATED_READS = ("brand.summary", "voice.profile", "content.search")
+CLOUD_GATED_READS = ("brand.summary", "voice.profile", "voice.check", "content.search")
 
 
 def _content(data):
@@ -697,9 +713,27 @@ def voice_check(ctx, draftId=None, text=None, platform=None):
         raise AlphaError("Select a draft or quote the sentence to compare.", 400, code="tool_input")
     platform = platform or (variant or {}).get("platform")
     result = checker.analyze(ctx.state, body, platform)
-    return contracts.result({**result, "draftId": draftId, "platform": platform, "subject": f"{platform} draft" if variant else "the quoted text",
-                             "href": _draft_href(draftId) if draftId else None, "profileHref": routes.href("brand")},
-                            now=ctx.now, verified=not result["empty"])
+    withheld = None
+    if ctx.cloud_reader and not result["empty"]:
+        # Each finding names the stored trait it was compared with, so it is memory text. A cloud reader gets it under
+        # brand.summary's rules: nothing while cloud memory is off, and never a sample-based profile's findings.
+        if not _cloud_memory_allowed(ctx.state):
+            withheld = {"reason": "cloud_memory_off", "voice": result["profile"]["revision"] is not None and not result["profile"]["stale"],
+                        "learned": len(result["profile"]["learned"])}
+            result = {**result, "findings": [], "summary": {"matches": 0, "differs": 0, "unclear": 0}, "profile": {**result["profile"], "tone": None, "learned": []}}
+        elif _sample_voice((memory.active_profile(ctx.state) or {}).get("profile") or {}) and not result["profile"]["stale"]:
+            # The learned preferences travel with cloud memory on; the profile's own findings do not.
+            unprofiled = {**ctx.state, "speaker": {**(ctx.state.get("speaker") or {}), "revisions": []}}
+            learned_only = checker.analyze(unprofiled, body, platform)
+            withheld = {"reason": "sample_route_grant_required", "voice": True}
+            result = {**result, "findings": learned_only["findings"], "summary": learned_only["summary"], "profile": {**result["profile"], "tone": None}}
+    data = {**result, "draftId": draftId, "platform": platform, "subject": f"{platform} draft" if variant else "the quoted text",
+            "href": _draft_href(draftId) if draftId else None, "profileHref": routes.href("brand")}
+    if withheld is not None:
+        memory_off = withheld["reason"] == "cloud_memory_off"
+        return contracts.result({**data, "withheld": withheld}, now=ctx.now, verified=not memory_off and bool(result["findings"]),
+                                warnings=[CLOUD_MEMORY_OFF if memory_off else CLOUD_SAMPLE_VOICE])
+    return contracts.result(data, now=ctx.now, verified=not result["empty"])
 
 
 def member_activity(ctx, member=None, since=None, until=None, label=None, only=None):
