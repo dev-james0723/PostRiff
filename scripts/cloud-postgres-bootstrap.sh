@@ -19,6 +19,28 @@ if [ -z "${TREND_VISUAL_TEST_PYTHON:-}" ] || [ ! -x "$TREND_VISUAL_TEST_PYTHON" 
   exit 64
 fi
 
+# The fixed selection includes real legacy Office/RTF preview and media tests.
+# Provision their existing official Ubuntu dependencies before starting clusters.
+# This script's cloud/Linux guards above prohibit any installation on the Mac.
+if ! command -v libreoffice >/dev/null || ! command -v ffmpeg >/dev/null; then
+  if [ ! -r /etc/os-release ]; then
+    echo "validation_unavailable: cannot identify the cloud parser distribution." >&2
+    exit 3
+  fi
+  . /etc/os-release
+  if [ "${ID:-}" != "ubuntu" ] || [ "${VERSION_ID:-}" != "24.04" ]; then
+    echo "validation_unavailable: provide the existing Office/media parsers on this runner." >&2
+    exit 3
+  fi
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  else
+    sudo -n apt-get -qq update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  fi
+fi
+
 jcb_pg_repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # Reuse, rather than install or replace, the repository's isolated Python runtime.
 "$TREND_VISUAL_TEST_PYTHON" - "$jcb_pg_repo_root/.python-version" <<'PY'
@@ -84,7 +106,7 @@ cd -- "$jcb_pg_repo_root"
 # switches. Only the disposable cluster can be reached by the libpq defaults.
 # Keep concurrent fleet claims in their own clean cluster: prior fixture accounts
 # must not be blocked or mutated merely to make claim selection deterministic.
-for jcb_pg_group in creator fleet history revocation agent_context workspace_provider_data privacy_erasure identity_fence openui_fence policy_acceptance operations_projection; do
+for jcb_pg_group in creator fleet history revocation agent_context workspace_provider_data privacy_erasure identity_fence openui_fence policy_acceptance operations_projection consumer_deletion; do
   if [ "$jcb_pg_group" = creator ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_creator.py tests/phase2/postgres_video.py
       tests/phase2/postgres_consumer_campaign_worker.py tests/phase2/postgres_youtube_acceptance.py
@@ -108,6 +130,8 @@ for jcb_pg_group in creator fleet history revocation agent_context workspace_pro
     jcb_pg_scripts=(tests/phase2/postgres_youtube_openui_fence.py)
   elif [ "$jcb_pg_group" = policy_acceptance ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_policy_acceptance.py)
+  elif [ "$jcb_pg_group" = consumer_deletion ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_consumer_deletion.py)
   else
     jcb_pg_scripts=(tests/phase2/postgres_youtube_operations_projection.py)
   fi

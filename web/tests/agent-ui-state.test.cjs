@@ -256,3 +256,29 @@ test('receipts never upgrade an outcome: prepared is not applied; applied reads 
   assert.equal(confirmation.outcomeKey({ outcome: 'published', verified: true }), 'outcomeFailed');
   assert.equal(confirmation.CONFIRMATION_ATTRIBUTE, 'data-rafii-genui-confirmation');
 });
+
+test('YouTube chat draft review link is an allowlisted page, with no publishing authority in its URL', () => {
+  const origin = 'https://rafii.io';
+  const navigations = [];
+  const blocked = [];
+  const handle = actions.createHostActionHandler({
+    origin, onFollowUp: () => {}, onNavigate: (path) => navigations.push(path), onBlocked: (kind) => blocked.push(kind),
+  });
+  const allowed = ['/app/youtube', '/app/youtube?channel=conn_123'];
+  for (const path of allowed) {
+    assert.equal(actions.safeOpenUrl(path, origin), path);
+    handle({ type: 'open_url', params: { url: path } });
+  }
+  assert.equal(actions.safeOpenUrl('https://rafii.io/app/youtube', origin), '/app/youtube');
+  const refused = [
+    '/app/youtube?approve=1', '/app/youtube?publish=now', '/app/youtube?next=//evil.example',
+    '/app/youtube?channel=../../another-workspace', '/app/youtube#approve', '/app/youtube/actions',
+    '/api/v1/workspaces/w/channels/youtube/approve',
+  ];
+  for (const path of refused) {
+    assert.equal(actions.safeOpenUrl(path, origin), null, path);
+    handle({ type: 'open_url', params: { url: path } });
+  }
+  assert.deepEqual(navigations, allowed);
+  assert.deepEqual(blocked, refused.map(() => 'link'));
+});

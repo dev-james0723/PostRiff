@@ -149,6 +149,7 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 \ir ../../migrations/postriff/100_youtube_api_privacy_erasure.sql
 \ir ../../migrations/postriff/105_youtube_agent_history.sql
 \ir ../../migrations/postriff/106_youtube_operations_projection.sql
+\ir ../../migrations/postriff/107_youtube_planner_fairness.sql
 \ir ../../migrations/postriff/109_agent_permissions.sql
 do $$ begin
  if not exists (

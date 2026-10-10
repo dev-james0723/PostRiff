@@ -46,6 +46,10 @@ def main(scripts: list[str]) -> int:
     # Refuse a collision before loading any fixture data into a database.
     try:
         with socket.socket() as probe:
+            # Closed fixture connections can leave TIME_WAIT after pg_ctl -w stop.
+            # Reuse permits those ports, while an active listener still conflicts;
+            # SO_REUSEPORT is deliberately not enabled.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind(("127.0.0.1", PORT))
     except OSError:
         print(json.dumps({"status": "validation_unavailable", "cause": f"loopback port {PORT} is already in use"}))

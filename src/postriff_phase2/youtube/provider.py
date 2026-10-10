@@ -58,8 +58,53 @@ class YouTubeProvider(OAuthProvider):
         self.policy_public_binding = bool(production_reviewed or self.project_evidence.get('publicUploadEligibility'))
 
     @classmethod
-    def mount(cls, values, transport=None):
+    def standard_credential_pair(cls, values):
+        """Resolve server-only custody without rewriting the supplied environment."""
+        prefix = cls.env_prefix()
+        source = values.get(prefix + 'STANDARD_CREDENTIAL_SOURCE', 'current')
+        if source == 'dedicated_production':
+            pending = prefix + 'PENDING_'
+            supplied = {prefix + suffix: values.get(pending + suffix)
+                        for suffix in ('CLIENT_ID', 'CLIENT_SECRET') if values.get(pending + suffix) is not None}
+            client_id, secret, valid, diagnostic = cls.credential_pair(supplied)
+            diagnostic['missingVariables'] = [name.replace(prefix, pending, 1) for name in diagnostic['missingVariables']]
+            diagnostic['credentialSource'] = source
+            callback_valid = values.get(prefix + 'CALLBACK_ORIGIN') == 'https://rafii.io'
+            diagnostic['callbackOriginPinned'] = callback_valid
+            if not callback_valid:
+                valid = False
+                diagnostic['callbackOriginInvalid'] = True
+                if values.get(prefix + 'CALLBACK_ORIGIN') is None:
+                    diagnostic['missingVariables'].append(prefix + 'CALLBACK_ORIGIN')
+            override = values.get('POSTRIFF_YOUTUBE_PUBLIC_BASE_URL')
+            if override is not None and override != 'https://rafii.io':
+                valid = False
+                diagnostic['publicBaseOverrideInvalid'] = True
+            original_id = values.get(prefix + 'CLIENT_ID')
+            agentic_id = values.get(prefix + 'AGENTIC_CLIENT_ID')
+            reference = values.get(prefix + 'LEGACY_CLIENT_ID')
+            if client_id is not None and client_id in (original_id, agentic_id):
+                valid = False
+                diagnostic['separateClientRequired'] = True
+            if original_id is not None and original_id == agentic_id:
+                valid = False
+                diagnostic['separateClientRequired'] = True
+            if reference is not None and reference != original_id:
+                valid = False
+                diagnostic['legacyReferenceConflict'] = True
+            if not valid and diagnostic['configurationState'] == 'configured':
+                diagnostic['configurationState'] = 'invalid_configuration'
+            return client_id, secret, valid, diagnostic
         client_id, secret, valid, diagnostic = cls.credential_pair(values)
+        diagnostic['credentialSource'] = 'current'
+        if source != 'current':
+            valid = False
+            diagnostic.update(configurationState='invalid_configuration', credentialSource='invalid', credentialSourceInvalid=True)
+        return client_id, secret, valid, diagnostic
+
+    @classmethod
+    def mount(cls, values, transport=None):
+        client_id, secret, valid, diagnostic = cls.standard_credential_pair(values)
         proof = {}
         try:
             supplied = json.loads(values.get('POSTRIFF_YOUTUBE_PROJECT_EVIDENCE', '{}'))
@@ -68,8 +113,12 @@ class YouTubeProvider(OAuthProvider):
             diagnostic['projectEvidenceInvalid'] = True
         adapter = cls(client_id, secret, transport, creator_enabled=values.get('POSTRIFF_YOUTUBE_CREATOR_ENABLED') == '1', project_evidence=proof) if valid else None
         agentic, agentic_diagnostic = cls.mount_agentic(values, transport)
+        legacy, legacy_diagnostic = cls.mount_legacy(values, transport)
         if adapter:
+            if diagnostic['credentialSource'] == 'dedicated_production':
+                adapter.callback_origin = 'https://rafii.io'
             adapter.agentic_provider = agentic
+            adapter.legacy_provider = legacy
             adapter.policy_public_binding = bool(adapter.policy_public_binding
                 or values.get('POSTRIFF_YOUTUBE_PUBLIC_BASE_URL')
                 or str(values.get(cls.env_prefix() + 'REVIEWED', '')).lower() == 'true')
@@ -77,18 +126,24 @@ class YouTubeProvider(OAuthProvider):
         diagnostic['publicUploadGateVerified'] = bool(adapter and project_public_gate(adapter))
         diagnostic['authorizationLane'] = 'standard'
         diagnostic['agenticConfiguration'] = agentic_diagnostic
+        diagnostic['legacyRefreshConfiguration'] = legacy_diagnostic
         return adapter, diagnostic
 
     @classmethod
     def mount_agentic(cls, values, transport=None):
         """Separate client and proof for explicitly consented Google-calling agents."""
+        standard_id, _, standard_valid, source_diagnostic = cls.standard_credential_pair(values)
         prefix = 'POSTRIFF_OAUTH_YOUTUBE_AGENTIC_'
         supplied = {cls.env_prefix() + suffix: values.get(prefix + suffix)
                     for suffix in ('CLIENT_ID', 'CLIENT_SECRET') if values.get(prefix + suffix) is not None}
         client_id, secret, valid, diagnostic = cls.credential_pair(supplied)
         diagnostic['missingVariables'] = [name.replace(cls.env_prefix(), prefix, 1) for name in diagnostic['missingVariables']]
         diagnostic['authorizationLane'] = 'agentic'
-        if valid and client_id == values.get(cls.env_prefix() + 'CLIENT_ID'):
+        if source_diagnostic['credentialSource'] != 'current' and not standard_valid:
+            valid = False
+            diagnostic['configurationState'] = 'invalid_configuration'
+            diagnostic['standardCredentialSourceInvalid'] = True
+        if valid and client_id == standard_id:
             valid = False
             diagnostic['configurationState'] = 'invalid_configuration'
             diagnostic['separateClientRequired'] = True
@@ -102,8 +157,34 @@ class YouTubeProvider(OAuthProvider):
                       authorization_lane='agentic', project_evidence=proof,
                       production_reviewed=str(values.get(prefix + 'REVIEWED', '')).lower() == 'true') if valid else None
         if adapter:
+            if source_diagnostic['credentialSource'] == 'dedicated_production':
+                adapter.callback_origin = 'https://rafii.io'
             adapter.execution_enabled = values.get('POSTRIFF_YOUTUBE_AGENTIC_ENABLED') == '1'
         diagnostic['executionEnabled'] = bool(adapter and adapter.execution_enabled)
+        return adapter, diagnostic
+
+    @classmethod
+    def mount_legacy(cls, values, transport=None):
+        """Optional exact old issuer for existing protected standard read grants."""
+        standard_id, _, standard_valid, source_diagnostic = cls.standard_credential_pair(values)
+        original = source_diagnostic['credentialSource'] == 'dedicated_production'
+        prefix = cls.env_prefix() if original else 'POSTRIFF_OAUTH_YOUTUBE_LEGACY_'
+        supplied = {cls.env_prefix() + suffix: values.get(prefix + suffix)
+                    for suffix in ('CLIENT_ID', 'CLIENT_SECRET') if values.get(prefix + suffix) is not None}
+        client_id, secret, valid, diagnostic = cls.credential_pair(supplied)
+        diagnostic['missingVariables'] = [name.replace(cls.env_prefix(), prefix, 1) for name in diagnostic['missingVariables']]
+        diagnostic['refreshOnly'] = True
+        diagnostic['credentialSource'] = 'original' if original else 'explicit_legacy'
+        if source_diagnostic['credentialSource'] != 'current' and not standard_valid:
+            valid = False
+            diagnostic['configurationState'] = 'invalid_configuration'
+            diagnostic['standardCredentialSourceInvalid'] = True
+        if valid and client_id in (standard_id,
+                                   values.get('POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID')):
+            valid = False
+            diagnostic['configurationState'] = 'invalid_configuration'
+            diagnostic['separateClientRequired'] = True
+        adapter = LegacyYouTubeReadProvider(client_id, secret, transport) if valid else None
         return adapter, diagnostic
 
     def authorize_url(self, redirect, state, challenge, scopes):
@@ -248,3 +329,46 @@ class YouTubeProvider(OAuthProvider):
 
     def revoke(self, token):
         return self.transport('POST', self.REVOKE, form={'token': self.bearer(token)}).get('status') == 200
+
+
+class LegacyYouTubeReadProvider(YouTubeProvider):
+    """Refresh existing read-only custody; never request or extend old consent."""
+    legacy_refresh_only = True
+    SCOPES = {'identity': [READ], 'posts_read': [READ]}
+    native_schedule = False
+
+    @staticmethod
+    def assert_read_scopes(scopes):
+        if (not isinstance(scopes, (list, tuple)) or not all(isinstance(scope, str) for scope in scopes)
+                or set(scopes) != {READ}):
+            raise AlphaError('Reconnect this YouTube channel through the current application for these permissions.',
+                             409, code='youtube_oauth_binding_changed')
+
+    def _bound(self, value, kind):
+        body = super()._bound(value, kind)
+        if kind == 'at' and body.get('scope'):
+            self.assert_read_scopes(body['scope'])
+        return body
+
+    def bind_credentials(self, access_token, refresh_token=None):
+        self._bound(access_token, 'at')
+        if refresh_token:
+            self._bound(refresh_token, 'rt')
+        return access_token, refresh_token, None
+
+    def bearer(self, access_token):
+        return self._bound(access_token, 'at')['at']
+
+    def authorize_url(self, redirect, state, challenge, scopes):
+        raise AlphaError('Start a new YouTube connection through the current application.',
+                         409, code='youtube_oauth_binding_changed')
+
+    def exchange(self, code, verifier, redirect):
+        raise AlphaError('Start a new YouTube connection through the current application.',
+                         409, code='youtube_oauth_binding_changed')
+
+    def api(self, access_token, method, url, **kwargs):
+        if method != 'GET':
+            raise AlphaError('Reconnect this YouTube channel through the current application before making changes.',
+                             409, code='youtube_oauth_binding_changed')
+        return super().api(access_token, method, url, **kwargs)

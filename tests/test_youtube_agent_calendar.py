@@ -130,5 +130,97 @@ class YouTubePlanCalendarTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 'youtube_calendar_projection_limit')
 
 
+class YouTubePlannerAttentionTests(unittest.TestCase):
+    @staticmethod
+    def paused():
+        from postriff_phase2.youtube.agent import prepare_policy
+        value, draft = planned()
+        policy = prepare_policy(value, CONNECTION, {'draftIds': [draft['id']], 'timeZone': 'UTC',
+                                                   'maxDaily': 1, 'endsAt': NOW + 86400}, 'owner', NOW)
+        policy.update(status='paused', intervention={'code': 'youtube_agentic_oauth_required',
+                                                     'message': 'PRIVATE_ERROR_TOKEN https://private.example/?secret=hidden', 'at': NOW})
+        return value, policy
+
+    def test_real_prepared_policy_intervention_surfaces_without_job_or_state_mutation(self):
+        value, policy = self.paused()
+        before = copy.deepcopy(value)
+        ctx = context(value)
+        projected = reads._youtube_interventions(ctx)
+        self.assertEqual(value, before)
+        # Global attention already initializes the unrelated campaign root.
+        expected = copy.deepcopy(before)
+        expected.setdefault('raffi', {}).setdefault('campaignPlanning',
+            {'campaigns': [], 'recurringTasks': [], 'occurrences': []})
+        facts = reads.attention_summary(ctx)['data']['facts']
+        self.assertEqual([fact for fact in facts if fact['kind'] == 'youtube_agent_intervention'], projected)
+        alert = next(fact for fact in facts if fact['kind'] == 'youtube_agent_intervention')
+        self.assertEqual(alert['policyId'], policy['id'])
+        self.assertEqual(alert['source'], 'youtube_policy_intervention')
+        self.assertEqual(alert['href'], '/app/youtube')
+        self.assertIn('planner intervention', alert['text'])
+        self.assertEqual(value['phase2']['jobs'], [])
+        self.assertEqual(value, expected)
+
+    def test_projection_never_exposes_error_secret_url_owner_grant_or_asset_payload(self):
+        value, policy = self.paused()
+        policy.update(grantedBy='PRIVATE_OWNER', authorizationGeneration='PRIVATE_GRANT',
+                      assetIds=['PRIVATE_ASSET'], callback='https://private.example')
+        policy['intervention']['code'] = 'PRIVATE_ERROR_CODE'
+        projected = json.dumps(reads._youtube_interventions(context(value)))
+        for secret in ('PRIVATE_', 'private.example', 'secret=hidden', 'grantedBy', 'authorizationGeneration', 'assetIds'):
+            self.assertNotIn(secret, projected)
+        self.assertEqual(len(reads._youtube_interventions(context(value, role='viewer'))), 1)
+
+    def test_foreign_workspace_and_denied_read_fail_closed(self):
+        value, _ = self.paused()
+        for ctx in (context(value, workspace='workspace-two'), context(value)):
+            if ctx.workspace_id == 'workspace-one':
+                ctx.membership = SimpleNamespace(allows=lambda _right: False)
+            with self.subTest(workspace=ctx.workspace_id), self.assertRaises(AlphaError) as raised:
+                reads._youtube_interventions(ctx)
+            self.assertEqual(raised.exception.code, 'tool_forbidden')
+
+    def test_foreign_erased_revoked_and_malformed_records_are_hidden(self):
+        for change in ('connection', 'channel', 'channel_revoked', 'erased', 'status', 'id', 'code', 'time', 'future'):
+            value, policy = self.paused()
+            if change == 'connection': policy['connectionId'] = 'foreign-connection'
+            elif change == 'channel': policy['channelId'] = 'UC' + 'z' * 22
+            elif change == 'channel_revoked': value['phase2']['channels'][0]['revoked'] = True
+            elif change == 'erased': policy['privacyErased'] = True
+            elif change == 'status': policy['status'] = 'revoked'
+            elif change == 'id': policy['id'] = []
+            elif change == 'code': policy['intervention']['code'] = {}
+            elif change == 'time': policy['intervention']['at'] = float('nan')
+            else: policy['intervention']['at'] = NOW + 1
+            with self.subTest(change=change):
+                self.assertEqual(reads._youtube_interventions(context(value)), [])
+        value, _ = self.paused()
+        value['youtubeAgent']['policies'] = None
+        self.assertEqual(reads._youtube_interventions(context(value)), [])
+
+    def test_matching_held_job_deduplicates_policy_but_foreign_job_does_not(self):
+        for connection, expected in ((CONNECTION, 0), ('foreign-connection', 1)):
+            value, policy = self.paused()
+            value['phase2']['jobs'].append({'id': 'held-job', 'state': 'held',
+                'manifest': {'platform': 'YouTube', 'channelId': connection},
+                'youtubeAgent': {'policyId': policy['id']}})
+            with self.subTest(connection=connection):
+                self.assertEqual(len(reads._youtube_interventions(context(value))), expected)
+
+    def test_facts_are_bounded_deduplicated_and_not_lost_to_existing_attention_cap(self):
+        value, policy = self.paused()
+        value['youtubeAgent']['policies'] = [copy.deepcopy(policy) for _ in range(20)]
+        for index, item in enumerate(value['youtubeAgent']['policies']): item['id'] = format(index, '032x')
+        value['youtubeAgent']['policies'].insert(0, copy.deepcopy(value['youtubeAgent']['policies'][0]))
+        facts = reads._youtube_interventions(context(value))
+        self.assertEqual(len(facts), 5)
+        self.assertEqual(len({fact['policyId'] for fact in facts}), 5)
+        # Many unrelated reconnect notices cannot hide actionable pre-job alerts.
+        value['phase2']['channels'] += [{'id': 'account-' + str(i), 'platform': 'Threads', 'revoked': True} for i in range(20)]
+        shown = reads.attention_summary(context(value))['data']['facts']
+        self.assertEqual(len(shown), 15)
+        self.assertEqual(sum(fact['kind'] == 'youtube_agent_intervention' for fact in shown), 5)
+
+
 if __name__ == '__main__':
     unittest.main()
