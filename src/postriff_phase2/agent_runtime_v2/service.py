@@ -24,7 +24,7 @@ import time
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
-from .. import asset_kinds, attachment_rows, intent as writing_intent, media_consent, turn_references as chip_refs
+from .. import agent_observability, asset_kinds, attachment_rows, intent as writing_intent, media_consent, turn_references as chip_refs
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import require
@@ -88,6 +88,7 @@ class AgentRuntimeService:
                 "genui": self.cfg.genui_for(workspace_id)}
 
     # --- turn --------------------------------------------------------------------------------------------------------
+    @agent_observability.instrument_turn   # telemetry only: request/response phases, latency; arguments and result untouched
     def turn(self, workspace_id, token, payload) -> dict:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured turn.", 400)
@@ -981,6 +982,8 @@ class AgentRuntimeService:
         artifact = {"version": 1, "result": result, "trace": trace}
         cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s",
                     (status, json.dumps(artifact, ensure_ascii=False, default=str), digest(json.loads(json.dumps(artifact, default=str))), json.dumps(usage, default=str), run_id))
+        # Verify phase (P0.7): codes and counts of what was just stored; never raises, writes nothing.
+        agent_observability.run_persisted(self, run_id=run_id, status=status, result=result, trace=trace)
 
     def _stored(self, cur, workspace_id, run_id) -> dict:
         cur.execute("SELECT status,conversation_id::text,artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
