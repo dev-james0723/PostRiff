@@ -124,3 +124,29 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
   - Generate mode adds: "Write the program once: declare every statement id exactly once, and never repeat, restate or continue a program". Patch mode is unchanged, since re-declaring a statement by id replaces it.
   - All modes add: "Every name you use must be declared in this program", plus WRONG/RIGHT Query-argument examples.
   - For views limited to some journeys' component groups, the allowed-components line stays at the end (the prompt must start with the generated asset — test_prompt_is_the_generated_asset_plus_runtime_bindings), now followed on its own line by "Any other component documented above is rejected for this view", which the CI fake provider still parses.
+- D-A53 (2026-10-09, AMENDS G03 in 04-ACCEPTANCE and acceptance.json; decided by James on 2026-10-09 as DP-1) The G03 first-pass gate is measured on a FIXED 60-case live corpus. D-A51 is the Library browse decision (#152) and D-A52 is reserved for C3.
+
+  The rule:
+  - Old: at least 29 of 30 normal cases (96.7%) first-pass valid, and all 30 functional after at most one repair.
+  - New: at least 59 of 60 normal cases (98.3%) first-pass valid, and all 60 functional after at most one allowed repair. Fixtures and fallbacks still never count as generated success.
+  - The corpus was fixed and documented before any measurement. The denominator never changes afterwards, and no case is dropped or replaced because it fails.
+
+  The corpus (`g03-live-60/v2`, the `normal` list of `scripts/agent_ui_live.py plan`):
+  - sha256 `703b54cdb40eb8abb3b5f4d8b82a1d9ca46779a327ee72b88adc47ba34721ff0`, over the canonical JSON of the 60 cases (sorted keys, no spaces).
+  - Cases 1–30 are the earlier 30-case sample, byte for byte and in the same order. The frozen copy is `tests/agent_ui_acceptance/fixtures/g03-corpus-v1.json`.
+  - Cases 31–60 are new: d, e and f for each of J01–J09, then CMP-d, CMP-e and CMP-f. They were written from 01-ENGINEERING-SPEC §4 and the journey definitions only, not from any pending prompt change.
+  - Of the new cases, 10 are Hong Kong Cantonese in Traditional Chinese and 2 mix English and Chinese. 13 are follow-ups that only make sense as a later turn of their journey's conversation (`corpus.followUps`).
+  - They also cover partial, empty and unknown data, multi-journey asks, filters, date ranges and time zones, comparisons and charts, and read-only founder summaries for J09 on the founder surface.
+  - The 9 edit cases and 3 fault cases are unchanged.
+
+  Running and counting:
+  - The run order is fixed (`runOrder`), with one conversation per entry. For each journey, its first three cases run in one conversation and its new three in a second. The composites follow, then the consumer edits (each reopens its base case's conversation). The founder panel comes last: J09-1, J09-2, then J09-edit. The cold case is J01-a.
+  - `ingest` counts only the plan's case ids. Any other id is reported as unplanned. A case that shows more than one artifact (re-run under the same id) never counts as first-pass valid.
+  - G03 fails as soon as two first-pass misses, or one case that is not functional after its repair, are known. Otherwise a short sample stays unverified.
+
+  Freezing and cost:
+  - The corpus is frozen at the merge commit of the PR that introduced it. The release test pins its hash, the first 30 cases byte for byte, and the edits and faults.
+  - Any change to a case, its order or the threshold is a new corpus. It needs a new decision and a new corpus id, and results from different corpora are never pooled.
+  - A full live run costs about 4.7 USD at run-3 rates. Run 3 cost 2.29 USD for 27 cases plus 8 edits, about 0.065 USD per generation including its Manager turn; a full run is 72 generations (60 normal, 9 edits and 3 fault cases).
+  - The runner's per-case estimate rises from 0.06 to 0.07 USD so that it stays conservative. A paid run still needs DP-2 approval. Within the existing 5 USD canary cap, the headroom is about 0.3 USD.
+  - This change made no live model calls and measured nothing.
