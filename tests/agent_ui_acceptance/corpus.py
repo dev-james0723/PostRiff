@@ -29,7 +29,7 @@ PRODUCTION = ("production-canary", "production")
 GATES = {
     "G01": {"owner": "A", "kinds": [("repository",)], "g": "release.py checks the frozen contract hash and ownership register are recorded"},
     "G02": {"owner": "A/C", "kinds": [("contract", "ci-harness")], "g": "contract + api corpus legacy-answer checks"},
-    "G03": {"owner": "B/C", "kinds": [("live-provider",), PRODUCTION], "g": "scripts/agent_ui_live.py generate (30 normal cases)"},
+    "G03": {"owner": "B/C", "kinds": [("live-provider",), PRODUCTION], "g": "scripts/agent_ui_live.py ingest (fixed 60-case corpus, >=59/60 first pass; D-A53)"},
     "G04": {"owner": "B/F", "kinds": [DEPLOYED], "g": "scripts/agent_ui_live.py stream (probe + real presentation, UTF-8 split, cancel)"},
     "G05": {"owner": "C/D", "kinds": [("ci-harness",), PRODUCTION], "g": "api corpus G05 + agent_ui_live.py filter (model-attempt delta 0)"},
     "G06": {"owner": "C/D", "kinds": [("ci-harness",)], "g": "api corpus + validator corpus (DB/audit before-and-after)"},
