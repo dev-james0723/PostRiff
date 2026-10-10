@@ -1649,10 +1649,30 @@
      "argsSchema": {
       "additionalProperties": false,
       "properties": {
+       "addedFrom": {
+        "format": "date",
+        "maxLength": 10,
+        "type": "string"
+       },
+       "addedTo": {
+        "format": "date",
+        "maxLength": 10,
+        "type": "string"
+       },
        "collection": {
         "maxLength": 32,
         "pattern": "^[0-9a-f]{32}$",
         "type": "string"
+       },
+       "ids": {
+        "items": {
+         "maxLength": 32,
+         "pattern": "^[0-9a-f]{32}$",
+         "type": "string"
+        },
+        "maxItems": 25,
+        "type": "array",
+        "uniqueItems": true
        },
        "kind": {
         "enum": [
@@ -6180,10 +6200,30 @@
    "argsSchema": {
     "additionalProperties": false,
     "properties": {
+     "addedFrom": {
+      "format": "date",
+      "maxLength": 10,
+      "type": "string"
+     },
+     "addedTo": {
+      "format": "date",
+      "maxLength": 10,
+      "type": "string"
+     },
      "collection": {
       "maxLength": 32,
       "pattern": "^[0-9a-f]{32}$",
       "type": "string"
+     },
+     "ids": {
+      "items": {
+       "maxLength": 32,
+       "pattern": "^[0-9a-f]{32}$",
+       "type": "string"
+      },
+      "maxItems": 25,
+      "type": "array",
+      "uniqueItems": true
      },
      "kind": {
       "enum": [
@@ -6264,7 +6304,7 @@
      "lists": {}
     }
    },
-   "description": "Search or filter the Library (photos, videos, audio, documents, files): title, kind, size, tags, collections, processing state and how the browser previews it. Paged; the Library gives no total.",
+   "description": "Search or filter the Library (photos, videos, audio, documents, files): title, kind, size, tags, collections, processing state and how the browser previews it. ids lists exactly those items, in that order; addedFrom/addedTo keep items added in that range. Paged; the Library gives no total.",
    "invalidatedBy": [
     "library_search"
    ],
