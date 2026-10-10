@@ -36,8 +36,8 @@ function DocumentFirstPage({ asset, size, enabled }: { asset: Asset; size: Asset
   const ready = ['ready','unsupported'].includes(asset.processing || '');
   const query = useQuery({
     queryKey: ['library-source-page', workspaceId, asset.id, asset.hash],
-    queryFn: async () => {
-      const result = await api.libraryPreviewUrl(workspaceId, asset.id);
+    queryFn: async ({ signal }) => {
+      const result = await api.libraryPreviewUrl(workspaceId, asset.id, signal);
       setImageFailed(false);
       return result.url;
     },
