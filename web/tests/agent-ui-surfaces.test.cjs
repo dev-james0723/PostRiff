@@ -257,7 +257,7 @@ test('C’s renderer reports the revision on screen: "choosing" while the dirty-
   const { createLoader } = require('./agent-ui-library-loader.cjs');
   const c = createLoader();
   const { RafiiGenerativeMessage, supportedLibraryHashes } = c.load('src/features/agent/generative-ui/renderer.tsx');
-  const { UiArtifactStateContext } = c.load('src/features/agent/generative-ui/state/context.ts');
+  const { UiArtifactStateContext } = c.load('src/features/agent/generative-ui/state/context');
   const reported = [];
   const bridge = { artifactId: ART, revision: 1, stateRevision: 0, initialState: {}, onStateUpdate() {}, recordSelection() {}, dirtyFields: () => ['note'],
     declared: { stateNames: [], formNames: [] }, canPersist: true };
