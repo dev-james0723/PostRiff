@@ -565,7 +565,7 @@ class PanelHistoryEgressTest(unittest.TestCase):
         rows = [("assistant", {"text": "An unrelated answer."}), ("assistant", held), ("user", {"text": "What is our brand voice?"}), ("user", {"text": "And now?"})]
         cursor = lambda: PanelCursor(SimpleNamespace(messages=[{"role": r, "body": b, "run": None, "id": str(i)} for i, (r, b) in enumerate(rows)], runs={}))  # noqa: E731
         histories = {"manager": AgentRuntimeService._history(SimpleNamespace(cfg=None, clock=lambda: NOW), cursor(), WS, CONVERSATION),
-                     "voice": VoiceSessions._history(SimpleNamespace(), cursor(), WS, CONVERSATION),
+                     "voice": VoiceSessions._history(SimpleNamespace(cfg=None), cursor(), WS, CONVERSATION),
                      "site (cloud writer)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION, cloud=True),
                      "site (default)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION)}
         for name, history in histories.items():
