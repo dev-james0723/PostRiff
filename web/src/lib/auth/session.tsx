@@ -60,7 +60,7 @@ const DEV_PRINCIPAL_KEY = 'postriff-dev-principal';
 function clearDraftStorage() {
   try {
     for (const key of Object.keys(window.sessionStorage)) {
-      if (key.startsWith('rafii.brief.') || key.startsWith('rafii.destinations.') || key.startsWith('rafii.task-request.') || key.startsWith('rafii.task-pending.')) window.sessionStorage.removeItem(key);
+      if (key.startsWith('rafii.brief.') || key.startsWith('rafii.destinations.') || key.startsWith('rafii.task-request.') || key.startsWith('rafii.task-pending.') || key.startsWith('rafii.creator-pending.')) window.sessionStorage.removeItem(key);
     }
   } catch {
     /* storage unavailable: nothing was kept */

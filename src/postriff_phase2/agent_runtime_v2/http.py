@@ -64,6 +64,9 @@ def handle(app, environ, start_response, service, token, method, parts):
         response = task_http.handle(app, environ, start_response, runtime, token, method, workspace_id, resource, rest)
         if response is not None:
             return response
+    if resource == "creator-pipeline":
+        from . import creator_pipeline_http
+        return creator_pipeline_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
     if resource == "ui":
         # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
         from . import ui_http

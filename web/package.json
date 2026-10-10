@@ -22,7 +22,11 @@
     "ci:youtube:proposal:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-proposal-validation.sh",
     "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs",
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh",
-    "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh"
+    "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh",
+    "test:creator-pipeline": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh",
+    "test:creator-pipeline:ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh ui",
+    "test:creator-pipeline:backend": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh backend",
+    "test:creator-pipeline:browser": "cd .. && bash scripts/cloud-python-bootstrap.sh bash scripts/creator-pipeline-validation.sh browser"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -14,6 +14,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
+    parser.add_argument('--creator-pipeline',action='store_true',help='Creator Pipeline native UI contract checks with synthetic responses')
     parser.add_argument('--agent-tasks',action='store_true',help='Task Center UI contract acceptance against synthetic task responses and disposable identity')
     parser.add_argument('--founder',action='store_true',help='consolidated Founder UI and synthetic identities against the real local API/database')
     parser.add_argument('--tour',action='store_true',help='record a short local Demo workflow instead of the full Founder acceptance suite')
@@ -25,6 +26,7 @@ def main():
     parser.add_argument('--pg-port',type=int,default=55479)
     parser.add_argument('--evidence-dir',type=Path,default=OUT)
     args=parser.parse_args()
+    if args.creator_pipeline: args.agent_tasks = True
     if args.agent_tasks and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
         parser.error('Task Center browser validation runs on cloud Linux CI only')
     if args.agent_tasks and any((args.library,args.founder,args.performance,args.history_import,args.tour,args.customers)):
@@ -93,7 +95,7 @@ def main():
             else:raise RuntimeError('Local server readiness deadline exceeded')
         if args.agent_tasks:
             for browser in ('chromium','webkit'):
-                code=subprocess.call(['node','web/tests/task-center-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
+                code=subprocess.call(['node','web/tests/creator-pipeline-browser.cjs' if args.creator_pipeline else 'web/tests/task-center-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
                 if code:return code
             return 0
         test = 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
