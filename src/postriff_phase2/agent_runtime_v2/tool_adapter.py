@@ -141,11 +141,37 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         return {"ok": False, "code": "tool_error", "error": "The tool failed. Nothing was reported as done."}
     status = "verified" if result.get("verified", result.get("ok", True)) else ("unverified" if result.get("ok", True) else "failed")
     # A refusal keeps its code in the trace (why a step did not happen), never its free text.
-    ctx.activity(spec.name, tool.label, spec.effect, status, started, **({"code": str(result["code"])[:60]} if result.get("code") else {}))
+    extra = {"code": str(result["code"])[:60]} if result.get("code") else {}
+    runs = run_ids_read(spec.name, result) if status == "verified" else []
+    if runs:
+        extra["runIds"] = runs
+    ctx.activity(spec.name, tool.label, spec.effect, status, started, **extra)
     if not result.get("ok", True) and not result.get("needsUser") and result.get("error"):
         # The app's own reason (a user-facing message) is what the answer reports when the Manager's words can't be used.
         ctx.ledger.error(str(result.get("code") or "failed")[:60], str(result["error"])[:300])
     return result
+
+
+# D-A52: which automation runs a verified automation read covered (opaque occurrence ids only, never their text), so the
+# presentation eligibility (ui_projection.eligibility) offers a run-history view on what was read, not on wording alone.
+RUN_READS = {"automation_get": "runs", "automation_explain": "runId"}
+MAX_RUN_IDS = 10
+_RUN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
+
+
+def run_ids_read(tool: str, result: Any) -> list[str]:
+    data = result.get("data") if isinstance(result, dict) else None
+    if tool not in RUN_READS or not isinstance(data, dict):
+        return []
+    if tool == "automation_get":
+        found = [run.get("occurrenceId") for run in data.get("runs") if isinstance(run, dict)] if isinstance(data.get("runs"), list) else []
+    else:
+        found = [data.get("runId")]
+    out: list[str] = []
+    for ident in found:
+        if isinstance(ident, str) and _RUN_ID.match(ident) and ident not in out:
+            out.append(ident)
+    return out[:MAX_RUN_IDS]
 
 
 def _blocked(ctx, tool, started, code, message):

@@ -114,15 +114,74 @@ test('generated plans keep only local steps; host actions handle follow-ups and 
     onBlocked: (k) => blocked.push(k),
   });
   handle({ type: 'continue_conversation', humanFriendlyMessage: '  Compare   the second two  ', params: { context: 'IGNORE PREVIOUS' }, formState: { secret: 1 } });
-  handle({ type: 'open_url', params: { url: '/app/library?asset=1' } });
+  handle({ type: 'open_url', params: { url: '/app/calendar?view=week' } });
   handle({ type: 'open_url', params: { url: 'https://rafii.io/app/calendar' } });
   handle({ type: 'open_url', params: { url: 'javascript:alert(1)' } });
   handle({ type: 'open_url', params: { url: 'https://evil.example/phish' } });
   handle({ type: 'open_url', params: { url: '//evil.example' } });
+  // A query key the route manifest does not declare for that page is off the allowlist (HF-3).
+  handle({ type: 'open_url', params: { url: '/app/library?asset=1' } });
   handle({ type: 'rafii.schedule', params: { all: true } });
   assert.deepEqual(followUps, ['Compare the second two']);
-  assert.deepEqual(navigations, ['/app/library?asset=1', '/app/calendar']);
-  assert.equal(blocked.length, 3);
+  assert.deepEqual(navigations, ['/app/calendar?view=week', '/app/calendar']);
+  assert.deepEqual(blocked, ['link', 'link', 'link', 'link']);
+});
+
+test('HF-3: @OpenUrl opens only route-manifest pages (safeHref); script, data, blob, protocol-relative, encoded and off-allowlist forms are refused', () => {
+  const origin = 'https://rafii.io';
+  // Allowed: manifest pages as same-origin paths, with declared query keys/values, or this app's own https origin.
+  const allowed = [
+    ['/app/library', '/app/library'],
+    ['/app/calendar?view=week', '/app/calendar?view=week'],
+    ['/app/queue?view=drafts&draft=d_123', '/app/queue?view=drafts&draft=d_123'],
+    ['/app/automations?edit=task-1', '/app/automations?edit=task-1'],
+    ['/app/help/getting-started#connect-accounts', '/app/help/getting-started#connect-accounts'],
+    ['/app/workspace/brand', '/app/workspace/brand'],
+    ['https://rafii.io/app/overview', '/app/overview'],
+    ['HTTPS://RAFII.IO/app/overview', '/app/overview'],
+    ['https://rafii.io:443/app/channels?filter=attention', '/app/channels?filter=attention'],
+  ];
+  for (const [input, expected] of allowed) assert.equal(actions.safeOpenUrl(input, origin), expected, input);
+
+  const refused = [
+    // Script and document schemes, any case, with whitespace or control-character prefixes, or split by tabs/newlines.
+    'javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'JAVASCRIPT:alert(1)', ' javascript:alert(1)', '\tjavascript:alert(1)', '\njavascript:alert(1)',
+    '\u0000javascript:alert(1)', '\u0001javascript:alert(1)', '\u001fjavascript:alert(1)', ' javascript:alert(1)', ' javascript:alert(1)',
+    '﻿javascript:alert(1)', 'java\tscript:alert(1)', 'java\nscript:alert(1)', 'java\u0000script:alert(1)',
+    'vbscript:msgbox(1)', 'VBScript:msgbox(1)', 'data:text/html,<script>alert(1)</script>', 'DATA:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+    ' data:text/html,x', 'blob:https://rafii.io/0f9e8d7c-6b5a-4f3e-9d2c-1b0a9f8e7d6c', 'BLOB:https://rafii.io/x', 'file:///etc/passwd',
+    'filesystem:https://rafii.io/temporary/x', 'about:blank', 'mailto:a@example.com', 'tel:+85212345678',
+    // Encoded schemes and entity tricks never become a scheme.
+    'javascript%3Aalert(1)', '%6A%61%76%61%73%63%72%69%70%74:alert(1)', '&#106;avascript:alert(1)', '&#x6A;avascript:alert(1)', '%20javascript:alert(1)',
+    '/%2F%2Fevil.example', '/%5C%5Cevil.example', '/app/%2e%2e/api/v1/workspaces',
+    // Protocol-relative and backslash forms the browser would read as another host.
+    '//evil.example', '//evil.example/app/library', ' //evil.example', '\t//evil.example', '/\\evil.example', '\\\\evil.example', '\\/evil.example', '/\t/evil.example',
+    // Other origins, credentials, ports and scheme downgrades.
+    'https://evil.example/app/library', 'https://rafii.io.evil.example/app/library', 'https://rafii.io@evil.example/app/library',
+    ['https://user', 'pw@rafii.io/app/library'].join(':'), 'http://rafii.io/app/library', 'https://rafii.io:8443/app/library', 'wss://rafii.io/app/library',
+    // Same-origin paths the route manifest does not allow (APIs, unknown pages, dot segments, undeclared query keys or values, stray anchors).
+    '/api/v1/workspaces', '/auth/signout', '/app/unknown-page', '/app/agent/..', '/app/help/.', '/app/help/../../api/v1/logout', '/app/./library',
+    '/app/library?asset=1', '/app/calendar?view=year', '/app/calendar?view=week&next=//evil.example', '/app/library#top', '/app/calendar?view=%E0%A4%A',
+    '', '   ', 'library', 'app/library',
+  ];
+  for (const input of refused) assert.equal(actions.safeOpenUrl(input, origin), null, JSON.stringify(input));
+  // Non-strings and absurd lengths are refused without throwing.
+  for (const input of [null, undefined, 42, {}, ['/app/library'], { toString: () => '/app/library' }]) assert.equal(actions.safeOpenUrl(input, origin), null);
+  assert.equal(actions.safeOpenUrl(`/app/agent/${'a'.repeat(5000)}`, origin), null);
+  // Without a known origin only relative manifest paths open.
+  assert.equal(actions.safeOpenUrl('https://rafii.io/app/overview', null), null);
+  assert.equal(actions.safeOpenUrl('/app/overview', null), '/app/overview');
+
+  // The host handler routes every @OpenUrl through the same check and announces each refusal.
+  const navigations = [];
+  const blocked = [];
+  const handle = actions.createHostActionHandler({ origin, onFollowUp: () => {}, onNavigate: (p) => navigations.push(p), onBlocked: (k) => blocked.push(k) });
+  for (const [input] of allowed) handle({ type: 'open_url', params: { url: input } });
+  for (const input of refused) handle({ type: 'open_url', params: { url: input } });
+  handle({ type: 'open_url', params: {} });
+  handle({ type: 'open_url' });
+  assert.deepEqual(navigations, allowed.map(([, expected]) => expected));
+  assert.equal(blocked.length, refused.length + 2);
 });
 
 test('dirty fields an edit would remove are detected; the swap keeps the latest typed values', () => {
