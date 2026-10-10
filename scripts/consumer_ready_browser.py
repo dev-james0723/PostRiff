@@ -14,6 +14,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--universal-entry',action='store_true',help='Existing panel entry and explicit text-selection handoff, no model calls')
+    parser.add_argument('--library-metadata',action='store_true',help='Native Library metadata preview/apply/Undo on synthetic assets')
     parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
     parser.add_argument('--founder',action='store_true',help='consolidated Founder UI and synthetic identities against the real local API/database')
     parser.add_argument('--tour',action='store_true',help='record a short local Demo workflow instead of the full Founder acceptance suite')
@@ -25,6 +26,7 @@ def main():
     parser.add_argument('--pg-port',type=int,default=55479)
     parser.add_argument('--evidence-dir',type=Path,default=OUT)
     args=parser.parse_args()
+    args.library = args.library or args.library_metadata
     if args.universal_entry and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
         parser.error('Universal Entry validation runs on cloud Linux CI only')
     if args.universal_entry and any((args.library,args.founder,args.performance,args.history_import,args.tour,args.customers)):
@@ -96,7 +98,7 @@ def main():
                 code=subprocess.call(['node','web/tests/universal-entry-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
                 if code:return code
             return 0
-        test = 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        test = 'library-metadata-browser.cjs' if args.library_metadata else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal
