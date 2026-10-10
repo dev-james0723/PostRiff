@@ -818,6 +818,7 @@ def _():
         def apply(s, _actor):
             record_ = next(x for x in s["coworker"]["sourceCampaigns"] if x["id"] == failed["id"])
             record_["status"], record_["retrying"] = "drafting", {"attempt": 2, "at": at, "by": "another-request"}
+            return s
         return apply
     command(claim(service.coworker.clock()))
     try:
