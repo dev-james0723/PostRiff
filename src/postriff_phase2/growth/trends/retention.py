@@ -1,11 +1,14 @@
 """Bounded physical purge after immediate rights suppression; independent of feature flags."""
-from .store import row, rows
+from .store import row, rows, trust_lock
 
 
 def sweep(store, *, limit=100, cursor=None):
     if type(limit) is not int or not 1<=limit<=1000:
         raise ValueError('invalid_purge_limit')
     with store.transaction(cursor) as cur:
+        # Restore/revocation owns exclusive trust before row locks. Keep the
+        # same order before either existing purge work or Meta request cleanup.
+        trust_lock(cur)
         cur.execute('SELECT reads_ready FROM public.pr_trend_runtime_guard WHERE singleton FOR SHARE')
         if not row(cur)['reads_ready']:
             return {'purged_nodes':0,'deferred':'restore_in_progress'}
@@ -156,4 +159,6 @@ def sweep(store, *, limit=100, cursor=None):
         for event in events:
             cur.execute('UPDATE public.pr_trend_outbox SET payload=%s WHERE scope_key=%s AND event_id=%s',
                 (bounded_json(ingestion_payload(event['payload'])),event['scope_key'],event['event_id']))
+        from . import meta_discovery
+        meta_discovery.purge_expired(store,limit=limit,cursor=cur)
         return {'purged_nodes':len(candidates),'scrubbed_jobs':len(terminal)+len(invalid_jobs),'scrubbed_events':len(events)}

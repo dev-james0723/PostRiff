@@ -32,6 +32,17 @@ from .store import TrendStore, row, rows, utcnow
 LOG = logging.getLogger('postriff.trends')
 
 
+def cursor_partition(cap, policy, payload):
+    filters={'operation':policy.operation,'scope':policy.scope_key,'filter':payload.get('filter',{})}
+    if 'discovery_request_id' in payload:
+        # An immutable user selection owns its own pagination checkpoint. Neither
+        # another query nor the operator's scheduled selection may reuse it.
+        filters.update(discovery_request_id=payload['discovery_request_id'],
+                       coverage_epoch=payload.get('coverage_epoch'))
+    return partition_key(instance_id=cap.endpoint,protocol_version=cap.version,
+                         filter_digest=digest(filters))
+
+
 def _scope_enabled(store, scope_key, values):
     if scope_key.startswith('workspace:'):
         return config.workspace_allowed(scope_key[10:], values)
@@ -215,9 +226,7 @@ class TrendWorker:
                     route = frontier.dispatch_context(claim)
                     partition, checkpoint = route['partition_key'], route['checkpoint']
                 else:
-                    partition = partition_key(instance_id=cap.endpoint, protocol_version=cap.version,
-                        filter_digest=digest({'operation': policy.operation, 'scope': policy.scope_key,
-                                              'filter': claim['payload'].get('filter', {})}))
+                    partition = cursor_partition(cap,policy,claim['payload'])
                     checkpoint = self.jobs.get_cursor(claim['scope_key'], cap.provider_id, partition)
                 claim = self.jobs.start(claim)
                 # Configuration may change while a cursor/start transaction waits.
@@ -269,6 +278,9 @@ class TrendWorker:
                                         'coverage_epoch': claim['payload']['coverage_epoch'],
                                         'completeness': completeness, 'markers': list(batch.markers)}}],
                         actual_micro_usd=accounting['actual_micro_usd'], usage_event_id=accounting['usage_event_id'], cursor=cur)
+                    if isinstance(adapter,MetaCollector) and 'discovery_request_id' in claim['payload']:
+                        from . import meta_discovery
+                        meta_discovery.record_batch(self.store,claim,batch,cursor=cur)
                     source_health.record(self.store, claim['scope_key'], cap.provider_id,
                         status='gap' if completeness == 'gap' else 'partial',
                         reason_code=batch.reason_code or 'bounded_sample', cursor=cur)

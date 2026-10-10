@@ -1,5 +1,6 @@
 """Cloud disposable PostgreSQL acceptance. Synthetic Meta records; no provider I/O."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import copy
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,8 @@ import threading
 import time
 import unittest
 from uuid import uuid4
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'tests')]
@@ -18,7 +21,7 @@ from psycopg.types.json import Jsonb
 from test_trend_pipeline import dedicated_test_dsn
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.growth.trends import retention
-from postriff_phase2.growth.trends.contracts import ContractError, PERMISSIONS, iso
+from postriff_phase2.growth.trends.contracts import ContractError, PERMISSIONS, digest, iso
 from postriff_phase2.growth.trends.policy import SourcePolicy
 from postriff_phase2.growth.trends.jobs import TrendJobs
 from postriff_phase2.growth.trends.retry import fail_attempt
@@ -76,7 +79,7 @@ class MetaPostgres(unittest.TestCase):
         return wid
 
     def grant(self, provider='threads', *, workspace=None, account=None, limit=10,
-              hashtag='music', review_changes=None, credential_changes=None, changes=None, denied_rights=()):
+              hashtag='music', review_changes=None, credential_changes=None, changes=None, denied_rights=(), scheduled=False):
         wid = workspace or self.workspace
         aid, connection = str(uuid4()), 'meta-fixture-' + uuid4().hex
         scope, account = 'workspace:' + wid, account or str(uuid4().int)[:15]
@@ -132,7 +135,14 @@ class MetaPostgres(unittest.TestCase):
                 VALUES(%s,%s,%s,%s,%s,'{}') ON CONFLICT DO NOTHING''',
                 (provider, meta.PROTOCOL, list(PERMISSIONS), self.start, self.end))
         self.store.ensure_scope(scope)
-        self.store.register_policy({**asdict(policy), 'meta_authorization_id': aid}, provider_contract_version=meta.PROTOCOL)
+        manifest = {**asdict(policy), 'meta_authorization_id': aid}
+        if scheduled:
+            keys = [aid + ':' + dimension for dimension in ('system', 'provider', 'workspace')]
+            for key, dimension in zip(keys, ('system', 'provider', 'workspace')):
+                TrendJobs(self.store).configure_budget(key, dimension, 0, self.start, self.end)
+            manifest['schedule'] = dict(enabled=True, start_at=self.start, interval_seconds=60,
+                max_samples=2, max_items=5, seconds=5, budget_keys=keys, reservation_microusd=0)
+        self.store.register_policy(manifest, provider_contract_version=meta.PROTOCOL)
         return dict(id=aid, connection=connection, policy=policy, review=review,
                     account=account, workspace=wid, ciphertext=ciphertext, selection=selection)
 
@@ -526,6 +536,233 @@ class MetaPostgres(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, 'stale_job_fence'):
             jobs.defer_local(started, code='meta_provider_quota_exhausted')
         jobs.cancel(scope, retry['job_id'])
+
+
+    def discovery_service(self, *, workspace=None, denied=False):
+        from postriff_phase2.growth.trends.service import error
+        wid = workspace or self.workspace
+        actor = str(uuid4())
+        with psycopg.connect(self.dsn) as db:
+            db.execute('INSERT INTO auth.users(id) VALUES(%s)', (actor,))
+            db.execute('INSERT INTO public.pr_profiles(user_id) VALUES(%s)', (actor,))
+            db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active')", (wid, actor))
+        requirements = []
+        @contextmanager
+        def transaction(workspace_id, token, requirement='read'):
+            requirements.append(requirement)
+            if denied: raise error('forbidden', 403)
+            self.assertEqual(workspace_id, wid)
+            with self.store.transaction() as cur:
+                yield self.store, cur, None, actor, {}, ['workspace:' + wid]
+        flags = {'RAFII_TREND_' + n + '_ENABLED': True for n in ('INTELLIGENCE', 'RADAR', 'PROVIDER_OPERATIONS')}
+        flags.update(RAFII_TREND_WORKSPACE_ALLOWLIST=wid,
+            RAFII_TREND_ALLOWED_OPERATIONS=','.join(p + ':' + o for p, o in OPERATIONS.items()))
+        return SimpleNamespace(transaction=transaction, values=flags, requirements=requirements,
+            hosted=SimpleNamespace(oauth=SimpleNamespace(vault=self.vault),
+                ideas=SimpleNamespace(_member=lambda _row: SimpleNamespace(allows=lambda _permission: True))))
+
+    def test_discovery_submit_idempotency_isolation_and_opaque_queue(self):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        from postriff_alpha.domain import AlphaError
+        grant = self.grant(scheduled=True)
+        service = self.discovery_service()
+        body = dict(provider='threads', selection={'query': 'user piano', 'search_type': 'TOP'},
+                    idempotency_key='one-click')
+        with patch.object(meta, 'collect_threads_keyword', side_effect=AssertionError('submit cannot perform I/O')):
+            first = d.submit(service, self.workspace, 'fixture', body)['data']
+            replay = d.submit(service, self.workspace, 'fixture', body)['data']
+        self.assertEqual(first['request_id'], replay['request_id'])
+        self.assertEqual((first['status'], first['sample_size']), ('queued', None))
+        self.assertEqual(service.requirements, ['edit', 'edit'])
+        with self.connect() as db:
+            request = db.execute('SELECT authorization_id,job_id FROM public.pr_trend_meta_discovery_requests '
+                                 'WHERE request_id=%s', (first['request_id'],)).fetchone()
+            payload = db.execute('SELECT payload FROM public.pr_trend_jobs WHERE scope_key=%s AND job_id=%s',
+                                 (grant['policy'].scope_key, request[1])).fetchone()[0]
+        self.assertEqual(str(request[0]), grant['id'])
+        self.assertEqual(payload['discovery_request_id'], first['request_id'])
+        self.assertNotIn('user piano', str(payload))
+        with self.assertRaises(AlphaError) as conflict:
+            d.submit(service, self.workspace, 'fixture', {**body, 'selection': {'query': 'different', 'search_type': 'TOP'}})
+        self.assertEqual(conflict.exception.status, 409)
+        other = self.new_workspace()
+        self.assertEqual(d.read(self.discovery_service(workspace=other), other, 'fixture')['data']['requests'], [])
+        with self.assertRaises(AlphaError) as denial:
+            d.submit(self.discovery_service(denied=True), self.workspace, 'fixture', body)
+        self.assertEqual(denial.exception.status, 403)
+        with psycopg.connect(self.dsn) as db:
+            for role in ('anon', 'authenticated'):
+                with self.subTest(role=role), db.transaction():
+                    db.execute('SET LOCAL ROLE ' + role)
+                    with self.assertRaises(psycopg.errors.InsufficientPrivilege), db.transaction():
+                        db.execute('SELECT * FROM public.pr_trend_meta_discovery_requests')
+        with self.assertRaises(psycopg.errors.CheckViolation), self.connect() as db:
+            db.execute("UPDATE public.pr_trend_meta_discovery_requests SET selection='{}' WHERE request_id=%s", (first['request_id'],))
+
+    def discovery_job(self, receipt):
+        from postriff_phase2.growth.trends.store import row
+        with self.store.transaction() as cur:
+            cur.execute("SELECT j.* FROM public.pr_trend_jobs j JOIN public.pr_trend_meta_discovery_requests r "
+                "ON r.job_id=j.job_id AND j.scope_key='workspace:'||r.workspace_id::text WHERE r.request_id=%s", (receipt['request_id'],))
+            return row(cur)
+
+    def finish_discovery(self, grant, receipt, *, data):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        job = self.discovery_job(receipt)
+        jobs = TrendJobs(self.store)
+        claim = jobs.claim('discovery-fixture', job_id=job['job_id'], scope_key=job['scope_key'],
+            budget_keys=job['payload']['budget_keys'], amount_micro_usd=0)
+        claim = jobs.start(claim)
+        class Transport:
+            def get(self, _url, **_kwargs): return {'data': data}, {}, 100
+        collector = MetaCollector(self.store, grant['id'], transport=Transport())
+        batch = collector(policy=grant['policy'], cursor=None, now=iso(datetime.now(timezone.utc)),
+            payload=claim['payload'], reservation_microusd=0)
+        with self.store.transaction() as cur:
+            jobs.complete_batch(claim, partition_key=receipt['request_id'], expected_generation=0,
+                batch_key=receipt['request_id'], observations=batch.observations, cursor_value=batch.cursor or {},
+                terminal_page=batch.terminal_page, coverage_state=batch.completeness, actual_micro_usd=0, cursor=cur)
+            d.record_batch(self.store, claim, batch, cursor=cur)
+        return batch
+
+    def test_two_request_queries_share_native_evidence_but_keep_separate_receipts(self):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        grant = self.grant(scheduled=True)
+        service = self.discovery_service()
+        ids, batches = [], []
+        for query, text in [('first piano', 'same post'), ('second piano', 'same post'), ('third piano', 'changed post')]:
+            receipt = d.submit(service, self.workspace, 'fixture', dict(provider='threads',
+                selection={'query': query, 'search_type': 'RECENT'}, idempotency_key=query))['data']
+            ids.append(receipt['request_id'])
+            batches.append(self.finish_discovery(grant, receipt, data=[{'id': '123456', 'text': text, 'timestamp': self.start}]))
+        self.assertNotEqual(batches[0].observations[0]['revision_sequence'], batches[1].observations[0]['revision_sequence'])
+        self.assertEqual(batches[0].observations[0]['revision_identity'], batches[1].observations[0]['revision_identity'])
+        self.assertNotEqual(batches[0].observations[0]['revision_identity'], batches[2].observations[0]['revision_identity'])
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_trend_observations WHERE scope_key=%s',
+                (grant['policy'].scope_key,)).fetchone()[0], 2)
+        receipts = d.read(service, self.workspace, 'fixture')['data']['requests']
+        self.assertEqual({r['request_id'] for r in receipts}, set(ids))
+        self.assertTrue(all(r['sample_size'] == 1 and r['status'] == 'completed' for r in receipts))
+        earlier = iso(datetime.now(timezone.utc) + timedelta(seconds=30))
+        with self.connect() as db:
+            db.execute('UPDATE public.pr_trend_nodes SET retention_until=%s WHERE scope_key=%s AND node_id=%s',
+                (earlier, grant['policy'].scope_key, batches[0].observations[0]['observation_id']))
+        bounded = d.read(service, self.workspace, 'fixture')['data']['requests']
+        for receipt in bounded:
+            if receipt['request_id'] in ids[:2]:
+                self.assertEqual(receipt['expires_at'], earlier)
+        with self.connect() as db:
+            db.execute('UPDATE public.pr_trend_meta_authorizations SET revoked_at=clock_timestamp() WHERE authorization_id=%s', (grant['id'],))
+        revoked = d.read(service, self.workspace, 'fixture')['data']['requests']
+        self.assertTrue(all(r['sample_size'] is None and r['selection'] is None and r['status'] == 'unavailable' for r in revoked))
+        # Cleanup is intentionally global. Earlier cases can leave other revoked
+        # requests; assert the actual bounded candidate set plus our own records.
+        live_workspace = self.new_workspace()
+        self.grant(workspace=live_workspace, scheduled=True)
+        live_service = self.discovery_service(workspace=live_workspace)
+        live = d.submit(live_service, live_workspace, 'fixture', dict(provider='threads',
+            selection={'query': 'unrelated live request', 'search_type': 'RECENT'},
+            idempotency_key='preserved-live-request'))['data']
+        with self.connect() as db:
+            eligible = {str(r[0]) for r in db.execute('''SELECT request_id FROM public.pr_trend_meta_discovery_requests
+                WHERE NOT postriff_private.trend_meta_discovery_request_valid(request_id)
+                ORDER BY expires_at,request_id LIMIT 100''').fetchall()}
+        self.assertTrue(set(ids) <= eligible)
+        self.assertNotIn(live['request_id'], eligible)
+        self.assertEqual(d.purge_expired(self.store), len(eligible))
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_trend_meta_discovery_requests '
+                'WHERE request_id=ANY(%s::uuid[])', (sorted(eligible),)).fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_trend_meta_discovery_results '
+                'WHERE request_id=ANY(%s::uuid[])', (ids,)).fetchone()[0], 0)
+        self.assertEqual(d.read(service, self.workspace, 'fixture')['data']['requests'], [])
+        self.assertEqual(d.read(live_service, live_workspace, 'fixture')['data']['requests'], [live])
+
+    def test_empty_and_queued_discovery_receipts_honor_policy_scope_actor_and_restore_guards(self):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        for mutation in ('policy_revoked', 'scope_disabled', 'creator_revoked', 'restore_paused', 'contract_revoked'):
+            with self.subTest(mutation=mutation):
+                wid = self.new_workspace()
+                grant = self.grant(workspace=wid, scheduled=True)
+                service = self.discovery_service(workspace=wid)
+                receipts = [d.submit(service, wid, 'fixture', dict(provider='threads',
+                    selection={'query': q, 'search_type': 'RECENT'}, idempotency_key=q))['data'] for q in ('empty', 'queued')]
+                self.finish_discovery(grant, receipts[0], data=[])
+                current = d.read(service, wid, 'fixture')['data']['requests']
+                empty = next(r for r in current if r['request_id'] == receipts[0]['request_id'])
+                self.assertEqual((empty['status'], empty['sample_size']), ('completed', 0))
+                with self.connect() as db:
+                    if mutation == 'policy_revoked':
+                        db.execute('UPDATE public.pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s', (grant['policy'].scope_key,))
+                    elif mutation == 'scope_disabled':
+                        db.execute('UPDATE public.pr_trend_scopes SET enabled=false WHERE scope_key=%s', (grant['policy'].scope_key,))
+                    elif mutation == 'creator_revoked':
+                        # Membership writes are performed by the established hosted service role.
+                        with psycopg.connect(self.dsn) as admin:
+                            admin.execute("UPDATE public.pr_memberships SET status='revoked' WHERE workspace_id=%s", (wid,))
+                    elif mutation == 'restore_paused':
+                        db.execute('UPDATE public.pr_trend_runtime_guard SET reads_ready=false')
+                    else:
+                        db.execute("UPDATE public.pr_trend_provider_contracts SET revoked_at=clock_timestamp() WHERE provider_id='threads' AND version=%s", (meta.PROTOCOL,))
+                try:
+                    current = d.read(service, wid, 'fixture')['data']['requests']
+                    self.assertTrue(all(r['status'] == 'unavailable' and r['sample_size'] is None and r['selection'] is None for r in current))
+                    self.assertGreaterEqual(d.purge_expired(self.store), 2)
+                    self.assertEqual(d.read(service, wid, 'fixture')['data']['requests'], [])
+                finally:
+                    with self.connect() as db:
+                        db.execute('UPDATE public.pr_trend_runtime_guard SET reads_ready=true')
+                        db.execute("UPDATE public.pr_trend_provider_contracts SET revoked_at=NULL WHERE provider_id='threads' AND version=%s", (meta.PROTOCOL,))
+
+    def test_distinct_hashtag_quota_cannot_reset_between_user_requests(self):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        grant = self.grant('instagram', scheduled=True, limit=1)
+        service = self.discovery_service()
+        receipts = [d.submit(service, self.workspace, 'fixture', dict(provider='instagram',
+            selection={'hashtag': tag}, idempotency_key=tag))['data'] for tag in ('piano', 'music')]
+        collector = self.collect(grant)
+        self.assertTrue(collector.reserve(grant['policy'], 'instagram_distinct_hashtag_7d',
+            grant['account'] + ':piano', 1, discovery_request_id=receipts[0]['request_id']))
+        with self.assertRaisesRegex(ContractError, 'meta_provider_quota_exhausted'):
+            collector.reserve(grant['policy'], 'instagram_distinct_hashtag_7d', grant['account'] + ':music', 1,
+                discovery_request_id=receipts[1]['request_id'])
+        self.assertTrue(collector.reserve(grant['policy'], 'instagram_distinct_hashtag_7d',
+            grant['account'] + ':piano', 1, discovery_request_id=receipts[0]['request_id']))
+        with self.assertRaisesRegex(ContractError, 'meta_quota_domain_mismatch'):
+            collector.reserve(grant['policy'], 'instagram_distinct_hashtag_7d', grant['account'] + ':music', 1,
+                discovery_request_id=receipts[0]['request_id'])
+
+    def test_review_renewal_creates_fresh_acquisition_without_rebinding_old_evidence_or_quota(self):
+        from postriff_phase2.growth.trends import meta_discovery as d
+        first = self.grant(scheduled=True)
+        service = self.discovery_service()
+        body = dict(provider='threads', selection={'query': 'piano', 'search_type': 'RECENT'}, idempotency_key='first-review')
+        receipt1 = d.submit(service, self.workspace, 'fixture', body)['data']
+        native = [{'id': '123456', 'text': 'unchanged native post', 'timestamp': self.start}]
+        batch1 = self.finish_discovery(first, receipt1, data=native)
+        old_id = batch1.observations[0]['observation_id']
+        with self.connect() as db:
+            old_before = db.execute('SELECT source_policy_version,revision_identity,provenance,payload FROM public.pr_trend_observations '
+                'WHERE scope_key=%s AND observation_id=%s', (first['policy'].scope_key, old_id)).fetchone()
+            db.execute('UPDATE public.pr_trend_meta_authorizations SET revoked_at=clock_timestamp() WHERE authorization_id=%s', (first['id'],))
+        renewed = self.grant(scheduled=True, account=first['account'])
+        receipt2 = d.submit(service, self.workspace, 'fixture', {**body, 'idempotency_key': 'renewed-review'})['data']
+        batch2 = self.finish_discovery(renewed, receipt2, data=native)
+        new_id = batch2.observations[0]['observation_id']
+        self.assertNotEqual(old_id, new_id)
+        self.assertEqual(batch1.observations[0]['source_identity'], batch2.observations[0]['source_identity'])
+        self.assertEqual(batch1.observations[0]['provenance']['content_revision_digest'],
+                         batch2.observations[0]['provenance']['content_revision_digest'])
+        self.assertEqual(self.valid_nodes(first, [old_id, new_id]), [False, True])
+        with self.connect() as db:
+            self.assertEqual(db.execute('SELECT source_policy_version,revision_identity,provenance,payload FROM public.pr_trend_observations '
+                'WHERE scope_key=%s AND observation_id=%s', (first['policy'].scope_key, old_id)).fetchone(), old_before)
+            self.assertEqual(db.execute('SELECT count(*),count(DISTINCT bucket_digest) FROM public.pr_trend_meta_quota_events '
+                'WHERE authorization_id=ANY(%s::uuid[])', ([first['id'], renewed['id']],)).fetchone(), (2, 1))
+        results = {r['request_id']: r for r in d.read(service, self.workspace, 'fixture')['data']['requests']}
+        self.assertEqual((results[receipt1['request_id']]['status'], results[receipt1['request_id']]['selection']), ('unavailable', None))
+        self.assertEqual((results[receipt2['request_id']]['status'], results[receipt2['request_id']]['sample_size']), ('completed', 1))
 
 
 if __name__ == '__main__':

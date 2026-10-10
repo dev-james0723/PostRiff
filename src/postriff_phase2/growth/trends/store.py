@@ -22,6 +22,27 @@ class TrendStorageError(ContractError):
     pass
 
 
+def same_meta_sample_revision(value, prior, operation):
+    """An unchanged Meta content revision keeps its first stored fetch sequence.
+
+    These three adapters receive no native revision counter, so their sequence
+    orders newly observed content revisions by retrieval time. A later read of
+    the same revision must not invent another revision or extend its retention.
+    All other providers and sequences retain strict collision detection.
+    """
+    operations={'threads':'keyword_search','instagram':'hashtag_discovery','facebook':'page_public_posts'}
+    provider=value.get('provider_id')
+    return bool(operations.get(provider)==operation
+        and value.get('kind')=='raw_post' and value.get('operation')=='create'
+        and value.get('provenance',{}).get('access_method')==f'official_meta_{provider}_public_sample'
+        and value['revision_identity']==digest([value['source_policy_version'],value['event_at'],value['payload']])
+        and value.get('provenance',{}).get('content_revision_digest')==digest([value['event_at'],value['payload']])
+        and prior['revision_identity']==value['revision_identity']
+        and prior['payload_digest']==value['payload_digest']
+        and value['revision_sequence']==int(instant(value['received_at']).timestamp()*1_000_000)
+        and prior['revision_sequence']==int(instant(prior['received_at']).timestamp()*1_000_000))
+
+
 # Match observation admission. Metadata and licensed aggregate evidence do not
 # acquire a raw-content requirement merely by sharing a provider.
 STORAGE_PERMISSION_SQL = """CASE WHEN o.kind='aggregate_metric' THEN 'store_metrics'
@@ -275,10 +296,11 @@ class TrendStore:
             cur.execute('SELECT 1 FROM public.pr_trend_deletion_tombstones WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s', (o['scope_key'],o['provider_id'],key))
             if cur.fetchone():
                 raise TrendStorageError('source_deleted')
-            cur.execute('SELECT observation_id,payload_digest,revision_sequence FROM public.pr_trend_observations WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s AND revision_identity=%s', (o['scope_key'],o['provider_id'],key,o['revision_identity']))
+            cur.execute('SELECT observation_id,payload_digest,revision_identity,revision_sequence,received_at FROM public.pr_trend_observations WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s AND revision_identity=%s', (o['scope_key'],o['provider_id'],key,o['revision_identity']))
             prior = row(cur)
             if prior:
-                if prior['payload_digest'] != o['payload_digest'] or prior['revision_sequence'] != o['revision_sequence']:
+                if prior['payload_digest'] != o['payload_digest'] or (prior['revision_sequence'] != o['revision_sequence']
+                        and not same_meta_sample_revision(o,prior,p['manifest'].get('operation'))):
                     raise TrendStorageError('observation_identity_collision')
                 return {'observation_id':prior['observation_id'],'inserted':False}
             self._node(cur,o['scope_key'],o['observation_id'],'observation',o['available_at'],o['retention_until'])

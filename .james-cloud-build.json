@@ -10,7 +10,7 @@
     "build": "build",
     "test": "test:meta:jcb",
     "ci": "ci:meta:jcb",
-    "e2e": "ci:meta:jcb"
+    "e2e": "e2e:meta:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",

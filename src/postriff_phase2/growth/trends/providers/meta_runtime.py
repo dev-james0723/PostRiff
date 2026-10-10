@@ -5,7 +5,7 @@ immutable source policy. Every admission re-reads it; returned bearer tokens are
 short-lived local values, never stored in a registry or queue. Provider quota
 reservations commit before I/O and are not refunded after uncertain failures.
 """
-from dataclasses import fields
+from dataclasses import fields, replace
 import hashlib
 import hmac
 
@@ -16,7 +16,7 @@ from . import meta_public as meta
 
 PUBLIC_CREDENTIALS = {p: 'meta_public_' + p for p in ('threads', 'instagram', 'facebook')}
 JOB_KEYS = frozenset({'operation', 'max_items', 'seconds', 'budget_keys',
-                     'reservation_microusd', 'coverage_epoch'})
+                     'reservation_microusd', 'coverage_epoch', 'discovery_request_id'})
 
 
 def _denied():
@@ -110,11 +110,16 @@ class MetaCollector:
     def assert_current(self,policy,at,*,cursor=None):
         load_authorization(self.store,self.authorization_id,policy,at=at,cursor=cursor)
 
-    def reserve(self,policy,name,key,units):
+    def reserve(self,policy,name,key,units,*,discovery_request_id=None):
         if units != 1 or type(units) is not int: raise ContractError('meta_quota_invalid')
         with self.store.transaction() as cur:
             at=self.clock()
             value,proof,_=load_authorization(self.store,self.authorization_id,policy,at=at,cursor=cur)
+            selection=value['selection']
+            if discovery_request_id is not None:
+                from ..meta_discovery import load_request, validate_selection
+                request=load_request(self.store,discovery_request_id,policy,self.authorization_id,at=at,cursor=cur)
+                selection={**selection,**validate_selection(policy.provider_id,request['selection'],proof)}
             rule=(value.get('quota_rules') or {}).get(name)
             if (not isinstance(rule,dict) or set(rule)!={'limit','window_seconds'}
                     or type(rule['limit']) is not int or not 1<=rule['limit']<=1_000_000
@@ -122,10 +127,10 @@ class MetaCollector:
                 raise ContractError('meta_quota_rule_unverified')
             expected={'threads_keyword_search':policy.scope_key,
                       'instagram_graph_request':policy.scope_key,
-                      'facebook_public_page_read':value['selection'].get('reviewed_page_id')}
+                      'facebook_public_page_read':selection.get('reviewed_page_id')}
             distinct=name=='instagram_distinct_hashtag_7d'
             if distinct:
-                hashtag=meta._query(value['selection'].get('hashtag'),hashtag=True).casefold()
+                hashtag=meta._query(selection.get('hashtag'),hashtag=True).casefold()
                 if key.casefold()!=proof.account_id+':'+hashtag or rule['limit']!=proof.quota_limit or rule['limit']>30 or rule['window_seconds']!=proof.quota_window_seconds or rule['window_seconds']!=604800:
                     raise ContractError('meta_quota_domain_mismatch')
             elif name!='instagram_graph_request' and (rule['limit'] != proof.quota_limit or rule['window_seconds'] != proof.quota_window_seconds):
@@ -156,12 +161,25 @@ class MetaCollector:
         if payload.get('operation',policy.operation)!=policy.operation:
             raise ContractError('meta_job_override_forbidden')
         value,proof,token=load_authorization(self.store,self.authorization_id,policy,at=self.clock())
+        request_id=payload.get('discovery_request_id')
+        request=None
+        selection=value['selection']
+        if 'discovery_request_id' in payload:
+            from ..meta_discovery import load_request, validate_selection
+            request=load_request(self.store,request_id,policy,self.authorization_id,at=self.clock())
+            if payload['coverage_epoch']!=request['coverage_epoch']:
+                raise ContractError('meta_discovery_epoch_mismatch')
+            selection={**selection,**validate_selection(policy.provider_id,request['selection'],proof)}
+            if cursor:
+                if (not isinstance(cursor,dict) or set(cursor)!={'discovery_request_id','provider_cursor'}
+                        or cursor['discovery_request_id']!=request_id):
+                    raise ContractError('meta_discovery_cursor_mismatch')
+                cursor=cursor['provider_cursor']
         common=dict(policy=policy,review=proof,token=token,received_at=now,available_at=now,
             coverage_epoch=payload['coverage_epoch'],enabled=True,entitlement_current=True,
-            quota_reserve=lambda name,key,units:self.reserve(policy,name,key,units),
+            quota_reserve=lambda name,key,units:self.reserve(policy,name,key,units,discovery_request_id=request_id),
             limit=payload['max_items'],cursor=cursor or None,transport=self.transport,
             reservation_microusd=reservation_microusd,on_http_start=self._http_start)
-        selection=value['selection']
         if policy.provider_id=='threads':
             result=meta.collect_threads_keyword(**common,query=selection['query'],search_type=selection['search_type'])
         elif policy.provider_id=='instagram':
@@ -173,10 +191,18 @@ class MetaCollector:
         # APIs that omit authors remain unknown; synthetic transports never qualify.
         reviewed=set(selection.get('third_party_source_ids',()))
         for observation in result.observations:
+            if request is not None:
+                observation['provenance'].update(discovery_request_id=request_id,
+                    discovery_selection_digest=request['selection_digest'])
             if (observation['provenance'].get('evidence_kind')=='provider_response'
                     and observation['source_identity'] in reviewed):
                 observation['provenance']['third_party']=True
                 observation['provenance']['third_party_evidence_ref']=selection['third_party_evidence_ref']
+        if request is not None:
+            # The provider validates its own query cursor; this envelope also
+            # prevents same-query cursors crossing independent user requests.
+            result=replace(result,cursor={'discovery_request_id':request_id,'provider_cursor':result.cursor}
+                           if result.cursor else None)
         return result
 
 

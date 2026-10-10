@@ -29,6 +29,16 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
             if q: raise error("invalid_request",400)
             from . import meta_sources
             data=meta_sources.read(service,workspace_id,token)
+        elif tail == ['public-sources','discovery-requests']:
+            if q: raise error('invalid_request',400)
+            from . import meta_discovery
+            if method == 'GET':
+                data=meta_discovery.read(service,workspace_id,token)
+            elif method == 'POST':
+                data=meta_discovery.submit(service,workspace_id,token,body())
+                status=202
+            else:
+                raise error('not_found',404)
         elif len(tail)==2 and tail[0]=="public-sources" and method=="DELETE":
             if q: raise error("invalid_request",400)
             from . import meta_sources

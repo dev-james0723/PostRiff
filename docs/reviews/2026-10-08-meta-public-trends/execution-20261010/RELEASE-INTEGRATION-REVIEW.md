@@ -1,0 +1,13 @@
+# Release integration findings — 2026-10-10
+
+The initial exact-head GitHub release run 38060710720 used PR merge SHA ba91d76e866f35e001c42a5161e37d851ab4a8d5 and failed with 6 failures / 51 errors in 4,798 Python tests. The independently passing Library workflow did not reproduce these discovery-order failures. Current consumer-saas 6744835c1f3ac7258c62fe3b534736b73248620d adds merged PR152 Library browse and PR167 Connection Health; it was fetched and cleanly merged as 56ed46e4eac0eb224875eca9cc36546ce7858b80. The shared hosted route/client/hooks changes were reviewed and preserve the additive Meta routes and source status.
+
+Root cause: the capability fixture temporarily overwrote the real library_browse tool then popped it, deleting the production registration from the shared test process. The newly integrated registration also omitted its post-freeze since=2 and Library data-grant metadata, causing the frozen legacy baseline to expand. Fix6f12fbda6a6db670eaafcee46f43a4ac92006da4 restores the fixture state, declares since=2 and Library data grants, and adds required bilingual capability copy; targeted regression checks passed RED→GREEN. Exact-head cloud validation is running; the frozen golden fixture itself must not be regenerated to absorb this tool.
+
+WebKit scenes run38060710706 passed desktop and Chromium checks, then timed out at phone guide Step4 and reported Target crashed. A bounded 25.7KB artifact review found null failure DOM and no corresponding server runtime error. Nearby successful scenes run38060570835 passed all26 WebKit guide checks with identical guide, ConnectSheet, workflow and dependency blobs. No product/test change was justified; the next candidate push supplies one clean cloud retry. The crash initiator remains unproven.
+
+All failure artifacts remain under the local .superpowers execution directory. No scanner, assertion, permission guard or release gate was disabled.
+
+Integrated GitHub run38062237800 completed full Python PASS and all117 PostgreSQL script executions PASS (740.21 seconds, zero nonzero exits). It then failed one of872 Web contract tests because visual-analysis.test.cjs uses a custom TypeScript loader that did not map the newly imported ./public-source-types. The repair supplies the real transpiled schema module, without substituting a mock schema or weakening assertions; a focused cloud validation is running.
+
+The WebKit retry failed a different weather context after57/58 checks. Diagnostic-only commit d9b778d2169cfcac670cff3931b6665226b1f950 adds bounded lifecycle/crash events and runner/kernel evidence, without changing commands, assertions, timeouts or success conditions. It is not itself a crash fix.

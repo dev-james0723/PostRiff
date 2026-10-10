@@ -5,16 +5,23 @@ case "${CI:-}" in 1|true|TRUE) ;; *) echo 'Use JCB cloud CI.' >&2; exit 64 ;; es
 if [ "$(uname -s)" != Linux ] || [ -z "${TREND_VISUAL_TEST_PYTHON:-}" ]; then
   echo 'Use cloud-python-bootstrap.sh on Linux.' >&2; exit 64
 fi
-case "${1:-}" in ''|--schema-only|--python-only|--full) ;; *) exit 64 ;; esac
+case "${1:-}" in ''|--schema-only|--python-only|--web-only|--full) ;; *) exit 64 ;; esac
 meta_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd -- "$meta_root"
 export PYTHONPATH="$meta_root/src:$meta_root/tests" PYTHONDONTWRITEBYTECODE=1
+meta_web_checks() {
+  npm --prefix web run typecheck
+  npm --prefix web run lint
+  npm --prefix web run build
+  bash scripts/cloud-meta-browser.sh
+}
 if [ "${1:-}" != --schema-only ]; then
+  # Validate the wire contract before the broader Python and database cohorts.
+  node --test web/tests/visual-analysis.test.cjs web/tests/trend-public-sources.test.cjs web/tests/trend-meta-discovery.test.cjs
+  if [ "${1:-}" = --web-only ]; then meta_web_checks; exit 0; fi
   "$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_trend_meta*.py'
   # Preserve the integrated release registry across test discovery order.
   "$TREND_VISUAL_TEST_PYTHON" -m unittest test_agent_capability_registry test_agent_ui_library_browse
-  # This API-loader contract must resolve the actual public-source schemas.
-  node --test web/tests/visual-analysis.test.cjs
 fi
 # Keep synthetic credentials unmistakable to the release secret detector.
 "$TREND_VISUAL_TEST_PYTHON" - <<'META_SECRET_SCAN'
@@ -40,7 +47,7 @@ if [ ! -x "$meta_pg_bin/initdb" ]; then
 fi
 meta_home="$(mktemp -d)"
 trap 'rm -rf -- "$meta_home"' EXIT
-meta_scripts=(tests/phase2/postgres_trend_meta.py)
+meta_scripts=(tests/phase2/postgres_trend_meta.py tests/phase2/postgres_trend_meta_status.py)
 if [ "${1:-}" = --full ]; then
   meta_scripts+=(tests/phase2/postgres_trend_trust.py tests/phase2/postgres_trend_services.py tests/phase2/postgres_trend_pipeline.py)
 fi
@@ -53,8 +60,5 @@ for meta_script in "${meta_scripts[@]}"; do
 done
 if [ "${1:-}" = --full ]; then
   "$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_trend_*.py'
-  npm --prefix web run typecheck
-  npm --prefix web run lint
-  npm --prefix web run build
-  bash scripts/cloud-meta-browser.sh
+  meta_web_checks
 fi

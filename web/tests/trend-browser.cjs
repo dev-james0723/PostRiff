@@ -47,7 +47,7 @@ async function visibleText(page, pattern) {
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
-    for (const width of (process.env.TREND_WIDTHS || '1440,390,820').split(',').map(Number)) {
+    for (const width of (process.env.TREND_WIDTHS || (process.env.TREND_META_SMOKE_ONLY === '1' ? '1440,390,320' : '1440,390,820')).split(',').map(Number)) {
       const context = await browser.newContext({
         viewport: { width, height: 1000 },
         reducedMotion: 'reduce',
@@ -75,6 +75,13 @@ async function run() {
       let flagsOn = false,
         workspaceAllowed = true,
         scenario = 'fresh',
+        publicSourceScenario = 'pending',
+        displayLocale = 'en',
+        requestReadFails = false,
+        requestReceipts = [],
+        delayNextRequest = false,
+        releaseRequest,
+        delayedRequestStarted,
         revokedReceipt = false,
         watch = null,
         labDelay = false,
@@ -120,21 +127,57 @@ async function run() {
         calls.push({ method: req.method(), path: pathname, query: url.search, body });
         const send = (data, status = 200) =>
           route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
-        const root = `/api/workspaces/${wid}/coworker/trends`;
+        const requestedWorkspace = pathname.match(/^\/api\/workspaces\/([^/]+)\/coworker\/trends/)?.[1];
+        const root = `/api/workspaces/${requestedWorkspace ?? wid}/coworker/trends`;
+        const otherWorkspace = requestedWorkspace && requestedWorkspace !== wid;
         if (pathname.startsWith(root)) {
           assert.match(req.headers().authorization, /^Bearer dev:/);
           assert.equal(req.headers()['x-postriff-request'], 'founder-alpha');
           const endpoint = pathname.slice(root.length);
           if (endpoint === '/public-sources' && req.method() === 'GET') {
+            const sourceScenario = otherWorkspace ? 'pending' : publicSourceScenario;
             return send(f.envelope([
               ['instagram','hashtag_discovery','Instagram hashtags'],
               ['threads','keyword_search','Threads keywords'],
               ['facebook','page_public_posts','Facebook public Pages']
             ].map(([provider,operation,label]) => ({provider,operation,label,
-              status:'APP_REVIEW_REQUIRED',authorization_id:null,latest_successful_read:null,
-              expires_at:null,dispatch_enabled:false,
+              status:sourceScenario === 'pending' ? 'APP_REVIEW_REQUIRED' : sourceScenario === 'authorization_denied' ? 'AUTHORIZATION_REQUIRED' : 'LIVE',
+              authorization_id:sourceScenario === 'pending' ? null : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              latest_successful_read:sourceScenario === 'pending' ? null : new Date().toISOString(),
+              expires_at:sourceScenario === 'pending' ? null : new Date(Date.now()+(sourceScenario === 'expires_soon' ? 5000 : 60000)).toISOString(),
+              dispatch_enabled:sourceScenario !== 'pending',
+              verification:{
+                implemented:'VERIFIED',runtime_bound:'VERIFIED',
+                app_reviewed:sourceScenario === 'pending' ? 'BLOCKED' : 'VERIFIED',
+                verified_scope_or_feature:sourceScenario === 'pending' ? 'BLOCKED' : 'VERIFIED',
+                live_read_verified:sourceScenario === 'pending' ? 'UNVERIFIED' : 'VERIFIED',
+                stored_and_processed:sourceScenario === 'pending' ? 'UNVERIFIED' : 'VERIFIED',
+                production_ui_verified:'UNVERIFIED'
+              },
               coverage:'Selected hashtags, queries or reviewed Pages only. Not all public posts.',
               semantic_evaluation:'Requires current source rights, workspace consent and model budget.'}))));
+          }
+          if (endpoint === '/public-sources/discovery-requests') {
+            const selections = {threads:{query:'sustainable fashion',search_type:'RECENT'},instagram:{hashtag:'nature'},facebook:{reviewed_page_id:'123456789'}};
+            const ids = {threads:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',instagram:'11111111-1111-4111-8111-111111111111',facebook:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'};
+            const receipt = {
+              request_id:ids[body?.provider ?? 'threads'],provider:body?.provider ?? 'threads',
+              selection:selections[body?.provider ?? 'threads'],status:'queued',
+              sample_size:null,earliest_source_at:null,latest_source_at:null,retrieved_at:null,
+              created_at:new Date().toISOString(),expires_at:new Date(Date.now()+60000).toISOString(),completeness:'unknown',coverage:'Synthetic queued request; no provider read.'
+            };
+            if(req.method() === 'POST') {
+              assert.ok(body.provider in selections);
+              assert.deepEqual(body.selection,receipt.selection);
+              assert.match(body.idempotency_key,/^[0-9a-f-]{36}$/);
+              if(delayNextRequest) await new Promise(resolve => { releaseRequest=resolve; delayedRequestStarted?.(); });
+              requestReceipts = requestReceipts.filter(value=>value.request_id !== receipt.request_id).concat(receipt);
+              return send(f.envelope(receipt));
+            }
+            if(requestReadFails) return send({code:'source_unavailable',error:'Synthetic disconnected receipt read'},503);
+            return send(f.envelope({requests:otherWorkspace ? [] : requestReceipts,options:['instagram','threads','facebook'].map(provider=>({
+              provider,enabled:!otherWorkspace && publicSourceScenario !== 'pending',reviewed_page_ids:provider === 'facebook' ? ['123456789'] : []
+            }))}));
           }
           if (endpoint === '' && req.method() === 'GET') {
             if (scenario === 'loading') await new Promise((r) => setTimeout(r, 700));
@@ -305,17 +348,22 @@ async function run() {
                 name: 'Synthetic Trend workspace',
                 plan: 'studio',
                 memberCounts: { owner: 1 }
-              }
+              },
+              ...(process.env.TREND_META_SMOKE_ONLY === '1' ? [{workspaceId:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',membership:snapshot.membership,name:'Other Synthetic workspace',plan:'studio',memberCounts:{owner:1}}] : [])
             ]
           });
         if (pathname === '/api/me')
           return send({
             userId: '00000000-0000-0000-0000-000000000001',
             displayName: 'Synthetic owner',
-            preferences: { timeZone: 'UTC', locale: 'en', alertNewDevice: false },
+            preferences: { timeZone: 'UTC', locale: displayLocale, alertNewDevice: false },
             mfa: {}
           });
         if (pathname === `/api/workspaces/${wid}`) return send(snapshot);
+        if (pathname === '/api/workspaces/cccccccc-cccc-4ccc-8ccc-cccccccccccc') {
+          const other=structuredClone(snapshot);other.state.workspace.id='cccccccc-cccc-4ccc-8ccc-cccccccccccc';other.state.workspace.name='Other Synthetic workspace';
+          return send(other);
+        }
         if (pathname.endsWith('/coworker/status'))
           return send({
             flags: flagsOn ? f.flags : {},
@@ -372,7 +420,116 @@ async function run() {
           assert.equal(await sources.getByText('Public access approval required', {exact:true}).count(),3);
           assert.equal(await sources.getByText('No verified third-party public reading.', {exact:true}).count(),3);
           assert.equal(await sources.getByText('Live within this source scope', {exact:true}).count(),0);
-          assert.equal(calls.some(c => c.path.includes('/public-sources') && c.method !== 'GET'),false);
+          const gateLabels = ['Adapter implemented','Runtime connected','Meta app approval','Permission or feature verified',
+            'Live public read verified','Stored and processed','Production interface verified'];
+          for (const label of gateLabels) {
+            const fields = sources.getByText(label,{exact:true});
+            assert.equal(await fields.count(),3,label+' independently visible for all three sources');
+            for(let i=0;i<3;i++) assert.equal(await fields.nth(i).isVisible(),true,label);
+          }
+          assert.equal(await sources.locator('[data-verification-key]').count(),21,'exactly seven gates per source');
+          assert.equal(await sources.getByRole('button',{name:'Queue discovery request',exact:true}).first().isDisabled(),true);
+          assert.equal(await sources.getByLabel('Threads keyword query',{exact:true}).isDisabled(),true,'pending grants cannot submit a query');
+          publicSourceScenario='authorized';
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByLabel('Threads keyword query',{exact:true}).fill('sustainable fashion');
+          await sources.getByLabel('Threads search order',{exact:true}).selectOption('RECENT');
+          await sources.getByLabel('Reviewed Facebook Page',{exact:true}).selectOption('123456789');
+          assert.deepEqual(await sources.getByLabel('Reviewed Facebook Page',{exact:true}).locator('option').allTextContents(),['Choose a reviewed Page','123456789']);
+          await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(1).click();
+          await sources.getByText('Request queued. No live reading has been verified by this request.',{exact:true}).waitFor();
+          await sources.getByText('Sample size: Unknown',{exact:true}).waitFor();
+          await sources.getByText('Source time range: Unknown',{exact:true}).waitFor();
+          await sources.getByText('Retrieval time: Unknown',{exact:true}).waitFor();
+          await sources.getByLabel('Instagram hashtag',{exact:true}).fill('#nature');
+          await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(0).click();
+          await sources.getByText('Selection: #nature',{exact:true}).waitFor();
+          await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(2).click();
+          await sources.getByText('Selection: 123456789',{exact:true}).waitFor();
+          assert.equal(calls.filter(c=>c.path.endsWith('/public-sources/discovery-requests') && c.method === 'POST').length,3,'all three official source selections queue exact synthetic payloads');
+          requestReceipts=requestReceipts.map(receipt=>({...receipt,status:'completed',sample_size:2,
+            earliest_source_at:'2026-10-09T11:00:00Z',latest_source_at:'2026-10-09T12:00:00Z',retrieved_at:new Date().toISOString(),
+            completeness:'partial',expires_at:new Date(Date.now()+5000).toISOString()}));
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByText('Sample size: 2',{exact:true}).first().waitFor();
+          // A frozen/offline connection cannot prolong a cached receipt's independent deadline.
+          await context.setOffline(true);
+          await page.waitForTimeout(5500);
+          assert.equal(await sources.getByText('Sample size: 2',{exact:true}).count(),0);
+          assert.equal(await sources.getByText('Selection: sustainable fashion · Recent results',{exact:true}).count(),0);
+          assert.equal(await sources.getByText('Sample size: Unknown',{exact:true}).count(),3);
+          await context.setOffline(false);
+          requestReceipts=requestReceipts.map(receipt=>({...receipt,expires_at:new Date(Date.now()+60000).toISOString()}));
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByText('Sample size: 2',{exact:true}).first().waitFor();
+          publicSourceScenario='authorization_denied';
+          await page.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')));
+          await sources.getByText('Reconnect or verify public access',{exact:true}).first().waitFor();
+          assert.equal(await sources.getByText('Sample size: 2',{exact:true}).count(),0,'explicit authorization denial hides counts before datetime expiry');
+          assert.equal(await sources.getByText('Selection: sustainable fashion · Recent results',{exact:true}).count(),0);
+          publicSourceScenario='authorized';
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByText('Sample size: 2',{exact:true}).first().waitFor();
+          requestReadFails=true;
+          await page.evaluate(()=>window.dispatchEvent(new Event('visibilitychange')));
+          await sources.getByText('Discovery requests are unavailable.',{exact:true}).waitFor();
+          assert.equal(await sources.getByText('Sample size: 2',{exact:true}).count(),0,'failed GET hides cached measurements');
+          assert.equal(await sources.getByText('Selection: sustainable fashion · Recent results',{exact:true}).count(),0,'failed GET hides cached selections');
+          requestReadFails=false;
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByLabel('Threads keyword query',{exact:true}).fill('sustainable fashion');
+          await sources.getByLabel('Threads search order',{exact:true}).selectOption('RECENT');
+          delayNextRequest=true;
+          const started=new Promise(resolve=>{delayedRequestStarted=resolve;});
+          await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(1).click();
+          await started;
+          if(width<768) await page.locator('[data-sidebar="trigger"]').first().click();
+          await page.getByRole('button',{name:/My agency/}).first().click();
+          await page.getByRole('menuitem',{name:/Other Synthetic workspace/}).click();
+          if(width<768) await page.keyboard.press('Escape');
+          await sources.locator('summary').click();
+          await sources.getByText('Public access approval required',{exact:true}).first().waitFor();
+          releaseRequest();delayNextRequest=false;
+          await page.waitForTimeout(100);
+          assert.equal(await sources.getByText('Selection: sustainable fashion · Recent results',{exact:true}).count(),0,'workspace remount rejects late old-workspace submission');
+          assert.equal(await sources.getByText('Sample size: 2',{exact:true}).count(),0);
+          // Return to the original workspace before independent cached-source expiry checks.
+          if(width<768) await page.locator('[data-sidebar="trigger"]').first().click();
+          await page.getByRole('button',{name:/Other Synthetic workspace/}).first().click();
+          await page.getByRole('menuitem',{name:/My agency/}).click();
+          if(width<768) await page.keyboard.press('Escape');
+          publicSourceScenario='expires_soon';
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          await sources.locator('summary').click();
+          await sources.getByText('Live within this source scope',{exact:true}).first().waitFor();
+          await sources.getByLabel('Threads keyword query',{exact:true}).fill('expiry check');
+          assert.equal(await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(1).isEnabled(),true);
+          assert.equal(await sources.locator('[data-verification-key="production_ui_verified"] dd').first().innerText(),'Not verified');
+          await page.waitForTimeout(5500);
+          assert.equal(await sources.getByText('Live within this source scope',{exact:true}).count(),0,'expired cached reading cannot remain LIVE');
+          assert.equal(await sources.getByRole('button',{name:'Queue discovery request',exact:true}).nth(1).isDisabled(),true,'expiry disables a previously enabled request');
+          for(const key of ['verified_scope_or_feature','live_read_verified','stored_and_processed','production_ui_verified'])
+            assert.equal(await sources.locator(`[data-verification-key="${key}"] dd`).first().innerText(),'Not verified',key+' demotes on expiry');
+          publicSourceScenario='pending'; displayLocale='zh-Hant';
+          await page.reload({waitUntil:'domcontentloaded',timeout:120000});
+          const chineseSources=page.getByRole('region',{name:'公開內容探索來源'});
+          await chineseSources.locator('summary').click();
+          for(const label of ['已實作來源讀取','已連接執行流程','Meta 應用程式審批','已核實權限或功能',
+              '已核實即時公開讀取','已儲存及處理','已核實正式介面']) {
+            const fields=chineseSources.getByText(label,{exact:true});
+            await fields.first().waitFor();
+            assert.equal(await fields.count(),3,label+' has Traditional Chinese labels');
+          }
+          assert.equal(await chineseSources.getByText('此來源範圍內的即時資料',{exact:true}).count(),0);
+          await noOverflow(page,width+' Traditional Chinese Meta public sources');
+          await axe(page,width+' Traditional Chinese Meta public sources');
+
+          assert.equal(calls.filter(c => c.path.endsWith('/public-sources/discovery-requests') && c.method === 'POST').length,4,'three selections and one delayed explicit synthetic request mutate');
           await noOverflow(page,width+' Meta public sources');
           await axe(page,width+' Meta public sources');
           assert.deepEqual(errors,[],'No browser runtime errors');

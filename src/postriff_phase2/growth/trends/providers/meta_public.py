@@ -461,14 +461,19 @@ def _normalize(item, *, platform, policy, at, available_at, epoch, source_key,
         content = item.get(content_key)
         if isinstance(content, str):
             payload["text"] = content[:8000]
-    return observation(
+    # The same native content acquired under a new reviewed grant must get a
+    # fresh rights-bound node. Reuse within a policy is still canonical; revoked
+    # historical evidence is never rebound or granted a longer retention period.
+    value = observation(
         policy=policy, source_identity=f"{platform}:{native_id}",
-        revision_identity=digest([published_at, payload]),
+        revision_identity=digest([policy.version, published_at, payload]),
         sequence=int(instant(at).timestamp() * 1_000_000), kind="raw_post",
         operation="create", payload=payload, event_at=published_at,
         received_at=at, available_at=available_at, coverage_epoch=epoch,
         contract_version=PROTOCOL, access_method=f"official_meta_{platform}_public_sample",
         deletion_key=f"{platform}:{native_id}")
+    value['provenance']['content_revision_digest'] = digest([published_at, payload])
+    return value
 
 
 def _fold(data, *, capability, policy, received_at, available_at, epoch,
