@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -184,6 +184,8 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
+        if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
+            audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after = None
         if action == media_consent.ACTION:
             # Chat-context SPEC §8.1: the owner's decision is audited with the processors it names, and turning it off
@@ -227,7 +229,9 @@ class HostedPhase2Commands:
         self.engine.images = FixtureImages()
 
     def present(self, state, revision):
-        return self.engine._present(state, revision)
+        shown = self.engine._present(state, revision)
+        shown['state']['brandBrain'] = brand_brain.projection(state)
+        return shown
 
     def __call__(self, state, principal, action, payload):
         if not isinstance(action, str) or not isinstance(payload, dict):
@@ -241,6 +245,9 @@ class HostedPhase2Commands:
             self.engine.invalidate(state)
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
+            if action in ('brand_brain_identity', 'brand_brain_boundaries'):
+                self.engine._mark_stale(state)
+                self.engine.invalidate(state)
             return state
         if media_consent.apply_action(state, action, payload, principal, self.clock(), processors=self.media_processors()):
             return state
@@ -252,6 +259,15 @@ class HostedPhase2Commands:
             return state
         if writer_defaults.apply_action(state, action, payload, principal, self.clock(), self.writers):
             return state
+        if brand_brain.apply_action(state, action, payload, principal, self.clock(), self.engine):
+            source_policy.stamp(state)
+            return state
+        if action in ('profile_decide', 'you_restore_voice'):
+            profile = state.get('speaker', {}).get('provisional') if action == 'profile_decide' else next((r['profile'] for r in state.get('speaker', {}).get('revisions', []) if r['revision'] == payload.get('revision')), None)
+            if profile and profile.get('analysisMethod'):
+                brand_brain.validate_profile(state, profile)
+            if profile and profile.get('workflow') == 'brand_brain':
+                raise AlphaError('Review the current Brand Brain proposal and impact before approving or restoring.', 409)
         if voice_analysis.apply_action(state, action, payload, principal, self.clock()):
             self.engine.invalidate(state)
             return state
@@ -783,9 +799,14 @@ class HostedWorkspaceService:
     def mutate(self, workspace_id, token, revision, action, payload):
         if action in ('p2_review', 'p2_approve', 'p2_approve_many'):
             self.oauth.refresh_for_composer(workspace_id, token, revision, action, payload)
-        if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
+        if action == 'brand_brain_preview' and isinstance(payload, dict) and payload.get('model'):
+            return brand_brain.HostedPreview(self).run(workspace_id, token, revision, payload)
+        if action == 'brand_brain_quote':
             from .voice_ai import HostedVoiceAnalysis
-            return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
+            return HostedVoiceAnalysis(self).quote(workspace_id, token, revision, payload)
+        if action in ('voice_profile_analyze', 'brand_brain_analyze') and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
+            from .voice_ai import HostedVoiceAnalysis
+            return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload, require_quote=action == 'brand_brain_analyze')
         return self._present(self.repository.mutate(workspace_id, token, revision, action, payload))
 
     # --- Workspaces, members, invitations, sessions, audit (architecture spec 8, 9, 21) ---
@@ -1303,6 +1324,41 @@ class HostedWorkspaceService:
         snapshot = self.get(workspace_id, token)
         state = snapshot["state"]
         profile = self.commands.engine._profile(state)
+        active = memory.active_profile(state) or {}
+        if (profile and active.get('activationSource') == 'brand_brain' and active.get('approvedBy')):
+            if active.get('stale') or profile.get('status') != 'approved':
+                raise AlphaError('Review current voice evidence before exporting this profile.', 409)
+            brand_brain.validate_profile(state, profile)
+            # A portable snapshot is not a provider grant or a field-level package.
+            # Derive it from current canonical Memory, never the pending proposal,
+            # and omit retained examples and restricted boundary values.
+            portable = copy.deepcopy(state)
+            memory.active_profile(portable)['profile']['writingExample'] = ''
+            files = {item['name']: item['body'] for item in memory.render_files(portable, shareable=memory.CLOUD_SHAREABLE)}
+            files['profile.json'] = json.dumps({
+                'schema': 'rafii.brand-brain.voice-snapshot.v1', 'status': 'user_approved',
+                'revision': active['revision'], 'tone': profile.get('tone'),
+                'observations': profile.get('observations', []), 'unknowns': profile.get('unknowns', []),
+            }, ensure_ascii=False, indent=2)
+            files['README.txt'] = ('Brand Brain approved voice and current canonical Memory snapshot.\n'
+                'Private/local-only/excluded/unlabelled boundary values, retained writing samples, evidence quotes and pending proposals are omitted.\n'
+                'This is a read-only export, not a field-level Personal Voice Package import or a model prompt authorization.\n'
+                'No installation, memory mutation, account connection, external send or publication is authorized.\n')
+            files['manifest.json'] = json.dumps({
+                'schema': 'rafii.brand-brain.export.v1', 'status': 'user_approved',
+                'createdAt': self.clock(), 'workspaceId': workspace_id,
+                'workspaceRevision': snapshot['revision'], 'profileRevision': active['revision'],
+                'rendererVersion': memory.RENDER_VERSION,
+                'boundaryPrivacyIncluded': list(memory.CLOUD_SHAREABLE),
+                'retainedSamplesIncluded': False, 'pendingProposalsIncluded': False,
+                'files': {name: hashlib.sha256(body.encode()).hexdigest() for name, body in files.items()},
+                'permissions': {name: False for name in ('globalInstallation', 'memoryMutation', 'accountConnection', 'externalSend', 'publication')},
+            }, ensure_ascii=False, indent=2)
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for name, body in files.items():
+                    archive.writestr(name, body)
+            return output.getvalue()
         if not profile or not profile.get("packageSchema"):
             raise AlphaError("Approve the field-level Personal Voice Package before exporting it.")
         files = profiles.portable_files(state, profile)

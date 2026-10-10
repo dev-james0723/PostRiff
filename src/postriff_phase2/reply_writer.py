@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import datetime, timezone
 import re
 import uuid
 
@@ -127,7 +128,8 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         usable = [s for s in context["sources"] if not s.get("candidateOnly")]
         facts = [f["text"] for s in usable for f in s["facts"]][:12]
         fact_sources = [s.get("id") for s in usable if s.get("facts") and s.get("id")]
-        shared = memory.projection(state, "cloud", destinations)
+        from .model_runtime import MAX_MEMORY_BYTES
+        shared, memory_receipt = memory.prepare_writer(state, "cloud", f"cloud:{runtime.provider}:{chosen}", destinations=destinations, max_bytes=MAX_MEMORY_BYTES)
         bound = ideas.skills.bind(destinations, intent="engagement_reply", max_chars=SKILL_BUDGET)
         # The reply method for this language; the channel adapter comes from `bound`, so it is not compiled twice. The
         # workspace's preference overlays reach the cloud writer only with the same Memory-page consent as its memory.
@@ -148,6 +150,16 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         estimate = math.ceil(runtime._cost(chosen, len((system + user).encode()) + 512, output_cap(chosen)) * 1_000_000)
         reservation = ideas.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"reply:{uuid.uuid4().hex}", charge_batch=False,
                                            provider=runtime.provider, model=chosen, meta={"via": "reply_writer", "threadId": thread_id})
+    # The reservation transaction has committed. Re-read current membership and memory
+    # immediately before provider dispatch; a revoked grant must not leave in a fresh call.
+    try:
+        with service.repository.transaction(token, workspace_id) as (_cur, dispatch_row, _principal):
+            require(ideas._member(dispatch_row), "edit")
+            memory.validate_receipt(ideas._state(dispatch_row), memory_receipt)
+    except AlphaError:
+        with service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            ideas.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
+        raise
     if call is None:
         from .learning_model import GatewayCall
         call = GatewayCall(runtime.api_key, model=chosen, endpoint=runtime.endpoint, transport=runtime.transport, allowed_providers=runtime.allowed_for(chosen), drafting=True)
@@ -163,6 +175,9 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
         failure = error
     with service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
         ideas.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if actual is not None else "unknown", actual)
+        completed_state = ideas._state(_row)
+    if failure is None:
+        memory.validate_receipt(completed_state, memory_receipt)
     if failure is not None:
         raise AlphaError("Rafii's AI writer couldn't suggest a reply this time. Try again, or write it yourself.", 502, code="reply_writer_failed") from failure
     text = answer.get("reply") if isinstance(answer, dict) else None
@@ -173,6 +188,8 @@ def write(service, workspace_id, token, thread_id, *, model=None, call=None):
     # What was actually sent: the writer's skills and the compiled method (no evaluator runs on a reply).
     provenance = {**skill_compiler.provenance_for_run({**method, "evaluators": []}, writer_bindings=bound.get("bindings") or [], route=route, state=state),
                   "route": route, "language": language, "memory": {"shared": bool(files), "files": [f["name"] for f in files]},
-                  "facts": len(facts), "factSourceIds": fact_sources, "costUsdMicro": actual}
+                  "facts": len(facts), "factSourceIds": fact_sources, "costUsdMicro": actual,
+                  "memoryReceipt": {**memory_receipt, "workspaceId": workspace_id, "threadId": thread_id,
+                                    "generatedAt": datetime.now(timezone.utc).isoformat(), "execution": "completed"}}
     return {"text": _fit(text), "needs": needs, "language": answer.get("language") if isinstance(answer.get("language"), str) else None,
             "provenance": provenance, "costUsdMicro": actual, **({"warnings": [note]} if note else {})}

@@ -1,4 +1,4 @@
-import type { ModelOption, SnapshotSource } from '@/lib/api/types';
+import type { ModelOption, SnapshotSource, Speaker } from '@/lib/api/types';
 
 /** A writing grant covers this writer when it names its exact route, or the class the server lists for it
  * (voiceRouteClass: every model Rafii's managed writer offers). Drafts still record the exact route they used. */
@@ -14,6 +14,15 @@ export function eligibleVoiceSources(sources: SnapshotSource[], model: ModelOpti
 
 /** The voice a draft is written in: the person's own choice, else writing like them whenever this writer may read a
  * sample they approved. Neutral when none is eligible, as the server falls back too; consent itself is unchanged. */
-export function effectiveVoiceMode(choice: 'neutral' | 'personalized' | null, eligible: number): 'neutral' | 'personalized' {
+export function effectiveVoiceMode(choice: 'neutral' | 'personalized' | null, eligible: number, manualProfile = false): 'neutral' | 'personalized' {
+  if (choice === 'personalized' && manualProfile) return 'personalized';
   return eligible > 0 ? (choice ?? 'personalized') : 'neutral';
+}
+
+/** An approved authored profile is opt-in without samples. Cloud memory consent is still required. */
+export function manualVoiceAvailable(speaker: Speaker | undefined, model: ModelOption | undefined, cloudAllowed: boolean): boolean {
+  if (!model?.qualified || !model.voiceRoute) return false;
+  const revision = speaker?.revisions.find((item) => item.revision === speaker.activeRevision);
+  if (!revision || (revision as typeof revision & { stale?: boolean }).stale || revision.profile.status === 'stale' || revision.profile.evidenceSourceIds?.length) return false;
+  return model.voiceRoute === 'local-cli' || cloudAllowed;
 }

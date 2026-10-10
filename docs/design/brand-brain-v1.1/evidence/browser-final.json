@@ -1,0 +1,145 @@
+{
+  "status": "PASS",
+  "execution": "Cloud real application and disposable PostgreSQL; synthetic identities/providers",
+  "paidModelCalls": 0,
+  "productionChanges": false,
+  "physicalIPhone": false,
+  "humanScreenReader": false,
+  "capturedAt": "2026-10-10T18:54:19.184Z",
+  "results": [
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "First-fold CTA, keyboard entry, separate authorship/retention and real stored sample; local analysis remains pending with unchanged active memory"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Separate writer grant, real paired template execution and actual neutral/candidate Memory receipts; no model or activation"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Pending review, explicitly labeled guideline fallback, owner activation and persistent readback",
+      "accessibilityViolations": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Visible history restore creates revision3 from revision1; source revoke requires two explicit clicks"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Manual no-sample setup preserves active identity and voice until owner impact confirmation"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Canonical identity and private boundary editor read back through the same five Memory files; Advanced cloud-denied projection is empty"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Legacy Memory voice package export downloads an actual ZIP"
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "check": "Revocation removes retained text; legacy Memory route works; no browser errors",
+      "physicalIPhone": false
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "First-fold CTA, keyboard entry, separate authorship/retention and real stored sample; local analysis remains pending with unchanged active memory"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Separate writer grant, real paired template execution and actual neutral/candidate Memory receipts; no model or activation"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Pending review, explicitly labeled guideline fallback, owner activation and persistent readback",
+      "accessibilityViolations": []
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Visible history restore creates revision3 from revision1; source revoke requires two explicit clicks"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Manual no-sample setup preserves active identity and voice until owner impact confirmation"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Canonical identity and private boundary editor read back through the same five Memory files; Advanced cloud-denied projection is empty"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Legacy Memory voice package export downloads an actual ZIP"
+    },
+    {
+      "engine": "chromium",
+      "width": 375,
+      "check": "Revocation removes retained text; legacy Memory route works; no browser errors",
+      "physicalIPhone": false
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "First-fold CTA, keyboard entry, separate authorship/retention and real stored sample; local analysis remains pending with unchanged active memory"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Separate writer grant, real paired template execution and actual neutral/candidate Memory receipts; no model or activation"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Pending review, explicitly labeled guideline fallback, owner activation and persistent readback",
+      "accessibilityViolations": []
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Visible history restore creates revision3 from revision1; source revoke requires two explicit clicks"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Manual no-sample setup preserves active identity and voice until owner impact confirmation"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Canonical identity and private boundary editor read back through the same five Memory files; Advanced cloud-denied projection is empty"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Legacy Memory voice package export downloads an actual ZIP"
+    },
+    {
+      "engine": "webkit",
+      "width": 375,
+      "check": "Revocation removes retained text; legacy Memory route works; no browser errors",
+      "physicalIPhone": false
+    },
+    {
+      "locale": "zh-Hant-HK",
+      "check": "375px translated intake, separate storage/analysis consent, exact original Chinese, pending review and guideline preview, owner activation and readback; no horizontal overflow"
+    },
+    {
+      "locale": "zh-Hans-CN",
+      "check": "375px translated intake, separate storage/analysis consent, exact original Chinese, pending review and guideline preview, owner activation and readback; no horizontal overflow"
+    }
+  ]
+}
