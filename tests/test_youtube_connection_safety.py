@@ -17,6 +17,7 @@ from postriff_phase2.youtube.service import YouTubeCreatorService
 CHANNEL, VIDEO, NOW = 'UC' + 'a' * 22, 'abcdefghijk', 1_800_000_000
 SCOPES = [READ, UPLOAD, MANAGE]
 TOKEN = json.dumps({'v': 1, 'at': 'synthetic-access'})
+GENERATION = '00000000-0000-0000-0000-000000000098'
 
 
 class Repository:
@@ -27,13 +28,18 @@ class Repository:
             'identityVerified': True, 'capabilityVerified': True, 'verifiedAt': NOW - 10,
             'expiresAt': NOW + 3600}]}}
         self.executed, self.result = [], None
+        self.rowcount, self.identity_ingested_at = 1, None
 
     def execute(self, sql, params=()):
         self.executed.append((sql, params))
         if sql.startswith('SELECT provider,access_ciphertext'):
             self.result = ('youtube', TOKEN, None, 'test', NOW + 3600, False, False, list(self.scopes), CHANNEL, NOW - 10)
         elif sql.startswith('SELECT provider,provider_account_id,scopes'):
-            self.result = ('youtube', CHANNEL, list(self.scopes), TOKEN)
+            self.result = ('youtube', CHANNEL, list(self.scopes), TOKEN, 'test')
+        elif 'SELECT EXISTS(SELECT 1 FROM pg_attribute' in sql:
+            self.result = (True,)
+        elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
+            self.result = (GENERATION,)
         elif sql.startswith('SELECT c.provider,c.provider_account_id,w.state'):
             self.result = ('youtube', CHANNEL, self.state)
         elif sql.startswith('SELECT access_ciphertext,key_id,scopes'):
@@ -44,6 +50,11 @@ class Repository:
             self.result = (self.state,)
         elif sql.startswith('UPDATE public.pr_encrypted_credentials SET scopes='):
             self.scopes = list(params[0])
+        elif sql.startswith('UPDATE public.pr_encrypted_credentials SET youtube_identity_ingested_at='):
+            observed_at, workspace, connection, generation, account = params
+            assert (workspace, connection, generation, account) == ('workspace', 'connection', GENERATION, CHANNEL)
+            self.identity_ingested_at = observed_at
+            self.rowcount = 1
         elif sql.startswith('UPDATE public.pr_workspaces SET state='):
             self.state = json.loads(params[0])
 
@@ -81,6 +92,10 @@ def service_for(observation):
     engine = SimpleNamespace(invalidate=Mock(), channel_state=lambda c: 'Ready for posting' if c['capabilityVerified'] else 'Needs reconnect')
     vault = SimpleNamespace(decrypt=lambda value, _: value)
     service = OAuthService(repo, SimpleNamespace(engine=engine), vault, {'youtube': provider}, 'https://rafii.example', clock=lambda: NOW)
+    # Isolate scope observation/custody; the policy dependency has its own real
+    # receipt/RLS/OAuth regressions in the dedicated policy acceptance PG group.
+    service.youtube_policy.require_user = Mock(return_value=None)
+    service.youtube_policy.assert_connection = Mock()
     service.mark_youtube_revoked = Mock()
     return service, repo, provider
 
@@ -118,7 +133,8 @@ class YouTubeConnectionSafetyTests(unittest.TestCase):
         with self.assertRaises(AlphaError) as revoked:
             service.token_for_worker('workspace', 'connection')
         self.assertEqual(revoked.exception.code, 'youtube_revoked_oauth')
-        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection', expected_ciphertext=TOKEN)
+        service.mark_youtube_revoked.assert_called_once_with('workspace', 'connection',
+                                                           expected_ciphertext=TOKEN, expected_generation=GENERATION)
 
         service, repo, provider = service_for({'status': 200, 'body': {'aud': 'test-client', 'scope': ' '.join(SCOPES)}})
         self.assertEqual(set(service.token_for_worker('workspace', 'connection')['scopes']), set(SCOPES))

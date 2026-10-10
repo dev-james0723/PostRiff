@@ -67,6 +67,27 @@ class PagingTests(unittest.TestCase):
         record['metadataOrigin'] = 'unknown-origin'
         self.assertNotIn('metadataOrigin', projection(record, 'draft', NOW))
 
+    def test_erased_tombstone_markers_survive_display_without_private_erasure_details(self):
+        value = state(); draft, policy = draft_and_policy(value)
+        for record, kind in ((draft, 'draft'), (policy, 'policy')):
+            with self.subTest(kind=kind):
+                record.update(privacyErased=True, privacyErasedAt=NOW,
+                              privacyErasureReason='disconnect',
+                              privateErasureEvidence={'authorizationGeneration': 'server-private'})
+                before = copy.deepcopy(record)
+                projected = live_page([record], 'workspace', CONNECTION, kind, NOW)['items'][0]
+                self.assertIs(projected['privacyErased'], True)
+                if kind == 'draft':
+                    self.assertTrue(projected['readOnly'], 'Erasure fences a plan even before its status changes.')
+                for key in ('privacyErasedAt', 'privacyErasureReason', 'privateErasureEvidence', 'authorizationGeneration',
+                            'createdBy', 'grantedBy'):
+                    self.assertNotIn(key, projected)
+                self.assertNotIn('server-private', str(projected))
+                self.assertEqual(record, before)
+                record['privacyErased'] = {'private': 'server-private'}
+                self.assertNotIn('privacyErased', projection(record, kind, NOW),
+                                 'Only the canonical content-free boolean is public.')
+
     def test_policy_preview_rejects_changed_off_page_selection(self):
         value = state(); draft, _ = draft_and_policy(value)
         body = {'draftIds': [draft['id']], 'draftDigests': {draft['id']: 'changed-off-page'},
@@ -82,14 +103,24 @@ class PagingTests(unittest.TestCase):
         value = state(); draft, policy = draft_and_policy(value)
         value['youtubeAgent']['fleetLease'] = {'id':'private-lease', 'authorization': {'grantedBy':'private-owner'}}
         value['youtubeAgent']['drafts'].append(copy.deepcopy(draft) | {'id':'foreign', 'connectionId':'other-channel'})
-        creator = SimpleNamespace(service=SimpleNamespace(),repository=SimpleNamespace(),clock=lambda:NOW,
-                                  oauth=SimpleNamespace(provider_for_connection=Mock(return_value=None)))
+        before = copy.deepcopy(value)
+        cursor, require_policy = Mock(), Mock()
+        @contextmanager
+        def transaction(token, workspace):
+            self.assertEqual((token, workspace), ('token', 'workspace'))
+            yield cursor, (1, copy.deepcopy(value), 'owner', False, False, False, False), 'owner'
+        creator = SimpleNamespace(service=SimpleNamespace(),repository=SimpleNamespace(transaction=transaction),clock=lambda:NOW,
+                                  oauth=SimpleNamespace(provider_for_connection=Mock(return_value=None),
+                                                        youtube_policy=SimpleNamespace(require_user=require_policy)))
         agent = YouTubePublishingAgent(creator); agent._member = Mock(return_value=('owner',CHANNEL,value))
         overview = agent.overview('workspace','token',CONNECTION)
         self.assertEqual(len(overview['drafts']), 1)
         self.assertNotIn('fleetLease', overview)
         self.assertNotIn('grantedBy', str(overview))
         self.assertIn('pagination', overview)
+        self.assertFalse(overview['autopilotGate']['canActivate'])
+        require_policy.assert_called_once_with(cursor, 'workspace', 'owner', 'token', None, force=True)
+        self.assertEqual(value, before, 'Reading overview cannot mutate standing authority or another channel.')
 
 
 class HistoryRouteTests(unittest.TestCase):

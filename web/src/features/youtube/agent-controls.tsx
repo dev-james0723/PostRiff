@@ -15,11 +15,11 @@ import type { OAuthStart } from '@/lib/api/types';
 const control = 'border-input bg-background w-full min-w-0 rounded-md border px-3 py-2 text-sm';
 
 export function canReviewYouTubeAgentDraft(draft: YouTubeAgentDraft, now = Date.now() / 1000) {
-  return draft.status === 'proposed' && !draft.readOnly && Number.isFinite(draft.timing.timestamp) && draft.timing.timestamp > now;
+  return draft.status === 'proposed' && !draft.privacyErased && !draft.readOnly && Number.isFinite(draft.timing.timestamp) && draft.timing.timestamp > now;
 }
 
 function currentPolicy(policy: YouTubeAgentPolicy, now = Date.now() / 1000) {
-  return policy.status !== 'expired' && policy.status !== 'revoked' && Number.isFinite(policy.endsAt) && policy.endsAt > now;
+  return !policy.privacyErased && policy.status !== 'expired' && policy.status !== 'revoked' && Number.isFinite(policy.endsAt) && policy.endsAt > now;
 }
 
 export function YouTubeAgentControls({ channel, canPublic }: { channel: string; canPublic: boolean }) {
@@ -224,12 +224,12 @@ export function YouTubeAgentControls({ channel, canPublic }: { channel: string; 
                 });
               }} />}
             <div className='min-w-0'><p className='font-medium'>{draft.publishOptions.title}</p>
-              <p className='text-muted-foreground'>{draft.timing.local.replace('T', ' ')} · {draft.timing.timeZone} · {draft.publishOptions.privacyStatus} · {draft.status}</p></div>
+              <p className='text-muted-foreground'>{draft.timing.local.replace('T', ' ')} · {draft.timing.timeZone} · {draft.publishOptions.privacyStatus} · {draft.privacyErased ? 'Data removed' : draft.status}</p></div>
           </div>
           <p className='whitespace-pre-wrap'>{draft.publishOptions.description || '(Empty description)'}</p>
           {draft.metadataOrigin && <p className='text-muted-foreground'>{draft.metadataOrigin === 'chat_model_proposal_requires_video_review' ? 'AI chat proposal. Review it against the actual video before approval.' : 'Metadata from your inputs or the Library filename. Review it against the actual video before approval.'}</p>}
-          <p>Channel: {draft.channelId} · Library video: {draft.assetId}</p>
-          <p>{draft.uploadWorkflow === 'upload_now' ? 'Upload privately after approval.' : `Upload begins ${new Date(draft.uploadAt * 1000).toISOString()}.`} {draft.publishOptions.privacyStatus === 'private' ? 'There is no automatic public transition.' : 'YouTube applies the native future publication schedule.'}</p>
+          <p>{draft.channelId && `Channel: ${draft.channelId} · `}Library video: {draft.assetId}</p>
+          {draft.privacyErased ? <p>Data removed. This plan cannot run again. Prepare and approve a new plan. A schedule already accepted by YouTube is not canceled.</p> : <p>{draft.uploadWorkflow === 'upload_now' ? 'Upload privately after approval.' : `Upload begins ${new Date(draft.uploadAt * 1000).toISOString()}.`} {draft.publishOptions.privacyStatus === 'private' ? 'There is no automatic public transition.' : 'YouTube applies the native future publication schedule.'}</p>}
           {!canReviewYouTubeAgentDraft(draft, now) && <p className='text-muted-foreground'>Read-only plan record. This view grants no new publishing approval.</p>}
           {canReviewYouTubeAgentDraft(draft, now) && <>
             <label htmlFor={`${prefix}-approve-${draft.id}`} className='flex items-start gap-2'><input id={`${prefix}-approve-${draft.id}`} aria-label={`Approve the exact video, metadata, channel, time and visibility for ${draft.publishOptions.title}`} type='checkbox' checked={confirmedDraft?.id === draft.id && confirmedDraft.digest === draft.digest} onChange={(event) => setConfirmedDraft(event.target.checked ? { id: draft.id, digest: draft.digest } : undefined)} />I approve this exact video, metadata, channel, time and visibility.</label>
@@ -274,6 +274,7 @@ export function YouTubeAgentControls({ channel, canPublic }: { channel: string; 
         <p className='text-muted-foreground text-sm'>Policy page {pages.policies.length + 1}. Expired and revoked records are read-only.</p>
         {query.data?.policies.map((policy) => <div key={policy.id} data-youtube-agent-policy={policy.id} className='grid min-w-0 grid-cols-1 gap-2 rounded-md border p-3 text-sm'>
           <p>{policy.status} · {policy.drafts.length} plans · {policy.maxDaily}/day · expires {new Date(policy.endsAt * 1000).toISOString()}</p>
+          {policy.privacyErased && <p>Channel data was removed and this authority cannot restart. Prepare a new policy after reviewing new plans.</p>}
           {policy.intervention && <p role='alert'>{policy.intervention.message}</p>}
           {policy.status === 'paused' && <p>Restarting this policy permits new plan dispatch only. Held jobs require separate review and do not resume automatically. Creator recovery is available only for recoverable journaled uploads.</p>}
           {!currentPolicy(policy, now) && <p className='text-muted-foreground'>Read-only authority record. Prepare new authority to approve different future plans.</p>}
