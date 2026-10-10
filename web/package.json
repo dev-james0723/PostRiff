@@ -24,7 +24,9 @@
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh",
     "test:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh",
     "ci:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh --full",
-    "e2e:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh --web-only"
+    "e2e:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh --web-only",
+    "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
+    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
