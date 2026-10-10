@@ -554,6 +554,10 @@ def _build() -> _Built:
     # Model tool calls through tool_adapter.execute: the FunctionTool timeout, and a proposal for approval tools.
     for name in specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])):
         bind("manager", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
+    # PR152's opt-in metadata tool is reachable only through the Manager's per-workspace flag.
+    # Its since-2 declaration prevents it joining the immutable legacy grant baseline.
+    if "library_browse" in tool_adapter.REGISTRY:
+        bind("manager", "library_browse", "tool.library_browse", "none", timeout=tool_adapter.REGISTRY["library_browse"].spec.timeout_seconds)
     for key, spec in specialists.SPECIALISTS.items():
         for name in specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])):
             bind("specialist", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
