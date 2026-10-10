@@ -444,7 +444,7 @@ jobs:
         run: "npm ci"
       - name: "JCB e2e"
         working-directory: "web"
-        run: "npm run ci:meta:jcb"
+        run: "npm run e2e:meta:jcb"
       - name: Observe cache after
         if: always()
         run: "printf 'JCB cache after: '; python3 -c 'import os,json; paths=['\"'\"'/mnt/jcb-package-cache/_cacache'\"'\"', '\"'\"'/mnt/jcb-framework-cache'\"'\"', '\"'\"'/mnt/jcb-playwright-cache'\"'\"']; data=[{'\"'\"'path'\"'\"':p,'\"'\"'files'\"'\"':sum(len(fs) for _,_,fs in os.walk(p)),'\"'\"'bytes'\"'\"':sum(os.path.getsize(os.path.join(d,f)) for d,_,fs in os.walk(p) for f in fs if not os.path.islink(os.path.join(d,f)))} for p in paths]; print(json.dumps(data,sort_keys=True))'"

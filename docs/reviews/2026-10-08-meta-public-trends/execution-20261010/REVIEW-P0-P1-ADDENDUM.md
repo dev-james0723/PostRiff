@@ -45,8 +45,12 @@ ce8a1d756dc05ddd94b977e637f573708cc2431f1ce587417b739d086e1f685d  web/tests/tren
 a469db3b25fa70a29d354ad6117180f95780148192951a716bb799da009af948  src/postriff_phase2/growth/trends/metrics.py
 aba6d676af64c9cba1be62d47cd6c7d5fbbe927ec9cdf5b3e2c610772abfe541  src/postriff_phase2/growth/trends/membership.py
 5e441816fc57bd4c932ecdf0ceb38aae9ebaf27c99ff4ab85a53e647f915e61a  scripts/cloud-meta-validation.sh
-1690d95a767e6d306bedd09abc69146b951f10d43ad3e1aac9b340145a97e517  web/package.json
+1fb055ddf40b29f59ae33cbb64b9fff1d9b23480fc079f5a87c389fbee363066  web/package.json
 85f5f461b0e9e3bd604c87f9bc57a7e98302a08d5dfaa210a1a2fcb0846fbf2b  .james-cloud-build.json
 ```
 
 Any change to these files requires review of the changed portions before carrying this disposition forward. Usage/cost for this static review: unknown.
+
+## Parent integration follow-up
+
+After the independent review, consumer-saas2dd3fa5d was merged at ecb904ce. The only conflict was additive package scripts. A parsed comparison verified every script from both parents is preserved and every non-script field is identical. The package hash above now identifies this reviewed union. JCB setup regenerated its workflow through the supported setup command; its sole delta changes the e2e command from ci:meta:jcb to e2e:meta:jcb, matching the reviewed configuration. No protection, assertion or product behavior changed. Cloud execution remains separately evidenced.
