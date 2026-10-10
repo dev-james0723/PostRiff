@@ -31,7 +31,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import tools
+from . import agent_observability, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -471,6 +471,8 @@ class HostedApplication:
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
+        # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
+        correlation = agent_observability.bind_request(request_id)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -500,6 +502,7 @@ class HostedApplication:
                 observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
             except Exception:
                 pass
+            agent_observability.release_request(correlation)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -969,6 +972,14 @@ class HostedApplication:
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
                     return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) in (6, 7) and parts[4:6] == ["metadata", "changes"] and method == "GET":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, changes.history(workspace_id, token) if len(parts) == 6 else changes.read(workspace_id, token, parts[6]))
+                if len(parts) == 6 and parts[4] == "metadata" and parts[5] in ("preview", "apply", "undo") and method == "POST":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, getattr(changes, parts[5])(workspace_id, token, self._body(environ)))
                 if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
                     return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
                 if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":
