@@ -600,7 +600,7 @@ export function LibraryView() {
           }
         />
 
-        {canEdit && visible.length > 0 ? <LibraryBatchOrganizer key={workspaceId} assets={visible} collections={collections.data?.collections ?? []} /> : null}
+        {canEdit ? <LibraryBatchOrganizer key={workspaceId} assets={visible} collections={collections.data?.collections ?? []} /> : null}
 
         {visible.length === 0 ? (
           // No matches is not an empty library (DNA §13.5): say what can be cleared.

@@ -24,7 +24,8 @@ create table if not exists public.pr_library_metadata_changes (
      or (status='applied' and applied_at is not null and undo_expires_at is not null and undone_at is null)
      or (status='undone' and applied_at is not null and undo_expires_at is not null and undone_at is not null))
 );
-create index if not exists pr_library_metadata_changes_owner on public.pr_library_metadata_changes(workspace_id,actor_id,created_at desc);
+create index if not exists pr_library_metadata_changes_owner on public.pr_library_metadata_changes(workspace_id,actor_id,applied_at desc,id desc) where status in ('applied','undone');
+create index if not exists pr_library_metadata_changes_pending on public.pr_library_metadata_changes(workspace_id,actor_id,expires_at) where status='prepared';
 
 create or replace function public.pr_library_metadata_bump() returns trigger language plpgsql set search_path=pg_catalog,public as $$
 declare w uuid; k text;

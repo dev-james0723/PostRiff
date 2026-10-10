@@ -126,7 +126,7 @@ class LibraryMetadataChanges:
         with self.service.repository.transaction(token, w) as (cur, _, principal):
             self._ready(cur)
             self._context(cur, w, principal)
-            cur.execute("SELECT replace(id::text,'-',''),status,extract(epoch from created_at),jsonb_array_length(payload->'entries'),payload->'entries'->0->'before'->'fields'->>'title' FROM public.pr_library_metadata_changes WHERE workspace_id=%s AND actor_id=%s AND status IN ('applied','undone') ORDER BY created_at DESC,id DESC LIMIT 10", (w, principal))
+            cur.execute("SELECT replace(id::text,'-',''),status,extract(epoch from created_at),jsonb_array_length(payload->'entries'),payload->'entries'->0->'before'->'fields'->>'title' FROM public.pr_library_metadata_changes WHERE workspace_id=%s AND actor_id=%s AND status IN ('applied','undone') ORDER BY applied_at DESC,id DESC LIMIT 10", (w, principal))
             return {'changes': [{'receiptId': i, 'status': status, 'createdAt': float(at), 'assetCount': count, 'firstTitle': title} for i, status, at, count, title in cur.fetchall()]}
 
     def read(self, w, token, ident):
