@@ -1,0 +1,592 @@
+{
+ "version": "capability-copy/1",
+ "status": "draft: server-authored titles for the permissions UI (CF-1 §11). Wording, launch languages and legal review are DP-6; lane B may fold these into permission_copy.json.",
+ "languages": [
+  "en",
+  "zh-Hant"
+ ],
+ "capabilities": {
+  "account.delete": {
+   "en": "Delete your account",
+   "zh-Hant": "刪除你的帳戶"
+  },
+  "automations.auto_publish_authority": {
+   "en": "Let automations publish without review",
+   "zh-Hant": "讓自動化免審核直接發佈"
+  },
+  "billing.checkout": {
+   "en": "Buy a plan or credits",
+   "zh-Hant": "購買方案或點數"
+  },
+  "connections.connect": {
+   "en": "Connect a social account",
+   "zh-Hant": "連接社交帳戶"
+  },
+  "connections.disconnect": {
+   "en": "Disconnect a social account",
+   "zh-Hant": "中斷社交帳戶連接"
+  },
+  "consent.connector_egress": {
+   "en": "Share connected app content with AI writers",
+   "zh-Hant": "與 AI 寫作工具分享已連接應用程式的內容"
+  },
+  "consent.media_egress": {
+   "en": "Share photos and video frames with AI models",
+   "zh-Hant": "與 AI 模型分享相片及影片畫面"
+  },
+  "consent.memory_egress": {
+   "en": "Share Brand Brain memory with cloud AI",
+   "zh-Hant": "與雲端 AI 分享品牌大腦記憶"
+  },
+  "consent.research_egress": {
+   "en": "Allow web research",
+   "zh-Hant": "允許網上搜尋"
+  },
+  "context.attention": {
+   "en": "See what needs your attention",
+   "zh-Hant": "查看需要你處理的事項"
+  },
+  "context.connections": {
+   "en": "See your connected accounts",
+   "zh-Hant": "查看已連接的帳戶"
+  },
+  "context.memory_layers": {
+   "en": "Use Rafii's memory of your brand",
+   "zh-Hant": "使用 Rafii 對你品牌的記憶"
+  },
+  "context.page_summary": {
+   "en": "See which page you are on",
+   "zh-Hant": "查看你目前所在的頁面"
+  },
+  "context.screen_outline": {
+   "en": "See the labels on your screen",
+   "zh-Hant": "查看畫面上的標籤"
+  },
+  "library.delete": {
+   "en": "Delete Library items",
+   "zh-Hant": "刪除資料庫項目"
+  },
+  "members.manage": {
+   "en": "Manage workspace members",
+   "zh-Hant": "管理工作區成員"
+  },
+  "publish.approve": {
+   "en": "Approve a post for publishing",
+   "zh-Hant": "批准帖文發佈"
+  },
+  "security.api_tokens": {
+   "en": "Manage API tokens",
+   "zh-Hant": "管理 API 權杖"
+  },
+  "security.sessions_mfa": {
+   "en": "Manage sign-in sessions and two-step verification",
+   "zh-Hant": "管理登入工作階段及雙重驗證"
+  },
+  "site.automation_patch_propose": {
+   "en": "Propose a change to an automation",
+   "zh-Hant": "建議修改自動化"
+  },
+  "tool.attention_summary": {
+   "en": "Check what needs attention",
+   "zh-Hant": "查看需要處理的事項"
+  },
+  "tool.attention_summary_v2": {
+   "en": "Check what needs attention, in priority order",
+   "zh-Hant": "按優先次序查看需要處理的事項"
+  },
+  "tool.automation_change_propose": {
+   "en": "Propose a change to an automation",
+   "zh-Hant": "建議修改自動化"
+  },
+  "tool.automation_explain": {
+   "en": "Explain an automation's run history",
+   "zh-Hant": "解釋自動化的執行記錄"
+  },
+  "tool.automation_get": {
+   "en": "Read an automation",
+   "zh-Hant": "查看自動化"
+  },
+  "tool.automation_list": {
+   "en": "List your automations",
+   "zh-Hant": "列出你的自動化"
+  },
+  "tool.brand_summary": {
+   "en": "Read your Brand Brain",
+   "zh-Hant": "查看你的品牌大腦"
+  },
+  "tool.calendar_range": {
+   "en": "Read your content calendar",
+   "zh-Hant": "查看你的內容日曆"
+  },
+  "tool.campaign_get": {
+   "en": "Read a campaign",
+   "zh-Hant": "查看推廣活動"
+  },
+  "tool.campaign_items": {
+   "en": "Read a campaign's drafts and posts",
+   "zh-Hant": "查看推廣活動的草稿及帖文"
+  },
+  "tool.campaign_link": {
+   "en": "Add drafts and posts to a campaign",
+   "zh-Hant": "把草稿及帖文加入推廣活動"
+  },
+  "tool.campaign_list": {
+   "en": "List your campaigns",
+   "zh-Hant": "列出你的推廣活動"
+  },
+  "tool.campaign_membership": {
+   "en": "Check which campaigns an item belongs to",
+   "zh-Hant": "查看項目所屬的推廣活動"
+  },
+  "tool.campaign_unlink": {
+   "en": "Remove drafts and posts from a campaign",
+   "zh-Hant": "從推廣活動移除草稿及帖文"
+  },
+  "tool.channels_capabilities": {
+   "en": "Check your connected accounts",
+   "zh-Hant": "查看已連接的帳戶"
+  },
+  "tool.content_search": {
+   "en": "Search your drafts, posts and sources",
+   "zh-Hant": "搜尋你的草稿、帖文及資料來源"
+  },
+  "tool.creative_plan": {
+   "en": "Plan the visuals for a post",
+   "zh-Hant": "規劃帖文的視覺設計"
+  },
+  "tool.draft_create": {
+   "en": "Write new drafts",
+   "zh-Hant": "撰寫新草稿"
+  },
+  "tool.draft_edit": {
+   "en": "Edit the text of a draft",
+   "zh-Hant": "編輯草稿文字"
+  },
+  "tool.draft_get": {
+   "en": "Read a draft",
+   "zh-Hant": "查看草稿"
+  },
+  "tool.draft_rewrite": {
+   "en": "Rewrite or adapt a draft",
+   "zh-Hant": "改寫或調整草稿"
+  },
+  "tool.engagement_draft_create": {
+   "en": "Draft a reply to a comment",
+   "zh-Hant": "草擬留言回覆"
+  },
+  "tool.engagement_triage": {
+   "en": "Sort comments that need a reply",
+   "zh-Hant": "整理需要回覆的留言"
+  },
+  "tool.entitlements_summary": {
+   "en": "Check your plan and allowances",
+   "zh-Hant": "查看你的方案及用量"
+  },
+  "tool.entity_status": {
+   "en": "Check the item selected on the page",
+   "zh-Hant": "查看頁面上已選取的項目"
+  },
+  "tool.help_get": {
+   "en": "Read a help article",
+   "zh-Hant": "閱讀說明文章"
+  },
+  "tool.help_search": {
+   "en": "Search Rafii help",
+   "zh-Hant": "搜尋 Rafii 說明"
+  },
+  "tool.image_analyze": {
+   "en": "Look at an image",
+   "zh-Hant": "分析圖片"
+  },
+  "tool.image_edit": {
+   "en": "Edit an image as a new version",
+   "zh-Hant": "把圖片編輯成新版本"
+  },
+  "tool.image_generate": {
+   "en": "Generate an image",
+   "zh-Hant": "生成圖片"
+  },
+  "tool.image_list": {
+   "en": "List the images in this conversation",
+   "zh-Hant": "列出此對話中的圖片"
+  },
+  "tool.image_variant": {
+   "en": "Make a variant of an image",
+   "zh-Hant": "製作圖片變化版本"
+  },
+  "tool.job_get": {
+   "en": "Read a post's publishing record",
+   "zh-Hant": "查看帖文的發佈記錄"
+  },
+  "tool.library_read": {
+   "en": "Read a Library source",
+   "zh-Hant": "閱讀資料庫來源"
+  },
+  "tool.library_search": {
+   "en": "Search approved Library facts",
+   "zh-Hant": "搜尋已批准的資料庫資料"
+  },
+  "tool.member_activity": {
+   "en": "Read what members did",
+   "zh-Hant": "查看成員的操作記錄"
+  },
+  "tool.memory_context": {
+   "en": "Read Rafii's memory of your workspace",
+   "zh-Hant": "查看 Rafii 對你工作區的記憶"
+  },
+  "tool.memory_summary": {
+   "en": "Read what Rafii remembers",
+   "zh-Hant": "查看 Rafii 記得的內容"
+  },
+  "tool.models_summary": {
+   "en": "Check which AI writers are available",
+   "zh-Hant": "查看可用的 AI 寫作工具"
+  },
+  "tool.notification_list": {
+   "en": "Read your notifications",
+   "zh-Hant": "查看你的通知"
+  },
+  "tool.overlay_context": {
+   "en": "Read your learned writing preferences",
+   "zh-Hant": "查看已學習的寫作偏好"
+  },
+  "tool.pending_approvals": {
+   "en": "Check what waits for your approval",
+   "zh-Hant": "查看等待你批准的事項"
+  },
+  "tool.privacy_egress_state": {
+   "en": "Check what may leave Rafii",
+   "zh-Hant": "查看哪些資料可離開 Rafii"
+  },
+  "tool.proposal_apply": {
+   "en": "Apply a proposal you approved",
+   "zh-Hant": "套用你已批准的建議"
+  },
+  "tool.publishing_summary": {
+   "en": "Check publishing results",
+   "zh-Hant": "查看發佈結果"
+  },
+  "tool.queue_summary": {
+   "en": "Check your publishing queue",
+   "zh-Hant": "查看你的發佈佇列"
+  },
+  "tool.record_attribution": {
+   "en": "Check who acted on an item",
+   "zh-Hant": "查看誰處理過某項目"
+  },
+  "tool.relationships": {
+   "en": "See how items relate",
+   "zh-Hant": "查看項目之間的關係"
+  },
+  "tool.research_fetch": {
+   "en": "Read a web page",
+   "zh-Hant": "閱讀網頁"
+  },
+  "tool.research_search": {
+   "en": "Search the web for leads",
+   "zh-Hant": "在網上搜尋線索"
+  },
+  "tool.reviews_list": {
+   "en": "Check reviews and returned posts",
+   "zh-Hant": "查看審核及退回的帖文"
+  },
+  "tool.route_describe": {
+   "en": "Explain a Rafii page",
+   "zh-Hant": "解釋 Rafii 頁面"
+  },
+  "tool.schedule_propose": {
+   "en": "Propose a time to schedule a post",
+   "zh-Hant": "建議帖文的排程時間"
+  },
+  "tool.skills_list": {
+   "en": "List Rafii's writing skills",
+   "zh-Hant": "列出 Rafii 的寫作技能"
+  },
+  "tool.source_campaign_create": {
+   "en": "Build a campaign from a source",
+   "zh-Hant": "從資料來源建立推廣活動"
+  },
+  "tool.source_normalize": {
+   "en": "Read a supplied source",
+   "zh-Hant": "閱讀提供的資料來源"
+  },
+  "tool.strategy_context": {
+   "en": "Read performance hypotheses",
+   "zh-Hant": "查看成效假設"
+  },
+  "tool.task_plan": {
+   "en": "Plan the steps of a request",
+   "zh-Hant": "規劃請求的步驟"
+  },
+  "tool.task_update": {
+   "en": "Update a step's progress",
+   "zh-Hant": "更新步驟進度"
+  },
+  "tool.trend_calibration": {
+   "en": "Read trend calibration",
+   "zh-Hant": "查看趨勢校準"
+  },
+  "tool.trend_detail": {
+   "en": "Read a trend's evidence",
+   "zh-Hant": "查看趨勢的證據"
+  },
+  "tool.trend_examples": {
+   "en": "Read trend examples",
+   "zh-Hant": "查看趨勢例子"
+  },
+  "tool.trend_forecast": {
+   "en": "Read a trend forecast",
+   "zh-Hant": "查看趨勢預測"
+  },
+  "tool.trend_genome": {
+   "en": "Read a trend's makeup",
+   "zh-Hant": "查看趨勢的組成"
+  },
+  "tool.trend_graph": {
+   "en": "Read how a trend spreads",
+   "zh-Hant": "查看趨勢的傳播"
+  },
+  "tool.trend_lab_check": {
+   "en": "Check a draft against a trend opportunity",
+   "zh-Hant": "以趨勢機會檢查草稿"
+  },
+  "tool.trend_lab_get": {
+   "en": "Read a draft check",
+   "zh-Hant": "查看草稿檢查結果"
+  },
+  "tool.trend_language_patterns": {
+   "en": "Read trend language patterns",
+   "zh-Hant": "查看趨勢用語模式"
+  },
+  "tool.trend_methodology": {
+   "en": "Read the trend methodology",
+   "zh-Hant": "查看趨勢分析方法"
+  },
+  "tool.trend_opportunities": {
+   "en": "Read trend opportunities",
+   "zh-Hant": "查看趨勢機會"
+  },
+  "tool.trend_opportunity": {
+   "en": "Read one trend opportunity",
+   "zh-Hant": "查看單一趨勢機會"
+  },
+  "tool.trend_opportunity_accept": {
+   "en": "Save a trend idea as a source",
+   "zh-Hant": "把趨勢構思儲存為資料來源"
+  },
+  "tool.trend_receipt": {
+   "en": "Read a trend receipt",
+   "zh-Hant": "查看趨勢記錄"
+  },
+  "tool.trend_saturation": {
+   "en": "Read trend saturation",
+   "zh-Hant": "查看趨勢飽和度"
+  },
+  "tool.trend_search": {
+   "en": "Search stored trends",
+   "zh-Hant": "搜尋已儲存的趨勢"
+  },
+  "tool.trend_snapshots": {
+   "en": "Read trend snapshots",
+   "zh-Hant": "查看趨勢快照"
+  },
+  "tool.trend_watch_create": {
+   "en": "Watch a trend in the app",
+   "zh-Hant": "在應用程式內追蹤趨勢"
+  },
+  "tool.trend_watch_disable": {
+   "en": "Stop watching a trend",
+   "zh-Hant": "停止追蹤趨勢"
+  },
+  "tool.trend_watches": {
+   "en": "Read your trend watches",
+   "zh-Hant": "查看你追蹤的趨勢"
+  },
+  "tool.trend_whitespace": {
+   "en": "Read trend gaps",
+   "zh-Hant": "查看趨勢空白位"
+  },
+  "tool.ui_guide": {
+   "en": "Show you how, step by step",
+   "zh-Hant": "逐步示範操作"
+  },
+  "tool.ui_navigate": {
+   "en": "Open a page for you",
+   "zh-Hant": "為你開啟頁面"
+  },
+  "tool.ui_show_help": {
+   "en": "Open a help article",
+   "zh-Hant": "開啟說明文章"
+  },
+  "tool.ui_voice": {
+   "en": "Control the voice panel and how Rafii talks",
+   "zh-Hant": "控制語音面板及 Rafii 的說話方式"
+  },
+  "tool.voice_check": {
+   "en": "Compare text with your voice",
+   "zh-Hant": "比較文字與你的語氣"
+  },
+  "tool.voice_profile": {
+   "en": "Read your voice profile",
+   "zh-Hant": "查看你的語氣檔案"
+  },
+  "tool.weather_now": {
+   "en": "Check the weather",
+   "zh-Hant": "查看天氣"
+  },
+  "tool.web_research": {
+   "en": "Research the web",
+   "zh-Hant": "進行網上研究"
+  },
+  "tool.weekly_plan_get": {
+   "en": "Read the weekly plan",
+   "zh-Hant": "查看每週計劃"
+  },
+  "tool.weekly_plan_prepare": {
+   "en": "Prepare next week's drafts",
+   "zh-Hant": "準備下週的草稿"
+  },
+  "tool.workspace_search": {
+   "en": "Find items to add to a message",
+   "zh-Hant": "尋找可加入訊息的項目"
+  },
+  "tool.workspace_summary": {
+   "en": "Read your workspace summary",
+   "zh-Hant": "查看你的工作區摘要"
+  },
+  "tool.youtube_analytics_summary": {
+   "en": "Read your YouTube analytics",
+   "zh-Hant": "查看你的 YouTube 分析數據"
+  },
+  "tool.youtube_plan_context": {
+   "en": "Check videos ready for YouTube",
+   "zh-Hant": "查看可上載到 YouTube 的影片"
+  },
+  "tool.youtube_plan_prepare": {
+   "en": "Prepare a YouTube upload plan",
+   "zh-Hant": "準備 YouTube 上載計劃"
+  },
+  "tool.youtube_recommendations": {
+   "en": "Suggest YouTube planning steps",
+   "zh-Hant": "建議 YouTube 規劃步驟"
+  },
+  "ui.action.campaign_create": {
+   "en": "Create a campaign",
+   "zh-Hant": "建立推廣活動"
+  },
+  "ui.action.campaign_update": {
+   "en": "Save a campaign brief",
+   "zh-Hant": "儲存推廣活動簡介"
+  },
+  "ui.action.library_use_as_source": {
+   "en": "Use a Library item as a source",
+   "zh-Hant": "把資料庫項目用作資料來源"
+  },
+  "ui.action.preference_decide": {
+   "en": "Accept or reject a learned preference",
+   "zh-Hant": "接受或拒絕已學習的偏好"
+  },
+  "ui.action.research_save_sources": {
+   "en": "Save research results as sources",
+   "zh-Hant": "把研究結果儲存為資料來源"
+  },
+  "ui.action.voice_profile_analyze_ai": {
+   "en": "Analyse your voice with AI",
+   "zh-Hant": "用 AI 分析你的語氣"
+  },
+  "ui.action.voice_profile_analyze_local": {
+   "en": "Analyse your voice on Rafii",
+   "zh-Hant": "在 Rafii 內分析你的語氣"
+  },
+  "ui.action.voice_profile_approve": {
+   "en": "Approve your voice profile",
+   "zh-Hant": "批准你的語氣檔案"
+  },
+  "ui.action.voice_sample_exclude": {
+   "en": "Exclude a voice sample",
+   "zh-Hant": "排除語氣樣本"
+  },
+  "ui.action.voice_sample_grant": {
+   "en": "Allow a voice sample to be used",
+   "zh-Hant": "允許使用語氣樣本"
+  },
+  "ui.action.voice_sample_select": {
+   "en": "Use a sample in voice analysis",
+   "zh-Hant": "在語氣分析中使用樣本"
+  },
+  "ui.action.voice_samples_import": {
+   "en": "Keep a voice sample",
+   "zh-Hant": "保留語氣樣本"
+  },
+  "ui.query.analytics_compare": {
+   "en": "Compare post results",
+   "zh-Hant": "比較帖文成效"
+  },
+  "ui.query.analytics_posts": {
+   "en": "Read post results",
+   "zh-Hant": "查看帖文成效"
+  },
+  "ui.query.analytics_series": {
+   "en": "Read results over time",
+   "zh-Hant": "查看一段時間內的成效"
+  },
+  "ui.query.automation_history": {
+   "en": "Read an automation's history",
+   "zh-Hant": "查看自動化的記錄"
+  },
+  "ui.query.campaign_timeline": {
+   "en": "Read a campaign timeline",
+   "zh-Hant": "查看推廣活動時間表"
+  },
+  "ui.query.draft_revisions": {
+   "en": "Read a draft's earlier versions",
+   "zh-Hant": "查看草稿的舊版本"
+  },
+  "ui.query.library_collections": {
+   "en": "Read your Library collections",
+   "zh-Hant": "查看你的資料庫收藏"
+  },
+  "ui.query.library_selection": {
+   "en": "Read the Library items you selected",
+   "zh-Hant": "查看你選取的資料庫項目"
+  },
+  "ui.query.post_feedback": {
+   "en": "Read feedback on a post",
+   "zh-Hant": "查看帖文的回饋"
+  },
+  "ui.query.recovery_guides": {
+   "en": "Read how to fix a problem",
+   "zh-Hant": "查看問題的解決方法"
+  },
+  "ui.query.research_results": {
+   "en": "Read research results",
+   "zh-Hant": "查看研究結果"
+  },
+  "ui.query.research_sources": {
+   "en": "Read saved research sources",
+   "zh-Hant": "查看已儲存的研究來源"
+  },
+  "ui.query.slot_check": {
+   "en": "Check whether a time slot is free",
+   "zh-Hant": "查看時段是否空閒"
+  },
+  "ui.query.task_progress": {
+   "en": "Read a task's progress",
+   "zh-Hant": "查看工作進度"
+  },
+  "ui.query.voice_learning_status": {
+   "en": "Read voice learning status",
+   "zh-Hant": "查看語氣學習狀態"
+  },
+  "ui.query.voice_sources": {
+   "en": "Read your voice samples",
+   "zh-Hant": "查看你的語氣樣本"
+  }
+ },
+ "providers": {
+  "YouTube:analytics": {
+   "en": "YouTube: read your channel and its analytics",
+   "zh-Hant": "YouTube：讀取你的頻道及其分析數據"
+  }
+ }
+}
