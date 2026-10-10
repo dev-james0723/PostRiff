@@ -88,6 +88,9 @@ class LinkedInProvider(OAuthProvider):
     read_scope, publish_scope = "r_member_social", "w_member_social"
     publish_required = frozenset({"w_member_social"})
     server_schedule = True
+    # Used only when LinkedIn actually issued a partner refresh token. The vault
+    # serializes rotation per credential; self-service grants still need reconnect.
+    refresh_margin = 300
     EXPLAIN = {"publish": "Rafii will publish posts to your LinkedIn member profile only when you approve each exact post. Organization pages and analytics are not requested."}
 
     history_approved = False
@@ -221,9 +224,38 @@ class LinkedInProvider(OAuthProvider):
         # LinkedIn's documented flow has no PKCE parameter; the verifier still binds our transaction server-side.
         return self.AUTH + "?" + urlencode({"response_type": "code", "client_id": self.client_id, "redirect_uri": redirect, "state": state, "scope": " ".join(scopes)})
 
+    def _token_grant(self, response, *, original_refresh=None):
+        """Validate the provider's lifetime before custody; never invent an expiry.
+
+        LinkedIn access tokens expire. Missing/invalid TTLs must not become NULL
+        (non-expiring) credentials or acquire the worker's generic one-hour default.
+        Explicit refresh rejection needs consent again, not an automatic code retry.
+        """
+        body = response.get('body')
+        revoked_request = (isinstance(body, dict) and body.get('error') == 'invalid_request'
+                           and str(body.get('error_description', '')).strip().lower()
+                           == 'the provided authorization grant or refresh token is invalid, expired or revoked')
+        if (original_refresh is not None and response.get('status') in (400, 401)
+                and isinstance(body, dict)
+                and (body.get('error') in ('invalid_grant', 'invalid_token', 'expired_token') or revoked_request)):
+            raise AlphaError('LinkedIn access can no longer be renewed. Reconnect your account before publishing.',
+                             409, code='reauthorization_required')
+        body = self._ok(response, 'access_token')
+        lifetime = body.get('expires_in')
+        refresh = body.get('refresh_token', original_refresh)
+        if (not _credential_shape(body['access_token'])
+                or type(lifetime) is not int or not 0 < lifetime <= 2_147_483_647
+                or (original_refresh is not None and 'refresh_token' in body and refresh is None)
+                or (refresh is not None and not _credential_shape(refresh))):
+            raise AlphaError('LinkedIn returned an invalid token lifetime or credential. Start a new connection.',
+                             502, code='provider_token_invalid')
+        return {'accessToken': body['access_token'], 'refreshToken': refresh, 'expiresIn': lifetime,
+                'scopes': re.split(r'[\s,]+', body['scope'].strip())
+                if isinstance(body.get('scope'), str) and body['scope'].strip() else None}
+
     def exchange(self, code, verifier, redirect):
-        body = self._ok(self.transport("POST", self.TOKEN, form={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "client_id": self.client_id, "client_secret": self.client_secret}), "access_token")
-        return {"accessToken": body["access_token"], "refreshToken": body.get("refresh_token"), "expiresIn": body.get("expires_in"), "scopes": re.split(r'[\s,]+', body['scope'].strip()) if isinstance(body.get('scope'), str) and body['scope'].strip() else None}
+        response = self.transport("POST", self.TOKEN, form={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect, "client_id": self.client_id, "client_secret": self.client_secret})
+        return self._token_grant(response)
 
     def identity(self, access_token):
         body = self._ok(self.transport("GET", self.USERINFO, headers={"Authorization": "Bearer " + access_token}), "sub")
@@ -239,8 +271,11 @@ class LinkedInProvider(OAuthProvider):
 
     def refresh(self, refresh_token):
         # Refresh tokens are issued only to approved partners; otherwise the customer re-authorizes every 60 days.
-        body = self._ok(self.transport("POST", self.TOKEN, form={"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": self.client_id, "client_secret": self.client_secret}), "access_token")
-        return {"accessToken": body["access_token"], "refreshToken": body.get("refresh_token", refresh_token), "expiresIn": body.get("expires_in")}
+        if not _credential_shape(refresh_token):
+            raise AlphaError('LinkedIn renewal is unavailable. Reconnect your account before publishing.',
+                             409, code='reauthorization_required')
+        response = self.transport("POST", self.TOKEN, form={"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": self.client_id, "client_secret": self.client_secret})
+        return self._token_grant(response, original_refresh=refresh_token)
 
     def revoke(self, token):
         return self.transport("POST", self.REVOKE, form={"client_id": self.client_id, "client_secret": self.client_secret, "token": token}).get("status") == 200
