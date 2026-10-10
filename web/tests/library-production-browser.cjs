@@ -373,11 +373,37 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    await page.getByText('Source fingerprint',{exact:false}).waitFor();
    checks.push({engine,width,source:'actual Library import opens its source facts and sharing review',execution:'real UI/API/DB; synthetic identity/storage; no model call'});
    await settleBeforeNavigation('return from source review');markDiagnosticNavigation('goto',base+'/app/library');await page.goto(base+'/app/library');await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();
+   // Observe dismissal without retries, changed timeouts, or application state writes.
+   // Retain only geometry, primitive state and at most 12 native/lifecycle events.
+   if(width===390){
+    const before=await page.evaluate(()=>{
+     const events=[],selector='[data-slot="drawer-viewport"],[data-slot="drawer-popup"],[data-slot="sheet-content"]';
+     const geometry=element=>{const bounds=element.getBoundingClientRect(),style=getComputedStyle(element);return {slot:element.getAttribute('data-slot'),open:element.hasAttribute('data-open'),closed:element.hasAttribute('data-closed'),ending:element.hasAttribute('data-ending-style'),visible:bounds.width>0&&bounds.height>0&&style.display!=='none'&&style.visibility!=='hidden',bounds:{x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height},pointerEvents:style.pointerEvents}};
+     const snapshot=()=>({width:innerWidth,overlays:[...document.querySelectorAll(selector)].slice(0,4).map(geometry),closeButtons:[...document.querySelectorAll('button[aria-label="Close asset details"]')].slice(0,4).map(geometry)});
+     const push=event=>{if(events.length<12)events.push({atMs:Math.round(performance.now()),...event})};
+     const types=['pointerdown','mousedown','pointerup','mouseup','click'];
+     const observe=event=>{const target=event.target instanceof Element?event.target:null;push({kind:event.type,targetTag:target?.tagName??null,targetSlot:target?.closest('[data-slot]')?.getAttribute('data-slot')??null,closeButton:Boolean(target?.closest('button[aria-label="Close asset details"]'))})};
+     for(const type of types)document.addEventListener(type,observe,true);
+     const observer=new MutationObserver(records=>{for(const record of records){if(record.target instanceof Element&&record.target.matches(selector))push({kind:'primitive-state',...geometry(record.target)})}});
+     observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['data-open','data-closed','data-ending-style']});
+     window.__rafiiLibraryDismissDiagnostic={snapshot,stop:()=>{observer.disconnect();for(const type of types)document.removeEventListener(type,observe,true);return events}};
+     return snapshot();
+    });
+    recordDiagnostic('drawer:before-close',before);
+   }
+   try{
    await page.getByRole('button',{name:'Close asset details'}).click();
+   if(width===390)recordDiagnostic('drawer:after-close',await page.evaluate(()=>window.__rafiiLibraryDismissDiagnostic.snapshot()));
    // The portal wrapper can have no bounding box while its fixed modal children
    // are still open. Observe the actual hit-blocking viewport after dismissal;
    // hidden also allows DOM removal when the exit transition completes.
    if(width===390)await page.locator('[data-slot="drawer-viewport"]').waitFor({state:'hidden',timeout:5000});
+   }catch(error){
+    if(width===390)recordDiagnostic('drawer:dismissal-failed',await page.evaluate(()=>window.__rafiiLibraryDismissDiagnostic.snapshot()).catch(()=>({unavailable:true})));
+    throw error;
+   }finally{
+    if(width===390)recordDiagnostic('drawer:event-timeline',{events:await page.evaluate(()=>{const events=window.__rafiiLibraryDismissDiagnostic.stop();delete window.__rafiiLibraryDismissDiagnostic;return events}).catch(()=>[])});
+   }
    await page.getByText('Manage collections',{exact:true}).click();await page.getByLabel('New collection name').fill('Practice');
    const collectionForm=page.locator('form').filter({has:page.getByLabel('New collection name')});await collectionForm.getByRole('button',{name:'Create',exact:true}).click();
    await page.getByRole('button',{name:/Document Brahms browser notes/}).first().click();await page.getByRole('checkbox',{name:'Add to collection Practice'}).check();await page.getByRole('button',{name:'Save details',exact:true}).click();

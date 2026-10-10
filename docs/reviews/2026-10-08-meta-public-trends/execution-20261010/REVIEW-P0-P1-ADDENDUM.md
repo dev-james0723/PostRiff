@@ -62,3 +62,13 @@ Any change to these files requires review of the changed portions before carryin
 ## Parent integration follow-up
 
 After the independent review, consumer-saas2dd3fa5d was merged at ecb904ce. The only conflict was additive package scripts. A parsed comparison verified every script from both parents is preserved and every non-script field is identical. The package hash above now identifies this reviewed union. JCB setup regenerated its workflow through the supported setup command; its sole delta changes the e2e command from ci:meta:jcb to e2e:meta:jcb, matching the reviewed configuration. No protection, assertion or product behavior changed. Cloud execution remains separately evidenced.
+
+## Parent review of Library release diagnostics
+
+The5c6e39c Library run failed only at WebKit390 drawer dismissal after source review. The primitive retained data-open; there were no page errors. A passing comparison is unmerged PR169, so its result is not treated as current-base acceptance. The cause remains unproven. The added test diagnostics record bounded geometry, primitive state and up to12 native/state events, with no content or credentials; cleanup runs in finally. The original click and five-second hidden assertion remain unchanged. No Library product file was changed. Current-head CI must establish the result; instrumentation is not a claimed repair.
+
+A read-only inventory of all current local worktrees also found113_workflow_recipes.sql in the active recipes worktree;114_meta_public_trends.sql occurs only in this Meta worktree. This supports the reserved-number choice without modifying peer work.
+
+```text
+6f89bae79c930b72d436f95f0a3036935c3d4eb58b5217636dade8b75489c804  web/tests/library-production-browser.cjs
+```
