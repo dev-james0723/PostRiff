@@ -218,6 +218,10 @@
    "en": "Read a post's publishing record",
    "zh-Hant": "查看帖文的發佈記錄"
   },
+  "tool.library_browse": {
+   "en": "Browse Library metadata",
+   "zh-Hant": "瀏覽素材庫資料"
+  },
   "tool.library_read": {
    "en": "Read a Library source",
    "zh-Hant": "閱讀資料庫來源"
