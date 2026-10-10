@@ -4953,7 +4953,7 @@
      "lists": {}
     }
    },
-   "description": "What is scheduled, waiting for approval or planned in a date range (inclusive YYYY-MM-DD dates in a time zone): each entry with its exact UTC instant, local time and the job's own zone, complete status counts (unknown stays unknown), day counts and rule-labelled observations.",
+   "description": "Scheduled, waiting and planned posts in a date range (default: 7 days from today): each entry's UTC instant, local time and zone, complete status counts (unknown stays unknown), day counts, empty days in data.derived.emptyDays, and posts that collide (same account, <2 hours apart) in data.derived.closeTogether.pairs.",
    "invalidatedBy": [
     "calendar_agenda"
    ],
@@ -6794,7 +6794,7 @@
      "lists": {}
     }
    },
-   "description": "Check a proposed local time for a draft or waiting post before preparing it: valid in that zone (DST), the account it would use and posts on the same account less than 2 hours away. Read only.",
+   "description": "Checks ONE proposed local time (a RescheduleForm's) for one draft or waiting post: valid in that zone (DST), the account it would use and posts on that account less than 2 hours away. Empty until a time and a draft or post are picked; for posts that already collide, use calendar_agenda.",
    "invalidatedBy": [],
    "journey": "J02",
    "name": "slot_check",

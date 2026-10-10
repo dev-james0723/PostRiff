@@ -63,7 +63,7 @@ def gate_record(gate: str, kind: str, checks: list, results: dict, origin: str |
 
 
 REQUIRED_ELSEWHERE = {
-    "G01": "A: git metadata, package probe, ownership register", "G03": "live: scripts/agent_ui_live.py ingest (30 real generations)",
+    "G01": "A: git metadata, package probe, ownership register", "G03": "live: scripts/agent_ui_live.py ingest (fixed 60-case corpus, >=59/60 first pass; D-A53)",
     "G20": "A: agent_ui_validation.sh regression on the integrated SHA", "G22": "A: migration rehearsal + route smoke", "G23": "A/G: deployed kill-switch drill",
     "G24": "A: production release receipt", "G25": "release.py over the final matrix", **{f"J0{i}": "real-service journey (E/D/F) + live journey" for i in range(1, 10)},
 }

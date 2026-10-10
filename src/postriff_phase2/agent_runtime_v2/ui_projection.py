@@ -51,6 +51,26 @@ REF_JOURNEYS = {"draft": "J01", "post": "J01", "job": "J02", "review": "J02", "a
 PROPOSAL_JOURNEYS = {"schedule_draft": "J02", "reschedule_post": "J02", "automation_change": "J08"}
 MAX_JOURNEYS = 3
 LIBRARY_IDS = 25     # library_search `ids` maxItems (ui_domain/library.py PICK_MAX)
+# D-A52: run-history reads. automation_get returns an automation's latest runs and automation_explain explains one stored run;
+# each harvests a single automation reference, so without this a question about several runs was a "single fact" although
+# J08's manifest shows run history (automation_history → RunHistory). They count as a collection read only when the verified
+# reads covered two or more distinct runs (the `runIds` the tool gate records, tool_adapter.run_ids_read) AND the person asked
+# about several runs or their history. One run's "why didn't it publish?", the verb "runs" ("what runs tomorrow?") and a
+# declined history ("唔使睇歷史") stay native answers.
+RUN_HISTORY_TOOLS = {"automation_get", "automation_explain"}
+_RUN_HISTORY = re.compile(
+    r"\brun\s+(?:history|histories|logs?|records?)\b|\bhistory\b"
+    r"|\b(?:last|latest|recent|past|previous|earlier|prior)\s+(?:(?:\d+|few|several|couple\s+of|two|three|four|five|ten)\s+)?"
+    r"(?:automation\s+|scheduled\s+)?(?:runs|times)\b"
+    r"|\b(?:my|its|their|your|the|all|these|those)\s+runs\b(?!\s+(?:at|on|every|each|daily|weekly|monthly|hourly|tomorrow|today|tonight|next|when|again)\b)"
+    r"|運行記錄|運行紀錄|运行记录|运行纪录|執行記錄|執行紀錄|执行记录|执行纪录|歷史|历史|最近幾次|最近几次|上幾次|上几次|前幾次|前几次|過去幾次|过去几次",
+    re.I)
+# A history the person declined ("no need to show the history", "唔使睇歷史", "不用看历史") is not a request for one.
+_DECLINED = re.compile(
+    r"(?:\b(?:no|not|don'?t|do\s+not|never|without|skip(?:ping)?|no\s+need\s+(?:to|for))\b[^.?!。？！,，]{0,24}"
+    r"|(?:唔使|唔駛|唔洗|唔好|唔需要|不用|不要|不需要|無需|无需|毋須|毋须|別|别|免)[^。？！,，]{0,6})$",
+    re.I)
+MIN_RUNS_FOR_HISTORY = 2
 
 # Explicit UI intents (en / zh-Hant / zh-Hans). Word boundaries for Latin words; CJK words are matched as substrings.
 _UI_INTENT = re.compile(
@@ -97,12 +117,24 @@ def wants_ui(text: str) -> bool:
     return bool(_UI_INTENT.search(text or ""))
 
 
+def asks_run_history(text: str) -> bool:
+    """The person asked about several runs or their history (en / zh-Hant / zh-Hans), and did not decline it."""
+    text = text if isinstance(text, str) else ""
+    return any(not _DECLINED.search(text[max(0, match.start() - 40):match.start()]) for match in _RUN_HISTORY.finditer(text))
+
+
+def runs_read(activity: list) -> set:
+    """Distinct run ids the turn's verified automation reads covered (D-A52; recorded by the tool gate)."""
+    return {ident for a in activity if a.get("status") == "verified" and str(a.get("tool")) in RUN_HISTORY_TOOLS
+            for ident in (a.get("runIds") if isinstance(a.get("runIds"), list) else []) if isinstance(ident, str)}
+
+
 def detect_journeys(result: dict, request_text: str = "", *, scope: str = "workspace") -> list[str]:
     """Journeys the turn touched, in order of first evidence: tools that ran (not blocked), proposals waiting, changed
     entities, references; J06 when the person asked about performance and the turn read publishing/attention data."""
     if scope == "founder":
         return ["J09"] if (result or {}).get("founder") or any(str(a.get("tool") or "").startswith("founder_") for a in (result or {}).get("toolActivity") or []
-                                                               if isinstance(a, dict)) else []
+                                                               if isinstance(a, dict) and a.get("status") in ("verified", "unverified")) else []
     found: list[str] = []
 
     def add(journey):
@@ -132,7 +164,7 @@ def detect_journeys(result: dict, request_text: str = "", *, scope: str = "works
     return found[:MAX_JOURNEYS]
 
 
-def eligibility(result, request_text, modality, *, flags):  # lane D
+def eligibility(result, request_text, modality, *, flags, scope="workspace"):  # lane D
     """{eligible, slot, reason, journeyIds}. Deterministic; never raises for odd input (the caller also guards)."""
     result = result if isinstance(result, dict) else {}
     text = request_text if isinstance(request_text, str) else ""
@@ -146,7 +178,9 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
         return {**_NOT, "reason": "not_metered"}
     if is_greeting_or_ack(text):
         return {**_NOT, "reason": "greeting"}
-    journeys = detect_journeys(result, text)
+    if scope not in ("workspace", "founder"):
+        return {**_NOT, "reason": "plain_answer"}
+    journeys = detect_journeys(result, text, scope=scope)
     intent = wants_ui(text)
     if not journeys:
         return {**_NOT, "reason": "plain_answer"}
@@ -156,9 +190,13 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
     if intent:
         return {"eligible": True, "slot": "main", "reason": "ui_intent", "journeyIds": journeys}
     activity = [a for a in result.get("toolActivity") or [] if isinstance(a, dict) and a.get("status") in ("verified", "unverified")]
-    rich = (any(str(a.get("tool")) in COLLECTION_TOOLS for a in activity) or bool(result.get("pendingApprovals"))
+    founder_collections = {"founder_metric_query", "founder_cost_breakdown", "founder_attention_list", "founder_entity_search", "founder_audit_tail"}
+    rich = (any(str(a.get("tool")) in COLLECTION_TOOLS for a in activity)
+            or (scope == "founder" and any(a.get("status") == "verified" and a.get("tool") in founder_collections for a in activity))
+            or bool(result.get("pendingApprovals"))
             or any(isinstance(c, dict) and c.get("verified") for c in result.get("changedEntities") or [])
-            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2)
+            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2
+            or (len(runs_read(activity)) >= MIN_RUNS_FOR_HISTORY and asks_run_history(text)))
     if rich:
         return {"eligible": True, "slot": "main", "reason": "rich_result", "journeyIds": journeys}
     return {**_NOT, "reason": "single_fact", "journeyIds": journeys}
@@ -247,6 +285,7 @@ def _suggested_inputs(journeys: list[str], refs: list[dict], library_ids: list[s
         out.append({"binding": "campaign_detail", "inputs": {"campaignId": by_type["campaign"][0]}})
     if "J08" in journeys and by_type.get("automation"):
         out.append({"binding": "automation_detail", "inputs": {"automationId": by_type["automation"][0]}})
+        out.append({"binding": "automation_history", "inputs": {"automationId": by_type["automation"][0]}})
     # The Library items the turn found: what library_browse listed (`libraryIds`, in its results' order, [] when it found nothing),
     # else the turn's asset refs (a J03 view's selection comes back as media/library_file refs). The view lists exactly those, so
     # the chat and the view agree; an empty browse gives `ids: []` (an empty view), never library_search {} (the whole Library).
