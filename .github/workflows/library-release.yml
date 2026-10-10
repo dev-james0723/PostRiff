@@ -67,12 +67,33 @@ jobs:
     if: ${{ inputs.prepare_dependency_lock != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      # Both images come from AWS's own ECR Public publisher, pinned by multi-arch
+      # index digest so every run uses the same bytes. Refresh deliberately (for
+      # example monthly or for an AL2023/Lambda security update): resolve the new
+      # index digest, confirm the amd64 manifest, and re-run this job. Never float.
+      # Resolved 2026-10-09 through the anonymous ECR Public registry API:
+      #   amazonlinux:2023 -> amd64 manifest sha256:3552faf41b70d5b123fc33d4429a259baa2bcf9aa6ab15c70ad6da40fd63d247,
+      #     one rootfs layer sha256:7234d0a9b6ba1270c7bb653ee62a443a1dbb6fdfa833336edd3c0691c2524d1f, built 2026-09-29
+      #   lambda/python:3.12 -> amd64 manifest sha256:9531d39617b0966d2238cd30328087d53803110d50948feca99d29437422cffa, built 2026-10-09
+      BUILDER_IMAGE: public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:12052e9b5d3fd85769abbdd863dd038e1890c9ace31d5fdbe1afa78eda97d061
+      LAMBDA_IMAGE: public.ecr.aws/lambda/python:3.12@sha256:145350008f3f67d82c0bc6ecd34d9eb0c95aecf11f9b69db6bab7de3d5d3cc61
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Pull the pinned images and record their digests
+        run: |
+          for image in "$BUILDER_IMAGE" "$LAMBDA_IMAGE"; do
+            docker pull --platform linux/amd64 "$image"
+            platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+            echo "image=$image platform=$platform repoDigests=$(docker image inspect --format '{{join .RepoDigests ","}}' "$image")"
+            test "$platform" = linux/amd64
+          done
+          docker run --rm --pull=never --entrypoint /var/lang/bin/python3.12 "$LAMBDA_IMAGE" -c \
+            'import sys; print("lambda python", sys.version); assert sys.version_info[:2] == (3, 12)'
       - name: Build and exercise the real Amazon Linux document bundle
         run: |
           # AWS publishes this same AL2023 base on ECR; avoid the unrelated Docker Hub token endpoint.
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work public.ecr.aws/amazonlinux/amazonlinux:2023 bash -euc '
+          docker run --rm --pull=never -v "$GITHUB_WORKSPACE:/work" -w /work "$BUILDER_IMAGE" bash -euc '
             dnf install -y python3.12 python3.12-pip tar gzip findutils which
             python3.12 runtime/build_document_renderer.py
             python3.12 -m pip install --target .document-test-python Pillow==12.3.0 pypdfium2==5.14.0 Markdown==3.11
@@ -83,11 +104,11 @@ jobs:
         run: |
           # The builder has every Office RPM installed. A second pristine image
           # catches missing dynamically opened libraries and system-tool reliance.
-          docker run --rm --read-only --user 1000:1000 --cap-drop=ALL \
+          docker run --rm --pull=never --read-only --user 1000:1000 --cap-drop=ALL \
             --security-opt=no-new-privileges --tmpfs /tmp:rw,size=536870912,mode=1777 \
             -v "$GITHUB_WORKSPACE:/work:ro" -w /work \
             -e PYTHONPATH=/work/src:/work/tests:/work/.document-test-python \
-            --entrypoint /var/lang/bin/python3.12 public.ecr.aws/lambda/python:3.12 \
+            --entrypoint /var/lang/bin/python3.12 "$LAMBDA_IMAGE" \
             -m unittest test_library_preview
   dependency-lock:
     if: ${{ inputs.prepare_dependency_lock == true }}
