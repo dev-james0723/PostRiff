@@ -471,7 +471,8 @@ def resolve_bound_actor(cur, ctx, capability, args, now):
         return None
     record=authority_record(approval)
     record.update(state='approved',consumedAt=None)
-    return authz_seam.Actor('approval',ctx.principal,'',{'approvalId':approval['approvalId'],'approval':record,'digest':approval['digest']})
+    from ..authz import Actor
+    return Actor('approval',ctx.principal,'',{'approvalId':approval['approvalId'],'approval':record,'digest':approval['digest']})
 
 
 def execute_approved_model(runtime,workspace_id,token,task,approval,*,seconds_left=240):

@@ -137,7 +137,12 @@ class Fixtures(unittest.TestCase):
         snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] != "tool.library_browse"]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
-            self.assertEqual(entry, self.golden["capabilities"][capability_id], capability_id)
+            expected = self.golden["capabilities"][capability_id]
+            if capability_id == "tool.draft_edit":
+                # CF3 adds the atomic receipt and conditional revision restore; legacy authority stays frozen.
+                expected = {**expected, "version": 2, "idempotency": "receipt_tx", "retry_class": "auto", "max_attempts": 3,
+                            "compensation": "inverse", "inverse": "tool.draft_edit"}
+            self.assertEqual(entry, expected, capability_id)
         self.assertEqual(snapshot["bindings"], self.golden["bindings"])
 
     def test_legacy_baseline_v1_is_frozen(self):

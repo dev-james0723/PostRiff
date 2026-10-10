@@ -165,6 +165,14 @@ def finish(service, ideas, workspace_id: str, task_id: str, checkpoint_id: str, 
             task = store.lock_task(cur, ideas, workspace_id, task_id)
             if task is None:
                 return
+            waiting = {s['stepId'] for s in store.load_steps(cur, workspace_id, task_id)
+                       if s['kind'] == 'continuation' and s['state'] == 'awaiting_approval'}
+            if not ok and any(a['kind'] == 'spend' and a['state'] == 'pending' and a['stepId'] in waiting
+                              for a in store.approvals_for(cur, workspace_id, task_id)):
+                # No provider was dispatched: retain the private checkpoint while its creator reviews the exact new ceiling.
+                release(cur, checkpoint_id)
+                store.refresh(cur, ideas, task)
+                return
             if ok:
                 consume(cur, checkpoint_id)
             else:

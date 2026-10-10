@@ -92,8 +92,8 @@ TOOL_POLICY: dict[str, dict] = {
     # drafting through the writing pipeline: its own 'text_model' reservation (ideas.py run reservation), writing-run key
     "draft_create": _write("content", "memory_brand", cost="text_credits", idempotency="native_key", retry_class="manual"),
     "draft_rewrite": _write("content", "memory_brand", cost="text_credits", idempotency="native_key", retry_class="manual"),
-    # compensation stays manual until the restore inverse exists (CF-3 §13); the revision guard refuses a replay
-    "draft_edit": _write("content", idempotency="none", retry_class="never", compensation="manual"),
+    # CF-3 now commits its receipt with the revisioned edit and restores through the same domain command.
+    "draft_edit": _write("content", capability_version=2, idempotency="receipt_tx", retry_class="auto", compensation="inverse", inverse="tool.draft_edit"),
     "campaign_link": _write("campaigns", "content", idempotency="receipt_tx", retry_class="auto", compensation="inverse", inverse="tool.campaign_unlink"),
     "campaign_unlink": _write("campaigns", "content", idempotency="receipt_tx", retry_class="auto", compensation="inverse", inverse="tool.campaign_link"),
     # images: their own 'image_generation' reservation (creative.py); a duplicate reservation key returns the first call.

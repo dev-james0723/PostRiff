@@ -208,9 +208,10 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
         existing = store.receipt(cur, workspace_id, undo_key, lock=True)
         if existing is not None:
             raise errors.error("undo_unavailable")
+        undo_trace = executor.new_trace()
         cur.execute("INSERT INTO public.pr_agent_receipts(workspace_id,effect_key,task_id,step_id,principal,capability_id,input_digest,trace_id) "
                     "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)", (workspace_id, undo_key, task_id, step["stepId"], principal,
-                                                       record["inverseCapabilityId"], inverse_digest, executor.new_trace()))
+                                                       record["inverseCapabilityId"], inverse_digest, undo_trace))
         if relational_inverse:
             relational_inverse.apply_in(runtime, cur, workspace_id, principal, inverse_inputs, undo_key)
         else:
@@ -220,7 +221,8 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
             for effect in runtime.service.repository.effects:
                 effect(cur, workspace_id, source, state, principal)
         from ...hosted import audit
-        audit(cur, workspace_id, principal, "agent.task.undo", step_key, {"taskId": task_id, "compensationId": record["compensationId"]})
+        audit(cur, workspace_id, principal, "agent.task.undo", step_key,
+              {"taskId": task_id, "stepKey": step_key, "effectKey": undo_key, "traceId": undo_trace, "compensationId": record["compensationId"]})
         refs = [{"type": record["targetType"], "id": record["targetId"], "change": "restored"}]
         store.receipt_done(cur, workspace_id, undo_key, outcome="applied", verified=True,
                            result={"checks": [{"name": "guarded_domain_inverse", "ok": True}], "changedRefs": refs})

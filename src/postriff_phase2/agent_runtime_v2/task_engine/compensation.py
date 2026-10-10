@@ -34,7 +34,9 @@ def register(capability_id: str, inverse: Inverse) -> None:
 def _campaign_items(state: dict, _kind: str, campaign_id: str):
     root = ((state.get("raffi") or {}).get("campaignPlanning") or {})
     campaign = next((c for c in root.get("campaigns") or [] if isinstance(c, dict) and c.get("id") == campaign_id), None)
-    return None if campaign is None else sorted((model.canonical(i) for i in campaign.get("items") or []))
+    return None if campaign is None else {"version": campaign.get("version"),
+                                          "itemLog": campaign.get("itemLog", []),
+                                          "items": sorted((model.canonical(i) for i in campaign.get("items") or []))}
 
 
 def _link_inputs(inputs: dict, _result: dict) -> dict:

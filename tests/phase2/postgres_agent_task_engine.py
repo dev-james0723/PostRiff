@@ -441,7 +441,7 @@ class TaskEnginePG(unittest.TestCase):
         draft=uuid.uuid4().hex
         with connect() as db:
             state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
-            state['variants'].append({'id':draft,'revision':1,'text':'Original text','platform':'LinkedIn','needsReview':False,
+            state['variants'].append({'id':draft,'revision':1,'text':'Original text','platform':'LinkedIn','needsReview':False,'unknowns':[],
                 'revisions':[{'revision':1,'text':'Original text'}]})
             db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),self.w))
         t=self.create([{'label':'Edit draft','kind':'model'}])
@@ -517,5 +517,49 @@ class TaskEnginePG(unittest.TestCase):
                 with self.service.repository.transaction(OWNER,self.w):
                     self.fail('Expired approval attempt reached a write transaction')
         self.assertEqual(e.exception.code,'agent_permission_revoked')
+
+    def test_33_continuation_spend_approval_preserves_private_checkpoint(self):
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals,continuations
+        t=self.create()
+        with store.service_tx(self.service,self.w) as cur:
+            cp=checkpoints.store_run(cur,self.service.ideas,t,'private SDK state',[],writer_model=None,stored_at=time.time())
+            checkpoints.claim(cur,self.w,t['taskId'],A,'req:budget')
+        binding,_ledger=continuations.begin(self.runtime,self.w,OWNER,t['taskId'],t['taskId'],'trace_'+uuid.uuid4().hex)
+        continuations.finish(self.runtime,binding,ok=False,code='budget_ceiling',spend_limit=50)
+        checkpoints.finish(self.service,self.service.ideas,self.w,t['taskId'],cp,ok=False)
+        with store.service_tx(self.service,self.w) as cur:
+            checkpoint=checkpoints.available(cur,self.w,t['taskId']);self.assertIsNotNone(checkpoint)
+            approval=next(a for a in store.approvals_for(cur,self.w,t['taskId']) if a['kind']=='spend')
+            self.assertEqual(approval['summary']['budgetCeilingUsdMicro'],50)
+        self.assertIsNone(continuations.begin(self.runtime,self.w,OWNER,t['taskId'],t['taskId'],'trace_'+uuid.uuid4().hex))
+        with patch('postriff_phase2.agent_runtime_v2.task_engine.approvals.continue_after_decision',return_value={'resumed':'needs_continue'}):
+            result=approvals.resolve_approval(self.runtime,self.w,OWNER,approval['approvalId'],{'decision':'approve','digest':approval['digest'],'idempotencyKey':'continuation-spend-'+uuid.uuid4().hex})
+        self.assertEqual(result['resumed'],'needs_continue')
+        second,_ledger=continuations.begin(self.runtime,self.w,OWNER,t['taskId'],t['taskId'],'trace_'+uuid.uuid4().hex)
+        self.assertEqual(second['stepId'],binding['stepId']);self.assertEqual(second['attemptNo'],2)
+        with connect() as db:
+            self.assertEqual(db.execute('SELECT state FROM public.pr_agent_approvals WHERE id=%s',(approval['approvalId'],)).fetchone()[0],'consumed')
+            self.assertEqual(db.execute('SELECT budget_ceiling_usd_micro FROM public.pr_agent_tasks WHERE id=%s',(t['taskId'],)).fetchone()[0],50)
+        continuations.finish(self.runtime,second,ok=True)
+        checkpoints.finish(self.service,self.service.ideas,self.w,t['taskId'],cp,ok=True)
+
+    def test_34_trend_create_receipt_undo_is_atomic_and_revision_guarded(self):
+        from postriff_phase2.growth.trends.store import TrendStore
+        from postriff_phase2.agent_runtime_v2 import domain_tools
+        domain_tools.ensure_registered();domain=TrendStore(connect)
+        values={'trend_id':str(uuid.uuid4()),'platforms':['bluesky'],'threshold':'stage_change','idempotency_key':'create-'+uuid.uuid4().hex}
+        t=self.create([{'label':'Watch trend','kind':'tool','capabilityId':'trend_watch_create','inputs':values}]);c=self.claim(t)
+        binding={'workspaceId':self.w,'principal':A,'taskId':t['taskId'],'stepId':c.step['stepId'],'stepKey':'s1','attemptId':c.attempt_id,'leaseOwner':c.lease_owner,
+                 'effectKey':c.step['effectKey'],'inputDigest':c.step['inputDigest'],'traceId':c.trace_id}
+        with store.service_tx(self.service,self.w) as cur:
+            store.receipt_begin(cur,t,c.step,c.attempt_id,c.trace_id)
+            saved=domain.put_watch(self.w,A,{k:v for k,v in values.items() if k != 'idempotency_key'},idempotency_key=values['idempotency_key'],cursor=cur)
+            receipts.commit_command(cur,SimpleNamespace(step_binding=binding),verified=True,changed_refs=[{'type':'trend_watch','id':saved['watch_id']}],
+                compensation_result={'watchId':saved['watch_id'],'revision':saved['revision'],'changed':True})
+        executor.finish(self.runtime,c,{'ok':True,'verified':True})
+        with connect() as db:comp=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+        result=actions.undo(self.runtime,self.w,OWNER,t['taskId'],'s1',{'compensationId':comp,'idempotencyKey':'create-undo-'+uuid.uuid4().hex})
+        self.assertTrue(result['verified'])
+        with connect() as db:self.assertEqual(db.execute('SELECT enabled,revision FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s',(self.w,saved['watch_id'])).fetchone(),(False,2))
 
 if __name__=='__main__':unittest.main(verbosity=2)

@@ -40,6 +40,14 @@ class TaskEngineRules(unittest.TestCase):
         self.assertEqual(model.effect_key(tid,'s1',1),model.effect_key(tid,'s1',1))
         self.assertNotEqual(model.effect_key(tid,'s1',1),model.effect_key(tid,'s1',2))
 
+    def test_campaign_undo_digest_rejects_intervening_link_cycle(self):
+        from postriff_phase2.agent_runtime_v2.task_engine import compensation
+        state={'raffi':{'campaignPlanning':{'campaigns':[{'id':'c1','version':1,'items':[],'itemLog':[]}]}}}
+        inverse=compensation.INVERSES['campaign_unlink']
+        before=compensation.digest_of(state,inverse,'campaign','c1')
+        state['raffi']['campaignPlanning']['campaigns'][0]['itemLog']=[{'op':'link','id':'d1','at':1},{'op':'unlink','id':'d1','at':2}]
+        self.assertNotEqual(before,compensation.digest_of(state,inverse,'campaign','c1'))
+
     def test_digest_principal_binding(self):
         self.assertNotEqual(model.request_digest('a',{'x':1}),model.request_digest('b',{'x':1}))
         self.assertEqual(model.input_digest('x',{'b':2,'a':1}),model.input_digest('x',{'a':1,'b':2}))

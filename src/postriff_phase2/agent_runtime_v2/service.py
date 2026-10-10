@@ -1255,7 +1255,8 @@ class AgentRuntimeService:
                     reservation = {**reservation, "estimateUsdMicro": estimate}
             except AlphaError as error:
                 if continuation:
-                    continuations.finish(self, continuation_binding, ok=False, code=error.code)
+                    continuations.finish(self, continuation_binding, ok=False, code=error.code,
+                                         spend_limit=getattr(error, "required_budget_ceiling_usd_micro", None))
                 return None
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
