@@ -253,7 +253,10 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
    assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
-   await page.locator('[data-library-thumbnail="md"]').first().waitFor({timeout:15000});
+   // The thumbnail container can still be a preparing placeholder: frontend
+   // indexing/auth work may start its preview fetch after the backend is ready.
+   // Finish this owned preview before any later forced navigation destroys it.
+   await waitForLoadedRaster(page.getByRole('img',{name:'First page of rehearsal-'+width+'.md',exact:true}).first(),500,90000);
    const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4')),videoTraceStart=storageTrace.length;
    if(engine==='chromium'){
     await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
