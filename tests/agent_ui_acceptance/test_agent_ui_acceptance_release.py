@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -52,6 +53,32 @@ def passing_records(sha=SHA):
 
 def matrix(status="pass", sha=SHA, gates=None):
     return {"candidate_sha": sha, "gates": [{"id": g, "required": True, "status": status, "candidate_sha": sha, "evidence": []} for g in (gates or corpus.GATES)]}
+
+
+def ingest_sample(plan):
+    """A complete CI-fake browser collection + server rows for every normal case of the plan: each first pass ready."""
+    browser = {"cases": {}, "marks": [], "resources": []}
+    rows = []
+    for index, case in enumerate(plan["normal"]):
+        artifact = f"00000000-0000-4000-8000-{index:012d}"
+        browser["cases"][case["caseId"]] = {"begunAt": index * 1000}
+        browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/turns", "start": 0.0})
+        browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/ui/presentations", "start": 100.0})
+        browser["marks"] += [{"caseId": case["caseId"], "name": "rafii-genui:first-component", "at": 2100.0, "artifactId": artifact},
+                             {"caseId": case["caseId"], "name": "rafii-genui:ready", "at": 9100.0, "artifactId": artifact, "revision": 1}]
+        rows.append({"artifact_id": artifact, "kind": "generate", "state": "ready", "accepted": True, "provider_attempts": 1, "cost_usd_micro": 900,
+                     "cost_state": "known", "admitted_at": "2026-10-09T10:00:00Z", "first_delta_at": "2026-10-09T10:00:01.5Z", "ready_at": "2026-10-09T10:00:08Z"})
+    return browser, rows
+
+
+# D-A53 (James, 2026-10-09): the G03 corpus is fixed before any measurement. Its first 30 cases, 9 edits and 3 faults are the
+# v1 plan byte for byte (fixtures/g03-corpus-v1.json, printed by `agent_ui_live.py plan` at de4e5907); the hash below freezes all
+# 60 normal cases. A changed, dropped, replaced or reordered case is a new corpus: it needs a new decision and a new id, and
+# results measured on different corpora are never pooled.
+G03_CORPUS_V1 = json.loads((Path(__file__).resolve().parent / "fixtures" / "g03-corpus-v1.json").read_text(encoding="utf-8"))
+G03_CORPUS_SHA256 = "703b54cdb40eb8abb3b5f4d8b82a1d9ca46779a327ee72b88adc47ba34721ff0"
+CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+JOURNEYS = tuple(f"J0{i}" for i in range(1, 10))
 
 
 class ReleaseMode(unittest.TestCase):
@@ -147,15 +174,15 @@ class LiveRunnerGuards(unittest.TestCase):
 
     def test_plan_is_the_04_acceptance_sample(self):
         plan = LIVE.sample_plan()
-        self.assertEqual(len(plan["normal"]), 30)
-        self.assertEqual(sum(1 for c in plan["normal"] if c["journey"] == "composite"), 3)
+        self.assertEqual(len(plan["normal"]), 60)
+        self.assertEqual(sum(1 for c in plan["normal"] if c["journey"] == "composite"), 6)
         for j in corpus.GATES:
             if j.startswith("J"):
-                self.assertEqual(sum(1 for c in plan["normal"] if c["journey"] == j), 3, j)
+                self.assertEqual(sum(1 for c in plan["normal"] if c["journey"] == j), 6, j)
         self.assertEqual(sorted(c["journey"] for c in plan["edits"]), [f"J0{i}" for i in range(1, 10)])
-        self.assertEqual(len({c["caseId"] for c in plan["normal"] + plan["edits"]}), 39)
+        self.assertEqual(len({c["caseId"] for c in plan["normal"] + plan["edits"]}), 69)
         self.assertTrue(all(c["surface"] == "founder" for c in plan["normal"] if c["journey"] == "J09"))
-        self.assertEqual(plan["denominators"]["G03"]["firstPassValidAtLeast"], 29)
+        self.assertEqual(plan["denominators"]["G03"], {"firstPassValidAtLeast": 59, "of": 60, "functionalAfterOneRepair": 60})
 
     def test_refusals(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -216,17 +243,7 @@ class LiveRunnerGuards(unittest.TestCase):
 
     def test_ingest_verdicts(self):
         plan = LIVE.sample_plan()
-        browser = {"cases": {}, "marks": [], "resources": []}
-        rows = []
-        for index, case in enumerate(plan["normal"]):
-            artifact = f"00000000-0000-4000-8000-{index:012d}"
-            browser["cases"][case["caseId"]] = {"begunAt": index * 1000}
-            browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/turns", "start": 0.0})
-            browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/ui/presentations", "start": 100.0})
-            browser["marks"] += [{"caseId": case["caseId"], "name": "rafii-genui:first-component", "at": 2100.0, "artifactId": artifact},
-                                 {"caseId": case["caseId"], "name": "rafii-genui:ready", "at": 9100.0, "artifactId": artifact, "revision": 1}]
-            rows.append({"artifact_id": artifact, "kind": "generate", "state": "ready", "accepted": True, "provider_attempts": 1, "cost_usd_micro": 900,
-                         "cost_state": "known", "admitted_at": "2026-10-09T10:00:00Z", "first_delta_at": "2026-10-09T10:00:01.5Z", "ready_at": "2026-10-09T10:00:08Z"})
+        browser, rows = ingest_sample(plan)
         rows[3] = {**rows[3], "state": "failed", "reason": "parse_rejected"}
         rows.append({**rows[3], "kind": "repair", "state": "ready", "reason": None})
         browser["probe"] = {"ok": True, "frames": [{"at": 10, "event": "ui.started", "multibyte": False}, {"at": 1510, "event": "ui.delta", "multibyte": True},
@@ -234,7 +251,7 @@ class LiveRunnerGuards(unittest.TestCase):
         out = LIVE.ingest(browser, rows, plan)
         v = out["verdicts"]
         self.assertEqual(v["G03"]["status"], "pass", v["G03"])
-        self.assertEqual(v["G03"]["firstPassValid"], 29)
+        self.assertEqual(v["G03"]["firstPassValid"], 59)
         self.assertEqual(v["G17"]["status"], "pass")
         self.assertEqual(v["G17"]["firstUsefulComponentP95Ms"], 2000.0)
         self.assertEqual(v["G04"]["status"], "pass")
@@ -252,6 +269,70 @@ class LiveRunnerGuards(unittest.TestCase):
         self.assertEqual(short["status"], "unverified")
         self.assertEqual(short["missingCases"], ["J05-b"])
 
+    def test_ingest_counts_the_fixed_corpus_only(self):
+        plan = LIVE.sample_plan()
+        browser, rows = ingest_sample(plan)
+        out = LIVE.ingest(browser, rows, plan)
+        g03 = out["verdicts"]["G03"]
+        self.assertEqual((g03["status"], g03["firstPassValid"], g03["functional"], g03["required"]), ("pass", 60, 60, 60))
+        self.assertEqual(g03["firstPassValidAtLeast"], 59)
+        self.assertEqual(g03["corpus"], {"id": plan["corpus"]["id"], "sha256": plan["corpus"]["sha256"]})
+        self.assertEqual(out["verdicts"]["G17"]["coldCase"], "J01-a", "the cold case is the first case run, not the first id alphabetically")
+        self.assertEqual([c["caseId"] for c in out["cases"]][:4], ["J01-a", "J01-b", "J01-c", "J01-d"], "evidence lists cases in run order")
+
+        one_miss = [dict(r) for r in rows]
+        one_miss[3] = {**one_miss[3], "state": "failed", "reason": "parse_rejected"}
+        one_miss.append({**one_miss[3], "kind": "repair", "state": "ready", "reason": None})
+        self.assertEqual(LIVE.ingest(browser, one_miss, plan)["verdicts"]["G03"]["status"], "pass", "59/60 first pass, 60/60 functional")
+
+        two_misses = [dict(r) for r in one_miss]
+        two_misses[40] = {**two_misses[40], "state": "failed", "reason": "parse_rejected"}
+        two_misses.append({**two_misses[40], "kind": "repair", "state": "ready", "reason": None})
+        v = LIVE.ingest(browser, two_misses, plan)["verdicts"]["G03"]
+        self.assertEqual((v["status"], v["firstPassValid"], v["functional"]), ("fail", 58, 60))
+
+        unrepaired = [dict(r) for r in rows]
+        unrepaired[7] = {**unrepaired[7], "state": "failed", "reason": "parse_rejected"}
+        v = LIVE.ingest(browser, unrepaired, plan)["verdicts"]["G03"]
+        self.assertEqual((v["status"], v["firstPassValid"], v["functional"]), ("fail", 59, 59), "every case must be functional after one repair")
+
+        # A replacement case is never counted: the planned case stays missing (or failed) and the extra id is reported.
+        replaced = json.loads(json.dumps(browser))
+        del replaced["cases"]["J05-b"]
+        replaced["cases"]["J05-b2"] = {"begunAt": 1}
+        for item in replaced["marks"] + replaced["resources"]:
+            if item["caseId"] == "J05-b":
+                item["caseId"] = "J05-b2"
+        v = LIVE.ingest(replaced, rows, plan)["verdicts"]["G03"]
+        self.assertEqual((v["status"], v["missingCases"], v["unplannedCases"], v["normalCases"]), ("unverified", ["J05-b"], ["J05-b2"], 59))
+        v = LIVE.ingest(replaced, unrepaired, plan)["verdicts"]["G03"]
+        self.assertEqual(v["status"], "fail", "a known unrepaired failure fails the gate even while another case is missing")
+
+        # A case re-run under the same id (two artifacts in one case) never counts as first-pass valid.
+        rerun = json.loads(json.dumps(browser))
+        rerun["marks"].append({"caseId": "J02-c", "name": "rafii-genui:ready", "at": 19100.0, "artifactId": "00000000-0000-4000-8000-999999999999", "revision": 1})
+        v = LIVE.ingest(rerun, rows, plan)["verdicts"]["G03"]
+        self.assertEqual((v["repeatedCases"], v["firstPassValid"], v["status"]), (["J02-c"], 59, "pass"))
+        rerun["marks"].append({"caseId": "J06-e", "name": "rafii-genui:ready", "at": 19100.0, "artifactId": "00000000-0000-4000-8000-999999999998", "revision": 1})
+        self.assertEqual(LIVE.ingest(rerun, rows, plan)["verdicts"]["G03"]["status"], "fail")
+
+    def test_api_mode_runs_each_conversation_in_order_and_threads_its_id(self):
+        plan = LIVE.sample_plan()
+        calls = []
+
+        def fake_case(api, token, workspace, case, budget, conversation_id=None):
+            calls.append((case["caseId"], conversation_id))
+            return {"caseId": case["caseId"], "status": "ready", "_conversationId": conversation_id or f"conv-{case['caseId']}"}
+        cases, founder = LIVE.run_conversations(None, "t" * 30, UUID, plan, None, LIVE.Budget(5.0, 0.07), case_fn=fake_case)
+        self.assertEqual(calls[:7], [("J01-a", None), ("J01-b", "conv-J01-a"), ("J01-c", "conv-J01-a"), ("J01-d", None), ("J01-e", "conv-J01-d"),
+                                     ("J01-f", "conv-J01-d"), ("J02-a", None)])
+        self.assertEqual(len(cases), 54)
+        self.assertTrue(all("_conversationId" not in c for c in cases), "conversation ids never reach evidence")
+        self.assertEqual(founder, [f"J09-{x}" for x in "abcdef"], "founder cases need the founder surface")
+        calls.clear()
+        cases, founder = LIVE.run_conversations(None, "t" * 30, UUID, plan, {"J03-e", "J09-a"}, LIVE.Budget(5.0, 0.07), case_fn=fake_case)
+        self.assertEqual((calls, founder), ([("J03-e", None)], ["J09-a"]))
+
     def test_ingest_end_to_end_writes_evidence_and_records(self):
         plan = LIVE.sample_plan()
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"RAFII_LIVE_CHECKS": "1"}):
@@ -267,6 +348,113 @@ class LiveRunnerGuards(unittest.TestCase):
             records = json.loads(Path(tmp, "live.records.json").read_text())["records"]
             self.assertTrue(records and all(r["status"] != "pass" for r in records))
         self.assertEqual(plan["normal"][0]["caseId"], "J01-a")
+
+
+class G03Corpus(unittest.TestCase):
+    """D-A53: G03 is measured on a FIXED 60-case live corpus, ≥59/60 first pass and 60/60 functional after at most one repair."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.plan = LIVE.sample_plan()
+        cls.normal = cls.plan["normal"]
+        cls.new = cls.normal[30:]
+
+    def test_exactly_60_normal_cases_with_unique_ids_and_six_per_journey(self):
+        self.assertEqual(len(self.normal), 60)
+        self.assertEqual(len({c["caseId"] for c in self.normal}), 60)
+        for j in JOURNEYS:
+            self.assertEqual([c["caseId"] for c in self.normal if c["journey"] == j], [f"{j}-{x}" for x in "abcdef"], j)
+        self.assertEqual([c["caseId"] for c in self.normal if c["journey"] == "composite"], [f"CMP-{x}" for x in "abcdef"])
+        self.assertTrue(all(set(c) == {"caseId", "journey", "kind", "surface", "prompt"} and c["kind"] == "generate" and c["prompt"].strip()
+                            for c in self.normal))
+        self.assertEqual({c["surface"] for c in self.normal if c["journey"] == "J09"}, {"founder"})
+        self.assertEqual({c["surface"] for c in self.normal if c["journey"] != "J09"}, {"chat"})
+
+    def test_first_30_cases_edits_and_faults_are_byte_identical_to_v1(self):
+        def dump(value):
+            return json.dumps(value, indent=1, ensure_ascii=False)
+        self.assertEqual(len(G03_CORPUS_V1["normal"]), 30)
+        self.assertEqual(dump(self.normal[:30]), dump(G03_CORPUS_V1["normal"]))
+        self.assertEqual(dump(self.plan["edits"]), dump(G03_CORPUS_V1["edits"]))
+        self.assertEqual(dump(self.plan["faults"]), dump(G03_CORPUS_V1["faults"]))
+
+    def test_the_new_cases_are_d_e_f_per_journey_plus_composite(self):
+        self.assertEqual([c["caseId"] for c in self.new], [f"{j}-{x}" for j in JOURNEYS for x in "def"] + [f"CMP-{x}" for x in "def"])
+        prompts = [c["prompt"] for c in self.normal]
+        self.assertEqual(len(set(prompts)), 60, "no prompt is repeated")
+
+    def test_at_least_a_third_of_the_new_cases_are_chinese_and_some_mix_english(self):
+        chinese = [c["caseId"] for c in self.new if CJK.search(c["prompt"])]
+        self.assertGreaterEqual(3 * len(chinese), len(self.new), chinese)
+        mixed = [c["caseId"] for c in self.new if CJK.search(c["prompt"]) and len(re.findall(r"\b[A-Za-z]{2,}\b", c["prompt"])) >= 5]
+        self.assertTrue(mixed, "at least one new case mixes English and Chinese")
+        self.assertFalse([c["caseId"] for c in self.normal[:30] if CJK.search(c["prompt"])], "v1 had no Chinese cases (unchanged)")
+
+    def test_every_journey_has_a_follow_up_that_runs_as_a_later_turn_of_its_conversation(self):
+        follow = self.plan["corpus"]["followUps"]
+        self.assertTrue(set(follow) <= {c["caseId"] for c in self.new}, "follow-ups are new cases; v1 cases are unchanged")
+        for j in JOURNEYS + ("composite",):
+            self.assertTrue(any(c["caseId"] in follow for c in self.new if c["journey"] == j), j)
+        for group in self.plan["runOrder"]:
+            for position, case_id in enumerate(group["cases"]):
+                if case_id in follow:
+                    self.assertEqual(group["start"], "new")
+                    self.assertGreater(position, 0, f"{case_id} only makes sense after an earlier turn of {group['conversation']}")
+
+    def test_the_corpus_is_frozen_by_hash_and_the_gate_is_59_of_60(self):
+        self.assertEqual(self.plan["corpus"]["sha256"], LIVE.corpus_sha256(self.normal))
+        self.assertEqual(self.plan["corpus"]["sha256"], G03_CORPUS_SHA256,
+                         "the G03 corpus is frozen (D-A53): a changed, dropped, replaced or reordered case needs a new decision and corpus id")
+        self.assertEqual(self.plan["corpus"]["normalCases"], 60)
+        self.assertEqual(self.plan["corpus"]["decision"], "D-A53")
+        self.assertEqual(self.plan["denominators"]["G03"], {"firstPassValidAtLeast": 59, "of": 60, "functionalAfterOneRepair": 60})
+        self.assertEqual(LIVE.G03_FIRST_PASS_AT_LEAST, 59)
+
+    def test_the_gate_reads_59_of_60_everywhere_it_is_defined(self):
+        pkg = ROOT / "docs/design/openui-production-2026-10-08"
+        if not (pkg / "acceptance.json").exists():
+            self.skipTest("JCB snapshots exclude docs/**; GitHub Actions runs this")
+        gate = next(g for g in json.loads((pkg / "acceptance.json").read_text(encoding="utf-8"))["gates"] if g["id"] == "G03")
+        rows = [line for name in ("04-ACCEPTANCE.md", "evidence/g/live-runbook.md")
+                for line in (pkg / name).read_text(encoding="utf-8").splitlines() if line.startswith("| G03 |")]
+        self.assertEqual(len(rows), 2)
+        for text in (gate["pass_criteria"], *rows):
+            self.assertIn("59/60", text)
+            self.assertIn("60", text.replace("59/60", ""), "every case functional after one repair")
+            self.assertNotIn("29/30", text.replace("was 29/30", ""), "the old rule appears only as the amended value")
+        self.assertIn(G03_CORPUS_SHA256, gate["required_evidence"])
+        decisions = (pkg / "A-DECISIONS.md").read_text(encoding="utf-8")
+        self.assertIn("- D-A53 (2026-10-09", decisions)
+        self.assertIn(G03_CORPUS_SHA256, decisions)
+
+    def test_run_order_is_deterministic_grouped_per_conversation_and_founder_last(self):
+        self.assertEqual(json.dumps(LIVE.sample_plan(), ensure_ascii=False), json.dumps(self.plan, ensure_ascii=False))
+        by_id = {c["caseId"]: c for c in self.normal + self.plan["edits"]}
+        steps = [case_id for group in self.plan["runOrder"] for case_id in group["cases"]]
+        self.assertEqual(sorted(steps), sorted(by_id), "every planned case and edit runs exactly once")
+        self.assertEqual(len(steps), len(set(steps)))
+        self.assertEqual(steps[0], "J01-a", "the first case run is the cold case")
+        self.assertEqual(steps, LIVE.run_sequence(self.plan))
+        group_of = {case_id: group for group in self.plan["runOrder"] for case_id in group["cases"]}
+        started = []
+        for group in self.plan["runOrder"]:
+            self.assertEqual({by_id[c]["journey"] for c in group["cases"]}, {group["journey"]}, "one journey per conversation")
+            self.assertEqual({by_id[c]["surface"] for c in group["cases"]}, {group["surface"]})
+            if group["start"] == "new":
+                self.assertNotIn(group["conversation"], started)
+                started.append(group["conversation"])
+                self.assertTrue(all(by_id[c]["kind"] == "generate" for c in group["cases"]))
+            else:
+                self.assertIn(group["conversation"], started, "an edit reopens a conversation that already ran")
+        for edit in self.plan["edits"]:
+            group = group_of[edit["caseId"]]
+            self.assertEqual(group["start"], f"reopen {edit['baseCase']}")
+            self.assertEqual(group["conversation"], group_of[edit["baseCase"]]["conversation"])
+            self.assertGreater(steps.index(edit["caseId"]), steps.index(edit["baseCase"]))
+        surfaces = [group["surface"] for group in self.plan["runOrder"]]
+        self.assertEqual(surfaces, sorted(surfaces, key=lambda s: s == "founder"), "consumer chat first, then the founder panel once")
+        self.assertEqual({c for g in self.plan["runOrder"] if g["surface"] == "founder" for c in g["cases"]},
+                         {c["caseId"] for c in self.normal + self.plan["edits"] if c["journey"] == "J09"})
 
 
 class FixtureProvider(unittest.TestCase):
