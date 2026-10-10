@@ -274,6 +274,42 @@ class FounderOpsPostgresTests(unittest.TestCase):
         self.assertEqual(result, {'status': 'ok', 'deleted': {'pr_request_metrics': 1, 'pr_operational_snapshots': 1, 'pr_connection_health': 1}})
         self.assertEqual(owner.execute('SELECT count(*) FROM public.pr_request_metrics').fetchone()[0], 1)
 
+    def test_youtube_vault_overlay_projects_inside_the_060_check(self):
+        """A YouTube credential whose refresh grant is retained but disabled classifies client_binding_missing. The projection must
+        store it inside the 060 connection_state CHECK (as reauthorization_required) or the hourly upsert aborts for everyone.
+        Channels the projection skips (invalid id, duplicate id, configured but neither verified, revoked nor tied to an account)
+        are filtered in SQL, so the stage cap counts projectable connections only."""
+        owner = self.connect()
+        now = NOW.timestamp()
+        created = owner.execute("SELECT to_regclass('public.pr_encrypted_credentials') IS NULL").fetchone()[0]
+        if created:   # the Control harness applies founder migrations only; 006 owns the real table (same columns)
+            owner.execute('CREATE TABLE public.pr_encrypted_credentials(workspace_id uuid NOT NULL, connection_id text NOT NULL, provider text NOT NULL, '
+                          'provider_account_id text NOT NULL, access_ciphertext text NOT NULL, refresh_ciphertext text, key_id text NOT NULL, scopes text[] NOT NULL, '
+                          'access_expires_at timestamptz, refresh_supported boolean NOT NULL DEFAULT false, revoked_at timestamptz, '
+                          'PRIMARY KEY(workspace_id, connection_id))')
+            self.addCleanup(lambda: psycopg.connect(self.dsn, autocommit=True).execute('DROP TABLE IF EXISTS public.pr_encrypted_credentials'))
+        else:
+            self.addCleanup(lambda: psycopg.connect(self.dsn, autocommit=True).execute('DELETE FROM public.pr_encrypted_credentials WHERE workspace_id=%s', (self.workspace,)))
+        original = owner.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+        self.addCleanup(lambda: psycopg.connect(self.dsn, autocommit=True).execute('UPDATE public.pr_workspaces SET state=%s WHERE id=%s', (json.dumps(original), self.workspace)))
+        youtube = lambda cid: {'id': cid, 'platform': 'YouTube', 'configured': True, 'identityVerified': True, 'revoked': False, 'providerAccountId': 'UC-private',
+                               'expiresAt': now - 60, 'scopes': ['https://www.googleapis.com/auth/youtube.readonly'], 'capabilityVerified': False}
+        channels = [youtube('yt-binding-0001'), youtube('yt-refresh-0002'),
+                    {'id': 'bad id with spaces', 'platform': 'X', 'configured': True, 'identityVerified': True},
+                    {'id': 'li-unverified-03', 'platform': 'LinkedIn', 'configured': True, 'identityVerified': False},
+                    youtube('yt-refresh-0002')]
+        owner.execute("UPDATE public.pr_workspaces SET state=state || jsonb_build_object('phase2', coalesce(state->'phase2','{}'::jsonb) || jsonb_build_object('channels', %s::jsonb)) WHERE id=%s",
+                      (json.dumps(channels), self.workspace))
+        for cid, refresh, supported in (('yt-binding-0001', 'retained-ciphertext', False), ('yt-refresh-0002', 'refresh-ciphertext', True)):
+            owner.execute('INSERT INTO public.pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,refresh_ciphertext,key_id,scopes,'
+                          'access_expires_at,refresh_supported) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),%s)',
+                          (self.workspace, cid, 'youtube', 'UC-private', 'access-ciphertext', refresh, 'k1', ['youtube.readonly'], now - 60, supported))
+        result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=self.factory), {}, now)
+        self.assertEqual((result['status'], result['connections'], result['youtubeOverlay']), ('ok', 2, 'applied'), result)
+        rows = owner.execute('SELECT connection_id,state,connection_state,expires_at FROM public.pr_connection_health WHERE workspace_id=%s ORDER BY 1', (self.workspace,)).fetchall()
+        self.assertEqual([tuple(row) for row in rows], [('yt-binding-0001', 'blocked', 'reauthorization_required', datetime.fromtimestamp(now - 60, timezone.utc)),
+                                                        ('yt-refresh-0002', 'ok', 'read_verified', None)])
+
     # ---- metrics through the reader ----------------------------------------------------------------------------------------
     def test_every_ops_metric_round_trips_through_the_reader_role(self):
         owner = self.connect()

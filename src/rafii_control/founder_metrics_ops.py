@@ -593,6 +593,11 @@ LEVELS = ('Direct', 'Assisted', 'Bridge', 'Unsupported')
 CONNECTION_ID = re.compile(r'^[A-Za-z0-9_.:-]{1,80}$')
 HEALTH = {'reauthorization_required': 'blocked', 'scope_missing': 'blocked', 'identity_known': 'blocked', 'client_binding_missing': 'blocked',
           'token_expired': 'expired'}
+# connection_state values public.pr_connection_health accepts (migration 060 CHECK). A Channels-card state outside it is stored as
+# the state with the same remedy: a retained but disabled YouTube refresh grant (client_binding_missing) needs the account holder's
+# new consent, i.e. reauthorization. Storing the raw value would violate the CHECK and abort every hourly refresh.
+STORED_CONNECTION_STATES = ('identity_known', 'scope_missing', 'token_expired', 'reauthorization_required', 'read_verified', 'publish_verified')
+STORED_AS = {'client_binding_missing': 'reauthorization_required'}
 EXPIRING_SECONDS = 7 * 86400
 MAX_CONNECTIONS = 5000
 REFRESH_SECONDS = 55 * 60
@@ -600,14 +605,20 @@ REFRESH_MINUTES = range(5, 10)       # an empty projection is retried once an ho
 PURGE_LOCAL_HOUR, PURGE_LOCAL_MINUTES = 3, range(0, 10)
 PURGES = (('public.pr_request_metrics', 'minute', RETENTION_DAYS), ('public.pr_operational_snapshots', 'minute', RETENTION_DAYS),
           ('public.pr_connection_health', 'refreshed_at', 7))
-CHANNELS_SQL = ("SELECT w.id::text, c->>'id', c->>'platform', c->'configured', c->'revoked', c->'identityVerified', coalesce(c->>'providerAccountId','')<>'', "
+CHANNELS_SQL = ("SELECT DISTINCT ON (w.id::text, c->>'id') w.id::text, c->>'id', c->>'platform', c->'configured', c->'revoked', c->'identityVerified', coalesce(c->>'providerAccountId','')<>'', "
                 "CASE WHEN jsonb_typeof(c->'expiresAt')='number' THEN (c->>'expiresAt')::double precision END, "
                 "CASE WHEN jsonb_typeof(c->'scopes')='array' THEN jsonb_array_length(c->'scopes') ELSE 0 END, c->'capabilityVerified', "
                 "CASE WHEN jsonb_typeof(c->'verifiedAt')='number' THEN (c->>'verifiedAt')::double precision END "
                 "FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(w.state->'phase2'->'channels')='array' "
                 "THEN w.state->'phase2'->'channels' ELSE '[]'::jsonb END) AS c "
                 "WHERE jsonb_typeof(c)='object' AND c->'configured' IS NOT NULL AND c->'configured' NOT IN ('false'::jsonb,'null'::jsonb) "
-                "ORDER BY 1, 2 LIMIT %s")
+                # Rows the projection would skip are filtered here, so the MAX_CONNECTIONS cap counts projectable connections and
+                # a capped run leaves exactly MAX_CONNECTIONS connections (the reader's partial-coverage signal): invalid ids, and
+                # configured channels that are neither revoked, verified nor tied to an account (connection_state 'disconnected').
+                "AND c->>'id' ~ '^[A-Za-z0-9_.:-]{1,80}$' "
+                "AND NOT (coalesce(c->'revoked','null'::jsonb) IN ('false'::jsonb,'null'::jsonb) "
+                "AND coalesce(c->'identityVerified','null'::jsonb) IN ('false'::jsonb,'null'::jsonb) AND coalesce(c->>'providerAccountId','')='') "
+                "ORDER BY w.id::text, c->>'id' LIMIT %s")   # one row per (workspace, connection id): duplicates would collapse below the cap
 CONNECTION_UPSERT = ('INSERT INTO public.pr_connection_health(workspace_id,connection_id,capability,provider,level,state,connection_state,expires_at,last_sync_at,refreshed_at) '
                      'SELECT u.w::uuid,u.c,u.cap,u.p,u.l,u.s,u.cs,to_timestamp(u.e),to_timestamp(u.v),to_timestamp(%s) '
                      'FROM unnest(%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::float8[],%s::float8[]) AS u(w,c,cap,p,l,s,cs,e,v) '
@@ -728,10 +739,13 @@ def project_connections(channels, levels, now, connection_state, youtube_status=
         # A refreshable grant's access-token deadline is not a grant deadline: never 'expiring' for it.
         refreshable = channel.get('refreshSupported') is True
         state = HEALTH.get(raw) or ('expiring' if expires_at is not None and not refreshable and expires_at - now < EXPIRING_SECONDS else 'ok')
+        stored = STORED_AS.get(raw, raw)
+        # A refreshable grant has no grant deadline to report (founder_risk reads expires_at as one).
+        deadline = None if refreshable else expires_at
         for capability, level in sorted((levels.get((workspace_id, connection_id)) or {'identity': 'unknown'}).items()):
             if capability in CAPABILITIES:
                 rows[(workspace_id, connection_id, capability)] = (workspace_id, connection_id, capability, provider_key(platform), level if level in LEVELS else 'unknown',
-                                                                    state, raw, expires_at, None if verified_at is None else float(verified_at))
+                                                                    state, stored, deadline, None if verified_at is None else float(verified_at))
     return rows
 
 

@@ -294,12 +294,13 @@ def _impact(entry):
     return 0
 
 
-def queue(items, limit=MAX_ITEMS):
+def queue(items, limit=MAX_ITEMS, *, partial=False):
     """Deterministic order: priority, launch blockers first, larger observed impact, oldest first seen. Blocked or acknowledged
-    items stay visible. The summary is a union of distinct tenants, never a sum of item counts."""
+    items stay visible. The summary is a union of distinct tenants, never a sum of item counts. `partial` marks a source whose
+    coverage is incomplete even when it produced no item (a capped projection with no attention rows is not an exact zero)."""
     ordered = sorted(items, key=lambda entry: (PRIORITY_RANK[entry['priority']], not entry['launchBlocker'], -_impact(entry),
                                                entry['firstSeenAt'] or '9999', entry['id']))
-    tenants, partial = set(), False
+    tenants = set()
     for entry in ordered:
         keys, state = entry.get('_tenantKeys'), entry['affected']['tenants']['countState']
         if keys is not None:
@@ -320,6 +321,7 @@ def queue(items, limit=MAX_ITEMS):
 CONNECTION_ATTENTION = {
     'reauthorization_required': ('reconnect_required', 'P2', 'Connections need the account holder to reconnect'),
     'token_expired': ('reconnect_required', 'P2', 'Connection grants expired and cannot refresh'),
+    # Not stored by the hourly projection today (060 CHECK; founder_metrics_ops.STORED_AS files it as reauthorization_required).
     'client_binding_missing': ('reconnect_required', 'P2', 'Connections need new consent for the current client'),
     'scope_missing': ('scope_missing', 'P2', 'Connections are missing a required permission'),
     'identity_known': ('identity_unverified', 'P2', 'Connected accounts have no verified identity'),
@@ -469,7 +471,7 @@ def build(*, connection_source, incident_source, registry, now, environment):
                           next_action={'kind': 'restore_observation', 'label': 'Check the founder incident store (migration 055).', 'targetRef': 'rafii_control.founder_incidents',
                                        'requiresHuman': True, 'blockedBy': []})]
     evaluated = evaluate_registry(registry, now)
-    result = queue(conn_items + incidents + registry_items(evaluated, now, environment))
+    result = queue(conn_items + incidents + registry_items(evaluated, now, environment), partial=(conn_envelope or {}).get('coverage') != 'complete')
     return {'asOf': _iso(now), 'environment': environment, **result, 'registry': evaluated, 'registryVersion': REGISTRY_VERSION,
             'sources': {'connectionHealth': {'state': conn_state, 'freshness': conn_envelope}, 'incidents': {'state': incident_state}},
             'liveVerified': False, 'limits': ['Connection health is the hourly projection, not live token validity.',

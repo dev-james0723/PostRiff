@@ -727,7 +727,7 @@ class StageTests(unittest.TestCase):
                   ('w1', 'yt-binding'): {'refreshSupported': False, 'refreshBindingRequired': True, 'accessTokenExpiresAt': now - 60, 'revoked': False}}
         rows = ops.project_connections(channels, {}, now, connection_state, status)
         got = {key[1]: (row[5], row[6]) for key, row in rows.items()}
-        self.assertEqual(got, {'yt-refresh': ('ok', 'read_verified'), 'yt-binding': ('blocked', 'client_binding_missing'),
+        self.assertEqual(got, {'yt-refresh': ('ok', 'read_verified'), 'yt-binding': ('blocked', 'reauthorization_required'),
                                'yt-none': ('expired', 'token_expired'), 'li': ('expired', 'token_expired')})
         revoked = ops.project_connections([('w3', 'yt-revoked', 'YouTube', True, False, True, True, now + 3600, 3, False, None)], {}, now, connection_state,
                                           {('w3', 'yt-revoked'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': now + 3600, 'revoked': True}})
@@ -737,10 +737,26 @@ class StageTests(unittest.TestCase):
                                         ('w4', 'yt-n', 'YouTube', True, False, True, True, now + 30 * 86400, 3, False, None)], {}, now, connection_state,
                                        {('w4', 'yt-r'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False},
                                         ('w4', 'yt-n'): {'refreshSupported': False, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False}})
-        self.assertEqual({k[1]: (r[5], r[7]) for k, r in near.items()}, {'yt-r': ('ok', soon), 'yt-n': ('expiring', soon)},
-                         'refreshable grants never read expiring; a non-refreshable one uses the vault deadline, not stale channel JSON')
+        self.assertEqual({k[1]: (r[5], r[7]) for k, r in near.items()}, {'yt-r': ('ok', None), 'yt-n': ('expiring', soon)},
+                         'refreshable grants never read expiring and store no grant deadline; a non-refreshable one uses the vault deadline')
         legacy = ops.project_connections(channels, {}, now, connection_state)
         self.assertEqual({key[1]: row[5] for key, row in legacy.items()}, {'yt-refresh': 'expired', 'yt-binding': 'expired', 'yt-none': 'expired', 'li': 'expired'})
+
+    def test_every_stored_connection_state_satisfies_the_060_check(self):
+        """public.pr_connection_health.connection_state has a CHECK list (060). Every state the Channels card can classify must be
+        stored inside it, or the single multi-row upsert fails and the hourly refresh aborts for every customer."""
+        import inspect
+        import pathlib
+        import re as _re
+        from postriff_phase2.channels import connection_state
+        sql = (pathlib.Path(__file__).resolve().parents[2] / 'migrations/postriff/060_founder_reliability.sql').read_text()
+        allowed = set(_re.findall(r"'([a-z_]+)'", _re.search(r'connection_state text not null check \(connection_state in \(([^)]*)\)\)', sql).group(1)))
+        self.assertEqual(set(ops.STORED_CONNECTION_STATES), allowed)
+        returned = {name for line in inspect.getsource(connection_state).splitlines() if 'return' in line for name in _re.findall(r'"([a-z_]+)"', line)}
+        self.assertIn('client_binding_missing', returned)
+        for raw in returned - {'disconnected'}:
+            self.assertIn(ops.STORED_AS.get(raw, raw), allowed, raw)
+            self.assertIn(raw, set(ops.HEALTH) | {'read_verified', 'publish_verified'}, f'{raw} has an explicit health mapping')
 
     def test_youtube_overlay_failure_never_aborts_the_refresh(self):
         """The optional vault overlay runs in a savepoint: a privilege error rolls back to it and the refresh still commits

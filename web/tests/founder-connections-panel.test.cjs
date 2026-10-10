@@ -81,6 +81,8 @@ function render({ query, ready = true, mode = 'live' }) {
 test('the query reads only the read-only attention route in the session mode, forwards cancellation and waits for the session', async () => {
   render({ query: { isPending: true }, mode: 'demo', ready: false });
   assert.equal(harness.options.enabled, false, 'no request before the Founder session is ready');
+  assert.equal(harness.options.refetchInterval, panel.ATTENTION_REFRESH_MS, 'an open Settings page re-reads the queue');
+  assert.ok(panel.ATTENTION_REFRESH_MS > 0 && panel.ATTENTION_REFRESH_MS <= 15 * 60_000, 'bounded polling, well inside the two-hour stale window');
   assert.deepEqual(harness.options.queryKey, ['founder', 'demo', 'production', 'connections-attention']);
   const controller = new AbortController();
   harness.fetches.length = 0;
@@ -169,6 +171,11 @@ test('count and freshness wording never turns unknown into 0 or partial into com
   assert.equal(panel.freshnessLabel({ ...fresh, coverage: 'partial' }), 'Current (partial coverage)');
   assert.equal(panel.freshnessLabel(unknownFreshness), 'Check required');
   assert.equal(panel.freshnessLabel({ ...fresh, freshness: 'stale', observedAt: null }), 'Stale');
+  const checked = Date.parse(fresh.lastCheckedAt);
+  assert.equal(panel.freshnessLabel({ ...fresh, staleAfterSeconds: 7200 }, checked + 3600_000), 'Current');
+  assert.match(panel.freshnessLabel({ ...fresh, staleAfterSeconds: 7200 }, checked + 7201_000), /^Stale · last good /, 'a cached fresh envelope expires on the client');
+  assert.equal(panel.freshnessLabel({ ...fresh, staleAfterSeconds: 7200, observedAt: null, lastCheckedAt: null }, checked + 9e9), 'Current',
+    'without a check time the server verdict stands (the server already turns a missing time into unknown)');
   assert.deepEqual(panel.degradedSources(connected), []);
   assert.deepEqual(panel.degradedSources({ connectionHealth: { state: 'source_not_configured', freshness: unknownFreshness }, incidents: { state: 'connected' } }),
     ['connection health (source not configured)']);

@@ -655,12 +655,23 @@ class ReleaseAcceptanceTests(unittest.TestCase):
                                             {('33333333-3333-4333-8333-333333333333', cid): status for cid, status in facts.items()})
         raw = {key[1]: (r[5], r[6]) for key, r in projected.items()}
         self.assertEqual(raw, {'refreshable': ('ok', 'read_verified'), 'expired': ('expired', 'token_expired'),
-                               'revoked': ('blocked', 'reauthorization_required'), 'binding': ('blocked', 'client_binding_missing')})
+                               'revoked': ('blocked', 'reauthorization_required'), 'binding': ('blocked', 'reauthorization_required')},
+                         'client_binding_missing is stored as reauthorization_required (060 CHECK): same remedy, new consent')
         rows = [row(r[0], r[1], r[3], r[6]) for r in projected.values()]
         items, _ = fc.connection_items([r for r in rows if r['cstate'] in fc.CONNECTION_ATTENTION], {'latest': NOW - 600}, NOW, 'production')
-        self.assertEqual(sorted(i['safeReasonCode'] for i in items), ['client_binding_missing', 'reauthorization_required', 'token_expired'])
+        self.assertEqual(sorted((i['safeReasonCode'], i['affected']['connections']['value']) for i in items), [('reauthorization_required', 2), ('token_expired', 1)])
         self.assertTrue(all(i['category'] == 'reconnect_required' and i['nextAction']['requiresHuman'] for i in items))
         self.assertNotIn('read_verified', [i['safeReasonCode'] for i in items], 'a refreshable grant is not an attention item')
+
+    def test_capped_projection_without_attention_rows_is_unknown_impact_not_zero(self):
+        reader = ReaderStub(coverage={'latest': fc._iso(NOW - 600), 'total': 5000 * 2, 'connections': fc.STAGE_CONNECTION_CAP})
+        out = fc.attention(app_for(reader, FounderStoreStub()), PRINCIPAL, {'mode': 'live', 'now': NOW})
+        self.assertEqual(out['sources']['connectionHealth']['freshness']['coverage'], 'partial')
+        self.assertNotIn('reconnect_required', [i['category'] for i in out['items']])
+        self.assertEqual(out['summary']['tenants'], {'value': None, 'countState': 'unknown'}, 'omitted connections may need attention')
+        complete = fc.attention(app_for(ReaderStub(coverage={'latest': fc._iso(NOW - 600), 'total': 3, 'connections': 3}), FounderStoreStub()), PRINCIPAL,
+                                {'mode': 'live', 'now': NOW})
+        self.assertEqual(complete['summary']['tenants'], {'value': 0, 'countState': 'exact'}, 'complete, fresh coverage with nothing wrong is an exact zero')
 
     def test_projection_stamp_from_the_future_is_unknown_not_fresh(self):
         app, _ = self.live_app([row('w1', 'c1', 'linkedin', 'token_expired')], latest=fc._iso(NOW + fc.CLOCK_SKEW_SECONDS + 60))

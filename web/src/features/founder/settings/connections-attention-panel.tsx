@@ -8,7 +8,13 @@ import { failureOf, useFounderScope } from '../customers/kit/api';
 import { Panel, RetryAction } from '../customers/kit/page-frame';
 
 type Count = { value: number | null; countState: 'exact' | 'estimated' | 'lower_bound' | 'unknown' };
-type Freshness = { freshness: 'fresh' | 'stale' | 'unknown' | 'not_applicable'; coverage?: string | null; observedAt: string | null; lastCheckedAt: string | null; reason: string | null };
+type Freshness = {
+  freshness: 'fresh' | 'stale' | 'unknown' | 'not_applicable'; coverage?: string | null; observedAt: string | null; lastCheckedAt: string | null;
+  staleAfterSeconds?: number | null; reason: string | null;
+};
+
+/** Re-read the queue while Settings stays open; the hourly projection is stale after two hours. */
+export const ATTENTION_REFRESH_MS = 5 * 60_000;
 type Item = {
   id: string; priority: string; category: string; state: string; title: string; summary: string; launchBlocker: boolean;
   affected: { users: Count; tenants: Count; connections: Count; jobs: Count };
@@ -32,8 +38,14 @@ export function formatCount(count: Count, noun: string): string {
   return `${noun}: ${prefix}${count.value}`;
 }
 
-/** Green only for fresh evidence; stale shows the last-known time, unknown asks for a check. */
-export function freshnessLabel(envelope: Freshness): string {
+/**
+ * Green only for fresh evidence; stale shows the last-known time, unknown asks for a check. A cached 'fresh' envelope expires
+ * on the client once its last check is older than staleAfterSeconds, so a stopped projection never keeps reading as current.
+ */
+export function freshnessLabel(envelope: Freshness, now: number = Date.now()): string {
+  const checked = envelope.lastCheckedAt ? Date.parse(envelope.lastCheckedAt) : Number.NaN;
+  const expired = envelope.freshness === 'fresh' && typeof envelope.staleAfterSeconds === 'number' && Number.isFinite(checked) && now - checked > envelope.staleAfterSeconds * 1000;
+  if (expired) return envelope.observedAt ? `Stale · last good ${new Date(envelope.observedAt).toLocaleString()}` : 'Stale';
   if (envelope.freshness === 'fresh') return envelope.coverage === 'complete' ? 'Current' : 'Current (partial coverage)';
   if (envelope.freshness === 'stale') return envelope.observedAt ? `Stale · last good ${new Date(envelope.observedAt).toLocaleString()}` : 'Stale';
   if (envelope.freshness === 'not_applicable') return 'Episode record';
@@ -53,6 +65,7 @@ export function ConnectionsAttentionPanel() {
   const query = useQuery({
     queryKey: scope.key('connections-attention'),
     enabled: scope.ready,
+    refetchInterval: ATTENTION_REFRESH_MS,
     queryFn: async ({ signal }) => (await founderFetch<Envelope<Attention>>(`/connections/attention?mode=${scope.mode}`, { signal })).data
   });
   return (
