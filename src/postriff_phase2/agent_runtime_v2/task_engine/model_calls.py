@@ -110,6 +110,15 @@ def dispatch(ctx, tool, args):
         if tool.spec.effect != "READ" and ok:
             refs = [{"type":c.get("type"),"id":c.get("id"),"change":c.get("change")} for c in ctx.ledger.changed[changed_start:] if c.get("id")]
             store.receipt_done(cur,ctx.workspace_id,key,outcome="applied",verified=bool(result.get("verified",False)),result={"changedRefs":refs,"checks":result.get("checks") or []})
+        current_step = store.load_step(cur,ctx.workspace_id,task["taskId"],step["stepKey"])
+        if not ok and not result.get("needsUser"):
+            category = executor._category(result,subject)
+            outcome = leases.classify(category,retry_class="manual",attempts=1,max_attempts=1)
+            store.set_step(cur,current_step,state=outcome.state,reason_code=outcome.reason_code,reason=model.clip(result.get("error"),300))
+            if tool.spec.effect != "READ":
+                store.receipt_done(cur,ctx.workspace_id,key,outcome="unknown" if category=="outcome_unknown" else "failed",verified=False,result={})
+        elif ok and not result.get("verified",False) and tool.spec.effect != "READ":
+            store.set_step(cur,current_step,state="failed",reason_code="outcome_unknown",verified=False,reason="The result could not be verified.")
         current = store.load_task(cur,ctx.workspace_id,task["taskId"])
         store.refresh(cur,ctx.service.ideas,current)
         ctx.task = task_state.load(cur,ctx.workspace_id,task["taskId"])

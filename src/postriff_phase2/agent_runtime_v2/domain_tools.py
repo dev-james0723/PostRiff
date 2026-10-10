@@ -136,9 +136,10 @@ def guarded(fn):
         try:
             result = fn(ctx, args)
         except AlphaError as error:
-            _step_failed(ctx, args, str(error))
+            if not getattr(ctx, "step_binding", None):
+                _step_failed(ctx, args, str(error))
             raise
-        if not result.get("ok", True) and not result.get("needsUser"):
+        if not result.get("ok", True) and not result.get("needsUser") and not getattr(ctx, "step_binding", None):
             _step_failed(ctx, args, result.get("error") or "It could not be done.")
         return result
     run.__name__ = fn.__name__
