@@ -81,6 +81,7 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ASSETS = Path(__file__).resolve().parent / "generated" / "openui-assets.json"
 # Library files (pr_library_assets rows; `library_file` is the ref the J03 bindings and the Library selection chips emit, ids are
 # the Library's 32-hex form of the uuid) and media items (legacy photos/videos and generated images in state.phase2.assets).
+# A media ref is live while either store holds it: tool_adapter.harvest() labels every `assetId` `asset`, Library files included.
 LIBRARY_REF_TYPES = ("library_file", "library_asset", "library_item", "document", "file")
 MEDIA_REF_TYPES = ("media", "asset", "image")
 _LIBRARY_GONE_STATES = ("deleting", "duplicate")       # being removed; the Library no longer lists them either
@@ -340,7 +341,13 @@ def revoked_refs(cur, auth, manifest: dict) -> list[str]:
         except ValueError:
             state = {}
     known = state_ids(state)
-    library = sorted({key for k, i in pairs if k in LIBRARY_REF_TYPES and (key := _library_key(i))})
+    media_live = known["media"]
+
+    def library_candidate(kind, ident):
+        if kind in LIBRARY_REF_TYPES or (kind in MEDIA_REF_TYPES and ident not in media_live):
+            return _library_key(ident)
+        return None
+    library = sorted({key for k, i in pairs if (key := library_candidate(k, i))})
     library_ok = set()
     if library:
         cur.execute("SELECT replace(id::text, '-', '') FROM public.pr_library_assets WHERE workspace_id=%s AND id = ANY(%s::uuid[]) "
@@ -349,7 +356,9 @@ def revoked_refs(cur, auth, manifest: dict) -> list[str]:
     tables = {"conversation": "pr_conversations", "message": "pr_messages", "run": "pr_agent_runs"}
     revoked = []
     for kind, ident in pairs:
-        if kind in known:
+        if kind in MEDIA_REF_TYPES:
+            gone = ident not in media_live and _library_key(ident) not in library_ok
+        elif kind in known:
             gone = ident not in known[kind]
         elif kind in LIBRARY_REF_TYPES:
             gone = _library_key(ident) not in library_ok

@@ -312,6 +312,15 @@ class RevokedLibraryAndMedia(unittest.TestCase):
         library_reads = [s for s in cur.statements if "pr_library_assets" in s[0]]
         self.assertEqual(len(library_reads), 1, "one bounded Library read per check")
 
+    def test_generic_asset_refs_naming_a_library_file_are_checked_against_the_library(self):
+        """tool_adapter.harvest() labels every `assetId` (Library files from library_search/library_read included) as `asset`: a live
+        Library file named that way is not revoked, a removed one is."""
+        cur = RevokedCursor(self.STATE, {FILE_LIVE})
+        revoked = store.revoked_refs(cur, auth(), self.refs(("asset", FILE_LIVE), ("asset", FILE_GONE), ("image", FILE_LIVE), ("asset", MEDIA_LIVE)))
+        self.assertEqual(revoked, [f"asset:{FILE_GONE}"])
+        wanted = {str(v).replace("-", "") for s in cur.statements if "pr_library_assets" in s[0] for v in s[1][1]}
+        self.assertEqual(wanted, {FILE_LIVE, FILE_GONE}, "a ref already live as media needs no Library read")
+
     def test_selection_of_a_deleted_library_file_or_photo_is_dropped_like_a_deleted_draft(self):
         cur = RevokedCursor(self.STATE, {FILE_LIVE})
         revoked = store.revoked_refs(cur, auth(), self.refs(("library_file", FILE_LIVE), ("media", MEDIA_LIVE)))

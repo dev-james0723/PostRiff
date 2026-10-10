@@ -646,7 +646,9 @@ def _revoked_library_media():
     refs = [{"type": "library_file", "id": files["kept"].hex}, {"type": "library_file", "id": files["removed"].hex},
             {"type": "library_file", "id": str(files["deleting"])}, {"type": "library_file", "id": files["duplicate"].hex},
             {"type": "media", "id": media["photo"]}, {"type": "asset", "id": media["generated"]}, {"type": "media", "id": media["removed_photo"]},
-            {"type": "image", "id": media["pending_photo"]}, {"type": "draft", "id": "d1"}]
+            {"type": "image", "id": media["pending_photo"]},
+            # tool_adapter.harvest() names Library files `asset` too: checked against the Library, not only phase2.assets.
+            {"type": "asset", "id": files["kept"].hex}, {"type": "asset", "id": files["removed"].hex}, {"type": "draft", "id": "d1"}]
     run = fixture_run(wid, ONE, title="library refs")
     with ui_transaction(RUNTIME, OWNER, wid, "edit") as (cur, auth):
         lease = store.create_or_resume_artifact(cur, auth, run["run"], "main", key(), surface="chat", manifest={**MANIFEST, "approvedRefs": refs},
@@ -673,7 +675,7 @@ def _revoked_library_media():
             asset.update({"deleted": True, "deletionPending": True})
     run_sql("UPDATE public.pr_workspaces SET state = jsonb_set(state, '{phase2}', %s::jsonb) WHERE id=%s", json.dumps(state["phase2"]), wid)
     expected = [f"library_file:{files['removed'].hex}", f"library_file:{files['deleting']}", f"library_file:{files['duplicate'].hex}",
-                f"media:{media['removed_photo']}", f"image:{media['pending_photo']}"]
+                f"media:{media['removed_photo']}", f"image:{media['pending_photo']}", f"asset:{files['removed'].hex}"]
     snap = store.snapshot_http(RUNTIME, wid, OWNER, artifact)
     assert snap["access"]["revokedRefs"] == expected, snap["access"]["revokedRefs"]
     # The same treatment as any other revoked source: the generated view stays, with the count the surface explains.
@@ -681,7 +683,7 @@ def _revoked_library_media():
     with ui_transaction(RUNTIME, OWNER, wid, "read") as (cur, auth):
         context = store.selection_context(cur, auth, {"artifactId": artifact, "artifactRevision": 1, "stateRevision": selected["stateRevision"]})
     assert [(r["type"], r["id"]) for r in context["references"]] == [("library_file", files["kept"].hex), ("media", media["photo"]),
-                                                                      ("asset", media["generated"]), ("draft", "d1")], context["references"]
+                                                                      ("asset", media["generated"]), ("asset", files["kept"].hex), ("draft", "d1")], context["references"]
     assert "no longer available" in context["note"], context["note"]
     # Another workspace's copy of a live file id is not a live file here.
     with ui_transaction(RUNTIME, OTHER, other, "read") as (cur, auth):
