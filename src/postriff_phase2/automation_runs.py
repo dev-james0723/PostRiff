@@ -35,14 +35,14 @@ CONTENT_WORDS = {"post": "post", "reflection": "personal reflection", "quote": "
                  "recap": "recap", "tip": "tip", "story": "story", "question": "question for the audience"}
 
 
-def principal_repository(service, workspace_id, principal, requirement, check=None):
+def principal_repository(service, workspace_id, principal, requirement, check=None, *, capability=None, config=None):
     """A private copy of the repository that acts as `principal` for one workspace (never an HTTP credential).
     Every transaction re-checks the principal's membership class and, when given, the run's binding."""
-    capability = object()
+    private_token = object()
     repository = copy.copy(service.repository)
 
     def verify(token):
-        if token is not capability:
+        if token is not private_token:
             raise AlphaError("Invalid worker capability.", 403)
         return principal
     repository.verify_session = verify
@@ -53,12 +53,18 @@ def principal_repository(service, workspace_id, principal, requirement, check=No
         if requested_workspace != workspace_id:
             raise AlphaError("Workspace unavailable.", 403)
         with base(token, requested_workspace, **kwargs) as (cur, row, found):
-            require(Membership.from_row(*row[2:7]), requirement)
+            member = Membership.from_row(*row[2:7])
+            require(member, requirement)
+            if capability is not None:
+                from .agent_runtime_v2 import authz
+                authz.recheck_principal(cur, workspace_id=workspace_id, principal=principal, member=member,
+                                       state=json.loads(row[1]) if isinstance(row[1], str) else row[1], capability=capability,
+                                       config=config or authz.runtime_config_for(service), now=service.clock())
             if check is not None:
                 check(json.loads(row[1]) if isinstance(row[1], str) else row[1])
             yield cur, row, found
     repository.transaction = transaction
-    return repository, capability
+    return repository, private_token
 
 
 def _save(cur, workspace_id, state, actor):

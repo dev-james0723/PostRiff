@@ -76,6 +76,7 @@ class ModeConfigTest(unittest.TestCase):
         with mock.patch.object(authz, "ENFORCEMENT_POINTS", set(authz.REQUIRED_ENFORCEMENT_POINTS)):
             self.assertEqual(cfg.permissions_for(WS), "enforce")
             cfg.flags["RAFII_GENUI_ENABLED"] = True
+            cfg.flags["RAFII_AGENT_V2_ENABLED"] = True
             self.assertEqual(cfg.permissions_for(WS), "shadow", "no verified current-release receipt provider")
             cfg.release_sha = "a" * 40
             cfg.permissions_gate_reader = lambda workspace, sha: workspace == WS and sha == "a" * 40
@@ -213,7 +214,7 @@ class DecideTest(unittest.TestCase):
 
     def test_provider_grants(self):
         scope = authz.ProviderScope("YouTube", ("analytics",), lane="agentic")
-        c = cap("youtube_analytics_summary", provider_scopes=(scope,))
+        c = cap("youtube_analytics_summary", provider_scopes=(scope,), explicit_request=False)
         view = lambda **ch: authz.ProviderView(({"id": "yt", "platform": "YouTube", "connectionState": "read_verified", "scopes": ["analytics"],
                                                  "capabilities": {}, "authorizationLane": "agentic", **ch},))
         self.assertEqual(decide(c, grants(), view=authz.ProviderView()).reason, "provider_not_connected")

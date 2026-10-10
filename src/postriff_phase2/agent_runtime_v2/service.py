@@ -61,6 +61,7 @@ class AgentRuntimeService:
     def __init__(self, service, cfg: runtime_config.RuntimeConfig | None = None, *, model_factory=None, image_studio=None, vision=None, live_transport=None, clock=None):
         self.service = service
         self.cfg = cfg or runtime_config.RuntimeConfig.from_environment()
+        service.agent_permissions_config = self.cfg
         self.model_factory = model_factory
         self.image_studio = image_studio
         self.vision = vision
@@ -474,6 +475,8 @@ class AgentRuntimeService:
                               vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
                               style=style, command=commands.parse(payload.get("command")), ui_context=ui_context, ui_selection=ui_selection,
                               voice_choice=voice_choice(payload))
+        from . import authz
+        authz.bind_context(ctx)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
@@ -1131,6 +1134,8 @@ class AgentRuntimeService:
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
                               vision=self.vision, request_text="(approved)", style=style,
                               writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
+        from . import authz
+        authz.bind_context(ctx)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.ledger.changed.extend(dict(change) for change in approved)  # the approval the application applied and verified

@@ -90,6 +90,10 @@ def _confirmation(binding, copy: dict) -> dict:
 
 def activate_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, now=None, supported=None):
     now = now if now is not None else _now()
+    issued = ui_capabilities.action_binding(manifest, request.get("actionId"))
+    decision = ui_capabilities.permission_decision(auth, issued["binding"], kind="action", inputs=request.get("inputs")) if issued else None
+    if decision is not None and decision.outcome == "deny":
+        raise AlphaError("Rafii is not allowed to do this with your current permissions.", 403, code="agent_permission_denied")
     effective = ui_capabilities.current(cur, auth, manifest)
     _require_drawable(artifact, supported)
     binding = _binding(effective, request.get("actionId"), manifest, auth.member)
@@ -114,7 +118,10 @@ def activate_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, 
     cur.execute("INSERT INTO public.pr_ui_activations(id,workspace_id,principal,artifact_id,artifact_revision,action_id,input_digest,binding_version,expires_at) "
                 "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s))",
                 (activation_id, auth.workspace_id, auth.principal, artifact["id"], revision, binding.action_id, digest, int(effective.get("bindingVersion") or 1), expires))
-    return {"activationId": activation_id, "inputDigest": digest, "expiresAt": common.iso(expires), "confirmation": _confirmation(binding, copy or {})}
+    confirmation = _confirmation(binding, copy or {})
+    if getattr(auth, "authz_mode", "off") == "enforce" and decision is not None:
+        confirmation["required"] = decision.required != "none"
+    return {"activationId": activation_id, "inputDigest": digest, "expiresAt": common.iso(expires), "confirmation": confirmation}
 
 
 def _stored(cur, workspace_id, key):
@@ -192,9 +199,12 @@ def _replay_intent(cur, auth, artifact, binding, request, digest, key, now, bind
 
 def execute_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, now=None, supported=None):
     now = now if now is not None else _now()
+    issued = ui_capabilities.action_binding(manifest, request.get("actionId"))
+    decision = ui_capabilities.permission_decision(auth, issued["binding"], kind="action", inputs=request.get("inputs")) if issued else None
+    permission_denied = decision is not None and decision.outcome == "deny"
     effective = ui_capabilities.current(cur, auth, manifest)
     _require_drawable(artifact, supported)   # before the stored receipt, the activation and the command
-    binding = _binding(effective, request.get("actionId"), manifest, auth.member)
+    binding = issued["binding"] if permission_denied and issued else _binding(effective, request.get("actionId"), manifest, auth.member)
     key = request["idempotencyKey"]
     inputs = ui_domain.validate(binding.inputs, request.get("inputs") or {})
     digest = ui_contracts.input_digest(binding.action_id, inputs)
@@ -208,6 +218,19 @@ def execute_ui_action(cur, auth, artifact, manifest, request, *, runtime=None, n
             return Deferred(binding, key, inputs, reconcile=True)
         # A one-phase pending row never survives a commit (it is written in the command's own transaction).
         raise AlphaError("This action is still being processed. Check again in a moment.", 409, code="ui_action_pending")
+    if permission_denied:
+        # A denied attempt still gets a stable receipt, but only for an activation
+        # issued to this person and exact request. Revocation may already mark it used.
+        cur.execute("SELECT 1 FROM public.pr_ui_activations WHERE id=%s AND workspace_id=%s AND principal=%s AND artifact_id=%s "
+                    "AND action_id=%s AND input_digest=%s AND artifact_revision=%s", (request["activationId"], auth.workspace_id, auth.principal,
+                    artifact["id"], binding.action_id, digest, request["artifactRevision"]))
+        if not cur.fetchone():
+            raise AlphaError("This confirmation is no longer valid.", 409, code="ui_activation")
+        result = _result_of(binding, key, _refusal(AlphaError("Rafii's permission for this action was revoked.", 403, code="agent_permission_denied")))
+        cur.execute("INSERT INTO public.pr_ui_actions(workspace_id,idempotency_key,principal,artifact_id,artifact_revision,action_id,input_digest,activation_id,state,outcome) "
+                    "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'done',%s::jsonb)", (auth.workspace_id, key, auth.principal, artifact["id"], request["artifactRevision"],
+                    binding.action_id, digest, request["activationId"], json.dumps(result)))
+        return result
     if not ui_capabilities._allows(auth.member, binding.requirement):
         raise AlphaError("Your role in this workspace can't do this.", 403, code="ui_forbidden")
     _require_current(artifact, int(request.get("artifactRevision") or 0))
@@ -271,7 +294,12 @@ def _second_phase(runtime, workspace_id, token, auth, deferred: Deferred) -> dic
             outcome="pending", message="This action is still being processed. Check again in a moment.")
     else:
         try:
-            receipt = binding.execute(runtime, token, auth, deferred.inputs, deferred.key)
+            from .ui_http import ui_transaction
+            with ui_transaction(runtime, token, workspace_id, "read") as (cur, fresh_auth):
+                decision = ui_capabilities.permission_decision(fresh_auth, binding, kind="action", inputs=deferred.inputs)
+                if decision is not None and decision.outcome == "deny":
+                    raise AlphaError("Rafii's permission changed before dispatch.", 403, code="agent_permission_revoked")
+            receipt = binding.execute(runtime, token, fresh_auth, deferred.inputs, deferred.key)
         except AlphaError as error:
             if error.status >= 500 and error.status != 503:
                 receipt = ui_domain.Receipt(outcome="failed", message="The action failed. Its cost, if any, is settled by the original service.")

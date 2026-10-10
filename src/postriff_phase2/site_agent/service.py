@@ -1110,6 +1110,8 @@ class SiteAgentService:
         def after(cur, state, actor):
             body, stored = self._proposal_row(cur, workspace_id, payload, lock=True)
             proposals.check(stored, digest_value=payload.get("digest"), now=now)
+            from ..agent_runtime_v2 import authz
+            authz.gate_proposal(cur, workspace_id, state, stored, config=authz.runtime_config_for(self.service), now=now)
             if stored.get("requiredPermission") == "owner":
                 cur.execute("SELECT m.role FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active'", (workspace_id, actor))
                 role = cur.fetchone()

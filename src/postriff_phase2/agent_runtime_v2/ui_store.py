@@ -1208,10 +1208,24 @@ def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
     revisions = [{"revision": r, "kind": k, "sourceHash": h, "attemptId": a, "libraryVersion": v or "", "createdAt": _iso(c)} for r, k, h, a, v, c in cur.fetchall()]
     artifact = contracts.public_artifact(record)
     display = display_for(record, attempt, compat, revoked)
+    revoked_by_permission = False
+    if getattr(auth, "authz_mode", "off") == "enforce":
+        from . import ui_capabilities
+        # Permission narrowing is independent of an expired view's historical
+        # display contract. current() intentionally rejects expired execution.
+        revoked_by_permission = any(not ui_capabilities.permission_allows(auth, binding, kind)
+                                    for kind, key in (("query", "queries"), ("action", "actions"))
+                                    for binding in record["manifest"].get(key) or [])
+        if revoked_by_permission:
+            display = {"mode": "fallback", "reason": "agent_permission_revoked", "updating": False}
+
     if display["mode"] != "generated":
         artifact["canonicalSource"] = None          # an old library or unfinished source is never rendered: native fallback
     manifest = contracts.public_manifest(record["manifest"])
     access = access_for(record, auth, flags, compat, revoked, display)
+    if revoked_by_permission:
+        access.update(canQuery=False, canAct=False, canEdit=False, canRetry=False, canPersistState=False, live=False, fallback=True, revokedByPermission=True)
+        manifest["queries"] = []
     if not access["canAct"]:
         # No write control is offered where writes are off, expired, not allowed, or the view falls back natively.
         manifest["actions"] = []

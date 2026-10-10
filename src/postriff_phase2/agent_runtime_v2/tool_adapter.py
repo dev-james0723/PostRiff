@@ -127,7 +127,7 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         op = thinking_state.tool_op(spec.name)
         if op:
             ctx.thinking(op, "tool", spec.name)
-        with authz.in_tool():
+        with authz.in_tool(), authz.active_tool(ctx, spec, args, agent):
             result = tool.executor(ctx, args)
     except AlphaError as error:
         code = error.code or ("not_found" if error.status == 404 else "forbidden" if error.status == 403 else "conflict" if error.status == 409 else "failed")

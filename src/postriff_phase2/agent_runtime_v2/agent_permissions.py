@@ -266,6 +266,31 @@ def _autopilot(cur, event: RevocationEvent) -> int:
     return cur.rowcount or 0
 
 
+def _proposals(cur, event: RevocationEvent) -> int:
+    kinds = {"schedule_draft": "tool.schedule_propose", "reschedule_post": "tool.schedule_propose", "automation_change": "tool.automation_change_propose"}
+    if not set(kinds.values()) & event.denied_now:
+        return 0
+    cur.execute("SELECT id::text,body FROM public.pr_messages WHERE workspace_id=%s AND role='assistant' "
+                "AND created_at>=now()-interval '24 hours' AND body ? 'siteAgent' FOR UPDATE", (event.workspace_id,))
+    changed = 0
+    for mid, body in cur.fetchall():
+        body = _json(body)
+        if not isinstance(body, dict):
+            continue
+        dirty = False
+        for proposal in (body.get("siteAgent") or {}).get("proposals") or []:
+            if (isinstance(proposal, dict) and proposal.get("status") == "proposed" and kinds.get(proposal.get("type")) in event.denied_now
+                    and (event.user_id is None or proposal.get("createdBy") == event.user_id)):
+                proposal.update(status="dismissed", closedReason="permission_revoked")
+                changed += 1
+                dirty = True
+        if dirty:
+            cur.execute("UPDATE public.pr_messages SET body=%s::jsonb WHERE id=%s AND workspace_id=%s", (json.dumps(body), mid, event.workspace_id))
+    return changed
+
+
+register_revocation_handler("proposals", _proposals)
+
 register_revocation_handler("ui_activations", _ui_activations)
 register_revocation_handler("autopilot", _autopilot)
 
@@ -275,9 +300,73 @@ def _run_handlers(cur, event: RevocationEvent, *, mode="shadow") -> dict:
     if mode != "enforce":
         authz.log.info(json.dumps({"event": "agent.permission.shadow_revocation", "capabilities": len(event.denied_now)}))
         return {}
+    # Install CF-3's H1/H3 only when that lane is present. An internal import error
+    # is a real failure, never a reason to report a partial invalidation as success.
+    import importlib
+    import importlib.util
+    name = "postriff_phase2.agent_runtime_v2.task_engine.revocation"
+    try:
+        spec = importlib.util.find_spec(name)
+    except ModuleNotFoundError as error:
+        if error.name != "postriff_phase2.agent_runtime_v2.task_engine":
+            raise
+        spec = None
+    if spec is not None:
+        importlib.import_module(name).install()
     # Handlers share the caller's transaction. A failure rolls back the whole change;
     # reporting success after partial invalidation would violate the receipt contract.
     return {name: int(fn(cur, event) or 0) for name, fn in REVOCATION_HANDLERS}
+
+
+def bump_workspace(cur, workspace_id, *, actor, denied, now, mode="shadow", reason="workspace_consent_narrowed"):
+    """One workspace epoch/receipt and atomic invalidation in the caller's lock."""
+    denied = frozenset(denied)
+    if not denied or mode == "off" or not ready(cur):
+        return None
+    cur.execute("INSERT INTO public.pr_agent_workspace_policy(workspace_id,epoch,updated_by,updated_at) VALUES(%s,1,%s,to_timestamp(%s::double precision)) "
+                "ON CONFLICT(workspace_id) DO UPDATE SET epoch=pr_agent_workspace_policy.epoch+1,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at RETURNING epoch",
+                (workspace_id, actor, now))
+    epoch = int(cur.fetchone()[0])
+    token = legacy(workspace_id, actor, workspace_epoch=epoch).token()
+    invalidated = _run_handlers(cur, RevocationEvent(workspace_id, None, denied, token, None, reason, epoch), mode=mode)
+    material = {"epoch": epoch, "capabilities": sorted(denied), "reason": reason}
+    cur.execute("INSERT INTO public.pr_agent_consent_receipts(workspace_id,user_id,actor,kind,source,epoch_before,epoch_after,scopes_before,scopes_after,widened,"
+                "consent_version,catalogue_digest,invalidated,not_recallable,idempotency_key,request_fingerprint,created_at) "
+                "VALUES(%s,NULL,%s,'workspace_consent_narrowed','system',%s,%s,'{}','{}',false,%s,%s,%s::jsonb,%s::jsonb,%s,%s,to_timestamp(%s::double precision)) RETURNING id::text",
+                (workspace_id, actor, epoch-1, epoch, CONSENT_VERSION, authz.catalogue_digest(), json.dumps(invalidated), json.dumps(_not_recallable(denied)),
+                 f"workspace-consent-{epoch}", hashlib.sha256(authz.canonical(material).encode()).hexdigest(), now))
+    receipt = cur.fetchone()[0]
+    _audit(cur, workspace_id, actor, "agent.permission.workspace_consent_narrowed", workspace_id, {"receiptId": receipt, "epoch": epoch})
+    return receipt
+
+
+def consent_effect(cur, workspace_id, before, after, principal, *, config=None, now=None):
+    """Capture workspace/resource consent narrowing, including command-based voice revocation."""
+    mode = authz.mode_for(config or authz.runtime_config_for(), workspace_id)
+    if mode == "off":
+        return
+    denied = set()
+    keys = set()
+    for key, reader in authz.CONSENT_READERS.items():
+        try:
+            if reader(before, None) and not reader(after, None):
+                keys.add(key)
+        except Exception:
+            continue
+    for cap in authz.catalogue():
+        if keys & set(cap.consents):
+            denied.add(cap.capability_id)
+    # Per-resource removals can narrow data even while its top-level switch stays on.
+    old_sources = {s.get("id"): s for s in before.get("sources", []) if isinstance(s, dict) and s.get("kind") == "voice_sample"}
+    new_sources = {s.get("id"): s for s in after.get("sources", []) if isinstance(s, dict)}
+    voice_narrowed = any(sid not in new_sources or not new_sources[sid].get("active", True) or
+                        any(granted is True and (new_sources[sid].get("useGrants") or {}).get(key) is not True
+                            for key, granted in (source.get("useGrants") or {}).items())
+                        for sid, source in old_sources.items() if source.get("active", True))
+    if voice_narrowed:
+        denied.update(c.capability_id for c in authz.catalogue() if "memory_brand" in c.required_domains())
+    if denied:
+        return bump_workspace(cur, workspace_id, actor=principal, denied=denied, now=time.time() if now is None else now, mode=mode)
 
 
 def _not_recallable(denied: frozenset) -> list[str]:

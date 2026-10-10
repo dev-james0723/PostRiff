@@ -32,6 +32,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -198,7 +199,12 @@ def capability_for(spec) -> Capability:
 def tool_surface(spec, agent: str | None = None) -> Surface:
     from . import capability_registry
     name = "manager" if agent in (None, "rafii_manager") else "specialist"
-    binding = capability_registry.surface(name, spec.name)
+    try:
+        binding = capability_registry.surface(name, spec.name)
+    except LookupError:
+        if name != "manager" or f"tool.{spec.name}" not in capability_registry.MANAGER_EXPANSION_V1:
+            raise
+        binding = capability_registry.surface("specialist", spec.name)
     return Surface(name, spec.name, binding.legacy_confirmation)
 
 
@@ -263,7 +269,24 @@ CONSENT_READERS: dict[str, Callable[[dict, Any], bool]] = {   # IMPLEMENTED read
     "library_purpose": lambda s, t: True,      # delegates to the Library's own per-purpose recheck once that lands
 }
 # capability_id -> matcher over the CURRENT human message only. A capability marked explicit_request with no matcher denies.
-EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {}
+def _youtube_requested(text: str, *, analytics=False) -> bool:
+    # Share the existing provider boundary's unquoted human-prose rules. No tool
+    # argument, stored approval text or earlier turn supplies fresh authority.
+    from ..youtube import agent_tools as youtube
+    text = youtube._human_prose(str(text or ""))
+    explicit_read = any(youtube._YOUTUBE.search(clause) and youtube._ANALYTICS.search(clause)
+                        and youtube._OWNED_READ.search(clause) and not youtube._EDUCATIONAL.search(clause)
+                        for clause in re.split(r"[.!?;\n，,。！？；]+", text))
+    return bool(youtube._YOUTUBE.search(text) and not youtube._NEGATIVE.search(text)
+                and (not analytics or (not youtube._NO_ACCESS.search(text) and explicit_read)))
+
+
+EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {
+    "tool.youtube_plan_context": _youtube_requested,
+    "tool.youtube_plan_prepare": _youtube_requested,
+    "tool.youtube_recommendations": _youtube_requested,
+    "tool.youtube_analytics_summary": functools.partial(_youtube_requested, analytics=True),
+}
 
 
 def _d(cap: Capability, outcome: str, reason: str, *, required: str | None = None, detail=None, policy_id=None, token="") -> Decision:
@@ -348,9 +371,9 @@ def decide(cap: Capability, *, surface: Surface, member, grants, state: dict | N
         if reason:
             return out("deny", reason, required=required)
     # (f) explicit request: only the current human message counts
-    if cap.explicit_request and actor.kind == "agent":
+    if cap.explicit_request:
         matcher = EXPLICIT_REQUEST.get(cap.capability_id)
-        if matcher is None or not matcher(actor.request_text or ""):
+        if actor.kind != "agent" or matcher is None or not matcher(actor.request_text or ""):
             return out("deny", "explicit_request_required", required=required)
     # (g) autonomy and confirmation
     if actor.kind == "autopilot":
@@ -460,6 +483,12 @@ def provider_view(state: dict | None, now: float, youtube_status: Mapping | None
     return ProviderView(tuple(views))
 
 
+def provider_view_current(cur, state, workspace_id, now):
+    from ..channels import youtube_credential_status
+    status = youtube_credential_status(cur, [workspace_id])
+    return provider_view(state, now, {cid: value for (wid, cid), value in status.items() if str(wid) == str(workspace_id)})
+
+
 def provider_check(view: ProviderView | None, scope: ProviderScope, target: Mapping | None = None, *, now: float) -> str | None:
     """Why this provider grant is missing (a REASON_CODES value), or None when it is there."""
     channels = [c for c in (view.channels if view else ()) if str(c.get("platform") or "").lower() == scope.provider.lower()]
@@ -534,6 +563,217 @@ def enforcement_ready() -> bool:
     return REQUIRED_ENFORCEMENT_POINTS <= ENFORCEMENT_POINTS
 
 
+def runtime_config_for(service=None):
+    """Trusted application configuration; never a request/body-supplied mode."""
+    configured = getattr(service, "agent_permissions_config", None)
+    if configured is not None:
+        return configured
+    runtime = getattr(service, "agent_runtime", None)
+    cfg = getattr(runtime, "cfg", None)
+    if cfg is not None:
+        return cfg
+    from .config import RuntimeConfig
+    return RuntimeConfig.from_environment()
+
+
+def gate(ctx, cap, args=None, surface=None, *, actor=None) -> Decision:
+    """E3–E6/E10: one loaded transaction snapshot, with byte-identical shadow output."""
+    from . import capability_registry
+    cap = _registry_capability(cap) if not isinstance(cap, Capability) else cap
+    if surface is None:
+        raise ValueError("a registered surface is required")
+    if not isinstance(surface, Surface):
+        surface = Surface(surface.surface, surface.binding_ref, surface.legacy_confirmation)
+    legacy = _d(cap, "allow", "allowed", required=surface.legacy_confirmation)
+    mode = getattr(ctx, "authz_mode", None) or mode_for(getattr(ctx, "config", None), getattr(ctx, "workspace_id", None))
+    if mode == "off" or cap.tenant == "founder":
+        return legacy
+    try:
+        now = getattr(ctx, "now", None) or time.time
+        now = now() if callable(now) else now
+        state = getattr(ctx, "authz_state", None) or getattr(ctx, "state", {})
+        member = getattr(ctx, "member", None) or getattr(ctx, "membership", None)
+        grants = getattr(ctx, "grants", None)
+        actor = actor or Actor("agent", ctx.principal, getattr(ctx, "request_text", ""), getattr(ctx, "authz_evidence", None))
+        result = decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor,
+                        provider_view=getattr(ctx, "authz_provider_view", None) if cap.provider_scopes else None, target=args, now=now)
+        if mode == "shadow":
+            log.info(json.dumps({"event": "agent.authz.shadow", "capabilityId": cap.capability_id,
+                                 "wouldOutcome": result.outcome, "wouldRequired": result.required, "wouldReason": result.reason}))
+            return legacy
+        return result
+    except Exception as error:
+        log.error(json.dumps({"event": "agent.authz.error", "mode": mode, "errorClass": type(error).__name__}))
+        return legacy if mode == "shadow" else _d(cap, "deny", "feature_off", required=surface.legacy_confirmation)
+
+
+def load_grants(cur, workspace_id, principal, *, now, mode):
+    from . import agent_permissions
+    if mode != "shadow":
+        return agent_permissions.load(cur, workspace_id, principal, now=now)
+    cur.execute("SAVEPOINT agent_permission_shadow_read")
+    try:
+        return agent_permissions.load(cur, workspace_id, principal, now=now)
+    finally:
+        cur.execute("ROLLBACK TO SAVEPOINT agent_permission_shadow_read")
+        cur.execute("RELEASE SAVEPOINT agent_permission_shadow_read")
+
+
+def bind_context(ctx, *, cur=None, state=None, member=None):
+    """E12: resolve grants for the verified turn principal, only outside off mode."""
+    from . import agent_permissions
+    ctx.authz_mode = mode_for(getattr(ctx, "config", None), ctx.workspace_id)
+    if ctx.authz_mode == "off":
+        return
+    if cur is None:
+        with ctx.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, row, principal):
+            if principal != ctx.principal:
+                raise AlphaError("Workspace unavailable.", 403)
+            return bind_context(ctx, cur=cur, state=ctx.service.ideas._state(row), member=ctx.service.ideas._member(row))
+    ctx.authz_state = state or {}
+    if member is not None:
+        ctx.membership = member
+    try:
+        now = ctx.now() if callable(ctx.now) else ctx.now
+        ctx.grants = load_grants(cur, ctx.workspace_id, ctx.principal, now=now, mode=ctx.authz_mode)
+        ctx.authz_provider_view = provider_view_current(cur, state or {}, ctx.workspace_id, now)
+    except Exception as error:
+        log.error(json.dumps({"event": "agent.authz.load_error", "mode": ctx.authz_mode, "errorClass": type(error).__name__}))
+        ctx.grants = None
+        if ctx.authz_mode == "enforce":
+            raise AuthzError("Rafii's permission settings could not be checked.", "agent_permission_revoked") from error
+
+
+@contextmanager
+def active_tool(ctx, spec, args, agent=None):
+    """Scope E2's capability to this executor only, including nested tool calls."""
+    names = ("active_capability", "authz_actor", "authz_args", "authz_surface")
+    before = {name: getattr(ctx, name, None) for name in names}
+    try:
+        if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "off" and spec.tenant != "founder":
+            try:
+                ctx.active_capability = capability_for(spec)
+                ctx.authz_actor = Actor("agent", ctx.principal, ctx.request_text or "", getattr(ctx, "authz_evidence", None))
+                ctx.authz_args = args
+                ctx.authz_surface = tool_surface(spec, agent)
+            except Exception:
+                ctx.active_capability = None
+                if mode_for(ctx.config, ctx.workspace_id) == "enforce":
+                    raise AuthzError("Rafii cannot verify this capability.", "agent_permission_denied")
+        yield
+    finally:
+        for name, value in before.items():
+            setattr(ctx, name, value)
+
+
+def recheck(cur, ctx, *, state, member):
+    """E2: re-read grants inside the executor's lock immediately before effects."""
+    if getattr(ctx, "active_capability", None) is None or mode_for(getattr(ctx, "config", None), ctx.workspace_id) == "off":
+        return
+    bind_context(ctx, cur=cur, state=state, member=member)
+    decision = gate(ctx, ctx.active_capability, getattr(ctx, "authz_args", None), getattr(ctx, "authz_surface", None), actor=ctx.authz_actor)
+    if decision.outcome != "allow":
+        raise AuthzError("Rafii's permissions changed before this action. Confirm again.", "agent_permission_revoked")
+
+
+def gate_site(ctx, capability_id: str, tool_id: str, args=None):
+    from . import capability_registry
+    policy = capability_registry.get(capability_id)
+    if policy is None:
+        raise AuthzError("Rafii cannot use this capability.", "agent_permission_denied")
+    return gate(ctx, policy, args, capability_registry.surface("site_agent", tool_id))
+
+
+def gate_proposal(cur, workspace_id, state, proposal, *, config, now):
+    """E7: the proposal creator's grants, in the apply transaction; decider rights stay independent."""
+    from types import SimpleNamespace
+    from . import capability_registry
+    mode = mode_for(config, workspace_id)
+    if mode == "off":
+        return
+    kinds = {"schedule_draft": "tool.schedule_propose", "reschedule_post": "tool.schedule_propose", "automation_change": "tool.automation_change_propose"}
+    capability_id = kinds.get(proposal.get("type"))
+    creator = proposal.get("createdBy")
+    try:
+        cap = capability_registry.get(capability_id or "")
+        if cap is None or not creator:
+            raise LookupError("proposal creator/capability unavailable")
+        member = _step_member(cur, workspace_id, creator)
+        grants = load_grants(cur, workspace_id, creator, now=now, mode=mode)
+        ctx = SimpleNamespace(workspace_id=workspace_id, principal=creator, member=member, grants=grants,
+                              config=config, authz_mode=mode, state=state, now=now)
+        surfaces = capability_registry.bindings(capability_id)
+        surface = next(b for b in surfaces if b.surface in ("manager", "specialist"))
+        result = gate(ctx, cap, proposal, surface, actor=Actor("approval", creator, "", {"proposalId": proposal.get("id"), "digest": proposal.get("digest")}))
+        if result.outcome == "deny":
+            raise AuthzError("The creator's permission for this proposal was revoked.", "agent_permission_revoked")
+    except Exception as error:
+        if mode == "shadow":
+            log.error(json.dumps({"event": "agent.authz.shadow_proposal_error", "errorClass": type(error).__name__}))
+            return
+        if isinstance(error, AuthzError):
+            raise
+        raise AuthzError("The creator's permissions could not be verified.", "agent_permission_revoked") from error
+
+
+def recheck_principal(cur, *, workspace_id, principal, member, state, capability, config=None, now=None):
+    """E9: agent-created background work only. Human-configured jobs pass no capability."""
+    if capability is None:
+        return
+    from types import SimpleNamespace
+    from . import capability_registry
+    config = config or runtime_config_for()
+    mode = mode_for(config, workspace_id)
+    if mode == "off":
+        return
+    try:
+        cap = capability_registry.get(capability) if isinstance(capability, str) else capability
+        if cap is None:
+            raise LookupError("unknown background capability")
+        at = time.time() if now is None else now
+        grants = load_grants(cur, workspace_id, principal, now=at, mode=mode)
+        bindings = capability_registry.bindings(cap.capability_id)
+        surface = next(b for b in bindings if b.surface in ("manager", "specialist"))
+        ctx = SimpleNamespace(workspace_id=workspace_id, principal=principal, member=member, state=state, now=at,
+                              grants=grants, config=config, authz_mode=mode)
+        result = gate(ctx, cap, surface=surface, actor=Actor("autopilot", principal))
+        if result.outcome != "allow":
+            raise AuthzError("Rafii's permission for this work changed.", "agent_permission_revoked")
+    except Exception as error:
+        if mode != "shadow":
+            if isinstance(error, AuthzError):
+                raise
+            raise AuthzError("Rafii's permissions could not be checked.", "agent_permission_revoked") from error
+        log.error(json.dumps({"event": "agent.authz.shadow_background_error", "errorClass": type(error).__name__}))
+
+
+def filter_tools(ctx, names, *, agent=None):
+    """E10: preserve exact lists in off/shadow; enforce reach before model exposure."""
+    from . import capability_registry, tool_adapter
+    mode = mode_for(getattr(ctx, "config", None), ctx.workspace_id)
+    if mode == "off":
+        return list(names)
+    surface_name = "manager" if agent in (None, "rafii_manager") else "specialist"
+    candidates = list(names)
+    if mode == "enforce" and surface_name == "manager":
+        reach = capability_registry.reach("manager", getattr(ctx, "grants", None))
+        candidates += [c.name for cid in sorted(reach) if (c := capability_registry.get(cid)) and c.kind == "tool" and c.name in tool_adapter.REGISTRY and c.name not in candidates]
+    kept = []
+    for name in candidates:
+        tool = tool_adapter.REGISTRY.get(name)
+        if tool is None:
+            continue
+        try:
+            decision = gate(ctx, capability_for(tool.spec), surface=tool_surface(tool.spec, agent))
+        except Exception:
+            if mode == "shadow":
+                kept.append(name)
+            continue
+        if mode == "shadow" or decision.outcome != "deny":
+            kept.append(name)
+    return candidates if mode == "shadow" else kept
+
+
 def context_gate(capability_id: str, *, cur, state: dict, workspace_id: str,
                  principal: str, member, config, now: float) -> str:
     """CF-2 E11. Existing transaction only; diagnostics cannot change shadow output."""
@@ -547,7 +787,7 @@ def context_gate(capability_id: str, *, cur, state: dict, workspace_id: str,
         if policy is None or policy.kind != "context" or binding is None or cur is None:
             raise ValueError("context permission metadata unavailable")
         cap = _registry_capability(policy)
-        grants = agent_permissions.load(cur, workspace_id, principal, now=now)
+        grants = load_grants(cur, workspace_id, principal, now=now, mode=mode)
         decision = decide(cap, surface=Surface("context", capability_id, binding.legacy_confirmation),
                           member=member, grants=grants, state=state, actor=Actor("agent", principal, request_text=""), now=now)
         log.info(json.dumps({"event": "agent.authz.context", "mode": mode, "capabilityId": capability_id,
@@ -589,7 +829,7 @@ def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = No
     cap = capability_for(spec)
     surface = tool_surface(spec, agent)
     now = ctx.now() if callable(getattr(ctx, "now", None)) else time.time()
-    actor = Actor("agent", ctx.principal, request_text=ctx.request_text or "")
+    actor = getattr(ctx, "authz_actor", None) or Actor("agent", ctx.principal, request_text=ctx.request_text or "", evidence=getattr(ctx, "authz_evidence", None))
     service = ctx.service
     with service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, row, principal):
         if principal != ctx.principal:
@@ -597,8 +837,8 @@ def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = No
         member = service.ideas._member(row)
         state = service.ideas._state(row)
         grants = agent_permissions.load(cur, ctx.workspace_id, principal, now=now)
-        view = provider_view(state, now) if cap.provider_scopes else None
-        return decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor, provider_view=view, target=None, now=now)
+        view = provider_view_current(cur, state, ctx.workspace_id, now) if cap.provider_scopes else None
+        return decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor, provider_view=view, target=args, now=now)
 
 
 def tool_gate(ctx, tool, args, *, started: float, agent: str | None = None) -> dict | None:
@@ -770,11 +1010,11 @@ def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, co
         if not row or not isinstance(row[0], dict):
             raise LookupError("workspace state unavailable")
         state = row[0]
-        grants = agent_permissions.load(cur, workspace_id, creator, now=now)
+        grants = load_grants(cur, workspace_id, creator, now=now, mode=mode)
         target = step.get("inputs") if isinstance(step.get("inputs"), dict) else None
         decision = decide(cap, surface=Surface(binding.surface, binding.binding_ref, binding.legacy_confirmation), member=member,
                           grants=grants, state=state, actor=Actor(actor.kind, creator, actor.request_text, actor.evidence),
-                          provider_view=provider_view(state, now) if cap.provider_scopes else None, target=target, now=now)
+                          provider_view=provider_view_current(cur, state, workspace_id, now) if cap.provider_scopes else None, target=target, now=now)
         result = step_verdict(decision, earlier_token=step.get("authzToken") or task.get("authzToken"),
                               spend_only=decision.outcome == "confirm" and cap.cost in SPEND.get(grants.spend_confirmation, ())
                               and cap.confirmation == "none" and binding.legacy_confirmation == "none")
