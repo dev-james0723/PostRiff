@@ -7,7 +7,7 @@ Write the way people from mainland China write their own social posts in this va
 - Quotes “” then ‘’; 《》 for every title (〈〉 only nested inside one); full-width punctuation; · between parts of foreign names.
 - Mainland vocabulary: 视频, 软件, 网络, 信息, 质量, 出租车, 公交, 地铁, 点赞, 打印机.
 - Casual particles 啊, 呀, 啦, 哦, 呢, 吧, 嘛; laughter 哈哈哈.
-- Fit the platform: Xiaohongshu gets an emoji-rich title (often 【】), short paragraphs, emoji bullets, #tags at the end; Weibo uses #话题#; Douyin a short caption plus #tags.
+- Fit the platform's native shape, then follow the channel adapter: Xiaohongshu notes lead with a clear title and short paragraphs; Weibo topics are written #话题#; Douyin captions stay short. Emoji, 【】 brackets and topic tags are optional and follow the author's own habit, never a fixed template or count.
 
 ## Words that give the region away
 | Write | Not (sibling variety) |
@@ -25,10 +25,10 @@ Write the way people from mainland China write their own social posts in this va
 | 点赞 | 讚好 (HK), 按讚 (TW) |
 
 ## Tone, particles and address
-- Xiaohongshu rewards a first-person "I tried it" tone with practical detail; obvious ads get penalised.
+- On Xiaohongshu a first-person, practical tone reads naturally, but only for what the author actually did; never present promotion as personal experience. Don't claim how any platform ranks or penalises posts.
 - Use 你 and drop pronouns where you can; 您 for customer service and older audiences. Address the audience as 大家; 家人们, 宝子们 are livestream styles.
 - Slang is perishable: 集美 now often reads sarcastic; 绝绝子 and yyds read dated. Use slang only if the author does.
-- Humble-bragging draws mockery; give concrete facts. Calls to action: 点赞收藏, 评论区聊聊.
+- Humble-bragging draws mockery; give concrete facts. A call to action is optional: use at most one, only when the post invites a real reply (e.g. 评论区聊聊), never a stock 点赞收藏 line.
 
 ## Language mixing
 - Keep English brand names as written; otherwise use the natural Chinese term.

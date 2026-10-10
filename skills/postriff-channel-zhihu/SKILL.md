@@ -2,7 +2,7 @@
 name: postriff-channel-zhihu
 description: Prepare and validate zhihu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # zhihu adapter
@@ -30,3 +30,13 @@ The following are implemented **local draft schemas**, not current API capabilit
 ## 4. Caption/title/description rules
 
 Write independently authored audience-facing `text`; put any required title or description in `notes`, labelled. Do not invent personal experience or product facts. Credible sourced depth; answers bind to one exact open question. Character limits remain unverified until a current account-specific constraint record exists; never silently truncate copy to fit an assumed limit.
+
+## 5. Native reasoning
+
+Editorial guidance reviewed 2026-10-09. It describes how readers use the surface, not current ranking rules: nothing here is an algorithm guarantee, and any platform limit stays unverified until a current constraint record exists. Examples are illustrations, never facts about the creator.
+
+- Zhihu is question-led: an answer addresses the question that was actually asked, leads with a direct conclusion, then gives reasoning and evidence from the supplied facts.
+- Disclose affiliation or promotion where the native field asks for it; an answer that sells without saying so is not acceptable.
+- An article states its thesis in the title and develops it with sections; an idea (想法) is a short observation, not a compressed article.
+- Separate what is established from what is opinion; cite sources plainly; never invent credentials, experience or data.
+- Register is careful written Simplified Chinese unless the destination tag says otherwise.

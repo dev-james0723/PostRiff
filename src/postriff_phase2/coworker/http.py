@@ -180,6 +180,8 @@ def handle(app, environ, start_response, service, token, method, parts):
                 return json_(200, coworker.research_diagnostics(workspace_id, token))
         if area == "source-campaigns" and not tail and method == "POST":
             return json_(201, coworker.source_campaign(workspace_id, token, body()))
+        if area == "source-campaigns" and len(tail) == 2 and tail[1] == "export" and method == "GET":
+            return json_(200, coworker.source_campaign_export(workspace_id, token, tail[0]))
         if area == "creative" and tail == ["plan"] and method == "POST":
             from . import creative, flags
             flags.require("RAFII_CREATIVE_AGENT_ENABLED")
@@ -192,6 +194,8 @@ def handle(app, environ, start_response, service, token, method, parts):
                 return json_(200, coworker.overlays_view(workspace_id, token))
             if tail == ["export"] and method == "GET":
                 return json_(200, coworker.overlays_export(workspace_id, token))
+            if tail == ["preview"] and method == "POST":
+                return json_(200, coworker.overlays_preview(workspace_id, token, body().get("scope")))
             if tail == ["notes"] and method == "POST":
                 return json_(201, coworker.overlay_note(workspace_id, token, body()))
             if len(tail) == 2 and tail[0] == "notes" and method == "PATCH":

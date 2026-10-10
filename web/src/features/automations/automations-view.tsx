@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
-import { DRAFT_PLATFORMS } from '@/features/agent/composer';
+import { useDraftPlatforms } from '@/features/agent/use-draft-platforms';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
 import { InfoTip, RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage, Surface } from '@/components/rafii';
@@ -57,6 +57,7 @@ function pausedUntilLabel(task: Automation['task']): string | null {
 
 export function AutomationsView() {
   const params = useSearchParams();
+  const draftPlatforms = useDraftPlatforms();
   const router = useRouter();
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
@@ -116,7 +117,7 @@ export function AutomationsView() {
       return;
     }
     if (source && lineage && Date.parse(lineage.expires_at) > Date.now()) {
-      if (!(DRAFT_PLATFORMS as readonly string[]).includes(lineage.platform)) {
+      if (!draftPlatforms.includes(lineage.platform)) {
         toast.error('Campaign drafting is not supported for this source’s selected platform. Review the source in Ideas.');
         return;
       }
@@ -131,7 +132,7 @@ export function AutomationsView() {
       const found = automations.find((item) => item.task.id === editId);
       if (found && found.task.status !== 'cancelled') open(initialFromAutomation(found, timeZone));
     }
-  }, [state, canEdit, params, automations, timeZone]);
+  }, [state, canEdit, params, automations, timeZone, draftPlatforms]);
 
   // A deleted automation is cancelled and hidden; its run history stays on the server for audit.
   const visible = automations.filter((a) => !a.task.deletedAt);

@@ -2,7 +2,7 @@
 name: postriff-content-engine
 description: Use when creating, researching, localizing, reviewing, or scheduling social content for a PostRiff workspace, in any language and for any channel the workspace has connected.
 metadata:
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # PostRiff content engine

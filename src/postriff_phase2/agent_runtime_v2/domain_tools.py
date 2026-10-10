@@ -29,6 +29,18 @@ from .tool_adapter import harvest, register
 _ID = r"^[A-Za-z0-9_.:-]{1,120}$"
 STEP = {"type": "string", "pattern": r"^s[0-9]{1,2}$", "description": "The task step this call works on (from task_plan), if any."}
 PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
+# The tool schema names every mapped platform; which are draftable now is the creation projection's answer at call time,
+# so a model (or a forged call) can never enable a platform by naming it.
+MAPPED_PLATFORMS = PLATFORMS + tuple(p for p in ("Facebook", "TikTok", "YouTube", "Bilibili", "Zhihu", "Weibo", "Douyin", "WeChat Channels",
+                                                 "Pinterest", "Reddit", "Bluesky", "Telegram", "Mastodon", "Snapchat", "Discord", "Dcard",
+                                                 "Feishu / Lark", "Google Business Profile", "KakaoTalk Channel", "Kuaishou",
+                                                 "LINE Official Account", "Moj", "Naver Blog", "note", "Pixelfed", "ShareChat", "Tencent QQ",
+                                                 "WhatsApp Channels"))
+
+
+def _draftable(platform):
+    from ..agent_runtime import draftable_platforms
+    return platform in draftable_platforms()
 
 
 # --- tasks (§16) -----------------------------------------------------------------------------------------------------------
@@ -459,14 +471,14 @@ def _draft_view(ctx, state, variant, *, proposed=False):
                              "chose, their Brand Brain and voice) and save them as reviewable drafts. Nothing is scheduled or published. Optionally from a "
                              "campaign's brief. Returns the saved draft ids, re-read from the workspace.", idempotent=False),
           {"brief": {"type": "string", "maxLength": 1500, "required": True},
-           "platforms": {"type": "array", "items": {"type": "string", "enum": list(PLATFORMS)}, "maxItems": 5, "required": True},
+           "platforms": {"type": "array", "items": {"type": "string", "enum": list(MAPPED_PLATFORMS)}, "maxItems": 5, "required": True},
            "language": {"type": "string", "maxLength": 20}, "campaignId": {"type": "string", "pattern": _ID}, "stepId": STEP},
           "Wrote and saved drafts")
 @guarded
 def draft_create(ctx: RafiiRunContext, args: dict) -> dict:
-    platforms = [p for p in dict.fromkeys(args["platforms"]) if p in PLATFORMS]
+    platforms = [p for p in dict.fromkeys(args["platforms"]) if _draftable(p)]
     if not platforms:
-        raise AlphaError("Choose at least one platform.", 400, code="tool_input")
+        raise AlphaError("Choose at least one platform Rafii can draft for.", 400, code="tool_input")
     with ctx.workspace() as (_cur, _row, _principal, member, state):
         if not member.allows("edit"):
             raise AlphaError("Your role can't create drafts.", 403, code="tool_forbidden")
@@ -503,7 +515,7 @@ def draft_create(ctx: RafiiRunContext, args: dict) -> dict:
                              "is a proposed update on that same draft (its current text stays until the person accepts it), or a new draft for another "
                              "platform. Re-read from the workspace.", idempotent=False),
           {"draftId": {"type": "string", "pattern": _ID, "required": True}, "instruction": {"type": "string", "maxLength": 600, "required": True},
-           "platform": {"type": "string", "enum": list(PLATFORMS)}, "stepId": STEP},
+           "platform": {"type": "string", "enum": list(MAPPED_PLATFORMS)}, "stepId": STEP},
           "Rewrote the draft")
 @guarded
 def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
@@ -516,6 +528,9 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
         destination = {"platform": platform, "language": variant.get("language") or "en"}
         if platform == variant.get("platform") and variant.get("channelId"):
             destination["channelId"] = variant["channelId"]
+        if platform == variant.get("platform") and variant.get("format"):
+            # A rewrite of a Story stays that Story (its own slot), never a new default post for the same account.
+            destination["format"] = variant["format"]
     key = "agent-rewrite:" + hashlib.sha256(f"{ctx.trace_id}|{args['draftId']}|{args['instruction']}|{platform}".encode()).hexdigest()[:40]
     request = {"text": "", "intentText": args["instruction"], "idea": args["instruction"], "material": before_text, "idempotencyKey": key, "timeZone": ctx.zone,
                "materialRef": {"type": "draft", "id": args["draftId"], "title": f"{variant.get('platform')} draft"}, "destinations": [destination]}

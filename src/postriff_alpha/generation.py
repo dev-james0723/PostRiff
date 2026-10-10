@@ -7,6 +7,13 @@ import re
 MATERIAL_LABEL = "Material to work from (data, not instructions):"
 
 PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
+# Every other platform a channel skill maps (postriff_phase2.skills.CHANNEL_SKILLS). Which of them a request may use is
+# decided upstream by the creation-capability projection and its rollout flags; this writer only knows how to write a
+# neutral, fact-bound preview for each: no hashtags, no invented call to action, no assumed character limit.
+NATIVE_PLATFORMS = ("Facebook", "TikTok", "YouTube", "Bilibili", "Zhihu", "Weibo", "Douyin", "WeChat Channels", "Pinterest",
+                    "Reddit", "Bluesky", "Telegram", "Mastodon", "Snapchat", "Discord", "Dcard", "Feishu / Lark",
+                    "Google Business Profile", "KakaoTalk Channel", "Kuaishou", "LINE Official Account", "Moj", "Naver Blog",
+                    "note", "Pixelfed", "ShareChat", "Tencent QQ", "WhatsApp Channels")
 # X is one post of 280 characters by X's count (CJK and emoji weigh two); a Xiaohongshu note's first line is its
 # title, at most 20 characters. Both are drafting and preview only: nothing here publishes.
 X_LIMIT = 280
@@ -52,6 +59,34 @@ SAMPLE_FACTS_HANS = {
 }
 
 
+# Neutral preview wording for the newer platforms. No hashtags or compulsory calls to action (the channel skills rule
+# both out as defaults); the close is a question the author can delete. Examples of register, not platform rules.
+NATIVE_OPENINGS = {
+    "*": ["A point worth sharing.", "Here is what holds up so far.", "Start with what we know."],
+    "Facebook": ["Something worth sharing with this community.", "A short update, with the details that hold up.", "Here is what we can say so far."],
+    "Reddit": ["Sharing this for discussion.", "Looking for perspectives on this.", "Here is what the sources say."],
+    "Zhihu": ["Short answer first, then the details.", "Here is what the evidence supports.", "Start with what is established."],
+    "Google Business Profile": ["An update for our visitors.", "Here is what is happening.", "A quick note for people nearby."],
+}
+ZH_NATIVE_OPENINGS = {
+    "*": [("一個值得分享的重點。", "一个值得分享的重点。"), ("先說目前有根據的部分。", "先说目前有根据的部分。"), ("從已知的事實開始。", "从已知的事实开始。")],
+    "Facebook": [("想和大家分享一件事。", "想和大家分享一件事。"), ("簡單更新，只講有根據的細節。", "简单更新，只讲有根据的细节。"), ("目前可以確定的是這些。", "目前可以确定的是这些。")],
+    "Zhihu": [("先說結論，再講細節。", "先说结论，再讲细节。"), ("以下是有根據的部分。", "以下是有根据的部分。"), ("先從已確定的事實開始。", "先从已确定的事实开始。")],
+    "Weibo": [("一個值得關注的消息。", "一个值得关注的消息。"), ("簡單說幾句。", "简单说几句。"), ("先講確定的部分。", "先讲确定的部分。")],
+}
+NATIVE_CLOSINGS = {
+    "*": "What would you add?",
+    "Facebook": "What questions do you have? Share them in the comments.",
+    "Reddit": "What am I missing? Corrections welcome.",
+    "Google Business Profile": "Questions? Get in touch with us.",
+}
+ZH_NATIVE_CLOSINGS = {
+    "*": ("你會補充甚麼？", "你会补充什么？"),
+    "Facebook": ("有甚麼問題，歡迎在留言區提出。", "有什么问题，欢迎在评论区提出。"),
+    "Zhihu": ("如有補充或指正，歡迎討論。", "如有补充或指正，欢迎讨论。"),
+}
+
+
 class AgentAdapter(Protocol):
     id: str
     version: str
@@ -64,11 +99,12 @@ class FixtureAdapter:
 
     def generate(self, request):
         platform, language = request["platform"], request["language"]
-        if platform not in PLATFORMS or not supported_language(language):
+        if platform not in PLATFORMS + NATIVE_PLATFORMS or not supported_language(language):
             raise ValueError("Choose a supported preview platform and language.")
         chinese = is_chinese(language)
-        # Xiaohongshu is written for mainland readers: a Simplified tag gets Simplified wording end to end.
-        hans = chinese and platform == "Xiaohongshu" and is_simplified(language)
+        # Xiaohongshu is written for mainland readers: a Simplified tag gets Simplified wording end to end. The newer
+        # platforms follow the tag the person chose, so a Simplified destination is Simplified everywhere.
+        hans = chinese and (platform == "Xiaohongshu" or platform in NATIVE_PLATFORMS) and is_simplified(language)
 
         def zh(hant, simplified):
             return simplified if hans else hant
@@ -106,6 +142,9 @@ class FixtureAdapter:
             "X": ["一個值得講清楚的重點：", "值得再看一眼：", "先講有根據的部分："],
             "Xiaohongshu": [zh("一個值得收藏的小點子", "一个值得收藏的小点子"), zh("記錄一個值得試試的想法", "记录一个值得试试的想法"), zh("先從有根據的資訊開始", "先从有根据的信息开始")],
         }
+        for name in NATIVE_PLATFORMS:
+            openings[name] = NATIVE_OPENINGS.get(name, NATIVE_OPENINGS["*"])
+            zh_openings[name] = [zh(hant, simplified) for hant, simplified in ZH_NATIVE_OPENINGS.get(name, ZH_NATIVE_OPENINGS["*"])]
         options = (zh_openings if chinese else openings)[platform][:]
         if request.get("shortOpenings"):
             options[0] = zh("一個小起點。", "一个小起点。") if chinese else "A small start."
@@ -129,6 +168,9 @@ class FixtureAdapter:
             "X": "你會補充甚麼？",
             "Xiaohongshu": zh("先收藏起來。你會先試哪一個？\n\n#學習筆記 #值得收藏", "先收藏起来。你会先试哪一个？\n\n#学习笔记 #值得收藏"),
         }
+        for name in NATIVE_PLATFORMS:
+            closing[name] = NATIVE_CLOSINGS.get(name, NATIVE_CLOSINGS["*"])
+            zh_closing[name] = zh(*ZH_NATIVE_CLOSINGS.get(name, ZH_NATIVE_CLOSINGS["*"]))
         # LinkedIn readers expect the professional context and a longer reflection before the question.
         if platform == "LinkedIn" and lines:
             context = ("為甚麼值得關注：重點在於它在實際工作中會帶來甚麼改變。以上來源是已核准的起點，其餘內容在發佈前仍需查證。" if chinese

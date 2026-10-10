@@ -3,6 +3,8 @@
  * Ported from the founder alpha client (`studio/web/src/founder/cloud-api.ts`)
  * and kept in one place so every page reads the same shapes.
  */
+
+import type { CreationCatalog, NativeDraft } from '@/lib/creation/capabilities';
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
 import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 
@@ -266,6 +268,9 @@ export interface SnapshotVariant {
   needsReview: boolean;
   blockedByRetraction: boolean;
   contentTypeId?: string;
+  /** Native format and structured draft saved with the variant (creation projection). */
+  format?: string;
+  native?: NativeDraft | null;
   customized?: boolean;
   /** Which Ideas run produced this variant (set by `apply`). */
   provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string; derivedFrom?: string };
@@ -803,6 +808,10 @@ export interface RunVariant {
   warnings?: string[];
   candidateOnly?: boolean;
   media?: RunMedia[];
+  /** The native format the destination asked for (absent for the platform default on older runs). */
+  format?: string;
+  /** Structured native draft (`rafii.native-draft.v1`): format, skill route, media and publish readiness. */
+  native?: NativeDraft | null;
 }
 
 export interface GeneratedImage {
@@ -829,6 +838,8 @@ export interface Destination {
   platform: string;
   language: LocaleTag;
   channelId?: string;
+  /** Native format id from the creation facet (e.g. `facebook.reel`); omitted = the platform's default format. */
+  format?: string;
 }
 
 export interface SchedulePlan {
@@ -1088,6 +1099,8 @@ export interface ModelCatalog {
   };
   /** Chat attachments (SPEC §5.11). Every limit the UI shows comes from here. Absent = feature off. */
   attachments?: AttachmentsCatalog;
+  /** Creation-capability facet (`rafii.creation-capabilities.v1`); null/absent = offer the original five only. */
+  creation?: CreationCatalog | null;
 }
 
 export interface MediaProcessor {

@@ -60,6 +60,8 @@ export interface IdeaComposerProps {
   consent?: ReactNode;
   /** Reminder rows (language notes) rendered under the pod. */
   notes?: ReactNode;
+  /** Native format per selected destination (creation facet), under the settings. */
+  formats?: ReactNode;
   className?: string;
   /** Chat attachments: the chip strip under the text, the ＋ button in the Context row, and the textarea handlers. */
   attachmentsRow?: ReactNode;
@@ -75,7 +77,7 @@ export interface IdeaComposerProps {
  * action → assurance. Every control is wired by the caller; this surface owns only the layout.
  */
 export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(function IdeaComposer(
-  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, className, attachmentsRow, addButton, textareaHandlers, slash },
+  { value, onChange, placeholder, disabled, busy, onExpand, contextCount, onOpenContext, onTryIdea, extras, contentType, channels, settings, generate, consent, notes, formats, className, attachmentsRow, addButton, textareaHandlers, slash },
   ref
 ) {
   const helpId = useId();
@@ -184,6 +186,7 @@ export const IdeaComposer = forwardRef<HTMLTextAreaElement, IdeaComposerProps>(f
           ))}
         </div>
         <div className='mt-2.5 mb-[19px]' data-tour='composer-settings'>{settings}</div>
+        {formats}
         {notes}
         <Button variant='action' size='hero' data-tour='composer-generate' disabled={generate.disabled} aria-describedby={helpId} onClick={generate.onClick} className='w-full justify-start text-left'>
           <Icons.sparkles className={cn(busy && 'animate-spin motion-reduce:animate-none')} />

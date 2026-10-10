@@ -328,7 +328,15 @@ def merge_destinations(payload_destinations, extra):
     for destination in list(payload_destinations or []) + list(extra or []):
         if not isinstance(destination, dict):
             continue
-        key = (destination.get("platform"), destination.get("channelId") or None)
+        target = (destination.get("platform"), destination.get("channelId") or None)
+        # Explicit native formats on one account stay distinct; a formatless entry (a chip) never adds a default-format
+        # post for an account that is already a target in any format.
+        if destination.get("format"):
+            key = target + (destination["format"],)
+        else:
+            key = target + (None,)
+            if any(item[:2] == target for item in seen):
+                continue
         if key in seen:
             continue
         seen.add(key)

@@ -402,6 +402,12 @@ class Phase2Store(Store):
         # Language is not part of the match: a channel can carry drafts in several languages (languages plan §6).
         if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
             raise AlphaError("The variant and current speaker must match this destination.")
+        # A native format other than the platform's default (a Story, Reel, carousel…) has no format-aware publisher:
+        # it is never approved as a default post. Export it and post it by hand (creation projection, spec §12).
+        from .creation_capabilities import DEFAULT_FORMATS, EXPORT_ONLY_NOTE
+        native_format = (v.get("native") or {}).get("formatId") if isinstance(v.get("native"), dict) else None
+        if any(f and f != DEFAULT_FORMATS.get(c["platform"]) for f in (v.get("format"), native_format)):
+            raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
         if not text.strip() or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:

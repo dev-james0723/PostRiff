@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import type { GeneratedItem, useHomeGeneration } from './use-home-generation';
 import { useRunPreviewMedia } from '@/components/application/post-preview/use-preview-post';
 import { reportFrom, UsedThisTime } from '@/features/agent/used-this-time';
+import { NativeDraftFacts } from '@/features/agent/native-draft-facts';
 
 /** Sample copy for the idle deck; always labelled as a sample, never presented as a draft. */
 const SAMPLE_TEXT = 'One thought, shaped for every place you post.';
@@ -105,7 +106,7 @@ const STATUS_COPY: Record<GeneratedItem['status'], string> = {
  * (prompt §4 "State and real generation"). Edits are local until "Save as drafts", which applies
  * the run through the existing service and records each edited caption as an author edit.
  */
-export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { generation: Generation; timeZone: string; speaker: string; onDraftAgain: () => void }) {
+export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain, isConnected }: { generation: Generation; timeZone: string; speaker: string; onDraftAgain: () => void; isConnected?: (platform: string) => boolean | undefined }) {
   const [openedAt] = useState(() => new Date());
   const [active, setActive] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -193,6 +194,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain }: { ge
                 rows={7}
                 className='rafii-field rafii-focus min-h-[150px] w-full resize-y rounded-[var(--rafii-radius-card)] px-4 py-3.5 text-base leading-[1.75] outline-none md:text-sm'
               />
+              {current.variant && <NativeDraftFacts variant={{ ...current.variant, text: current.edited ?? current.text }} connected={isConnected?.(current.variant.platform)} className='px-1' />}
               {current.variant?.warnings && current.variant.warnings.length > 0 && (
                 <ul className='text-muted-foreground flex flex-col gap-1 text-xs'>
                   {current.variant.warnings.map((warning, index) => (

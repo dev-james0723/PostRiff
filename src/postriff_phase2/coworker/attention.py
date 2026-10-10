@@ -24,6 +24,7 @@ WHY = {
     "campaign.blocked": "Rafii stopped here and needs your decision to continue.",
     "campaign.week_ready": "Next week's posts are drafted and checked; nothing is scheduled until you approve.",
     "campaign.drafts_ready": "Drafts are waiting for review; nothing is scheduled.",
+    "research.needs_input": "A campaign from your source couldn't finish its drafts. Its finished copy is kept; add a source or retry the targets that failed.",
     "budget.threshold_reached": "Paid work pauses at the limit.",
     "billing.trial_ending": "Publishing pauses when the trial ends unless a plan is chosen.",
     "engagement.needs_attention": "Someone asked a question or needs an answer. Not urgent unless you decide it is.",

@@ -30,7 +30,9 @@ import { STATUS } from '@/lib/status-labels';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
-import { DRAFT_PLATFORMS, type DraftPlatform } from './composer';
+import { type DraftPlatform } from './composer';
+import { NativeFormatPicker } from './native-format-picker';
+import { draftableFrom, formatsFor, platformRow, revisionOf, withFormats } from '@/lib/creation/capabilities';
 import { contentChoice, selectLibraryContent, type LibraryValue } from './content-choice';
 import { ContextPocket, pocketSources } from './home/context-pocket';
 import { greetingName, QuickStartsDisclosure, StartingPoints } from './home/home-nudges';
@@ -123,7 +125,6 @@ const infoContent = {
   ]
 };
 
-const isDraftable = (platform: string): platform is DraftPlatform => (DRAFT_PLATFORMS as readonly string[]).includes(platform);
 
 function HomeWorkspace() {
   const params = useSearchParams();
@@ -209,6 +210,13 @@ function HomeWorkspace() {
   /* ---- destinations: accounts (Channel Bloom) → selection items with languages ---- */
   const destinations = useDestinations(accounts);
   const languages = useChannelLanguages<DraftPlatform>([]);
+  // Creation-capability facet: the platforms and native formats offered here; the server re-validates every request.
+  const creation = models.data?.creation;
+  const draftPlatforms = useMemo(() => draftableFrom(creation), [creation]);
+  const isDraftable = useCallback((platform: string) => draftPlatforms.includes(platform), [draftPlatforms]);
+  const [nativeFormats, setNativeFormats] = useState<Record<string, string>>({});
+  const capabilityRevision = revisionOf(creation);
+  const formatted = useMemo(() => withFormats(languages.destinations, nativeFormats, creation), [languages.destinations, nativeFormats, creation]);
   const targets = useMemo<ChannelTarget<DraftPlatform>[]>(() => {
     const fromAccounts = destinations.selected.flatMap((id) => {
       const account = accounts.find((a) => a.id === id);
@@ -217,7 +225,7 @@ function HomeWorkspace() {
     const fromPlatforms = destinations.platformOnly.filter(isDraftable).map((platform) => ({ platform }) as ChannelTarget<DraftPlatform>);
     const all = [...fromAccounts, ...fromPlatforms];
     return all.length ? all : DEFAULT_TARGETS;
-  }, [destinations.selected, destinations.platformOnly, accounts]);
+  }, [destinations.selected, destinations.platformOnly, accounts, isDraftable]);
   const targetsKey = targets.map(selectionKey).join('|');
   const setTargets = languages.setTargets;
   useEffect(() => {
@@ -310,8 +318,8 @@ function HomeWorkspace() {
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
-    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included, ...chipFields })),
-    [text, own, languages.destinations, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included, chipFields]
+    () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: formatted, ...(capabilityRevision ? { capabilityRevision } : {}), ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included, ...chipFields })),
+    [text, own, formatted, capabilityRevision, choice.requestFields, voiceMode, voiceSourceIds, timeZone, included, chipFields]
   );
   // On Auto the body names no model, so a changed workspace default must still ask for a fresh estimate.
   const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
@@ -477,7 +485,7 @@ function HomeWorkspace() {
       // A reference still being read gets at most 20 s; one that isn't ready is reported `not_read_yet`, never dropped.
       if (attachmentsOn) await attachments.settleReads();
       const sent = attachmentsOn && !imageRequested ? attachments.sentKeys : [];
-      const result = await generation.start({ text: body, ownContent: own, destinations: languages.destinations,
+      const result = await generation.start({ text: body, ownContent: own, destinations: formatted, ...(capabilityRevision ? { capabilityRevision } : {}),
         ...choice.requestFields, voiceMode, voiceSourceIds,
         imageGeneration: imageRequested ? { enabled: true, count: 1 } : undefined,
         timeZone, sourceIds: included, maxMilliCredits: creditMode ? maximum : null, ...chipFields }, current);
@@ -514,7 +522,7 @@ function HomeWorkspace() {
     try {
       const result = await api.turn(workspaceId, target.id, {
         text: reply,
-        destinations: languages.destinations,
+        destinations: formatted,
         ...choice.requestFields,
         voiceMode,
         voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [],
@@ -616,6 +624,14 @@ function HomeWorkspace() {
                   )}
                 </div>
               ) : undefined}
+              formats={
+                <NativeFormatPicker
+                  rows={languages.selection.map((item) => ({ key: item.key, platform: item.platform, account: item.channelId ? accounts.find((a) => a.id === item.channelId)?.account : undefined, formats: formatsFor(creation, item.platform), defaultFormat: platformRow(creation, item.platform)?.defaultFormat ?? null }))}
+                  value={nativeFormats}
+                  onChange={(key, format) => setNativeFormats((current) => ({ ...current, [key]: format }))}
+                  disabled={!snapshot.data || preparing || generation.busy || generation.running}
+                />
+              }
               onTryIdea={() => setText('A behind-the-scenes thought: the quiet, imperfect work is usually where the best ideas begin.')}
               extras={
                 <button
@@ -735,7 +751,7 @@ function HomeWorkspace() {
         {/* Preview column */}
         <aside aria-label='Channel draft previews' className='min-w-0 lg:pt-2'>
           {generation.run || generation.busy || generation.error ? (
-            <IdeaSplits generation={generation} timeZone={timeZone} speaker={speaker} onDraftAgain={draftAgain} />
+            <IdeaSplits generation={generation} timeZone={timeZone} speaker={speaker} onDraftAgain={draftAgain} isConnected={(platform) => channels.some((c) => c.platform === platform && !c.revoked)} />
           ) : (
             <IdlePreview targets={previewTargets} idea={text} timeZone={timeZone} speaker={speaker} />
           )}
@@ -826,7 +842,7 @@ function HomeWorkspace() {
       {opened.current.has('library') && <ContentLibraryDialog open={dialog === 'library'} onOpenChange={(open) => setDialog(open ? 'library' : null)} value={library} onApply={(value) => void applyLibrary(value)} platformsForFit={Array.from(new Set(targets.map((t) => t.platform)))}
         messageTemplate={messageTemplate ? { name: messageTemplate.name, onRemove: () => setMessageTemplate(null) } : null} />}
       {opened.current.has('channels') && <ChannelBloomDialog open={dialog === 'channels'} onOpenChange={(open) => setDialog(open ? 'channels' : null)} accounts={accounts} folders={folders} selected={destinations.selected} context={destinations.context} onCommit={(result) => { destinations.commit({ accountIds: result.accountIds, context: result.context, platformOnly: [] }); setDialog(null); }} />}
-      <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
+      <PlatformOnlyDialog open={dialog === 'platforms'} onOpenChange={(open) => setDialog(open ? 'platforms' : null)} platforms={draftPlatforms} value={destinations.platformOnly.filter(isDraftable)} onApply={(platforms) => destinations.setPlatformOnly(platforms)} />
       {opened.current.has('language') && <LanguageDialog open={dialog === 'language'} onOpenChange={(open) => setDialog(open ? 'language' : null)} selection={languages.selection} languages={languages} accountLabel={(item) => (item.channelId ? `${item.platform} · ${accounts.find((a) => a.id === item.channelId)?.account ?? 'account'}` : item.platform)} id={ids.language} />}
       {opened.current.has('model') && <ModelDialog open={dialog === 'model'} onOpenChange={(open) => setDialog(open ? 'model' : null)} catalog={models.data} value={choice.dialogValue} onApply={choice.applyDialog} reasoningFor={choice.reasoningFor} auto={choice.autoWriter} credits={Boolean(usage.data?.credits)} id={ids.model} />}
       {opened.current.has('voice') && <VoiceDialog open={dialog === 'voice'} onOpenChange={(open) => setDialog(open ? 'voice' : null)} value={voiceMode} onApply={setVoiceChoice} available={voiceAvailable} sampleCount={voiceSourceIds.length} voiceRevision={voiceRevision} modelLabel={choice.auto ? modelName(choice.option, choice.model) : choice.label} />}
@@ -838,7 +854,7 @@ function HomeWorkspace() {
  * Drafting without a connected account (the existing "drafts only" path) for workspaces that have
  * not connected anything yet: choose the platforms to write for. Connecting an account replaces this.
  */
-function PlatformOnlyDialog({ open, onOpenChange, value, onApply }: { open: boolean; onOpenChange: (open: boolean) => void; value: DraftPlatform[]; onApply: (platforms: DraftPlatform[]) => void }) {
+function PlatformOnlyDialog({ open, onOpenChange, platforms, value, onApply }: { open: boolean; onOpenChange: (open: boolean) => void; platforms: readonly string[]; value: DraftPlatform[]; onApply: (platforms: DraftPlatform[]) => void }) {
   const [staged, setStaged] = useState<DraftPlatform[]>(value);
   useEffect(() => {
     if (open) setStaged(value.length ? value : DEFAULT_TARGETS.map((t) => t.platform));
@@ -848,7 +864,7 @@ function PlatformOnlyDialog({ open, onOpenChange, value, onApply }: { open: bool
       <RafiiDialogContent size='sm' aria-describedby={undefined}>
         <RafiiDialogHeader eyebrow='Channels' title='Where should it' accent='go?' intro='No accounts connected. Drafts only.' />
         <RafiiDialogBody className='flex flex-col gap-2'>
-          {DRAFT_PLATFORMS.map((platform) => {
+          {platforms.map((platform) => {
             const on = staged.includes(platform);
             return (
               <button key={platform} type='button' role='checkbox' aria-checked={on} onClick={() => setStaged((current) => (on ? current.filter((p) => p !== platform) : [...current, platform]))} className={cn('rafii-focus flex min-h-14 items-center gap-3 rounded-[var(--rafii-radius-control)] px-3 text-left', on ? 'rafii-glass-selected' : 'rafii-quiet')}>

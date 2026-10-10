@@ -50,7 +50,8 @@ import { RafiiAvatar } from '@/features/site-agent/rafii-avatar';
 import { isSiteAgentBody } from '@/lib/site-agent/panel-logic';
 import type { SiteAgentBody } from '@/lib/site-agent/types';
 import { ActivityStrip } from './activity-strip';
-import { Composer, DRAFT_PLATFORMS, type ChannelChip, type DraftPlatform } from './composer';
+import { Composer, type ChannelChip, type DraftPlatform } from './composer';
+import { draftableFrom, formatsFor, platformRow, revisionOf, withFormats } from '@/lib/creation/capabilities';
 import type { DeliveryTargetOption } from './delivery-planner';
 import { useChannelLanguages } from './use-channel-languages';
 import { useLiveRegion } from './attachments/attachment-bar';
@@ -225,6 +226,10 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const [learning, setLearning] = useState<(VoiceLearningRequest & { workspaceId: string; conversationId: string; id: string }) | null>(null);
   const languages = useChannelLanguages<DraftPlatform>(['LinkedIn', 'Instagram']);
   const [deliveryPlannerOpen, setDeliveryPlannerOpen] = useState(false);
+  // Creation-capability facet: which platforms and native formats the composer may offer (server-validated per turn).
+  const creation = models.data?.creation;
+  const draftPlatforms = useMemo(() => draftableFrom(creation), [creation]);
+  const [nativeFormats, setNativeFormats] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [voiceChoice, setVoiceChoice] = useState<'neutral' | 'personalized' | null>(null);
   const [imageRequested, setImageRequested] = useState(false);
@@ -242,7 +247,13 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const restoreLanguages = languages.restore;
   useEffect(() => {
     const last = lastAssistant ? bodyOf(lastAssistant).destinations : undefined;
-    if (last && last.length > 0) restoreLanguages(last, DRAFT_PLATFORMS);
+    if (last && last.length > 0) {
+      restoreLanguages(last, draftPlatforms);
+      // The conversation keeps its native formats too, so "draft again" never falls back to the platform default.
+      const formats: Record<string, string> = {};
+      for (const d of last as { platform: string; channelId?: string; format?: string }[]) if (d.format) formats[d.channelId ?? d.platform] = d.format;
+      setNativeFormats(formats);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once per assistant turn
   }, [lastAssistant]);
 
@@ -260,7 +271,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
     const ids = item.kind === 'folder' ? (phase2?.channelFolders?.find((folder) => folder.id === item.id)?.accountIds ?? []) : [item.id];
     for (const id of ids) {
       const channel = phase2?.channels.find((entry) => entry.id === id && !entry.revoked);
-      if (!channel || !(DRAFT_PLATFORMS as readonly string[]).includes(channel.platform)) continue;
+      if (!channel || !draftPlatforms.includes(channel.platform)) continue;
       if (!languages.selection.some((selected) => selected.channelId === id)) languages.toggle({ platform: channel.platform as DraftPlatform, channelId: id });
     }
   };
@@ -292,20 +303,27 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
   const voiceAvailable = voiceSourceIds.length > 0;
   // One chip per platform; the composer expands it into one row per selected account (accountLabel).
-  const chips: ChannelChip[] = DRAFT_PLATFORMS.map((platform) => {
+  const chips: ChannelChip[] = draftPlatforms.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
     return { platform, account: account?.account, state: account?.displayState };
   });
   const deliveryOptions = useMemo<DeliveryTargetOption<DraftPlatform>[]>(
     () =>
-      DRAFT_PLATFORMS.flatMap((platform) => [
+      draftPlatforms.flatMap((platform) => [
         ...channels
           .filter((channel) => channel.platform === platform && !channel.revoked)
           .map((channel) => ({ key: channel.id, platform, channelId: channel.id, account: channel.account, state: channel.displayState })),
         { key: platform, platform, platformOnly: true }
       ]),
-    [channels]
+    [channels, draftPlatforms]
   );
+  const formatRows = languages.selection.map((item) => ({
+    key: item.key,
+    platform: item.platform,
+    account: item.channelId ? channels.find((c) => c.id === item.channelId)?.account : undefined,
+    formats: formatsFor(creation, item.platform),
+    defaultFormat: platformRow(creation, item.platform)?.defaultFormat ?? null
+  }));
   const runOption = run ? choice.options.find((m) => m.id === run.model) : undefined;
   const runModelLabel = run ? shortLabel(runOption, run.model) : models.data ? choice.label : models.isError ? 'Model list unavailable' : 'Loading models…';
   // The composer's picker offers Auto first, named by the writer it resolves to now.
@@ -347,7 +365,8 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   // `requestFields` leaves out the model on Auto (the server resolves the workspace default) and the Auto level.
   // Chat attachments (chat-context SPEC §11.2): the same chip fields go to the estimate, the quote and the turn; quick
   // replies (`chips: false`) and image turns carry none.
-  const turnPayload = (body: string, chips = true) => ({ text: body, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone, ...(chips && attachmentsOn ? attachments.fields : {}) });
+  const capabilityRevision = revisionOf(creation);
+  const turnPayload = (body: string, chips = true) => ({ text: body, destinations: withFormats(languages.destinations, nativeFormats, creation), ...(capabilityRevision ? { capabilityRevision } : {}), ...choice.requestFields, voiceMode, voiceSourceIds: voiceMode === 'personalized' ? voiceSourceIds : [], timeZone, ...(chips && attachmentsOn ? attachments.fields : {}) });
   const estimateRequest = creditRequestFor(turnPayload(text.trim()));
   const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.selection.length > 0 && !imageRequested, { operation: 'turn', conversationId, request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
@@ -712,6 +731,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                               variants={variants}
                               selected={variantIndex}
                               onSelect={setVariantIndex}
+                              isConnected={(platform) => channels.some((c) => c.platform === platform && !c.revoked)}
                               preview={(variant, options) => <DraftPreview {...draftFor(variant)} scale={options?.scale} />}
                             />
                           )}
@@ -789,6 +809,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               hint={imageRequested ? 'Uses 1 media credit' : '⌘↵ to send'}
               accountLabel={(channelId) => channels.find((c) => c.id === channelId)?.account}
               deliveryPlanner={{ open: deliveryPlannerOpen, onOpenChange: setDeliveryPlannerOpen, options: deliveryOptions }}
+              nativeFormats={{ rows: formatRows, value: nativeFormats, onChange: (key, format) => setNativeFormats((current) => ({ ...current, [key]: format })) }}
               slash={{ onPick: (command, args, pick) => { setText(pick.value); if (pick.action === 'run' && command.kind === 'client') void runClientSlash(command, args).then((note) => { if (note) toast(note); }); } }}
               attachments={attachmentsOn ? attachments : undefined}
               attachmentBar={{ conversationId, liveMessage: live.message, snapshot: snapshot.data, owner: user?.id, catalog: models.data?.attachments, creditMode, fixtureWriter, isOwner: access.role === 'owner', onRecentPosts: () => setLearning({ instructions: 'Review my recent Instagram and LinkedIn posts and help me learn how I write.', workspaceId, conversationId, id: crypto.randomUUID() }) }}
