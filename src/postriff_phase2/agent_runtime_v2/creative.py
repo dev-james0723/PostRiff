@@ -366,7 +366,7 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
     left = ctx.remaining()
     if left is not None and left < MIN_IMAGE_SECONDS:
         raise AlphaError("There isn't enough time left in this turn to make an image; ask again and I'll start with it.", 409, code="turn_time")
-    key = "agent-image:" + hashlib.sha256(f"{ctx.trace_id}|{operation}|{prompt}|{args.get('assetId')}|{args.get('index')}|{quality}".encode()).hexdigest()[:40]
+    key = ctx.effect_key(args, "image_" + operation) or "agent-image:" + hashlib.sha256(f"{ctx.trace_id}|{operation}|{prompt}|{args.get('assetId')}|{args.get('index')}|{quality}".encode()).hexdigest()[:40]
     parent = None
     sources = []
     with ctx.workspace() as (cur, _row, principal, member, state):

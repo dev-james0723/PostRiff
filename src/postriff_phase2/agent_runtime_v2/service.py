@@ -88,6 +88,11 @@ class AgentRuntimeService:
 
     # --- turn --------------------------------------------------------------------------------------------------------
     def turn(self, workspace_id, token, payload) -> dict:
+        from .task_engine import turns
+        with turns.admit(self, workspace_id, token, payload):
+            return self._turn(workspace_id, token, payload)
+
+    def _turn(self, workspace_id, token, payload) -> dict:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured turn.", 400)
         from ..site_agent import contracts as site_contracts
@@ -113,6 +118,8 @@ class AgentRuntimeService:
             cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, run_key))
             prior = cur.fetchone()
             if prior:
+                if _engine_on(workspace_id):
+                    _same_turn_request(cur, workspace_id, prior[0], principal, text)
                 return self._stored(cur, workspace_id, prior[0])
             conversation_id = payload.get("conversationId")
             if conversation_id:
@@ -304,6 +311,10 @@ class AgentRuntimeService:
         else:
             answer = f"Left it: {summary}. Nothing was changed." if wants == "dismiss" else f"It wasn't applied (it is {decided['outcome']}). Nothing was changed."
             spoken = answer
+        if _engine_on(workspace_id):
+            from .task_engine import approvals as engine_approvals
+            engine_approvals.record_proposal_decision(self, workspace_id, token, item["proposalId"], decided, wants=wants,
+                                                      surface="voice" if modality == "voice" else "text")
         # A Manager run paused on this proposal is taken off its task first: resolving the step may finish the task, and a
         # finished task keeps no paused model state.
         claimed = self._claim_pending_run(workspace_id, token, conversation_id, item["proposalId"]) if decided["outcome"] == "applied" else None
@@ -320,13 +331,16 @@ class AgentRuntimeService:
         if claimed is not None:
             resumed = self._resume_pending_run(workspace_id, token, conversation_id, item["proposalId"], claimed, run_id=run_id, trace_id=trace_id, modality=modality,
                                                zone=zone, approved=result["changedEntities"])
+            if (claimed[1] or {}).get("_checkpointId"):
+                from .task_engine import checkpoints as engine_checkpoints
+                engine_checkpoints.finish(self.service, self.service.ideas, workspace_id, claimed[0], claimed[1]["_checkpointId"], ok=resumed is not None)
             if resumed is not None:
                 return resumed
         return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace, ask=self._chips_for(text, modality))
 
     def _resolve_task_steps(self, workspace_id, token, conversation_id, proposal_id, outcome, *, verified, outputs=(), reason=None):
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-            plan = task_state.active(cur, workspace_id, conversation_id)
+            plan = _task_waiting_on(cur, workspace_id, conversation_id, proposal_id) if _engine_on(workspace_id) else task_state.active(cur, workspace_id, conversation_id)
             if plan is None:
                 return
             touched = plan.resolve_approval(proposal_id, outcome, self.clock(), verified=verified, outputs=[o for o in outputs if o.get("id")], reason=reason)
@@ -339,7 +353,7 @@ class AgentRuntimeService:
         cancelled_runs = self.cancel_running(workspace_id, token, conversation_id, reason="You asked to cancel.")
         steps = []
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
-            plan = task_state.active(cur, workspace_id, conversation_id)
+            plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas)
             cur.execute("SELECT actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", ((plan.task_id if plan else None), workspace_id))
             owner = (cur.fetchone() or [None])[0]
             if plan is not None and owner == principal:
@@ -347,6 +361,9 @@ class AgentRuntimeService:
                 steps = plan.cancel_open("You asked to cancel.", self.clock())
                 if steps:
                     task_state.save(cur, self.service.ideas, workspace_id, plan)
+                if _engine_on(workspace_id):
+                    from .task_engine import actions as engine_actions
+                    engine_actions.cancel_in_tx(cur, self.service.ideas, workspace_id, plan.task_id, principal, "You asked to cancel.")
             bound = approvals.bind(cur, workspace_id, conversation_id, self.clock())
         dismissed, not_dismissed = None, None
         if "bind" in bound:
@@ -455,12 +472,12 @@ class AgentRuntimeService:
             resolved_chips = chip_refs.resolved_ids(state, {"references": chips["references"], "attachments": []}) + \
                 [{"kind": a.get("kind") or "image", "id": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]
             focus = self._chip_focus(focus, resolved_chips)
-            plan = task_state.active(cur, workspace_id, conversation_id)
+            plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas)
             images = creative.conversation_images(cur, state, workspace_id, conversation_id)
             if plan is not None and _sync_task(self, cur, workspace_id, plan, state):
                 task_state.save(cur, self.service.ideas, workspace_id, plan)
                 plan = plan if plan.status == "running" else None
-            last = task_state.latest(cur, workspace_id, conversation_id) if plan is None else None
+            last = task_state.latest(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas) if plan is None else None
             open_items = approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())
             history = self._history(cur, workspace_id, conversation_id)
             from .live import recent_transcript
@@ -660,6 +677,8 @@ class AgentRuntimeService:
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
                         (conversation_id, workspace_id, principal, model, "deep" if reserve_for == "deep_reasoning" else "standard", digest(context), EPOCH, run_key))
             run_id = cur.fetchone()[0]
+            from .task_engine import turns
+            turns.record(cur, run_id)
             body = {"text": text, "agent": {"modality": modality, "attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments], "traceId": trace_id,
                                             **({"delegationId": str(delegation_id)[:120]} if delegation_id else {}), **({"voiceSessionId": str(live_session)[:80]} if live_session else {})},
                     "siteAgent": {"role": "question", "runId": run_id}}
@@ -687,6 +706,8 @@ class AgentRuntimeService:
                     # The combined plan did not fit a budget stop: admit the turn alone; its view then follows the original rule.
                     reservation = reserve(estimate, None)
                 reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's own ceiling (follow-up chips fit inside it)
+        from .task_engine import turns
+        turns.release()
         return run_id, reservation
 
     def _presentation_allowance(self, workspace_id, text, modality, delegation_id):
@@ -784,7 +805,7 @@ class AgentRuntimeService:
         reservation = None
         try:
             with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-                work = followups.open_work(task_state.active(cur, workspace_id, conversation_id),
+                work = followups.open_work(task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, _principal), ideas=self.service.ideas),
                                            [{"summary": p.get("summary"), "type": p.get("type")} for p in approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())])
             planned = followups.plan(self.cfg, message=ask, answer=result["answerText"], work=work, language=result.get("language"))
             if planned is None:
@@ -964,7 +985,7 @@ class AgentRuntimeService:
             ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed" if status != "cancelled" else "run.cancelled",
                                                                       **({"usage": {k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "billing")}} if status != "cancelled" else {"message": "Stopped."})))
         artifact = {"version": 1, "result": result, "trace": trace}
-        cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s",
+        cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb || CASE WHEN usage ? 'request' THEN jsonb_build_object('request',usage->'request') ELSE '{}'::jsonb END,updated_at=now() WHERE id::text=%s",
                     (status, json.dumps(artifact, ensure_ascii=False, default=str), digest(json.loads(json.dumps(artifact, default=str))), json.dumps(usage, default=str), run_id))
 
     def _stored(self, cur, workspace_id, run_id) -> dict:
@@ -1063,6 +1084,15 @@ class AgentRuntimeService:
     def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None, youtube_provider_context=()):
         if youtube_provider_context:
             return False
+        if _engine_on(workspace_id):
+            # CF-3 §11: the paused run goes to a service-only checkpoint, never to the member-readable run artifact.
+            from .task_engine import checkpoints as engine_checkpoints, store as engine_store
+            task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
+            if task is not None:
+                engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, _interrupted_proposals(interruptions), writer_model=writer_model,
+                                             stored_at=self.clock())
+                return None
+            raise AlphaError("Task checkpoint unavailable.", 503)
         cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (task_id, workspace_id))
         row = cur.fetchone()
         artifact = row[0] or {} if row else {}
@@ -1077,9 +1107,22 @@ class AgentRuntimeService:
         # The writer the person chose travels with the paused run, so drafting after an approval uses it too.
         artifact["pendingRun"] = {"state": state_json, "proposalIds": proposal_ids, "storedAt": self.clock(), "writerModel": writer_model}
         cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
+        from .task_engine import flags as engine_flags, checkpoints as engine_checkpoints, store as engine_store
+        if engine_flags.shadow_for(workspace_id, self.cfg):
+            cur.execute("SAVEPOINT shadow_checkpoint")
+            try:
+                task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
+                if task is not None:
+                    engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, proposal_ids, writer_model=writer_model, stored_at=self.clock())
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT shadow_checkpoint")
+            finally:
+                cur.execute("RELEASE SAVEPOINT shadow_checkpoint")
 
     def _claim_pending_run(self, workspace_id, token, conversation_id, proposal_id):
         """Take the Manager run paused on this proposal off its task: (task id, paused state), or None."""
+        if _engine_on(workspace_id):
+            return _claim_checkpoint(self, workspace_id, token, conversation_id, proposal_id)
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
                         "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
@@ -1228,6 +1271,10 @@ def run_events(runtime: "AgentRuntimeService", workspace_id, token, run_id, curs
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
         found = ideas._events_for(cur, workspace_id, run_id, cursor)
+        if _engine_on(workspace_id):
+            from .task_engine import store
+            if store.load_task(cur, workspace_id, run_id) is not None:
+                found["events"] = _task_events(found["events"])
     return {
         "runId": found["runId"],
         "conversationId": found["conversationId"],
@@ -1243,11 +1290,24 @@ def task_view(runtime: "AgentRuntimeService", workspace_id, token, task_id, curs
     ideas = runtime.service.ideas
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
-        plan = task_state.load(cur, workspace_id, task_id, lock=True)
-        if plan.status == "running" and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
+        plan = task_state.load(cur, workspace_id, task_id, lock=True, ideas=ideas)
+        if not _engine_on(workspace_id) and plan.status == "running" and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
             task_state.save(cur, ideas, workspace_id, plan)
         events = ideas._events_for(cur, workspace_id, task_id, cursor)
-    return {"task": plan.view(), "events": events["events"], "cursor": events["cursor"]}
+        engine = None
+        if _engine_on(workspace_id):
+            from .task_engine import http as engine_http
+            engine = engine_http.engine_block(runtime, cur, workspace_id, task_id, _principal, ideas._member(row))
+            events["events"] = _task_events(events["events"])
+        legacy_view = plan.view()
+        if _engine_on(workspace_id) and plan.created_by != _principal and not ideas._member(row).allows("owner"):
+            for step in legacy_view.get("steps", []):
+                for key in ("outputs", "entities", "approvals", "reason"):
+                    step.pop(key, None)
+    out = {"task": legacy_view, "events": events["events"], "cursor": events["cursor"]}
+    if engine is not None:
+        out["engine"] = engine
+    return out
 
 
 def conversation_task(runtime: "AgentRuntimeService", workspace_id, token, conversation_id) -> dict:
@@ -1255,7 +1315,7 @@ def conversation_task(runtime: "AgentRuntimeService", workspace_id, token, conve
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
         ideas._conversation(cur, workspace_id, conversation_id)
-        plan = task_state.active(cur, workspace_id, conversation_id)
+        plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, _principal), ideas=ideas)
         if plan is not None and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
             task_state.save(cur, ideas, workspace_id, plan)
         images = creative.conversation_images(cur, ideas._state(row), workspace_id, conversation_id)
@@ -1274,6 +1334,9 @@ def decide(runtime: "AgentRuntimeService", workspace_id, token, payload) -> dict
         raise AlphaError("Name the proposal and the decision.", 400)
     decided = approvals.decide(runtime.service, workspace_id, token, conversation_id=payload["conversationId"], message_id=payload["messageId"],
                                proposal_id=payload["proposalId"], digest=payload["digest"], decision=payload["decision"], zone=payload.get("timeZone"))
+    if _engine_on(workspace_id):
+        from .task_engine import approvals as engine_approvals
+        engine_approvals.record_proposal_decision(runtime, workspace_id, token, payload["proposalId"], decided, wants=payload["decision"], surface="panel")
     runtime._resolve_task_steps(workspace_id, token, payload["conversationId"], payload["proposalId"],
                                 decided["outcome"] if payload["decision"] == "apply" else "dismissed", verified=decided["verified"])
     spoken = ("Done, and I checked it in your workspace." if decided["outcome"] == "applied" and decided["verified"]
@@ -1395,3 +1458,94 @@ def voice_choice(payload) -> dict | None:
     if ids is not None and (not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(i, str) and 0 < len(i) <= 80 for i in ids)):
         ids = None
     return {"mode": mode, "sourceIds": list(ids or [])} if (mode or ids) else None
+
+
+# --- durable task engine seams (CF-3; every helper is a no-op unless RAFII_AGENT_TASKS_ENABLED covers the workspace) ----------
+def _engine_on(workspace_id) -> bool:
+    from .task_engine import flags as engine_flags
+    return engine_flags.enabled_for(workspace_id)
+
+
+def _task_actor(workspace_id, principal):
+    """With the engine on, a person's request sees only their own open task (correction 1); off: today's newest task."""
+    return principal if _engine_on(workspace_id) else None
+
+
+def _same_turn_request(cur, workspace_id, run_id, principal, text) -> None:
+    """L1 for turns: a turn key replayed by the same person with the same message returns the stored turn; another person's
+    reuse, or another message, is 409 idempotency_conflict that reveals nothing about the other turn."""
+    from .task_engine import errors as engine_errors
+    from .task_engine import turns
+    cur.execute("SELECT r.actor::text,r.usage->'request',(SELECT m.body->>'text' FROM public.pr_messages m WHERE m.run_id=r.id AND m.role='user' ORDER BY m.seq LIMIT 1) "
+                "FROM public.pr_agent_runs r WHERE r.id::text=%s AND r.workspace_id=%s", (run_id, workspace_id))
+    row = cur.fetchone()
+    if (not row or row[0] != principal or (row[1] is not None and row[1] != turns.fingerprint())
+            or (row[1] is None and row[2] is not None and row[2] != text)):
+        raise engine_errors.error("idempotency_conflict")
+
+
+
+def _interrupted_proposals(interruptions) -> list:
+    ids = []
+    for item in interruptions or []:
+        try:
+            args = json.loads(getattr(item, "arguments", "") or "{}")
+        except ValueError:
+            args = {}
+        if args.get("proposalId"):
+            ids.append(args["proposalId"])
+    return ids
+
+
+def _task_waiting_on(cur, workspace_id, conversation_id, proposal_id):
+    """The running task whose step waits on this proposal, whoever created it (the approval knows its task, fix 11)."""
+    from .task_engine import store
+    approval = store.approval_by_proposal(cur, workspace_id, proposal_id)
+    task = store.load_task(cur, workspace_id, approval["taskId"]) if approval else None
+    return task_state.load(cur, workspace_id, task["taskId"]) if task and task["conversationId"] == conversation_id else None
+
+
+def _claim_checkpoint(runtime: "AgentRuntimeService", workspace_id, token, conversation_id, proposal_id):
+    """The paused run's checkpoint, claimed only by the task creator's own request (correction 2). Another member's decision
+    never resumes the creator's run (the creator gets Continue instead). A legacy pendingRun on the artifact (stored before the
+    engine was on) is adopted the same way: only its own person can take it."""
+    from .task_engine import checkpoints as engine_checkpoints
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+        task_id = engine_checkpoints.find_task_for_proposal(cur, workspace_id, conversation_id, proposal_id)
+        if task_id is not None:
+            claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id)
+            if claimed is None:
+                return None
+            checkpoint_id, payload = claimed
+            from ..youtube.agent_context import KEY
+            if not payload.get("state") or payload.get(KEY):
+                engine_checkpoints.discard(cur, checkpoint_id, "not_resumable")
+                return None
+            return task_id, {**payload, "_checkpointId": checkpoint_id}
+        cur.execute("SELECT id::text,artifact,actor::text FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
+                    "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
+        found = cur.fetchone()
+        if not found or found[2] != principal:
+            return None
+        task_id, artifact = found[0], found[1] or {}
+        from .task_engine import bridge
+        task = bridge.adopt(cur, runtime.service.ideas, workspace_id, task_id)
+        if task is None:
+            return None
+        claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id)
+        if claimed is None:
+            return None
+        checkpoint_id, pending = claimed
+        from ..youtube.agent_context import KEY, sources
+        if not pending.get("state") or pending.get(KEY) or sources(artifact.get("result")):
+            engine_checkpoints.discard(cur, checkpoint_id, "not_resumable")
+            return None
+        return task_id, {**pending, "_checkpointId": checkpoint_id}
+
+
+
+
+def _task_events(events):
+    """Task polling exposes progress only, including events written before adoption."""
+    allowed = {"id", "seq", "type", "stage", "taskId", "stepId", "stepKey", "label", "state", "at", "attempt", "executor", "verdict", "reasonCode", "partial", "version", "origin"}
+    return [{k: v for k, v in event.items() if k in allowed} for event in events]

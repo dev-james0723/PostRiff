@@ -653,6 +653,13 @@ class HostedApplication:
                     location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
+            if path == "/api/cron/agent-tasks" and method == "GET":
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Cron authorization failed.", 401)
+                from .agent_runtime_v2.task_engine import cron as task_cron
+                return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -685,6 +692,10 @@ class HostedApplication:
                             result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
                         except Exception as exc:
                             result['uiRecovery'] = {'status': 'unavailable', 'error': type(exc).__name__}
+                        from .agent_runtime_v2.task_engine import cron as task_cron
+                        task_recovery = task_cron.recover_for_worker(service)
+                        if task_recovery is not None:
+                            result['agentTaskRecovery'] = task_recovery
                         # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
                         try:
                             from .agent_runtime_v2 import ui_metering
@@ -1103,7 +1114,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker" or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

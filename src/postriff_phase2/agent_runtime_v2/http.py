@@ -51,6 +51,16 @@ def handle(app, environ, start_response, service, token, method, parts):
     workspace_id, resource = parts[2], parts[4]
     runtime = runtime_for(service)
     rest = parts[5:]
+    if resource in ("tasks", "approvals"):
+        from .task_engine import http as task_http, flags as task_flags
+        if resource == "tasks" and not rest and method == "GET" and not task_flags.enabled_for(workspace_id, runtime.cfg):
+            with service.repository.transaction(token, workspace_id) as (_cur, row, _principal):
+                from ..permissions import require
+                require(service.ideas._member(row), "read")
+            return app._json(start_response, 200, {"items": [], "engine": "disabled"})
+        response = task_http.handle(app, environ, start_response, runtime, token, method, workspace_id, resource, rest)
+        if response is not None:
+            return response
     if resource == "ui":
         # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
         from . import ui_http

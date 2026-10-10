@@ -119,6 +119,10 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         if spec.effect != contracts.READ:
             ctx.check_cancelled()
         _check_schema(tool.schema, args)
+        from .task_engine.bridge import dispatch_bound
+        dispatched = dispatch_bound(ctx, tool, args)
+        if dispatched is not None:
+            return dispatched
         from . import thinking_state
         op = thinking_state.tool_op(spec.name)
         if op:

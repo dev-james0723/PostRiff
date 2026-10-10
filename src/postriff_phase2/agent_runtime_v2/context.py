@@ -127,6 +127,18 @@ class RafiiRunContext:
     voice_choice: dict | None = None          # {mode, sourceIds} the person chose for drafting; never swapped by the model
     clients: list = field(default_factory=list)  # AsyncOpenAI clients this run created, closed inside its own event loop
 
+    def effect_key(self, args, capability_id=None):
+        """Stable key for a server-bound step; None preserves an unbound caller's legacy key."""
+        binding = getattr(self, "step_binding", None)
+        if not isinstance(binding, dict) or not binding.get("effectKey"):
+            return None
+        if binding.get("kind") != "model":
+            return binding["effectKey"]
+        from .task_engine import model
+        clean = {k: v for k, v in args.items() if k != "stepId"}
+        suffix = model.sha256(str(capability_id or binding.get("capabilityId") or "") + "|" + model.input_digest(capability_id or "", clean))[:16]
+        return binding["effectKey"] + ":" + suffix
+
     # --- workspace access ------------------------------------------------------------------------------------------
     def remaining(self) -> float | None:
         """Seconds left in this turn's budget (None when the turn has no deadline, as in unit tests)."""
