@@ -24,7 +24,9 @@
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh",
     "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
-    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all"
+    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
+    "test:workflow-recipes:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --core",
+    "e2e:workflow-recipes:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --browser"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

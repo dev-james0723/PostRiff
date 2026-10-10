@@ -13,6 +13,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--workflow-recipes',action='store_true',help='Cloud-only native recipe policy/run/report/pause/revoke acceptance')
     parser.add_argument('--library-metadata',action='store_true',help='Native Library metadata preview/apply/Undo on synthetic assets')
     parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
     parser.add_argument('--agent-tasks',action='store_true',help='Task Center UI contract acceptance against synthetic task responses and disposable identity')
@@ -26,6 +27,8 @@ def main():
     parser.add_argument('--pg-port',type=int,default=55479)
     parser.add_argument('--evidence-dir',type=Path,default=OUT)
     args=parser.parse_args()
+    if args.workflow_recipes and (sys.platform != 'linux' or os.environ.get('CI') != 'true' or args.pg_port != 55479):
+        parser.error('Recipe acceptance requires cloud Linux CI and disposable port 55479')
     args.library = args.library or args.library_metadata
     if args.agent_tasks and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
         parser.error('Task Center browser validation runs on cloud Linux CI only')
@@ -39,7 +42,7 @@ def main():
     if args.tour and not args.founder:parser.error('--tour requires --founder')
     if args.customers and (not args.founder or args.tour):parser.error('--customers requires --founder and cannot run with --tour')
     # Next bakes rewrites into the build. Runtime flags alone cannot change which API a test reaches.
-    manifest=ROOT/('web/.next/routes-manifest.json' if args.library or args.agent_tasks else '.codex/consumer-ready/web/.next/routes-manifest.json')
+    manifest=ROOT/('web/.next/routes-manifest.json' if args.library or args.agent_tasks or args.workflow_recipes else '.codex/consumer-ready/web/.next/routes-manifest.json')
     try:
         rewrites=json.loads(manifest.read_text())['rewrites']
         if isinstance(rewrites,dict):rewrites=[item for group in rewrites.values() for item in group]
@@ -72,14 +75,16 @@ def main():
     if args.library:
         env['RAFII_LIBRARY_EVIDENCE']=str(out)
         env['PLAYWRIGHT_MODULE']=str(ROOT/'web/node_modules/playwright')
+    if args.workflow_recipes:
+        env.update(CI='true',RAFII_RECIPE_EVIDENCE=str(out),PLAYWRIGHT_MODULE=str(ROOT/'web/node_modules/playwright'))
     if args.agent_tasks:
         env['RAFII_WEB_URL']=f'http://127.0.0.1:{args.web_port}'
     processes=[];logs=[]
     try:
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
-        fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
+        fixtures=['--workflow-recipes-fixture'] if args.workflow_recipes else ['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
         commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
-        if args.library or args.agent_tasks:
+        if args.library or args.agent_tasks or args.workflow_recipes:
             commands[1]=('frontend',['npm','--prefix','web','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])
         for name,command in commands:
             log=(out/f'durable-{name}.log').open('w');logs.append(log)
@@ -98,7 +103,7 @@ def main():
                 code=subprocess.call(['node','web/tests/task-center-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
                 if code:return code
             return 0
-        test = 'library-metadata-browser.cjs' if args.library_metadata else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        test = 'workflow-recipes-browser.cjs' if args.workflow_recipes else 'library-metadata-browser.cjs' if args.library_metadata else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal

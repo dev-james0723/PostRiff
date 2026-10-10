@@ -183,6 +183,7 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
                 {step.nextAttemptAt && <time className='mt-2 block text-xs text-muted-foreground'>{format(step.nextAttemptAt)}</time>}
                 <div className='mt-3 flex flex-wrap items-center gap-2'>
                   {safeTaskHref(step.delegate?.href) && <Link className='text-sm underline underline-offset-4' href={safeTaskHref(step.delegate?.href)!}>{t('result')}</Link>}
+                  {step.outputs?.filter(ref => ref.type === 'workflow_report' && changedResourceHref(ref)).map(ref => <Link key={ref.id} className='text-sm underline underline-offset-4' href={changedResourceHref(ref)!}>{t('result')}</Link>)}
                   {step.can.retry && <Button variant='quiet' disabled={blocked} onClick={() => ask({ kind: 'retry', taskId: task.taskId, version: task.version, step: { stepKey: step.stepKey, generation: step.generation, undo: null } })}>{t('retry')}</Button>}
                   {step.can.undo && step.undo && Date.parse(step.undo.undoUntil) > Date.now() && <Button variant='quiet' disabled={blocked} onClick={() => ask({ kind: 'undo', taskId: task.taskId, version: task.version, step: { stepKey: step.stepKey, generation: step.generation, undo: step.undo } })}>{t('undo')}</Button>}
                 </div>

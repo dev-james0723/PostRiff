@@ -71,7 +71,7 @@ class RecipesPG(unittest.TestCase):
             return runner.admit(cur,self.domain,self.w,self.actor,fresh,self.now,manual_key=key or uuid.uuid4().hex)
 
     def drive(self,task):
-        return executor.drive_inline(self.runtime,self.w,self.token,self.actor,task['taskId'],actor_kind='autopilot',seconds=20,max_steps=1)
+        return executor.drive_inline(self.runtime,self.w,self.token,self.actor,task['taskId'],actor_kind='autopilot',seconds=90,max_steps=1)
 
     def upload(self,**extra):
         ident=uuid.uuid4().hex
@@ -97,13 +97,14 @@ class RecipesPG(unittest.TestCase):
     def test_02_actual_read_stores_private_report_and_content_free_task_receipt(self):
         asset=self.upload();r=self.recipe();t=self.admit(r);self.drive(t)
         state,report=self.one('SELECT t.state,r.report FROM public.pr_agent_tasks t JOIN public.pr_workflow_recipe_runs r ON r.task_id=t.id WHERE t.id=%s',(t['taskId'],))
-        self.assertEqual(state,'completed');self.assertEqual(report['items'][0]['assetId'],asset)
+        self.assertEqual(state,'completed',self.one('SELECT state,reason_code,reason FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)));self.assertEqual(report['items'][0]['assetId'],asset)
         self.assertNotIn('FILE CONTENT',json.dumps(report));self.assertEqual(report['providerRequests'],0)
         self.assertEqual(report['items'][0]['title'],'Readable title')
         steps=self.one('SELECT outputs FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],))[0]
         self.assertNotIn('Readable title',json.dumps(steps))
         run=self.one('SELECT id::text FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0]
         self.assertEqual(self.domain.report(self.w,self.token,run)['report'],report)
+        self.assertEqual(steps,[{'type':'workflow_report','id':run}])
         self.drive(t);self.assertEqual(self.one('SELECT count(*) FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0],1)
 
     def test_03_duplicate_trigger_one_task(self):
@@ -198,6 +199,93 @@ class RecipesPG(unittest.TestCase):
         self.assertIsNone(self.one('SELECT report FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0])
         self.now+=86401
         with self.assertRaises(AlphaError):self.admit(r)
+
+    def test_16_completed_report_hides_after_source_revoke_but_history_remains(self):
+        self.upload();r=self.recipe();t=self.admit(r);self.drive(t)
+        run=self.one('SELECT id::text FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0]
+        self.assertIsNotNone(self.domain.report(self.w,self.token,run)['report'])
+        self.revoke()
+        with self.assertRaises(AlphaError) as caught:self.domain.report(self.w,self.token,run)
+        self.assertEqual(caught.exception.code,'agent_permission_revoked')
+        self.assertEqual(self.domain.list(self.w,self.token)['runs'][0]['taskId'],t['taskId'])
+
+    def test_17_actual_performance_report_preserves_missing_readings(self):
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            state.setdefault('phase2',{}).setdefault('channels',[]).append({'id':'recipe-account','platform':'linkedin','account':'Stored account'})
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),self.w))
+        r=self.recipe(templateId='weekly_performance',connectionId='recipe-account');t=self.admit(r);self.drive(t)
+        status,report=self.one('SELECT t.state,r.report FROM public.pr_agent_tasks t JOIN public.pr_workflow_recipe_runs r ON r.task_id=t.id WHERE t.id=%s',(t['taskId'],))
+        self.assertEqual(status,'completed',self.one('SELECT state,reason_code,reason FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)));self.assertEqual(report['kind'],'performance');self.assertEqual(report['state'],'empty')
+        self.assertEqual(report['data']['posts'],[]);self.assertIn('Unavailable is never 0',report['coverage']['note']);self.assertEqual(report['providerRequests'],0)
+
+    def test_18_daily_quota_rolls_over_in_configured_zone(self):
+        r=self.recipe(actionsPerDay=1,actionsTotal=3,expiresAt=self.now+3*86400);t=self.admit(r);self.drive(t)
+        with self.assertRaises(AlphaError):self.admit(r)
+        self.now+=86400
+        second=self.admit(r);self.assertNotEqual(second['taskId'],t['taskId'])
+
+    def test_19_claim_then_revoke_cannot_read_or_write_report(self):
+        r=self.recipe();t=self.admit(r)
+        with store.service_tx(self.service,self.w) as cur:
+            claim=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=self.actor,task_id=t['taskId'],seconds_left=120,owner=executor.lease_owner('inline'),actor_kind='autopilot',config=self.cfg)
+        self.assertIsInstance(claim,executor.Claim)
+        self.domain.stop(self.w,self.token,r['id'],{'expectedVersion':r['version'],'status':'paused'})
+        executor.execute(self.runtime,claim,token=self.token,seconds_left=120)
+        self.assertIsNone(self.one('SELECT report FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0])
+
+    def test_20_weekly_due_dedupes_calendar_occurrence(self):
+        r=self.recipe(planningDay=0,planningHour=0)
+        with store.service_tx(self.service,self.w) as cur:
+            task=runner.admit(cur,self.domain,self.w,self.actor,load(cur,self.w,self.actor,r['id']),self.now)
+        self.assertIsNotNone(task);self.drive(task)
+        with store.service_tx(self.service,self.w) as cur:
+            repeated=runner.admit(cur,self.domain,self.w,self.actor,load(cur,self.w,self.actor,r['id']),self.now)
+        self.assertEqual(task['taskId'],repeated['taskId']);self.assertFalse(repeated['recipeAdmissionCreated'])
+
+    def test_21_background_executor_uses_same_recipe_policy_and_real_report(self):
+        r=self.recipe();t=self.admit(r)
+        with store.service_tx(self.service,self.w) as cur:
+            claim=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='cron',principal=None,task_id=t['taskId'],seconds_left=120,owner=executor.lease_owner('cron'),config=self.cfg)
+        self.assertIsInstance(claim,executor.Claim)
+        executor.execute(self.runtime,claim,seconds_left=120)
+        self.assertEqual(self.one('SELECT state FROM public.pr_agent_tasks WHERE id=%s',(t['taskId'],))[0],'completed')
+        self.assertIsNotNone(self.one('SELECT report FROM public.pr_workflow_recipe_runs WHERE task_id=%s',(t['taskId'],))[0])
+
+    def test_22_notification_none_records_one_event_without_delivery(self):
+        from postriff_phase2.coworker import flags as notification_flags
+        from postriff_phase2.notifications.service import NotificationService
+        prior=notification_flags._values
+        notification_flags.attach({'RAFII_NOTIFICATIONS_V2_ENABLED':'1'});self.addCleanup(notification_flags.attach,prior)
+        self.service.notifications=NotificationService(self.service)
+        r=self.recipe(notificationPolicy='none');t=self.admit(r);self.drive(t)
+        notifications.scan(self.runtime)
+        count=self.one('SELECT count(*),count(d.id) FROM public.pr_notification_events e LEFT JOIN public.pr_notification_deliveries d ON d.event_id=e.id WHERE e.workspace_id=%s AND e.entity_id=%s',(self.w,t['taskId']))
+        self.assertEqual(count,(1,0))
+        notifications.scan(self.runtime)
+        self.assertEqual(self.one('SELECT count(*) FROM public.pr_notification_events WHERE workspace_id=%s AND entity_id=%s',(self.w,t['taskId']))[0],1)
+
+
+
+    def test_23_populated_performance_scope_and_unavailable_metrics(self):
+        from postriff_phase2 import insights
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            phase=state.setdefault('phase2',{})
+            phase.setdefault('channels',[]).extend([{'id':ident,'platform':'threads','account':ident} for ident in ('recipe-account','foreign-account')])
+            for account,job in (('recipe-account','recipe-post'),('foreign-account','foreign-post')):
+                phase.setdefault('jobs',[]).append({'id':job,'state':'verified','providerReference':job,'publishedAt':self.now-2*86400,
+                    'manifest':{'channelId':account,'platform':'threads','payload':{'language':'en'},'contentType':{'id':'text'}}})
+                insights.record_observations(db.cursor(),self.w,account,'threads',job,job,{'views':123,'likes':0},'synthetic://stored-metrics',self.now-86400,read_offset='24h',period_start=self.now-2*86400)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),self.w))
+        r=self.recipe(templateId='weekly_performance',connectionId='recipe-account');t=self.admit(r);self.drive(t)
+        status,report=self.one('SELECT t.state,r.report FROM public.pr_agent_tasks t JOIN public.pr_workflow_recipe_runs r ON r.task_id=t.id WHERE t.id=%s',(t['taskId'],))
+        self.assertEqual(status,'completed',self.one('SELECT state,reason_code,reason FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)))
+        posts=report['data']['posts'];self.assertEqual(len(posts),1);self.assertEqual(posts[0]['jobId'],'recipe-post')
+        self.assertEqual(posts[0]['metrics']['views']['value'],123);self.assertEqual(posts[0]['metrics']['likes']['value'],0)
+        self.assertIsNone(posts[0]['metrics']['replies']['value']);self.assertEqual(posts[0]['metrics']['replies']['availability'],'unavailable')
+        self.assertEqual(posts[0]['cohort']['account'],'recipe-account');self.assertNotIn('foreign-post',json.dumps(report))
+        self.assertEqual(report['providerRequests'],0);self.assertEqual(report['costUsdMicro'],0)
 
 
 if __name__=='__main__':unittest.main()

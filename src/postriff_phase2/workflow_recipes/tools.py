@@ -4,7 +4,7 @@ import json
 from postriff_alpha.domain import AlphaError
 from ..agent_runtime_v2 import contracts
 from ..agent_runtime_v2.tool_adapter import register
-from ..agent_runtime_v2.task_engine import model, receipts, store
+from ..agent_runtime_v2.task_engine import model, store
 from . import catalog, reports
 from .service import enabled, ready, scope
 
@@ -20,8 +20,10 @@ SCHEMA = {'recipeId': {'type': 'string', 'maxLength': 32, 'required': True},
 
 
 def _execute(ctx, args, name, reader):
-    binding = receipts.binding(ctx)
-    if (not binding or not enabled(ctx.workspace_id, ctx.config) or binding.get('modelCall')
+    # READ steps have no effect key, so the mutation receipt helper intentionally
+    # returns no binding. Use the server task binding; core E1/E2 validates its lease.
+    binding = getattr(ctx, 'step_binding', None)
+    if (not isinstance(binding, dict) or not binding or not enabled(ctx.workspace_id, ctx.config) or binding.get('modelCall')
             or binding.get('workspaceId') != ctx.workspace_id or binding.get('principal') != ctx.principal
             or binding.get('inputDigest') != model.input_digest(name, args)):
         raise AlphaError('This read needs its active recipe task.', 403, code='agent_permission_denied')
@@ -41,13 +43,15 @@ def _execute(ctx, args, name, reader):
         if run[1] is None:
             scope(cur, ctx.workspace_id, args, state)
             report = reader(ctx.service, cur, ctx.workspace_id, principal, member, state, row, args, ctx.now())
-            if len(json.dumps(report).encode()) > 95000:
+            serialized = json.dumps(report, ensure_ascii=False, allow_nan=False)
+            report = json.loads(serialized)  # native tuples and JSON arrays have one persisted representation
+            if len(serialized.encode()) > 95000:
                 raise AlphaError('This report exceeds the saved report bound. Narrow its scope.', 413)
-            cur.execute('UPDATE public.pr_workflow_recipe_runs SET report=%s::jsonb,completed_at=now() WHERE id=%s AND report IS NULL', (json.dumps(report), run[0]))
+            cur.execute('UPDATE public.pr_workflow_recipe_runs SET report=%s::jsonb,completed_at=now() WHERE id=%s AND report IS NULL', (serialized, run[0]))
             cur.execute('SELECT report FROM public.pr_workflow_recipe_runs WHERE id=%s', (run[0],))
             if cur.fetchone()[0] != report:
                 raise AlphaError('The stored report could not be verified.', 409)
-        return {'ok': True, 'verified': True, 'reviewId': run[0], 'checks': [{'name': 'stored_recipe_report_verified', 'ok': True}], 'providerRequests': 0, 'costUsdMicro': 0}
+        return {'ok': True, 'verified': True, 'recipeReportId': run[0], 'checks': [{'name': 'stored_recipe_report_verified', 'ok': True}], 'providerRequests': 0, 'costUsdMicro': 0}
 
 
 def _spec(name, domains):

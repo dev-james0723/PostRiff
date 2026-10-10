@@ -589,6 +589,14 @@
   "tool.library_metadata_apply": {
    "en": "Apply reviewed Library details",
    "zh-Hant": "套用已審閱的資料庫詳細資料"
+  },
+  "tool.workflow_performance_review": {
+   "en": "Review stored performance",
+   "zh-Hant": "檢視已儲存的成效"
+  },
+  "tool.workflow_library_review": {
+   "en": "Review Library metadata",
+   "zh-Hant": "檢視素材庫中繼資料"
   }
  },
  "providers": {

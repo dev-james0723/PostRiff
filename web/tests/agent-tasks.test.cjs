@@ -23,6 +23,9 @@ test('Changed resources open supported native destinations without inventing ass
   assert.equal(model.changedResourceHref({ type: 'source', id: 'source-1' }), '/app/ideas?source=source-1');
   assert.equal(model.changedResourceHref({ type: 'library_asset', id: '../private' }), null);
   assert.equal(model.changedResourceHref({ type: 'unknown', id: 'safe' }), null);
+  const report = '12345678-1234-4234-8234-123456789012';
+  assert.equal(model.changedResourceHref({ type: 'workflow_report', id: report }), '/app/automations?recipeReport=' + report);
+  assert.equal(model.changedResourceHref({ type: 'workflow_report', id: 'not-a-report' }), null);
 });
 test('Approval preview preserves long text and marks omitted or empty summaries incomplete', () => {
   const body = 'x'.repeat(12000);

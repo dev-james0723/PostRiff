@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
@@ -31,6 +32,12 @@ function RecipesPanel() {
   const [report, setReport] = useState<RecipeReport | null>(null);
   const keys = useRef(new Map<string, string>());
   const data = query.data;
+  const params = useSearchParams();
+  const reportId = params.get('recipeReport') ?? '';
+  const [dismissedReport, setDismissedReport] = useState('');
+  const linkedReport = useQuery({ queryKey: ['workflow-recipe-report', w, reportId], queryFn: () => api.workflowRecipeReport(w, reportId),
+    enabled: Boolean(data && /^[0-9a-f-]{32,36}$/.test(reportId) && reportId !== dismissedReport), retry: false });
+  const displayedReport = report ?? (reportId !== dismissedReport ? linkedReport.data : null);
   async function act(name: string, fn: (key: string) => Promise<unknown>) {
     if (busy) return;
     setBusy(true); setError(null); setFreshSignIn(false);
@@ -69,7 +76,7 @@ function RecipesPanel() {
         <p className='text-xs text-muted-foreground'>{template?.preconditions.join('. ')}. {template?.approvalPolicy}</p>
         {recipe.policyId && <details className='text-xs'><summary className='cursor-pointer'>Policy audit</summary><p className='mt-2 break-all'>Policy {recipe.policyId} · recipe v{recipe.version} · template v{template?.version}. {recipe.usedOperations ?? 'Unavailable'} operations reserved.</p></details>}
         {recipe.nextAttemptAt && <p className='text-sm'>After errors, new runs wait until {date(recipe.nextAttemptAt)}. {recipe.consecutiveFailures} consecutive failures.</p>}
-        {recipe.status !== 'active' && recipe.status !== 'revoked' && <label className='flex gap-2 text-sm'><input type='checkbox' className='mt-1' checked={reviewed === recipe.id} onChange={e => setReviewed(e.target.checked ? recipe.id : null)} />I reviewed these exact steps, scope, limits, expiry and notification settings.</label>}
+        {recipe.status !== 'active' && recipe.status !== 'revoked' && <label className='flex gap-2 text-sm'><input aria-label='I reviewed these exact steps, scope, limits, expiry and notification settings.' type='checkbox' className='mt-1' checked={reviewed === recipe.id} onChange={e => setReviewed(e.target.checked ? recipe.id : null)} />I reviewed these exact steps, scope, limits, expiry and notification settings.</label>}
         <div className='flex flex-wrap gap-2'>
           {recipe.status !== 'revoked' && <Button size='sm' variant='outline' disabled={busy} onClick={() => setEditing({ recipe, settings: recipe.config })}>Edit settings</Button>}
           {recipe.status !== 'active' && recipe.status !== 'revoked' && <Button size='sm' disabled={busy || !data.explicitPermissions || reviewed !== recipe.id} onClick={() => void act('enable:' + recipe.id + ':' + recipe.version, key => api.enableWorkflowRecipe(w, recipe.id, recipe.version, data.permissionToken, key))}>Enable limited Autopilot</Button>}
@@ -79,7 +86,8 @@ function RecipesPanel() {
       </article>;
     })}</div>
     {!!data.runs.length && <div className='space-y-2'><div className='flex items-center gap-3'><h3 className='font-medium'>Recent recipe runs</h3><button className='text-sm underline' onClick={() => void query.refetch()}>Refresh</button></div><ul className='space-y-2'>{data.runs.map(run => <li key={run.id} className='flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm'><span>{date(run.createdAt)} · {run.state}</span><Link className='underline' href={'/app/tasks?task=' + run.taskId}>Open task</Link>{run.hasReport && <button className='underline' disabled={busy} onClick={() => void act('report:' + run.id, async () => setReport(await api.workflowRecipeReport(w, run.id)))}>View report</button>}</li>)}</ul></div>}
-    {report && <ReportView value={report} close={() => setReport(null)} />}
+    {linkedReport.error && <p role='alert' className='text-sm'>{linkedReport.error instanceof Error ? linkedReport.error.message : 'Report unavailable.'}</p>}
+    {displayedReport && <ReportView value={displayedReport} close={() => { setReport(null); setDismissedReport(reportId); }} />}
   </section>;
 }
 
@@ -94,14 +102,14 @@ function RecipeEditor({ value, data, busy, onSave, onClose }: { value: RecipeSet
   function change<K extends keyof RecipeSettings>(key: K, value: RecipeSettings[K]) { set(s => ({ ...s, [key]: value })); }
   return <form className='space-y-4 rounded-lg border bg-muted/20 p-4' aria-label='Recipe settings' onSubmit={e => { e.preventDefault(); onSave(Object.fromEntries(['templateId', 'name', 'trigger', 'planningDay', 'planningHour', 'timeZone', 'connectionId', 'collectionId', 'expiresAt', 'actionsPerDay', 'actionsTotal', 'usdMicroPerDay', 'notificationPolicy'].map(key => [key, settings[key as keyof RecipeSettings]])) as RecipeSettings); }}>
     <div className='grid gap-4 sm:grid-cols-2'><label className='space-y-1 text-sm'>Template<select className={field} value={settings.templateId} onChange={e => { const id = e.target.value as RecipeSettings['templateId']; set(s => ({ ...s, templateId: id, name: data.templates.find(t => t.id === id)!.name, trigger: 'weekly', connectionId: id === 'weekly_performance' ? data.connections[0]?.id ?? null : null, collectionId: null })); }}>{data.templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-      <label className='space-y-1 text-sm'>Name<input className={field} maxLength={80} required value={settings.name} onChange={e => change('name', e.target.value)} /></label>
+      <label className='space-y-1 text-sm'>Name<input aria-label='Name' className={field} maxLength={80} required value={settings.name} onChange={e => change('name', e.target.value)} /></label>
       {settings.templateId === 'weekly_performance' ? <label className='space-y-1 text-sm'>Connected account<select className={field} required value={settings.connectionId ?? ''} onChange={e => change('connectionId', e.target.value)}><option value=''>Choose an account</option>{data.connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : <label className='space-y-1 text-sm'>Library scope<select className={field} value={settings.collectionId ?? ''} onChange={e => change('collectionId', e.target.value || null)}><option value=''>Whole Library</option>{data.collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
       <label className='space-y-1 text-sm'>Trigger<select className={field} value={settings.trigger} onChange={e => change('trigger', e.target.value as RecipeSettings['trigger'])}>{template.triggers.map(t => <option key={t} value={t}>{t === 'weekly' ? 'Weekly' : 'New file uploads'}</option>)}</select></label>
-      {settings.trigger === 'weekly' && <><label className='space-y-1 text-sm'>Day<select className={field} value={settings.planningDay} onChange={e => change('planningDay', Number(e.target.value))}>{days.map((day, i) => <option value={i} key={day}>{day}</option>)}</select></label><label className='space-y-1 text-sm'>Hour (0–23)<input className={field} required type='number' min={0} max={23} value={settings.planningHour} onChange={e => change('planningHour', Number(e.target.value))} /></label></>}
-      <label className='space-y-1 text-sm'>Time zone<input className={field} required maxLength={64} value={settings.timeZone} onChange={e => change('timeZone', e.target.value)} /></label>
-      <label className='space-y-1 text-sm'>Expires (UTC, within 30 days)<input className={field} type='datetime-local' required value={new Date(settings.expiresAt * 1000).toISOString().slice(0, 16)} onChange={e => { if (e.target.value) change('expiresAt', Date.parse(e.target.value + 'Z') / 1000); }} /></label>
-      <label className='space-y-1 text-sm'>Operations per day<input className={field} required type='number' min={1} max={5} value={settings.actionsPerDay} onChange={e => change('actionsPerDay', Number(e.target.value))} /></label>
-      <label className='space-y-1 text-sm'>Total operations<input className={field} required type='number' min={1} max={50} value={settings.actionsTotal} onChange={e => change('actionsTotal', Number(e.target.value))} /></label>
+      {settings.trigger === 'weekly' && <><label className='space-y-1 text-sm'>Day<select className={field} value={settings.planningDay} onChange={e => change('planningDay', Number(e.target.value))}>{days.map((day, i) => <option value={i} key={day}>{day}</option>)}</select></label><label className='space-y-1 text-sm'>Hour (0–23)<input aria-label='Hour (0–23)' className={field} required type='number' min={0} max={23} value={settings.planningHour} onChange={e => change('planningHour', Number(e.target.value))} /></label></>}
+      <label className='space-y-1 text-sm'>Time zone<input aria-label='Time zone' className={field} required maxLength={64} value={settings.timeZone} onChange={e => change('timeZone', e.target.value)} /></label>
+      <label className='space-y-1 text-sm'>Expires (UTC, within 30 days)<input aria-label='Expires (UTC, within 30 days)' className={field} type='datetime-local' required value={new Date(settings.expiresAt * 1000).toISOString().slice(0, 16)} onChange={e => { if (e.target.value) change('expiresAt', Date.parse(e.target.value + 'Z') / 1000); }} /></label>
+      <label className='space-y-1 text-sm'>Operations per day<input aria-label='Operations per day' className={field} required type='number' min={1} max={5} value={settings.actionsPerDay} onChange={e => change('actionsPerDay', Number(e.target.value))} /></label>
+      <label className='space-y-1 text-sm'>Total operations<input aria-label='Total operations' className={field} required type='number' min={1} max={50} value={settings.actionsTotal} onChange={e => change('actionsTotal', Number(e.target.value))} /></label>
       <label className='space-y-1 text-sm'>In-app notifications<select className={field} value={settings.notificationPolicy} onChange={e => change('notificationPolicy', e.target.value as RecipeSettings['notificationPolicy'])}><option value='none'>None</option><option value='failures_and_approvals'>Failures and approval requests</option><option value='all'>All task outcomes</option></select></label>
     </div><p className='text-sm'>{template.triggerNote} Cost ceiling: $0. Editing pauses any previous policy; inspect and enable the new version separately.</p><div className='flex gap-2'><Button disabled={busy} type='submit'>Save for review</Button><Button type='button' variant='outline' disabled={busy} onClick={onClose}>Cancel</Button></div>
   </form>;

@@ -18,6 +18,7 @@ export interface TaskStep {
   stepKey: string; label: string; state: TaskState; capabilityId: string | null; riskClass: 'R0' | 'R1' | 'R2' | 'R3';
   attempts: number; maxAttempts: number; generation: number; verified: boolean; reason: string | null;
   reasonCode: string | null; waitingOn: string[]; nextAttemptAt: string | null;
+  outputs?: { type: string; id: string }[];
   delegate: { type: string; state: string; href: string | null } | null;
   undo: { compensationId: string; undoUntil: string } | null; can: { retry: boolean; undo: boolean };
 }

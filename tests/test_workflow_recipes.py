@@ -1,7 +1,9 @@
 """Bounded template validation and content-free notification decisions."""
+import copy
 import time
 import unittest
 from unittest.mock import Mock
+from types import SimpleNamespace
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.workflow_recipes import catalog
 from postriff_phase2.agent_runtime_v2.task_engine.notifications import recipe_baseline
@@ -33,6 +35,31 @@ class RecipeRules(unittest.TestCase):
         cur=Mock()
         self.assertFalse(recipe_baseline(cur,{'origin':'chat'}));cur.execute.assert_not_called()
         self.assertTrue(recipe_baseline(cur,{**task,'autopilotPolicyId':None}));cur.execute.assert_not_called()
+
+
+class TaskServiceCopy(unittest.TestCase):
+    def test_cron_service_copy_preserves_creator_repository(self):
+        from postriff_phase2.agent_runtime_v2.task_engine.executor import _ActingService
+        base = SimpleNamespace(repository=object(), marker=object())
+        creator_repository = object()
+        acting = _ActingService(base, creator_repository)
+        copied = copy.copy(acting)
+        self.assertIs(copied.repository, creator_repository)
+        self.assertIs(copied.marker, base.marker)
+        copied.repository = object()
+        self.assertIs(acting.repository, creator_repository)
+        self.assertIs(copied._service, base)
+
+    def test_spend_bound_service_copy_preserves_bound_ledger(self):
+        from postriff_phase2.agent_runtime_v2.task_engine.spend import bind_service
+        base = SimpleNamespace(repository=object(), ideas=SimpleNamespace(), ledger=object())
+        ctx = SimpleNamespace(service=base, step_binding={'effectKey':'test-effect'})
+        bind_service(ctx)
+        copied = copy.copy(ctx.service)
+        self.assertIs(copied.repository, base.repository)
+        self.assertIs(copied.ledger, ctx.service.ledger)
+        self.assertIs(copied.ideas.ledger, copied.ledger)
+        self.assertIsNot(copied.ledger, base.ledger)
 
 
 if __name__=='__main__':unittest.main()

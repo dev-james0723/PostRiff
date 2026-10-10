@@ -46,5 +46,5 @@ def library(service, cur, w, principal, _member, _state, _row, inputs, now):
                       'collections': list(record.get('collections') or [])[:10], 'href': '/app/library?asset=' + ident})
     return {'kind': 'library', 'state': 'partial' if truncated else 'available' if items else 'empty', 'asOf': now,
             'items': items, 'truncated': truncated, 'included': len(items), 'total': None if truncated else len(items),
-            'note': 'Bounded metadata review; no file contents were read or sent to a model. ' + ('More assets exist outside this report.' if truncated else 'This report covers the selected scope at this time.'),
+            'note': 'Only bounded metadata is saved in this report; no file contents are sent to a model. ' + ('More assets exist outside this report.' if truncated else 'This report covers the selected scope at this time.'),
             'providerRequests': 0, 'costUsdMicro': 0}

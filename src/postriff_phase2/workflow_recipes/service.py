@@ -116,7 +116,7 @@ class Recipes:
                 policy = policies.get(recipe['policyId'])
                 recipe['policyCurrent'] = bool(policy and recipe['status'] == 'active' and policy.constraints == policy_constraints(recipe))
                 recipe['usedOperations'] = int((policy.usage or {}).get('actionsTotal', 0)) if policy else None
-            cur.execute('SELECT replace(id::text,'-',''),name FROM public.pr_library_collections WHERE workspace_id=%s ORDER BY name LIMIT 100', (w,))
+            cur.execute("SELECT replace(id::text,'-',''),name FROM public.pr_library_collections WHERE workspace_id=%s ORDER BY name LIMIT 100", (w,))
             collections = [{'id': i, 'name': name} for i, name in cur.fetchall()]
             cur.execute("SELECT replace(r.id::text,'-',''),replace(r.recipe_id::text,'-',''),r.task_id::text,t.state,t.reason_code,(r.report IS NOT NULL),extract(epoch from r.created_at) FROM public.pr_workflow_recipe_runs r JOIN public.pr_agent_tasks t ON t.id=r.task_id WHERE r.workspace_id=%s AND r.created_by=%s ORDER BY r.created_at DESC,r.id DESC LIMIT 10", (w, principal))
             runs = [{'id': i, 'recipeId': recipe, 'taskId': task, 'state': status, 'reasonCode': reason, 'hasReport': report, 'createdAt': float(at)} for i, recipe, task, status, reason, report, at in cur.fetchall()]
@@ -235,7 +235,7 @@ class Recipes:
                 raise AlphaError('This recipe changed. Reload it.', 409)
             task = admit(cur, self, w, principal, recipe, self.clock(), manual_key=key)
         if task:
-            executor.drive_inline(runtime, w, token, principal, task['taskId'], actor_kind='autopilot', seconds=15, max_steps=1)
+            executor.drive_inline(runtime, w, token, principal, task['taskId'], actor_kind='autopilot', seconds=90, max_steps=1)
         return self.list(w, token)
 
     def report(self, w, token, run_id):

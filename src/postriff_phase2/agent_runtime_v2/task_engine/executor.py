@@ -302,7 +302,7 @@ class _ActingService:
         self.repository = repository
 
     def __getattr__(self, name):
-        return getattr(self._service, name)
+        return getattr(object.__getattribute__(self, "_service"), name)
 
 
 def _context(runtime, claim: Claim, *, token, service, member, seconds_left: float):
@@ -496,7 +496,7 @@ def finish(runtime, claim: Claim, result: dict, *, ctx=None, elapsed_ms: int = 0
 
 def _outputs(result: dict) -> list:
     out = []
-    for key, kind in (("draftId", "draft"), ("campaignId", "campaign"), ("assetId", "asset"), ("jobId", "job"), ("reviewId", "review")):
+    for key, kind in (("draftId", "draft"), ("campaignId", "campaign"), ("assetId", "asset"), ("jobId", "job"), ("reviewId", "review"), ("recipeReportId", "workflow_report")):
         if isinstance(result.get(key), str):
             out.append({"type": kind, "id": result[key]})
     return out
