@@ -341,6 +341,26 @@ def _context(runtime, claim: Claim, *, token, service, member, seconds_left: flo
     return ctx
 
 
+def dispatch_agent(tool_name):
+    """Use a real registered model surface, retaining its strongest confirmation.
+
+    A task's direct driver is not necessarily the Manager: image tools, for
+    example, belong to the Creative specialist. Unknown surfaces fail closed.
+    """
+    from .. import capability_registry, contracts, specialists
+    cap = capability_registry.for_tool(tool_name)
+    bindings = [b for b in capability_registry.bindings(cap.capability_id) if b.surface in ('manager', 'specialist')]
+    if not bindings:
+        raise AlphaError('This capability has no execution surface.', 403, code='agent_permission_denied')
+    chosen = max(bindings, key=lambda b: contracts.CONFIRMATIONS.index(b.legacy_confirmation))
+    if chosen.surface == 'manager':
+        return 'rafii_manager'
+    for key, spec in specialists.SPECIALISTS.items():
+        if tool_name in specialists.available(list(spec['tools']) + specialists.EXTRA_SCOPES.get(key, [])):
+            return key
+    raise AlphaError('This capability has no execution surface.', 403, code='agent_permission_denied')
+
+
 def execute(runtime, claim: Claim, *, token=None, seconds_left: float = DEFAULT_REQUEST_SECONDS, return_result=False) -> dict:
     """Run the claimed tool step outside any transaction and finish it. Returns a content-free summary."""
     from .. import domain_tools, tool_adapter
@@ -373,7 +393,7 @@ def execute(runtime, claim: Claim, *, token=None, seconds_left: float = DEFAULT_
                 repository, capability = principal_repository(service, task["workspaceId"], task["createdBy"], tool.spec.permission)
                 service, token = _ActingService(service, repository), capability
             ctx = _context(runtime, claim, token=token, service=service, member=member, seconds_left=seconds_left)
-            result = tool_adapter.execute(ctx, tool, dict(step["inputs"] or {}))
+            result = tool_adapter.execute(ctx, tool, dict(step["inputs"] or {}), agent=dispatch_agent(tool.name))
     except AlphaError as error:
         result = {"ok": False, "code": getattr(error, "code", None) or "tool_forbidden", "error": str(error)}
     except Exception as error:  # the leased attempt always records its known outcome

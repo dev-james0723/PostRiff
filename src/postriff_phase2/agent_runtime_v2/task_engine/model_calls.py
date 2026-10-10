@@ -13,6 +13,7 @@ from . import authz_seam, errors, executor, model, store, targets
 def dispatch(ctx, tool, args):
     from .. import capability_registry, task_state, tool_adapter
     capability = capability_registry.for_tool(tool.name)
+    agent = executor.dispatch_agent(tool.name)
     clean = {k: v for k, v in args.items() if k != "stepId"}
     digest = model.input_digest(tool.name, clean)
     with ctx.workspace() as (cur, _row, principal, _member, _state):
@@ -92,7 +93,7 @@ def dispatch(ctx, tool, args):
     changed_start = len(ctx.ledger.changed)
     started = time.monotonic()
     nested_args = args if "stepId" in (tool.schema.get("properties") or {}) else clean
-    result = tool_adapter.execute(bound,tool,nested_args)
+    result = tool_adapter.execute(bound,tool,nested_args,agent=agent)
     with store.service_tx(ctx.service,ctx.workspace_id) as cur:
         from ... import leases
         if not leases.still_owned(cur,"pr_agent_step_attempts",aid,lease_owner=owner):

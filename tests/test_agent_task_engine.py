@@ -10,6 +10,14 @@ from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
 from postriff_phase2.agent_runtime_v2.task_engine import authz_seam, checkpoints, delegates, errors, flags, model, store
 
 class TaskEngineRules(unittest.TestCase):
+    def test_engine_dispatch_uses_registered_specialist_surface(self):
+        from postriff_phase2.agent_runtime_v2 import domain_tools, authz, tool_adapter
+        from postriff_phase2.agent_runtime_v2.task_engine import executor
+        domain_tools.ensure_registered()
+        agent = executor.dispatch_agent('image_generate')
+        self.assertEqual(agent, 'creative')
+        self.assertEqual(authz.tool_surface(tool_adapter.REGISTRY['image_generate'].spec, agent).name, 'specialist')
+
     def test_off_default(self):
         self.assertEqual(flags.mode_for('w',environ={}), 'off')
 

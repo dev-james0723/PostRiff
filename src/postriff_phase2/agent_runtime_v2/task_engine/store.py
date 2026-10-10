@@ -622,7 +622,9 @@ def receipt_begin(cur, task: dict, step: dict, attempt_id: str, trace_id: str) -
 
 
 def receipt_done(cur, workspace_id: str, effect_key: str, *, outcome: str, verified: bool | None, result: dict) -> None:
-    cur.execute("UPDATE public.pr_agent_receipts SET state='done',outcome=%s,verified=%s,result=%s::jsonb,updated_at=now() "
+    cur.execute("UPDATE public.pr_agent_receipts SET state='done',outcome=%s,verified=%s,result=%s::jsonb || "
+                "CASE WHEN result->'cannotRecall' @> '[\"sent_to_provider\"]'::jsonb THEN "
+                "jsonb_build_object('cannotRecall',result->'cannotRecall','costState',result->'costState') ELSE '{}'::jsonb END,updated_at=now() "
                 "WHERE workspace_id=%s AND effect_key=%s AND state='pending'",
                 (outcome, verified, json.dumps(receipt_result(result), ensure_ascii=False, default=str), workspace_id, effect_key))
 

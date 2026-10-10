@@ -453,6 +453,10 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
         result = studio.run(prompt=prompt, quality=quality, size=size, sources=source_bytes, operation=operation, timeout=ctx.provider_timeout(TIMEOUT_SECONDS))
         ctx.ledger.model_requests += 1
         _note_image_call(ctx, studio, quality, reservation, started=dispatched, began=began, result=result)
+        # Authority may have changed while the provider was working. Recheck before
+        # staging bytes; repository.command rechecks again in the actual write.
+        with ctx.workspace():
+            pass
         staged = ctx.service.assets.stage_upload(ctx.workspace_id, {"data": base64.b64encode(result["bytes"]).decode()})
         # The provider's reported cost when it gives one (the gateway); otherwise the configured per-image price — the same
         # rule as model tokens, which are priced from config — so a saved image is never left "unknown" with no reconciler.
@@ -490,15 +494,17 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
                 pass
         if result is None and dispatched is not None:
             _note_image_call(ctx, studio, quality, reservation, started=dispatched, began=began, error=error)
-        with ctx.workspace() as (cur, _row, _principal, _member, _state):
-            if result is not None:
-                # The provider made (and billed) the image even though it wasn't saved: book that cost, don't hold it unknown.
-                reported = (result.get("usage") or {}).get("costUsd")
-                micro = int(round(reported * 1_000_000)) if type(reported) in (int, float) and reported >= 0 else studio.estimate(quality)
-                ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed", micro)
-            else:
-                # No image came back: a provider whose outcome is unknown (a timeout) is held until reconciled; a refusal is released.
-                ctx.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "unknown" if isinstance(error, CreativeError) and error.uncertain else "failed")
+        from .task_engine.spend import settle_provider_failure
+        if result is not None:
+            # A completed provider call remains billable after revocation. Only the
+            # existing reservation settles; no derived asset or new spend is allowed.
+            reported = (result.get("usage") or {}).get("costUsd")
+            micro = int(round(reported * 1_000_000)) if type(reported) in (int, float) and reported >= 0 else studio.estimate(quality)
+            settle_provider_failure(ctx, reservation["reservationId"], "completed", micro, dispatched=dispatched is not None)
+        else:
+            uncertain = isinstance(error, CreativeError) and error.uncertain
+            settle_provider_failure(ctx, reservation["reservationId"], "unknown" if uncertain else "failed",
+                                    None if uncertain else 0, dispatched=dispatched is not None)
         raise
     # Source of truth: the asset exists with the staged hash, and the original (for an edit) is unchanged.
     after = ctx.snapshot()["state"]

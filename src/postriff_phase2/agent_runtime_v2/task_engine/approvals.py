@@ -490,7 +490,8 @@ def execute_approved_model(runtime,workspace_id,token,task,approval,*,seconds_le
             return None
         plan=task_state.load(cur,workspace_id,task['taskId'])
         member=runtime.service.ideas._member(row)
-    ctx=RafiiRunContext(runtime.service,workspace_id,token,principal,member,task['conversationId'],executor_trace(),task=plan,config=runtime.cfg)
+    ctx=RafiiRunContext(runtime.service,workspace_id,token,principal,member,task['conversationId'],executor_trace(),task=plan,config=runtime.cfg,
+                       image_studio=getattr(runtime,'image_studio',None),vision=getattr(runtime,'vision',None))
     ctx.deadline=time.monotonic()+max(0,seconds_left)
     for ref in approval['targetRefs']:
         ctx.ledger.reference(ref['type'],ref['id'])

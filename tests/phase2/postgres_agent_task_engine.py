@@ -562,4 +562,43 @@ class TaskEnginePG(unittest.TestCase):
         self.assertTrue(result['verified'])
         with connect() as db:self.assertEqual(db.execute('SELECT enabled,revision FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s',(self.w,saved['watch_id'])).fetchone(),(False,2))
 
+    def test_35_paid_provider_revocation_settles_without_saving_derived_asset(self):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals
+        from consumer_fixtures import approve_budgets
+        approve_budgets(connect,self.w);approvals.install()
+        values={'prompt':'Synthetic test image'}
+        t=self.create([{'label':'Make an image','kind':'tool','capabilityId':'image_generate','inputs':values}])
+        with store.service_tx(self.service,self.w) as cur:
+            step=store.load_step(cur,self.w,t['taskId'],'s1')
+            aid=approvals.request_approval(cur,self.service.ideas,t,step,None)
+            approval=store.load_approval(cur,self.w,aid)
+            store.close_approval(cur,approval,'approved',surface='task_center',decided_by=A,decision_key='image-'+uuid.uuid4().hex,outcome={})
+            store.set_step(cur,step,state='queued',next_attempt_at=time.time());store.refresh(cur,self.service.ideas,t)
+        claimed=self.claim(t);self.assertIsNotNone(claimed)
+        calls=[];staged=[]
+        def revoke_from_human_request():
+            with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+                agent_permissions.revoke(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                    payload={'scopes':['capability:tool.image_generate'],'idempotencyKey':'image-revoke-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+        def provider(**_kwargs):
+            from contextvars import Context
+            calls.append('synthetic provider')
+            # A separate human request has no model tool authority/context.
+            Context().run(revoke_from_human_request)
+            return {'bytes':b'synthetic image','model':'synthetic','route':'synthetic','usage':{'costUsd':0.000008}}
+        studio=SimpleNamespace(route=lambda *_a,**_k:SimpleNamespace(available=True,provider='test',model='synthetic'),estimate=lambda _q:10,run=provider)
+        cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on')
+        runtime=SimpleNamespace(service=self.service,cfg=cfg,clock=time.time,image_studio=studio)
+        with patch.object(self.service,'assets',SimpleNamespace(stage_upload=lambda *_a:staged.append('unexpected derived bytes'))):
+            result=executor.execute(runtime,claimed,token=OWNER,return_result=True)
+        self.assertEqual(calls,['synthetic provider'],result);self.assertEqual(staged,[])
+        self.assertEqual(result['code'],'agent_permission_revoked',result)
+        with connect() as db:
+            self.assertEqual(db.execute("SELECT actual_usd_micro,cost_state FROM public.pr_usage_ledger WHERE run_id=%s AND kind='settle'",(t['taskId'],)).fetchone(),(8,'actual'))
+            self.assertEqual(db.execute('SELECT spent_usd_micro,spend_unknown FROM public.pr_agent_tasks WHERE id=%s',(t['taskId'],)).fetchone(),(8,False))
+            state,receipt=db.execute('SELECT state,result FROM public.pr_agent_receipts WHERE task_id=%s',(t['taskId'],)).fetchone()
+            self.assertEqual(state,'done');self.assertEqual(receipt['cannotRecall'],['sent_to_provider']);self.assertEqual(receipt['costState'],'known')
+            self.assertEqual(receipt['changedRefs'],[])
+
 if __name__=='__main__':unittest.main(verbosity=2)
