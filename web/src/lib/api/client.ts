@@ -1,3 +1,4 @@
+import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
@@ -440,6 +441,11 @@ export function createApi(getToken: TokenSource) {
     deleteLibraryFile: (w: string, assetId: string) =>
       send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
 
+    previewLibraryMetadata: (w: string, changes: LibraryMetadataSelection[]) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/preview`, { changes }),
+    libraryMetadataHistory: (w: string) => get<LibraryMetadataHistory>(`${ws(w)}/library/metadata/changes`),
+    libraryMetadataReceipt: (w: string, id: string) => get<LibraryMetadataReceipt>(`${ws(w)}/library/metadata/changes/${encodeURIComponent(id)}`),
+    applyLibraryMetadata: (w: string, receiptId: string) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/apply`, { receiptId }),
+    undoLibraryMetadata: (w: string, receiptId: string) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/undo`, { receiptId }),
     libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number }[] }>(`${ws(w)}/library/collections`),
     createLibraryCollection: (w: string, name: string) => send('POST', `${ws(w)}/library/collections`, { name }),
     deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),

@@ -255,35 +255,33 @@ class UniversalLibrary:
         return self.metadata(w,t,i,{'title':title})
 
     def metadata(self,w,t,i,body):
-        if not isinstance(body,dict) or not body or not set(body) <= {'title','tags','collections'}:
-            raise AlphaError('Choose a title, tags or collections to update.')
-        title = body.get('title')
-        if 'title' in body and (not isinstance(title,str) or not 1<=len(title.strip())<=160 or '\x00' in title):
-            raise AlphaError('Use a title from 1 to 160 characters.')
-        tags = _tags(body['tags']) if 'tags' in body else None
-        collections = body.get('collections')
-        if collections is not None and (not isinstance(collections,list) or len(collections)>30 or any(not isinstance(c,str) or not ASSET_ID.fullmatch(c.replace('-','')) for c in collections)):
-            raise AlphaError('Choose valid collections.')
+        from .library_metadata import validate_metadata
+        body = validate_metadata(body)
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             self._exists(cur,row,w,i)
-            cur.execute('INSERT INTO public.pr_library_labels(workspace_id,asset_key) VALUES(%s,%s) ON CONFLICT DO NOTHING',(w,i))
-            if title is not None:
-                cur.execute('UPDATE public.pr_library_labels SET display_title=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(title.strip(),w,i))
-                cur.execute("UPDATE public.pr_library_assets SET display_title=%s,title_source='user',updated_at=now() WHERE workspace_id=%s AND id=%s",(title.strip(),w,i))
-            if tags is not None:
-                cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(tags,w,i))
-                cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(tags,w,i))
-            if collections is not None:
-                cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
-                if len(cur.fetchall()) != len(set(collections)):
-                    raise AlphaError('Collection unavailable.',404)
-                cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
-                for c in set(collections):
-                    cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
+            self._write_metadata(cur,w,i,body)
             cur.execute('SELECT 1 FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s',(w,i))
             normalized = bool(cur.fetchone())
         return {'asset':self.detail(w,t,i)['asset']} if normalized else {'assetId':i,'status':'updated'}
+
+    def _write_metadata(self,cur,w,i,body):
+        """Already-authorized, validated metadata write on the caller's workspace transaction."""
+        cur.execute('INSERT INTO public.pr_library_labels(workspace_id,asset_key) VALUES(%s,%s) ON CONFLICT DO NOTHING',(w,i))
+        if 'title' in body:
+            cur.execute('UPDATE public.pr_library_labels SET display_title=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(body['title'],w,i))
+            cur.execute("UPDATE public.pr_library_assets SET display_title=%s,title_source='user',updated_at=now() WHERE workspace_id=%s AND id=%s",(body['title'],w,i))
+        if 'tags' in body:
+            cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(body['tags'],w,i))
+            cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(body['tags'],w,i))
+        if 'collections' in body:
+            collections=body['collections']
+            cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
+            if len(cur.fetchall()) != len(collections):
+                raise AlphaError('Collection unavailable.',404)
+            cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
+            for c in collections:
+                cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
 
     def collections(self,w,t,body=None,collection_id=None,delete=False):
         with self.service.repository.transaction(t,w) as (cur,row,p):
