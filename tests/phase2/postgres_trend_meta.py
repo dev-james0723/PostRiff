@@ -28,7 +28,7 @@ from postriff_phase2.growth.trends.providers.meta_runtime import MetaCollector, 
 from postriff_phase2.growth.trends.store import TrendStore, trust_lock
 from postriff_phase2.growth.trends.providers.meta_control import MetaPublicControlService
 
-TOKEN = 'synthetic-meta-token-with-no-provider-access'
+TOKEN = 'synthetic-meta-token'
 OPERATIONS = {'threads': 'keyword_search', 'instagram': 'hashtag_discovery', 'facebook': 'page_public_posts'}
 SCOPES = {'threads': ['threads_basic', 'threads_keyword_search'],
           'instagram': ['instagram_basic'], 'facebook': []}

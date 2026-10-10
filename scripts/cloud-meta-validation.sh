@@ -12,6 +12,17 @@ export PYTHONPATH="$meta_root/src:$meta_root/tests" PYTHONDONTWRITEBYTECODE=1
 if [ "${1:-}" != --schema-only ]; then
   "$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_trend_meta*.py'
 fi
+# Keep synthetic credentials unmistakable to the release secret detector.
+"$TREND_VISUAL_TEST_PYTHON" - <<'META_SECRET_SCAN'
+from detect_secrets import SecretsCollection
+from detect_secrets.settings import default_settings
+with default_settings():
+    collection = SecretsCollection()
+    collection.scan_file('tests/phase2/postgres_trend_meta.py')
+    count = sum(len(items) for items in collection.json().values())
+print('Meta synthetic fixture secret scan: findings=' + str(count))
+if count: raise SystemExit(1)
+META_SECRET_SCAN
 if [ "${1:-}" = --python-only ]; then exit 0; fi
 meta_pg_bin=/usr/lib/postgresql/16/bin
 if [ ! -x "$meta_pg_bin/initdb" ]; then
