@@ -81,6 +81,8 @@ def tick(service) -> dict:
     counts = recover_for_worker(service) or {"status": "disabled"}
     if flags.background():
         from ..http import runtime_for
+        from ...workflow_recipes import runner as recipes
+        _phase(counts, "recipes", lambda: recipes.scan(runtime_for(service)))
         _phase(counts, "claims", lambda: executor.claim_loop(runtime_for(service)))
     else:
         counts["claims"] = {"status": "background_off"}
