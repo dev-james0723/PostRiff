@@ -7,6 +7,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).resolve().parent)]
 from postriff_phase2 import providers
@@ -52,6 +53,18 @@ class CallbackOrigin(unittest.TestCase):
 
     def test_unmounted_provider_and_public_callback_config_use_the_public_origin(self):
         self.assertEqual(OAuthService(None, None, None, {}, NEW).callback_uri("x"), NEW + "/api/oauth/x/callback")
+
+    def test_dedicated_youtube_origin_preserves_other_registered_callback_pins(self):
+        adapters = {name: SimpleNamespace(callback_origin=OLD) for name in ('youtube', 'linkedin')}
+        oauth = OAuthService(None, None, None, adapters, NEW, youtube_public_base_url=NEW)
+        self.assertEqual(oauth.callback_uri('youtube'), NEW + '/api/oauth/youtube/callback')
+        self.assertEqual(oauth.callback_uri('linkedin'), OLD + '/api/oauth/linkedin/callback')
+        self.assertEqual(oauth.callback_base_url('linkedin'), NEW)
+
+    def test_existing_youtube_callback_pin_survives_without_dedicated_override(self):
+        oauth = OAuthService(None, None, None, {'youtube': SimpleNamespace(callback_origin=OLD)}, NEW)
+        self.assertEqual(oauth.callback_uri('youtube'), OLD + '/api/oauth/youtube/callback')
+        self.assertEqual(oauth.callback_base_url('youtube'), NEW)
 
 
 class BlueskyClientPin(unittest.TestCase):

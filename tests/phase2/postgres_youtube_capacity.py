@@ -17,6 +17,8 @@ import psycopg
 from postriff_phase2.youtube.capacity import CapacityPolicy, CapacityController
 from postriff_phase2.youtube.model import YouTubeError
 from postriff_phase2.hosted_worker import PostgresWorker
+from postriff_phase2.youtube import privacy_erasure, workspace_provider_data
+from postriff_alpha.domain import AlphaError
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 PROJECT = 'synthetic-capacity-' + str(uuid4())
@@ -54,6 +56,38 @@ def reserve(index):
 
 
 try:
+    # Retain actual cleanup tombstones in PostgreSQL without treating them as
+    # pending work. Retryable holds still consume admission; no history is cut.
+    history = []
+    for index in range(40):
+        saved = {'id': 'retained-' + str(index), 'state': 'verified',
+                 'approvalDigest': 'original-' + str(index), 'approvedBy': 'synthetic-owner', 'approvedAt': NOW - 31 * 86400,
+                 'manifest': {'platform': 'YouTube', 'workspaceId': WORKSPACES[0],
+                              'channelId': 'synthetic-connection', 'payload': {'title': 'Submitted ' + str(index)}}}
+        if index < 20:
+            workspace_provider_data.scrub_job(saved, 'youtube_expired_data_removed', NOW)
+        else:
+            privacy_erasure.scrub_workspace({'phase2': {'jobs': [saved]}}, WORKSPACES[0], 'synthetic-connection', NOW)
+        history.append(saved)
+    capacity_state = {'phase2': {'jobs': history + [
+        {'id': 'current', 'state': 'approved', 'manifest': {'platform': 'YouTube'}}]}}
+    admission = CapacityController(connection, replace(policy, pending_per_workspace=2), clock=lambda: NOW)
+    with connection() as db:
+        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(capacity_state), WORKSPACES[0]))
+    with connection() as db:
+        persisted = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (WORKSPACES[0],)).fetchone()[0]
+        admission.assert_queue_capacity(persisted)
+        assert persisted == capacity_state and len(persisted['phase2']['jobs']) == 41
+        persisted['phase2']['jobs'].append({'id': 'retryable', 'state': 'held', 'manifest': {'platform': 'YouTube'}})
+        try:
+            admission.assert_queue_capacity(persisted)
+            raise AssertionError('Retryable held workflow bypassed queue admission')
+        except AlphaError as error:
+            assert error.code == 'youtube_queue_capacity'
+        admission.assert_queue_capacity(persisted, additional=0)
+        assert db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[0],)).fetchone()[0] == capacity_state
+        db.execute("UPDATE public.pr_workspaces SET state='{}'::jsonb WHERE id=%s", (WORKSPACES[0],))
+
     with ThreadPoolExecutor(max_workers=6) as pool:
         attempts = list(pool.map(reserve, range(12)))
     assert sum(ok for _, ok in attempts) == 5, attempts
@@ -93,6 +127,54 @@ try:
         assert db.execute('SELECT count(*) FROM public.pr_youtube_usage WHERE project_key=%s', (PROJECT + '-identity',)).fetchone()[0] == 0
     assert identity.snapshot(WORKSPACES[0])['workspaceUsageToday']['general'] == {
         'reservedUnits': 2, 'admittedRequests': 2, 'delayedRequests': 1}
+
+    # Analytics consumes request counts, never an invented Data API unit cost.
+    # Concurrent workspaces share the project lock/daily ceiling and keep their own allowance.
+    analytics_policy = replace(policy, project_key=PROJECT + '-analytics-daily', analytics_daily_limit=5,
+                               analytics_workspace_daily_limit=3, analytics_project_per_minute=720)
+    analytics = CapacityController(connection, analytics_policy, clock=lambda: NOW)
+    def analytics_attempt(index, target):
+        wid = WORKSPACES[index % 2]
+        try:
+            target.record(wid, 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+            return wid, True, None
+        except YouTubeError as error:
+            assert error.category == 'capacity_delay' and error.retry_at > NOW
+            return wid, False, error.capacity_reason
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        analytics_attempts = list(pool.map(lambda index: analytics_attempt(index, analytics), range(12)))
+    assert sum(ok for _, ok, _ in analytics_attempts) == 5, analytics_attempts
+    assert all(sum(ok and wid == target for wid, ok, _ in analytics_attempts) <= 3 for target in WORKSPACES)
+    with connection() as db:
+        assert db.execute("SELECT used_units,admitted_requests,denied_requests FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (analytics_policy.project_key,)).fetchone() == (5, 5, 7)
+        assert db.execute('SELECT count(*),count(*) FILTER(WHERE estimated_units IS NOT NULL) FROM public.pr_youtube_usage WHERE project_key=%s', (analytics_policy.project_key,)).fetchone() == (12, 0)
+        assert db.execute("SELECT count(*) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND bucket IN ('general','videoUploads')", (analytics_policy.project_key,)).fetchone()[0] == 0
+    analytics_own = analytics.snapshot(WORKSPACES[0])['analyticsAdmission']
+    assert analytics_own['workspaceReservedRequestsToday'] == sum(ok and wid == WORKSPACES[0] for wid, ok, _ in analytics_attempts)
+    assert 'analyticsRequests' not in analytics.snapshot(WORKSPACES[0])['workspaceUsageToday']
+    # Analytics exhaustion does not consume or overwrite the separate Data budget.
+    analytics.record(WORKSPACES[0], 'synthetic-connection', 'videos.insert', 'videoUploads', 1)
+
+    minute_policy = replace(analytics_policy, project_key=PROJECT + '-analytics-minute', analytics_daily_limit=100,
+                            analytics_workspace_daily_limit=100, analytics_project_per_minute=3)
+    analytics_minute = CapacityController(connection, minute_policy, clock=lambda: NOW)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        minute_attempts = list(pool.map(lambda index: analytics_attempt(index, analytics_minute), range(12)))
+    assert sum(ok for _, ok, _ in minute_attempts) == 3, minute_attempts
+    assert all(reason == 'analytics_project_rate' for _, ok, reason in minute_attempts if not ok)
+    # A different OAuth-client controller with the same project cannot obtain a fresh minute allowance.
+    same_project = CapacityController(connection, minute_policy, clock=lambda: NOW)
+    assert analytics_attempt(0, same_project)[1:] == (False, 'analytics_project_rate')
+    next_minute = CapacityController(connection, minute_policy, clock=lambda: NOW + 61)
+    next_minute.record(WORKSPACES[0], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+    with connection() as db:
+        assert db.execute("SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (minute_policy.project_key,)).fetchone()[0] == 4
+        assert db.execute("SELECT count(*) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket LIKE 'analyticsMinute:%%'", (minute_policy.project_key,)).fetchone()[0] == 2
+    workspace_policy = replace(minute_policy, project_key=PROJECT + '-analytics-workspace', requests_per_minute=1)
+    analytics_workspace = CapacityController(connection, workspace_policy, clock=lambda: NOW)
+    analytics_workspace.record(WORKSPACES[0], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
+    assert analytics_attempt(0, analytics_workspace)[1:] == (False, 'workspace_rate')
+    analytics_workspace.record(WORKSPACES[1], 'synthetic-connection', 'analytics.reports.query', 'analytics', None)
 
     for role in ('anon', 'authenticated'):
         for table in ('pr_youtube_quota_daily', 'pr_youtube_rate_windows', 'pr_worker_tenants'):
@@ -149,8 +231,10 @@ try:
         db.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[0],))
         assert db.execute('SELECT count(*) FROM public.pr_youtube_quota_daily WHERE workspace_id=%s', (WORKSPACES[0],)).fetchone()[0] == 0
         assert db.execute('SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key=\'project\' AND bucket=\'videoUploads\'', (PROJECT,)).fetchone()[0] == 5
-    print('PASS: synthetic atomic concurrent admission, preconnection identity budget, denial metering, isolated rates, server-only RLS, durable fair worker claim, missing097 platform isolation and deletion without quota refund. No real Google calls or load acceptance.')
+        assert db.execute("SELECT used_units FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket='analyticsRequests'", (analytics_policy.project_key,)).fetchone()[0] == 5
+        assert db.execute("SELECT sum(used_units) FROM public.pr_youtube_quota_daily WHERE project_key=%s AND scope_key='project' AND bucket LIKE 'analyticsMinute:%%'", (minute_policy.project_key,)).fetchone()[0] == 4
+    print('PASS: synthetic atomic concurrent admission, preconnection identity budget, denial metering, isolated rates, server-only RLS, concurrent Analytics request/day/project-minute admission and rollover, unknown Data costs, durable fair worker claim, missing097 platform isolation and deletion without quota refund. No real Google calls or load acceptance.')
 finally:
     with connection() as db:
         db.execute('DELETE FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])', (WORKSPACES + FAIR,))
-        db.execute('DELETE FROM public.pr_youtube_quota_daily WHERE project_key IN (%s,%s,%s)', (PROJECT, PROJECT + '-rate', PROJECT + '-identity'))
+        db.execute('DELETE FROM public.pr_youtube_quota_daily WHERE project_key=ANY(%s)', ([PROJECT, PROJECT + '-rate', PROJECT + '-identity', PROJECT + '-analytics-daily', PROJECT + '-analytics-minute', PROJECT + '-analytics-workspace'],))

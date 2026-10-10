@@ -57,6 +57,23 @@ class UploadEngine:
         state['updatedAt'] = self.clock()
         self.journal.save(key, state)
 
+    def _api(self, key, manifest):
+        api = self.api_factory(manifest)
+        previous = api.before_request
+        def authorized():
+            previous()
+            self.journal.assert_current(key)
+        # Includes API calls made by cancellation and post-upload finalization,
+        # as well as the direct resumable transport below.
+        api.before_request = authorized
+        return api
+
+    @staticmethod
+    def _authorization_receipt(error):
+        changed = getattr(error, 'youtube_authorization_changed', False)
+        return {'state': 'held', 'confirmed': 'YouTube authorization was disconnected or changed. The previous operation stopped; review the connection before continuing.',
+                'progress': {'version': 2, 'stage': 'held', 'errorCategory': 'authorization_changed' if changed else 'revoked_oauth'}}
+
     def _receipt(self, state):
         stage = state['stage']
         view = upload_view(state)
@@ -66,8 +83,11 @@ class UploadEngine:
             result.update(state='failed', confirmed='Upload validation or provider processing failed. Review the recorded error category.')
             if (state.get('processing') or {}).get('stage') == 'failed':
                 result['verification'] = 'provider_lookup'
-        elif stage in ('outcome_unknown', 'session_expired'):
-            result.update(state='uncertain', confirmed='The upload outcome needs reconciliation. This operation will never open a replacement upload automatically.')
+        elif stage in ('outcome_unknown', 'session_expired', 'native_schedule_reconciling'):
+            result.update(state='uncertain', confirmed=(
+                'The approved schedule change needs read-only verification against the existing YouTube video. Rafii will not open a replacement upload.'
+                if stage == 'native_schedule_reconciling' else
+                'The upload outcome needs reconciliation. This operation will never open a replacement upload automatically.'))
         elif stage == 'canceled':
             result.update(state='canceled', confirmed='Upload canceled. Any video already accepted by YouTube remains private; deletion requires separate approval.')
         elif stage == 'held':
@@ -106,7 +126,7 @@ class UploadEngine:
             if cancel:
                 if state.get('videoId'):
                     try:
-                        api = self.api_factory(manifest)
+                        api = self._api(key, manifest)
                         current = api.owned('videos', state['videoId'])
                         status = current.get('status') or {}
                         if status.get('privacyStatus') in ('public', 'unlisted'):
@@ -127,6 +147,8 @@ class UploadEngine:
                                 raise YouTubeError('invalid_scheduling_state', 'YouTube did not confirm cancellation of the native schedule.', ambiguous=True)
                             state['steps']['cancelSchedule'] = {'status': 'verified', 'source': 'YouTube Data API'}
                     except AlphaError as error:
+                        if getattr(error, 'youtube_authorization_fence', False):
+                            return self._authorization_receipt(error)
                         if getattr(error, 'category', None) == 'revoked_oauth' or error.code == 'youtube_revoked_oauth':
                             return {'state': 'held', 'confirmed': 'YouTube authorization was revoked. Authorized content was purged; reconnect and review.',
                                     'progress': {'version': 2, 'stage': 'held', 'errorCategory': 'revoked_oauth'}}
@@ -146,7 +168,7 @@ class UploadEngine:
                 state.pop('errorCategory', None)
             api = None
             try:
-                api = self.api_factory(manifest)
+                api = self._api(key, manifest)
                 usage = self.account_usage or api.account_usage
                 if state.get('videoId'):
                     video = api.owned('videos', state['videoId'])
@@ -176,6 +198,7 @@ class UploadEngine:
                     usage('videos.insert', rule['bucket'], rule['cost'])
                     state['stage'] = 'session_open_attempted'
                     self._save(key, state)  # committed before any remote initiation
+                    api.before_request()
                     response = api.provider.api(api.grant['accessToken'], 'POST', api.provider.UPLOAD + '?' + urlencode(params),
                         headers={'X-Upload-Content-Length': str(state['totalBytes']), 'X-Upload-Content-Type': state['mime']}, body=body)
                     if response.get('status') not in (200, 201):
@@ -186,6 +209,7 @@ class UploadEngine:
                     self._save(key, state)  # URL durable before any video bytes leave the server
                 url = session_url(self.journal.unseal(state['sessionCiphertext'], state['sessionKeyId']))
                 usage('resumable.status', 'videoUploads', None)
+                api.before_request()
                 response = api.provider.api(api.grant['accessToken'], 'PUT', url,
                     headers={'Content-Type': state['mime'], 'Content-Length': '0', 'Content-Range': f"bytes */{state['totalBytes']}"}, data=b'')
                 if response.get('status') in (200, 201):
@@ -215,6 +239,7 @@ class UploadEngine:
                 if not isinstance(chunk, bytes) or len(chunk) != size:
                     raise AlphaError('The approved private video asset changed or is unavailable.', 409, code='youtube_media_changed')
                 usage('resumable.chunk', 'videoUploads', None)
+                api.before_request()
                 response = api.provider.api(api.grant['accessToken'], 'PUT', url,
                     headers={'Content-Type': state['mime'], 'Content-Length': str(size),
                              'Content-Range': f"bytes {offset}-{offset + size - 1}/{state['totalBytes']}"}, data=chunk)
@@ -227,6 +252,11 @@ class UploadEngine:
                 else:
                     raise api_error(response, 'resumable.chunk', self.clock())
             except (YouTubeError, AlphaError) as error:
+                if getattr(error, 'youtube_authorization_fence', False):
+                    # Disconnect already purged the operation, or a newer
+                    # consent owns this connection. Do not recreate the journal
+                    # and do not classify the new grant as remotely revoked.
+                    return self._authorization_receipt(error)
                 category = getattr(error, 'category', None) or ('network' if error.status >= 500 else error.code or 'invalid_metadata')
                 if api:
                     api.on_error(error, 'videos.insert' if state['stage'] == 'session_open_attempted' else 'resumable.reconcile')

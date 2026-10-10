@@ -172,8 +172,20 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
     from . import thinking_state
     ledger = ctx.ledger
 
+    async def authorize_context():
+        if ledger.youtube_provider_context:
+            from ..youtube.agent_context import assert_current
+            try:
+                # A short read fence, released before network dispatch. A local
+                # revocation cannot recall an already in-flight model request.
+                await asyncio.to_thread(assert_current, ctx.service.youtube, ctx.workspace_id,
+                                        list(ledger.youtube_provider_context), now=ctx.now())
+            except Exception as error:
+                raise ModelNotDispatched('This YouTube context is no longer authorized for an AI request.') from error
+
     class MeteredModel(Model):
         async def get_response(self, *args, **kwargs):
+            await authorize_context()
             op, reason = thinking_state.model_op(agent, ledger.tool_activity)
             ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
             started, wall = time.monotonic(), time.time()
@@ -193,6 +205,7 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
             return response
 
         async def stream_response(self, *args, **kwargs):
+            await authorize_context()
             # A streamed call is metered exactly like get_response: one span from the final event's usage, or one failed /
             # unknown call when the stream raised, was abandoned or ended without a final response (never assumed zero).
             op, reason = thinking_state.model_op(agent, ledger.tool_activity)

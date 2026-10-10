@@ -18,6 +18,7 @@ import { UploadRecovery, StreamConfiguration } from './creator-recovery';
 import { YouTubeResourceList } from './resource-list';
 import { YouTubeAgentControls } from './agent-controls';
 import { YouTubeQuotaControls } from './quota-controls';
+import { YouTubePolicyAcceptance } from './policy-acceptance';
 
 const control = 'border-input bg-background w-full rounded-md border px-3 py-2 text-sm';
 const actionLabels: Record<string, string> = {
@@ -166,10 +167,11 @@ export function YouTubeCreatorView() {
   const [selected, setSelected] = useQueryState('channel', { defaultValue: '' });
   const channel = selected ? (yt.some((c) => c.id === selected) ? selected : '') : yt[0]?.id || '';
   const agenticConnection = yt.find((c) => c.id === channel)?.authorizationLane === 'agentic';
+  const [policyAllowed, setPolicyAllowed] = useState(false);
   const overview = useQuery({
     queryKey: ['youtube', workspaceId, channel],
     queryFn: () => api.youtubeOverview(workspaceId, channel),
-    enabled: Boolean(channel),
+    enabled: Boolean(channel) && policyAllowed,
     retry: false,
     staleTime: 60_000
   });
@@ -391,6 +393,7 @@ export function YouTubeCreatorView() {
             Connect YouTube
           </Link>
         </div>
+        <YouTubePolicyAcceptance force onAvailabilityChange={setPolicyAllowed} />
         {!channel ? (
           <Panel title='Connect your creator channel'>
             <p className='text-sm'>
@@ -434,7 +437,7 @@ export function YouTubeCreatorView() {
                   : 'Creator capabilities unavailable.'}
               </p>
             )}
-            <YouTubeAgentControls key={`youtube-agent:${channel}`} channel={channel} canPublic={Boolean(overview.data?.capabilities.schedule?.canExecute)} />
+            <YouTubeAgentControls key={`youtube-agent:${workspaceId}:${channel}`} channel={channel} canPublic={Boolean(overview.data?.capabilities.schedule?.canExecute)} />
             {overview.data && (
               <Panel title={overview.data.identity.snippet?.title || 'Channel identity'}>
                 <p className='text-sm'>Channel ID: {overview.data.channelId}</p>

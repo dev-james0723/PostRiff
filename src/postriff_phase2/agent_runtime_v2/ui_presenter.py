@@ -249,9 +249,17 @@ def bindings_section(manifest: dict) -> str:
     actions = [a for a in (manifest or {}).get("actions") or [] if isinstance(a, dict) and contracts.valid_name(a.get("actionId"))][:MAX_BINDINGS]
     lines = ["## Rafii bindings (authoritative for this view)",
              "These are the only data queries and actions available. Use the names exactly; never invent another.",
-             "Queries (read-only): write `name = Query(\"binding\", {args}, null)` with literal or $variable arguments matching the schema; "
-             "an optional fourth argument is a literal refresh in seconds (30 or more). Pass the query and a rowsField to the row components "
-             "(ToolBoundTable, ToolBoundChart, Timeline, Comparison, SelectionList); give Metric and TaskStatus a dotted data path."]
+             "Queries (read-only): declare each on its own top-level line `name = Query(\"binding\", {args}, null)`. Each argument value "
+             "is a literal (\"text\", 12, true, [\"id1\", \"id2\"]) or a bare $variable, matching the schema: never $v[0], @First(...), a "
+             "ternary, a concatenation or another query's data. An optional fourth argument is a literal refresh in seconds (30 or more).",
+             "Every QueryRef parameter (the source or data of ToolBoundTable, ToolBoundChart, Metric, Timeline, Comparison, TaskStatus, "
+             "SelectionList, TaskProgress and every Draft… component) takes the bare name of one Query statement: never q.data…, a row of it, "
+             "an @Filter or @Sort result or an @Each item. Narrow and order rows with that query's own arguments; to show one record, declare "
+             "a query with a literal id from CONTEXT. A $variable bound to a selection holds a list of ids: pass it whole to a list argument "
+             "such as ids. Give the row components a rowsField, and Metric the dotted path inside the result as its field.",
+             "Every name you use must be declared in this program: each statement you reference, each $variable and each query. "
+             "Query arguments: WRONG `{platform: $filters.platform}` or `{ids: [$picked[0]]}`; RIGHT `{platform: $platform}` or `{ids: $picked}`.",
+             "Before you answer, check every statement against these rules and the component signatures; a view that breaks one is rejected."]
     if queries:
         for q in queries:
             schema = json.dumps(q.get("argsSchema") or {"type": "object"}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:1500]
@@ -374,7 +382,8 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
     components_line = ""
     if allowed and allowed != known:
         # A shared (`all`) prompt documents every component; this view may use only its journeys' groups (the validator policy).
-        components_line = "\n\n## Components for this view\nUse only these components: " + ", ".join(allowed) + "."
+        components_line = ("\n\n## Components for this view\nUse only these components: " + ", ".join(allowed)
+                           + ".\nAny other component documented above is rejected for this view.")
     instructions = (base_prompt.rstrip() + "\n\n" + bindings_section(manifest) + components_line).strip()
     context = presenter_context(projection)
     blocks = [f"<context kind=\"UI_PROJECTION\">\n{_escape_block(_bounded_json(context, MAX_CONTEXT_BYTES))}\n</context>"]
@@ -396,7 +405,8 @@ def build_plan(cfg, assets: Assets, projection: dict, manifest: dict, *, kind: s
         tail = ("Write only the statements that change: re-declare a statement by its id to replace it, `id = null` to remove it. "
                 "Keep every statement the person did not ask to change, including their filters, selections and form fields.")
     else:
-        tail = "Compose the complete interface for this verified result using only the components and bindings above."
+        tail = ("Compose the complete interface for this verified result using only the components and bindings above. Write the program "
+                "once: declare every statement id exactly once, and never repeat, restate or continue a program you have already written.")
     if rejected_source is not None:
         tail = ("The previous output (REJECTED_UI) failed validation with the VALIDATOR codes. Write a corrected "
                 + ("patch" if mode == "patch" else "complete program") + " that fixes them. " + tail)

@@ -15,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2 import ai_call_events
 from postriff_phase2.agent_runtime_v2 import ui_capabilities, ui_contracts as contracts, ui_projection, ui_store, ui_stream, ui_validator
 
-from test_agent_ui_stream_fakes import (GOOD_PROGRAM, ME, OTHER_TOKEN, PRIVATE_CONTEXT_TEXT, TOKEN, WS, FakeDB, FakeRuntime, FakeStore, FakeValidator,
+from test_agent_ui_stream_fakes import (GOOD_PROGRAM, ME, OTHER, OTHER_TOKEN, PRIVATE_CONTEXT_TEXT, TOKEN, WS, FakeDB, FakeRuntime, FakeStore, FakeValidator,
                                         ScriptTransport, Started, StatusError, fake_current, fake_manifest, fake_projection, frame_ids, make_assets, make_cfg,
                                         parse, program_in_pieces, usage_final)
 
@@ -387,9 +387,25 @@ class Failures(Base):
 
     def test_repair_can_succeed(self):
         self.validator.verdicts = ["reject", "accept"]
-        _, _, events = self.run_one(self.db.add_parent())
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            _, _, events = self.run_one(self.db.add_parent())
         self.assertEqual(events[-1]["kind"], "ui.ready")
         self.assertEqual(events[-1]["payload"]["providerAttempts"], 2)
+        # The first-pass rejection is measurable: code prefixes and counts only, never the statement ids or names behind them.
+        rejected = [json.loads(r.getMessage()) for r in logs.records if '"genui.validation_rejected"' in r.getMessage()]
+        self.assertEqual([(r["kind"], r["codes"]) for r in rejected], [("generate", {"component_denied": 1, "unresolved_ref": 1})])
+        self.assertNotIn("Bogus", " ".join(logs.output))
+
+    def test_rejection_log_is_a_fixed_vocabulary(self):
+        from postriff_phase2.agent_runtime_v2 import ui_stream as stream
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            stream._log_rejected("generate", ["type-mismatch:title", "missing-required:root", "unresolved_ref:x", "mydraftsecret", "source_not_query:s1"])
+        record = json.loads(logs.records[-1].getMessage())
+        self.assertEqual(set(record), {"event", "kind", "codes", "errorCount"})
+        self.assertEqual(record["codes"], {"missing-required": 1, "other": 1, "source_not_query": 1, "type-mismatch": 1, "unresolved_ref": 1})
+        self.assertEqual((record["kind"], record["errorCount"]), ("generate", 5))
+        for leaked in ("title", "root", "mydraftsecret", "s1"):
+            self.assertNotIn(leaked, json.dumps(record["codes"]) + record["kind"])
 
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
@@ -496,6 +512,20 @@ class Edits(Base):
         edit_reservation = self.db.ui_reservations()[-1]
         self.assertTrue(edit_reservation["meta"]["chain"].startswith("edit:"))
         self.assertEqual(self.db.revisions[(artifact_id, 1)], GOOD_PROGRAM.strip(), "the previous revision stays recoverable")
+
+    def test_co_member_who_is_not_the_actor_is_refused_before_any_spend(self):
+        """HF-3: the server matches access.canEdit (actor only); an editor of the same workspace who did not ask is a 403."""
+        _, artifact_id = self.ready_artifact()
+        head = dict(self.db.artifacts[artifact_id])
+        calls, reservations, attempts = len(self.transport.calls), len(self.db.ui_reservations()), len(self.db.attempts)
+        request = contracts.validate_patch({"baseRevision": 1, "baseSourceHash": head["sourceHash"], "instruction": "Add a chart",
+                                            "idempotencyKey": "edit-key-co-member-0001"})
+        self.assertEqual(self.db.members[(WS, OTHER)], "editor")
+        with self.assertRaises(AlphaError) as raised:
+            ui_stream.create_edit(self.runtime, {}, Started(), WS, OTHER_TOKEN, artifact_id, request)
+        self.assertEqual((raised.exception.status, raised.exception.code), (403, "ui_forbidden"))
+        self.assertEqual((len(self.transport.calls), len(self.db.ui_reservations()), len(self.db.attempts)), (calls, reservations, attempts))
+        self.assertEqual(self.db.artifacts[artifact_id]["revision"], head["revision"])
 
     def test_edit_while_another_attempt_is_live_is_refused(self):
         _, artifact_id = self.ready_artifact()

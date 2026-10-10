@@ -259,8 +259,61 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
 
 
 # --- calendar --------------------------------------------------------------------------------------------------------
+def _youtube_plans(ctx, start, end, zone):
+    """Current unapproved local plans, never publishing authority or raw media.
+
+    The normal planner permits at most 100 pending future plans per workspace.
+    Fail closed on an inconsistent larger snapshot instead of silently presenting
+    a partial calendar as complete. Expired history belongs to the paged archive.
+    """
+    from ..youtube.agent import assert_draft_current
+    from ..youtube.pagination import finite
+    data = ctx.state.get('youtubeAgent')
+    if not isinstance(data, dict) or not isinstance(data.get('drafts'), list):
+        return []
+    if not ctx.membership.allows('read') or ctx.state.get('workspace', {}).get('id') != ctx.workspace_id:
+        raise AlphaError("Your role cannot read this workspace calendar.", 403, code='tool_forbidden')
+    references = set()
+    for item in _jobs(ctx) + _reviews(ctx):
+        manifest = item.get('manifest')
+        identifier = manifest.get('variantId') if isinstance(manifest, dict) else None
+        if isinstance(identifier, str) and identifier:
+            references.add(identifier)
+    entries, pending = [], 0
+    for draft in data['drafts']:
+        if not isinstance(draft, dict) or draft.get('status') != 'proposed' or draft.get('jobId'):
+            continue
+        timing = draft.get('timing')
+        at = timing.get('timestamp') if isinstance(timing, dict) else None
+        if not finite(at) or at <= ctx.now:
+            continue
+        pending += 1
+        if pending > 100:
+            raise AlphaError('Too many pending YouTube plans to project a complete calendar. Review them in YouTube Creator.',
+                             409, code='youtube_calendar_projection_limit')
+        if (not isinstance(draft.get('publishOptions'), dict)
+                or any(not isinstance(draft.get(key), str) or not draft[key]
+                       for key in ('id', 'connectionId', 'channelId', 'assetId', 'variantId', 'assetHash'))
+                or not isinstance(draft['publishOptions'].get('title'), str)):
+            continue
+        if not start <= at < end or draft['variantId'] in references:
+            continue
+        try:
+            assert_draft_current(ctx.state, draft, ctx.now)
+        except (AlphaError, KeyError, TypeError, ValueError):
+            continue
+        # Deliberately omit goals, descriptions, private owner/run IDs, policy
+        # grants, generation/lease state, storage paths and credential fields.
+        entries.append({'kind': 'youtube_plan', 'id': draft['id'], 'state': 'ready_for_review',
+                        'title': 'YouTube plan awaiting approval', 'platform': 'YouTube',
+                        'account': 'YouTube channel', 'channelId': draft['connectionId'], 'at': at,
+                        'when': timeframe.local(at, zone),
+                        'text': _excerpt(draft['publishOptions']['title'], 100), 'href': '/app/youtube'})
+    return entries
+
+
 def _entries(ctx, start, end, zone):
-    entries = []
+    entries = _youtube_plans(ctx, start, end, zone)
     for j in _jobs(ctx):
         at = _timestamp(j)
         if at is None or not start <= at < end or j.get("state") == "canceled":

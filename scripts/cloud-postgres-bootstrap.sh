@@ -84,14 +84,32 @@ cd -- "$jcb_pg_repo_root"
 # switches. Only the disposable cluster can be reached by the libpq defaults.
 # Keep concurrent fleet claims in their own clean cluster: prior fixture accounts
 # must not be blocked or mutated merely to make claim selection deterministic.
-for jcb_pg_group in creator fleet; do
+for jcb_pg_group in creator fleet history revocation agent_context workspace_provider_data privacy_erasure identity_fence openui_fence policy_acceptance operations_projection; do
   if [ "$jcb_pg_group" = creator ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_creator.py tests/phase2/postgres_video.py
       tests/phase2/postgres_consumer_campaign_worker.py tests/phase2/postgres_youtube_acceptance.py
       tests/phase2/postgres_youtube_capacity.py tests/phase2/postgres_youtube_scale.py
       tests/phase2/postgres_library_lifecycle.py tests/phase2/postgres_reverify.py)
-  else
+  elif [ "$jcb_pg_group" = fleet ]; then
     jcb_pg_scripts=(tests/phase2/postgres_youtube_fleet.py)
+  elif [ "$jcb_pg_group" = history ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_agent_history.py)
+  elif [ "$jcb_pg_group" = revocation ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_revocation.py)
+  elif [ "$jcb_pg_group" = agent_context ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_agent_context.py)
+  elif [ "$jcb_pg_group" = workspace_provider_data ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_workspace_provider_data.py)
+  elif [ "$jcb_pg_group" = privacy_erasure ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_privacy_erasure.py)
+  elif [ "$jcb_pg_group" = identity_fence ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_identity_fence.py)
+  elif [ "$jcb_pg_group" = openui_fence ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_openui_fence.py)
+  elif [ "$jcb_pg_group" = policy_acceptance ]; then
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_policy_acceptance.py)
+  else
+    jcb_pg_scripts=(tests/phase2/postgres_youtube_operations_projection.py)
   fi
 env -i \
   PATH="$PATH" HOME="$jcb_pg_home" TMPDIR="$jcb_pg_temp_root" \

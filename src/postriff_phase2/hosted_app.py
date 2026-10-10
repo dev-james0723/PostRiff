@@ -255,6 +255,24 @@ def route_pattern(path):
     return "/".join(":id" if _ID_SEGMENT.match(part) else part for part in (path or "/").split("/"))[:160]
 
 
+def genui_cron_summary(result):
+    """Generative UI recovery for the cron.completed line: integer counts and statuses, plus the error class name when a
+    reaper is unavailable, never text. Returns (summary, failed) so a failing reaper raises the line to a warning."""
+    summary, failed = {}, False
+    for key in ('uiRecovery', 'uiHolds'):
+        value = result.get(key)
+        if not isinstance(value, dict):
+            continue
+        clean = {name: item for name, item in value.items() if type(item) is int}
+        if value.get('status') == 'unavailable':
+            failed = True
+            clean['status'] = 'unavailable'
+            error = value.get('error')
+            clean['error'] = error if isinstance(error, str) and error.isidentifier() else 'error'
+        summary[key] = clean
+    return summary, failed
+
+
 class HostedApplication:
     def __init__(self, service=None, worker=None, public_auth=None, cron_secret=None):
         self.service = service
@@ -665,14 +683,14 @@ class HostedApplication:
                         try:
                             from .agent_runtime_v2 import ui_store
                             result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
-                        except Exception:
-                            result['uiRecovery'] = {'status': 'unavailable'}
+                        except Exception as exc:
+                            result['uiRecovery'] = {'status': 'unavailable', 'error': type(exc).__name__}
                         # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
                         try:
                             from .agent_runtime_v2 import ui_metering
                             result['uiHolds'] = ui_metering.sweep_orphans(repository.connection_factory, ledger=getattr(service, 'ledger', None))
-                        except Exception:
-                            result['uiHolds'] = {'status': 'unavailable'}
+                        except Exception as exc:
+                            result['uiHolds'] = {'status': 'unavailable', 'error': type(exc).__name__}
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
@@ -735,8 +753,10 @@ class HostedApplication:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:
                     coworker_steps = {'status': 'unavailable'}
-                logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
-                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone']}))
+                genui, genui_failed = genui_cron_summary(result)
+                logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' and not genui_failed else logging.WARNING,
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'],
+                                **({'genui': genui} if genui else {})}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)
@@ -877,6 +897,11 @@ class HostedApplication:
                 if len(parts) == 7 and parts[4] == "reply-drafts" and parts[6] == "reply" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, audience.approve_reply(parts[2], token, parts[5], body.get("digest"), body.get("confirmed")))
+            if len(parts) == 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube-policy':
+                if method == 'GET':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.status(parts[2], token))
+                if method == 'POST':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.accept(parts[2], token, self._body(environ)))
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)

@@ -1,4 +1,4 @@
-import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation } from '@/lib/youtube/types';
+import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
@@ -236,10 +236,24 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
+    acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
+      send<YouTubePolicyStatus>('POST', `${ws(w)}/youtube-policy`, body),
     youtubeOverview: (w: string, c: string) =>
       get<YouTubeOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}`),
-    youtubeAgent: (w: string, c: string) =>
-      get<YouTubeAgentOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}/agent`),
+    youtubeAgent: (w: string, c: string, options: YouTubeAgentPageOptions = {}) => {
+      const query = new URLSearchParams({ limit: String(options.limit ?? 25) });
+      if (options.draftCursor) query.set('draftCursor', options.draftCursor);
+      if (options.policyCursor) query.set('policyCursor', options.policyCursor);
+      return get<YouTubeAgentOverview>(`${ws(w)}/youtube/${encodeURIComponent(c)}/agent?${query}`);
+    },
+    youtubeAgentHistory: (w: string, c: string, kind: 'draft' | 'policy', options: { cursor?: string; limit?: number } = {}) => {
+      const query = new URLSearchParams({ limit: String(options.limit ?? 25) });
+      if (options.cursor) query.set('cursor', options.cursor);
+      return get<YouTubeAgentHistory>(`${ws(w)}/youtube/${encodeURIComponent(c)}/agent/history/${kind}?${query}`);
+    },
+    youtubeAgentArchive: (w: string, c: string, body: { revision: number }) =>
+      send<Omit<YouTubeAgentMutation<YouTubeAgentArchiveResult>, 'queued'>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/history/archive`, body),
     youtubeAgentPrepare: (w: string, c: string, body: Record<string, unknown>) =>
       send<YouTubeAgentMutation<YouTubeAgentDraft>>('POST', `${ws(w)}/youtube/${encodeURIComponent(c)}/agent/drafts`, body),
     youtubeAgentApprove: (w: string, c: string, id: string, body: Record<string, unknown>) =>

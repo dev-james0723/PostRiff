@@ -1,0 +1,309 @@
+{
+ "about": "The G03 live corpus as `scripts/agent_ui_live.py plan` printed it at de4e5907, before D-A53: the 30 normal cases, 9 edits and 3 faults. D-A53 keeps these byte-identical and in order; the 60-case corpus appends 30 cases after them.",
+ "normal": [
+  {
+   "caseId": "J01-a",
+   "journey": "J01",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Compare my latest LinkedIn and Threads drafts side by side"
+  },
+  {
+   "caseId": "J01-b",
+   "journey": "J01",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show my unscheduled drafts in a table with platform and language"
+  },
+  {
+   "caseId": "J01-c",
+   "journey": "J01",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Which of my drafts still need review? Lay them out so I can filter by platform"
+  },
+  {
+   "caseId": "J02-a",
+   "journey": "J02",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show my publishing calendar for next week as an agenda"
+  },
+  {
+   "caseId": "J02-b",
+   "journey": "J02",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "What's in the publishing queue, and do any time slots collide?"
+  },
+  {
+   "caseId": "J02-c",
+   "journey": "J02",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Lay out next month's scheduled posts week by week"
+  },
+  {
+   "caseId": "J03-a",
+   "journey": "J03",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Browse my Library for piano practice photos I could use"
+  },
+  {
+   "caseId": "J03-b",
+   "journey": "J03",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show my Library items about the recital with previews"
+  },
+  {
+   "caseId": "J03-c",
+   "journey": "J03",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Find the Library videos I added last month and compare their details"
+  },
+  {
+   "caseId": "J04-a",
+   "journey": "J04",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show which sources Rafii can learn my writing voice from"
+  },
+  {
+   "caseId": "J04-b",
+   "journey": "J04",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "What has Rafii learned about my voice so far, with the evidence?"
+  },
+  {
+   "caseId": "J04-c",
+   "journey": "J04",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Compare proposed and learned voice traits in a table"
+  },
+  {
+   "caseId": "J05-a",
+   "journey": "J05",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show the plan for my current campaign as a table"
+  },
+  {
+   "caseId": "J05-b",
+   "journey": "J05",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "What's still missing in my campaign? Show progress by step"
+  },
+  {
+   "caseId": "J05-c",
+   "journey": "J05",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Lay out my campaign timeline with its dependencies"
+  },
+  {
+   "caseId": "J06-a",
+   "journey": "J06",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Chart my post views over the last 30 days by platform"
+  },
+  {
+   "caseId": "J06-b",
+   "journey": "J06",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Compare engagement for my last 10 posts in a table"
+  },
+  {
+   "caseId": "J06-c",
+   "journey": "J06",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show which of my metrics are unknown or missing, and why"
+  },
+  {
+   "caseId": "J07-a",
+   "journey": "J07",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show the research brief for my next post with its citations"
+  },
+  {
+   "caseId": "J07-b",
+   "journey": "J07",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Compare the sources behind my recital post by date"
+  },
+  {
+   "caseId": "J07-c",
+   "journey": "J07",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "List the research I saved, with each source's date"
+  },
+  {
+   "caseId": "J08-a",
+   "journey": "J08",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Show my automations with their next run and time zone"
+  },
+  {
+   "caseId": "J08-b",
+   "journey": "J08",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "What happened in my last automation runs?"
+  },
+  {
+   "caseId": "J08-c",
+   "journey": "J08",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Which connections need attention before my automations can run?"
+  },
+  {
+   "caseId": "J09-a",
+   "journey": "J09",
+   "kind": "generate",
+   "surface": "founder",
+   "prompt": "Show this week's revenue and cost summary"
+  },
+  {
+   "caseId": "J09-b",
+   "journey": "J09",
+   "kind": "generate",
+   "surface": "founder",
+   "prompt": "Show reliability by surface for the last 24 hours"
+  },
+  {
+   "caseId": "J09-c",
+   "journey": "J09",
+   "kind": "generate",
+   "surface": "founder",
+   "prompt": "Show the support queue grouped by status"
+  },
+  {
+   "caseId": "CMP-a",
+   "journey": "composite",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Pick two Library photos for my recital post, draft a LinkedIn post in my voice, and propose it for Thursday 18:00"
+  },
+  {
+   "caseId": "CMP-b",
+   "journey": "composite",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "Use the selected Library video to draft a Threads post in my voice and add it to my campaign plan"
+  },
+  {
+   "caseId": "CMP-c",
+   "journey": "composite",
+   "kind": "generate",
+   "surface": "chat",
+   "prompt": "From my Library recital photos, draft an Instagram caption in my voice and show where it fits in next week's calendar"
+  }
+ ],
+ "edits": [
+  {
+   "caseId": "J01-edit",
+   "journey": "J01",
+   "kind": "edit",
+   "baseCase": "J01-a",
+   "surface": "chat",
+   "instruction": "Compare only the two selected drafts"
+  },
+  {
+   "caseId": "J02-edit",
+   "journey": "J02",
+   "kind": "edit",
+   "baseCase": "J02-a",
+   "surface": "chat",
+   "instruction": "Change the period to next month"
+  },
+  {
+   "caseId": "J03-edit",
+   "journey": "J03",
+   "kind": "edit",
+   "baseCase": "J03-a",
+   "surface": "chat",
+   "instruction": "Show only videos"
+  },
+  {
+   "caseId": "J04-edit",
+   "journey": "J04",
+   "kind": "edit",
+   "baseCase": "J04-a",
+   "surface": "chat",
+   "instruction": "Add a column with the evidence for each trait"
+  },
+  {
+   "caseId": "J05-edit",
+   "journey": "J05",
+   "kind": "edit",
+   "baseCase": "J05-a",
+   "surface": "chat",
+   "instruction": "Add a chart of progress by step"
+  },
+  {
+   "caseId": "J06-edit",
+   "journey": "J06",
+   "kind": "edit",
+   "baseCase": "J06-a",
+   "surface": "chat",
+   "instruction": "Change the period to the last 7 days"
+  },
+  {
+   "caseId": "J07-edit",
+   "journey": "J07",
+   "kind": "edit",
+   "baseCase": "J07-a",
+   "surface": "chat",
+   "instruction": "Sort the sources by date, newest first"
+  },
+  {
+   "caseId": "J08-edit",
+   "journey": "J08",
+   "kind": "edit",
+   "baseCase": "J08-a",
+   "surface": "chat",
+   "instruction": "Show only paused automations"
+  },
+  {
+   "caseId": "J09-edit",
+   "journey": "J09",
+   "kind": "edit",
+   "baseCase": "J09-a",
+   "surface": "founder",
+   "instruction": "Add last week for comparison"
+  }
+ ],
+ "faults": [
+  {
+   "caseId": "F-cancel",
+   "kind": "fault",
+   "fault": "user cancel mid-stream",
+   "expect": "ui.canceled; native answer kept; settled once"
+  },
+  {
+   "caseId": "F-disconnect",
+   "kind": "fault",
+   "fault": "close the tab mid-stream",
+   "expect": "interrupted; settled once; reopen shows last valid revision"
+  },
+  {
+   "caseId": "F-retry",
+   "kind": "fault",
+   "fault": "explicit Try again after a failure",
+   "expect": "cost/consent shown first; a new attempt, never automatic"
+  }
+ ]
+}

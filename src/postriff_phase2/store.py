@@ -66,6 +66,12 @@ class Phase2Store(Store):
 
     def _present(self, state, revision):
         result = super()._present(state, revision)
+        # Creator uses scoped bounded endpoints. Internal authority/leases and
+        # model attribution must not escape through ordinary workspace payloads.
+        result["state"].pop("youtubeAgent", None)
+        for variant in result["state"].get("variants", []):
+            if isinstance(variant, dict) and variant.get("platform") == "YouTube":
+                variant.pop("metadataProvenance", None)
         ensure_content_state(result["state"])
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
@@ -290,7 +296,12 @@ class Phase2Store(Store):
                 raise AlphaError("Choose a supported fixture outcome.")
             c.update({"identityVerified": scenario != "denied", "capabilityVerified": scenario not in ("denied", "capability_loss"), "scopes": ["w_member_social"] if c["platform"] == "LinkedIn" else ["instagram_business_basic", "instagram_business_content_publish"], "expiresAt": now-1 if scenario == "expired" else now+86400, "verifiedAt": now, "revoked": False, "capabilityVersion": c["capabilityVersion"]+1, "scenario": scenario})
         elif action == "channel_disconnect":
-            find(data["channels"], p.get("channelId"))["revoked"] = True
+            channel = find(data["channels"], p.get("channelId"))
+            channel["revoked"] = True
+            if channel.get('platform') == 'YouTube':
+                from .youtube.agent import revoke_connection_authority
+                revoke_connection_authority(s, channel['id'], device['user_id'], now,
+                                            reason='connection_disconnected')
         elif action == "variant_review":
             v = self._variant(s, p.get("variantId"))
             if p.get("variantRevision") != v["revision"] or p.get("confirmed") is not True:
@@ -306,6 +317,8 @@ class Phase2Store(Store):
             data["reviews"] = data["reviews"][-19:]+[{"id": uid(), "manifest": manifest, "digest": digest(manifest), "status": "needs_review", "createdAt": now}]
         elif action == "approve":
             review = find(data["reviews"], p.get("reviewId"))
+            if review.get('privacyErased') or review.get('manifest', {}).get('privacyErased'):
+                raise AlphaError('This YouTube review was erased and cannot be approved again.', 409, code='youtube_data_removed')
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
@@ -313,6 +326,8 @@ class Phase2Store(Store):
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
             if existing:
+                if existing.get('privacyErased') or existing.get('youtubeProviderDataRemoved'):
+                    raise AlphaError('This YouTube operation was erased and cannot be resumed.', 409, code='youtube_data_removed')
                 if existing["state"] in ("failed", "canceled") and review["status"] != "approved":
                     raise AlphaError("This review belongs to an ended job. Prepare a new review to try again.", 409, code="review_consumed")
                 review.update({"status": "approved", "jobId": existing["id"]})
@@ -513,6 +528,8 @@ class Phase2Store(Store):
 
     def current(self, s, m):
         try:
+            if m.get('privacyErased'):
+                return False
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]

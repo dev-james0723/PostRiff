@@ -95,3 +95,67 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
 - D-A44 Lane E owns tests/phase2/postgres_agent_ui_journeys.py. Future J03 switch to library_intelligence.api (after the peer branch merges): any Library field that reaches a model (presenter projection, selection titles echoed into a Manager turn) must be read with `for_model=True`; browser-only query results keep the default. api.apply_action runs inside the pr_ui_actions transaction (peer holds a per-(workspace, key) advisory lock). Library manifest action ids = `library_` + actionType with '.' → '_' (peer exports LIBRARY_OPENUI_ACTION_IDS).
 - D-A45 `UiBridges` gains `dispose(): void` (bridges/types.ts): disposes query + action bridges (abort in flight, clear timers/caches). D's createUiBridges implements it; C calls it when (scopeKey, artifactId, revision, accepted) changes. Reserved Query arg `cursor` → UiQueryV1.cursor (never an input). Founder journey renderers are a separate FOUNDER_JOURNEY_RENDERERS map used only by founder-library.tsx.
 - D-A46 (wording fix for D-A43) `safeState['@selection'] = {items: [{type, id, title?}], visible: [{type, id}] (displayed order), listId}` — `visible` holds refs, not bare ids (F's clean_selection and state/selection.ts are authoritative). Server snapshot of an artifact whose library version is unsupported offers no write/edit/retry/persist capability (access_for gates canAct/canEdit/canRetry/canPersistState on compat.supported) and renders the native fallback with zero model calls.
+- D-A47 (2026-10-09, AMENDS D-A23; approved by James on 2026-10-09 as option "B1" after the production canary) Each generated view gets its own small capped allowance, and the Manager's own spend no longer decides whether a view may run. In production a Manager turn settled 112,163 µ$ against its 88,000 µ$ internal estimate, so the view was refused 'budget' although it needs about 1–2 k µ$.
+
+  The rule:
+  - When a turn can present, `_open_run` adds `ui_metering.presentation_allowance(cfg)` to the turn's ONE admission reservation `agent:{runId}` and records the portion as `meta.uiAllowanceUsdMicro`. A turn can present when `genui_for(workspace, founder=…)` is enabled, it is not delegated, it carries no non-founder credit authority (phone), it is not voice without UI intent, and it is not a greeting or acknowledgement.
+  - The allowance is 2 attempts (initial + its single repair). Each is priced at worst-case input (64 KiB prompt + 24 KiB context + 128 KiB source + 2 KiB instruction) plus the fixed output cap.
+  - The presentation chain's room is that portion minus what earlier UI attempts used or still hold. The Manager's settled spend is not subtracted. An unknown parent spend still refuses the view.
+  - Every presenter attempt still reserves its own ledger hold against the workspace, person-day, founder and credit limits, so the real user limits are enforced on every attempt.
+  - The allowance is an admission-time portion, released with the turn's settlement. It is not a standing hold.
+
+  Failure paths and other chains:
+  - If the combined reservation hits a budget stop (402/429, or 409 founder_budget), the turn is admitted with its own estimate only, and the view falls back to the original rule. The optional view never costs the answer.
+  - A failure to compute the allowance means no allowance.
+  - Explicit edits keep the per-request allowance of the turn's own estimate (the presentation portion is not added).
+  - `reservation.estimateUsdMicro`, the follow-up-chip ceiling, stays the turn's own estimate.
+  - Turns without the meta (older runs, presenter unpriced, GenUI off) keep D-A23 unchanged.
+  - Known residual: the parent ledger row's estimate now includes the portion, so person-facing and founder estimate views show it under the Manager model.
+- D-A48 (2026-10-09) Validator rejections are logged content-free as `genui.validation_rejected` {kind, codes: {code: count}, errorCount}. Codes come from a fixed vocabulary, `ui_stream.REJECTION_CODES`: validate.ts prefixes, lang-core ValidationErrorCode/OpenUIErrorCode and the seam codes. Anything else counts as "other", and statement ids, names, source and data never reach the log. INFO lines of `postriff.agent_ui` are emitted in production (`request.stream_closed` was observed in the Vercel runtime logs on 2026-10-09).
+- D-A49 (2026-10-09) The runtime bindings section of the presenter prompt now states positively what the validator enforces:
+  - Query arguments are literals or bare $variables.
+  - Every QueryRef parameter takes the bare name of one top-level Query statement: no `q.data…`, no @Filter/@Sort result, no @Each item.
+  - One record is shown by a Query with a literal id.
+  - A selection $variable is a list of ids.
+  - TaskStatus has no path parameter.
+  
+  The canary's first-pass validity was 0/3 (J01-a and J01-c each needed the repair). The upstream text, which teaches @Filter/@Each over `rows.data.items`, stays in the hash-checked asset; the bindings section is not hash-checked and now overrides it for bound slots.
+- D-A50 (2026-10-09) Presenter prompt rules aimed at the first-pass rejections D-A48 measured in the live canary. Run 2 on 26d7e901 had 20/24 first-pass valid, and the logged codes were duplicate_statement×13, unresolved_ref×1 and query_args_shape×1. Two of the three logged rejections came on multi-journey turns.
+  - Generate mode adds: "Write the program once: declare every statement id exactly once, and never repeat, restate or continue a program". Patch mode is unchanged, since re-declaring a statement by id replaces it.
+  - All modes add: "Every name you use must be declared in this program", plus WRONG/RIGHT Query-argument examples.
+  - For views limited to some journeys' component groups, the allowed-components line stays at the end (the prompt must start with the generated asset — test_prompt_is_the_generated_asset_plus_runtime_bindings), now followed on its own line by "Any other component documented above is rejected for this view", which the CI fake provider still parses.
+- D-A53 (2026-10-09, AMENDS G03 in 04-ACCEPTANCE and acceptance.json; decided by James on 2026-10-09 as DP-1) The G03 first-pass gate is measured on a FIXED 60-case live corpus. D-A51 is the Library browse decision (#152) and D-A52 is reserved for C3.
+
+  The rule:
+  - Old: at least 29 of 30 normal cases (96.7%) first-pass valid, and all 30 functional after at most one repair.
+  - New: at least 59 of 60 normal cases (98.3%) first-pass valid, and all 60 functional after at most one allowed repair. Fixtures and fallbacks still never count as generated success.
+  - The corpus was fixed and documented before any measurement. The denominator never changes afterwards, and no case is dropped or replaced because it fails.
+
+  The corpus (`g03-live-60/v2`, the `normal` list of `scripts/agent_ui_live.py plan`):
+  - sha256 `ef9e061b3705f7617b5467f6b1e8e9b904aa5fd5d0538d1a5a9299e937dbe4e3`, over the canonical JSON of the 60 cases (sorted keys, no spaces).
+  - Cases 1–30 are the earlier 30-case sample, byte for byte and in the same order. The frozen copy is `tests/agent_ui_acceptance/fixtures/g03-corpus-v1.json`.
+  - Cases 31–60 are new: d, e and f for each of J01–J09, then CMP-d, CMP-e and CMP-f. They were written from 01-ENGINEERING-SPEC §4 and the journey definitions only, not from any pending prompt change.
+  - Of the new cases, 10 are Hong Kong Cantonese in Traditional Chinese and 2 mix English and Chinese. 13 are follow-ups that only make sense as a later turn of their journey's conversation (`corpus.followUps`).
+  - They also cover partial, empty and unknown data, multi-journey asks, filters, date ranges and time zones, comparisons and charts, and read-only founder summaries for J09 on the founder surface.
+  - The 9 edit cases and 3 fault cases are unchanged.
+
+  Feasibility review (2026-10-09, before any measurement, after review of #157):
+  - Spec §2.3 keeps plain questions native: the Presenter runs only for an explicit view request or a rich tool result. A case whose spec-correct answer has no view could never be functional, so the frozen corpus could never pass.
+  - 20 of the 30 new cases had no explicit view request under the base's deterministic predicate (`ui_projection.wants_ui` at de4e5907): J01-d, J01-f, J02-e, J03-d, J03-e, J03-f, J04-d, J04-e, J04-f, J05-d, J05-f, J06-e, J07-d, J08-d, J08-e, J09-d, J09-e, CMP-d, CMP-e and CMP-f. Several were follow-ups that could be answered from the conversation alone.
+  - Each was reworded to ask to see its answer (a table, agenda, timeline, gallery, list, side-by-side comparison or breakdown), keeping its language, follow-up position, data conditions and difficulty. The prompt-fix branch was not consulted. The release test now requires every new case to pass `wants_ui`.
+  - The 30 v1 cases are frozen byte for byte and were not reworded. 14 of them have no explicit view request and rely on a rich tool result: J02-b, J02-c, J03-a, J04-a, J04-b, J05-b, J06-c, J08-b, J08-c, J09-a, J09-b, CMP-a, CMP-b and CMP-c.
+  - Rule, pending James's confirmation before merge: a planned case answered natively, with no view, is not functional, so it fails G03. The denominator stays 60.
+  - Open, outside this corpus: on the base, `ui_projection.eligibility` calls `detect_journeys` at workspace scope (ui_projection.py:148), and the founder Manager has only founder_* tools, so a founder turn comes out `plain_answer` and is never eligible (code reading plus a synthetic-result probe; no live call). Until that is fixed, J09-a to J09-f (3 of them v1 cases) cannot produce a view, and G03 cannot pass on any corpus that includes J09. Run 3 measured 27 cases and 8 edits, without the founder cases.
+
+  Running and counting:
+  - The run order is fixed (`runOrder`). For each journey, its first three cases run in one new conversation, then its edit runs in that same conversation (`"start": "continue"`, on the view of `<J>-a`), then its new three cases run in a second new conversation. J01–J08 and the composites run in the consumer chat first, and the founder panel comes last: J09-1, J09-edit, then J09-2. Nothing is reopened, because the founder panel's "New conversation" clears its in-memory thread. The cold case is J01-a.
+  - `ingest` counts only the plan's case ids. Any other id is reported as unplanned.
+  - Only each case's first attempt counts. A case's artifact is the earliest one of its own; an artifact first seen under an earlier case (for example, re-rendered after a reload) stays with that case. A case run more than once under its id (more than one turn, or more than one artifact of its own) counts as a first-pass miss and as not functional, whatever a later attempt did. Server artifacts that no case counts are listed as `uncountedArtifacts` for review; the fault cases account for some of them.
+  - G03 fails as soon as two first-pass misses, or one case that is not functional after its repair, are known. Otherwise a short sample stays unverified.
+
+  Freezing and cost:
+  - The corpus is frozen at the merge commit of PR #157, which introduced it. The release test pins its hash, the first 30 cases byte for byte, and the edits and faults.
+  - Any change to a case, its order or the threshold after that merge is a new corpus. It needs a new decision and a new corpus id, and results from different corpora are never pooled. The feasibility rewording above happened before the merge, with nothing measured, so the id stays `g03-live-60/v2` and only the pinned hash changed (it was `69d6bee3…`).
+  - A full live run costs about 4.7 USD at run-3 rates. Run 3 cost 2.29 USD for 27 cases plus 8 edits, about 0.065 USD per generation including its Manager turn; a full run is 72 generations (60 normal, 9 edits and 3 fault cases).
+  - The runner's per-case estimate rises from 0.06 to 0.07 USD so that it stays conservative. A paid run still needs DP-2 approval. Within the existing 5 USD canary cap, the headroom is about 0.3 USD.
+  - This change made no live model calls and measured nothing.

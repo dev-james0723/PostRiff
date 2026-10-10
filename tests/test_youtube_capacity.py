@@ -6,9 +6,10 @@ import unittest
 from unittest.mock import Mock
 
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.youtube.capacity import CapacityPolicy, CapacityController, DEFAULT_LIMITS, budget_decision
+from postriff_phase2.youtube.capacity import CapacityPolicy, CapacityController, DEFAULT_LIMITS, DEFAULT_ANALYTICS_LIMITS, budget_decision, analytics_budget_decision
 from postriff_phase2.youtube.model import YouTubeError
 from postriff_phase2.youtube.uploads import CHUNK_ALIGNMENT, CHUNK_SIZE, configured_chunk_size
+from postriff_phase2.youtube import privacy_erasure, workspace_provider_data
 import test_youtube_creator as creator_fixtures
 
 
@@ -72,6 +73,44 @@ class CapacityPolicyTests(unittest.TestCase):
         state['phase2']['jobs'][0] = {'state': 'approved', 'manifest': {'platform': 'LinkedIn'}}
         controller.assert_queue_capacity(state)
 
+    def test_retained_erasure_history_does_not_exhaust_pending_admission(self):
+        controller = CapacityController(None, CapacityPolicy('synthetic', pending_per_workspace=2))
+        history = []
+        for index in range(40):
+            saved = {'id': f'history-{index}', 'state': 'verified', 'approvalDigest': f'original-{index}',
+                     'approvedBy': 'owner', 'approvedAt': 1,
+                     'manifest': {'platform': 'YouTube', 'workspaceId': 'workspace',
+                                  'channelId': 'connection', 'payload': {'title': f'Submitted {index}'}}}
+            if index < 20:
+                workspace_provider_data.scrub_job(saved, 'youtube_expired_data_removed', 2)
+            else:
+                privacy_erasure.scrub_workspace({'phase2': {'jobs': [saved]}}, 'workspace', 'connection', 2)
+            history.append(saved)
+        state = {'phase2': {'jobs': history + [{'id': 'current', 'state': 'approved',
+                                              'manifest': {'platform': 'YouTube'}}]}}
+        before = copy.deepcopy(state)
+        controller.assert_queue_capacity(state)
+        self.assertEqual(state, before)
+        self.assertEqual(len(state['phase2']['jobs']), 41)
+        state['phase2']['jobs'].append({'id': 'retryable', 'state': 'held', 'manifest': {'platform': 'YouTube'}})
+        with self.assertRaises(AlphaError) as denied:
+            controller.assert_queue_capacity(state)
+        self.assertEqual(denied.exception.code, 'youtube_queue_capacity')
+        controller.assert_queue_capacity(state, additional=0)
+
+    def test_only_canonical_permanent_held_markers_release_queue_slots(self):
+        controller = CapacityController(None, CapacityPolicy('synthetic', pending_per_workspace=1))
+        for marker in ('youtubeProviderDataRemoved', 'privacyErased'):
+            for value in (False, None, 1, 'true', {}, []):
+                state = {'phase2': {'jobs': [{'state': 'held', marker: value,
+                                            'manifest': {'platform': 'YouTube'}}]}}
+                with self.subTest(marker=marker, value=value), self.assertRaises(AlphaError):
+                    controller.assert_queue_capacity(state)
+            inconsistent = {'phase2': {'jobs': [{'state': 'approved', marker: True,
+                                               'manifest': {'platform': 'YouTube'}}]}}
+            with self.subTest(marker=marker, state='approved'), self.assertRaises(AlphaError):
+                controller.assert_queue_capacity(inconsistent)
+
     def test_chunks_are_aligned_and_memory_bounded(self):
         self.assertEqual(configured_chunk_size(), 8 * 1024 * 1024)
         self.assertEqual(configured_chunk_size(str(CHUNK_ALIGNMENT)), CHUNK_ALIGNMENT)
@@ -86,6 +125,73 @@ class CapacityPolicyTests(unittest.TestCase):
         for missing in (None, ''):
             with self.assertRaises(AlphaError):
                 controller.record('workspace', missing, 'videos.list', 'general', 1)
+
+
+class AnalyticsCapacityTests(unittest.TestCase):
+    provider = CapacityPolicyTests.provider
+    proof = CapacityPolicyTests.proof
+
+    def test_analytics_defaults_are_separate_request_limits_and_cannot_be_raised_by_environment(self):
+        policy = CapacityPolicy.from_environment(self.provider(), {
+            'POSTRIFF_YOUTUBE_ANALYTICS_DAILY_LIMIT': '9999999',
+            'POSTRIFF_YOUTUBE_ANALYTICS_PROJECT_REQUESTS_PER_MINUTE': '9999999'})
+        self.assertEqual(policy.limits, DEFAULT_LIMITS)
+        self.assertEqual(policy.analytics_daily_limit, DEFAULT_ANALYTICS_LIMITS['requestsPerDay'])
+        self.assertEqual(policy.analytics_project_per_minute, DEFAULT_ANALYTICS_LIMITS['requestsPerMinute'])
+        self.assertFalse(policy.approved_evidence)
+
+    def test_analytics_limits_lower_or_raise_only_with_fresh_exact_google_project_evidence(self):
+        proof = self.proof()
+        proof['quota']['analyticsLimits'] = {'requestsPerDay': 200000, 'requestsPerMinute': 1440}
+        policy = CapacityPolicy.from_environment(self.provider(proof), {
+            'POSTRIFF_YOUTUBE_ANALYTICS_DAILY_LIMIT': '50000',
+            'POSTRIFF_YOUTUBE_ANALYTICS_PROJECT_REQUESTS_PER_MINUTE': '300',
+            'POSTRIFF_YOUTUBE_ANALYTICS_WORKSPACE_DAILY_LIMIT': '9999999'})
+        self.assertEqual((policy.analytics_daily_limit, policy.analytics_project_per_minute,
+                          policy.analytics_workspace_daily_limit), (50000, 300, 50000))
+        raised = CapacityPolicy.from_environment(self.provider(proof))
+        self.assertEqual((raised.analytics_daily_limit, raised.analytics_project_per_minute), (200000, 1440))
+        for change in ({'source': 'operator_assertion'}, {'status': 'submitted'}, {'observedAt': '2000-01-01'}, {'reference': ''}, {'projectId': 'wrong-project'}):
+            bad = copy.deepcopy(proof); bad['quota'].update(change)
+            closed = CapacityPolicy.from_environment(self.provider(bad))
+            self.assertEqual((closed.analytics_daily_limit, closed.analytics_project_per_minute), (100000, 720))
+        closed = CapacityPolicy.from_environment(self.provider(proof, 'wrong-client'))
+        self.assertEqual((closed.analytics_daily_limit, closed.analytics_project_per_minute), (100000, 720))
+
+    def test_analytics_invalid_limits_fail_to_conservative_defaults(self):
+        proof = self.proof(); proof['quota']['analyticsLimits'] = {'requestsPerDay': True, 'requestsPerMinute': -1}
+        policy = CapacityPolicy.from_environment(self.provider(proof), {
+            'POSTRIFF_YOUTUBE_ANALYTICS_DAILY_LIMIT': 'broken',
+            'POSTRIFF_YOUTUBE_ANALYTICS_PROJECT_REQUESTS_PER_MINUTE': '0',
+            'POSTRIFF_YOUTUBE_ANALYTICS_WORKSPACE_DAILY_LIMIT': '-1'})
+        self.assertEqual((policy.analytics_daily_limit, policy.analytics_project_per_minute,
+                          policy.analytics_workspace_daily_limit), (100000, 720, 2000))
+
+    def test_analytics_daily_project_minute_and_workspace_rate_backoffs_are_distinct(self):
+        policy = CapacityPolicy('synthetic', analytics_daily_limit=10, analytics_project_per_minute=3,
+                                analytics_workspace_daily_limit=4, requests_per_minute=2)
+        now = datetime(2026, 3, 8, 9, 59, tzinfo=timezone.utc).timestamp()
+        for args, reason in (((10, 0, 0, 0), 'analytics_project_daily'),
+                             ((0, 4, 0, 0), 'analytics_workspace_daily'),
+                             ((0, 0, 3, 0), 'analytics_project_rate'),
+                             ((0, 0, 0, 2), 'workspace_rate')):
+            decision = analytics_budget_decision(policy, *args, now)
+            self.assertEqual(decision[0], reason)
+            self.assertGreater(decision[1], now)
+            if reason.endswith('daily'):
+                self.assertEqual(datetime.fromtimestamp(decision[1], timezone.utc).isoformat(), '2026-03-09T07:00:00+00:00')
+            else:
+                self.assertEqual(decision[1], now // 60 * 60 + 60)
+        self.assertIsNone(analytics_budget_decision(policy, 9, 3, 2, 1, now))
+
+    def test_null_analytics_cost_routes_to_request_counter_without_inventing_data_units(self):
+        controller = CapacityController(None, CapacityPolicy('synthetic'))
+        controller._reserve_analytics = Mock()
+        controller.record('workspace', 'connection', 'analytics.reports.query', 'analytics', None)
+        controller._reserve_analytics.assert_called_once_with('workspace', 'connection', 'analytics.reports.query')
+        for method, cost in (('analytics.reports.query', 1), ('videos.list', None)):
+            with self.assertRaises(AlphaError):
+                controller.record('workspace', 'connection', method, 'analytics', cost)
 
 
 class UploadCapacityDelayTests(unittest.TestCase):

@@ -588,10 +588,11 @@ class AgentRuntimeService:
         return resolved.get("entity"), notes
 
     def _history(self, cur, workspace_id, conversation_id) -> list[dict]:
+        from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT %s", (conversation_id, workspace_id, HISTORY_MESSAGES))
         out = []
         for role, body in reversed(cur.fetchall()):
-            if not isinstance(body, dict) or role not in ("user", "assistant"):
+            if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body):
                 continue
             words = (body.get("text") or "").strip()
             if not words:
@@ -669,12 +670,42 @@ class AgentRuntimeService:
                 estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
                 if estimate is None:
                     raise AlphaError("Configure verified prices for the agent model before using it.", 503, code="price_unknown")
-                authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], estimate, route, run_id)
-                reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent:{run_id}", charge_batch=False,
-                                                          provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
-                                                          meta={"via": "rafii_agent", "traceId": trace_id, **extra_meta})
-                reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's ceiling (follow-up chips fit inside it)
+                # D-A47 (James, 2026-10-09): a turn that can show a generated view is admitted with a small presentation portion;
+                # the view then draws only on that portion (ui_metering.allowance). The portion never costs the answer itself.
+                ui_allowance = self._presentation_allowance(workspace_id, text, modality, delegation_id)
+                def reserve(amount, allowance):
+                    authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], amount, route, run_id)
+                    return self.service.ledger.reserve(cur, workspace_id, principal, "text_model", amount, f"agent:{run_id}", charge_batch=False,
+                                                       provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
+                                                       meta={"via": "rafii_agent", "traceId": trace_id, **extra_meta,
+                                                             **({"uiAllowanceUsdMicro": str(allowance)} if allowance else {})})
+                try:
+                    reservation = reserve(estimate + (ui_allowance or 0), ui_allowance)
+                except AlphaError as error:
+                    if not ui_allowance or not (error.status in (402, 429) or getattr(error, "code", None) == "founder_budget"):
+                        raise
+                    # The combined plan did not fit a budget stop: admit the turn alone; its view then follows the original rule.
+                    reservation = reserve(estimate, None)
+                reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's own ceiling (follow-up chips fit inside it)
         return run_id, reservation
+
+    def _presentation_allowance(self, workspace_id, text, modality, delegation_id):
+        """D-A47: the presentation portion for a turn that can show a generated view, else None (the turn reserves only its own
+        estimate). None for: generated views off for this workspace (founder views need their own flag); delegated and
+        credit-authorised turns (phone), whose quote must stay the Manager's own; voice without a request for a view; greetings
+        and acknowledgements. A failure to compute it is treated as None, never as a reason to refuse the turn."""
+        try:
+            from . import ui_metering, ui_projection
+            founder = isinstance(getattr(self, "founder", None), dict)
+            if not self.cfg.genui_for(workspace_id, founder=founder).get("enabled"):
+                return None
+            if delegation_id or (getattr(self, "reservation_approval", None) is not None and not founder):
+                return None
+            if (modality == "voice" and not ui_projection.wants_ui(text)) or ui_projection.is_greeting_or_ack(text):
+                return None
+            return ui_metering.presentation_allowance(self.cfg)
+        except Exception:  # noqa: BLE001 — an optional view never blocks the answer
+            return None
 
     def _reservation_approval(self, cur, workspace_id, principal, revision, cost, route, run_id):
         """Optional authenticated transport authority; text/browser retain their existing credit gates."""
@@ -723,6 +754,10 @@ class AgentRuntimeService:
     def _manager_follow_ups(self, ctx, run_id, reservation, answer, language, default_model) -> dict:
         """Chips after a Manager answer. A metered turn pays for them from its own reservation: the call is made only when
         its ceiling fits what the turn has not spent (the reservation is never exceeded). A stopped run gets none."""
+        if ctx.ledger.youtube_provider_context:
+            # Optional chip generation adds another recipient without improving
+            # the requested analytics read; never dispatch this private answer.
+            return {"followUps": [], "span": None, "skipped": "youtube_private_context"}
         if self.model_factory is not None and self.followup_transport is None:
             return {"followUps": [], "span": None, "skipped": "scripted"}
         try:
@@ -812,6 +847,8 @@ class AgentRuntimeService:
             blocks.append(site_contracts.warning("I've shown only what the workspace confirms.", f"agent_{reason}"))
         manager_route = next((r for r in routes if r.get("agent") == "rafii_manager"), {})
         chips = {"followUps": [], "skipped": "manager"}
+        if ledger.youtube_provider_context:
+            result['followUps'] = []
         if len(result.get("followUps") or []) < followups.MIN_CHIPS:
             # The Manager offered fewer than two: the light model suggests them, within what is left of this turn's reservation.
             chips = self._manager_follow_ups(ctx, run_id, reservation, answer, result.get("language"), manager_route.get("model"))
@@ -827,6 +864,12 @@ class AgentRuntimeService:
                        "changedEntities": ledger.changed[:20], "generatedAssets": ledger.assets[:8], "warnings": ledger.warnings[:6], "errors": ledger.errors[:6],
                        "routes": routes, "usage": {"modelRequests": ledger.model_requests, **usage_tokens, "costUsdMicro": cost, "route": manager_route.get("model"),
                                                    "billing": "metered" if reservation else ("scripted" if self.model_factory else None)}})
+        if ledger.youtube_provider_context:
+            from ..youtube.agent_context import KEY
+            result[KEY] = list(ledger.youtube_provider_context)
+            # SDK state contains tool outputs and model prose. Its independent
+            # task-row lifecycle cannot retain or resume native analytics.
+            state_json = None
         trace = {"traceId": ctx.trace_id, "runtime": RUNTIME_VERSION, "workload": workload, "why": why, "routes": routes, "composedBy": composed_by, "fallback": reason,
                  "tools": [{k: a.get(k) for k in ("tool", "effect", "status", "latencyMs", "code", "specialist")} for a in ledger.tool_activity][:60],
                  "specialists": sorted({a["specialist"] for a in ledger.tool_activity if a.get("specialist")}), "guardrails": ledger.guardrail_trips,
@@ -859,7 +902,8 @@ class AgentRuntimeService:
             if state_json is not None:
                 if ctx.task is None:
                     ctx.task = task_state.create(cur, self.service.ideas, ctx.workspace_id, ctx.conversation_id, ctx.principal, "Waiting for your approval", ctx.trace_id)
-                self._store_pending_run(cur, ctx.workspace_id, ctx.task.task_id, state_json, interruptions, writer_model=ctx.writer_model)
+                self._store_pending_run(cur, ctx.workspace_id, ctx.task.task_id, state_json, interruptions, writer_model=ctx.writer_model,
+                                        youtube_provider_context=ledger.youtube_provider_context)
                 for item in interruptions:
                     try:
                         args = json.loads(getattr(item, "arguments", "") or "{}")
@@ -878,6 +922,18 @@ class AgentRuntimeService:
                  site_extra=None):
         ideas = self.service.ideas
         from ..site_agent import contracts as site_contracts
+        from ..youtube import agent_context
+        provenance = agent_context.sources(result)
+        if provenance:
+            try:
+                agent_context.assert_current(getattr(self.service, 'youtube', None), workspace_id, provenance, cursor=cur, locked=True, now=self.clock())
+            except AlphaError:
+                # The workspace transaction and exact credential lock serialize
+                # this write with disconnect. A late answer cannot recreate any
+                # deleted provider facts, assistant prose or replay event.
+                result = agent_context.redact_result(result)
+                blocks, refs, follow_ups = [site_contracts.text(result['answerText'])], [], ()
+                trace = {key: trace[key] for key in ('traceId', 'runtime') if key in trace}
         site = {"version": site_contracts.VERSION, "runId": run_id, "status": status, "intent": "agent",
                 "language": language, "blocks": blocks, "citations": result.get("citations") or [], "grounding": {"required": False, "sufficient": True, "missing": []},
                 "proposals": proposals, "context": {"route": None, "entity": None, "read": [a["label"] for a in result.get("toolActivity") or [] if a.get("status") == "verified" and a.get("effect") == "READ"][:12],
@@ -954,6 +1010,9 @@ class AgentRuntimeService:
         result.update({"answerText": answer, "speakableSummary": contracts.speakable(answer), "composedBy": "deterministic",
                        "errors": [{"code": "internal_error", "message": "The request stopped before it finished."}],
                        "changedEntities": (ledger.changed if ledger else [])[:20], "generatedAssets": (ledger.assets if ledger else [])[:8]})
+        if ledger is not None and ledger.youtube_provider_context:
+            from ..youtube.agent_context import KEY
+            result[KEY] = list(ledger.youtube_provider_context)
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             if reservation is not None:
                 spent = self._spend(ledger, None)
@@ -1001,7 +1060,9 @@ class AgentRuntimeService:
                           usage={"provenance": "deterministic", "billing": "provider cost unknown: reservation retained until reconciliation"})
 
     # --- SDK human-in-the-loop resume (ADR-H1) ---------------------------------------------------------------------------
-    def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None):
+    def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None, youtube_provider_context=()):
+        if youtube_provider_context:
+            return False
         cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (task_id, workspace_id))
         row = cur.fetchone()
         artifact = row[0] or {} if row else {}
@@ -1028,7 +1089,8 @@ class AgentRuntimeService:
             task_id, artifact = found[0], found[1] or {}
             pending = artifact.pop("pendingRun", None) or {}
             cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
-        return (task_id, pending) if pending.get("state") else None
+        from ..youtube.agent_context import KEY, sources
+        return (task_id, pending) if pending.get("state") and not pending.get(KEY) and not sources(artifact.get('result')) else None
 
     def _resume_pending_run(self, workspace_id, token, conversation_id, proposal_id, claimed, *, run_id, trace_id, modality, zone, approved=()):
         """The person approved a proposal a paused Manager run was waiting on (its proposal_apply call). The application has
@@ -1041,6 +1103,9 @@ class AgentRuntimeService:
         from . import manager as manager_mod
 
         task_id, pending = claimed
+        from ..youtube.agent_context import KEY
+        if pending.get(KEY):
+            return None
         workload = "standard_reasoning"
         reservation = None
         if self.model_factory is None:

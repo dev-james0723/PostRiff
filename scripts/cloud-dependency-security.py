@@ -10,8 +10,18 @@ import sys
 import tempfile
 
 
-EXPECTED = {"sharp": "0.35.5", "source-map-js": "1.2.2", "tinypool": "2.1.2"}
-LOCK_SHA256 = "c347e642ee841cdcc2ca1a8450c4acc09cd391ea6962735c7b1f31fe6c551504"
+# Reviewed against official npm metadata and SHA512 tarball bytes on 2026-10-09.
+# Integration controls: docs/design/openui-production-2026-10-08/evidence/r0/openui-package.md.
+OPENUI_EXPECTED = {
+    "@openuidev/lang-core": "0.3.2",
+    "@openuidev/react-lang": "0.3.2",
+    "@openuidev/devtools": "0.2.2",
+    "@openuidev/observability": "0.0.4",
+    "ci-info": "4.4.0",
+    "lucide-react": "0.575.0",
+}
+EXPECTED = {"sharp": "0.35.5", "source-map-js": "1.2.2", "tinypool": "2.1.2", **OPENUI_EXPECTED}
+LOCK_SHA256 = "1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5"
 
 
 def require(condition, message):
@@ -34,12 +44,18 @@ def run(command, cwd, allowed=(0,), timeout=120):
 def main():
     require(sys.platform == "linux" and os.environ.get("CI", "").lower() in {"1", "true"},
             "Cloud Linux CI is required; do not run Node/npm checks on the Mac")
+    require(any(os.environ.get(name, "").lower() in {"1", "true"}
+                for name in ("OPENUI_TELEMETRY_DISABLED", "DO_NOT_TRACK")),
+            "Reviewed OpenUI install/runtime telemetry opt-out is required in the CI environment")
     package = Path(__file__).resolve().parents[1] / "web"
     manifest_path, lock_path = package / "package.json", package / "package-lock.json"
     before = {p.name: digest(p) for p in (manifest_path, lock_path)}
     require(before["package-lock.json"] == LOCK_SHA256, "Reviewed lockfile changed; re-review before validation")
     manifest, lock = (json.loads(p.read_text()) for p in (manifest_path, lock_path))
     require(manifest["dependencies"]["sharp"] == "^0.35.5", "Sharp dependency does not match upstream release")
+    for name in ("@openuidev/lang-core", "@openuidev/react-lang"):
+        require(manifest["dependencies"].get(name) == OPENUI_EXPECTED[name],
+                f"OpenUI direct dependency is not pinned to the reviewed version: {name}")
     for name, value in {"sharp": "^0.35.5", "tinypool": "2.1.2", "source-map-js": "1.2.2"}.items():
         require(manifest["overrides"].get(name) == value, f"Missing reviewed override: {name}")
     for section in ("dependencies", "devDependencies"):

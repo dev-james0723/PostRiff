@@ -57,6 +57,42 @@ jobs:
           sudo apt-get install -y postgresql-17
           # The scripts start their own disposable server; its socket directory must be writable by the runner.
           sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Reserve disposable PostgreSQL listener ports
+        # These fixed listeners must never become ephemeral source ports for the
+        # other harness's clients. Preserve all existing runner reservations.
+        run: |
+          python - <<'PY_RESERVE'
+          from contextlib import ExitStack
+          from pathlib import Path
+          import socket
+          import subprocess
+
+          path = Path('/proc/sys/net/ipv4/ip_local_reserved_ports')
+          def parse(value):
+              ports = set()
+              for part in filter(None, value.strip().split(',')):
+                  bounds = list(map(int, part.split('-')))
+                  low, high = bounds[0], bounds[-1]
+                  if len(bounds) not in (1, 2) or not 1 <= low <= high <= 65535:
+                      raise RuntimeError('Invalid existing runner port reservations')
+                  ports.update(range(low, high + 1))
+              return ports
+
+          original = path.read_text().strip()
+          before = parse(original)
+          listeners = (55479, 55480)
+          missing = [str(port) for port in listeners if port not in before]
+          if missing:
+              requested = ','.join(([original] if original else []) + missing)
+              subprocess.run(['sudo', 'sysctl', '-w', 'net.ipv4.ip_local_reserved_ports=' + requested], check=True)
+          if parse(path.read_text()) != before | set(listeners):
+              raise RuntimeError('Runner port reservation readback changed unexpectedly')
+          with ExitStack() as stack:
+              for port in listeners:
+                  listener = stack.enter_context(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+                  listener.bind(('127.0.0.1', port))
+          print('Reserved and verified exclusive loopback binds for fixture ports55479/55480')
+          PY_RESERVE
       - name: Build the web app for the local harness
         run: |
           python scripts/consumer_ready_web.py --prepare npm ci

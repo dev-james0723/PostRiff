@@ -108,6 +108,13 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         return _blocked(ctx, tool, started, "voice_not_allowed", "That can't be done from a voice request; use the panel.")
     if ctx.membership is not None and not ctx.membership.allows(spec.permission):
         return _blocked(ctx, tool, started, "tool_forbidden", "Your role in this workspace can't do this.")
+    if ctx.ledger.youtube_provider_context and spec.name not in ('youtube_analytics_summary', 'youtube_recommendations'):
+        # Once native provider data reaches a model, freeform tool arguments can
+        # be derivatives too. Keep this turn read-only instead of creating
+        # untracked drafts, memories, task labels or other persistent copies.
+        # Even READ tools can dispatch external queries or persist task prose.
+        return _blocked(ctx, tool, started, 'youtube_analytics_read_only',
+                        'This analytics turn is read-only. Start a separate request for workspace changes using your own instructions.')
     try:
         if spec.effect != contracts.READ:
             ctx.check_cancelled()

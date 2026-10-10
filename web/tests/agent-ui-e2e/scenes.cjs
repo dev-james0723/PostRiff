@@ -179,6 +179,7 @@ scene('typing-during-stream', async (t) => {
 
 scene('typing-during-patch', async (t) => {
   const page = await t.page({ surface: 'panel' });
+  const log = track(page);
   const { region } = await generated(t, page);
   const input = await firstInput(region);
   if (!input) blocked('lane C/E: the generated view has no text input to type into (needs a TextField in the generated library/fixture)');
@@ -191,7 +192,25 @@ scene('typing-during-patch', async (t) => {
   if (!(await editButton.count())) blocked('lane F: no "Change this view" affordance on the generated view (edits flag or role)');
   const readyBefore = await page.evaluate(() => performance.getEntriesByName('rafii-genui:ready').length);
   await editButton.click();
-  await page.locator('#rafii-panel').getByLabel('What should change?').last().fill('change the period');
+  const field = page.locator('#rafii-panel').getByLabel('What should change?').last();
+  // Suggestions (surfaces/edit-suggestions.ts): a tap only fills the field and sends nothing; "Update view" stays the billed step.
+  const chip = page.locator('#rafii-panel [data-rafii-edit-suggestions] button').first();
+  let chipNote = 'FAILED: no suggestion for the fixture view';
+  // The fixture view is J05's campaign plan, which always qualifies (campaign timeline, campaign item kinds): no chip is a
+  // failure of this scene, never a silent pass.
+  const chipShown = await chip.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+  t.assert(chipShown, 'the J05 fixture view offers edit suggestions');
+  if (chipShown) {
+    const chipAt = Date.now();
+    await chip.click();
+    await page.waitForTimeout(300);
+    const edits = uiRequests(log, chipAt).filter((e) => e.method === 'POST' && /\/edits$/.test(new URL(e.url).pathname)).length;
+    t.assert((await field.inputValue()).trim().length > 0, 'a suggestion tap fills the field');
+    t.assert((await chip.getAttribute('aria-pressed')) === 'true', 'the tapped suggestion shows as pressed');
+    t.assert(edits === 0, 'a suggestion tap sends no edit request', { edits });
+    chipNote = 'a suggestion tap filled the field with no request';
+  }
+  await field.fill('change the period');
   await page.locator('#rafii-panel').getByRole('button', { name: 'Update view', exact: true }).last().click();
   const edited = await page.waitForFunction((n) => performance.getEntriesByName('rafii-genui:ready').length > n
     || document.querySelector('[data-rafii-generated][data-generation-state="failed"]'), readyBefore, { timeout: 90000 }).then(() => true).catch(() => false);
@@ -199,7 +218,7 @@ scene('typing-during-patch', async (t) => {
   const value = await input.inputValue().catch(() => null);
   const conflict = await page.locator('[data-rafii-dirty-conflict], [role="alertdialog"]').count();
   t.assert(value === 'dirty value 普通话' || conflict > 0, 'the dirty value survived the patch or a native conflict UI protects it', { value, conflict });
-  return conflict ? 'native conflict UI shown for the dirty field' : 'dirty value kept across the patch';
+  return `${conflict ? 'native conflict UI shown for the dirty field' : 'dirty value kept across the patch'}; ${chipNote}`;
 });
 
 scene('keyboard-only', async (t) => {
@@ -267,12 +286,16 @@ scene('axe', async (t) => {
 scene('locales', async (t) => {
   const done = [];
   for (const locale of ['en-US', 'zh-HK', 'zh-CN']) {
+    t.step(`${locale}:open`);
     const page = await t.page({ surface: 'panel', locale });
+    t.step(`${locale}:generate`);
     const { region } = await generated(t, page);
+    t.step(`${locale}:ready`);
     t.assert(await noRawDsl(region), `${locale}: no raw DSL`);
     const lang = await page.evaluate(() => document.documentElement.lang);
     done.push(`${locale}→lang=${lang}`);
-    await page.context().close();   // free the whole context before the next locale (WebKit lost pages when contexts piled up)
+    await page.context().close();   // free the whole context before the next locale
+    t.step(`${locale}:closed`);
   }
   return done.join(', ');
 });
@@ -399,14 +422,21 @@ scene('xss', async (t) => {
 scene('viewports', async (t) => {
   const out = [];
   for (const vp of t.viewports) {
+    t.step(`${vp.id}:open`);
     const page = await t.page({ surface: vp.surface, viewport: { width: vp.width, height: vp.height }, mobile: vp.width < 768 });
+    t.step(`${vp.id}:generate`);
     const { region } = await generated(t, page);
+    t.step(`${vp.id}:ready`);
     const fits = await page.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1);
     const box = await region.boundingBox();
+    // Page-side growth signal for this size: DOM node count and JS heap where the engine exposes it (WebKit doesn't).
+    const size = await page.evaluate(() => ({ nodes: document.getElementsByTagName('*').length, heapMb: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null }));
+    t.step(`${vp.id}:measured nodes=${size.nodes} heapMb=${size.heapMb}`);
     t.assert(fits, `${vp.id}: no sideways page scroll`);
     t.assert(!box || box.width <= vp.width + 1, `${vp.id}: generated view fits the viewport width`, box);
     out.push(`${vp.id}✓`);
-    await page.context().close();   // one live context at a time (WebKit lost pages when five contexts piled up)
+    await page.context().close();   // one live context at a time
+    t.step(`${vp.id}:closed`);
   }
   return `${out.join(' ')} (emulation)`;
 });
