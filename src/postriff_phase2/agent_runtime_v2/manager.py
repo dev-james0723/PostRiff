@@ -377,10 +377,33 @@ def record_span(cur, cfg, span, *, workspace_id, user_id, run_id, reservation=No
         return 0
 
 
+def _library_browse(ctx: RafiiRunContext) -> bool:
+    """The Manager browses the Library itself only where RAFII_AGENT_LIBRARY_BROWSE_ENABLED is on for this workspace (D-A51),
+    and never in a voice turn: phase 1 sends Library metadata to the Manager's provider only, not to the voice front end."""
+    from . import library_browse
+    if getattr(ctx, "modality", "text") == "voice":
+        return False
+    return library_browse.enabled_for(getattr(ctx, "config", None), getattr(ctx, "workspace_id", None))
+
+
+def tool_names(ctx: RafiiRunContext) -> list[str]:
+    """The Manager's own tools for this turn: MANAGER_TOOLS, extension scopes, and library_browse only when the Library flag
+    is on for this workspace in a typed turn (never library_read, never on specialists)."""
+    names = MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])
+    if _library_browse(ctx):
+        from . import library_browse
+        names = names + list(library_browse.MANAGER_SCOPE)
+    return specialists.available(names)
+
+
 def instructions(ctx: RafiiRunContext) -> str:
-    """The Manager's instructions for this turn: the fixed text (plus extension hooks), then how this person wants Rafii
-    to talk (fixed sentences chosen by their style's enum values; never their own words)."""
-    return specialists.instructions_for("rafii_manager", INSTRUCTIONS) + "\n\n" + agent_style.text_block(getattr(ctx, "style", None))
+    """The Manager's instructions for this turn: the fixed text (plus extension hooks; the Library rules only when its tool is
+    on), then how this person wants Rafii to talk (fixed sentences chosen by their style's enum values; never their own words)."""
+    base = INSTRUCTIONS
+    if _library_browse(ctx):
+        from . import library_browse
+        base = base + "\n\n" + library_browse.MANAGER_INSTRUCTIONS
+    return specialists.instructions_for("rafii_manager", base) + "\n\n" + agent_style.text_block(getattr(ctx, "style", None))
 
 
 def build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standard_reasoning"):
@@ -419,7 +442,7 @@ def _build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standar
         return None if model_factory is not None else settings_for(cfg, load)
 
     specialist_tools = specialists.build(model_for, settings_for=(model_settings if model_factory is None else None)) if cfg.enabled("RAFII_SPECIALISTS_ENABLED") or model_factory is not None else {}
-    tools = sdk_tools(specialists.available(MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])), scope_name=None) + list(specialist_tools.values())
+    tools = sdk_tools(tool_names(ctx), scope_name=None) + list(specialist_tools.values())
     manager = Agent(name="rafii_manager", instructions=instructions(ctx), tools=tools, handoffs=[], model=model_for(workload, "rafii_manager"),
                     output_type=answer_policy.reply_type(), output_guardrails=[answer_policy.output_guardrail()],
                     input_guardrails=[answer_policy.input_guardrail()],

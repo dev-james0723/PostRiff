@@ -873,6 +873,9 @@ class AgentRuntimeService:
                        "changedEntities": ledger.changed[:20], "generatedAssets": ledger.assets[:8], "warnings": ledger.warnings[:6], "errors": ledger.errors[:6],
                        "routes": routes, "usage": {"modelRequests": ledger.model_requests, **usage_tokens, "costUsdMicro": cost, "route": manager_route.get("model"),
                                                    "billing": "metered" if reservation else ("scripted" if self.model_factory else None)}})
+        from . import library_browse
+        # The Library ids library_browse listed (up to 25, the J03 binding's limit), apart from references (capped at 20 above).
+        result.update(library_browse.result_fields(ledger))
         if ledger.youtube_provider_context:
             from ..youtube.agent_context import KEY
             result[KEY] = list(ledger.youtube_provider_context)
