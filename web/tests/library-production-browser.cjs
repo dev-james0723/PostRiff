@@ -230,6 +230,9 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
     finishRsc(request);
     if(isRscRequest(request))rscFailures.push({url:relevantUploadUrl(request.url()),method:request.method(),prefetch:request.headers()['next-router-prefetch']||null,failure:request.failure()?.errorText,phase:navigationPhase});
    });
+   // Failure evidence only: preview console errors, plus the file/upload trace (sanitized when written).
+   page.on('console',message=>{if(message.type()==='error'&&/preview/i.test(message.text()))recordDiagnostic('console:error',{text:diagnosticText(message.text(),512),activePreviewIds:[...activePreviews.keys()]})});
+   Object.defineProperty(diagnosticState,'uploadTrace',{value:uploadTrace});
    markDiagnosticNavigation('goto',base+'/app/library');
    await page.goto(base+'/app/library');
    const welcome=page.getByRole('button',{name:'Not now',exact:true});
@@ -703,6 +706,7 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const deletionResult=JSON.parse(deletionBody);
    assert.equal(deletionResult.assetId,doc.id,`DELETE targeted a different asset: ${JSON.stringify(deletionResult)}`);
    assert.equal(deletionResult.status,'deleted',`DELETE did not report deletion: ${JSON.stringify(deletionResult)}`);
+   recordDiagnostic('delete:confirmed',{assetId:doc.id,activePreviewIds:[...activePreviews.keys()]});
    await page.getByRole('button',{name:/Document Brahms browser notes/}).waitFor({state:'detached',timeout:15000});
    const afterDelete=await context.request.get(path+'/files/'+doc.id,{headers});
    assert.equal(afterDelete.status(),404,`deleted asset ${doc.id} still resolves: ${await afterDelete.text()}`);
@@ -714,4 +718,4 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
   }}finally{await browser.close();}
  }
  writeFileSync(resolve(out,'browser.json'),JSON.stringify({status:'pass',checks},null,2));console.log(JSON.stringify({status:'pass',checks}));
-})().catch(error=>{writeFileSync(resolve(out,'browser-failure.json'),JSON.stringify({status:'fail',error:diagnosticText(String(error)),checks,diagnostics:{schemaVersion:1,limits:DIAGNOSTIC_LIMITS,contextsDropped:diagnosticContextsDropped,contexts:browserDiagnostics}},null,2));console.error(error);process.exitCode=1;});
+})().catch(error=>{writeFileSync(resolve(out,'browser-failure.json'),JSON.stringify({status:'fail',error:diagnosticText(String(error)),checks,diagnostics:{schemaVersion:1,limits:DIAGNOSTIC_LIMITS,contextsDropped:diagnosticContextsDropped,contexts:browserDiagnostics.map(context=>({...context,uploadTrace:(context.uploadTrace||[]).slice(-DIAGNOSTIC_LIMITS.events).map(entry=>({...entry,url:diagnosticUrl(entry.url),...(entry.failure!==undefined?{failure:diagnosticText(entry.failure,256)}:{})}))}))}},null,2));console.error(error);process.exitCode=1;});

@@ -117,7 +117,66 @@ async function parse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** One signal for the caller's cancellation and the request timeout (`AbortSignal.any` needs Safari 17.4). */
+function requestSignal(timeoutMs?: number, signal?: AbortSignal): AbortSignal | undefined {
+  const timeout = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
+  if (!signal || !timeout) return signal ?? timeout;
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout]);
+  const combined = new AbortController();
+  for (const source of [signal, timeout]) {
+    if (source.aborted) combined.abort(source.reason);
+    else source.addEventListener('abort', () => combined.abort(source.reason), { once: true });
+  }
+  return combined.signal;
+}
+
+/**
+ * WebKit refuses a fetch that a page starts after its own navigation has begun (a reload, or leaving
+ * the page) and reports it as "Fetch API cannot load … due to access control checks." Requests that
+ * retry or poll on timers wait here once `beforeunload` has fired: if the page goes away they are
+ * never started; if it stays (navigation abandoned, or restored from the back/forward cache) they continue.
+ */
+export const UNLOAD_PAUSE_MS = 15_000;
+let unloadPause: { done: Promise<void>; release: () => void } | null = null;
+let watchingUnload = false;
+function watchUnload() {
+  if (watchingUnload || typeof window === 'undefined') return;
+  watchingUnload = true;
+  window.addEventListener('beforeunload', () => {
+    if (unloadPause) return;
+    let resolve = () => {};
+    let timer = 0;
+    const done = new Promise<void>((settle) => {
+      resolve = () => settle();
+    });
+    const release = () => {
+      window.clearTimeout(timer);
+      if (unloadPause?.done === done) unloadPause = null;
+      resolve();
+    };
+    timer = window.setTimeout(release, UNLOAD_PAUSE_MS);
+    unloadPause = { done, release };
+  });
+  window.addEventListener('pageshow', () => unloadPause?.release());
+}
+async function waitWhileUnloading(signal?: AbortSignal): Promise<void> {
+  watchUnload();
+  const pause = unloadPause;
+  if (!pause) return;
+  await new Promise<void>((resolve, reject) => {
+    const abort = () => reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+    if (signal?.aborted) return abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    void pause.done.then(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    });
+  });
+  signal?.throwIfAborted();
+}
+
 export function createApi(getToken: TokenSource) {
+  watchUnload();
   async function headers(auth = true): Promise<Record<string, string>> {
     const base: Record<string, string> = { 'Content-Type': 'application/json', ...APP_GUARD_HEADER };
     if (!auth) return base;
@@ -128,6 +187,13 @@ export function createApi(getToken: TokenSource) {
 
   async function get<T>(path: string, auth = true, timeoutMs?: number): Promise<T> {
     return parse<T>(await fetch(path, { headers: await headers(auth), cache: 'no-store', ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}) }));
+  }
+
+  /** A timer-driven GET (retry or refresh) that is cancellable and never starts while the page unloads. */
+  async function backgroundGet<T>(path: string, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+    const requestHeaders = await headers();
+    await waitWhileUnloading(signal);
+    return parse<T>(await fetch(path, { headers: requestHeaders, cache: 'no-store', signal: requestSignal(timeoutMs, signal) }));
   }
 
   async function send<T>(method: string, path: string, body: unknown = {}, timeoutMs?: number): Promise<T> {
@@ -431,8 +497,8 @@ export function createApi(getToken: TokenSource) {
       get<{ asset: Asset; extractedText: string; chunks: { ordinal: number; text: string }[] }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
     libraryViewerPage: (w: string, assetId: string, page = 1) =>
       get<{ pageCount: number; page: number; url: string; width: number; height: number; text: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/viewer?page=${encodeURIComponent(String(page))}`, true, 90_000),
-    libraryPreviewUrl: (w: string, assetId: string) =>
-      get<{ url: string; mime: string; page: number }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/preview`, true, 90_000),
+    libraryPreviewUrl: (w: string, assetId: string, signal?: AbortSignal) =>
+      backgroundGet<{ url: string; mime: string; page: number }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/preview`, 90_000, signal),
     libraryFileUrl: (w: string, assetId: string, download = false) =>
       get<{ url: string; mime: string; filename: string }>(`${ws(w)}/library/files/${encodeURIComponent(assetId)}/url${download ? "?download=1" : ""}`),
     renameLibraryFile: (w: string, assetId: string, title: string) =>
