@@ -213,7 +213,9 @@ class WriterRouteTest(FlagIsolation):
             self.assertEqual(facebook["native"]["unresolved"], ["page_ref"])  # A07: explicit, never substituted
             self.assertEqual(instagram["native"]["formatId"], "instagram.carousel")
             self.assertEqual(instagram["native"]["media"]["state"], "needs_input")
-            self.assertEqual(instagram["native"]["readiness"]["publish"], "not_checked")
+            # A carousel has no format-aware publisher: the review reads it as export-only, the same rule the approval gate enforces.
+            self.assertEqual(instagram["native"]["readiness"]["publish"], "export_only")
+            self.assertEqual(facebook["native"]["readiness"]["publish"], "not_checked")
             package = cc.export_package(variants)
             self.assertFalse(package["published"])
             self.assertEqual(len(package["files"]), 2)
@@ -243,6 +245,19 @@ class WriterRouteTest(FlagIsolation):
                     _, errors = cc.validate_native_fields(row["platform"], fmt["id"], {"slides": [{"index": 2, "text": "b"}, {"index": 1, "text": "a"}]}, proj)
                     self.assertEqual(errors, ["order_invalid:slides"])
                 self.assertFalse(native["constraints"]["verified"])
+
+    def test_publish_readiness_matches_the_approval_gate_for_every_format(self):
+        """A29: the review's publish reading and `store`'s `format_not_publishable` gate come from one table, so a Story,
+        Reel or carousel is never shown as publishable and a default post is never shown as export-only."""
+        proj = cc.projection(ALL)
+        for row in proj.rows:
+            for fmt in row["formats"]:
+                native = cc.native_draft({"platform": row["platform"], "language": "en", "format": fmt["id"], "text": "Copy."}, proj)
+                gate_refuses = fmt["id"] != cc.DEFAULT_FORMATS.get(row["platform"])
+                self.assertEqual(native["readiness"]["publish"], "export_only" if gate_refuses else "not_checked", fmt["id"])
+                self.assertEqual(native["readiness"]["publishNote"], cc.EXPORT_ONLY_NOTE if gate_refuses else cc.PUBLISH_NOTE)
+        story = cc.native_draft({"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Copy."}, proj)
+        self.assertEqual(story["readiness"]["publish"], "export_only")
 
     def test_instagram_and_facebook_formats_are_distinct_from_media_and_publishing(self):
         proj = cc.projection(WAVE1)

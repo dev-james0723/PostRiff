@@ -5,6 +5,7 @@
  */
 
 import type { CreationCatalog } from '@/lib/creation/capabilities';
+import type { NativeDraft } from '@/lib/creation/native-draft';
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
 import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 
@@ -268,6 +269,9 @@ export interface SnapshotVariant {
   needsReview: boolean;
   blockedByRetraction: boolean;
   contentTypeId?: string;
+  /** Native format and structured draft saved with the variant (creation projection). */
+  format?: string;
+  native?: NativeDraft | null;
   customized?: boolean;
   /** Which Ideas run produced this variant (set by `apply`). */
   provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string; derivedFrom?: string };
@@ -805,6 +809,10 @@ export interface RunVariant {
   warnings?: string[];
   candidateOnly?: boolean;
   media?: RunMedia[];
+  /** The native format the destination asked for (absent for the platform default on older runs). */
+  format?: string;
+  /** Structured native draft (`rafii.native-draft.v1`): format, skill route, media and publish readiness. */
+  native?: NativeDraft | null;
 }
 
 export interface GeneratedImage {

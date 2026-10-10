@@ -751,7 +751,7 @@ function HomeWorkspace() {
         {/* Preview column */}
         <aside aria-label='Channel draft previews' className='min-w-0 lg:pt-2'>
           {generation.run || generation.busy || generation.error ? (
-            <IdeaSplits generation={generation} timeZone={timeZone} speaker={speaker} onDraftAgain={draftAgain} />
+            <IdeaSplits generation={generation} timeZone={timeZone} speaker={speaker} onDraftAgain={draftAgain} isConnected={(platform) => channels.some((c) => c.platform === platform && !c.revoked)} />
           ) : (
             <IdlePreview targets={previewTargets} idea={text} timeZone={timeZone} speaker={speaker} />
           )}

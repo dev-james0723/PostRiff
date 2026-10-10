@@ -404,9 +404,9 @@ class Phase2Store(Store):
             raise AlphaError("The variant and current speaker must match this destination.")
         # A native format other than the platform's default (a Story, Reel, carousel…) has no format-aware publisher:
         # it is never approved as a default post. Export it and post it by hand (creation projection, spec §12).
-        from .creation_capabilities import DEFAULT_FORMATS
+        from .creation_capabilities import DEFAULT_FORMATS, EXPORT_ONLY_NOTE
         if v.get("format") and v["format"] != DEFAULT_FORMATS.get(c["platform"]):
-            raise AlphaError("Rafii can't publish this format yet. Export the draft and post it yourself.", 409, code="format_not_publishable")
+            raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
         if not text.strip() or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:

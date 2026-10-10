@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { RunVariant } from '@/lib/api/types';
 import { languageLabel, textAttributes, textLength } from '@/lib/locales';
+import { NativeDraftFacts } from './native-draft-facts';
 
 /** Local conservative text limits (`postriff_phase2.contracts.LIMITS`; Threads is the platform's own). */
 const LIMITS: Record<string, number> = { LinkedIn: 3000, Instagram: 2200, Threads: 500, Xiaohongshu: 1000 };
@@ -40,9 +41,11 @@ interface VariantCardProps {
    * side with the other drafts from Compare.
    */
   preview?: (variant: RunVariant, options?: { scale?: number }) => ReactNode;
+  /** Whether the workspace has a live connection on a platform (`undefined` when unknown); shown, never enforced here. */
+  isConnected?: (platform: string) => boolean | undefined;
 }
 
-export function VariantCard({ variants, selected, onSelect, preview }: VariantCardProps) {
+export function VariantCard({ variants, selected, onSelect, preview, isConnected }: VariantCardProps) {
   const active = Math.min(selected, variants.length - 1);
   // A panel mounts fresh each time its tab opens, so its count starts on the length the reader just saw on the
   // previous tab and rolls to its own before paint. Both numbers are real text lengths.
@@ -71,6 +74,7 @@ export function VariantCard({ variants, selected, onSelect, preview }: VariantCa
           return (
             <TabsContent key={index} value={String(index)} className='mt-0 flex flex-col'>
               <article {...textAttributes(variant.language)} className='px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap'>{variant.text}</article>
+              <NativeDraftFacts variant={variant} connected={isConnected?.(variant.platform)} className='border-border/60 border-t px-4 py-2' />
               <div className='rafii-quiet border-border/60 flex flex-wrap items-center justify-between gap-2 rounded-none border-t px-3 py-2'>
                 <div className='flex flex-wrap items-center gap-1.5'>
                   {variant.warnings?.map((warning, i) => (

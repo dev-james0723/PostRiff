@@ -317,6 +317,10 @@ def _paragraphs(text):
     return [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
 
 
+PUBLISH_NOTE = "A draft is not publish-ready: publishing runs the live account, permission, plan and approval checks."
+EXPORT_ONLY_NOTE = "Rafii can't publish this format yet. Export the draft and post it yourself."
+
+
 def native_draft(variant, proj=None):
     """The structured native draft for one written variant: public fields in their own slots, destination bindings
     (unresolved ones listed, never invented), private notes kept apart, media requirement and unverified constraints.
@@ -373,8 +377,11 @@ def native_draft(variant, proj=None):
         "privateNotes": [str(n) for n in (variant.get("privateNotes") or []) if isinstance(n, str)],
         "media": {"required": fmt["mediaKind"], "state": media_state, "reason": fmt["media"]["reason"]},
         "constraints": {"verified": False, "limits": row["limits"]},
-        "readiness": {"draft": "ready", "export": "ready", "publish": "not_checked",
-                      "publishNote": "A draft is not publish-ready: publishing runs the live account, permission, plan and approval checks."},
+        # The same rule as the approval gate (`store` refuses `format_not_publishable`): only a platform's default format
+        # has a publisher, so any other format is export-only and the review says so before anyone tries to schedule it.
+        "readiness": {"draft": "ready", "export": "ready", "publish": "not_checked", "publishNote": PUBLISH_NOTE}
+        if fmt_id == DEFAULT_FORMATS.get(platform) else
+        {"draft": "ready", "export": "ready", "publish": "export_only", "publishNote": EXPORT_ONLY_NOTE},
     }
 
 

@@ -132,7 +132,7 @@ export function AutomationsView() {
       const found = automations.find((item) => item.task.id === editId);
       if (found && found.task.status !== 'cancelled') open(initialFromAutomation(found, timeZone));
     }
-  }, [state, canEdit, params, automations, timeZone]);
+  }, [state, canEdit, params, automations, timeZone, draftPlatforms]);
 
   // A deleted automation is cancelled and hidden; its run history stays on the server for audit.
   const visible = automations.filter((a) => !a.task.deletedAt);

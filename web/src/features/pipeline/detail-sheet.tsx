@@ -7,6 +7,7 @@ import { ReviewApproveButton } from '@/components/jobs/review-approve-button';
 import { useSnapshot } from '@/lib/api/hooks';
 import Link from 'next/link';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
+import { NativeDraftFacts } from '@/features/agent/native-draft-facts';
 import { ManifestPreview } from '@/components/application/post-preview/manifest-preview';
 import { ChannelIcon } from '@/components/channel-icon';
 import { Icons } from '@/components/icons';
@@ -94,6 +95,12 @@ function DraftDetails({ card, board, state, onShow }: { card: BoardCard; board: 
           <TextBlock text={variant.text} />
         </Section>
       )}
+      <Section title='Draft details'>
+        <NativeDraftFacts
+          variant={{ ...variant, account: variant.channelId ? state?.phase2?.channels.find((c) => c.id === variant.channelId && !c.revoked)?.account : undefined }}
+          connected={Boolean(state?.phase2?.channels.some((c) => c.platform === variant.platform && !c.revoked))}
+        />
+      </Section>
       {card.chips.length > 0 && (
         <Section title='Situation'>
           <ul className='flex flex-col gap-1 text-sm'>

@@ -731,6 +731,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
                               variants={variants}
                               selected={variantIndex}
                               onSelect={setVariantIndex}
+                              isConnected={(platform) => channels.some((c) => c.platform === platform && !c.revoked)}
                               preview={(variant, options) => <DraftPreview {...draftFor(variant)} scale={options?.scale} />}
                             />
                           )}
