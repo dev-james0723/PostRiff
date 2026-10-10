@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENABLED", "RAFII_SPECIALISTS_ENABLED", "RAFII_PROACTIVE_V2_ENABLED", "RAFII_AGENT_THINKING_STATES_ENABLED",
          # Generative UI (rafii-genui/1). Off unless set; RAFII_GENUI_WORKSPACES narrows a canary to listed workspaces.
          "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED",
-         # The Manager's metadata-level Library browse (library_browse + library_read; D-A51). Off unless set, and then only for
+         # The Manager's metadata-level Library browse (library_browse only; D-A51). Off unless set, and then only for
          # the workspaces listed in RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES (an empty list enables none: no consent covers a wider release).
          "RAFII_AGENT_LIBRARY_BROWSE_ENABLED")
 LIBRARY_BROWSE_WORKSPACES_ENV = "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES"
@@ -165,7 +165,7 @@ class RuntimeConfig:
                 "canary": bool(self.genui_workspaces)}
 
     def library_browse_for(self, workspace_id: str | None) -> bool:
-        """The Manager may browse this workspace's Library metadata (library_browse + library_read; D-A51): the flag is on AND the
+        """The Manager may browse this workspace's Library metadata (library_browse; D-A51): the flag is on AND the
         workspace is listed. Unlike the GenUI canary list, an empty list enables no workspace: titles, filenames and tags can
         hold personal data, and no consent covers sending them to the Manager's provider beyond an approved canary (D1)."""
         if not self.enabled("RAFII_AGENT_LIBRARY_BROWSE_ENABLED") or not workspace_id:

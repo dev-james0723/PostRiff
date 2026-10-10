@@ -46,6 +46,10 @@ class EffectLedger:
     interruptions: list[dict] = field(default_factory=list)
     site_results: dict = field(default_factory=dict)            # raw site-tool results, for the site agent's evidence blocks
     research: list = field(default_factory=list)                # web_research outputs this turn (pages, never page bodies beyond facts)
+    # library_browse (D-A51): pages reserved this turn (taken under a lock before the Library is read, so parallel calls
+    # can't exceed the limit), and the ids it listed in order (None until it lists a page; [] when it found nothing).
+    library_pages: int = 0
+    library_ids: list | None = None
 
     def reference(self, kind: str, ident: str | None, title: str | None = None) -> None:
         if not ident or not isinstance(ident, str):

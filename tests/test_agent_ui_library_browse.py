@@ -10,8 +10,12 @@ tests/phase2/postgres_agent_ui_library_browse.py.
 """
 import copy
 import datetime as dt
+import inspect
 import json
+import re
 import sys
+import threading
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,8 +27,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2.permissions import Membership  # noqa: E402
-from postriff_phase2.agent_runtime_v2 import (config, contracts, context as rt_context, domain_tools, library_browse as lb, manager, specialists,  # noqa: E402
-                                              tool_adapter, ui_capabilities, ui_domain, ui_presenter, ui_projection)
+from postriff_phase2 import media_consent  # noqa: E402
+from postriff_phase2.agent_runtime_v2 import (config, contracts, context as rt_context, creative, domain_tools, library_browse as lb, manager,  # noqa: E402
+                                              service as rt_service, specialists, tool_adapter, ui_capabilities, ui_domain, ui_presenter, ui_projection)
 from postriff_phase2.agent_runtime_v2.ui_domain import common, library as j03, shapes  # noqa: E402
 from postriff_phase2.agent_runtime_v2.ui_http import UiAuth  # noqa: E402
 
@@ -74,11 +79,24 @@ def file(n, filename, title=None, created=NOW - 86400, kind="document", summary=
             "transcriptionStatus": "not_applicable", "sourceId": source, "duplicateOf": None, "collections": list(collections), "_chunks": chunks, **extra}
 
 
-class FakeCursor:
-    """Answers the bound transaction's membership re-select and the pr_media_uploads date read; records every statement."""
+def stored(asset, workspace=WS):
+    """A fake file as `SELECT to_jsonb(a)||jsonb_build_object('epoch',…)` returns its pr_library_assets row."""
+    return {"id": asset["id"], "workspace_id": workspace, "created_by": asset["createdBy"], "original_filename": asset["originalFilename"],
+            "display_title": asset.get("displayTitle"), "title_source": asset.get("titleSource"), "summary": asset.get("summary"), "tags": list(asset.get("tags") or []),
+            "kind": asset["kind"], "mime": asset["mime"], "extension": asset["extension"], "bytes": asset["bytes"], "sha256": asset["sha256"],
+            "processing_status": asset["processingStatus"], "analysis_status": asset["analysisStatus"], "indexing_status": asset["indexingStatus"],
+            "epoch": asset["createdAt"], "provenance": dict(asset.get("provenance") or {}), "extraction_error": asset.get("extractionError"), "attempts": 0,
+            "transcription_status": "not_applicable", "source_id": asset.get("sourceId"), "duplicate_of": None}
 
-    def __init__(self, uploads=None, member=True):
+
+class FakeCursor:
+    """Answers the bound transaction's membership re-select, the pr_media_uploads date read, the J03 `ids` read of
+    pr_library_assets (workspace-scoped, deleting/duplicate rows excluded, like the real SQL) and this conversation's
+    pr_attachments; records every statement."""
+
+    def __init__(self, uploads=None, member=True, files=(), attachments=()):
         self.statements, self.uploads, self.member, self._last = [], dict(uploads or {}), member, ("", None)
+        self.files, self.attachments = list(files), list(attachments)
 
     def execute(self, sql, params=None):
         self._last = (" ".join(str(sql).split()), params)
@@ -95,37 +113,64 @@ class FakeCursor:
         if "pr_media_uploads" in sql:
             workspace, ids = params
             return [(i, self.uploads[i]) for i in ids if workspace == WS and i in self.uploads]
+        if "FROM public.pr_library_assets a WHERE a.workspace_id=%s AND a.id=ANY" in sql:
+            workspace, ids = params
+            return [(stored(f, f.get("_workspace", WS)),) for f in self.files
+                    if f["id"] in ids and f.get("_workspace", WS) == workspace and f["processingStatus"] not in ("deleting", "duplicate")]
+        if "pr_attachments" in sql:
+            return [({"assetId": a}, 1.0) for a in self.attachments]
         return []
 
 
-class FakeLibrary:
-    """UniversalLibrary.list's contract: media-store items on the first page only (with their own title/filename/hash/tag
-    word match), files paged by offset, and — like the real SQL — a file query that also matches summaries and chunk text."""
+def _tokens(text) -> set:
+    return set(re.findall(r"\w+", str(text or "").casefold()))
 
-    def __init__(self, service=None, media=(), files=(), collections=()):
+
+class FakeLibrary:
+    """UniversalLibrary.list's contract, mirroring its SQL: media-store items on the first page only (every query word a
+    substring of title/filename/hash/tags), files paged by offset, and a file query that matches a sha256 prefix, the
+    whole-token vector of title+filename+SUMMARY+tags, chunk tokens, and title/filename/CHUNK substrings; never collection
+    names. A tag filter is one exact element of the stored tags."""
+
+    def __init__(self, service=None, media=(), files=(), collections=(), delay=0.0):
         self.service, self.media, self.files, self.collection_rows, self.calls = service, list(media), list(files), list(collections), []
+        self.delay = delay
+
+    def _decorate(self, cur, w, assets):
+        return None   # fake records already carry their labels and collections
 
     def list(self, w, t, query="", limit=100, offset=0, kind="all", tag="", collection="", sort="newest"):
         self.calls.append({"query": query, "limit": limit, "offset": offset, "kind": kind, "tag": tag, "collection": collection, "sort": sort})
+        if self.delay:
+            time.sleep(self.delay)
         if self.service is not None:
             with self.service.repository.transaction(t, w):   # the bound transaction: same cursor, no second workspace transaction
                 pass
+        query = str(query or "").strip()[:120]
         words = query.casefold().split()
+        hash_prefix = bool(re.fullmatch(r"[0-9a-fA-F]{1,64}", query))
 
-        def meta(a):
+        def legacy_meta(a):
             return " ".join([str(a.get("displayTitle") or ""), str(a.get("originalFilename") or ""), str(a.get("hash") or ""), *a.get("tags", [])]).casefold()
 
-        def text(a):
-            return (str(a.get("summary") or "") + " " + str(a.get("_chunks") or "")).casefold()
+        def file_query(a):
+            if not query:
+                return True
+            q = query.casefold()
+            title, filename, chunks = str(a.get("displayTitle") or ""), str(a.get("originalFilename") or ""), str(a.get("_chunks") or "")
+            vector = _tokens(" ".join([title, filename, str(a.get("summary") or ""), " ".join(a.get("tags", []))]))
+            wanted = _tokens(query)
+            return ((hash_prefix and str(a.get("sha256") or "").startswith(q)) or (bool(wanted) and wanted <= vector) or (bool(wanted) and wanted <= _tokens(chunks))
+                    or q in filename.casefold() or q in title.casefold() or q in chunks.casefold())
 
-        def keep(a, content):
+        def keep(a, is_file):
             ok_kind = kind == "all" or (a.get("assetKind") or a.get("kind")) == kind
             ok_tag = not tag or tag in a.get("tags", [])
             ok_collection = not collection or collection in a.get("collections", [])
-            ok_query = not words or all(word in meta(a) or (content and word in text(a)) for word in words)
+            ok_query = file_query(a) if is_file else (not words or all(word in legacy_meta(a) for word in words))
             return ok_kind and ok_tag and ok_collection and ok_query
 
-        files = [copy.deepcopy(f) for f in self.files if keep(f, True)]
+        files = [copy.deepcopy(f) for f in self.files if keep(f, True) and f["processingStatus"] not in ("deleting", "duplicate")]
         files.sort(key=(lambda f: -f["bytes"]) if sort == "largest" else (lambda f: -f["createdAt"]))
         page = files[offset:offset + limit]
         legacy = [copy.deepcopy(m) for m in self.media if keep(m, False)] if offset == 0 else []
@@ -160,11 +205,17 @@ class FakeIdeas:
 
 
 class FakeService:
-    def __init__(self, media=(), files=(), collections=(), uploads=None, role="owner", refuse=False, state=None):
+    def __init__(self, media=(), files=(), collections=(), uploads=None, role="owner", refuse=False, state=None, delay=0.0, attachments=()):
         self.state = state or {"phase2": {"assets": []}}
-        self.repository = FakeRepository(FakeCursor(uploads), role=role, refuse=refuse)
+        self.repository = FakeRepository(FakeCursor(uploads, files=files, attachments=attachments), role=role, refuse=refuse)
         self.ideas = FakeIdeas(self)
-        self.library = FakeLibrary(self, media, files, collections)
+        self.library = FakeLibrary(self, media, files, collections, delay=delay)
+        self.assets = object()   # media storage is configured (image tools check it before anything else)
+        self.media_reads = []
+
+    def media(self, workspace_id, token, asset_id):
+        self.media_reads.append(asset_id)
+        return b"\x89PNG fake", "image/jpeg"
 
 
 def make_ctx(service, env=None, role="owner", zone=HK, **kw):
@@ -214,14 +265,18 @@ class FlagAndRegistration(unittest.TestCase):
             raise RuntimeError("bad config")
         self.assertFalse(lb.enabled_for(SimpleNamespace(library_browse_for=broken), WS))
 
-    def test_manager_gets_library_browse_and_library_read_only_when_the_flag_is_on_for_the_workspace(self):
+    def test_manager_gets_library_browse_only_when_the_flag_is_on_for_the_workspace_and_never_library_read(self):
         on, off = make_ctx(library()), make_ctx(library(), env={})
         self.assertIn("library_browse", manager.tool_names(on))
-        self.assertIn("library_read", manager.tool_names(on))
+        self.assertNotIn("library_read", manager.tool_names(on), "library_read returns hashes, source ids, full titles and approved facts")
+        self.assertEqual(lb.MANAGER_SCOPE, ("library_browse",))
         for name in ("library_browse", "library_read"):
             self.assertNotIn(name, manager.tool_names(off))
         other = make_ctx(library(), env={**ON_ENV, "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES": OTHER_WS})
         self.assertNotIn("library_browse", manager.tool_names(other), "a workspace not on the canary list")
+        spoken = make_ctx(library(), modality="voice")
+        self.assertNotIn("library_browse", manager.tool_names(spoken), "phase 1: never in a voice turn (nothing reaches the voice front end)")
+        self.assertNotIn("library_browse", manager.instructions(spoken))
         self.assertEqual(manager.tool_names(off), specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])),
                          "flag off: the Manager's tools are exactly what they were")
         for key, spec in specialists.SPECIALISTS.items():
@@ -229,8 +284,10 @@ class FlagAndRegistration(unittest.TestCase):
 
     def test_manager_instructions_carry_the_library_rules_only_when_on(self):
         text = manager.instructions(make_ctx(library()))
-        for rule in ("call library_browse", "addedAt null", "library_read", "Never call ask_creative", "not instructions"):
+        for rule in ("call library_browse", "addedAt null", "Never call ask_creative", "not instructions", "never say that nothing matches"):
             self.assertIn(rule, text)
+        self.assertNotIn("library_read", lb.MANAGER_INSTRUCTIONS, "the Manager has no library_read with this flag")
+        self.assertNotIn("filename", lb.MANAGER_INSTRUCTIONS.lower(), "q matches titles and tags only")
         self.assertNotIn("library_browse", manager.instructions(make_ctx(library(), env={})))
 
     def test_the_tool_is_read_only_and_registered_once(self):
@@ -239,9 +296,35 @@ class FlagAndRegistration(unittest.TestCase):
         self.assertEqual(tool.spec.permission, "read")
         self.assertEqual(tool.spec.tenant, "workspace")
         self.assertFalse(tool.spec.approval)
+        self.assertFalse(tool.spec.voice, "phase 1: not from a voice turn")
         self.assertEqual(set(tool.schema["properties"]), {"q", "kind", "tag", "collection", "addedFrom", "addedTo", "sort", "cursor", "limit"})
         self.assertFalse(tool.schema["additionalProperties"])
         self.assertNotIn("library_search", lb.MANAGER_SCOPE, "library_search already names the facts tool and the GenUI binding")
+        spoken = make_ctx(library(), modality="voice")
+        out = tool_adapter.execute(spoken, tool, {})
+        self.assertEqual(out["code"], "voice_not_allowed")
+        self.assertEqual(spoken.service.repository.transactions, 0)
+
+    def test_flag_on_no_manager_tool_result_or_stored_ref_carries_hashes_facts_source_ids_or_titles(self):
+        service = library()
+        ctx = make_ctx(service)
+        scope = frozenset(manager.tool_names(ctx))
+        outputs = [browse(ctx), browse(ctx, q="recital"), browse(ctx, kind="document")]
+        self.assertTrue(all(o["ok"] for o in outputs))
+        for name in ("library_read", "library_search"):
+            self.assertNotIn(name, scope)
+            refused = tool_adapter.execute(ctx, tool_adapter.REGISTRY[name], {"assetId": hexid(10)} if name == "library_read" else {"query": "recital"}, scope=scope)
+            self.assertEqual(refused["code"], "tool_out_of_scope", name)
+        titles = {"Recital programme", "Piano practice, Monday", "Recital run-through", "Studio ledger", "notes.pdf"}
+        stored = {"references": ctx.ledger.references[:20], **lb.result_fields(ctx.ledger)}
+        for text in [json.dumps(o) for o in outputs] + [json.dumps(stored)]:
+            for key in ("sha256", "facts", "sourceId", "src-1", "f" * 64):
+                self.assertNotIn(key, text)
+        self.assertTrue(ctx.ledger.references)
+        for ref in ctx.ledger.references:
+            self.assertIsNone(ref["title"], ref)
+        self.assertFalse([t for t in titles for r in ctx.ledger.references if t in json.dumps(r)])
+        self.assertFalse([t for t in titles if t in json.dumps(stored)], "no title in what is persisted and fed back")
 
 
 # =============================================================================================================================
@@ -262,7 +345,10 @@ class OutputAllowlist(unittest.TestCase):
             self.assertNotIn(f'"{key}"', dumped, key)
         for private in (CONTENT_ONLY_TEXT, PRIVATE_PATH, "A child at the piano", "pypdf", "thumb.png", "poster.jpg", "a" * 64, PRINCIPAL):
             self.assertNotIn(private, dumped, private)
-        self.assertEqual(set(data["counts"]), {"listed", "matched", "dateUnknown", "complete"})
+        self.assertEqual(set(data["counts"]), {"listed", "dateUnknown", "complete"}, "no filter: no count that would be the Library's size")
+        self.assertEqual(set(data["modelAccess"]), {"photos", "mediaConsent"}, "no hint about reading documents")
+        filtered = browse(make_ctx(library()), q="recital")["data"]["counts"]
+        self.assertEqual(set(filtered), {"listed", "matched", "dateUnknown", "complete"})
 
     def test_titles_tags_and_collections_are_bounded(self):
         long_tags = [f"{n:02d}" + "t" * 60 for n in range(30)]
@@ -339,7 +425,7 @@ class Matching(unittest.TestCase):
         self.assertIn(hexid(5), ids)
         self.assertNotIn(hexid(11), ids, "its only 'recital' is in its summary and text")
         self.assertEqual(out["data"]["counts"]["matched"], 3)
-        self.assertEqual(service.library.calls[0]["query"], "recital", "the service narrows first; the tool re-filters on metadata")
+        self.assertEqual({c["query"] for c in service.library.calls}, {""}, "q never reaches the service (its SQL matches summaries and text)")
         chopin = browse(make_ctx(library()), q="chopin")
         self.assertEqual(chopin["data"]["items"], [])
         self.assertEqual(chopin["data"]["counts"]["matched"], 0)
@@ -350,13 +436,52 @@ class Matching(unittest.TestCase):
         out = browse(make_ctx(library()), q="ffffffff")
         self.assertEqual(out["data"]["items"], [], "the service matches sha256 prefixes; metadata does not")
 
-    def test_every_word_must_match_title_filename_tags_or_collection_names(self):
+    def test_every_word_must_match_the_returned_title_or_tags(self):
         collection = hexid(700)
-        service = FakeService([photo(1, "Bow", tags=["stage"], collections=[collection]), photo(2, "Bow")], collections=[{"id": collection, "name": "Spring", "count": 1}])
-        service.library.media[0]["tags"].append("spring")   # the service's own word match needs the word too; the tool re-checks names
+        service = FakeService([photo(1, "Bow", tags=["stage", "spring"], collections=[collection]), photo(2, "Bow", collections=[collection])],
+                              collections=[{"id": collection, "name": "Spring", "count": 2}])
         out = browse(make_ctx(service), q="bow spring")
-        self.assertEqual([i["assetId"] for i in out["data"]["items"]], [hexid(1)])
+        self.assertEqual([i["assetId"] for i in out["data"]["items"]], [hexid(1)], "photo 2 is only in a collection named Spring")
         self.assertEqual(browse(make_ctx(library()), q="piano practice", kind="image")["data"]["counts"]["matched"], 2)
+
+    def test_q_never_reaches_the_service_and_results_never_depend_on_summary_or_chunk_text(self):
+        chopin = hexid(701)
+
+        def build(private):
+            files = [file(10, "recital-programme.pdf", "Recital programme", created=hk(2026, 8, 15), tags=["recital"], source="src-1",
+                          summary=private, chunks=private),
+                     file(11, "notes.pdf", None, created=hk(2026, 9, 10), summary=private, chunks=private),
+                     file(12, "ledger.pdf", "Studio ledger", created=hk(2026, 7, 1), kind="file", summary=private, chunks=private),
+                     # Before the fix these leaked: the SQL matches tags by whole token only and never collection names, so a tag
+                     # substring ("prac") or a collection name ("chopin") was returned only when the file's TEXT also matched.
+                     file(13, "scales.pdf", "Scales", created=hk(2026, 7, 2), tags=["piano practice"], summary=private, chunks=private),
+                     file(14, "etudes.pdf", "Etudes", created=hk(2026, 7, 3), collections=[chopin], summary=private, chunks=private)]
+            return FakeService([photo(1, "Recital bow", tags=["recital"])], files, collections=[{"id": chopin, "name": "Chopin", "count": 1}])
+        plain = build("")
+        private = build(f"{CONTENT_ONLY_TEXT}. Studio pacing, ledger recital notes; programme chopin; daily practice")
+        for q in ("recital", "chopin", "ballade", "pacing", "notes", "ledger", "programme", "studio", "rehearsal notes", "prac", "practice", "ffffffff",
+                  "f" * 12):
+            with self.subTest(q=q):
+                a, b = browse(make_ctx(plain), q=q), browse(make_ctx(private), q=q)
+                self.assertEqual(a["data"], b["data"], "the same metadata gives the same answer, whatever the files say")
+        self.assertEqual({c["query"] for c in plain.library.calls + private.library.calls}, {""})
+        # The fake mirrors the SQL: given q, it WOULD return the content-only matches (so a tool sending q would be an oracle).
+        self.assertIn(hexid(11), [a["id"] for a in private.library.list(WS, None, query="chopin")["assets"]])
+        self.assertNotIn(hexid(11), [a["id"] for a in plain.library.list(WS, None, query="chopin")["assets"]])
+
+    def test_a_filename_behind_a_title_collection_names_and_hidden_tags_never_match(self):
+        collection = hexid(700)
+        files = [file(30, "private-chopin-letter.pdf", "Programme", tags=[f"t{n}" for n in range(10)] + ["hidden"], collections=[collection]),
+                 file(31, "chopin-etude.pdf", None)]
+        service = FakeService([photo(1, "x" * 130 + " needle")], files, collections=[{"id": collection, "name": "Winter recital", "count": 1}])
+        self.assertEqual([i["assetId"] for i in browse(make_ctx(service), q="chopin")["data"]["items"]], [hexid(31)],
+                         "a filename is matched only where it is the returned title")
+        self.assertEqual(browse(make_ctx(service), q="winter")["data"]["items"], [], "collection names are never searched")
+        self.assertEqual(browse(make_ctx(service), q="needle")["data"]["items"], [], "only the 120 characters of title that are returned")
+        self.assertEqual(browse(make_ctx(service), tag="hidden")["data"]["items"], [], "the 11th tag is not returned, so it never matches")
+        self.assertEqual(browse(make_ctx(service), q="hidden")["data"]["items"], [])
+        self.assertEqual([i["assetId"] for i in browse(make_ctx(service), tag="t3")["data"]["items"]], [hexid(30)])
+        self.assertEqual([i["assetId"] for i in browse(make_ctx(service), collection=collection)["data"]["items"]], [hexid(30)], "filtered by id")
 
     def test_kinds_tags_and_collections_pass_through_to_the_library_service(self):
         service = library()
@@ -522,7 +647,8 @@ class PagingAndRefusals(unittest.TestCase):
     def test_empty_library_and_consent_hint(self):
         out = browse(make_ctx(FakeService()))["data"]
         self.assertEqual((out["items"], out["libraryEmpty"], out["note"]), ([], True, lb.EMPTY_LIBRARY))
-        self.assertEqual(out["counts"], {"listed": 0, "matched": 0, "dateUnknown": 0, "complete": True})
+        self.assertEqual(out["counts"], {"listed": 0, "dateUnknown": 0, "complete": True})
+        self.assertNotIn("documents", out["modelAccess"])
         self.assertFalse(out["modelAccess"]["mediaConsent"])
         consented = FakeService([photo(1)], state={"phase2": {"assets": []}, "mediaEgress": {"cloud": True, "processors": [{"id": "openai:gpt-6"}]}})
         self.assertTrue(browse(make_ctx(consented))["data"]["modelAccess"]["mediaConsent"])
@@ -531,9 +657,67 @@ class PagingAndRefusals(unittest.TestCase):
         files = [file(100 + n, f"f{n}.pdf", created=NOW - n) for n in range(lb.SCAN_LIMIT * lb.SCAN_CALLS + 5)]
         out = browse(make_ctx(FakeService(files=files)))["data"]
         self.assertFalse(out["counts"]["complete"])
-        self.assertIsNone(out["counts"]["matched"], "unknown is never a number")
+        self.assertNotIn("matched", out["counts"], "no filter: never the Library's size")
         self.assertGreaterEqual(len(out["items"]), 20)
         self.assertIsNotNone(out["nextCursor"])
+        named = browse(make_ctx(FakeService(files=files)), q="f1")["data"]
+        self.assertIsNone(named["counts"]["matched"], "unknown is never a number")
+        self.assertFalse(named["counts"]["complete"])
+        self.assertIn("nextCursor continues the search", named["note"])
+
+    def test_an_incomplete_search_never_says_nothing_matches_and_continues_with_the_next_files(self):
+        total = lb.SEGMENT + 5
+        files = [file(100 + n, f"f{n}.pdf", created=NOW - n) for n in range(total)]
+        files[-1]["displayTitle"] = "Oldest needle"            # only the oldest file, past the first 1,000, matches
+        service = FakeService(files=files)
+        ctx = make_ctx(service)
+        first = browse(ctx, q="needle")
+        data = first["data"]
+        self.assertEqual((data["items"], data["counts"]["complete"], data["counts"]["matched"]), ([], False, None))
+        self.assertNotEqual(data["note"], lb.NO_MATCH)
+        self.assertNotIn(lb.NO_MATCH, data["note"])
+        self.assertTrue(data["note"].startswith(lb.PARTIAL), data["note"])
+        self.assertIn("nextCursor", data["note"])
+        self.assertIsNotNone(data["nextCursor"], "the continuation is offered")
+        second = browse(ctx, q="needle", cursor=data["nextCursor"])["data"]
+        self.assertEqual([i["assetId"] for i in second["items"]], [hexid(100 + total - 1)])
+        self.assertTrue(second["counts"]["complete"])
+        self.assertIsNone(second["counts"]["matched"], "a continuation never claims a total")
+        self.assertIsNone(second["nextCursor"])
+        self.assertEqual(service.library.calls[-1]["offset"], lb.SEGMENT, "the continuation scanned from file 1,000 on")
+        nothing = browse(make_ctx(service), q="zzzz")["data"]
+        self.assertTrue(nothing["note"].startswith(lb.PARTIAL))
+        rest = browse(make_ctx(service), q="zzzz", cursor=nothing["nextCursor"])["data"]
+        self.assertEqual((rest["items"], rest["note"], rest["nextCursor"]), ([], lb.NO_MORE, None))
+        stolen = browse(make_ctx(service), q="other", cursor=data["nextCursor"])
+        self.assertEqual((stolen["ok"], stolen["code"]), (False, "tool_input"), "a continuation cursor is bound to its filters")
+        small = browse(make_ctx(library()), q="zzzz")["data"]
+        self.assertEqual((small["note"], small["counts"]["complete"], small["counts"]["matched"]), (lb.NO_MATCH, True, 0), "definitive only when complete")
+
+    def test_parallel_calls_reserve_pages_atomically(self):
+        service = FakeService([photo(n) for n in range(1, 10)], delay=0.05)
+        ctx = make_ctx(service)
+        barrier, results = threading.Barrier(5), []
+
+        def call():
+            barrier.wait()
+            results.append(tool_adapter.execute(ctx, tool_adapter.REGISTRY["library_browse"], {}, scope=frozenset(manager.tool_names(ctx))))
+        threads = [threading.Thread(target=call) for _ in range(5)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(sum(1 for r in results if r["ok"]), lb.PAGES_PER_TURN)
+        self.assertEqual(sorted(r.get("code") for r in results if not r["ok"]), ["library_page_limit"] * 2)
+        self.assertEqual(len([c for c in service.library.calls if c["limit"] == lb.SCAN_LIMIT]), lb.PAGES_PER_TURN, "the refused calls read nothing")
+        self.assertEqual(lb.pages_used(ctx), lb.PAGES_PER_TURN)
+
+    def test_a_refused_input_gives_its_page_back(self):
+        ctx = make_ctx(library())
+        for _ in range(4):
+            self.assertEqual(browse(ctx, addedFrom="2026-09-01", addedTo="2026-08-01")["code"], "tool_input")
+        self.assertEqual(lb.pages_used(ctx), 0)
+        self.assertTrue(browse(ctx)["ok"])
 
 
 # =============================================================================================================================
@@ -583,6 +767,42 @@ class GenUIJourney(unittest.TestCase):
         self.assertEqual(selected[0]["inputs"]["ids"], [hexid(1), hexid(2)], "a J03 selection's refs count too")
         self.assertEqual(ui_projection._suggested_inputs(["J01"], many), [], "only for J03")
 
+    def test_a_24_item_page_reaches_the_view_whole_though_references_are_capped_at_20(self):
+        ctx = make_ctx(FakeService([photo(n, f"P{n}") for n in range(1, 25)]))
+        out = browse(ctx)
+        listed = [i["assetId"] for i in out["data"]["items"]]
+        self.assertEqual(len(listed), 24)
+        self.assertEqual(lb.result_fields(ctx.ledger), {"libraryIds": listed})
+        stored = {**self.result(ctx.ledger.references[:20]), **lb.result_fields(ctx.ledger), "ui": {"journeyIds": ["J03"]}}   # as service._finalize persists it
+        self.assertEqual(len(stored["references"]), 20)
+        suggested = ui_projection.project_ui_context(None, self.auth(), stored, "chat", None)["allowed_context"]["suggestedInputs"]
+        self.assertIn({"binding": "library_search", "inputs": {"ids": listed}}, suggested, "all 24, in order")
+        self.assertIn("library_browse.result_fields(ledger)", inspect.getsource(rt_service.AgentRuntimeService._finalize), "the result carries them")
+        many = make_ctx(FakeService([photo(n) for n in range(1, 80)]))
+        cursor = None
+        for _ in range(lb.PAGES_PER_TURN):
+            page = browse(many, **({"cursor": cursor} if cursor else {}))["data"]
+            cursor = page["nextCursor"]
+        self.assertEqual(len(lb.result_fields(many.ledger)["libraryIds"]), lb.PICK_MAX, "at most the binding's 25")
+        self.assertEqual(lb.result_fields(make_ctx(library()).ledger), {}, "nothing when library_browse never listed a page")
+
+    def test_an_empty_browse_suggests_empty_ids_never_the_whole_library(self):
+        ctx = make_ctx(library())
+        out = browse(ctx, q="zzzz-nothing")
+        self.assertEqual(out["data"]["items"], [])
+        self.assertEqual(lb.result_fields(ctx.ledger), {"libraryIds": []})
+        stored = {**self.result([]), **lb.result_fields(ctx.ledger), "ui": {"journeyIds": ["J03"]}}
+        self.assertTrue(ui_projection.eligibility(stored, "find my zzzz photos", "text", flags={"enabled": True})["eligible"])
+        projection = ui_projection.project_ui_context(None, self.auth(), stored, "chat", None)
+        suggested = projection["allowed_context"]["suggestedInputs"]
+        self.assertEqual([s for s in suggested if s["binding"].startswith("library_")], [{"binding": "library_search", "inputs": {"ids": []}}])
+        self.assertIn({"binding": "library_search", "inputs": {"ids": []}}, ui_presenter.presenter_context(projection)["context"]["suggestedInputs"],
+                      "the presenter sees the empty ids")
+        self.assertEqual(ui_domain.validate(ui_domain.QUERIES["library_search"].args, {"ids": []}), {"ids": []})
+        old = {**self.result([]), "ui": {"journeyIds": ["J03"]}}
+        self.assertEqual([s for s in ui_projection.project_ui_context(None, self.auth(), old, "chat", None)["allowed_context"]["suggestedInputs"]
+                          if s["binding"] == "library_search"], [], "a result without libraryIds keeps the earlier behaviour")
+
     def test_the_binding_schema_accepts_ids_and_added_dates(self):
         args = ui_domain.QUERIES["library_search"].args
         ids = [hexid(n) for n in range(1, 26)]
@@ -602,6 +822,7 @@ class GenUIJourney(unittest.TestCase):
         section = ui_presenter.bindings_section(j03_manifest)
         rule = "When CONTEXT.suggestedInputs gives library_search inputs, use them unchanged; never invent q or tag."
         self.assertIn(rule, section)
+        self.assertIn("Empty ids mean the answer found no Library items: keep them, never list the whole Library instead.", section)
         self.assertTrue(section.rstrip().endswith("No prose, no Markdown fences."), "the output rule stays last")
         self.assertTrue(section.startswith("## Rafii bindings"))
         j01_manifest = ui_capabilities.build_manifest(None, self.auth(), {"journey_ids": ["J01"]}, scope="workspace")
@@ -613,10 +834,13 @@ class J03Binding(unittest.TestCase):
     def dctx(self, service, zone=HK):
         member = Membership.from_row("viewer")
         auth = UiAuth(workspace_id=WS, principal=PRINCIPAL, member=member, role="viewer")
-        lib = FakeLibrary(None, service.library.media, service.library.files)
-        return common.DomainContext(runtime=None, cur=FakeCursor(service.repository.cur.uploads), auth=auth, workspace_id=WS, principal=PRINCIPAL, member=member,
-                                    state={"phase2": {"assets": []}}, revision=3, artifact={"id": "a"}, manifest={}, now=NOW, zone=zone,
-                                    _bound=SimpleNamespace(library=lib))
+        self.lib = FakeLibrary(None, service.library.media, service.library.files)
+        self.cur = FakeCursor(service.repository.cur.uploads, files=service.library.files)
+        # The member's workspace state holds the media store (state.phase2.assets), as the request transaction reads it.
+        state = {"phase2": {"assets": [copy.deepcopy(m) for m in service.library.media]}}
+        return common.DomainContext(runtime=None, cur=self.cur, auth=auth, workspace_id=WS, principal=PRINCIPAL, member=member,
+                                    state=state, revision=3, artifact={"id": "a"}, manifest={}, now=NOW, zone=zone,
+                                    _bound=SimpleNamespace(library=self.lib))
 
     def search(self, service, inputs, cursor=None):
         inputs = ui_domain.validate(ui_domain.QUERIES["library_search"].args, inputs)
@@ -635,7 +859,39 @@ class J03Binding(unittest.TestCase):
         self.assertEqual(out["warnings"], ["1 of the chosen items aren't available here."])
         self.assertNotIn(foreign, json.dumps(out["data"]))
         empty = self.search(library(), {"ids": []})
-        self.assertEqual((empty["state"], empty["data"]["items"], empty["coverage"]["note"]), ("empty", [], j03.EMPTY_FILTERED))
+        self.assertEqual((empty["state"], empty["data"]["items"], empty["coverage"]["note"]), ("empty", [], j03.EMPTY_PICKED),
+                         "the turn found nothing: an honest empty view, never the whole Library")
+        self.assertEqual(self.lib.calls, [], "and nothing was read for it")
+        none_here = self.search(library(), {"ids": [foreign]})
+        self.assertEqual((none_here["state"], none_here["coverage"]["note"]), ("empty", j03.EMPTY_FILTERED))
+
+    def test_ids_are_resolved_directly_even_past_the_scan_bound(self):
+        files = [file(100 + n, f"f{n}.pdf", created=NOW - n) for n in range(lb.SEGMENT + 5)]
+        oldest, middle = hexid(100 + lb.SEGMENT + 4), hexid(100 + 500)
+        gone = file(5000, "gone.pdf", created=NOW - 10)
+        gone["processingStatus"] = "deleting"
+        twin = file(5001, "twin.pdf", created=NOW - 11)
+        twin["processingStatus"] = "duplicate"
+        theirs = file(5002, "theirs.pdf", created=NOW - 12)
+        theirs["_workspace"] = OTHER_WS
+        removed = photo(6, "Removed", deleted=True)
+        service = FakeService([photo(1, "Bow"), video(5, "Run-through"), removed], files + [gone, twin, theirs], uploads={hexid(5): hk(2026, 8, 20)})
+        ids = [oldest, hexid(1), gone["id"], twin["id"], theirs["id"], hexid(6), middle, hexid(5)]
+        out = self.search(service, {"ids": ids})
+        self.assertEqual([i["assetId"] for i in out["data"]["items"]], [oldest, hexid(1), middle, hexid(5)], "in the order given; the oldest file is past 1,000")
+        self.assertEqual(out["warnings"], ["4 of the chosen items aren't available here."])
+        self.assertEqual(out["coverage"]["total"], 4)
+        self.assertEqual(self.lib.calls, [], "no Library scan")
+        reads = [s for s in self.cur.statements if "pr_library_assets" in s[0]]
+        self.assertEqual(len(reads), 1, "one read")
+        self.assertIn("a.workspace_id=%s AND a.id=ANY(%s::uuid[]) AND a.processing_status NOT IN ('deleting','duplicate')", reads[0][0])
+        self.assertEqual(reads[0][1][0], WS)
+        self.assertEqual(set(reads[0][1][1]), {oldest, gone["id"], twin["id"], theirs["id"], hexid(6), middle},
+                         "live media-store ids come from the workspace state; every other id is looked up once as a file")
+        clip = next(i for i in out["data"]["items"] if i["assetId"] == hexid(5))
+        self.assertEqual(clip["createdAt"], common.iso(hk(2026, 8, 20)))
+        kinds = self.search(service, {"ids": ids, "kind": "image"})
+        self.assertEqual([i["assetId"] for i in kinds["data"]["items"]], [hexid(1)], "other filters still apply to the selection")
 
     def test_added_dates_use_the_same_filter_as_the_agent_tool(self):
         out = self.search(library(), {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"})
@@ -657,10 +913,80 @@ class J03Binding(unittest.TestCase):
         self.assertEqual(listed["coverage"]["note"], j03.PAGING_NOTE, "unchanged when there are rows")
         self.assertIsNone(listed["coverage"]["total"])
 
+    def test_a_window_still_uses_the_shared_scan(self):
+        out = self.search(library(), {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"})
+        self.assertTrue(self.lib.calls, "a window without ids is the bounded scan")
+        self.assertEqual({i["assetId"] for i in out["data"]["items"]}, {hexid(5), hexid(10)})
+
     def test_the_browser_rows_keep_their_existing_shape_with_a_video_date(self):
         listed = self.search(library(), {"kind": "video"})
         dated = {i["assetId"]: i["createdAt"] for i in listed["data"]["items"]}
         self.assertEqual(dated, {hexid(5): common.iso(hk(2026, 8, 20)), hexid(6): None})
+
+
+# =============================================================================================================================
+class PhotosAttachOnly(unittest.TestCase):
+    """While library_browse is on, the model knows every photo/video id in the Library; an image tool takes an explicit id
+    only when the person attached it in this conversation (D-A51: photos attach-only, enforced in code)."""
+    ROUTE_ENV = dict.fromkeys(("OPENAI_API_KEY",), "unit-test-only")   # a vision route exists; no request is made (the model is a fake)
+
+    class Vision:
+        def __init__(self):
+            self.calls = 0
+
+        def analyze(self, raw, mime, **_kw):
+            self.calls += 1
+            return {"findings": {"summary": "a bow"}, "model": "vision-fake", "usage": {}, "latencyMs": 1}
+
+    def make(self, env, attachments=(), conversation=()):
+        cfg = config.RuntimeConfig.from_environment({**env, **self.ROUTE_ENV})
+        processor = media_consent.processor(*(lambda r: (r.provider, r.model))(cfg.route("vision", reason="test")))
+        state = {"phase2": {"assets": [photo(1, "Recital bow"), photo(2, "Studio")]}, "mediaEgress": {"cloud": True, "processors": [processor]}}
+        service = FakeService([photo(1, "Recital bow"), photo(2, "Studio")], state=state, attachments=conversation)
+        vision = self.Vision()
+        ctx = make_ctx(service, env={**env, **self.ROUTE_ENV}, vision=vision, attachments=list(attachments))
+        return ctx, service, vision
+
+    def analyze(self, ctx, **args):
+        return tool_adapter.execute(ctx, tool_adapter.REGISTRY["image_analyze"], {"question": "What is in it?", **args})
+
+    def test_a_browsed_photo_is_refused_unless_attached_even_with_media_consent_on(self):
+        ctx, service, vision = self.make(ON_ENV)
+        self.assertTrue(media_consent.allowed(service.state, media_consent.processor(*(lambda r: (r.provider, r.model))(ctx.config.route("vision", reason="t")))))
+        browsed = [i["assetId"] for i in browse(ctx, kind="image")["data"]["items"]]
+        self.assertIn(hexid(1), browsed)
+        out = self.analyze(ctx, assetId=hexid(1))
+        self.assertEqual((out["ok"], out["code"], out["needsUser"]), (False, "needs_attachment", True))
+        self.assertEqual((vision.calls, service.media_reads), (0, []), "no pixels were read or sent")
+        self.assertEqual(ctx.ledger.errors, [], "a request to attach, not a failed turn")
+        missing = self.analyze(ctx, assetId="e" * 32)
+        self.assertEqual(missing["code"], "not_found", "another workspace's id still gets the same answer as a missing one")
+
+    def test_an_attached_or_conversation_photo_is_allowed(self):
+        ctx, service, vision = self.make(ON_ENV, attachments=[{"assetId": hexid(1)}])
+        out = self.analyze(ctx, assetId=hexid(1))
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(vision.calls, 1)
+        earlier, _service, earlier_vision = self.make(ON_ENV, conversation=[hexid(2)])
+        self.assertTrue(self.analyze(earlier, assetId=hexid(2))["ok"], "attached earlier in this conversation")
+        self.assertEqual(self.analyze(earlier, assetId=hexid(1))["code"], "needs_attachment")
+        self.assertEqual(earlier_vision.calls, 1)
+
+    def test_edits_variants_and_reference_images_are_gated_too(self):
+        ctx, service, _vision = self.make(ON_ENV)
+        ctx.image_studio = SimpleNamespace(route=lambda quality, reason: SimpleNamespace(available=True, provider="openai", model="gpt-image-2", blocker=None),
+                                           estimate=lambda quality: 1000)
+        for name, args in (("image_edit", {"instruction": "brighter", "assetId": hexid(1)}), ("image_variant", {"instruction": "warmer", "assetId": hexid(1)}),
+                           ("image_generate", {"prompt": "a poster", "referenceAssetIds": [hexid(2)]})):
+            with self.subTest(tool=name):
+                out = tool_adapter.execute(ctx, tool_adapter.REGISTRY[name], args)
+                self.assertEqual((out["ok"], out["code"]), (False, "needs_attachment"), out)
+        self.assertEqual(service.media_reads, [])
+
+    def test_with_the_flag_off_an_explicit_id_works_as_before(self):
+        ctx, _service, vision = self.make({})
+        self.assertTrue(self.analyze(ctx, assetId=hexid(1))["ok"])
+        self.assertEqual(vision.calls, 1)
 
 
 if __name__ == "__main__":

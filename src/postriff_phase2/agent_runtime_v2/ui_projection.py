@@ -222,7 +222,16 @@ def _refs(result: dict, selection_state: dict | None) -> list[dict]:
     return out[:60]
 
 
-def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
+def _library_ids(result: dict) -> list[str] | None:
+    """The ids library_browse listed this turn, in order (`result.libraryIds`, library_browse.result_fields), or None when it
+    never listed a page. Kept apart from `references` (capped at 20 on the message) so a 25-item page reaches the view whole."""
+    ids = result.get("libraryIds") if isinstance(result, dict) else None
+    if not isinstance(ids, list):
+        return None
+    return list(dict.fromkeys(i for i in ids if isinstance(i, str) and re.match(r"^[0-9a-f]{32}$", i)))[:LIBRARY_IDS]
+
+
+def _suggested_inputs(journeys: list[str], refs: list[dict], library_ids: list[str] | None = None) -> list[dict]:
     """Starting arguments for bindings from the turn's own references (ids only); the presenter may use or ignore them."""
     by_type: dict[str, list[str]] = {}
     for reference in refs:
@@ -238,10 +247,14 @@ def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
         out.append({"binding": "campaign_detail", "inputs": {"campaignId": by_type["campaign"][0]}})
     if "J08" in journeys and by_type.get("automation"):
         out.append({"binding": "automation_detail", "inputs": {"automationId": by_type["automation"][0]}})
-    # The Library items the turn found (library_browse records each as an `asset` ref, in its result's order; a J03 view's selection
-    # comes back as media/library_file refs): the view lists exactly those, so the chat and the view agree. Ids only.
-    found = list(dict.fromkeys(r["id"] for r in refs if r["type"] in ("asset", "media", "library_file") and re.match(r"^[0-9a-f]{32}$", r["id"])))
-    if "J03" in journeys and found:
+    # The Library items the turn found: what library_browse listed (`libraryIds`, in its results' order, [] when it found nothing),
+    # else the turn's asset refs (a J03 view's selection comes back as media/library_file refs). The view lists exactly those, so
+    # the chat and the view agree; an empty browse gives `ids: []` (an empty view), never library_search {} (the whole Library).
+    if library_ids is not None:
+        found = list(library_ids)
+    else:
+        found = list(dict.fromkeys(r["id"] for r in refs if r["type"] in ("asset", "media", "library_file") and re.match(r"^[0-9a-f]{32}$", r["id"])))
+    if "J03" in journeys and (found or library_ids is not None):
         out.append({"binding": "library_search", "inputs": {"ids": found[:LIBRARY_IDS]}})
         if len(found) == 1:
             out.append({"binding": "library_item", "inputs": {"assetId": found[0]}})
@@ -294,7 +307,7 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
     groups = component_groups(journeys)
     projection = {"journey_ids": journeys, "component_group_ids": groups, "egress_decision": egress_decision(result, scope=scope),
                   "allowed_context": {"refs": refs, "counts": _counts(result, refs), "toolStates": _tool_states(result), "language": result.get("language") or "en",
-                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs),
+                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs, _library_ids(result)),
                                       "selection": [r for r in refs if r in ((selection_state or {}).get("references") or [])][:12] if isinstance(selection_state, dict) else [],
                                       "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"]},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}

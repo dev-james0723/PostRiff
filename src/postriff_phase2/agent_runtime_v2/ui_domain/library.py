@@ -28,6 +28,7 @@ PICK_MAX = 25        # library_search `ids`: the items a Manager turn found (ui_
 PAGING_NOTE = "The Library does not report a total; more pages follow while a cursor is returned."
 EMPTY_FILTERED = "Nothing in your Library matches these filters."
 EMPTY_LIBRARY = "Your Library has no items yet."
+EMPTY_PICKED = "This answer didn't list any Library items."   # `ids: []`: the turn found nothing (never the whole Library)
 
 
 def _library(dctx):
@@ -97,28 +98,89 @@ def _dated(dctx, assets: list) -> tuple[list, dict]:
     return [{**a, "createdAt": dates[a.get("id")]} if a.get("id") in dates else a for a in assets], dates
 
 
+def _windowed(assets: list, dates: dict, window, warnings: list) -> list:
+    """Items with a recorded added date inside the window (photos have none, and are counted in a warning)."""
+    if not window:
+        return assets
+    browse = _browse()
+    epochs = {id(a): browse.added_epoch(a, dates) for a in assets}
+    undated = sum(1 for a in assets if epochs[id(a)] is None)
+    if undated:
+        warnings.append(f"{undated} item(s) have no recorded added date (photos never do), so a date range can't include them.")
+    return [a for a in assets if epochs[id(a)] is not None and window[0] <= epochs[id(a)] < window[1]]
+
+
+def _picked(dctx, library, ids: list) -> list:
+    """Exactly these items of this workspace, in the order given, however large the Library: the non-deleted media-store
+    photos/videos of this member's workspace state, and ONE workspace-scoped read of pr_library_assets for the rest (deleting
+    and duplicate rows excluded, as list() excludes them), decorated with their labels and collections as list() decorates
+    them. Another workspace's, deleted and unknown ids are simply not returned."""
+    from ...library_assets import _asset
+    wanted = set(ids)
+    legacy = {}
+    for a in (dctx.state.get("phase2") or {}).get("assets") or []:
+        if isinstance(a, dict) and a.get("id") in wanted and not a.get("deleted") and not a.get("deletionPending") and a["id"] not in legacy:
+            legacy[a["id"]] = {**a, "assetKind": "video" if str(a.get("mime") or "").startswith("video/") else "image"}
+    rest = [i for i in ids if i not in legacy and re.match(HEX, i)]
+    files = {}
+    if rest:
+        dctx.cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) FROM public.pr_library_assets a "
+                         "WHERE a.workspace_id=%s AND a.id=ANY(%s::uuid[]) AND a.processing_status NOT IN ('deleting','duplicate')",
+                         (dctx.workspace_id, rest))
+        for (record,) in dctx.cur.fetchall() or []:
+            asset = _asset(record)
+            files[asset["id"]] = asset
+    picked = [legacy.get(i) or files.get(i) for i in ids]
+    picked = [a for a in picked if a is not None]
+    if picked and callable(getattr(library, "_decorate", None)):
+        library._decorate(dctx.cur, dctx.workspace_id, picked)
+    return picked
+
+
+def _keeps(asset: dict, inputs: dict) -> bool:
+    """The other filters, applied to an `ids` selection: kind, tag, collection and q (title, filename and tags words)."""
+    kind = inputs.get("kind") or "all"
+    if kind != "all" and (asset.get("assetKind") or asset.get("kind")) != kind:
+        return False
+    if inputs.get("tag") and inputs["tag"] not in (asset.get("tags") or []):
+        return False
+    if inputs.get("collection") and inputs["collection"] not in (asset.get("collections") or []):
+        return False
+    words = str(inputs.get("q") or "").casefold().split()
+    hay = " ".join(str(x) for x in [asset.get("displayTitle") or "", asset.get("originalFilename") or "", *(asset.get("tags") or [])]).casefold()
+    return all(word in hay for word in words)
+
+
+def _search_ids(dctx, library, inputs, cursor, window):
+    """`ids`: exactly those items of this workspace, in that order (the rest are counted, never explained), resolved directly
+    rather than through a bounded scan, so an item past the scan bound is still listed. `ids: []` is the turn's own empty
+    result: an empty view, never the whole Library."""
+    ids = list(inputs.get("ids") or [])
+    warnings = []
+    picked = _picked(dctx, library, ids) if ids else []
+    if len(picked) < len(ids):
+        warnings.append(f"{len(ids) - len(picked)} of the chosen items aren't available here.")
+    assets, dates = _dated(dctx, picked)
+    assets = [a for a in _windowed(assets, dates, window, warnings) if _keeps(a, inputs)]
+    page, next_cursor, start = common.paginate("library_search", inputs, cursor, assets, default=50)
+    rows = [_row(dctx, a) for a in page]
+    data = {"items": rows, "offset": start, "storage": {"usedBytes": None, "limitBytes": None}, "capabilities": {},
+            "legacyMedia": len([a for a in assets if not _is_file(a)])}
+    note = (EMPTY_PICKED if not ids else EMPTY_FILTERED) if not rows and start == 0 else None
+    return ui_contracts.query_result("available" if rows else ("empty" if start == 0 else "available"), data, as_of=common.iso(dctx.now),
+                                     source_refs=[r["ref"] for r in rows], revision=str(dctx.revision), next_cursor=next_cursor, known=len(rows),
+                                     total=len(assets), note=note, warnings=warnings)
+
+
 def _search_scanned(dctx, library, inputs, cursor, args, window):
-    """`ids` (exactly those items of this workspace, in that order; the rest are counted, never explained) and/or an
-    addedFrom/addedTo window (items with a recorded added date inside it; photos have none). One bounded scan of the
+    """An addedFrom/addedTo window (items with a recorded added date inside it; photos have none). One bounded scan of the
     Library service, then one ordered list paged with the binding's own cursor."""
     browse = _browse()
     found = browse.scan(library, dctx.workspace_id, query=args["query"], kind=args["kind"], tag=args["tag"], collection=args["collection"],
                         sort=args["sort"], stop_before=window[0] if window else None)
     assets, dates = _dated(dctx, found["legacy"] + found["files"])
     warnings = []
-    if window:
-        epochs = {id(a): browse.added_epoch(a, dates) for a in assets}
-        undated = sum(1 for a in assets if epochs[id(a)] is None)
-        assets = [a for a in assets if epochs[id(a)] is not None and window[0] <= epochs[id(a)] < window[1]]
-        if undated:
-            warnings.append(f"{undated} item(s) have no recorded added date (photos never do), so a date range can't include them.")
-    ids = inputs.get("ids")
-    if ids is not None:
-        by_id = {a.get("id"): a for a in assets}
-        picked = [by_id[i] for i in ids if i in by_id]
-        if len(picked) < len(ids):
-            warnings.append(f"{len(ids) - len(picked)} of the chosen items aren't available here.")
-        assets = picked
+    assets = _windowed(assets, dates, window, warnings)
     page, next_cursor, start = common.paginate("library_search", inputs, cursor, assets, default=50)
     rows = [_row(dctx, a) for a in page]
     first = found["first"]
@@ -135,7 +197,9 @@ def _search_scanned(dctx, library, inputs, cursor, args, window):
 def library_search(dctx, inputs, cursor):
     library = _library(dctx)
     window = _browse().added_window(inputs.get("addedFrom"), inputs.get("addedTo"), dctx.zone, dctx.now, code="ui_window")
-    if inputs.get("ids") is not None or window is not None:
+    if inputs.get("ids") is not None:
+        return _search_ids(dctx, library, inputs, cursor, window)
+    if window is not None:
         args = dict(query=inputs.get("q") or "", kind=inputs.get("kind") or "all", tag=inputs.get("tag") or "", collection=inputs.get("collection") or "",
                     sort=inputs.get("sort") or "newest")
         return _search_scanned(dctx, library, inputs, cursor, args, window)

@@ -9,7 +9,12 @@ inputs, on the real HostedWorkspaceService + UniversalLibrary, real roles and tw
   together; a document that mentions a word only in its summary or extracted text is not matched by it;
 - a video's added date comes from its committed pr_media_uploads row; photos have none and are never inside a date window;
 - the tool opens exactly one workspace transaction and writes nothing; the J03 query savepoint leaves no writes;
-- with the flag off (or the workspace not on the canary list) the Manager has no library_browse and the tool refuses.
+- with the flag off (or the workspace not on the canary list) the Manager has no library_browse and the tool refuses; with it
+  on, the Manager still has no library_read;
+- q never reaches the Library SQL (which matches summaries and chunk text): it is matched against the returned titles and
+  tags only, and no count of the whole Library is returned for an unfiltered browse;
+- the J03 `ids` binding resolves exactly those ids with one workspace-scoped read (not the bounded scan); `ids: []` is an
+  honest empty view.
 
 Nothing is asserted through a service-role bypass of the code under test. Migration 102 is applied inline (J03 artifacts).
 
@@ -262,7 +267,8 @@ def _():
     dumped = json.dumps(out)
     for private in (CONTENT_ONLY, "private alt text", "poster.jpg", "x/video/", "e" * 64, ONE, "pypdf"):
         assert private not in dumped, private
-    assert out["data"]["counts"] == {"listed": 9, "matched": 9, "dateUnknown": 5, "complete": True}, out["data"]["counts"]
+    assert out["data"]["counts"] == {"listed": 9, "dateUnknown": 5, "complete": True}, out["data"]["counts"]
+    assert set(out["data"]["modelAccess"]) == {"photos", "mediaConsent"}, out["data"]["modelAccess"]
     return {"rows": len(seen[OWNER])}
 
 
@@ -309,6 +315,10 @@ def _():
     assert recital["data"]["counts"]["matched"] == 3
     _ctx, chopin = browse(OWNER, q="chopin")
     assert ids_of(chopin) == [] and chopin["data"]["libraryEmpty"] is False, chopin["data"]
+    assert chopin["data"]["note"] == library_browse.NO_MATCH and chopin["data"]["counts"]["matched"] == 0, chopin["data"]
+    for word in ("ballade", "pacing", "rehearsal", "spring"):   # only in D2's summary/chunk text, or only a collection name
+        _ctx, hidden = browse(OWNER, q=word)
+        assert ids_of(hidden) == [], (word, ids_of(hidden))
     _ctx, tagged = browse(OWNER, tag="piano practice")
     assert set(ids_of(tagged)) == {P1, P2}
     _ctx, videos = browse(OWNER, kind="video")
@@ -385,6 +395,8 @@ def _():
         raise AssertionError("a revoked member read the view's data")
     except AlphaError as error:
         assert error.status in (401, 403, 404), error
+    none = query("library_search", {"ids": []}, art=art)
+    assert none["state"] == "empty" and none["data"]["items"] == [] and none["coverage"]["note"] == "This answer didn't list any Library items.", none
     empty_art = make_artifact(["J03"], token=EMPTY, workspace=empty_wid)
     nothing = query("library_search", {}, art=empty_art, token=EMPTY, workspace=empty_wid)
     assert nothing["state"] == "empty" and nothing["coverage"]["note"] == "Your Library has no items yet.", nothing
@@ -401,7 +413,7 @@ def _():
         out = tool_adapter.execute(ctx, tool_adapter.REGISTRY["library_browse"], {})
         assert out["ok"] is False and out["code"] == "library_browse_off", out
     ctx = ctx_for(OWNER)
-    assert {"library_browse", "library_read"} <= set(manager.tool_names(ctx))
+    assert "library_browse" in manager.tool_names(ctx) and "library_read" not in manager.tool_names(ctx), manager.tool_names(ctx)
     _ctx, empty = browse(EMPTY, workspace=empty_wid)
     assert empty["data"]["libraryEmpty"] is True and empty["data"]["items"] == [] and empty["data"]["note"] == library_browse.EMPTY_LIBRARY, empty["data"]
     return {}

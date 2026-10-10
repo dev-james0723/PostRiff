@@ -378,14 +378,17 @@ def record_span(cur, cfg, span, *, workspace_id, user_id, run_id, reservation=No
 
 
 def _library_browse(ctx: RafiiRunContext) -> bool:
-    """The Manager browses the Library itself only where RAFII_AGENT_LIBRARY_BROWSE_ENABLED is on for this workspace (D-A51)."""
+    """The Manager browses the Library itself only where RAFII_AGENT_LIBRARY_BROWSE_ENABLED is on for this workspace (D-A51),
+    and never in a voice turn: phase 1 sends Library metadata to the Manager's provider only, not to the voice front end."""
     from . import library_browse
+    if getattr(ctx, "modality", "text") == "voice":
+        return False
     return library_browse.enabled_for(getattr(ctx, "config", None), getattr(ctx, "workspace_id", None))
 
 
 def tool_names(ctx: RafiiRunContext) -> list[str]:
-    """The Manager's own tools for this turn: MANAGER_TOOLS, extension scopes, and library_browse + library_read only when the
-    Library flag is on for this workspace (never on specialists)."""
+    """The Manager's own tools for this turn: MANAGER_TOOLS, extension scopes, and library_browse only when the Library flag
+    is on for this workspace in a typed turn (never library_read, never on specialists)."""
     names = MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])
     if _library_browse(ctx):
         from . import library_browse
