@@ -126,6 +126,21 @@ class RafiiRunContext:
     ui_selection: dict | None = None          # selection re-resolved from persisted UI state {references, note}
     voice_choice: dict | None = None          # {mode, sourceIds} the person chose for drafting; never swapped by the model
     clients: list = field(default_factory=list)  # AsyncOpenAI clients this run created, closed inside its own event loop
+    # --- seams for rafii-agent-authz/1 (CF-2 §8.1) and the task engine (CF-3 §8.1), declared once here (X11) so lanes B1
+    # and A2 never edit this file. Every default is "absent", which is exactly today's behaviour: nothing in this release
+    # reads or sets them.
+    grants: Any = None                        # agent_permissions.Grants for this person (CF-2 §5), loaded at turn start
+    active_capability: Any = None             # capability_registry.CapabilitySpec of the tool now running (CF-2 E1/E2)
+    authz_actor: Any = None                   # authz.Actor of this call (CF-2 §8.1)
+    authz_evidence: dict | None = None        # {'activationId'} | {'approvalId','digest','stepUp'} | {'creditQuoteId','requestDigest'}
+    authz_mode: str = "off"                   # 'off' | 'shadow' | 'enforce' (CF-2 §8.2); 'off' = today
+    step_binding: dict | None = None          # {taskId, stepKey, generation, kind: 'tool'|'model'} when a task step runs this turn (CF-3)
+
+    def effect_key(self, args: dict | None = None) -> str | None:
+        """The task engine's effect key for this tool call (CF-3 §8.1), or None when no task step is bound, so the tools
+        keep their trace-based keys exactly as today."""
+        cap = getattr(self.active_capability, "capability_id", None)
+        return contracts.effect_key(self.step_binding, cap, args)
 
     # --- workspace access ------------------------------------------------------------------------------------------
     def remaining(self) -> float | None:
