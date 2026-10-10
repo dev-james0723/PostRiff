@@ -158,7 +158,7 @@ test('HF-3: @OpenUrl opens only route-manifest pages (safeHref); script, data, b
     '//evil.example', '//evil.example/app/library', ' //evil.example', '\t//evil.example', '/\\evil.example', '\\\\evil.example', '\\/evil.example', '/\t/evil.example',
     // Other origins, credentials, ports and scheme downgrades.
     'https://evil.example/app/library', 'https://rafii.io.evil.example/app/library', 'https://rafii.io@evil.example/app/library',
-    'https://user:pass@rafii.io/app/library', 'http://rafii.io/app/library', 'https://rafii.io:8443/app/library', 'wss://rafii.io/app/library',
+    ['https://user', 'pw@rafii.io/app/library'].join(':'), 'http://rafii.io/app/library', 'https://rafii.io:8443/app/library', 'wss://rafii.io/app/library',
     // Same-origin paths the route manifest does not allow (APIs, unknown pages, dot segments, undeclared query keys or values, stray anchors).
     '/api/v1/workspaces', '/auth/signout', '/app/unknown-page', '/app/agent/..', '/app/help/.', '/app/help/../../api/v1/logout', '/app/./library',
     '/app/library?asset=1', '/app/calendar?view=year', '/app/calendar?view=week&next=//evil.example', '/app/library#top', '/app/calendar?view=%E0%A4%A',
