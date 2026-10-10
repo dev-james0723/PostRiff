@@ -17,6 +17,7 @@ Mounted by hosted_app with the same session, request guard, origin checks and JS
     POST voice/sessions/{v}/transcript       text of what was said (no audio)
     POST voice/sessions/{v}/end              end and settle the session
     *    ui/...                              Generative UI presentations, queries and guarded actions (ui_http.py)
+    *    permissions/...                     Rafii agent permissions: choices, revoke, reminder, history (agent_permissions_http.py)
 """
 from __future__ import annotations
 
@@ -53,10 +54,24 @@ def handle(app, environ, start_response, service, token, method, parts):
     workspace_id, resource = parts[2], parts[4]
     runtime = runtime_for(service)
     rest = parts[5:]
+    if resource in ("tasks", "approvals"):
+        from .task_engine import http as task_http, flags as task_flags
+        if resource == "tasks" and not rest and method == "GET" and not task_flags.enabled_for(workspace_id, runtime.cfg):
+            with service.repository.transaction(token, workspace_id) as (_cur, row, _principal):
+                from ..permissions import require
+                require(service.ideas._member(row), "read")
+            return app._json(start_response, 200, {"items": [], "engine": "disabled"})
+        response = task_http.handle(app, environ, start_response, runtime, token, method, workspace_id, resource, rest)
+        if response is not None:
+            return response
     if resource == "ui":
         # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
         from . import ui_http
         return ui_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
+    if resource == "permissions":
+        # rafii-agent-authz/1 (CF-2 §16): 404 agent_permissions_unavailable while the workspace's permissions mode is off.
+        from . import agent_permissions_http
+        return agent_permissions_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
     if resource == "status" and not rest and method == "GET":
         return app._json(start_response, 200, runtime.status(workspace_id, token))
     if resource == "turns" and not rest and method == "POST":

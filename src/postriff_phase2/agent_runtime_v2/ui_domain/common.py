@@ -90,6 +90,8 @@ def bind(service, cur, principal: str, workspace_id: str):
         row = cur.fetchone()
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
+        from .. import authz
+        authz.recheck_transaction(cur, workspace_id, principal, row)
         yield cur, row, principal
 
     def assert_fresh(_token, _principal):

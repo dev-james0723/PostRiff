@@ -80,7 +80,7 @@ class ContextLifecycleTests(unittest.TestCase):
         rt = runtime()
         manager_history = rt._history(Cursor(rows), 'workspace-one', 'conversation-one')
         site_history = SiteAgentService._history(SimpleNamespace(), Cursor(rows), 'workspace-one', 'conversation-one')
-        voice_history = VoiceSessions._history(SimpleNamespace(), Cursor(rows), 'workspace-one', 'conversation-one')
+        voice_history = VoiceSessions._history(SimpleNamespace(cfg=None), Cursor(rows), 'workspace-one', 'conversation-one')
         for history in (manager_history, site_history, voice_history):
             self.assertNotIn('918273', str(history))
             self.assertIn('unrelated answer', str(history))

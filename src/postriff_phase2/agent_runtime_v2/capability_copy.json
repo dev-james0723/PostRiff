@@ -585,6 +585,10 @@
   "ui.query.voice_sources": {
    "en": "Read your voice samples",
    "zh-Hant": "查看你的語氣樣本"
+  },
+  "tool.library_metadata_apply": {
+   "en": "Apply reviewed Library details",
+   "zh-Hant": "套用已審閱的資料庫詳細資料"
   }
  },
  "providers": {

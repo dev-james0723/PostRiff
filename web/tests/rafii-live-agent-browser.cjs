@@ -560,15 +560,40 @@ async function slashSection(browser) {
     check('slash: “/wea” filters the menu to /weather', Boolean(filtered) && filtered[0].startsWith('/weather'), filtered ?? await menuOptions(page).catch(() => null));
     await shot(page, 'slash-desktop-2-filtered-to-weather.png');
     const turnsBefore = net.turns.length;
+    // Retain the actual native selection/input sequence if clearing after a
+    // command pick fails; the menu restores its caret on the next frame.
+    await input.evaluate((el) => {
+      const events = [];
+      const sample = (event) => {
+        events.push({ type: event.type, key: event.key, inputType: event.inputType, data: event.data,
+          value: el.value, focused: document.activeElement === el,
+          start: el.selectionStart, end: el.selectionEnd, at: performance.now() });
+        if (events.length > 40) events.shift();
+      };
+      for (const name of ['keydown', 'keyup', 'beforeinput', 'input', 'focus', 'blur']) el.addEventListener(name, sample);
+      document.addEventListener('selectionchange', sample);
+      el.__slashClearEvents = events;
+    });
     await input.press('Enter');
     // A send would have emptied the input: "/weather " proves Enter picked the command instead.
     const picked = await until(async () => ((await input.inputValue()) === '/weather ' ? true : null), { timeout: 10000 });
     check('slash: Enter picks /weather without sending: the input reads “/weather ”', Boolean(picked) && net.turns.length === turnsBefore, { value: await input.inputValue(), turns: net.turns.length - turnsBefore });
     check('slash: … and the menu closes', await menu.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true, () => false));
 
+    // pick() restores the caret on a queued frame. Finish that interaction
+    // before fill('') selects all and sends Delete for the next scenario.
+    const settledPick = await input.evaluate((el) => new Promise((resolve) => requestAnimationFrame(() => resolve({
+      value: el.value, focused: document.activeElement === el, start: el.selectionStart, end: el.selectionEnd
+    }))));
+    const pickReady = settledPick.value === '/weather ' && settledPick.focused && settledPick.start === 9 && settledPick.end === 9;
+    check('slash: the picked command settles with composer focus and the caret after its space', pickReady, settledPick);
+    if (!pickReady) throw new Error(`Slash command pick did not settle before clearing: ${JSON.stringify(settledPick)}.`);
     await input.fill('');
     const clearedBeforeEscape = await until(async () => (await input.inputValue()) === '' ? true : null, { timeout: 5000 });
-    if (!clearedBeforeEscape) throw new Error('Slash fixture could not clear the previously picked command.');
+    const clearState = await input.evaluate((el) => ({ value: el.value, focused: document.activeElement === el,
+      start: el.selectionStart, end: el.selectionEnd, events: el.__slashClearEvents }));
+    fs.writeFileSync(path.join(out, 'slash-clear-diagnostic.json'), JSON.stringify({ settledPick, ...clearState }, null, 2));
+    if (!clearedBeforeEscape) throw new Error(`Slash fixture could not clear the previously picked command: ${JSON.stringify(clearState)}.`);
     await input.fill('/we');
     const escapePrefixReady = await until(async () => input.evaluate((el) =>
       el.value === '/we' && el.selectionStart === 3 && el.selectionEnd === 3), { timeout: 5000 });

@@ -43,6 +43,9 @@ def persist_task(ctx: RafiiRunContext) -> None:
     if ctx.task is None or not ctx.task.changes:
         return
     with ctx.workspace() as (cur, _row, _principal, _member, _state):
+        from .task_engine import flags
+        if flags.enabled_for(ctx.workspace_id, ctx.config) and ctx.task.created_by != _principal:
+            raise AlphaError("Only this task's creator can change it.", 403, code="task_forbidden")
         task_state.save(cur, ctx.service.ideas, ctx.workspace_id, ctx.task, trace_id=ctx.trace_id)
 
 
@@ -51,10 +54,15 @@ def persist_task(ctx: RafiiRunContext) -> None:
           {"title": {"type": "string", "maxLength": 140, "required": True},
            "steps": {"type": "array", "maxItems": task_state.MAX_STEPS, "required": True,
                      "items": {"type": "object", "properties": {"label": {"type": "string", "maxLength": 140}, "kind": {"type": "string", "maxLength": 40},
-                                                                "dependsOn": {"type": "array", "items": {"type": "string"}}}, "required": ["label"]}}},
+                                                                "dependsOn": {"type": "array", "items": {"type": "string"}},
+                                                                "capability": {"type": "string"}, "inputs": {"type": "object"}}, "required": ["label"]}}},
           "Planned the steps")
 def task_plan(ctx: RafiiRunContext, args: dict) -> dict:
     now = ctx.now()
+    from .task_engine import flags, store, targets
+    engine = flags.enabled_for(ctx.workspace_id, ctx.config)
+    if engine and ctx.task is not None and ctx.task.created_by != ctx.principal:
+        raise AlphaError("Only this task's creator can extend it.", 403, code="task_forbidden")
     if ctx.task is None or ctx.task.status != "running":
         with ctx.workspace() as (cur, _row, principal, _member, _state):
             ctx.task = task_state.create(cur, ctx.service.ideas, ctx.workspace_id, ctx.conversation_id, principal, args["title"], ctx.trace_id)
@@ -62,7 +70,23 @@ def task_plan(ctx: RafiiRunContext, args: dict) -> dict:
     for raw in args["steps"]:
         if not isinstance(raw, dict):
             raise AlphaError("Each step needs a label.", 400, code="tool_input")
-        step = ctx.task.add(raw.get("label"), kind=raw.get("kind"), depends_on=[d for d in raw.get("dependsOn") or [] if isinstance(d, str)], now=now)
+        if raw.get("capability"):
+            if not engine:
+                raise AlphaError("Durable tool plans are not enabled in this workspace.", 400, code="tool_input")
+            persist_task(ctx)
+            inputs = raw.get("inputs") if isinstance(raw.get("inputs"), dict) else {}
+            refs = targets.planned_refs(ctx, inputs)
+            with ctx.workspace() as (cur, _row, principal, _member, _state):
+                task = store.lock_task(cur, ctx.service.ideas, ctx.workspace_id, ctx.task.task_id)
+                if task is None or task["createdBy"] != principal:
+                    raise AlphaError("Only this task's creator can extend it.", 403, code="task_forbidden")
+                store.add_steps(cur, task, [{"label": raw.get("label"), "kind": "tool", "capabilityId": raw["capability"], "inputs": inputs,
+                                             "dependsOn": raw.get("dependsOn") or [], "targetRefs": refs, "plannedRunId": ctx.run_id}])
+                store.refresh(cur, ctx.service.ideas, task)
+                ctx.task = task_state.load(cur, ctx.workspace_id, task["taskId"])
+            step = ctx.task.steps[-1]
+        else:
+            step = ctx.task.add(raw.get("label"), kind=raw.get("kind"), depends_on=[d for d in raw.get("dependsOn") or [] if isinstance(d, str)], now=now)
         added.append({"stepId": step.id, "label": step.label, "dependsOn": step.depends_on})
     persist_task(ctx)
     return {"ok": True, "verified": True, "taskId": ctx.task.task_id, "steps": added}
@@ -112,9 +136,10 @@ def guarded(fn):
         try:
             result = fn(ctx, args)
         except AlphaError as error:
-            _step_failed(ctx, args, str(error))
+            if not getattr(ctx, "step_binding", None):
+                _step_failed(ctx, args, str(error))
             raise
-        if not result.get("ok", True) and not result.get("needsUser"):
+        if not result.get("ok", True) and not result.get("needsUser") and not getattr(ctx, "step_binding", None):
             _step_failed(ctx, args, result.get("error") or "It could not be done.")
         return result
     run.__name__ = fn.__name__
@@ -281,10 +306,31 @@ def _link_command(ctx: RafiiRunContext, action: str, args: dict) -> dict:
         raise AlphaError("Name the drafts, posts or images.", 400, code="tool_input")
     kind = "campaign.items_linked" if action == "raffi_campaign_link" else "campaign.items_unlinked"
     repo = ctx.service.repository
+    from .task_engine import receipts
+    before_links = {}
+    def change(state, actor):
+        for typ, key in (("draft", "draftIds"), ("post", "jobIds"), ("asset", "assetIds")):
+            before_links[key] = [ident for ident in payload.get(key, []) if
+                                 any(c["campaign"].get("id") == payload["campaignId"] for c in campaigns.linked_campaigns(state, typ, ident))]
+        return ctx.service.commands(state, actor, action, payload)
+    def after(cur, state, actor):
+        linked = action == "raffi_campaign_link"
+        checks = [any(c["campaign"].get("id") == payload["campaignId"] for c in campaigns.linked_campaigns(state, typ, ident)) == linked
+                  for typ, key in (("draft", "draftIds"), ("post", "jobIds"), ("asset", "assetIds")) for ident in payload.get(key, [])]
+        inverse = {"campaignId": payload["campaignId"]}
+        for key in ("draftIds", "jobIds", "assetIds"):
+            inverse[key] = [ident for ident in payload.get(key, []) if ident not in before_links[key]] if linked else before_links[key]
+        receipts.commit_command(cur, ctx, verified=all(checks), changed_refs=[{"type": "campaign", "id": payload["campaignId"], "change": "links_changed"}],
+                                compensation_result={"_inverseInputs": inverse})
+    if receipts.binding(ctx):
+        with ctx.workspace() as (cur, _row, _principal, _member, _state):
+            if receipts.replayed(cur, ctx):
+                return payload
     for attempt in range(2):
         revision = repo.get(ctx.workspace_id, ctx.token)["revision"]
         try:
-            repo.command(ctx.workspace_id, ctx.token, revision, lambda state, actor: ctx.service.commands(state, actor, action, payload), requirement="edit",
+            repo.command(ctx.workspace_id, ctx.token, revision, change, requirement="edit",
+                         after=after if receipts.binding(ctx) else None,
                          audit_event=lambda _s: (kind, payload["campaignId"], {"drafts": len(payload["draftIds"]), "posts": len(payload["jobIds"]), "assets": len(payload.get("assetIds") or []),
                                                                               "via": "rafii_agent", "traceId": ctx.trace_id}))
             break
@@ -482,7 +528,7 @@ def draft_create(ctx: RafiiRunContext, args: dict) -> dict:
         for platform in platforms:
             same = [c for c in channels if c.get("platform") == platform]
             destinations.append({"platform": platform, "language": args.get("language") or "en", **({"channelId": same[0]["id"]} if len(same) == 1 else {})})
-    key = "agent-draft:" + hashlib.sha256(f"{ctx.trace_id}|{args['brief']}|{platforms}|{args.get('campaignId')}".encode()).hexdigest()[:40]
+    key = ctx.effect_key(args, "draft_create") or "agent-draft:" + hashlib.sha256(f"{ctx.trace_id}|{args['brief']}|{platforms}|{args.get('campaignId')}".encode()).hexdigest()[:40]
     # Empty `text`: the pipeline appends no user message (the person did not type this brief); the brief is the idea and
     # the material is data, never parsed for channels, days or instructions (ideas.turn "reworking").
     request = {"text": "", "intentText": args["brief"], "idea": args["brief"], "material": material, "destinations": destinations, "idempotencyKey": key,
@@ -516,7 +562,7 @@ def draft_rewrite(ctx: RafiiRunContext, args: dict) -> dict:
         destination = {"platform": platform, "language": variant.get("language") or "en"}
         if platform == variant.get("platform") and variant.get("channelId"):
             destination["channelId"] = variant["channelId"]
-    key = "agent-rewrite:" + hashlib.sha256(f"{ctx.trace_id}|{args['draftId']}|{args['instruction']}|{platform}".encode()).hexdigest()[:40]
+    key = ctx.effect_key(args, "draft_rewrite") or "agent-rewrite:" + hashlib.sha256(f"{ctx.trace_id}|{args['draftId']}|{args['instruction']}|{platform}".encode()).hexdigest()[:40]
     request = {"text": "", "intentText": args["instruction"], "idea": args["instruction"], "material": before_text, "idempotencyKey": key, "timeZone": ctx.zone,
                "materialRef": {"type": "draft", "id": args["draftId"], "title": f"{variant.get('platform')} draft"}, "destinations": [destination]}
     run_id, state, skills = _writing_run(ctx, request, separate=False)
@@ -559,8 +605,15 @@ def draft_edit(ctx: RafiiRunContext, args: dict) -> dict:
         return ctx.service.commands(state, principal, 'variant_edit', {'variantId':variant['id'],'variantRevision':args['revision'],'text':expected})
     ctx.check_cancelled()
     snapshot = ctx.snapshot()
+    from .task_engine import receipts
+    def after(cur, state, principal):
+        saved = _variant(state, args['draftId'])
+        receipts.commit_command(cur, ctx, verified=saved.get('text') == expected and saved.get('revision') == args['revision'] + 1,
+                                changed_refs=[{'type':'draft','id':args['draftId'],'change':'text_edited'}],
+                                compensation_result={'_inverseInputs': {'draftId': args['draftId'], 'restoreRevision': args['revision']}})
     ctx.service.repository.command(ctx.workspace_id,ctx.token,snapshot['revision'],change,requirement='edit',
-                                   audit_event=lambda _s:('agent.draft_edited',args['draftId'],{'via':'rafii_agent'}))
+                                   audit_event=lambda _s:('agent.draft_edited',args['draftId'],{'via':'rafii_agent'}),
+                                   after=after if receipts.binding(ctx) else None)
     saved = _variant(ctx.snapshot()['state'],args['draftId'])
     verified = saved.get('text')==expected and saved.get('revision')==args['revision']+1 and bool(saved.get('needsReview'))
     ctx.ledger.changed.append({'type':'draft','id':saved['id'],'change':'text edited; needs review','expected':'saved requested text at next revision; needs review','actual':'saved requested text at next revision; needs review' if verified else 'result unconfirmed','verified':verified})
@@ -575,10 +628,31 @@ def draft_edit(ctx: RafiiRunContext, args: dict) -> dict:
           {"layers": {"type": "array", "items": {"type": "string", "enum": ["identity", "workspace", "brand", "voice", "preferences", "campaigns", "task"]}, "maxItems": 7}},
           "Read Rafii's memory")
 def memory_context(ctx: RafiiRunContext, args: dict) -> dict:
-    from . import memory_layers
+    from dataclasses import replace
+    from . import authz, memory_layers, tool_adapter
     with ctx.workspace() as (cur, _row, _principal, member, state):
+        wanted = args.get("layers") or memory_layers.LAYERS
+        permitted, withheld = [], []
+        spec = tool_adapter.REGISTRY["memory_context"].spec
+        cap = authz.capability_for(spec)
+        surface = authz.tool_surface(spec, getattr(ctx, "specialist", None))
+        extra = {"identity": ("account",), "workspace": ("content", "connections"),
+                 "campaigns": ("campaigns",), "task": ("content",)}
+        for layer in wanted:
+            domains = extra.get(layer, ())
+            scoped = replace(cap, data_grants=tuple(sorted(set(cap.data_grants or ()) | set(domains))))
+            if authz.gate(ctx, scoped, surface=surface).outcome != "allow":
+                withheld.append(layer)
+                continue
+            permitted.append(layer)
+            if domains:
+                ctx.authz_used_source_domains = set(getattr(ctx, "authz_used_source_domains", ())) | set(domains)
         data = memory_layers.read(state, member=member, cur=cur, workspace_id=ctx.workspace_id, zone=ctx.zone, locale=ctx.locale, task=ctx.task,
-                                  layers=args.get("layers") or None)
+                                  layers=permitted)
+        if permitted:
+            authz.record_memory_context(ctx, state)
+        if withheld:
+            data["withheldLayers"] = withheld
     return {"ok": True, "verified": True, "data": data}
 
 
@@ -638,6 +712,7 @@ def ensure_registered() -> None:
     """Import side effects in one place (the registry is filled at import), then optional extensions if installed."""
     import importlib
     from . import creative, library_browse, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, library_browse, weather_now, skills_list, web_research)
+    from .task_engine import library_tools  # noqa: F401 — receipt-only, no model scope
     from .tool_adapter import register_site_tools
     register_site_tools()
     for name in EXTENSION_MODULES:

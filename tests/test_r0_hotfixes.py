@@ -164,7 +164,7 @@ class MemoryEgressReadsTest(unittest.TestCase):
         from postriff_phase2.agent_runtime_v2.context import EffectLedger, RafiiRunContext
         state = brand_state(False)
         run = SimpleNamespace(principal=OWNER, workspace_id=WS, service=None, now=lambda: NOW, page={}, writer_model=None, zone="UTC",
-                              ledger=EffectLedger(), request_text="What is our brand voice?")
+                              ledger=EffectLedger(), request_text="What is our brand voice?", config=None)
 
         @contextmanager
         def workspace():
@@ -236,7 +236,7 @@ class VoiceCheckEgressTest(unittest.TestCase):
         from postriff_phase2.agent_runtime_v2.context import EffectLedger, RafiiRunContext
         state = voice_check_state(False)
         run = SimpleNamespace(principal=OWNER, workspace_id=WS, service=None, now=lambda: NOW, page={}, writer_model=None, zone="UTC",
-                              ledger=EffectLedger(), request_text="Does this sound like me?")
+                              ledger=EffectLedger(), request_text="Does this sound like me?", config=None)
 
         @contextmanager
         def workspace():
@@ -564,8 +564,8 @@ class PanelHistoryEgressTest(unittest.TestCase):
         held = {"text": "Your tone is TONEMARK.", "siteAgent": {"version": 1, "cloudWithheld": True}}
         rows = [("assistant", {"text": "An unrelated answer."}), ("assistant", held), ("user", {"text": "What is our brand voice?"}), ("user", {"text": "And now?"})]
         cursor = lambda: PanelCursor(SimpleNamespace(messages=[{"role": r, "body": b, "run": None, "id": str(i)} for i, (r, b) in enumerate(rows)], runs={}))  # noqa: E731
-        histories = {"manager": AgentRuntimeService._history(SimpleNamespace(), cursor(), WS, CONVERSATION),
-                     "voice": VoiceSessions._history(SimpleNamespace(), cursor(), WS, CONVERSATION),
+        histories = {"manager": AgentRuntimeService._history(SimpleNamespace(cfg=None, clock=lambda: NOW), cursor(), WS, CONVERSATION),
+                     "voice": VoiceSessions._history(SimpleNamespace(cfg=None), cursor(), WS, CONVERSATION),
                      "site (cloud writer)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION, cloud=True),
                      "site (default)": SiteAgentService._history(SimpleNamespace(), cursor(), WS, CONVERSATION)}
         for name, history in histories.items():
