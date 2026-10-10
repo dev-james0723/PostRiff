@@ -801,6 +801,8 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s AND status='active'", (workspace_id, principal))
             if cur.rowcount != 1:
                 raise AlphaError("Workspace unavailable.", 403)
+            from .agent_runtime_v2 import agent_permissions
+            agent_permissions.on_membership_ended(cur, workspace_id, principal, actor=principal, now=self.clock())
             audit(cur, workspace_id, principal, "member.left")
         return {"workspaceId": workspace_id, "status": "left"}
 
@@ -921,7 +923,9 @@ class HostedWorkspaceService:
 
     # The account history a person may see about themselves: what they did to the account, and what
     # others did to their memberships. Workspace content activity stays in the workspace audit log.
-    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics")
+    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics",
+                      # Rafii agent permissions (CF-2 §14): a person's own consent changes are part of their account history.
+                      "agent.permission.preset_applied", "agent.permission.changed", "agent.permission.revoked", "agent.permission.revoked_all")
     ABOUT_ME_KINDS = ("member.updated", "member.removed")
 
     def security_events(self, token, limit=50):
@@ -1031,6 +1035,8 @@ class HostedWorkspaceService:
             if current[0] == "owner":
                 raise AlphaError("The owner cannot be removed.", 409)
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, user_id))
+            from .agent_runtime_v2 import agent_permissions
+            agent_permissions.on_membership_ended(cur, workspace_id, user_id, actor=principal, now=self.clock())
             audit(cur, workspace_id, principal, "member.removed", user_id)
             return {"userId": user_id, "status": "revoked", "note": "Jobs this member approved are held at the next worker claim until re-approved."}
 
