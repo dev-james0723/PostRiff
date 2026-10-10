@@ -104,5 +104,5 @@ def bind_service(ctx):
             self.ideas = copy.copy(service.ideas)
             self.ideas.ledger = self.ledger
         def __getattr__(self, name):
-            return getattr(self._service, name)
+            return getattr(object.__getattribute__(self, "_service"), name)
     ctx.service = BoundService(ctx.service)

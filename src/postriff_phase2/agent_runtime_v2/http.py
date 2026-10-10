@@ -68,6 +68,9 @@ def handle(app, environ, start_response, service, token, method, parts):
         # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
         from . import ui_http
         return ui_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
+    if resource == "recipes":
+        from ..workflow_recipes import http as recipe_http
+        return recipe_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
     if resource == "permissions":
         # rafii-agent-authz/1 (CF-2 §16): 404 agent_permissions_unavailable while the workspace's permissions mode is off.
         from . import agent_permissions_http

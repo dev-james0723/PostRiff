@@ -27,6 +27,7 @@ import { AutomationBuilder, blankInitial, initialFromAutomation, initialFromBrie
 import { RunDecisionDialog, type DecisionTarget, type RunDecision } from './run-decision';
 import { RunDetail, awaitingApproval, isWorkflowRun, runStatus } from './run-history';
 import { ceilingMicro, ceilingText, isTrigger, runLabel, runText, scheduleSummary, statusText, usd } from './schedule';
+import { WorkflowRecipesPanel } from '@/features/workflow-recipes/workflow-recipes-panel';
 import { finished, monthStart, spentSince, unseen, useAutomations, type Automation } from './use-automations';
 import { policyText, researchRule, stageRules } from './workflow';
 import { AUTOMATION_CHANGED, usePanel } from '@/features/site-agent/store';
@@ -196,6 +197,7 @@ export function AutomationsView() {
         ) : undefined
       }
     >
+      {canEdit && <WorkflowRecipesPanel />}
       {snapshot.isLoading ? (
         <Skeleton className='h-16 w-full rounded-[var(--rafii-radius-card)]' />
       ) : (

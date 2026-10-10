@@ -125,17 +125,19 @@ class Fixtures(unittest.TestCase):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             actual = self.live[key]
             if key == "tools":
-                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply")}
+                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply", "workflow_performance_review", "workflow_library_review")}
             elif key == "manager":
                 actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply")]
             self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 2, "only declared post-freeze Library tools were added")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 4, "only declared post-freeze Library and recipe tools were added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
         self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
         self.assertEqual(snapshot["capabilities"].pop("tool.library_metadata_apply")["since"], 2)
-        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply")]
+        self.assertEqual(snapshot["capabilities"].pop("tool.workflow_performance_review")["since"], 2)
+        self.assertEqual(snapshot["capabilities"].pop("tool.workflow_library_review")["since"], 2)
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply", "tool.workflow_performance_review", "tool.workflow_library_review")]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             expected = self.golden["capabilities"][capability_id]
@@ -145,6 +147,15 @@ class Fixtures(unittest.TestCase):
                             "compensation": "inverse", "inverse": "tool.draft_edit"}
             self.assertEqual(entry, expected, capability_id)
         self.assertEqual(snapshot["bindings"], self.golden["bindings"])
+
+    def test_recipe_tools_are_exactly_free_read_engine_surfaces(self):
+        for name in ("workflow_performance_review", "workflow_library_review"):
+            spec = tool_adapter.REGISTRY[name].spec
+            self.assertEqual((spec.since, spec.effect, spec.risk, spec.cost, spec.background_eligible), (2, "READ", "R0", "free", True))
+            self.assertEqual({b.surface for b in registry.bindings(registry.for_tool(name).capability_id)}, {"task_engine"})
+            self.assertNotIn(name, self.live["manager"])
+            for scope in self.live["specialists"].values():
+                self.assertNotIn(name, scope)
 
     def test_legacy_baseline_v1_is_frozen(self):
         frozen = json.loads(BASELINE.read_text(encoding="utf-8"))

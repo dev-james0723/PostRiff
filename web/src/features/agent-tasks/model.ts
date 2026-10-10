@@ -47,6 +47,7 @@ export function receiptVerified(receipt: TaskReceipt): boolean {
 }
 export function changedResourceHref(ref: { type: string; id: string }): string | null {
   if (!/^[A-Za-z0-9_.:-]{1,120}$/.test(ref.id)) return null;
+  if (ref.type === 'workflow_report' && /^[0-9a-f]{32}$|^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(ref.id)) return `/app/automations?recipeReport=${encodeURIComponent(ref.id)}`;
   if (ref.type === 'draft') return `/app/queue?view=drafts&draft=${encodeURIComponent(ref.id)}`;
   if (ref.type === 'source') return `/app/ideas?source=${encodeURIComponent(ref.id)}`;
   // Library has no asset-query deep link. Its native history exposes the exact changed assets.

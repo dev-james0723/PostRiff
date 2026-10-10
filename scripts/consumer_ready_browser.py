@@ -14,6 +14,7 @@ OUT=ROOT/'docs/consumer-ready/evidence'
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--universal-entry',action='store_true',help='Existing panel entry and explicit text-selection handoff, no model calls')
+    parser.add_argument('--workflow-recipes',action='store_true',help='Cloud-only native recipe policy/run/report/pause/revoke acceptance')
     parser.add_argument('--library-metadata',action='store_true',help='Native Library metadata preview/apply/Undo on synthetic assets')
     parser.add_argument('--library',action='store_true',help='Universal Library Chromium/WebKit acceptance against real API/database with synthetic storage/identity')
     parser.add_argument('--agent-tasks',action='store_true',help='Task Center UI contract acceptance against synthetic task responses and disposable identity')
@@ -27,15 +28,19 @@ def main():
     parser.add_argument('--pg-port',type=int,default=55479)
     parser.add_argument('--evidence-dir',type=Path,default=OUT)
     args=parser.parse_args()
+    if args.workflow_recipes and (sys.platform != 'linux' or os.environ.get('CI') != 'true' or args.pg_port != 55479):
+        parser.error('Recipe acceptance requires cloud Linux CI and disposable port 55479')
     args.library = args.library or args.library_metadata
-    if args.agent_tasks and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
-        parser.error('Task Center browser validation runs on cloud Linux CI only')
-    if args.agent_tasks and any((args.library,args.founder,args.performance,args.history_import,args.tour,args.customers,args.universal_entry)):
-        parser.error('Choose Task Center or another acceptance suite')
+    if args.workflow_recipes and any((args.library,args.agent_tasks,args.universal_entry,args.founder,args.performance,args.history_import,args.tour,args.customers)):
+        parser.error('Choose Recipes or another acceptance suite')
     if args.universal_entry and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
         parser.error('Universal Entry validation runs on cloud Linux CI only')
-    if args.universal_entry and any((args.library,args.founder,args.performance,args.history_import,args.tour,args.customers,args.agent_tasks)):
+    if args.universal_entry and any((args.library,args.agent_tasks,args.workflow_recipes,args.founder,args.performance,args.history_import,args.tour,args.customers)):
         parser.error('Choose Universal Entry or another suite')
+    if args.agent_tasks and (sys.platform != 'linux' or os.environ.get('CI') != 'true'):
+        parser.error('Task Center browser validation runs on cloud Linux CI only')
+    if args.agent_tasks and any((args.library,args.universal_entry,args.workflow_recipes,args.founder,args.performance,args.history_import,args.tour,args.customers)):
+        parser.error('Choose Task Center or another acceptance suite')
     ports=(args.api_port,args.web_port,args.pg_port)
     if any(not 1024<=port<=65535 for port in ports) or len(set(ports))!=3:parser.error('Three distinct loopback ports from 1024 to 65535 are required')
     if args.founder and args.performance:parser.error('Choose Founder or consumer performance acceptance')
@@ -44,7 +49,7 @@ def main():
     if args.tour and not args.founder:parser.error('--tour requires --founder')
     if args.customers and (not args.founder or args.tour):parser.error('--customers requires --founder and cannot run with --tour')
     # Next bakes rewrites into the build. Runtime flags alone cannot change which API a test reaches.
-    manifest=ROOT/('web/.next/routes-manifest.json' if args.library or args.agent_tasks or args.universal_entry else '.codex/consumer-ready/web/.next/routes-manifest.json')
+    manifest=ROOT/('web/.next/routes-manifest.json' if args.library or args.agent_tasks or args.workflow_recipes or args.universal_entry else '.codex/consumer-ready/web/.next/routes-manifest.json')
     try:
         rewrites=json.loads(manifest.read_text())['rewrites']
         if isinstance(rewrites,dict):rewrites=[item for group in rewrites.values() for item in group]
@@ -77,6 +82,8 @@ def main():
     if args.library:
         env['RAFII_LIBRARY_EVIDENCE']=str(out)
         env['PLAYWRIGHT_MODULE']=str(ROOT/'web/node_modules/playwright')
+    if args.workflow_recipes:
+        env.update(CI='true',RAFII_RECIPE_EVIDENCE=str(out),PLAYWRIGHT_MODULE=str(ROOT/'web/node_modules/playwright'))
     if args.agent_tasks:
         env['RAFII_WEB_URL']=f'http://127.0.0.1:{args.web_port}'
     if args.universal_entry:
@@ -84,9 +91,9 @@ def main():
     processes=[];logs=[]
     try:
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
-        fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
+        fixtures=['--workflow-recipes-fixture'] if args.workflow_recipes else ['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
         commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
-        if args.library or args.agent_tasks or args.universal_entry:
+        if args.library or args.agent_tasks or args.workflow_recipes or args.universal_entry:
             commands[1]=('frontend',['npm','--prefix','web','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])
         for name,command in commands:
             log=(out/f'durable-{name}.log').open('w');logs.append(log)
@@ -100,12 +107,17 @@ def main():
                         if response.status==200:break
                 except Exception:time.sleep(.25)
             else:raise RuntimeError('Local server readiness deadline exceeded')
-        if args.agent_tasks or args.universal_entry:
+        if args.agent_tasks:
             for browser in ('chromium','webkit'):
-                code=subprocess.call(['node','web/tests/task-center-browser.cjs' if args.agent_tasks else 'web/tests/universal-entry-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
+                code=subprocess.call(['node','web/tests/task-center-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
                 if code:return code
             return 0
-        test = 'library-metadata-browser.cjs' if args.library_metadata else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
+        if args.universal_entry:
+            for browser in ('chromium','webkit'):
+                code=subprocess.call(['node','web/tests/universal-entry-browser.cjs',f'--browser={browser}',f'--out={out}'],cwd=ROOT,env=env)
+                if code:return code
+            return 0
+        test = 'workflow-recipes-browser.cjs' if args.workflow_recipes else 'library-metadata-browser.cjs' if args.library_metadata else 'library-production-browser.cjs' if args.library else 'history-import-browser.cjs' if args.history_import else 'founder-tour.cjs' if args.tour else 'founder-browser.cjs' if args.founder else 'consumer-performance-browser.cjs' if args.performance else 'consumer-durable-browser.cjs'
         return subprocess.call(['node','web/tests/' + test]+(['--customers'] if args.customers else []),cwd=ROOT,env=env)
     finally:
         import signal

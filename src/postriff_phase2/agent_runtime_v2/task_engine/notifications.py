@@ -39,6 +39,30 @@ def event_for(task):
             'occurred_at': task.get('updatedAt'), 'channel_filter': ('in_app',)}
 
 
+
+def recipe_baseline(cur, task):
+    """Suppress delivery, but persist its dedupe event, unless a current stored policy permits it."""
+    if task.get('origin') != 'recipe':
+        return False
+    if not store._uuid(task.get('autopilotPolicyId')):
+        return True
+    cur.execute("SELECT to_regclass('public.pr_workflow_recipes')")
+    if not cur.fetchone()[0]:
+        return True
+    cur.execute("""SELECT p.constraints->>'notificationPolicy' FROM public.pr_agent_autopilot_policies p
+       JOIN public.pr_workflow_recipes r ON r.policy_id=p.id AND r.workspace_id=p.workspace_id AND r.created_by=p.user_id
+       JOIN public.pr_agent_permission_state g ON g.workspace_id=p.workspace_id AND g.user_id=p.user_id
+       WHERE p.id=%s AND p.workspace_id=%s AND p.user_id=%s AND p.revoked_at IS NULL
+         AND p.starts_at<=now() AND p.expires_at>now() AND p.created_epoch=g.epoch
+         AND r.status='active' AND p.constraints->>'recipeId'=replace(r.id::text,'-','')
+         AND p.constraints->>'recipeVersion'=r.version::text
+         AND p.constraints->>'notificationPolicy'=r.config->>'notificationPolicy'""",
+       (task['autopilotPolicyId'], task['workspaceId'], task['createdBy']))
+    row = cur.fetchone()
+    mode = row[0] if row else 'none'
+    return not (mode == 'all' or mode == 'failures_and_approvals' and task.get('state') in ('failed', 'blocked', 'awaiting_approval'))
+
+
 def scan(runtime, *, limit=50, budget_seconds=2.0):
     """Fresh current membership, flags and task state under the workspace lock. Disabled = zero writes."""
     service = runtime.service
@@ -86,6 +110,8 @@ def scan(runtime, *, limit=50, budget_seconds=2.0):
                             (workspace_id, task['createdBy']))
                 if not cur.fetchone():
                     continue
+                if recipe_baseline(cur, task):
+                    event['baseline'] = True
                 result = notifications.emit(cur, **event)
                 created += int(bool(result.get('created')))
                 scanned += 1

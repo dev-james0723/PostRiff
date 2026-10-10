@@ -713,6 +713,7 @@ def ensure_registered() -> None:
     import importlib
     from . import creative, library_browse, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, library_browse, weather_now, skills_list, web_research)
     from .task_engine import library_tools  # noqa: F401 — receipt-only, no model scope
+    from ..workflow_recipes import tools as workflow_recipe_tools  # noqa: F401 — exact recipe tasks only
     from .tool_adapter import register_site_tools
     register_site_tools()
     for name in EXTENSION_MODULES:

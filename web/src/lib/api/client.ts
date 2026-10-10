@@ -1,3 +1,4 @@
+import type { Recipe, RecipeList, RecipeReport, RecipeSettings } from '@/features/workflow-recipes/types';
 import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
@@ -144,6 +145,12 @@ export function createApi(getToken: TokenSource) {
   }
 
   return {
+    workflowRecipes: (w: string) => get<RecipeList>(`${ws(w)}/agent/recipes`),
+    saveWorkflowRecipe: (w: string, settings: RecipeSettings, expectedVersion: number | null, id?: string) => send<Recipe>(id ? 'PUT' : 'POST', `${ws(w)}/agent/recipes${id ? '/' + encodeURIComponent(id) : ''}`, { settings, expectedVersion }),
+    enableWorkflowRecipe: (w: string, id: string, expectedVersion: number, permissionToken: string, requestKey: string) => send<Recipe>('POST', `${ws(w)}/agent/recipes/${encodeURIComponent(id)}/enable`, { expectedVersion, permissionToken, requestKey, confirmed: true }),
+    stopWorkflowRecipe: (w: string, id: string, expectedVersion: number, status: 'paused' | 'revoked') => send<Recipe>('POST', `${ws(w)}/agent/recipes/${encodeURIComponent(id)}/stop`, { expectedVersion, status }),
+    runWorkflowRecipe: (w: string, id: string, expectedVersion: number, requestKey: string) => send<RecipeList>('POST', `${ws(w)}/agent/recipes/${encodeURIComponent(id)}/run`, { expectedVersion, requestKey }),
+    workflowRecipeReport: (w: string, id: string) => get<RecipeReport>(`${ws(w)}/agent/recipes/reports/${encodeURIComponent(id)}`),
     /* Growth advice never sends a post. Each model request has its own explicit confirmation. */
     radarCatalog: (w: string) => get<RadarCatalog>(`${ws(w)}/growth/radar/catalog`),
     radarScans: (w: string) => get<{ scans: RadarScan[] }>(`${ws(w)}/growth/radar/scans`),

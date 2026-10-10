@@ -383,6 +383,7 @@ def start_postgres(port=PORT_PG):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--workflow-recipes-fixture', action='store_true', help='Cloud-only personal recipes with synthetic signed identity and disposable data')
     parser.add_argument("--port", type=int, default=4331)
     parser.add_argument("--credit-fixture", action="store_true", help="synthetic credit funding and model, disposable database only")
     parser.add_argument("--phone-fixture", action="store_true", help="local fake phone identity/calls; no SMS or PSTN egress")
@@ -426,6 +427,10 @@ def main():
             from growth_postdoctor_v2_fixtures import Models, ENV
         growth_writer=Writer()
     service = HostedWorkspaceService(connection, verifier, dev_assets, vault=CredentialVault(CredentialVault.generate_key()), providers=providers, public_base_url="https://dev.postriff.invalid", audience_transport=transport, image_runtime=DevImageRuntime(), email_lookup=lambda principal: f"dev-{principal[:8]}@postriff.invalid", chat_media=chat_media,ideas_runtime=growth_writer)
+    if args.workflow_recipes_fixture:
+        sys.path.insert(0, str(ROOT / 'tests'))
+        from workflow_recipes_browser_fixture import seed
+        seed(service, verifier, dsn)
     if args.history_import_fixture:
         from postriff_phase2.growth.history_import import HistoryImporter
         service.history_import = HistoryImporter(connection, service.oauth, transport=transport)
