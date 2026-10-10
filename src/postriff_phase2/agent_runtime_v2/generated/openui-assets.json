@@ -778,7 +778,7 @@
   "prompts": {
     "consumer:all:generate": {
       "file": "prompts/consumer-all-generate.txt",
-      "promptHash": "6cd90acafed09e08f74100eae43ae2d6c1d65f3a05f668c189f90de72e684287",
+      "promptHash": "4f9267ceff3817a1971f8b98d61950bf0a2fea5422ea869604c12efc2edfcd9d",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -936,7 +936,7 @@
     },
     "consumer:J01:generate": {
       "file": "prompts/consumer-J01-generate.txt",
-      "promptHash": "6361e17d392ddde1bc9ff8c36f540d388166ceefa22f902a14befe0b8cf27b3a",
+      "promptHash": "2179913375c2744a414314d739cb7c145335eb10fcc1715e6614a1f36c32d651",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1022,7 +1022,7 @@
     },
     "consumer:J02:generate": {
       "file": "prompts/consumer-J02-generate.txt",
-      "promptHash": "c3f5e92784fe017e0995b34eba2a0db68c61b3c97841b3032bc83f236a75df90",
+      "promptHash": "d9652436355ddde2c02cefe848a0f8770427af7f2ad1b4a0d01778056ab70c9c",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1104,7 +1104,7 @@
     },
     "consumer:J03:generate": {
       "file": "prompts/consumer-J03-generate.txt",
-      "promptHash": "6640999dbf1e0b025216722fb4a47f5a1c8d58a3016264690db328195c166bea",
+      "promptHash": "0af2fa390b0bddfce5f539bb8cae1c6b691076ce4b83a5923b1a6fe1a9ea083d",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1182,7 +1182,7 @@
     },
     "consumer:J04:generate": {
       "file": "prompts/consumer-J04-generate.txt",
-      "promptHash": "f61b3e4f28a567c47544c44fb6db6f2418057b224572b9298faf5aa7b195df98",
+      "promptHash": "06279efeed1eb72a7347392bab11bdb7e043c949418a99c703d69e098bc8106b",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1266,7 +1266,7 @@
     },
     "consumer:J05:generate": {
       "file": "prompts/consumer-J05-generate.txt",
-      "promptHash": "6ca992bd4aa023c01baa70775c9c97b57ee5dc39434324ca2b2030ad1c2ea03e",
+      "promptHash": "4a4b763d6e91a9f80297e155d8b5f1591282001722debd4d268d06019a0c63ac",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1364,7 +1364,7 @@
     },
     "consumer:J06:generate": {
       "file": "prompts/consumer-J06-generate.txt",
-      "promptHash": "3ce6257d7c19a4f90535d1de75886d8c0f9d3ddb0ad84c87cea1e45f55b448b3",
+      "promptHash": "dbc66f470fddf248069e106b8452f80436f71b608c7dc8f640b1be3a3bfef6b1",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1444,7 +1444,7 @@
     },
     "consumer:J07:generate": {
       "file": "prompts/consumer-J07-generate.txt",
-      "promptHash": "efb5962457075c5ed8df3b073576687f55613d1018a21b6e6043f1ccbd65aed8",
+      "promptHash": "cd964cf0ab54d7b07866b7af9443bf08ea04b6d14a533fa286bdcc881190a52c",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1524,7 +1524,7 @@
     },
     "consumer:J08:generate": {
       "file": "prompts/consumer-J08-generate.txt",
-      "promptHash": "6fe776dcf99da93d4f8bb53af79bf461f1b371c0c3f51f3e203920614d65bdfd",
+      "promptHash": "5002642c7ba8c8ee261b18abfbba73b2239f1bcbff3664ee7fd9eae30260b649",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1612,7 +1612,7 @@
     },
     "founder:all:generate": {
       "file": "prompts/founder-all-generate.txt",
-      "promptHash": "ba08709ec61c8117c51796d941f2d664e811ca6a5497c0cdea3158c821bb0aa7",
+      "promptHash": "80e45d83d6981883c9554c38bfb59b3852293f981b2ce0cee0ed0691762d9320",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -1684,7 +1684,7 @@
     },
     "founder:J09:generate": {
       "file": "prompts/founder-J09-generate.txt",
-      "promptHash": "ba08709ec61c8117c51796d941f2d664e811ca6a5497c0cdea3158c821bb0aa7",
+      "promptHash": "80e45d83d6981883c9554c38bfb59b3852293f981b2ce0cee0ed0691762d9320",
       "components": [
         "RafiiRoot",
         "Stack",

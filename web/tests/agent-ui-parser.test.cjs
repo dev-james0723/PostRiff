@@ -277,7 +277,7 @@ test('validation performs no network or tool execution', () => {
   assert.equal(calls, 0);
 });
 
-// --- D-A52: a generated view's canonical source keeps only what root reaches (run 3: J08-edit unexplained_deletion×5) ----
+// --- D-A52: a generated view's statements must all be reachable from root (run 3: J08-a / J08-edit unexplained_deletion×5) ---
 const { statementsOf, unreachableStatements } = loader.load('src/lib/agent-runtime/ui-parser/validate.ts');
 const ORPHANED = [
   'root = RafiiRoot([table], "Recent drafts")',
@@ -288,53 +288,179 @@ const ORPHANED = [
   'reach = Metric(summary, "totals.reach", "Reach", "number")',
   'note = Text("Nobody lists this.", "muted")',
 ].join('\n');
-const ids = (source) => statementsOf(source).map((s) => s.id);
+const errorsOf = (result, code) => result.errors.filter((e) => e.startsWith(`${code}:`)).sort();
 
-test('generate: statements root never reaches are pruned from the canonical source; state and reachable ones stay (D-A52)', () => {
+test('generate: a statement root never reaches is rejected as unreachable_statement, never stored or pruned (D-A52)', () => {
   assert.deepEqual(unreachableStatements(statementsOf(ORPHANED)), ['summary', 'reach', 'note']);
   const result = validate(ORPHANED);
-  assert.equal(result.accepted, true, JSON.stringify(result.errors));
-  assert.deepEqual(ids(result.canonicalSource), ['root', '$platform', 'drafts', 'table']);
-  assert.equal(result.sourceHash, sha(result.canonicalSource));
-  assert.deepEqual(result.queryNames, ['drafts_list'], 'an orphan Query is not part of the view');
-  assert.deepEqual(result.stateNames, ['$platform']);
-  // A program without orphans is unchanged by the rule.
+  assert.equal(result.accepted, false);
+  assert.equal(result.canonicalSource, null, 'a view with orphans is not stored in any form');
+  assert.deepEqual(errorsOf(result, 'unreachable_statement'), ['unreachable_statement:note', 'unreachable_statement:reach', 'unreachable_statement:summary']);
+  assert.ok(!result.errors.some((e) => e.includes('$platform')), '$state statements are kept, as the merge keeps them');
+  // Wired into root's tree, the same statements are accepted unchanged.
+  const wired = ORPHANED.replace('root = RafiiRoot([table], "Recent drafts")', 'root = RafiiRoot([table, reach, note], "Recent drafts")');
+  const accepted = validate(wired);
+  assert.equal(accepted.accepted, true, JSON.stringify(accepted.errors));
+  assert.equal(accepted.canonicalSource, wired);
   assert.equal(validate(GOOD).canonicalSource, GOOD);
-});
-
-test('generate: an orphan still has to pass every rule; pruning never accepts what was rejected (D-A52)', () => {
+  // An orphan that also breaks another rule reports both.
   const denied = validate(`${ORPHANED}\nextra = Query("billing_export", {}, null)`);
-  assert.equal(denied.accepted, false);
-  assert.ok(hasCode(denied, 'query_binding_denied'), JSON.stringify(denied.errors));
-  const bad = validate(`${ORPHANED}\nghost = Hologram("x")`);
-  assert.equal(bad.accepted, false);
-  const dup = validate(`${ORPHANED}\nnote = Text("again", "muted")`);
-  assert.ok(hasCode(dup, 'duplicate_statement'), JSON.stringify(dup.errors));
+  assert.ok(hasCode(denied, 'query_binding_denied') && errorsOf(denied, 'unreachable_statement').includes('unreachable_statement:extra'), JSON.stringify(denied.errors));
 });
 
-test('patch: orphans in a stored base are unexplained deletions on any edit; the pruned canonical base edits cleanly (D-A52)', () => {
-  // The mechanism behind run 3's J08-edit (edit and repair both unexplained_deletion×5): lang-core's merge garbage-collects
-  // unreachable statements, and the deletion guard cannot explain a removal no parent ever made.
+test('generate: run 3 J08-a shape — a Query as a root child plus an unreachable layout is rejected, not stored (D-A52)', () => {
+  // Role A read production (artifact 6c61c1c1, revision 1): root listed the Query itself and the intended layout (5 statements)
+  // was unreachable; those 5 were the J08-edit unexplained_deletion×5. Both are now first-pass failures that go to the repair.
+  const j08 = [
+    'root = RafiiRoot([automations], "Automations")',
+    '$automationStatus = null',
+    'automations = Query("automations_list", {status: $automationStatus}, null)',
+    'finalView = Stack([listSection])',
+    'listSection = Section("Automations", [filters, automationList])',
+    'automationList = AutomationList(automations)',
+    'filters = Stack([statusFilter], "horizontal")',
+    'statusFilter = Select("status", "Status", [{value: "active", label: "Active"}, {value: "paused", label: "Paused"}], $automationStatus)',
+  ].join('\n');
+  const result = validate(j08, { policy: policy({ readBindings: ['automations_list'] }) });
+  assert.equal(result.accepted, false);
+  assert.deepEqual(errorsOf(result, 'query_as_child'), ['query_as_child:automations']);
+  assert.deepEqual(errorsOf(result, 'unreachable_statement'), ['automationList', 'filters', 'finalView', 'listSection', 'statusFilter']
+    .map((id) => `unreachable_statement:${id}`));
+  // The repaired program (root lists the layout, the Query feeds AutomationList) is accepted.
+  const repaired = j08.replace('root = RafiiRoot([automations], "Automations")', 'root = RafiiRoot([finalView], "Automations")');
+  const ok = validate(repaired, { policy: policy({ readBindings: ['automations_list'] }) });
+  assert.equal(ok.accepted, true, JSON.stringify(ok.errors));
+});
+
+test('a Query is data, never a child: as an element of any component list it is query_as_child, as a source it is fine (D-A52)', () => {
+  // react-lang 0.3.2 renderDeep returns null for a plain object, so a Query result listed as a child renders nothing.
+  const view = (body) => validate(`root = RafiiRoot([box])\nrows = Query("drafts_list", {}, null)\n${body}`);
+  for (const body of ['box = Stack([rows])', 'box = Card([Text("x"), rows], "Drafts")', 'box = Section("Drafts", [rows])',
+    'box = Tabs([TabItem("All", [rows])])', 'kids = [rows]\nbox = Stack(kids)']) {
+    const result = view(body);
+    assert.deepEqual(errorsOf(result, 'query_as_child'), ['query_as_child:rows'], `${body}: ${JSON.stringify(result.errors)}`);
+  }
+  assert.ok(hasCode(validate('root = RafiiRoot([rows])\nrows = Query("drafts_list", {}, null)'), 'query_as_child'));
+  const fine = view('box = Stack([ToolBoundTable(rows, [{field: "title", label: "Draft"}], null, null, "drafts"), Text("x")])');
+  assert.equal(fine.accepted, true, JSON.stringify(fine.errors));
+  // Patch mode applies the same rule to the merged program.
+  const base = validate(GOOD).canonicalSource;
+  assert.ok(hasCode(validate('root = RafiiRoot([heading, controls, table, actions, drafts], "Recent drafts")', { mode: 'patch', baseSource: base }), 'query_as_child'));
+});
+
+test('query children cannot hide behind value aliases, nested lists, conditionals or value-returning builtins', () => {
+  const prefix = 'root = RafiiRoot([box])\nrows = Query("drafts_list", {}, null)\n';
+  for (const body of [
+    'alias = rows\nbox = Stack([alias])',
+    'alias = rows\nother = alias\nbox = Stack([other])',
+    'kids = [rows]\nother = kids\nbox = Stack(other)',
+    'box = Stack([[rows]])',
+    'box = Stack([true ? rows : Text("Empty")])',
+    'box = Stack([false ? Text("Empty") : rows])',
+    'choice = true ? [Text("Empty")] : [rows]\nbox = Stack(choice)',
+    'box = Stack([@First([rows])])',
+    'box = Stack([@Last([rows])])',
+    'box = Stack([@Each([1], "item", rows)])',
+  ]) {
+    const result = validate(prefix + body);
+    assert.equal(result.accepted, false, body);
+    assert.deepEqual(errorsOf(result, 'query_as_child'), ['query_as_child:rows'], `${body}: ${JSON.stringify(result.errors)}`);
+  }
+});
+
+test('child alias cycles and excessive depth fail closed; valid component data sources still pass', () => {
+  const cycle = validate('root = RafiiRoot([first])\nfirst = second\nsecond = first');
+  assert.equal(cycle.accepted, false);
+  assert.ok(hasCode(cycle, 'unresolved_ref'), JSON.stringify(cycle.errors));
+  const aliases = Array.from({ length: 40 }, (_, i) => `a${i} = ${i === 39 ? 'Text("Visible")' : `a${i + 1}`}`);
+  const deep = validate(['root = RafiiRoot([a0])', ...aliases].join('\n'));
+  assert.equal(deep.accepted, false);
+  assert.ok(hasCode(deep, 'bounds_depth'), JSON.stringify(deep.errors));
+  const data = validate([
+    'root = RafiiRoot([alias, conditional, items])',
+    'rows = Query("drafts_list", {}, null)',
+    'table = ToolBoundTable(rows, [{field: "title", label: "Draft"}], null, null, "drafts")',
+    'alias = table',
+    'conditional = @Count(rows.data.rows) > 0 ? table : Text("No drafts")',
+    'items = @Each(rows.data.rows, "row", Text(row.title))',
+  ].join('\n'));
+  assert.equal(data.accepted, true, JSON.stringify(data.errors));
+  assert.deepEqual(errorsOf(data, 'query_as_child'), []);
+});
+
+test('patch: orphans in a stored base are unexplained deletions on any edit; the deletion guard is unchanged (D-A52)', () => {
+  // Views stored before this rule may still hold orphans. lang-core's merge garbage-collects them, and the guard cannot explain
+  // a removal no parent made, so the edit (or its repair) must remove each one on purpose.
   const edit = 'drafts = Query("drafts_list", {platform: "threads"}, null)';
   const raw = validate(edit, { mode: 'patch', baseSource: ORPHANED });
   assert.equal(raw.accepted, false);
-  assert.deepEqual(raw.errors.filter((e) => e.startsWith('unexplained_deletion:')).sort(),
-    ['unexplained_deletion:note', 'unexplained_deletion:reach', 'unexplained_deletion:summary']);
-  // The guard itself is unchanged: removing them on purpose is accepted.
+  assert.deepEqual(errorsOf(raw, 'unexplained_deletion'), ['unexplained_deletion:note', 'unexplained_deletion:reach', 'unexplained_deletion:summary']);
   const explicit = validate(`${edit}\nsummary = null\nreach = null\nnote = null`, { mode: 'patch', baseSource: ORPHANED });
   assert.equal(explicit.accepted, true, JSON.stringify(explicit.errors));
-  // A base stored after this change has no orphans, so the same edit is accepted first time.
-  const base = validate(ORPHANED).canonicalSource;
-  const clean = validate(edit, { mode: 'patch', baseSource: base });
+  assert.ok(explicit.canonicalSource.includes('{platform: "threads"}'));
+  // A base accepted under the rule has no orphans, so the same edit is accepted first time.
+  const clean = validate(edit, { mode: 'patch', baseSource: validate(GOOD).canonicalSource });
   assert.equal(clean.accepted, true, JSON.stringify(clean.errors));
   assert.deepEqual(clean.removedStatementIds, []);
-  assert.ok(clean.canonicalSource.includes('{platform: "threads"}'));
 });
 
-test('query arguments: member access on a DateRange $variable is rejected, the whole $variable or literal dates are not (D-A52)', () => {
+test('query arguments: DateRange member access, a null object and copied hint literals are rejected (D-A52)', () => {
   const view = (args) => validate(`root = RafiiRoot([t])\n$range = null\nrows = Query("drafts_list", ${args}, null)\nt = ToolBoundTable(rows, [{field: "title", label: "Draft"}], null, null, "drafts")`);
   assert.ok(hasCode(view('{start: $range.start, end: $range.end}'), 'query_args_shape'));
   assert.ok(hasCode(view('null'), 'query_args_shape'), 'a null arguments object is rejected');
-  assert.equal(view('{start: "2026-10-12", end: "2026-10-18"}').accepted, true);
-  assert.equal(view('{}').accepted, true);
+  for (const args of ['{start: "YYYY-MM-DD"}', '{end: " YYYY-MM-DD "}', '{local: "YYYY-MM-DDTHH:MM"}', '{zone: "Area/City"}', '{draftId: "<id from CONTEXT>"}',
+    '{q: "<text>"}', '{ids: ["d1", "<id>"]}', '{filter: {zone: "Area/City"}}']) {
+    const result = view(args);
+    assert.deepEqual(errorsOf(result, 'query_arg_placeholder'), ['query_arg_placeholder:rows'], `${args}: ${JSON.stringify(result.errors)}`);
+  }
+  for (const args of ['{start: "2026-10-12", end: "2026-10-18"}', '{zone: "Asia/Hong_Kong"}', '{q: "a < b"}', '{ids: ["d1", "d2"]}', '{}']) {
+    assert.equal(view(args).accepted, true, args);
+  }
+});
+
+test('query hints are rejected through reactive initializers while real state-backed filters remain valid', () => {
+  const view = (state, args) => validate([
+    'root = RafiiRoot([t])', state,
+    `rows = Query("drafts_list", ${args}, null)`,
+    't = ToolBoundTable(rows, [{field: "title", label: "Draft"}], null, null, "drafts")',
+  ].join('\n'));
+  for (const [state, args] of [
+    ['$start = "YYYY-MM-DD"', '{start: $start}'],
+    ['$zone = "Area/City"', '{zone: $zone}'],
+    ['$ids = ["d1", "<id>"]', '{ids: $ids}'],
+    ['$filter = {zone: "Area/City"}', '{filter: $filter}'],
+    ['$date = "YYYY-MM-DD"\n$start = $date', '{start: $start}'],
+  ]) {
+    const result = view(state, args);
+    assert.equal(result.accepted, false, state);
+    assert.deepEqual(errorsOf(result, 'query_arg_placeholder'), ['query_arg_placeholder:rows'], JSON.stringify(result.errors));
+  }
+  for (const [state, args] of [
+    ['$start = "2026-10-12"', '{start: $start}'],
+    ['$zone = "Asia/Hong_Kong"', '{zone: $zone}'],
+    ['$ids = ["d1", "d2"]', '{ids: $ids}'],
+    ['$platform = null', '{platform: $platform}'],
+    ['$picked = []', '{ids: $picked}'],
+  ]) {
+    const result = view(state, args);
+    assert.equal(result.accepted, true, `${state}: ${JSON.stringify(result.errors)}`);
+  }
+  const cycle = view('$first = $second\n$second = $first', '{q: $first}');
+  assert.equal(cycle.accepted, false);
+  assert.ok(hasCode(cycle, 'query_args_shape'), JSON.stringify(cycle.errors));
+});
+
+test('names: one binding read twice takes two distinct Query names; a Query name is never reused for a component (D-A52)', () => {
+  const two = [
+    'root = RafiiRoot([reach, views])',
+    'reachSeriesData = Query("analytics_trend", {metric: "reach"}, null)',
+    'viewsSeriesData = Query("analytics_trend", {metric: "views"}, null)',
+    'reach = ToolBoundChart(reachSeriesData, "line", "day", [{field: "value", label: "Reach"}], "Reach")',
+    'views = ToolBoundChart(viewsSeriesData, "line", "day", [{field: "value", label: "Views"}], "Views")',
+  ].join('\n');
+  const result = validate(two);
+  assert.equal(result.accepted, true, JSON.stringify(result.errors));
+  assert.deepEqual(result.queryNames, ['analytics_trend']);
+  const reused = two.replace('reach = ToolBoundChart(reachSeriesData', 'reachSeriesData = ToolBoundChart(reachSeriesData').replace('[reach, views]', '[reachSeriesData, views]');
+  assert.ok(errorsOf(validate(reused), 'duplicate_statement').includes('duplicate_statement:reachSeriesData'));
 });

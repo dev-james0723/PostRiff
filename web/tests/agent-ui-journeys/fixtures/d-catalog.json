@@ -4933,7 +4933,7 @@
      "lists": {}
     }
    },
-   "description": "Scheduled, waiting and planned posts between two inclusive YYYY-MM-DD dates in a time zone: each entry's exact UTC instant, local time and zone, complete status counts, day counts, and the posts that collide (same account, less than 2 hours apart) in data.derived.closeTogether.pairs, which CalendarAgenda shows.",
+   "description": "Scheduled, waiting and planned posts in a date range (default: 7 days from today): each entry's UTC instant, local time and zone, complete status counts (unknown stays unknown), day counts, empty days in data.derived.emptyDays, and posts that collide (same account, <2 hours apart) in data.derived.closeTogether.pairs.",
    "invalidatedBy": [
     "calendar_agenda"
    ],

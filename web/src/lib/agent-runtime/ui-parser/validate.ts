@@ -6,7 +6,9 @@
  * root `RafiiRoot`, zero `Mutation`, literal read-binding `Query` names with null defaults, literal refresh >= 30 s,
  * literal/$variable query arguments, component/action allowlists, bounds, duplicate ids, prop rules from
  * `component-specs.ts`, and in patch mode the unexplained-deletion guard (a malformed `x = )` parses to Null and would
- * delete `x`; openui-package.md §5). Error strings are stable codes plus identifiers, never source text.
+ * delete `x`; openui-package.md §5). D-A52 adds: in generate mode every statement must be reachable from root
+ * (`unreachable_statement`), a Query is never listed as a child (`query_as_child`), and Query arguments never hold a copied
+ * prompt hint (`query_arg_placeholder`). Error strings are stable codes plus identifiers, never source text.
  */
 import {
   autoClose,
@@ -157,7 +159,9 @@ function refsOf(node: ASTNode): Set<string> {
 
 /**
  * Statements root never reaches (D-A52), in source order: the walk follows `Ref`/`RuntimeRef` from `root` the way
- * lang-core's merge garbage-collects. `$state` statements are always kept, as the merge keeps them.
+ * lang-core's merge garbage-collects. `$state` statements are excluded, as the merge keeps them. In generate mode each one is
+ * an `unreachable_statement` error: it would never render, and the merge of the person's next edit would drop it, which the
+ * deletion guard cannot explain (run 3 J08-edit).
  */
 export function unreachableStatements(list: readonly { id: string; ast: ASTNode }[]): string[] {
   const byId = new Map(list.map((s) => [s.id, s.ast] as const));
@@ -175,6 +179,59 @@ export function unreachableStatements(list: readonly { id: string; ast: ASTNode 
     }
   }
   return [...new Set(list.map((s) => s.id).filter((sid) => !sid.startsWith('$') && !reached.has(sid)))];
+}
+
+/**
+ * Props whose value is a list of components (container children, Tabs/Accordion items), read from the library's JSON Schema:
+ * an array whose items are any value or a `$ref` to a component. A Query listed there is data, not an element: react-lang
+ * 0.3.2's renderDeep returns null for a plain object, so it would render nothing (`query_as_child`, D-A52).
+ */
+const childListCache = new WeakMap<object, Map<string, Set<string>>>();
+function childListProps(lib: ValidatorLibrary): Map<string, Set<string>> {
+  const cached = childListCache.get(lib.schema);
+  if (cached) return cached;
+  const found = new Map<string, Set<string>>();
+  const defs = ((lib.schema as unknown as { $defs?: Record<string, unknown> }).$defs ?? {}) as Record<string, unknown>;
+  for (const [component, def] of Object.entries(defs)) {
+    const properties = (def && typeof def === 'object' ? (def as { properties?: unknown }).properties : undefined) as Record<string, unknown> | undefined;
+    for (const [prop, spec] of Object.entries(properties ?? {})) {
+      if (!spec || typeof spec !== 'object') continue;
+      const { type, items } = spec as { type?: unknown; items?: unknown };
+      if (type !== 'array' || !items || typeof items !== 'object' || Array.isArray(items)) continue;
+      const shape = items as Record<string, unknown>;
+      if (Object.keys(shape).length === 0 || typeof shape.$ref === 'string') {
+        const props = found.get(component) ?? new Set<string>();
+        props.add(prop);
+        found.set(component, props);
+      }
+    }
+  }
+  childListCache.set(lib.schema, found);
+  return found;
+}
+
+/** Prompt hints that are never data (D-A52 call lines): "YYYY-MM-DD", "YYYY-MM-DDTHH:MM", "Area/City" and any "<…>" placeholder. */
+const HINT_LITERAL = /^(?:YYYY-MM-DD(?:THH:MM)?|Area\/City|<[^<>]*>)$/;
+function queryArgHint(node: ASTNode, declarations: ReadonlyMap<string, ASTNode>): 'placeholder' | 'invalid' | null {
+  let visits = 0;
+  const visit = (value: ASTNode, seen: ReadonlySet<string>, depth: number): 'placeholder' | 'invalid' | null => {
+    if (depth > 32 || ++visits > 4096) return 'invalid';
+    if (value.k === 'Str') return HINT_LITERAL.test(value.v.trim()) ? 'placeholder' : null;
+    if (value.k === 'StateRef' || value.k === 'Ref') {
+      const initial = declarations.get(value.n);
+      if (!initial) return null; // A declared control may start with the parser's default null.
+      if (seen.has(value.n)) return 'invalid';
+      return visit(initial, new Set([...seen, value.n]), depth + 1);
+    }
+    const children = value.k === 'Arr' ? value.els : value.k === 'Obj' ? value.entries.map(([, child]) => child)
+      : value.k === 'Ternary' ? [value.then, value.else] : [];
+    for (const child of children) {
+      const problem = visit(child, seen, depth + 1);
+      if (problem) return problem;
+    }
+    return null;
+  };
+  return visit(node, new Set(), 0);
 }
 
 function isLiteral(node: ASTNode): boolean {
@@ -269,7 +326,7 @@ function validRequest(request: UiValidatorRequest): string | null {
  * Validate (and in patch mode merge) one candidate against one library and one manifest policy. `sha256` is injected so
  * the module stays free of Node-only imports.
  */
-export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLibrary, sha256: Sha256, prune = true): UiValidationResult {
+export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLibrary, sha256: Sha256): UiValidationResult {
   const invalid = validRequest(request);
   if (invalid) return rejected([invalid], lib);
   if (request.libraryHash !== lib.libraryHash) return rejected(['library_unsupported'], lib);
@@ -320,6 +377,9 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
   if (root && elementDepth(root) > BOUNDS.treeDepth) errors.push('bounds_depth');
   if (result.mutationStatements.length) errors.push('mutation_forbidden');
 
+  // Inspect declarations before queries so a copied prompt hint cannot hide in a reactive state's initial value.
+  const statements = statementsOf(merged);
+  const asts = new Map<string, ASTNode>(statements.map((stmt) => [stmt.id, stmt.ast]));
   const readBindings = new Set(policy.readBindings);
   const queryNames: string[] = [];
   for (const query of result.queryStatements) {
@@ -333,18 +393,20 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
       errors.push(`refresh_invalid:${id}`);
     }
     if (query.argsAST && !(query.argsAST.k === 'Obj' && literalOrState(query.argsAST))) errors.push(`query_args_shape:${id}`);
+    else if (query.argsAST) {
+      const hint = queryArgHint(query.argsAST, asts);
+      if (hint === 'placeholder') errors.push(`query_arg_placeholder:${id}`);
+      else if (hint) errors.push(`query_args_shape:${id}`);
+    }
   }
 
   // Statement-level walk: sees orphans and @Each templates too, which the materialized tree does not.
-  const statements = statementsOf(merged);
   if (statements.length > BOUNDS.statements) errors.push('bounds_statements');
   const kinds = new Map<string, 'query' | 'mutation' | 'state' | 'value'>();
-  const asts = new Map<string, ASTNode>();
   for (const stmt of statements) {
     const top = stmt.ast;
     const kind = top.k === 'Comp' && top.name === 'Query' ? 'query' : top.k === 'Comp' && top.name === 'Mutation' ? 'mutation' : stmt.id.startsWith('$') ? 'state' : 'value';
     kinds.set(stmt.id, kind);
-    asts.set(stmt.id, top);
   }
   const duplicates = (list: Stmt[]) => {
     const seen = new Set<string>();
@@ -390,6 +452,46 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
     return isBound(node);
   };
 
+  // Follow values only where they become rendered children. A query used as a component's source, an Each collection or a
+  // condition is legitimate data; an alias/conditional/list that returns that query is still a non-rendering child.
+  // A shared visit budget also bounds highly connected alias graphs without evaluating expressions or running queries.
+  let childVisits = 0;
+  const checkChild = (node: ASTNode, seen: ReadonlySet<string> = new Set(), scoped: ReadonlySet<string> = new Set(), depth = 0): void => {
+    if (depth > 32 || ++childVisits > 4096) {
+      errors.push('bounds_depth');
+      return;
+    }
+    if (node.k === 'Ref') {
+      if (scoped.has(node.n)) return;
+      if (kinds.get(node.n) === 'query') {
+        errors.push(`query_as_child:${ident(node.n)}`);
+      } else if (kinds.get(node.n) === 'value') {
+        if (seen.has(node.n)) {
+          errors.push(`unresolved_ref:${ident(node.n)}`);
+          return;
+        }
+        const target = asts.get(node.n);
+        if (target) checkChild(target, new Set([...seen, node.n]), scoped, depth + 1);
+      }
+    } else if (node.k === 'RuntimeRef' && node.refType === 'query') {
+      errors.push(`query_as_child:${ident(node.n)}`);
+    } else if (node.k === 'Arr') {
+      for (const child of node.els) checkChild(child, seen, scoped, depth + 1);
+    } else if (node.k === 'Ternary') {
+      checkChild(node.then, seen, scoped, depth + 1);
+      checkChild(node.else, seen, scoped, depth + 1);
+    } else if (node.k === 'Comp') {
+      if (node.name === 'Each' && node.args[2]) {
+        const variable = node.args[1];
+        const local = variable?.k === 'Str' ? new Set([...scoped, variable.v]) : scoped;
+        checkChild(node.args[2], seen, local, depth + 1);
+      } else if (['First', 'Last', 'Filter', 'Sort'].includes(node.name) && node.args[0]) {
+        checkChild(node.args[0], seen, scoped, depth + 1);
+      }
+      // Ordinary components consume their data props themselves. Their child props are checked by the statement walk below.
+    }
+  };
+
   const components = new Set<string>();
   const actionIds: string[] = [];
   const formNames: string[] = [];
@@ -416,6 +518,10 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
         return;
       }
       if (node.args.length > params.length) errors.push(`excess_args:${id}`);
+      for (const prop of childListProps(lib).get(node.name) ?? []) {
+        const list = node.args[params.indexOf(prop)];
+        if (list) checkChild(list);
+      }
       if (node.name === 'Form') {
         const formName = node.args[0];
         if (!formName || formName.k !== 'Str' || !FORM_NAME.test(formName.v)) errors.push(`form_name_invalid:${id}`);
@@ -474,26 +580,16 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
     replaced = [...redeclared.keys()];
   }
 
-  if (errors.length) return { ...rejected(errors, lib), ...(removed ? { removedStatementIds: removed, replacedStatementIds: replaced } : {}) };
-  if (!patch && prune) {
-    // D-A52: a generated view's canonical source keeps only what root reaches. lang-core garbage-collects unreachable
-    // statements in every later merge, so an orphan left in a base made the person's next edit fail the deletion guard
-    // (`unexplained_deletion` for statements nobody saw). Every check above already ran on the full candidate; the pruned
-    // program is validated again and used only if it is accepted, so no candidate is accepted that was not before.
-    const orphans = unreachableStatements(statements);
-    if (orphans.length) {
-      let pruned: string | null = null;
-      try {
-        pruned = mergeStatements(merged, orphans.map((sid) => `${sid} = null`).join('\n'), 'root').trim();
-      } catch {
-        pruned = null;
-      }
-      if (pruned) {
-        const again = validateCandidate({ ...request, candidateSource: pruned }, lib, sha256, false);
-        if (again.accepted && again.canonicalSource && unreachableStatements(statementsOf(again.canonicalSource)).length === 0) return again;
-      }
-    }
+  if (!patch) {
+    // D-A52 (stricter, replacing a silent prune): a generated view's statements must all be reachable from root. An orphan never
+    // renders, and lang-core's merge drops it on the person's next edit, which the deletion guard then reports as an
+    // `unexplained_deletion` nobody wrote (run 3: J08-a stored five unreachable layout statements; J08-edit failed on them twice).
+    // It is a first-pass failure that goes to the one automatic repair, whose guide says to wire each into root's tree or
+    // delete it. Pushed last, so the error cap never hides an earlier code.
+    for (const sid of unreachableStatements(statements)) errors.push(`unreachable_statement:${ident(sid)}`);
   }
+
+  if (errors.length) return { ...rejected(errors, lib), ...(removed ? { removedStatementIds: removed, replacedStatementIds: replaced } : {}) };
   return {
     accepted: true,
     canonicalSource: merged,

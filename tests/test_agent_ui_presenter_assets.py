@@ -78,10 +78,28 @@ class RealAssets(unittest.TestCase):
         slot = plan.instructions.split("- slot_check: ", 1)[1].split("\n", 1)[0]
         self.assertIn("collide", agenda)
         self.assertIn("data.derived.closeTogether.pairs", agenda)
+        self.assertIn("(unknown stays unknown)", agenda)
+        self.assertIn("data.derived.emptyDays", agenda)
+        self.assertIn("default: 7 days from today", agenda)
         self.assertIn("ONE proposed local time", slot)
         self.assertIn("for posts that already collide, use calendar_agenda", slot)
         self.assertIn('call: calendarAgendaData = Query("calendar_agenda", {}, null)', plan.instructions)
         self.assertIn('optional keys: start "YYYY-MM-DD"; end "YYYY-MM-DD"; zone "Area/City"', plan.instructions)
+
+    def test_generated_core_example_types_no_dates(self):
+        # D-A52 review: the asset's grounding rule forbids typed dates and generate mode has no date source, so the core example
+        # reads its bindings' default window with {} instead of literal start/end dates.
+        import glob
+        import os
+        files = sorted(glob.glob(os.path.join(p.ASSET_DIR, "prompts", "*-generate.txt")))
+        self.assertEqual(len(files), 11)
+        for path in files:
+            with self.subTest(prompt=os.path.basename(path)):
+                with open(path, encoding="utf-8") as handle:
+                    text = handle.read()
+                self.assertIn('stats = Query("example_summary", {}, null)\ntrend = Query("example_trend", {}, null)', text)
+                self.assertNotIn('"2026-09-01"', text)
+                self.assertNotIn("$range = null", text)
 
     def test_founder_journey_uses_the_founder_library_and_is_read_only(self):
         plan, manifest = self.check("J09", "founder", "founder")

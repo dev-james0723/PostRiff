@@ -41,7 +41,7 @@ MAX_OUTPUT_TOKENS = 16_000                 # ≈ 48-64 KiB of DSL; well under BO
 MAX_CONTEXT_BYTES = 24 * 1024
 MAX_BINDINGS = 40
 MAX_ERRORS_IN_REPAIR = 12
-DESCRIPTION_CHARS = 320                    # D-A52: every registered binding description fits whole (the longest is 285)
+DESCRIPTION_CHARS = 320                    # D-A52: every registered binding description fits whole (longest measured: 318, calendar_agenda)
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated")
 ASSET_FILE = "openui-assets.json"
 LIBRARIES = ("consumer", "founder")
@@ -243,16 +243,31 @@ def _shape_lines(shape: dict | None) -> list[str]:
 
 
 _ZONE_PATTERN = "^[A-Za-z][A-Za-z0-9_+\\-]*(/"
+MAX_ENUM_HINT = 8
+# Array items that are record ids (drafts, jobs, assets, …): a selection $variable holds exactly those (journeys.json "selection").
+_RECORD_ID_ITEMS = ("^[A-Za-z0-9_.:-]", "^[0-9a-f]{32}$")
 
 
-def _arg_hint(key: str, spec) -> str:
-    """A literal-shaped hint for one argument of a binding's schema (what to put there, never a value to copy as data)."""
+def _kinds(spec: dict) -> list:
+    return spec.get("type") if isinstance(spec.get("type"), list) else [spec.get("type")]
+
+
+def _id_list(spec: dict) -> bool:
+    items = spec.get("items") if isinstance(spec.get("items"), dict) else {}
+    return str(items.get("pattern") or "").startswith(_RECORD_ID_ITEMS)
+
+
+def _arg_hint(key: str, spec, *, required: bool = False) -> str:
+    """A literal-shaped hint for one argument of a binding's schema (what to put there, never a value to copy as data). A
+    required enum lists every value; an optional one longer than MAX_ENUM_HINT says where the rest are."""
     spec = spec if isinstance(spec, dict) else {}
-    kinds = spec.get("type") if isinstance(spec.get("type"), list) else [spec.get("type")]
+    kinds = _kinds(spec)
     if isinstance(spec.get("enum"), list) and spec["enum"]:
-        return " or ".join(json.dumps(v, ensure_ascii=False) for v in spec["enum"][:8])
+        values = spec["enum"] if required else spec["enum"][:MAX_ENUM_HINT]
+        cut = "" if len(values) == len(spec["enum"]) else " … (see args)"
+        return " or ".join(json.dumps(v, ensure_ascii=False) for v in values) + cut
     if "array" in kinds:
-        return "[\"<id>\", …] or a $variable holding that list"
+        return "$picked" if _id_list(spec) else "[\"<value>\"]"
     if "boolean" in kinds:
         return "true or false"
     if "integer" in kinds or "number" in kinds:
@@ -269,6 +284,14 @@ def _arg_hint(key: str, spec) -> str:
     return "\"<text>\""
 
 
+def _list_note(key: str, spec: dict) -> str:
+    """The other valid form of a list argument, on its own line under the call (the call shows one)."""
+    if _id_list(spec):
+        return (f"    note: {key} takes a list: a $variable you declare (for example $picked = [] bound to a SelectionList), "
+                "or a literal list of ids from CONTEXT")
+    return f"    note: {key} takes a list of literal values (see args), or a $variable you declare that holds such a list"
+
+
 def statement_name(binding: str) -> str:
     """The Query statement name a call line uses: calendar_agenda → calendarAgendaData (never a component's name)."""
     parts = [part for part in str(binding).split("_") if part]
@@ -279,33 +302,43 @@ def statement_name(binding: str) -> str:
 
 def call_lines(query: dict) -> list[str]:
     """D-A52: one legal statement per read binding, generated from its argument schema — the exact keys (required ones in the
-    call, `{}` when none is required), a literal-shaped hint for each, and the reserved cursor for paged bindings."""
+    call, `{}` when none is required), a literal-shaped hint for each, the reserved cursor for paged bindings, and a note line
+    with the other form of each list argument."""
     schema = query.get("argsSchema") if isinstance(query.get("argsSchema"), dict) else {}
     properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
     required = [k for k in schema.get("required") or [] if isinstance(k, str) and k in properties]
-    args = ", ".join(f"{key}: {_arg_hint(key, properties[key])}" for key in required)
+    args = ", ".join(f"{key}: {_arg_hint(key, properties[key], required=True)}" for key in required)
     out = [f"    call: {statement_name(query['name'])} = Query(\"{query['name']}\", {{{args}}}, null)"]
-    optional = [f"{key} {_arg_hint(key, spec)}" for key, spec in list(properties.items())[:20] if key not in required]
+    shown = list(properties.items())[:20]
+    optional = [f"{key} {_arg_hint(key, spec)}" for key, spec in shown if key not in required]
     if isinstance(query.get("pageSize"), int):
         optional.append("cursor $page (to page; pass the same $variable as the list's cursor)")
     if optional:
         out.append("    optional keys: " + "; ".join(optional))
     elif not required:
         out.append("    takes no arguments: always {}")
+    out.extend(_list_note(key, spec) for key, spec in shown if isinstance(spec, dict) and "array" in _kinds(spec))
     return out
 
 
 # The binding rules lane B states positively (D-A49, D-A50, D-A52); each matches a validator rule or a backend check.
 BINDING_RULES = (
     "Each binding below has a `call:` line in the exact shape Rafii accepts. Copy it, keep its braces ({} when it takes no "
-    "arguments, never null), replace each hint (\"YYYY-MM-DD\", \"Area/City\", \"<…>\", \"a\" or \"b\") with one literal from CONTEXT or the "
-    "request, or with a bare $variable, and add only keys listed for that binding.",
-    "A DateRange $variable is one {start, end} object. A Query cannot read its parts ($range.start is rejected), so a binding's start "
-    "and end keys take literal \"YYYY-MM-DD\" dates.",
-    "Names: a Query statement keeps the …Data name of its call line, and the component that shows it gets a different name. One id "
-    "is never both a Query and a component.",
-    "A full program writes `root = RafiiRoot([...])` once, as its first line, listing every top-level part, and every other "
-    "statement must be reachable from root. Never write any id twice in one answer.",
+    "arguments, never null) and add only keys listed for that binding. Replace each hint (\"YYYY-MM-DD\", \"Area/City\", \"<…>\", "
+    "\"a\" or \"b\") with one literal from CONTEXT (in an edit, also from the person's request) or a bare $variable, or leave that "
+    "optional key out; a copied hint is rejected. A $variable such as $picked or $page must be declared in the program.",
+    "Dates: In generation, leave start and end out unless CONTEXT supplies the dates; never invent dates. In an edit, preserve "
+    "dates from CURRENT_UI unless the person explicitly changes them in USER_EDIT, and use exact dates they supplied. When "
+    "dates are omitted, each binding reads its own "
+    "default window in the person's time zone (calendar_agenda: the 7 days from today; analytics: the last 30 days). A DateRange "
+    "$variable is one {start, end} object that no binding takes, and a Query cannot read its parts ($range.start is rejected).",
+    "Names: name each Query after its call line (…Data). When one binding is read twice, give each Query its own name for what it "
+    "reads, for example reachSeriesData and viewsSeriesData for two analytics_series reads. Never reuse a Query's name for a "
+    "component: the component that shows it gets a different name.",
+    "A full program writes `root = RafiiRoot([...])` once, as its first line, and every other statement must be reachable from "
+    "root (listed in root or in a component root shows); a statement root never reaches is rejected. A Query is data, never a "
+    "child: list the component that shows it (pass the Query as that component's source or data). Never write any id twice in "
+    "one answer.",
     "A required argument (one shown without ? in its signature) is never null. When there is nothing to show for a part (CONTEXT "
     "counts 0, or no id to read), leave that component out or show EmptyState.",
 )
@@ -360,15 +393,23 @@ def bindings_section(manifest: dict) -> str:
 
 
 # D-A52: edits that narrow a list change its Query's arguments (the validator's deletion guard rejects a removal nobody wrote).
-PATCH_GUIDE = ("To narrow or change what a list shows (only paused ones, one platform, another period), re-declare its Query statement "
-               "with the new arguments from that binding's call line and keep the components that show it. Every statement your patch "
-               "removes must be removed on purpose: write `id = null`, or re-declare its parent without it.")
+PATCH_GUIDE = ("To narrow or change what a list shows (only paused ones, one platform, another period), re-declare the existing Query "
+               "statement under its id in CURRENT_UI with the new arguments from that binding's call line, and keep the components "
+               "that show it; the …Data names of call lines are only for statements you add. Every statement your patch removes must "
+               "be removed on purpose: write `id = null`, or re-declare its parent without it.")
 
 # D-A52: what each validator code means for the next attempt. Keys are validate.ts / lang-core code prefixes; `{id}` is the
 # statement id that follows the code (an identifier the validator already sanitized).
 _REPAIR_GUIDE = {
     "duplicate_statement": "`{id}` is declared more than once. Keep exactly one `{id} = …` line; a Query and the component that shows it "
-                           "need different names, and root is written once.",
+                           "need different names, and root is written once. When one binding is read twice, give each Query its own "
+                           "name for what it reads (reachSeriesData, viewsSeriesData).",
+    "unreachable_statement": "`{id}` is declared but root never reaches it, so it would never show: list it in root's tree (in root, or in "
+                             "a component root shows) or delete its line.",
+    "query_as_child": "`{id}` is a Query: its result is data, not a component, so as a child it shows nothing. Pass `{id}` as the source "
+                      "or data of the component that shows it, and list that component instead.",
+    "query_arg_placeholder": "`{id}` contains a copied hint (\"YYYY-MM-DD\", \"YYYY-MM-DDTHH:MM\", \"Area/City\" or \"<…>\"). Put one "
+                             "literal from CONTEXT there, or leave that optional key out (dates: the binding's default window).",
     "unresolved_ref": "`{id}` is used but never declared. Declare it as its own statement, or stop referring to it.",
     "query_args_shape": "The arguments of `{id}` must be one {{key: value}} object whose values are literals or bare $variables: no "
                         "$v.part, no $v[0], no other statement's data and never a null object.",

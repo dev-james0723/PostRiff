@@ -158,8 +158,8 @@ platform = Select("platform", "Platform", [{value: "all", label: "All platforms"
 table = ToolBoundTable(rows, [{field: "title", label: "Post"}, {field: "publishedAt", label: "Published", kind: "datetime"}, {field: "reach", label: "Reach", kind: "number"}], $page)
 
 root = RafiiRoot([figures, tabs])
-stats = Query("example_summary", {start: "2026-09-01", end: "2026-09-30"}, null)
-trend = Query("example_trend", {start: "2026-09-01", end: "2026-09-30"}, null)
+stats = Query("example_summary", {}, null)
+trend = Query("example_trend", {}, null)
 figures = Grid([reach, saves], 2)
 reach = Metric(stats, "reach", "Reach", "number")
 saves = Metric(stats, "saves", "Saves", "number")

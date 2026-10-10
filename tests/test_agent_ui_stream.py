@@ -407,6 +407,24 @@ class Failures(Base):
         for leaked in ("title", "root", "mydraftsecret", "s1"):
             self.assertNotIn(leaked, json.dumps(record["codes"]) + record["kind"])
 
+    def test_every_validator_code_is_in_the_log_vocabulary(self):
+        # D-A48/D-A52: a code validate.ts can emit never logs as "other"; the D-A52 codes are counted by name and get a repair note.
+        import os
+        import re as _re
+        from postriff_phase2.agent_runtime_v2 import ui_presenter, ui_stream as stream
+        path = os.path.join(os.path.dirname(__file__), "..", "web", "src", "lib", "agent-runtime", "ui-parser", "validate.ts")
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        emitted = set(_re.findall(r"errors\.push\([`']([a-z_-]+)[:`']", source)) | set(_re.findall(r"rejected\(\[['`]([a-z_-]+)['`]\]", source))
+        self.assertTrue({"unreachable_statement", "query_as_child", "query_arg_placeholder"} <= emitted, emitted)
+        self.assertEqual(sorted(emitted - stream.REJECTION_CODES), [])
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            stream._log_rejected("generate", ["query_as_child:automations", *[f"unreachable_statement:s{i}" for i in range(5)], "query_arg_placeholder:cal"])
+        self.assertEqual(json.loads(logs.records[-1].getMessage())["codes"], {"query_arg_placeholder": 1, "query_as_child": 1, "unreachable_statement": 5})
+        for code in ("unreachable_statement", "query_as_child", "query_arg_placeholder"):
+            self.assertNotIn(code, stream.NOT_REPAIRABLE, "a first-pass failure that goes to the one automatic repair")
+            self.assertIn(code, ui_presenter._REPAIR_GUIDE)
+
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
         self.transport.scripts.append([("delta", GOOD_PROGRAM), ("final", usage_final(1200, 16_000))])   # the first attempt costs ~8.1k

@@ -291,9 +291,9 @@ def schedule_execute(dctx, inputs, _key):
                    message="Prepared. Nothing is scheduled until you apply the proposal, and the post still needs its own approval.")
 
 
-query("calendar_agenda", "J02", "Scheduled, waiting and planned posts between two inclusive YYYY-MM-DD dates in a time zone: each entry's exact UTC instant, "
-      "local time and zone, complete status counts, day counts, and the posts that collide (same account, less than 2 hours apart) in "
-      "data.derived.closeTogether.pairs, which CalendarAgenda shows.",
+query("calendar_agenda", "J02", "Scheduled, waiting and planned posts in a date range (default: 7 days from today): each entry's UTC instant, local "
+      "time and zone, complete status counts (unknown stays unknown), day counts, empty days in data.derived.emptyDays, and posts that "
+      "collide (same account, <2 hours apart) in data.derived.closeTogether.pairs.",
       {"start": DATE, "end": DATE, "zone": ZONE, "platform": PLATFORM, "channelId": ID, "limit": {"type": "integer", "minimum": 1, "maximum": 100}},
       calendar_agenda, page=50, refresh=60, tool="calendar.range", invalidated_by=("calendar_agenda",), also=("J05",))
 query("queue_status", "J02", "The publishing queue now: reviews waiting for approval, approved posts waiting for their time, posts needing attention, complete counts.",

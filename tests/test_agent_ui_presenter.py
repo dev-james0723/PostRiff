@@ -191,12 +191,83 @@ class Plans(unittest.TestCase):
         base = GOOD_PROGRAM.strip()
         plan = self.plan(kind="edit", mode="patch", base_source=base, base_revision=1, instruction="Show only paused automations")
         self.assertIn(p.PATCH_GUIDE, plan.input_text)
-        self.assertIn("re-declare its Query statement with the new arguments", plan.input_text)
+        # The edit re-declares the Query the view already has, by its CURRENT_UI id; …Data names are for new statements only.
+        self.assertIn("re-declare the existing Query statement under its id in CURRENT_UI", plan.input_text)
+        self.assertIn("the …Data names of call lines are only for statements you add", plan.input_text)
         repair = self.plan(kind="repair", mode="patch", base_source=base, base_revision=1, instruction="Show only paused automations",
                            rejected_source='list = AutomationList(paused)', errors=["unexplained_deletion:detail", "unexplained_deletion:history"])
         self.assertIn("If it should go, write `detail = null` on its own line", repair.input_text)
         self.assertIn("write `history = null`", repair.input_text)
         self.assertIn("write only the statements that change", repair.input_text)
+
+    def test_dates_are_left_out_unless_context_supplies_them(self):
+        # D-A52 review: generate mode has no request text and no date source (presenter_view carries refs, counts and states), so
+        # a typed date could show the wrong period and still pass. Rule 2 now says to leave start/end out: each binding then reads
+        # its own default window (calendar_agenda the 7 days from today, analytics the last 30 days).
+        rules = " ".join(p.BINDING_RULES)
+        self.assertIn("leave start and end out unless CONTEXT supplies the dates", rules)
+        self.assertIn("preserve dates from CURRENT_UI", rules)
+        self.assertIn("explicitly changes them in USER_EDIT", rules)
+        self.assertIn("calendar_agenda: the 7 days from today", rules)
+        self.assertIn("analytics: the last 30 days", rules)
+        self.assertIn("$range.start is rejected", rules)
+        self.assertNotIn("take literal", rules)
+        self.assertNotIn("from CONTEXT or the request", rules, "generate mode has no request text")
+        # The windows the rule names are the backend's own defaults.
+        from postriff_phase2.agent_runtime_v2.ui_domain import analytics, common
+        now = 1_760_000_000
+        lo, hi = common.window({}, "Asia/Hong_Kong", now)
+        self.assertEqual((round((hi - lo) / 86400), lo <= now < hi), (7, True))
+        lo, hi = analytics._past_window(SimpleNamespace(zone="Asia/Hong_Kong", now=now), {})
+        self.assertEqual((round((hi - lo) / 86400), lo <= now < hi), (30, True))
+
+    def test_enum_and_array_hints(self):
+        metrics = ["views", "reach", "likes", "comments", "replies", "reposts", "quotes", "shares", "saved"]
+        platforms = [f"P{i}" for i in range(12)]
+        shaped = dict(manifest())
+        shaped["queries"] = [
+            {"name": "analytics_series", "description": "Series", "argsSchema": {"type": "object", "required": ["metric"], "properties": {
+                "metric": {"type": "string", "enum": metrics}, "platform": {"type": "string", "enum": platforms}}}},
+            {"name": "library_selection", "description": "Picked", "argsSchema": {"type": "object", "required": ["assetIds"], "properties": {
+                "assetIds": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[0-9a-f]{32}$"}}}}},
+            {"name": "founder_metrics", "description": "Metrics", "argsSchema": {"type": "object", "required": ["metricIds"], "properties": {
+                "metricIds": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}},
+                "groupBy": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"}}}}},
+        ]
+        text = p.bindings_section(shaped)
+        # A required enum lists every value; an optional one cut at 8 says so.
+        self.assertIn('call: analyticsSeriesData = Query("analytics_series", {metric: ' + " or ".join(f'"{m}"' for m in metrics) + "}, null)", text)
+        self.assertIn('optional keys: platform ' + " or ".join(f'"{v}"' for v in platforms[:8]) + " … (see args)", text)
+        # An array shows one valid form in the call; the alternative is on its own note line.
+        self.assertIn('call: librarySelectionData = Query("library_selection", {assetIds: $picked}, null)', text)
+        self.assertIn("    note: assetIds takes a list: a $variable you declare (for example $picked = [] bound to a SelectionList), "
+                      "or a literal list of ids from CONTEXT", text)
+        self.assertIn('call: founderMetricsData = Query("founder_metrics", {metricIds: ["<value>"]}, null)', text)
+        self.assertIn("optional keys: groupBy [\"<value>\"]", text)
+        self.assertIn("    note: metricIds takes a list of literal values", text)
+        self.assertNotIn("or a $variable holding that list", text)
+
+    def test_names_differ_per_read_and_from_components(self):
+        rules = " ".join(p.BINDING_RULES)
+        self.assertIn("reachSeriesData and viewsSeriesData", rules)
+        self.assertIn("Never reuse a Query's name for a component", rules)
+        # Two Queries of one binding under one name: the repair note says to name each read for what it reads.
+        rejected = ('root = RafiiRoot([a, b])\nanalyticsSeriesData = Query("analytics_series", {metric: "reach"}, null)\n'
+                    'analyticsSeriesData = Query("analytics_series", {metric: "views"}, null)')
+        plan = self.plan(kind="repair", rejected_source=rejected, errors=["duplicate_statement:analyticsSeriesData"])
+        self.assertIn("When one binding is read twice, give each Query its own name for what it reads (reachSeriesData, viewsSeriesData)",
+                      plan.input_text)
+
+    def test_repair_notes_for_unreachable_statements_queries_as_children_and_copied_hints(self):
+        rejected = ('root = RafiiRoot([automations], "Automations")\nautomations = Query("automations_list", {}, null)\n'
+                    'finalView = Stack([list])\nlist = AutomationList(automations)\ncal = Query("calendar_agenda", {start: "YYYY-MM-DD"}, null)')
+        errors = ["query_as_child:automations", "unreachable_statement:finalView", "unreachable_statement:list", "query_arg_placeholder:cal"]
+        notes = self.plan(kind="repair", rejected_source=rejected, errors=errors).input_text.split('<notes kind="REPAIR_GUIDE">\n', 1)[1]
+        self.assertIn("`finalView` is declared but root never reaches it", notes)
+        self.assertIn("list it in root's tree (in root, or in a component root shows) or delete its line", notes)
+        self.assertIn("`list` is declared but root never reaches it", notes)
+        self.assertIn("`automations` is a Query: its result is data, not a component, so as a child it shows nothing", notes)
+        self.assertIn("`cal` contains a copied hint", notes)
 
     def test_refusals_happen_before_any_reservation_or_call(self):
         cases = [(make_cfg(OPENAI_API_KEY=None), {}, "no_model_route"),
