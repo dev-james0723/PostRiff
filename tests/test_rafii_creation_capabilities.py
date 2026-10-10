@@ -557,6 +557,23 @@ class ReviewFixTest(FlagIsolation):
         self.assertTrue(plain["files"][0]["text"].startswith("Exact text"))
         self.assertFalse(plain["published"])
 
+    def test_a_structural_field_returned_as_one_string_never_breaks_export(self):
+        """Codex review P2: `frames: "Frame one"` from a writer is one ordered item at ingestion, exports as one frame,
+        and a direct string is refused by schema validation instead of crashing the package."""
+        from postriff_phase2 import model_runtime
+        warnings = []
+        with env(WAVE1):
+            cc._CACHE.clear()
+            fields = model_runtime._native_fields({"frames": "Frame one", "spokenScript": "Say this"}, {"platform": "Instagram", "format": "instagram.story"}, warnings)
+        self.assertEqual(fields["frames"], [{"index": 1, "text": "Frame one"}])
+        self.assertEqual(fields["spokenScript"], "Say this") if "spokenScript" in fields else None
+        story = {"platform": "Instagram", "language": "en", "format": "instagram.story", "text": "Caption", "nativeFields": {"frames": "Frame one"}}
+        body = cc.export_package([story])["files"][0]["text"]
+        self.assertIn("[frame 1]\nFrame one", body)
+        _clean, errors = cc.validate_native_fields("Instagram", "instagram.story", {"frames": "Frame one"})
+        self.assertIn("type_invalid:frames", errors)
+        self.assertEqual(cc.ordered_items(["a", {"index": 9, "text": "b"}, 3, " "]), [{"index": 1, "text": "a"}, {"index": 2, "text": "b"}])
+
     def test_agent_rewrite_keeps_the_drafts_native_format(self):
         """Security review P3: rewriting a Story asks for that Story's slot, never a new default post."""
         source = (ROOT / "src/postriff_phase2/agent_runtime_v2/domain_tools.py").read_text()

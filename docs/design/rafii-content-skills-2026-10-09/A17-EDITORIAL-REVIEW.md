@@ -221,6 +221,20 @@ Severity: **FAIL-H** (breaks A17 or a format), **CONCERN-H/M/L**.
 
 Recommendation: fix F-1 and F-2 (and ideally C-1 to C-5), bump and relock the affected skills, then do the human editorial sign-off below. Until then, A17 should stay **unverified (human editorial)**, as `ACCEPTANCE-EVIDENCE.md:67` already records.
 
+## 5a. Resolutions after this review (commit `cf9d0e0a`)
+
+Text edits were made by the same AI session that commissioned this review; they are fixes to the findings, not a re-review, and they do not change the human sign-off below.
+
+| Finding | Resolution | Version |
+| --- | --- | --- |
+| F-1 | `zh-Hans-CN.md` no longer states how Xiaohongshu ranks or penalises posts. It now says a first-person, practical tone fits only for what the author actually did, never presents promotion as personal experience, and makes no claim about ranking. | `postriff-content-engine` 1.1.0 → 1.2.0, relocked |
+| F-2 | The X adapter now describes `x.thread`: `text` is the first post, `nativeFields.sequence` holds the following posts in order, and threads are drafted for review and export only. | `postriff-channel-x` 1.0.1 → 1.1.0, relocked |
+| C-3 | The fixed "emoji-rich title… #tags at the end" template is replaced: the channel adapter decides; emoji, 【】 and topic tags are optional and follow the author's habit, never a fixed template or count. | content-engine 1.2.0 |
+| C-4 | Stock CTAs: a call to action is optional, at most one, only when the post invites a real reply; never a stock 点赞收藏 line. | content-engine 1.2.0 |
+| C-1, C-2, C-5 … C-19 | Open for the human editor. C-1 (Mainland AI-content and commercial-disclosure reminders) and C-2 (X capability claims) are the highest priority. The coverage gap on whether `visual-handoff.md` is bound for native video/carousel IDs (section 6) is also open. | — |
+
+After these edits, the machine view of "no unsupported blanket algorithm claims" is met for the composed `zh-Hans-CN` route; undated enforcement claims (C-5) remain. A17 stays **partially verified (machine) / unverified (human editorial)**.
+
 ## 6. Coverage note
 
 **Read in full (paths under `skills/` unless noted):**

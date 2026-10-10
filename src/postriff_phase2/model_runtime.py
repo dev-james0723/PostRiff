@@ -957,6 +957,11 @@ class ServerModelRuntime(AgentRuntime):
         return variants
 
 
+def creation_capabilities_ordered():
+    from .creation_capabilities import ORDERED_FIELDS
+    return ORDERED_FIELDS
+
+
 def _native_fields(value, destination, warnings):
     """Only the public slots the destination's native format allows; anything else is dropped with a warning (never
     copied into text). Strings and ordered {"index","text"} lists are kept, bounded."""
@@ -968,7 +973,10 @@ def _native_fields(value, destination, warnings):
         if key not in slots:
             dropped.append(str(key)[:40])
             continue
-        if isinstance(item, str):
+        if isinstance(item, str) and key in creation_capabilities_ordered():
+            # A slide/segment/frame list returned as one string is one ordered item, never a bare string.
+            out[key] = [{"index": 1, "text": clean(item, 2000)}] if item.strip() else []
+        elif isinstance(item, str):
             out[key] = clean(item, 4000)
         elif isinstance(item, list):
             ordered = []

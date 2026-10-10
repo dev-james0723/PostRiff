@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { draftFacts, reviewFactsEnabled } from '../src/lib/creation/capabilities.ts';
+import { draftFacts, nativeExportText, nativeFieldBlocks, reviewFactsEnabled } from '../src/lib/creation/capabilities.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const byKey = (facts) => Object.fromEntries(facts.map((f) => [f.key, f]));
@@ -96,7 +96,7 @@ test('every format in the live projection gets a label and a known publish readi
 test('the home results, the conversation card and the saved-draft sheet all render the facts', () => {
   const read = (file) => fs.readFileSync(path.join(here, '../src/features', file), 'utf8');
   assert.match(read('agent/variant-card.tsx'), /<NativeDraftFacts variant=\{variant\}/);
-  assert.match(read('agent/home/idea-splits.tsx'), /<NativeDraftFacts variant=\{current\.variant\}/);
+  assert.match(read('agent/home/idea-splits.tsx'), /<NativeDraftFacts variant=\{\{ \.\.\.current\.variant, text: current\.edited \?\? current\.text \}\}/);
   assert.match(read('pipeline/detail-sheet.tsx'), /<NativeDraftFacts/);
 });
 
@@ -107,4 +107,18 @@ test('the facts appear only while a creation wave is on, so a flags-off deployme
   for (const value of [undefined, null, {}, { ...catalog, rollout: { waves: [] } }, { ...catalog, rollout: undefined }, { ...catalog, schema: 'other' }]) {
     assert.equal(reviewFactsEnabled(value), false);
   }
+});
+
+test('a Reel script, Story frames and thread posts are shown and copied; echoed caption slides are not repeated', () => {
+  const reel = { fields: { caption: 'Caption', spokenScript: 'Say this', onScreenText: 'Show this', altText: 'A piano' } };
+  assert.deepEqual(nativeFieldBlocks(reel, 'Instagram', 'Caption').map((b) => [b.label, b.items]), [['Spoken script', ['Say this']], ['On-screen text', ['Show this']], ['Alt text', ['A piano']]]);
+  const story = { fields: { caption: 'Caption', frames: 'Frame one' } };
+  assert.deepEqual(nativeFieldBlocks(story, 'Instagram', 'Caption'), [{ key: 'frames', label: 'Frames', items: ['Frame one'], ordered: true }]);
+  const echo = { fields: { caption: 'One\n\nTwo', slides: [{ index: 1, text: 'One' }, { index: 2, text: 'Two' }] } };
+  assert.deepEqual(nativeFieldBlocks(echo, 'Xiaohongshu', 'One\n\nTwo'), []);
+  const thread = { fields: { caption: 'First', sequence: [{ index: 1, text: 'Second' }, { index: 2, text: 'Third' }] } };
+  assert.equal(nativeExportText(thread, 'X', 'First'), 'First\n\n[sequence]\nSecond\nThird\n');
+  assert.equal(nativeExportText(story, 'Instagram', 'Caption'), 'Caption\n\n[frame 1]\nFrame one\n');
+  assert.equal(nativeExportText(null, 'LinkedIn', 'Only text'), 'Only text\n');
+  assert.deepEqual(nativeFieldBlocks({ fields: { title: 'T' } }, 'Xiaohongshu', 'T\nbody'), []);
 });

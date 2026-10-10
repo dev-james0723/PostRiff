@@ -194,7 +194,7 @@ export function IdeaSplits({ generation, timeZone, speaker, onDraftAgain, isConn
                 rows={7}
                 className='rafii-field rafii-focus min-h-[150px] w-full resize-y rounded-[var(--rafii-radius-card)] px-4 py-3.5 text-base leading-[1.75] outline-none md:text-sm'
               />
-              {current.variant && <NativeDraftFacts variant={current.variant} connected={isConnected?.(current.variant.platform)} className='px-1' />}
+              {current.variant && <NativeDraftFacts variant={{ ...current.variant, text: current.edited ?? current.text }} connected={isConnected?.(current.variant.platform)} className='px-1' />}
               {current.variant?.warnings && current.variant.warnings.length > 0 && (
                 <ul className='text-muted-foreground flex flex-col gap-1 text-xs'>
                   {current.variant.warnings.map((warning, index) => (

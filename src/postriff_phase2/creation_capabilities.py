@@ -470,6 +470,8 @@ def validate_native_fields(platform, format_id, fields, proj=None):
     for key, value in (fields or {}).items():
         if key not in fmt["draftFields"]:
             errors.append(f"field_not_allowed:{key}")
+        elif key in ORDERED_FIELDS and isinstance(value, str):
+            errors.append(f"type_invalid:{key}")
         elif value is None or isinstance(value, str):
             out[key] = value
         elif isinstance(value, list) and all(isinstance(i, dict) and isinstance(i.get("text"), str) and type(i.get("index")) is int for i in value):
@@ -484,6 +486,18 @@ def validate_native_fields(platform, format_id, fields, proj=None):
 
 
 # -- export ---------------------------------------------------------------------------------
+# Structural slots are ordered lists of {"index","text"}; a writer that returns one string gets one item, never a crash.
+ORDERED_FIELDS = ("slides", "segments", "frames")
+
+
+def ordered_items(value):
+    """`value` as ordered {"index","text"} items: a string is one item, a list keeps its strings and text items in order."""
+    if isinstance(value, str):
+        return [{"index": 1, "text": value}] if value.strip() else []
+    items = [i.get("text") if isinstance(i, dict) else i for i in value] if isinstance(value, list) else []
+    return [{"index": n + 1, "text": str(t)} for n, t in enumerate(t for t in items if isinstance(t, str) and t.strip())]
+
+
 def _item_text(item):
     """One entry of a list field as text: an ordered {"index","text"} item exports its text, never its dict form."""
     return str(item.get("text") or "") if isinstance(item, dict) else str(item)
@@ -508,9 +522,9 @@ def export_package(variants, *, campaign_id=None, created_at=None):
         for key in ("title", "description", "question", "options", "sequence", "cta", "terms", "start", "end", "flair", "category", "content_warning", "spokenScript", "onScreenText"):
             if fields.get(key) and not (key == "title" and platform == "Xiaohongshu"):
                 lines.append(f"[{key}]\n{fields[key] if not isinstance(fields[key], list) else chr(10).join(_item_text(item) for item in fields[key])}")
-        for key in ("slides", "segments", "frames"):
-            for item in fields.get(key) or []:
-                lines.append(f"[{key[:-1]} {item.get('index')}]\n{item.get('text')}")
+        for key in ORDERED_FIELDS:
+            for item in ordered_items(fields.get(key)):
+                lines.append(f"[{key[:-1]} {item['index']}]\n{item['text']}")
         if fields.get("altText"):
             lines.append(f"[alt text]\n{fields['altText']}")
         if variant.get("sourceIds"):

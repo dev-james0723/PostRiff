@@ -148,6 +148,72 @@ export interface NativeDraft {
   constraints?: { verified?: boolean };
   readiness?: { draft?: string; export?: string; publish?: string; publishNote?: string };
   skillRoute?: NativeSkillRoute | null;
+  /** Public fields in their own slots (caption, title, slides, spokenScript…), as the server wrote them. */
+  fields?: Record<string, unknown>;
+}
+
+export interface NativeFieldBlock {
+  key: string;
+  label: string;
+  /** One entry for a text field; one per slide, segment or frame for an ordered field, in order. */
+  items: string[];
+  ordered: boolean;
+}
+
+/** Export order (`creation_capabilities.export_package`): text fields, then ordered fields, then alt text. */
+const TEXT_FIELDS = ['title', 'description', 'question', 'options', 'sequence', 'cta', 'terms', 'start', 'end', 'flair', 'category', 'content_warning', 'spokenScript', 'onScreenText'] as const;
+const ORDERED_FIELDS = ['slides', 'segments', 'frames'] as const;
+const FIELD_LABELS: Record<string, string> = {
+  title: 'Title', description: 'Description', question: 'Question', options: 'Options', sequence: 'Thread posts', cta: 'Call to action',
+  terms: 'Terms', start: 'Starts', end: 'Ends', flair: 'Flair', category: 'Category', content_warning: 'Content warning',
+  spokenScript: 'Spoken script', onScreenText: 'On-screen text', slides: 'Slides', segments: 'Segments', frames: 'Frames', altText: 'Alt text'
+};
+
+function itemTexts(value: unknown): string[] {
+  if (typeof value === 'string') return value.trim() ? [value] : [];
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => (item && typeof item === 'object' ? (item as { text?: unknown }).text : item)).filter((t): t is string => typeof t === 'string' && t.trim().length > 0);
+}
+
+const paragraphs = (text: string) => text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+/**
+ * The native public fields beyond the caption, for review (Codex review P1: a Reel's script, a Story's frames and a
+ * carousel's slides live outside `text`). Ordered fields that only repeat the caption's paragraphs are skipped here
+ * (they are the caption again); a Xiaohongshu title is the caption's first line, so it is skipped too.
+ */
+export function nativeFieldBlocks(native: NativeDraft | null | undefined, platform: string, text: string): NativeFieldBlock[] {
+  const fields = native?.fields;
+  if (!fields || typeof fields !== 'object') return [];
+  const blocks: NativeFieldBlock[] = [];
+  for (const key of TEXT_FIELDS) {
+    if (key === 'title' && platform === 'Xiaohongshu') continue;
+    const items = itemTexts(fields[key]);
+    if (items.length) blocks.push({ key, label: FIELD_LABELS[key], items: Array.isArray(fields[key]) ? items : [items.join('\n')], ordered: Array.isArray(fields[key]) });
+  }
+  const caption = paragraphs(text).join('\n\n');
+  for (const key of ORDERED_FIELDS) {
+    const items = itemTexts(fields[key]);
+    if (items.length && items.join('\n\n') !== caption) blocks.push({ key, label: FIELD_LABELS[key], items, ordered: true });
+  }
+  const alt = itemTexts(fields.altText);
+  if (alt.length) blocks.push({ key: 'altText', label: FIELD_LABELS.altText, items: [alt.join('\n')], ordered: false });
+  return blocks;
+}
+
+/** The draft as one text, laid out like the server's export file (caption, then each field in its own section). */
+export function nativeExportText(native: NativeDraft | null | undefined, platform: string, text: string): string {
+  const fields = native?.fields && typeof native.fields === 'object' ? native.fields : {};
+  const lines = [text];
+  for (const key of TEXT_FIELDS) {
+    if (key === 'title' && platform === 'Xiaohongshu') continue;
+    const items = itemTexts(fields[key]);
+    if (items.length) lines.push(`[${key}]\n${items.join('\n')}`);
+  }
+  for (const key of ORDERED_FIELDS) itemTexts(fields[key]).forEach((item, i) => lines.push(`[${key.slice(0, -1)} ${i + 1}]\n${item}`));
+  const alt = itemTexts(fields.altText);
+  if (alt.length) lines.push(`[alt text]\n${alt.join('\n')}`);
+  return lines.join('\n\n').trimEnd() + '\n';
 }
 
 export type FactTone = 'neutral' | 'attention';

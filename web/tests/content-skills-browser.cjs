@@ -143,6 +143,8 @@ async function factsOf(page) {
       assert.match(review.facebook.Media, /Rafii wrote the script, not a video/);
       assert.equal(review.facebook.Publishing, 'Export only · Rafii can’t publish this format yet');
       assert.match(review.facebook.Account, /No Facebook account connected · draft, copy and export only/);
+      // Codex review P1: the native content has a copy path laid out like the export (fields live outside the caption).
+      await drafts.getByRole('button', { name: 'Copy with format fields' }).waitFor();
       review.linkedin = await pick('LinkedIn');
       assert.equal(review.linkedin.Format, 'Post');
       assert.equal(review.linkedin.Publishing, 'Connect LinkedIn to publish');
