@@ -105,6 +105,13 @@ source_id2=library.as_source(wid,'one',audio,{'expectedRevision':service.get(wid
 library.transcript(wid,'one',audio,'Replacement transcript. Old words must disappear.')
 check('transcript replacement withdraws old source',not next(s for s in service.get(wid,'one')['state']['sources'] if s['id']==source_id2)['active'])
 check('old transcript no longer searchable',not library.list(wid,'one','bowing acceptance')['assets'])
+# Free on-device recognition never replaces a person's transcript, and only it may report "no speech".
+library.transcript(wid,'one',audio,'Automatic words that must not win.',source='browser_whisper')
+check('automatic transcript keeps the person\'s own',library.detail(wid,'one',audio)['asset']['transcriptSource']=='user_supplied' and not library.list(wid,'one','must not win')['assets'])
+try: library.transcript(wid,'one',audio,None,speech='none'); check('no-speech needs an automatic source',False)
+except AlphaError as e: check('no-speech needs an automatic source',e.status==400)
+try: library.transcript(wid,'one',audio,'x',source='paid_cloud'); check('unknown transcript source rejected',False)
+except AlphaError as e: check('unknown transcript source rejected',e.status==400)
 
 # Storage failure retries, immutable identity, crashed worker lease, dedup and account freeze.
 raw=b'Background queue recovery marker'

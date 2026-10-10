@@ -994,7 +994,8 @@ class HostedApplication:
                         self._body(environ)
                         return self._json(start_response, 202, library.retry(workspace_id, token, asset_id))
                     if verb == "transcript" and method == "POST":
-                        return self._json(start_response, 200, library.transcript(workspace_id, token, asset_id, self._body(environ).get("text")))
+                        body = self._body(environ)
+                        return self._json(start_response, 200, library.transcript(workspace_id, token, asset_id, body.get("text"), source=body.get("source"), speech=body.get("speech")))
                     if verb == "source" and method == "POST":
                         return self._json(start_response, 200, library.as_source(workspace_id, token, asset_id, self._body(environ)))
                     if verb == "commit" and method == "POST":

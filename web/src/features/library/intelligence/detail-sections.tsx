@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { LibraryAsset } from '../use-library';
 import { Control } from '../ui/controls';
+import { AudioAutoSummary } from './audio-summary';
 
 /**
  * Library understanding for one item. Each read is optional: until a capability is in this build (or allowed for this
@@ -145,11 +146,13 @@ export function CapabilityList({ states }: { states: CapabilityState[] }) {
   );
 }
 
-export function UnderstandingSummary({ asset, card }: { asset: LibraryAsset; card: UnderstandingCard | undefined }) {
+export function UnderstandingSummary({ asset, card, canEdit = false }: { asset: LibraryAsset; card: UnderstandingCard | undefined; canEdit?: boolean }) {
   // The stored summary is one sentence taken from the file at upload (no model): it is extracted, not AI.
   const summary = card?.summary ?? (asset.aiSummary ? { text: asset.aiSummary, origin: 'extracted' as const } : null);
   const topics = card?.topics ?? [];
-  const tags = asset.tags ?? [];
+  const audio = asset.kind === 'audio' || asset.assetKind === 'audio';
+  // A transcript's suggested tags are shown (as automatic) until the person sets their own.
+  const tags = asset.tags?.length ? asset.tags : audio && asset.speech === 'detected' ? asset.aiTags ?? [] : [];
   const automatic = new Set(asset.aiTags ?? []);
   return (
     <div className='flex flex-col gap-2'>
@@ -158,9 +161,14 @@ export function UnderstandingSummary({ asset, card }: { asset: LibraryAsset; car
           <OriginBadge origin={summary.origin} />
           <p className='text-sm leading-relaxed'>{summary.text}</p>
         </div>
+      ) : audio && asset.speech === 'none' ? (
+        <p className='text-muted-foreground text-sm'>No transcript detected: no speech was heard in this recording, so it is treated as music.</p>
+      ) : audio ? (
+        <AudioAutoSummary asset={asset} canEdit={canEdit} />
       ) : (
         <p className='text-muted-foreground text-sm'>No summary yet. The original stays useful as a file.</p>
       )}
+      {summary && audio && asset.transcriptSource === 'browser_whisper' ? <p className='text-muted-foreground text-xs'>From a transcript made on your device (free, no AI credits).</p> : null}
       {tags.length ? (
         <div className='flex flex-col gap-1.5'>
           <ul aria-label='Tags' className='flex flex-wrap gap-1.5'>

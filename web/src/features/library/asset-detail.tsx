@@ -28,6 +28,7 @@ import { kindOf } from '@/lib/media/asset-kinds';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 import { AudioMomentPlayer } from './intelligence/audio-player';
 import { VersionsPanel } from './intelligence/versions-panel';
 import { UsagePanel } from './intelligence/usage-panel';
@@ -135,6 +136,10 @@ function LargeImage({ asset, peaks }: { asset: LibraryAsset; peaks?: number[] | 
   const image = useAssetImage(asset.id, mediaAsset);
   const { api, workspaceId } = useWorkspaceApi();
   const isVideo = assetKind === 'video';
+  if (assetKind === 'audio') {
+    // The recording itself: its waveform (any length) to play and drag through, Voice Memos-style.
+    return <GalleryMediaPreview key={asset.id} asset={asset} variant='detail' />;
+  }
   if (!mediaAsset) {
     return <div className='flex flex-col gap-3'><AssetFileThumbnail asset={asset} size='detail' peaks={peaks} /><DocumentViewerLauncher key={asset.id} asset={asset} /></div>;
   }
@@ -330,7 +335,7 @@ function DetailBody({
 
       <DetailSection prefix={prefix} id='overview' title='Overview'>
         <p className='text-muted-foreground text-sm'>{whatItIs(asset, card?.media)}</p>
-        <UnderstandingSummary asset={asset} card={card} />
+        <UnderstandingSummary asset={asset} card={card} canEdit={canEdit} />
         <SuggestedUses card={card} />
         {publishing && <StateMessage kind='loading' layout='inline' title='A post using this asset is publishing' description='You can delete it once that post finishes.' />}
         {textual && intelligence ? (

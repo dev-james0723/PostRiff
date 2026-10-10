@@ -446,7 +446,9 @@ export function createApi(getToken: TokenSource) {
     deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),
     updateLibraryAsset: (w: string, id: string, body: { title?: string; tags?: string[]; collections?: string[] }) => send('PATCH', `${ws(w)}/library/assets/${encodeURIComponent(id)}`, body),
     retryLibraryFile: (w: string, id: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/retry`, {}),
-    libraryTranscript: (w: string, id: string, text: string) => send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/transcript`, { text }),
+    /** A person's transcript, or (with `source: 'browser_whisper'`) what free on-device recognition heard, or no speech. */
+    libraryTranscript: (w: string, id: string, text: string, automatic?: { source: 'browser_whisper'; speech?: 'none' }) =>
+      send('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/transcript`, automatic ? { text, ...automatic } : { text }),
     librarySource: (w: string, id: string, expectedRevision: number) => send<{ sourceId: string; revision?: number; clipped: boolean; status: string }>('POST', `${ws(w)}/library/files/${encodeURIComponent(id)}/source`, { expectedRevision }),
 
     /* Library intelligence (rafii-library/1): the same permission-aware service the Agent uses. */
