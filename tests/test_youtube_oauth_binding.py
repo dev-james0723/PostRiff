@@ -179,6 +179,275 @@ def stub_policy_dependency(service):
 
 
 class YouTubeOAuthBindingTests(unittest.TestCase):
+    @staticmethod
+    def dedicated_values():
+        return {'POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE': 'dedicated_production',
+                'POSTRIFF_OAUTH_YOUTUBE_CLIENT_ID': 'standard-client',
+                'POSTRIFF_OAUTH_YOUTUBE_CLIENT_SECRET': 'synthetic-original-secret',
+                'POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_ID': 'production-client',
+                'POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_SECRET': 'synthetic-pending-secret',
+                'POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN': 'https://rafii.io',
+                'POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID': 'standard-client',
+                'POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_SECRET': 'synthetic-ignored-alias-secret',
+                'POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID': 'agent-client',
+                'POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_SECRET': 'synthetic-agent-secret'}
+
+    def test_dedicated_source_keeps_original_environment_and_routes_each_exact_issuer(self):
+        from urllib.parse import parse_qs, urlsplit
+        values = self.dedicated_values()
+        before = copy.deepcopy(values)
+        wire = Wire(scopes=[READ])
+        standard, diagnostic = YouTubeProvider.mount(values, wire)
+        self.assertEqual(values, before)
+        self.assertEqual((standard.client_id, standard.client_secret), ('production-client', 'synthetic-pending-secret'))
+        self.assertEqual((standard.legacy_provider.client_id, standard.legacy_provider.client_secret),
+                         ('standard-client', 'synthetic-original-secret'))
+        self.assertEqual((standard.agentic_provider.client_id, standard.agentic_provider.client_secret),
+                         ('agent-client', 'synthetic-agent-secret'))
+        self.assertEqual(standard.callback_origin, 'https://rafii.io')
+        self.assertEqual(standard.agentic_provider.callback_origin, 'https://rafii.io')
+        service = OAuthService(None, None, None, {'youtube': standard}, 'https://legacy.example')
+        query = parse_qs(urlsplit(standard.authorize_url(service.callback_uri('youtube'), 'state', 'challenge', [READ])).query)
+        self.assertEqual(query['client_id'], ['production-client'])
+        self.assertEqual(query['redirect_uri'], ['https://rafii.io/api/oauth/youtube/callback'])
+        standard.exchange('synthetic-code', 'synthetic-verifier', service.callback_uri('youtube'))
+        self.assertEqual(wire.calls[-1][2]['form']['client_secret'], 'synthetic-pending-secret')
+        issued = standard.legacy_provider._grant({'access_token': 'synthetic-access', 'refresh_token': 'synthetic-refresh', 'scope': READ})
+        standard.legacy_provider.refresh(issued['refreshToken'])
+        self.assertEqual(wire.calls[-1][2]['form']['client_id'], 'standard-client')
+        self.assertEqual(wire.calls[-1][2]['form']['client_secret'], 'synthetic-original-secret')
+        self.assertFalse(standard.creator_enabled)
+        self.assertFalse(standard.policy_public_binding)
+        self.assertFalse(standard.agentic_provider.execution_enabled)
+        self.assertEqual(diagnostic['credentialSource'], 'dedicated_production')
+        self.assertEqual(diagnostic['legacyRefreshConfiguration']['credentialSource'], 'original')
+        rendered = json.dumps(diagnostic)
+        for value in values.values():
+            if value.endswith('secret') or value.endswith('client'):
+                self.assertNotIn(value, rendered)
+
+    def test_dedicated_source_requires_complete_valid_pending_pair_without_falling_back(self):
+        for suffix, replacement in (('CLIENT_ID', None), ('CLIENT_SECRET', None),
+                                    ('CLIENT_ID', ''), ('CLIENT_SECRET', 'placeholder')):
+            with self.subTest(suffix=suffix, replacement=replacement):
+                values = self.dedicated_values()
+                key = 'POSTRIFF_OAUTH_YOUTUBE_PENDING_' + suffix
+                if replacement is None:
+                    values.pop(key)
+                else:
+                    values[key] = replacement
+                provider, diagnostic = YouTubeProvider.mount(values, Wire())
+                self.assertIsNone(provider)
+                self.assertIn(diagnostic['configurationState'], ('partial_configuration', 'invalid_configuration'))
+                if replacement is None:
+                    self.assertIn(key, diagnostic['missingVariables'])
+                self.assertIsNone(YouTubeProvider.mount_agentic(values, Wire())[0])
+                self.assertIsNone(YouTubeProvider.mount_legacy(values, Wire())[0])
+
+    def test_dedicated_source_requires_exact_canonical_callback(self):
+        for callback in (None, 'https://staging.example', 'https://rafii.io/api/oauth/youtube/callback',
+                         'https://rafii.io?next=x', 'http://rafii.io', 'https://rafii.io.attacker.example'):
+            with self.subTest(callback=callback):
+                values = self.dedicated_values()
+                if callback is None:
+                    values.pop('POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN')
+                else:
+                    values['POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN'] = callback
+                provider, diagnostic = YouTubeProvider.mount(values, Wire())
+                self.assertIsNone(provider)
+                self.assertTrue(diagnostic['callbackOriginInvalid'])
+                self.assertFalse(diagnostic['callbackOriginPinned'])
+
+    def test_unknown_credential_source_fails_all_youtube_mounts_without_echoing_value(self):
+        for source in ('', 'synthetic-private-unknown-source', 'DEDICATED_PRODUCTION'):
+            with self.subTest(source=source):
+                values = self.dedicated_values() | {'POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE': source}
+                provider, diagnostic = YouTubeProvider.mount(values, Wire())
+                self.assertIsNone(provider)
+                self.assertEqual(diagnostic['configurationState'], 'invalid_configuration')
+                self.assertTrue(diagnostic['credentialSourceInvalid'])
+                if source:
+                    self.assertNotIn(source, json.dumps(diagnostic))
+                self.assertIsNone(YouTubeProvider.mount_agentic(values, Wire())[0])
+                self.assertIsNone(YouTubeProvider.mount_legacy(values, Wire())[0])
+
+    def test_dedicated_source_rejects_noncanonical_override_that_would_supersede_the_callback_pin(self):
+        for override in ('', 'https://staging.example', 'https://rafii.io/',
+                         'https://rafii.io/api/oauth/youtube/callback', 'https://rafii.io?next=x',
+                         'http://rafii.io', 'https://rafii.io.attacker.example'):
+            with self.subTest(override=override):
+                values = self.dedicated_values() | {'POSTRIFF_YOUTUBE_PUBLIC_BASE_URL': override}
+                standard, diagnostic = YouTubeProvider.mount(values, Wire())
+                self.assertIsNone(standard)
+                self.assertEqual(diagnostic['configurationState'], 'invalid_configuration')
+                self.assertTrue(diagnostic['publicBaseOverrideInvalid'])
+                self.assertIsNone(YouTubeProvider.mount_agentic(values, Wire())[0])
+                self.assertIsNone(YouTubeProvider.mount_legacy(values, Wire())[0])
+
+    def test_dedicated_source_rejects_conflicting_legacy_reference_and_any_issuer_collision(self):
+        for changed in ({'POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID': 'foreign-client'},
+                        {'POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_ID': 'standard-client'},
+                        {'POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID': 'production-client'},
+                        {'POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID': 'standard-client'}):
+            with self.subTest(changed=list(changed)):
+                values = self.dedicated_values() | changed
+                provider, diagnostic = YouTubeProvider.mount(values, Wire())
+                self.assertIsNone(provider)
+                self.assertEqual(diagnostic['configurationState'], 'invalid_configuration')
+                self.assertTrue(diagnostic.get('legacyReferenceConflict') or diagnostic.get('separateClientRequired'))
+                self.assertIsNone(YouTubeProvider.mount_agentic(values, Wire())[0])
+                self.assertIsNone(YouTubeProvider.mount_legacy(values, Wire())[0])
+
+    def test_dedicated_new_standard_can_mount_without_retired_original_pair_but_never_adopts_its_alias(self):
+        for removed in (('CLIENT_ID', 'CLIENT_SECRET'), ('CLIENT_SECRET',)):
+            with self.subTest(removed=removed):
+                values = self.dedicated_values()
+                values.pop('POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID')
+                for suffix in removed:
+                    values.pop('POSTRIFF_OAUTH_YOUTUBE_' + suffix)
+                wire = Wire(scopes=[READ])
+                standard, diagnostic = YouTubeProvider.mount(values, wire)
+                self.assertEqual(standard.client_id, 'production-client')
+                self.assertIsNone(standard.legacy_provider)
+                legacy_diagnostic = diagnostic['legacyRefreshConfiguration']
+                self.assertEqual(legacy_diagnostic['credentialSource'], 'original')
+                self.assertEqual(legacy_diagnostic['configurationState'],
+                                 'not_configured' if len(removed) == 2 else 'partial_configuration')
+                self.assertEqual(set(legacy_diagnostic['missingVariables']),
+                                 {'POSTRIFF_OAUTH_YOUTUBE_' + suffix for suffix in removed})
+                old = LegacyYouTubeReadProvider('standard-client', 'synthetic-original-secret', transport=wire)
+                issued = old._grant({'access_token': 'synthetic-access', 'refresh_token': 'synthetic-refresh', 'scope': READ})
+                service = OAuthService(None, None, None, {'youtube': standard}, 'https://rafii.io')
+                with self.assertRaises(AlphaError) as error:
+                    service._provider_for_access('youtube', issued['accessToken'])
+                self.assertEqual(error.exception.code, 'youtube_oauth_binding_changed')
+                self.assertIsNone(standard.reusable_refresh(issued['accessToken'], issued['refreshToken']))
+                self.assertEqual(wire.calls, [])
+
+    def test_direct_dedicated_lane_mounts_keep_original_pair_and_never_adopt_old_refresh(self):
+        values = self.dedicated_values()
+        values.pop('POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID')
+        agentic, _ = YouTubeProvider.mount_agentic(values, Wire())
+        legacy, _ = YouTubeProvider.mount_legacy(values, Wire())
+        standard, _ = YouTubeProvider.mount(values, Wire())
+        self.assertEqual(agentic.client_id, 'agent-client')
+        self.assertEqual((legacy.client_id, legacy.client_secret), ('standard-client', 'synthetic-original-secret'))
+        issued = legacy._grant({'access_token': 'synthetic-access', 'refresh_token': 'synthetic-refresh', 'scope': READ})
+        self.assertIsNone(standard.reusable_refresh(issued['accessToken'], issued['refreshToken']))
+        for rejected_access in (LEGACY, json.dumps({'v': 2, 'clientId': 'foreign-client', 'authorizationLane': 'standard', 'at': 'synthetic-access'}),
+                                agentic._grant({'access_token': 'synthetic-access'})['accessToken']):
+            with self.subTest(access=rejected_access):
+                with self.assertRaises(AlphaError):
+                    legacy.bind_credentials(rejected_access, issued['refreshToken'])
+        broad = legacy._grant({'access_token': 'synthetic-access', 'scope': ' '.join([READ, UPLOAD])})
+        with self.assertRaises(AlphaError):
+            legacy.bind_credentials(broad['accessToken'])
+
+    def test_default_current_source_ignores_pending_and_preserves_staging_and_gmail(self):
+        from postriff_phase2.providers import registry_from_environment
+        from postriff_phase2.productivity_connectors import providers_from_environment
+        values = self.dedicated_values()
+        values.pop('POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE')
+        values['POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID'] = 'older-client'
+        values['POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_SECRET'] = 'synthetic-older-secret'
+        values['POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN'] = 'https://staging.example'
+        values.update(POSTRIFF_OAUTH_GMAIL_CLIENT_ID='gmail-client', POSTRIFF_OAUTH_GMAIL_CLIENT_SECRET='synthetic-gmail-secret')
+        before = copy.deepcopy(values)
+        registry = registry_from_environment(values, Wire())
+        self.assertEqual(registry['youtube'].client_id, 'standard-client')
+        self.assertEqual(registry['youtube'].callback_origin, 'https://staging.example')
+        self.assertEqual(registry['youtube'].legacy_provider.client_id, 'older-client')
+        explicit, _ = YouTubeProvider.mount(values | {'POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE': 'current'}, Wire())
+        self.assertEqual(explicit.client_id, 'standard-client')
+        gmail = providers_from_environment(values, Wire())['gmail']
+        self.assertEqual((gmail.client_id, gmail.client_secret), ('gmail-client', 'synthetic-gmail-secret'))
+        self.assertEqual(values, before)
+        # A YouTube-only configuration error cannot unmount the independently configured Gmail adapter.
+        invalid = values | {'POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE': 'unknown-source'}
+        invalid_before = copy.deepcopy(invalid)
+        self.assertNotIn('youtube', registry_from_environment(invalid, Wire()))
+        self.assertEqual(providers_from_environment(invalid, Wire())['gmail'].client_id, 'gmail-client')
+        self.assertEqual(invalid, invalid_before)
+
+    def test_dedicated_registry_uses_same_effective_client_and_canonical_callback(self):
+        from postriff_phase2.providers import registry_from_environment
+        for extra in ({}, {'POSTRIFF_YOUTUBE_PUBLIC_BASE_URL': 'https://rafii.io'}):
+            with self.subTest(override=bool(extra)):
+                values = self.dedicated_values() | extra
+                before = copy.deepcopy(values)
+                registry = registry_from_environment(values, Wire())
+                self.assertEqual(registry['youtube'].client_id, 'production-client')
+                self.assertEqual(registry['youtube'].legacy_provider.client_id, 'standard-client')
+                self.assertEqual(registry['youtube'].agentic_provider.client_id, 'agent-client')
+                service = OAuthService(None, None, None, registry, 'https://staging.example',
+                                       youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+                self.assertEqual(service.callback_uri('youtube'), 'https://rafii.io/api/oauth/youtube/callback')
+                self.assertEqual(values, before)
+
+    def test_acceptance_cli_checks_effective_dedicated_client_before_any_evidence_or_database_read(self):
+        import importlib.util
+        import io
+        import os
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location('youtube_acceptance_selector_cli',
+                                                    Path(__file__).resolve().parents[1] / 'scripts/youtube_acceptance.py')
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        values = self.dedicated_values() | {'POSTRIFF_YOUTUBE_PROJECT_EVIDENCE': json.dumps({'projectId': 'synthetic-project', 'clientId': 'production-client'})}
+        for client, expected in (('production-client', 'A fixed current HTTPS server origin is required.'),
+                                 ('standard-client', 'Current server client/project binding is missing or different.')):
+            with self.subTest(client=client):
+                argv = []
+                for field in ('matrix', 'attestation', 'evidence-root', 'operator', 'workspace-id', 'connection-id', 'channel-id'):
+                    argv += ['--' + field, 'unused']
+                argv += ['--client-id', client, '--project-id', 'synthetic-project', '--capability', 'identity']
+                output = io.StringIO()
+                with patch.dict(os.environ, values, clear=True), patch.object(cli, 'read_document') as read, redirect_stdout(output):
+                    self.assertEqual(cli.main(argv), 2)
+                self.assertEqual(json.loads(output.getvalue())['reason'], expected)
+                read.assert_not_called()
+
+    def test_acceptance_cli_uses_the_dedicated_canonical_callback_and_preserves_current_callback(self):
+        import importlib.util
+        import io
+        import os
+        import sys
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from unittest.mock import MagicMock
+        spec = importlib.util.spec_from_file_location('youtube_acceptance_callback_cli',
+                                                    Path(__file__).resolve().parents[1] / 'scripts/youtube_acceptance.py')
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        for source, expected_client, expected_base in (('dedicated_production', 'production-client', 'https://rafii.io'),
+                                                      ('current', 'standard-client', 'https://staging.example')):
+            with self.subTest(source=source):
+                values = self.dedicated_values() | {
+                    'POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE': source,
+                    'POSTRIFF_YOUTUBE_PUBLIC_BASE_URL': 'https://rafii.io',
+                    'POSTRIFF_PUBLIC_BASE_URL': 'https://staging.example',
+                    'POSTRIFF_DATABASE_URL': 'synthetic-dsn',
+                    'POSTRIFF_YOUTUBE_PROJECT_EVIDENCE': json.dumps({'projectId': 'synthetic-project', 'clientId': expected_client})}
+                argv = []
+                for field in ('matrix', 'attestation', 'evidence-root', 'operator', 'workspace-id', 'connection-id', 'channel-id'):
+                    argv += ['--' + field, 'unused']
+                argv += ['--client-id', expected_client, '--project-id', 'synthetic-project', '--capability', 'identity']
+                connection, cursor = MagicMock(), MagicMock()
+                connection.__enter__.return_value = connection
+                connection.cursor.return_value.__enter__.return_value = cursor
+                connect = Mock(return_value=connection)
+                output = io.StringIO()
+                with patch.dict(os.environ, values, clear=True), patch.dict(sys.modules, {'psycopg': SimpleNamespace(connect=connect)}), \
+                     patch.object(cli, 'read_document', return_value=SimpleNamespace(value={'cases': []})), \
+                     patch.object(cli, 'current_context', side_effect=cli.AcceptanceError('synthetic stop after binding')) as context, \
+                     patch.object(cli, 'write_acceptance') as write, redirect_stdout(output):
+                    self.assertEqual(cli.main(argv), 2)
+                self.assertEqual(context.call_args.args[1]['clientId'], expected_client)
+                self.assertEqual(context.call_args.args[1]['callbackUri'], expected_base + '/api/oauth/youtube/callback')
+                self.assertEqual(json.loads(output.getvalue())['reason'], 'synthetic stop after binding')
+                write.assert_not_called()
+
     def test_new_grants_encrypt_client_and_lane_metadata_with_both_tokens(self):
         wire = Wire()
         provider = YouTubeProvider('standard-client', 'synthetic-secret', transport=wire)
