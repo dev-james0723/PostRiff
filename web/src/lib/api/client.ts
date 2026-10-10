@@ -3,6 +3,7 @@ import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTub
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
+import type { ConnectionHealth } from '@/lib/channels/health';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -236,7 +237,9 @@ export function createApi(getToken: TokenSource) {
       send<{ url: string }>('POST', `${ws(w)}/billing/portal`, { returnPath }),
 
     /* channels */
-    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
+    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
+    connectionHealth: (w: string) => get<ConnectionHealth>(`${ws(w)}/connection-health`),
     youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
     acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
       send<YouTubePolicyStatus>('POST', `${ws(w)}/youtube-policy`, body),

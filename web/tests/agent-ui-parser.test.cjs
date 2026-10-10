@@ -135,6 +135,18 @@ test('Query arguments are literals or $variables only (no query-to-query depende
   assert.ok(hasCode(validate(source), 'query_args_shape'));
 });
 
+test('a library_search Query with the literal ids a Manager turn found (suggestedInputs, D-A51) passes the argument-shape rule', () => {
+  const source = [
+    'root = RafiiRoot([browser], "Found in your Library")',
+    '$selectedAssets = []',
+    `results = Query("library_search", {ids: ["${'a'.repeat(32)}", "${'b'.repeat(32)}"]}, null)`,
+    'browser = LibraryBrowser(results, $selectedAssets)',
+  ].join('\n');
+  const result = validate(source, { policy: policy({ readBindings: [...READS, 'library_search'] }) });
+  assert.equal(hasCode(result, 'query_args_shape'), false, result.errors.join(', '));
+  assert.equal(result.accepted, true, result.errors.join(', '));
+});
+
 test('components outside the journey policy and unknown action ids are denied', () => {
   const allowed = policy({ allowedComponents: ['RafiiRoot', 'Text'] });
   assert.ok(hasCode(validate(GOOD, { policy: allowed }), 'component_denied'));

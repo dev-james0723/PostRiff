@@ -905,10 +905,17 @@ class HostedApplication:
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connection-health" and method == "GET":
+                # Connection Health Center (connection_health.py). With RAFII_CONNECTION_HEALTH_ENABLED off this branch is
+                # never taken, so the request reaches the same 404 as any unknown route.
+                from . import connection_health
+                if connection_health.deployment_enabled(connection_health.environment(service)):
+                    return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
-                    return self._json(start_response, 200, oauth.channels(parts[2], token))
+                    from .connection_health import annotate_channels, environment
+                    return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
                     extra = {"inputs": body["input"]} if body.get("input") is not None else {}
