@@ -41,6 +41,7 @@ SUPERSEDE_WINDOW_SECONDS = 180
 # An agent turn still "running" this long after it last changed was killed (Vercel stops a function at 300 s).
 STALE_TURN_SECONDS = 600
 HISTORY_MESSAGES = 12
+HELD_BACK_SPOKEN = "The answer is in the panel. It uses memory your workspace keeps out of cloud models, so I won't read it aloud."
 RUNTIME_VERSION = "agent-runtime-1"
 # Extensions add blocks to a run's trace (e.g. the skill provenance of the turn): fn(ctx=..., routes=...) -> dict.
 TRACE_HOOKS: list = []
@@ -228,8 +229,14 @@ class AgentRuntimeService:
             result = site.compose(workspace_id, token, result["runId"])
         message = result.get("message") or {}
         answer = message.get("text") or ""
+        spoken = answer
+        from ..site_agent.contracts import cloud_withheld
+        if modality == "voice" and cloud_withheld(message):
+            # Voice Mode hands speakableSummary to the cloud Live session; an answer built from memory or sources kept out of
+            # cloud models is shown in the panel only.
+            spoken = HELD_BACK_SPOKEN
         out = contracts.empty_result(trace_id, modality)
-        out.update({"answerText": answer, "speakableSummary": contracts.speakable(answer) or ("I've started that; it will appear in the panel." if result.get("delegated") else ""),
+        out.update({"answerText": answer, "speakableSummary": contracts.speakable(spoken) or ("I've started that; it will appear in the panel." if result.get("delegated") else ""),
                     "blocks": ((message.get("siteAgent") or {}).get("blocks") or []), "composedBy": "site_agent",
                     "references": ((message.get("siteAgent") or {}).get("refs") or []), "citations": ((message.get("siteAgent") or {}).get("citations") or []),
                     "pendingApprovals": [{"proposalId": p.get("id"), "messageId": result.get("messageId"), "type": p.get("type"), "summary": p.get("summary"),
@@ -588,11 +595,13 @@ class AgentRuntimeService:
         return resolved.get("entity"), notes
 
     def _history(self, cur, workspace_id, conversation_id) -> list[dict]:
+        from ..site_agent.contracts import cloud_withheld
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT %s", (conversation_id, workspace_id, HISTORY_MESSAGES))
         out = []
         for role, body in reversed(cur.fetchall()):
-            if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body):
+            # This runtime is a cloud processor: a site-agent answer kept from cloud models (a fallback turn) is not its history.
+            if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body) or cloud_withheld(body):
                 continue
             words = (body.get("text") or "").strip()
             if not words:
@@ -888,7 +897,10 @@ class AgentRuntimeService:
             pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
             result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
                                   "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
-        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
+        # Scope comes from the authenticated server context, never the model's result or a client page hint.
+        from .tool_adapter import founder_scope
+        ui_scope = "founder" if founder_scope(ctx) is not None else "workspace"
+        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality, scope=ui_scope)
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
@@ -1347,15 +1359,15 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
 _NOT_ELIGIBLE = {"eligible": False, "slot": "main", "reason": "not_eligible", "journeyIds": []}
 
 
-def ui_handoff(cfg, workspace_id, result, request_text, modality) -> dict:
+def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="workspace") -> dict:
     """result.ui: whether this completed Manager turn may get a generated view (deterministic predicate in ui_projection).
     A failure here never fails the turn; the answer stays native."""
-    flags = cfg.genui_for(workspace_id)
+    flags = cfg.genui_for(workspace_id, founder=scope == "founder")
     if not flags.get("enabled"):
         return {**_NOT_ELIGIBLE, "reason": "disabled"}
     try:
         from . import ui_projection
-        decided = ui_projection.eligibility(result, request_text, modality, flags=flags)
+        decided = ui_projection.eligibility(result, request_text, modality, flags=flags, scope=scope)
     except Exception:  # noqa: BLE001 — presentation is optional; the business answer is already complete
         return {**_NOT_ELIGIBLE, "reason": "not_eligible"}
     if not isinstance(decided, dict):

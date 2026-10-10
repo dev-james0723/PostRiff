@@ -124,6 +124,18 @@ class PresentationIsNotBusinessState(unittest.TestCase):
 
 
 class LegacyAndKillSwitch(unittest.TestCase):
+    def test_founder_handoff_uses_founder_flag_and_never_infers_privilege_from_result(self):
+        env = {"RAFII_GENUI_ENABLED": "1", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_WORKSPACES": UUID}
+        result = {"composedBy": "manager", "usage": {"billing": "metered"}, "founder": {"mode": "live"},
+                  "toolActivity": [{"tool": "founder_cost_breakdown", "status": "verified"}]}
+        cfg = config.RuntimeConfig.from_environment(env)
+        self.assertFalse(service.ui_handoff(cfg, UUID, result, "Show costs", "text", scope="founder")["eligible"])
+        cfg = config.RuntimeConfig.from_environment({**env, "RAFII_GENUI_FOUNDER_ENABLED": "1"})
+        self.assertFalse(service.ui_handoff(cfg, UUID, result, "Show costs", "text")["eligible"])
+        decided = service.ui_handoff(cfg, UUID, result, "Show costs", "text", scope="founder")
+        self.assertEqual((decided["eligible"], decided["journeyIds"]), (True, ["J09"]))
+        self.assertFalse(service.ui_handoff(cfg, "7d2f2f3e-1111-4222-8333-944455556666", result, "Show costs", "text", scope="founder")["eligible"])
+
     def test_legacy_answer_without_artifact_stays_native(self):
         cfg = config.RuntimeConfig.from_environment({})
         self.assertEqual(service.ui_handoff(cfg, UUID, {"answerText": "hi"}, "hi", "text")["eligible"], False)
