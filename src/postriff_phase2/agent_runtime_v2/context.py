@@ -212,6 +212,8 @@ class RafiiRunContext:
         record = {"tool": tool, "label": label, "effect": effect, "status": status, "latencyMs": round((time.monotonic() - started) * 1000, 1),
                   **({"specialist": self.specialist} if self.specialist else {}), **extra}
         self.ledger.tool_activity.append(record)
+        from .. import agent_observability
+        agent_observability.tool_activity(self, record)   # P0.7 telemetry: content-free line + metric; never raises
         return record
 
 
