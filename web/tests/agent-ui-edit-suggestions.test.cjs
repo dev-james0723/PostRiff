@@ -108,8 +108,16 @@ test('the current value is never offered (no no-op chips)', () => {
   assert.doesNotMatch(text, /by feature/, 'J09 dimension:"feature" never yields "feature"');
   assert.doesNotMatch(text, /this month so far/, 'J09 period:"mtd" never yields "mtd"');
   assert.doesNotMatch(text, /Compare views/, 'J06 metric:"views" never yields "views"');
-  assert.doesNotMatch(text, /last 30 days/, 'J06 already shows a 30-day window');
   assert.doesNotMatch(text, /2026-10-05 to 2026-10-11/, 'J02 never offers its own week');
+  // "Last 7/30 days" is hidden only when the view already shows exactly that window; an older window of that length gets it.
+  const posts = (start, end) => `root = RafiiRoot([t])\nposts = Query("analytics_posts", {start: "${start}", end: "${end}"}, null)\nt = MetricTable(posts, ["views"])`;
+  const periods = (source) => suggest.suggestEdits({ source, queries: manifest('J06'), journeyIds: [], selection: null, language: 'en', timeZone: HK, now: NOW })
+    .filter((c) => c.rule === 'period').map((c) => c.instruction);
+  assert.deepEqual(periods(posts('2026-10-03', '2026-10-09')), ['Change the period to the week before (2026-09-26 to 2026-10-02)',
+    'Change the period to the last 30 days (2026-09-10 to 2026-10-09)'], 'the current 7 days: no "Last 7 days"');
+  assert.deepEqual(periods(posts('2026-09-01', '2026-09-07')), ['Change the period to the last 7 days (2026-10-03 to 2026-10-09)',
+    'Change the period to the week before (2026-08-25 to 2026-08-31)'], 'an older week can be brought up to date');
+  assert.ok(!periods(posts('2026-09-10', '2026-10-09')).some((i) => /last 30 days/.test(i)), 'the current 30 days: no "Last 30 days"');
   // A view that already compares the picked pages gets no comparison chip.
   const compared = `${read('J07-research-brief.openui')}\nmatrix = ComparisonMatrix(results, $selectedPages)`;
   assert.ok(!chipsFor('J07', { source: compared, selection: selection('web_page', 2) }).some((c) => c.rule === 'selection'));
@@ -197,6 +205,30 @@ test('dates: "last 7 days" is today−6..today in the person’s zone; the Query
   assert.ok(!suggest.suggestEdits({ source: bound, queries: manifest('J06'), journeyIds: [], selection: null, language: 'en', timeZone: HK, now: NOW }).some((c) => c.rule === 'period'));
 });
 
+test('a one-day window shifts by one day ("Next day" / "Previous day", never "Next 1 days"), in all three languages', () => {
+  const oneDay = read('J02-calendar-week.openui').replace('start: "2026-10-05", end: "2026-10-11"', 'start: "2026-10-10", end: "2026-10-10"');
+  const next = (language) => chipsFor('J02', { source: oneDay, language }).find((c) => c.id === 'period:next');
+  assert.deepEqual([next('en').label, next('en').instruction], ['Next day', 'Change the period to the next day (2026-10-11)']);
+  assert.deepEqual([next('zh-Hant').label, next('zh-Hant').instruction], ['下一日', '把時段改為下一日（2026-10-11）']);
+  assert.deepEqual([next('zh-Hans').label, next('zh-Hans').instruction], ['下一天', '把时段改为下一天（2026-10-11）']);
+  const day = 'root = RafiiRoot([t])\nposts = Query("analytics_posts", {start: "2026-10-08", end: "2026-10-08"}, null)\nt = MetricTable(posts, ["views"])';
+  const before = (language) => suggest.suggestEdits({ source: day, queries: manifest('J06'), journeyIds: [], selection: null, language, timeZone: HK, now: NOW })
+    .find((c) => c.id === 'period:previous');
+  assert.deepEqual([before('en').label, before('en').instruction], ['Previous day', 'Change the period to the day before (2026-10-07)']);
+  assert.deepEqual([before('zh-Hant').label, before('zh-Hant').instruction], ['前一日', '把時段改為前一日（2026-10-07）']);
+  assert.deepEqual([before('zh-Hans').label, before('zh-Hans').instruction], ['前一天', '把时段改为前一天（2026-10-07）']);
+  for (const language of ['en', 'zh-Hant', 'zh-Hans']) {
+    const text = [...chipsFor('J02', { source: oneDay, language }), before(language)].map((c) => `${c.label} ${c.instruction}`).join('\n');
+    assert.doesNotMatch(text, /\b1 days\b| 1 日| 1 天/, language);
+  }
+  // Week spans read as weeks (Hong Kong wording: 下星期 / 上星期).
+  assert.equal(chipsFor('J02', { language: 'zh-Hant' })[0].label, '下星期');
+  assert.equal(chipsFor('J02', { language: 'zh-Hant' })[0].instruction, '把時段改為下星期（2026-10-12 至 2026-10-18）');
+  assert.equal(copy.DATE_PERIOD_CHIPS.previousWeek.label[1], '上星期');
+  assert.deepEqual(labels(chipsFor('J09', { language: 'zh-Hant' })).slice(1, 2), ['只看嚴重項目']);
+  assert.deepEqual(labels(chipsFor('J09', { language: 'zh-Hans' })).slice(1, 2), ['只看严重项目']);
+});
+
 test('selection: 0 or 1 picked drafts → no comparison; 2 → "Compare only the 2 selected drafts"; the count is the live selection’s', () => {
   assert.ok(!chipsFor('J01').some((c) => c.rule === 'selection'));
   const one = chipsFor('J01', { selection: selection('draft', 1) });
@@ -258,7 +290,8 @@ test('languages: English, Traditional Chinese (Hong Kong wording) and Simplified
   const cn = locale.createGenUiLocale({ locale: 'zh-CN' });
   assert.deepEqual([en.t('changeView'), en.t('whatShouldChange'), en.t('updateView')], ['Change this view', 'What should change?', 'Update view']);
   for (const key of ['changeView', 'whatShouldChange', 'editPlaceholder', 'editBilling', 'updateView', 'suggestions', 'restoreText', 'chipAdded', 'selectionChanged',
-    'suggestionStale', 'newerVersion', 'keptEarlier', 'editConflict', 'editBusy', 'editUnavailable', 'editFailed', 'editNotActor', 'editBudget', 'editBudgetUnknown', 'editPaused']) {
+    'suggestionStale', 'newerVersion', 'keptEarlier', 'editConflict', 'editBusy', 'editUnavailable', 'editFailed', 'editNotActor', 'editForbidden', 'editBudget', 'editBudgetUnknown',
+    'editPaused']) {
     assert.ok(en.t(key) && hk.t(key) && cn.t(key), key);
     assert.notEqual(hk.t(key), en.t(key), `${key} has zh-Hant`);
     assert.notEqual(cn.t(key), en.t(key), `${key} has zh-Hans`);

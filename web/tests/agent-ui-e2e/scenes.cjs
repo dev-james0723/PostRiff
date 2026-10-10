@@ -195,8 +195,12 @@ scene('typing-during-patch', async (t) => {
   const field = page.locator('#rafii-panel').getByLabel('What should change?').last();
   // Suggestions (surfaces/edit-suggestions.ts): a tap only fills the field and sends nothing; "Update view" stays the billed step.
   const chip = page.locator('#rafii-panel [data-rafii-edit-suggestions] button').first();
-  let chipNote = 'no suggestion for the fixture view';
-  if (await chip.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
+  let chipNote = 'FAILED: no suggestion for the fixture view';
+  // The fixture view is J05's campaign plan, which always qualifies (campaign timeline, campaign item kinds): no chip is a
+  // failure of this scene, never a silent pass.
+  const chipShown = await chip.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+  t.assert(chipShown, 'the J05 fixture view offers edit suggestions');
+  if (chipShown) {
     const chipAt = Date.now();
     await chip.click();
     await page.waitForTimeout(300);

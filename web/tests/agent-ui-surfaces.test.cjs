@@ -14,7 +14,10 @@ const vm = require('node:vm');
 const ts = require('typescript');
 
 const WEB = path.join(__dirname, '..');
+const { createHarness } = require('./agent-ui-client-harness.cjs');
 const cache = new Map();
+/** The props F last handed C's (stubbed) renderer: lets a test play C's side, e.g. report an older revision. */
+const rendererSeen = { props: null };
 function resolveFile(request, from) {
   const base = request.startsWith('@/') ? path.join(WEB, 'src', request.slice(2)) : path.resolve(path.dirname(from), request);
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')]) if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
@@ -23,6 +26,7 @@ function resolveFile(request, from) {
 const STUBS = {
   // C's renderer is lazy (next/dynamic): stand in for it and expose the props F hands it, so F's wiring is checked in isolation.
   'next/dynamic': () => function StubRenderer(props) {
+    rendererSeen.props = props;
     const React = require(require.resolve('react', { paths: [WEB] }));
     return React.createElement('div', { 'data-stub-renderer': '', 'data-mode': props.render?.mode, 'data-status': props.status ?? '', 'data-active': String(props.active),
       'data-retry': props.onRetry ? '1' : '0', 'data-expand': props.onExpand ? '1' : '0', 'data-historical': String(props.historical), 'data-surface': props.surface,
@@ -182,28 +186,6 @@ test('a panel turn sent before the runtime status loaded waits for it instead of
   assert.ok(/markFresh\(uiScope, response\.runId\)/.test(send), 'an eligible answer from this tab is marked fresh');
 });
 
-test('"Change this view" opens a focused field (fine pointers; a phone keeps the suggestions visible) and sends the live selection as is', () => {
-  const source = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/surfaces/artifact.tsx'), 'utf8');
-  const edit = source.slice(source.indexOf('export function EditView('));
-  assert.match(edit, /useEffect\(\(\) => \{\s*if \(!coarsePointer\(\)\) input\.current\?\.focus\(\);\s*\}, \[\]\)/);
-  assert.match(source, /matchMedia\('\(pointer: coarse\)'\)/);
-  assert.match(edit, /<input ref=\{input\}/);
-  assert.doesNotMatch(edit, /\? \{ selection \} :/, 'the selection is not wrapped in another object');
-  // The request carries the selection this tab holds now (controller-local @selection), read at submit, not the snapshot's.
-  assert.match(edit, /const current = selectionNow\(\);[\s\S]*session\.edit\(instruction, current\)/);
-  assert.match(edit, /liveSelection\(controller\?\.selection\(\), session\.getState\(\)\.view\?\.artifact\.safeState\)/);
-  assert.doesNotMatch(edit, /safeState\?\.\['@selection'\]/, 'never the stale snapshot selection directly');
-  // Escape closes the field from any of its controls (a focused chip too), and stops there.
-  assert.match(edit, /const closeOnEscape = [\s\S]*?event\.key !== 'Escape'[\s\S]*?event\.stopPropagation\(\);\s*onDone\(\);/);
-  assert.match(edit, /const onInputKeyDown = [\s\S]*?closeOnEscape\(event\);/);
-  assert.match(edit, /onEscape=\{closeOnEscape\}/, 'chips');
-  assert.equal((edit.match(/onKeyDown=\{closeOnEscape\}/g) ?? []).length, 3, 'Restore, Update view and Cancel');
-  // A chip tap only fills the field: no edit, no fetch, focus stays on the chip.
-  const pick = edit.slice(edit.indexOf('const pick = '), edit.indexOf('const submit = '));
-  assert.ok(pick.includes("dispatch({ type: 'pick'"));
-  assert.doesNotMatch(pick, /session\.|fetch|submit\(|\.focus\(/);
-});
-
 const editForm = load('src/features/agent/generative-ui/surfaces/edit-form.ts');
 const frame = load('src/features/agent/generative-ui/surfaces/frame.tsx');
 const genLocale = load('src/features/agent/generative-ui/core/locale.tsx');
@@ -220,6 +202,17 @@ function j01View(id, over = {}) {
       queries: dCatalog.journeys.J01.queries.map((q) => ({ name: q.name, description: `PRIVATE ${q.name}`, argsSchema: q.argsSchema, refreshMinSeconds: null, pageSize: null })) },
     ...over }, { artifactId: id, canonicalSource: J01_SOURCE });
 }
+const noTimers = { setTimeout: () => null, clearTimeout() {} };
+/** A session the client harness renders (its own timers: nothing lingers after the test). */
+function harnessSession(scope, id, handler, viewOf = j01View) {
+  registry.enterUiScope(scope);
+  sessions.setActiveSessionScope(scope);
+  const t = transport(scope, handler ?? (() => json(viewOf(id))));
+  const session = new sessions.ArtifactSession({ transport: t, artifactId: id, conversationId: 'c1', timers: noTimers });
+  session.adopt(viewOf(id));
+  return { t, session };
+}
+const drafts = (n) => Array.from({ length: n }, (_, i) => ({ type: 'draft', id: `d${i + 1}`, title: `Private draft ${i + 1}` }));
 
 test('"Change this view" is for the person who asked only (the server refuses anyone else), and never while an older revision is shown', () => {
   registry.enterUiScope('workspace:u5:w1');
@@ -239,16 +232,62 @@ test('"Change this view" is for the person who asked only (the server refuses an
   assert.deepEqual(editForm.editAccess({ ...base, accepted: false, older: null }), { canEdit: false, note: null });
   assert.deepEqual(editForm.editAccess({ ...base, older: 'choosing' }), { canEdit: false, note: 'newerVersion' }, 'the dirty-field warning is up');
   assert.deepEqual(editForm.editAccess({ ...base, older: 'kept' }), { canEdit: false, note: 'keptEarlier' }, '"Keep the earlier view" was chosen');
-  // C reports the older revision to F (no other renderer change) and F gates on it.
-  const renderer = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/renderer.tsx'), 'utf8');
-  assert.match(renderer, /const older: 'choosing' \| 'kept' \| null = conflict\s*\? 'choosing'\s*: kept !== null && shown && incoming && incoming\.revision > shown\.revision/);
-  assert.match(renderer, /onOlderRef\.current\?\.\(older\)/);
-  const adapter = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/surfaces/renderer-adapter.tsx'), 'utf8');
-  assert.match(adapter, /onOlderRevision=\{onOlderRevision\}/);
-  const host = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/surfaces/artifact.tsx'), 'utf8');
-  assert.match(host, /editAccess\(\{ access, accepted, live, older \}\)/);
-  assert.match(host, /onOlderRevision=\{setOlder\}/);
-  assert.match(host, /<EditView session=\{session\} view=\{view\} blocked=\{editNote\}/);
+
+  // Rendered: C reports the older revision through the adapter (F's reporter reaches the renderer) and F gates on it.
+  const { session } = harnessSession('workspace:u5h:w1', '2d1f2f3e-1111-4222-8333-944455556666');
+  const h = createHarness(React);
+  try {
+    h.render(React.createElement(artifactView.GeneratedArtifact, { session, surface: 'panel', runId: RUN }));
+    assert.ok(h.button('Change this view'));
+    assert.equal(typeof rendererSeen.props.onOlderRevision, 'function', 'F hands C a reporter for the revision on screen');
+    h.act(() => rendererSeen.props.onOlderRevision('choosing'));
+    assert.equal(h.button('Change this view'), null, 'the dirty-field warning is up: no edit of a view that is not the latest');
+    assert.match(h.container.textContent, /A newer version is ready\. Use the updated view to change it\./);
+    h.act(() => rendererSeen.props.onOlderRevision('kept'));
+    assert.equal(h.button('Change this view'), null);
+    assert.match(h.container.textContent, /You kept the earlier view/);
+    h.act(() => rendererSeen.props.onOlderRevision(null));
+    assert.ok(h.button('Change this view'), 'back on the latest revision: changing is on again');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('C’s renderer reports the revision on screen: "choosing" while the dirty-field warning asks, "kept" after "Keep the earlier view"', () => {
+  const { createLoader } = require('./agent-ui-library-loader.cjs');
+  const c = createLoader();
+  const { RafiiGenerativeMessage, supportedLibraryHashes } = c.load('src/features/agent/generative-ui/renderer.tsx');
+  const { UiArtifactStateContext } = c.load('src/features/agent/generative-ui/state/context.ts');
+  const reported = [];
+  const bridge = { artifactId: ART, revision: 1, stateRevision: 0, initialState: {}, onStateUpdate() {}, recordSelection() {}, dirtyFields: () => ['note'],
+    declared: { stateNames: [], formNames: [] }, canPersist: true };
+  const artifactAt = (revision) => ({ ...view().artifact, revision, libraryHash: supportedLibraryHashes('consumer')[0], canonicalSource: 'root = RafiiRoot([])' });
+  const cTransport = { base: '/api/workspaces/w1/agent/ui', scope: 'workspace', scopeKey: 'workspace:c1:w1', fetch: async () => { throw new Error('no network'); } };
+  const tree = (revision) => React.createElement(UiArtifactStateContext.Provider, { value: bridge },
+    React.createElement(RafiiGenerativeMessage, { artifact: artifactAt(revision), manifest: null, surface: 'panel', transport: cTransport, onContinue() {},
+      onOlderRevision: (state) => reported.push(state) }));
+  // Only C's own component runs (its hooks and effects); OpenUI's Renderer and the providers stay elements to inspect.
+  const h = createHarness(React, { shallow: (type) => type === RafiiGenerativeMessage || type.name === 'GenerativeMessage' });
+  try {
+    h.render(tree(1));
+    assert.deepEqual(reported, [null], 'the latest revision is on screen');
+    const renderer = h.findElement((el) => typeof el.props?.onParseResult === 'function');
+    assert.ok(renderer, 'revision 1 is handed to OpenUI’s Renderer');
+    // The person typed into a field of revision 1 (OpenUI reports the parsed tree and the state)...
+    renderer.props.onParseResult({ root: { type: 'element', typeName: 'TextField', props: { name: 'note', label: 'Note' } } });
+    renderer.props.onStateUpdate({ note: 'typed words' });
+    // ...then revision 2 arrives without that field: the native warning asks first, and F is told the latest isn't shown.
+    h.render(tree(2));
+    assert.ok(h.findElement((el) => el.props?.['data-rafii-dirty-conflict'] === ''), 'the dirty-field warning is up');
+    assert.deepEqual(reported, [null, 'choosing']);
+    const keep = h.findElement((el) => typeof el.props?.onClick === 'function' && el.props.children === 'Keep the earlier view');
+    assert.ok(keep);
+    h.act(() => keep.props.onClick());
+    assert.equal(h.findElement((el) => el.props?.['data-rafii-dirty-conflict'] === ''), null);
+    assert.deepEqual(reported, [null, 'choosing', 'kept'], 'the earlier revision stays on screen by choice');
+  } finally {
+    h.cleanup();
+  }
 });
 
 test('the edit field: localized chrome, live-selection chips in a labelled group of type="button" chips; rendering sends nothing', async () => {
@@ -349,6 +388,173 @@ test('a chip is a type="button" QuietButton that only calls onPick (no request);
   assert.equal(editFieldReducer(field, { type: 'type', text: 'Show only videos!' }).filled, null, 'typing clears aria-pressed');
   assert.deepEqual(editFieldReducer(field, { type: 'unfill' }), { text: '', filled: null, saved: 'my own words' });
   assert.equal(canRestore(editFieldReducer(EMPTY_FIELD, { type: 'pick', suggestion: chip })), false, 'nothing of theirs to restore');
+  // The same chip with new words (the selection went from 2 to 3) is another suggestion: a tap replaces the words, never clears.
+  const two = { id: 'selection:draft:compare', rule: 'selection', instruction: 'Compare only the 2 selected drafts' };
+  const three = { ...two, instruction: 'Compare only the 3 selected drafts' };
+  const picked = editFieldReducer(editFieldReducer(EMPTY_FIELD, { type: 'pick', suggestion: two }), { type: 'pick', suggestion: three });
+  assert.deepEqual(picked, { text: three.instruction, filled: three, saved: null });
+  assert.deepEqual(editFieldReducer(picked, { type: 'pick', suggestion: { ...three } }), { text: '', filled: null, saved: null }, 'the same words again: cleared');
+  assert.equal(editForm.sameSuggestion(two, three), false);
+  assert.equal(editForm.sameSuggestion(three, { ...three }), true);
+  assert.equal(editForm.sameSuggestion(null, three), false);
+});
+
+test('opening "Change this view" moves focus into the field: the text field on a fine pointer, the form on a coarse one, never <body>', async () => {
+  assert.ok(await artifactView.preloadEditSuggestions());
+  for (const coarse of [false, true]) {
+    const { session } = harnessSession(`workspace:u9${coarse ? 'c' : 'f'}:w1`, `5c1f2f3e-1111-4222-8333-94445555666${coarse ? 'c' : 'f'}`);
+    const matchMedia = (query) => ({ matches: coarse && query === '(pointer: coarse)', media: query });
+    const h = createHarness(React, { window: { matchMedia } });
+    try {
+      h.render(React.createElement(artifactView.GeneratedArtifact, { session, surface: 'panel', runId: RUN }));
+      const open = h.button('Change this view');
+      assert.ok(open, 'the person who asked sees "Change this view"');
+      h.click(open);
+      assert.equal(h.button('Change this view'), null, 'the button that opened the field is gone');
+      const form = h.find('form');
+      const input = h.find('input');
+      assert.ok(form && input, 'the field is open');
+      const active = h.document.activeElement;
+      assert.notEqual(active, h.document.body, 'focus never drops to <body>');
+      assert.ok(form.contains(active), 'focus is inside the field');
+      if (coarse) {
+        assert.equal(active, form, 'a coarse pointer focuses the form itself: no soft keyboard over the suggestions');
+        assert.deepEqual(form.focusOptions, { preventScroll: true });
+        assert.equal(form.getAttribute('tabindex'), '-1', 'focusable by script only (never a Tab stop)');
+        assert.equal(form.getAttribute('aria-label'), 'Change this view', 'a screen reader lands on a named form');
+      } else {
+        assert.equal(active, input, 'a fine pointer focuses the text field: typing goes straight into the request');
+      }
+      assert.ok(h.find('[data-rafii-edit-suggestions]'), 'the suggestions are there');
+    } finally {
+      h.cleanup();
+    }
+  }
+});
+
+test('closing the field puts focus back on "Change this view", or on the view itself when changing is off now; focus moved elsewhere stays', async () => {
+  assert.ok(await artifactView.preloadEditSuggestions());
+  const { session } = harnessSession('workspace:u10:w1', '6d1f2f3e-1111-4222-8333-944455556666');
+  const h = createHarness(React);
+  try {
+    h.render(React.createElement('div', null, React.createElement('button', { type: 'button' }, 'Composer'),
+      React.createElement(artifactView.GeneratedArtifact, { session, surface: 'panel', runId: RUN })));
+    h.click(h.button('Change this view'));
+    const input = h.find('input');
+    assert.equal(h.document.activeElement, input);
+    const escape = h.keyDown(input, 'Escape');
+    assert.equal(escape.propagationStopped, true, 'Escape stops at the field (the panel stays open)');
+    assert.equal(h.find('form'), null, 'Escape closed the field');
+    assert.equal(h.document.activeElement, h.button('Change this view'), 'focus is back on "Change this view"');
+
+    h.click(h.button('Change this view'));
+    h.click(h.button('Cancel'));
+    assert.equal(h.find('form'), null);
+    assert.equal(h.document.activeElement, h.button('Change this view'), 'Cancel returns focus the same way');
+
+    // Changing turns off while the field is open (C's dirty-field warning): the field says so; closing it lands on the view.
+    h.click(h.button('Change this view'));
+    h.act(() => rendererSeen.props.onOlderRevision('choosing'));
+    assert.match(h.find('form').textContent, /A newer version is ready/);
+    assert.equal(h.find('[data-rafii-edit-suggestions]'), null, 'no suggestions for a view that is not the latest');
+    h.click(h.button('Cancel'));
+    assert.equal(h.button('Change this view'), null);
+    const host = h.find('[data-rafii-generated-host]');
+    assert.equal(h.document.activeElement, host, 'focus goes to the generated view, never <body>');
+    assert.deepEqual(host.focusOptions, { preventScroll: true });
+    assert.equal(host.getAttribute('tabindex'), '-1');
+
+    // Focus the person already moved elsewhere is never taken back.
+    h.act(() => rendererSeen.props.onOlderRevision(null));
+    h.click(h.button('Change this view'));
+    const composer = h.button('Composer');
+    composer.focus();
+    h.keyDown(h.find('input'), 'Escape');
+    assert.equal(h.find('form'), null);
+    assert.equal(h.document.activeElement, composer);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('Escape closes the field from the field, a chip, Restore, Update view and Cancel, and stops there; during an IME composition it does neither', async () => {
+  assert.ok(await artifactView.preloadEditSuggestions());
+  const { session, t } = harnessSession('workspace:u11:w1', '7e1f2f3e-1111-4222-8333-944455556666');
+  let done = 0;
+  const h = createHarness(React);
+  try {
+    h.render(React.createElement(artifactView.EditView, { session, view: session.getState().view, blocked: null, onDone: () => { done += 1; } }));
+    h.type(h.find('input'), 'my own words');
+    h.click(h.button('Needs review'));
+    assert.equal(h.find('input').value, 'Show only drafts that need review');
+    assert.ok(h.button('Restore my text'), 'the person’s words can come back');
+    for (const control of [h.find('input'), h.button('Needs review'), h.button('Restore my text'), h.button('Update view'), h.button('Cancel')]) {
+      assert.ok(control);
+      const before = done;
+      const event = h.keyDown(control, 'Escape');
+      assert.equal(done, before + 1, `Escape on ${control.textContent || 'the text field'} closes the field`);
+      assert.equal(event.propagationStopped, true, 'and stops there (the panel stays open)');
+    }
+    // A key that belongs to a composition (Chinese or Cantonese input): Escape cancels the composition, Enter commits it.
+    const field = h.find('input');
+    const before = done;
+    h.compositionStart(field);
+    const escape = h.keyDown(field, 'Escape', { isComposing: true, keyCode: 229 });
+    assert.equal(done, before, 'Escape during a composition never closes the field');
+    assert.equal(escape.propagationStopped, true, 'nor anything around it');
+    const enter = h.keyDown(field, 'Enter', { isComposing: true, keyCode: 229 });
+    assert.equal(enter.defaultPrevented, true, 'Enter during a composition never submits');
+    h.compositionEnd(field);
+    await new Promise((resolve) => setTimeout(resolve, 5));   // the guard counts as composing until one task after compositionend
+    h.keyDown(field, 'Escape');
+    assert.equal(done, before + 1, 'after the composition, Escape closes the field again');
+    assert.equal(t.calls.length, 0, 'none of this sent anything');
+  } finally {
+    h.cleanup();
+  }
+});
+
+test('a filled suggestion that no longer fits at "Update view" empties the field, says why and sends nothing; the re-counted chip sends the live selection', async () => {
+  assert.ok(await artifactView.preloadEditSuggestions());
+  const id = '8f1f2f3e-1111-4222-8333-944455556666';
+  const { session, t } = harnessSession('workspace:u12:w1', id, (p, init) => (init.method === 'POST' ? json({ view: j01View(id) }) : json(j01View(id))));
+  const controller = session.stateController();
+  controller.recordSelection('$selectedDrafts', drafts(2), drafts(4));
+  let done = 0;
+  const h = createHarness(React);
+  try {
+    h.render(React.createElement(artifactView.EditView, { session, view: session.getState().view, blocked: null, onDone: () => { done += 1; } }));
+    h.click(h.button('Compare the 2 selected'));
+    assert.equal(h.find('input').value, 'Compare only the 2 selected drafts');
+    assert.equal(h.button('Compare the 2 selected').getAttribute('aria-pressed'), 'true');
+    assert.equal(h.document.activeElement, h.button('Compare the 2 selected'), 'focus stays on the chip (a second Enter never submits)');
+    // The person picks a third draft in the view: the chip now counts 3 (other words: not pressed); the field still says 2.
+    h.act(() => controller.recordSelection('$selectedDrafts', drafts(3), drafts(4)));
+    assert.equal(h.button('Compare the 3 selected').getAttribute('aria-pressed'), 'false', 'pressed only while the chip shows the words in the field');
+    assert.equal(h.find('input').value, 'Compare only the 2 selected drafts');
+    h.click(h.button('Update view'));
+    await flush();
+    assert.equal(h.find('input').value, '', 'the words that no longer fit are taken out of the field');
+    assert.equal(h.find('[role="alert"]').textContent, 'Your selection changed. Pick a suggestion again.');
+    assert.equal(t.calls.filter((c) => c.method === 'POST').length, 0, 'nothing was sent, nothing is charged');
+    assert.equal(done, 0, 'the field stays open');
+    // A tap on the re-counted chip fills its words (same chip id, new words: replaced, not cleared)...
+    h.click(h.button('Compare the 3 selected'));
+    assert.equal(h.find('input').value, 'Compare only the 3 selected drafts');
+    assert.equal(h.button('Compare the 3 selected').getAttribute('aria-pressed'), 'true');
+    assert.equal(h.find('[role="alert"]'), null);
+    // ...and "Update view" sends exactly them, with the selection the person sees now (this tab's, not the saved snapshot's).
+    h.click(h.button('Update view'));
+    await flush();
+    const posts = t.calls.filter((c) => c.method === 'POST');
+    assert.equal(posts.length, 1);
+    assert.ok(posts[0].p.endsWith(`/presentations/${id}/edits`));
+    assert.equal(posts[0].body.instruction, 'Compare only the 3 selected drafts');
+    assert.deepEqual(posts[0].body.selection.items.map((i) => i.id), ['d1', 'd2', 'd3']);
+    assert.equal(done, 1, 'a sent change closes the field');
+  } finally {
+    h.cleanup();
+  }
 });
 
 test('the live selection wins over the snapshot; the edit body keys stay exactly as validate_patch accepts', async () => {
@@ -388,13 +594,16 @@ test('the live selection wins over the snapshot; the edit body keys stay exactly
   assert.deepEqual(Object.keys(t.calls.filter((c) => c.method === 'POST')[1].body).sort(), ['baseRevision', 'baseSourceHash', 'idempotencyKey', 'instruction']);
 });
 
-test('refusals read honestly: budget, paused AI, not the asker, busy, conflict — never the generic message for those', () => {
+test('HTTP refusals of the edit request read honestly (defensive: budget and paused AI normally arrive on the stream); 403 names no role it doesn’t know', async () => {
   const of = editForm.editProblemOf;
   assert.equal(of({ code: 'ui_budget', status: 402 }), 'editBudget');
   assert.equal(of({ code: 'ui_budget_unknown', status: 402 }), 'editBudgetUnknown');
   assert.equal(of({ code: null, status: 402 }), 'editBudget');
   assert.equal(of({ code: 'ui_ai_paused', status: 503 }), 'editPaused');
-  assert.equal(of({ code: 'ui_forbidden', status: 403 }), 'editNotActor');
+  assert.equal(of({ code: 'ui_forbidden', status: 403 }, { isActor: false }), 'editNotActor', 'the client knows this person did not ask');
+  assert.equal(of({ code: 'ui_forbidden', status: 403 }, { isActor: true }), 'editForbidden', 'the asker refused (e.g. no edit permission): role-neutral');
+  assert.equal(of({ code: 'ui_forbidden', status: 403 }), 'editForbidden');
+  assert.equal(of({ code: null, status: 403 }, null), 'editForbidden');
   assert.equal(of({ code: 'ui_busy', status: 409 }), 'editBusy');
   assert.equal(of({ code: 'ui_revision_conflict', status: 409 }), 'editConflict');
   assert.equal(of({ code: null, status: 404 }), 'editUnavailable');
@@ -410,8 +619,76 @@ test('refusals read honestly: budget, paused AI, not the asker, busy, conflict �
   }
   assert.equal(en.t('editConflict'), 'This view changed since you looked at it. The latest version is shown; ask again.', 'existing English kept');
   assert.equal(en.t('editFailed'), 'That change couldn’t be started. The current view is kept.');
-  const host = fs.readFileSync(path.join(WEB, 'src/features/agent/generative-ui/surfaces/artifact.tsx'), 'utf8');
-  assert.match(host, /setProblem\(editProblemOf\(result\)\)/);
+  assert.doesNotMatch(en.t('editForbidden'), /person who asked/);
+  assert.match(hk.t('editForbidden'), /權限/);
+
+  // Rendered: the field shows the refusal it got (the asker without edit permission reads the role-neutral line).
+  for (const [status, code, text] of [[402, 'ui_budget', en.t('editBudget')], [403, 'ui_forbidden', en.t('editForbidden')]]) {
+    const id = `9a1f2f3e-1111-4222-8333-944455556${status}`;
+    const { session, t } = harnessSession(`workspace:u13-${status}:w1`, id, (p, init) => (init.method === 'POST' ? json({ code }, status) : json(j01View(id))));
+    const h = createHarness(React);
+    try {
+      h.render(React.createElement(artifactView.EditView, { session, view: session.getState().view, blocked: null, onDone() {} }));
+      h.type(h.find('input'), 'add a chart');
+      h.click(h.button('Update view'));
+      await flush();
+      assert.equal(t.calls.filter((c) => c.method === 'POST').length, 1);
+      assert.equal(h.find('[role="alert"]').textContent, text, `${status} ${code}`);
+    } finally {
+      h.cleanup();
+    }
+  }
+});
+
+test('an edit refused after admission (HTTP 200, the stream’s ui.failed: budget, paused AI, no verified price) says why in the status line, once', async () => {
+  const en = genLocale.createGenUiLocale({ locale: 'en' });
+  for (const [reason, key] of [['budget', 'editBudget'], ['disabled', 'editPaused'], ['price_unknown', 'editPaused']]) {
+    const scope = `workspace:u14-${reason}:w1`;
+    registry.enterUiScope(scope);
+    sessions.setActiveSessionScope(scope);
+    const id = `ab1f2f3e-1111-4222-8333-${reason === 'budget' ? 'b' : reason === 'disabled' ? 'd' : 'e'}44455556666`;
+    const EDIT_ATT = 'cd2a3b4c-2222-4333-8444-a55566667777';
+    const base = () => view({ access: access({ canPersistState: false }) }, { artifactId: id });
+    const refused = () => view({ access: access({ canPersistState: false }), lastSeq: 3,
+      attempt: { attemptId: EDIT_ATT, kind: 'edit', state: 'failed', reason, targetRevision: 2, baseRevision: 1, retryOf: null, live: false } }, { artifactId: id });
+    let sent = false;
+    const t = transport(scope, (p, init) => {
+      if (init.method === 'POST' && p.endsWith('/edits')) {
+        sent = true;
+        // The reservation was refused before any model call: the stream carries only the terminal event.
+        const failed = { contractVersion: 'rafii-genui/1', artifactId: id, attemptId: EDIT_ATT, revision: 1, seq: 3, kind: 'ui.failed', at: 'x',
+          payload: { reason, fallback: 'native', attempt: EDIT_ATT } };
+        return new Response(frameOf(failed), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      }
+      return json(sent ? refused() : base());
+    });
+    const session = sessions.sessionFor(t, id, 'c1');
+    session.adopt(base());
+    const result = await session.edit('add a chart', null);
+    await flush();
+    assert.deepEqual(result, { ok: true }, `${reason}: the request itself was accepted (HTTP 200)`);
+    assert.ok(t.calls.some((c) => c.method === 'GET'), `${reason}: the snapshot was read after the terminal event`);
+    const state = session.getState();
+    assert.equal(state.view.attempt.state, 'failed');
+    assert.deepEqual(state.notice, { kind: 'failed', reason }, `${reason}: the snapshot confirmed the failure, so the notice stays`);
+    assert.equal(editForm.editRefusalOf(state), key, reason);
+    const html = renderToStaticMarkup(React.createElement(artifactView.GeneratedArtifact, { session, surface: 'panel', runId: RUN }));
+    assert.ok(html.includes(`data-status="${en.t(key)}"`), `${reason}: ${html.slice(0, 400)}`);
+    assert.doesNotMatch(html, /That change couldn’t be made/, 'never the generic line for a refusal');
+    assert.match(html, /Change this view/, 'the person can ask again later');
+    // A reload reads the same snapshot without the event: an old refusal is not reported again.
+    const reloaded = new sessions.ArtifactSession({ transport: t, artifactId: id, conversationId: 'c1', timers: noTimers });
+    reloaded.adopt(refused());
+    assert.equal(reloaded.getState().notice, null);
+    assert.equal(editForm.editRefusalOf(reloaded.getState()), null);
+  }
+  // Other failures keep their own line; a first view that fails keeps its native fallback copy.
+  const accepted = { view: view(), notice: { kind: 'failed', reason: 'provider_error' } };
+  assert.equal(editForm.editRefusalOf(accepted), null);
+  assert.equal(editForm.editRefusalOf({ ...accepted, notice: { kind: 'canceled', reason: 'budget' } }), null);
+  const first = { view: view({ display: { mode: 'fallback', reason: 'budget', updating: false } }, { revision: 0 }), notice: { kind: 'failed', reason: 'budget' } };
+  assert.equal(editForm.editRefusalOf(first), null);
+  assert.equal(editForm.editRefusalOf({ view: null, notice: { kind: 'failed', reason: 'budget' } }), null);
 });
 
 test('the outline and the panel Escape handling skip generated layers (same selectors everywhere)', () => {

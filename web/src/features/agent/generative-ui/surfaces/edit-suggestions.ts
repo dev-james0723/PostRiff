@@ -349,14 +349,14 @@ function periodCandidates(input: SuggestInput, view: ViewInfo): Candidate[] {
   const shift = (direction: 'next' | 'previous') => {
     if (span === null || start === null || end === null) return;
     const delta = direction === 'next' ? span : -span;
-    const week = span === 7;
-    const text = DATE_PERIOD_CHIPS[week ? (direction === 'next' ? 'nextWeek' : 'previousWeek') : direction];
+    const next = direction === 'next';
+    const text = DATE_PERIOD_CHIPS[span === 1 ? (next ? 'nextDay' : 'previousDay') : span === 7 ? (next ? 'nextWeek' : 'previousWeek') : direction];
     push(`period:${direction}`, text, { n: span, ...range(start + delta, end + delta) });
   };
   const last = (days: 7 | 30) => {
-    if (today === null || span === days) return;   // the same length is the same period, just read again
+    if (today === null) return;
     const from = today - (days - 1);
-    if (same(from, today)) return;
+    if (same(from, today)) return;   // the view already shows exactly this window; an older window of that length still gets it
     push(`period:last${days}`, DATE_PERIOD_CHIPS[days === 7 ? 'last7' : 'last30'], range(from, today));
   };
   if (PAST_DATE_BINDINGS.includes(dated.binding)) {

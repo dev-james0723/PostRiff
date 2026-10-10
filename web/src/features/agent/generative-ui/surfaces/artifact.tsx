@@ -20,7 +20,7 @@ import { useGenUiLocale, type GenUiMessageKey } from '../core/locale';
 import { renderOf, statusLine, type ArtifactViewState, type UiArtifactViewV1 } from '../state/artifact-machine';
 import { UiArtifactStateContext, type UiArtifactStateBridge } from '../state/context';
 import { noteUiInteraction } from '../state/registry';
-import { canRestore, editAccess, editFieldReducer, editProblemOf, EMPTY_FIELD, liveSelection, type OlderRevision } from './edit-form';
+import { canRestore, editAccess, editFieldReducer, editProblemOf, editRefusalOf, EMPTY_FIELD, liveSelection, sameSuggestion, type OlderRevision } from './edit-form';
 import type { EditSuggestion } from './edit-suggestions';
 import { QuietButton } from './frame';
 import { canExpand } from './plan';
@@ -94,7 +94,10 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
 
   const view = state.view;
   const render = renderOf(state);
-  const status = statusLine(state);
+  const l = useGenUiLocale();
+  // An edit refused before any model call (no allowance left, paid AI paused) arrives as the stream's ui.failed: say why.
+  const refusal = editRefusalOf(state);
+  const status = refusal ? l.t(refusal) : statusLine(state);
   const revision = view?.artifact.revision ?? 0;
   const controller = session.stateController();
 
@@ -128,7 +131,6 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
   const reason = state.notice?.reason ?? attempt?.reason ?? null;
   const stopped = !live && attempt !== null && ['failed', 'canceled', 'interrupted'].includes(attempt.state);
   const canRetry = Boolean(runId && access?.canRetry && access.isActor && stopped && !accepted && (!reason || FAILURE_RETRYABLE.has(reason)));
-  const l = useGenUiLocale();
   // C reports when the revision on screen is older than the latest (the dirty-field warning): an edit would change the latest.
   const [older, setOlder] = useState<OlderRevision>(null);
   // Only the person who asked may change the view (the server refuses anyone else), never while it is being built or updated.
@@ -136,6 +138,21 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
   const [confirmRetry, setConfirmRetry] = useState(false);
   const [editing, setEditing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // Closing the edit field removes the control that had focus: put focus back on "Change this view", or on the view itself
+  // when changing is off now, unless the person already moved focus somewhere else.
+  const changeButton = useRef<HTMLButtonElement>(null);
+  const [returnFocus, setReturnFocus] = useState(false);
+  const closeEdit = useCallback(() => {
+    setEditing(false);
+    setReturnFocus(true);
+  }, []);
+  useEffect(() => {
+    if (!returnFocus || editing) return;
+    setReturnFocus(false);
+    if (typeof document !== 'undefined' && document.activeElement && document.activeElement !== document.body) return;
+    if (changeButton.current) changeButton.current.focus();
+    else ref.current?.focus({ preventScroll: true });
+  }, [returnFocus, editing, ref]);
 
   const retry = async () => {
     if (!runId) return;
@@ -145,7 +162,8 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
   };
 
   return (
-    <div ref={ref} data-rafii-generated-host='' data-surface={surface} data-generation-phase={generationStateOf(state) ?? undefined} className='flex min-w-0 flex-col gap-2'>
+    <div ref={ref} data-rafii-generated-host='' data-surface={surface} data-generation-phase={generationStateOf(state) ?? undefined} tabIndex={-1}
+      className='flex min-w-0 flex-col gap-2'>
       <UiArtifactStateContext.Provider value={bridge}>
         <GeneratedRenderer render={render} view={view} transport={session.transport} surface={surface} status={status} active={visible} onContinue={continueWith}
           onRetry={canRetry && !confirmRetry ? () => setConfirmRetry(true) : null} onExpand={onExpand && canExpand(surface) ? onExpand : null} onNavigate={onNavigate}
@@ -156,7 +174,7 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
       {(live && access?.isActor && view?.artifact.artifactId) || (canEdit && !editing) ? (
         <div className='flex flex-wrap items-center gap-2'>
           {live && access?.isActor && view?.artifact.artifactId ? <QuietButton onClick={() => void session.cancel()} disabled={session.busy('cancel')}>Stop building</QuietButton> : null}
-          {canEdit && !editing ? <QuietButton onClick={() => { void preloadEditSuggestions(); setEditing(true); }}>{l.t('changeView')}</QuietButton> : null}
+          {canEdit && !editing ? <QuietButton ref={changeButton} onClick={() => { void preloadEditSuggestions(); setEditing(true); }}>{l.t('changeView')}</QuietButton> : null}
         </div>
       ) : null}
       {editNote && !editing ? <p role='note' className='text-muted-foreground text-xs'>{l.t(editNote)}</p> : null}
@@ -169,7 +187,7 @@ export function GeneratedArtifact({ session, surface, runId, onContinue, onExpan
           </div>
         </div>
       )}
-      {editing && <EditView session={session} view={view} blocked={editNote} onDone={() => setEditing(false)} />}
+      {editing && <EditView session={session} view={view} blocked={editNote} onDone={closeEdit} />}
     </div>
   );
 }
@@ -246,7 +264,7 @@ export function SuggestionChips({ suggestions, pressed, caption, captionId, onPi
 const NONE: readonly EditSuggestion[] = [];
 const noSelection = () => () => undefined;
 
-/** A coarse pointer (phone/tablet): the soft keyboard would cover the suggestions, so the field is not focused on open. */
+/** A coarse pointer (phone/tablet): the soft keyboard would cover the suggestions, so the text field is not focused on open. */
 function coarsePointer(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 }
@@ -274,9 +292,13 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
   const inputId = useId();
   const captionId = useId();
   const input = useRef<HTMLInputElement>(null);
-  // The field takes focus when it opens (the button that opened it is gone), so typing goes straight into the request.
+  const form = useRef<HTMLFormElement>(null);
+  // Focus moves into the field when it opens (the button that opened it is gone, so it would drop to <body>): the text field
+  // on a fine pointer, so typing goes straight into the request; on a coarse pointer the form itself (no soft keyboard over
+  // the suggestions, and a screen reader lands on "Change this view" with the suggestions next).
   useEffect(() => {
-    if (!coarsePointer()) input.current?.focus();
+    if (coarsePointer()) form.current?.focus({ preventScroll: true });
+    else input.current?.focus();
   }, []);
 
   // The selection the person sees in this tab (saved or not). Chips count it and the request carries the same object.
@@ -303,7 +325,7 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
 
   const pick = (suggestion: EditSuggestion) => {
     setProblem(null);
-    const again = field.filled?.id === suggestion.id;
+    const again = sameSuggestion(field.filled, suggestion);
     dispatch({ type: 'pick', suggestion: { id: suggestion.id, rule: suggestion.rule, instruction: suggestion.instruction } });
     if (!again) announcer.announce(l.t('chipAdded'));   // focus stays on the chip: a second Enter never submits
   };
@@ -333,7 +355,7 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
       onDone();
       return;
     }
-    setProblem(editProblemOf(result));
+    setProblem(editProblemOf(result, session.getState().view?.access));
   };
   // Escape closes the field from any of its controls (the field, a chip, Restore, Update view, Cancel), and stops there.
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
@@ -342,12 +364,20 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
     onDone();
   };
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && ime.current.composing(event)) event.preventDefault();
+    // A key that belongs to an IME composition (Enter commits it, Escape cancels it) never submits and never closes the field.
+    if (ime.current.composing(event)) {
+      if (event.key === 'Enter') event.preventDefault();
+      if (event.key === 'Escape') event.stopPropagation();
+      return;
+    }
     closeOnEscape(event);
   };
   const chips = blocked ? NONE : suggestions;
+  // Pressed: the chip whose words are in the field now (the same id with new words is another suggestion).
+  const pressed = field.filled && chips.some((chip) => sameSuggestion(field.filled, chip)) ? field.filled.id : null;
   return (
-    <form onSubmit={(event) => void submit(event)} className='rafii-quiet mt-2 flex min-w-0 max-w-full flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
+    <form ref={form} tabIndex={-1} aria-label={l.t('changeView')} onSubmit={(event) => void submit(event)}
+      className='rafii-quiet mt-2 flex min-w-0 max-w-full flex-col gap-2 rounded-[var(--rafii-radius-control)] p-3'>
       <label htmlFor={inputId} className='flex flex-col gap-2 text-sm font-medium'>
         {l.t('whatShouldChange')}
         <input ref={input} id={inputId} aria-label={l.t('whatShouldChange')} value={field.text} maxLength={2000} onChange={(event) => dispatch({ type: 'type', text: event.target.value })}
@@ -355,7 +385,7 @@ export function EditView({ session, view, blocked, onDone }: EditViewProps) {
           placeholder={l.t('editPlaceholder')}
           className='rafii-field rafii-focus min-h-11 rounded-[var(--rafii-radius-control)] px-3 text-base font-normal' />
       </label>
-      <SuggestionChips suggestions={chips} pressed={field.filled?.id ?? null} caption={l.t('suggestions')} captionId={captionId} onPick={pick} onEscape={closeOnEscape} />
+      <SuggestionChips suggestions={chips} pressed={pressed} caption={l.t('suggestions')} captionId={captionId} onPick={pick} onEscape={closeOnEscape} />
       {canRestore(field) ? (
         <div className='flex'>
           <QuietButton onClick={() => dispatch({ type: 'restore' })} onKeyDown={closeOnEscape} className='pointer-coarse:min-h-11'>{l.t('restoreText')}</QuietButton>

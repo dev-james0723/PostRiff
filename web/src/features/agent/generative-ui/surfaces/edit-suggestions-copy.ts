@@ -104,7 +104,7 @@ export const FILTER_CHIPS: readonly FilterChips[] = [
     { value: true, text: chip(['Only active samples', '只看使用中的樣本', '只看使用中的样本'], ['Show only the writing samples in use', '只顯示使用中的寫作樣本', '只显示使用中的写作样本']) },
   ] },
   { binding: 'founder_attention', arg: 'severity', whenAbsent: null, values: [
-    { value: 'critical', text: chip(['Only critical', '只看嚴重', '只看严重'], ['Show only critical items', '只顯示嚴重項目', '只显示严重项目']) },
+    { value: 'critical', text: chip(['Only critical', '只看嚴重項目', '只看严重项目'], ['Show only critical items', '只顯示嚴重項目', '只显示严重项目']) },
   ] },
   { binding: 'founder_costs', arg: 'dimension', whenAbsent: null, values: [
     { value: 'model', text: chip(['By model', '按模型', '按模型'], ['Break AI cost down by model', '按模型細分 AI 成本', '按模型细分 AI 成本']) },
@@ -120,13 +120,18 @@ export const FUTURE_DATE_BINDINGS: readonly string[] = ['calendar_agenda', 'camp
 
 export type DatePeriod = 'next' | 'previous' | 'nextMonth' | 'last7' | 'last30';
 
-export const DATE_PERIOD_CHIPS: Readonly<Record<DatePeriod | 'nextWeek' | 'previousWeek', ChipText>> = {
-  nextWeek: chip(['Next week', '下一星期', '下一周'],
-    ['Change the period to the following week ({start} to {end})', '把時段改為下一星期（{start} 至 {end}）', '把时段改为下一周（{start} 至 {end}）']),
+/** A shifted span reads by its length: one day, one week, or `{n}` days (never "Next 1 days"). */
+export const DATE_PERIOD_CHIPS: Readonly<Record<DatePeriod | 'nextDay' | 'previousDay' | 'nextWeek' | 'previousWeek', ChipText>> = {
+  nextDay: chip(['Next day', '下一日', '下一天'],
+    ['Change the period to the next day ({start})', '把時段改為下一日（{start}）', '把时段改为下一天（{start}）']),
+  previousDay: chip(['Previous day', '前一日', '前一天'],
+    ['Change the period to the day before ({start})', '把時段改為前一日（{start}）', '把时段改为前一天（{start}）']),
+  nextWeek: chip(['Next week', '下星期', '下一周'],
+    ['Change the period to the following week ({start} to {end})', '把時段改為下星期（{start} 至 {end}）', '把时段改为下一周（{start} 至 {end}）']),
   next: chip(['Next {n} days', '之後 {n} 日', '之后 {n} 天'],
     ['Change the period to the following {n} days ({start} to {end})', '把時段改為之後的 {n} 日（{start} 至 {end}）', '把时段改为之后的 {n} 天（{start} 至 {end}）']),
-  previousWeek: chip(['Previous week', '上一星期', '上一周'],
-    ['Change the period to the week before ({start} to {end})', '把時段改為上一星期（{start} 至 {end}）', '把时段改为上一周（{start} 至 {end}）']),
+  previousWeek: chip(['Previous week', '上星期', '上一周'],
+    ['Change the period to the week before ({start} to {end})', '把時段改為上星期（{start} 至 {end}）', '把时段改为上一周（{start} 至 {end}）']),
   previous: chip(['Previous {n} days', '之前 {n} 日', '之前 {n} 天'],
     ['Change the period to the {n} days before ({start} to {end})', '把時段改為之前的 {n} 日（{start} 至 {end}）', '把时段改为之前的 {n} 天（{start} 至 {end}）']),
   nextMonth: chip(['Next month', '下個月', '下个月'],
