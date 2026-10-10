@@ -561,14 +561,34 @@ IN_TOOL: contextvars.ContextVar[bool] = contextvars.ContextVar("rafii_authz_in_t
 ACTIVE_CONTEXT: contextvars.ContextVar = contextvars.ContextVar("rafii_authz_active_context", default=None)
 # Set by the task engine (CF-3 §10.1): fn(ctx, capability, args, decision) -> {approvalId, summary, expiresAt} | None.
 APPROVAL_REQUESTER: list[Callable] = []
+# Server-only CF-3 proof resolver; called inside each current effect transaction.
+APPROVAL_ACTOR_RESOLVER: list[Callable] = []
 
 
 def register_approval_requester(fn: Callable) -> None:
     APPROVAL_REQUESTER[:] = [fn]
 
 
-# Startup adapters declare actual installed enforcement points. The partial store/E1/E11
-# recovery must never make enforce selectable while E2–E10 are still unwired.
+def register_approval_actor_resolver(fn: Callable) -> None:
+    """fn(cur, ctx, capability, args, now) -> Actor | None; never a request-supplied callback."""
+    APPROVAL_ACTOR_RESOLVER[:] = [fn]
+
+
+def _tool_actor(cur, ctx, cap, args, now):
+    actor = getattr(ctx, "authz_actor", None) or Actor("agent", ctx.principal, getattr(ctx, "request_text", "") or "", getattr(ctx, "authz_evidence", None))
+    if not getattr(ctx, "step_binding", None) or mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "enforce":
+        return actor
+    verified = APPROVAL_ACTOR_RESOLVER[0](cur, ctx, cap, args, now) if APPROVAL_ACTOR_RESOLVER else None
+    if verified is not None:
+        if not isinstance(verified, Actor) or verified.principal != ctx.principal:
+            raise AuthzError("The current approval could not be verified.", "agent_permission_revoked")
+        return verified
+    # A projection from E1 cannot remain authority after E2 finds an expired or
+    # revoked lease/approval. The engine's resolver owns the live-attempt check.
+    return Actor("agent", ctx.principal, getattr(ctx, "request_text", "") or "") if actor.kind == "approval" else actor
+
+
+# Startup adapters declare actual installed enforcement points; all are required.
 REQUIRED_ENFORCEMENT_POINTS = frozenset(f"E{i}" for i in range(1, 13))
 # E8 is registered by the integrated task-engine approval adapter only after validation.
 ENFORCEMENT_POINTS: set[str] = {"E1", "E2", "E3", "E4", "E5", "E6", "E7", "E9", "E10", "E11", "E12"}
@@ -701,7 +721,9 @@ def recheck(cur, ctx, *, state, member):
     if getattr(ctx, "active_capability", None) is None or mode_for(getattr(ctx, "config", None), ctx.workspace_id) == "off":
         return
     bind_context(ctx, cur=cur, state=state, member=member)
-    decision = gate(ctx, ctx.active_capability, getattr(ctx, "authz_args", None), getattr(ctx, "authz_surface", None), actor=ctx.authz_actor)
+    now = ctx.now() if callable(ctx.now) else ctx.now
+    actor = _tool_actor(cur, ctx, ctx.active_capability, getattr(ctx, "authz_args", None), now)
+    decision = gate(ctx, ctx.active_capability, getattr(ctx, "authz_args", None), getattr(ctx, "authz_surface", None), actor=actor)
     if decision.outcome != "allow":
         raise AuthzError("Rafii's permissions changed before this action. Confirm again.", "agent_permission_revoked")
 
@@ -951,13 +973,13 @@ def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = No
     cap = capability_for(spec)
     surface = tool_surface(spec, agent)
     now = ctx.now() if callable(getattr(ctx, "now", None)) else time.time()
-    actor = getattr(ctx, "authz_actor", None) or Actor("agent", ctx.principal, request_text=ctx.request_text or "", evidence=getattr(ctx, "authz_evidence", None))
     service = ctx.service
     with service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, row, principal):
         if principal != ctx.principal:
             return _d(cap, "deny", "membership_missing")
         member = service.ideas._member(row)
         state = service.ideas._state(row)
+        actor = _tool_actor(cur, ctx, cap, args, now)
         grants = load_grants(cur, ctx.workspace_id, principal, now=now, mode=mode_for(ctx.config, ctx.workspace_id))
         view = provider_view_current(cur, state, ctx.workspace_id, now) if cap.provider_scopes else None
         return decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor, provider_view=view, target=args, now=now)

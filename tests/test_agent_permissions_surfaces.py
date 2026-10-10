@@ -79,6 +79,26 @@ class PermissionSurfaces(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 'agent_permission_revoked')
         self.assertIsNone(ctx.active_capability)
 
+    def test_live_approval_is_rechecked_between_tool_gate_and_effect(self):
+        ctx = self.ctx('enforce', {'category:create_edit':'ask'})
+        ctx.step_binding = {'taskId':'server-task','stepKey':'server-step','generation':1}
+        tool = f.tool_adapter.REGISTRY['campaign_link']
+        capability = authz.capability_for(tool.spec)
+        evidence = {'approval': {'state':'approved','capabilityId':capability.capability_id,
+                                'requestedFor':f.ME,'digest':'exact-digest','expiresAt':f.NOW+30}, 'digest':'exact-digest'}
+        ctx.authz_actor = authz.Actor('approval', f.ME, evidence=evidence)
+        live = authz.Actor('approval', f.ME, evidence=evidence)
+        with mock.patch.object(authz, 'APPROVAL_ACTOR_RESOLVER', [mock.Mock(side_effect=[live, None])]) as resolvers, \
+             mock.patch.object(authz, 'load_grants', return_value=ctx.grants), \
+             mock.patch.object(authz, 'provider_view_current', return_value=authz.ProviderView(())):
+            decision = authz.evaluate_tool(ctx, tool.spec, {}, agent='campaign')
+            self.assertEqual(decision.outcome, 'allow')
+            with authz.active_tool(ctx, tool.spec, {}, 'campaign'):
+                with self.assertRaises(AlphaError) as caught:
+                    authz.recheck(object(), ctx, state=f.workspace_state(), member=f.OWNER)
+            self.assertEqual(caught.exception.code, 'agent_permission_revoked')
+            self.assertEqual(resolvers[0].call_count, 2)
+
     def test_grounded_site_call_is_gated_and_shadow_result_matches_off(self):
         def context(mode):
             c = self.ctx(mode, {'domain:content':False})
