@@ -1,5 +1,7 @@
 # PR #150 — final acceptance review (independent audit)
 
+> **Superseded status (2026-10-10).** This page records the 2026-10-09 audit. For the current state, see RELEASE-CLOSEOUT-20261010.md and RELEASE-GATE-MATRIX.json (schema v2). The current state is: B1 is resolved by #155 (pinned digests, PASS); C1 has a verified root cause, fixed in #161; the High and Medium review findings are fixed in 65205edc and 45b564ff.
+
 Audit date 2026-10-09. Authority boundary: no merge, deploy, DDL, provider grants, scope changes, credentials, real posts or purchases. The PR stays a draft.
 
 ## Revisions

@@ -1,5 +1,7 @@
 # CI blocker triage — PR #150
 
+> **Superseded status (2026-10-10).** This page records the 2026-10-09 audit. For the current state, see RELEASE-CLOSEOUT-20261010.md and RELEASE-GATE-MATRIX.json (schema v2). The current state is: B1 is resolved by #155 (pinned digests, PASS); C1 has a verified root cause, fixed in #161; the High and Medium review findings are fixed in 65205edc and 45b564ff.
+
 Audit date 2026-10-09. PR head `ed8d4bb6d3e951062456bf2680f54bc738e550e0` (docs only on top of application-code head `1956428296f43dfa4550bbcd111a4b47670e6f7d`). PR base `220d2de1…`; `origin/consumer-saas` is now `2af255fd…`. The extra commits are #151 (GenUI presenter, 3 files), with no overlap with this PR, and `git merge-tree` is clean.
 
 ## B1. `document-runtime`: BLOCKED (infrastructure); owner: Library/CI lane
