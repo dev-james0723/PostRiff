@@ -928,7 +928,10 @@ class AgentRuntimeService:
             pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
             result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
                                   "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
-        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
+        # Scope comes from the authenticated server context, never the model's result or a client page hint.
+        from .tool_adapter import founder_scope
+        ui_scope = "founder" if founder_scope(ctx) is not None else "workspace"
+        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality, scope=ui_scope)
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
@@ -1387,15 +1390,15 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
 _NOT_ELIGIBLE = {"eligible": False, "slot": "main", "reason": "not_eligible", "journeyIds": []}
 
 
-def ui_handoff(cfg, workspace_id, result, request_text, modality) -> dict:
+def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="workspace") -> dict:
     """result.ui: whether this completed Manager turn may get a generated view (deterministic predicate in ui_projection).
     A failure here never fails the turn; the answer stays native."""
-    flags = cfg.genui_for(workspace_id)
+    flags = cfg.genui_for(workspace_id, founder=scope == "founder")
     if not flags.get("enabled"):
         return {**_NOT_ELIGIBLE, "reason": "disabled"}
     try:
         from . import ui_projection
-        decided = ui_projection.eligibility(result, request_text, modality, flags=flags)
+        decided = ui_projection.eligibility(result, request_text, modality, flags=flags, scope=scope)
     except Exception:  # noqa: BLE001 — presentation is optional; the business answer is already complete
         return {**_NOT_ELIGIBLE, "reason": "not_eligible"}
     if not isinstance(decided, dict):
