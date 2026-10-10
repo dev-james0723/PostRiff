@@ -241,8 +241,9 @@ def sdk_tools(names, *, scope_name: str | None = None) -> list:
                 return model_output(result)
 
             needs = _approval_gate(tool) if tool.spec.approval and tool.spec.name == "proposal_apply" else False
+            # The timeout is the capability's declared one (CF-1 ToolSpec.timeout_seconds, default 150 s = what every tool had).
             return FunctionTool(name=tool.name, description=tool.spec.description, params_json_schema=tool.schema, on_invoke_tool=invoke,
-                                strict_json_schema=False, needs_approval=needs, timeout_seconds=150.0)
+                                strict_json_schema=False, needs_approval=needs, timeout_seconds=tool.spec.timeout_seconds)
         tools.append(make())
     return tools
 
