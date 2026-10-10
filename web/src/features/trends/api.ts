@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { publicSourceSchema } from './public-source-types';
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
 import {
   envelopeSchema,
@@ -44,6 +45,66 @@ export type TrendFilters = {
   since?: string;
   cursor?: string;
 };
+
+const discoveryProvider = z.enum(['instagram', 'threads', 'facebook']);
+const discoveryText = (max: number) => z.string().min(1).max(max).refine(
+  (value) => value.trim().length > 0 && Array.from(value).every((character) => {
+    const code = character.charCodeAt(0);
+    return code >= 32 && code !== 127;
+  })
+);
+const discoverySelections = {
+  instagram: z.object({ hashtag: discoveryText(80) }).strict(),
+  threads: z.object({ query: discoveryText(160), search_type: z.enum(['TOP', 'RECENT']) }).strict(),
+  facebook: z.object({ reviewed_page_id: z.string().regex(/^[0-9]{1,40}$/) }).strict()
+};
+const discoveryKey = z.string().min(1).max(200);
+export const discoveryRequestInputSchema = z.discriminatedUnion('provider', [
+  z.object({ provider: z.literal('instagram'), selection: discoverySelections.instagram, idempotency_key: discoveryKey }).strict(),
+  z.object({ provider: z.literal('threads'), selection: discoverySelections.threads, idempotency_key: discoveryKey }).strict(),
+  z.object({ provider: z.literal('facebook'), selection: discoverySelections.facebook, idempotency_key: discoveryKey }).strict()
+]);
+export type DiscoveryRequestInput = z.infer<typeof discoveryRequestInputSchema>;
+
+const discoveryTime = z.string().datetime({ offset: true }).nullable();
+export const discoveryReceiptSchema = z.object({
+  request_id: z.string().uuid(),
+  provider: discoveryProvider,
+  selection: z.union([discoverySelections.instagram, discoverySelections.threads, discoverySelections.facebook]).nullable(),
+  status: z.enum(['queued', 'running', 'completed', 'failed', 'unavailable']),
+  sample_size: z.number().int().min(0).max(1000).nullable(),
+  earliest_source_at: discoveryTime,
+  latest_source_at: discoveryTime,
+  retrieved_at: discoveryTime,
+  created_at: z.string().datetime({ offset: true }),
+  expires_at: z.string().datetime({ offset: true }),
+  completeness: z.enum(['partial', 'gap', 'unknown']),
+  coverage: z.string().min(1).max(2000)
+}).strict().superRefine((receipt, context) => {
+  const reject = (path: string, message: string) => context.addIssue({ code: 'custom', path: [path], message });
+  if (receipt.selection === null) {
+    if (receipt.status !== 'unavailable') reject('selection', 'A current request must identify its selection.');
+  } else if (!discoverySelections[receipt.provider].safeParse(receipt.selection).success) {
+    reject('selection', 'The selection must match its source.');
+  }
+  if (receipt.status !== 'completed') {
+    for (const key of ['sample_size', 'earliest_source_at', 'latest_source_at', 'retrieved_at'] as const)
+      if (receipt[key] !== null) reject(key, 'A pending or unavailable sample has no verified measurement.');
+    if (receipt.completeness !== 'unknown') reject('completeness', 'Sample coverage is unknown before completion.');
+  } else if (receipt.sample_size === null || receipt.retrieved_at === null) {
+    reject('sample_size', 'Completion requires a recorded sample and retrieval time.');
+  }
+});
+export type DiscoveryRequestReceipt = z.infer<typeof discoveryReceiptSchema>;
+const discoveryOptionsSchema = z.object({
+  requests: z.array(discoveryReceiptSchema).max(20),
+  options: z.array(z.object({
+    provider: discoveryProvider,
+    enabled: z.boolean(),
+    reviewed_page_ids: z.array(z.string().regex(/^[0-9]{1,40}$/)).max(100)
+  }).strict()).length(3)
+}).strict().refine((value) => new Set(value.options.map((item) => item.provider)).size === 3);
+
 export function createTrendApi(getToken: TokenSource) {
   async function request<T>(
     workspace: string,
@@ -91,6 +152,15 @@ export function createTrendApi(getToken: TokenSource) {
   }
   const seg = encodeURIComponent;
   return {
+    publicSources: (w: string, signal?: AbortSignal) =>
+      request(w, '/public-sources', envelopeSchema(z.array(publicSourceSchema)), signal),
+    discoveryRequests: (w: string, signal?: AbortSignal) =>
+      request(w, '/public-sources/discovery-requests', envelopeSchema(discoveryOptionsSchema), signal),
+    submitDiscoveryRequest: (w: string, input: DiscoveryRequestInput) =>
+      request(w, '/public-sources/discovery-requests', envelopeSchema(discoveryReceiptSchema), undefined,
+        'POST', discoveryRequestInputSchema.parse(input)),
+    revokePublicSource: (w: string, id: string) =>
+      request(w, `/public-sources/${seg(id)}`, envelopeSchema(z.object({ authorization_id: z.string().uuid(), status: z.literal('REVOKED') }).strict()), undefined, 'DELETE'),
     generateAngles: (w: string, id: string, revision: number, key: string) =>
       request(w, `/opportunities/${seg(id)}/angles`, envelopeSchema(angleGenerationSchema), undefined, 'POST', { revision, idempotency_key: key }),
     generationStatus: (w: string, job: string, signal?: AbortSignal) =>

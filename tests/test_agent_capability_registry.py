@@ -18,6 +18,7 @@ from collections import Counter
 from dataclasses import replace
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,6 +179,24 @@ class Fixtures(unittest.TestCase):
                 tool_adapter.REGISTRY.pop(spec.name, None)
             else:
                 tool_adapter.REGISTRY[spec.name] = original
+
+
+class FixtureIsolation(unittest.TestCase):
+    def test_registered_library_browse_is_post_freeze_with_declared_data_grants(self):
+        cap = registry.for_tool("library_browse")
+        self.assertEqual(cap.since, 2)
+        self.assertEqual(cap.data_grants, ("library",))
+
+    def test_post_freeze_probe_restores_an_existing_tool_registration(self):
+        # Discovery may import later integrated tools before this legacy fixture.
+        # Its temporary probe must never delete the registered production executor.
+        registry.ensure()  # Match full discovery: importing registering modules precedes the probe.
+        spec = contracts.ToolSpec("library_browse", contracts.READ, "read", "Existing Library reader", voice=False,
+                                  data_grants=("library",), since=2)
+        existing = tool_adapter.Tool(spec, {}, lambda ctx, args: {"existing": True}, "Existing Library")
+        with patch.dict(tool_adapter.REGISTRY, {spec.name: existing}):
+            Fixtures("test_post_freeze_tool_never_joins_legacy").test_post_freeze_tool_never_joins_legacy()
+            self.assertIs(tool_adapter.REGISTRY.get(spec.name), existing)
 
 
 class RegistryMatchesToday(unittest.TestCase):

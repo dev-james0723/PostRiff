@@ -128,7 +128,9 @@ if (require.main === module && process.argv.includes('--fixtures')) {
     return compiledModule.exports;
   }
   const panel = load('web/src/features/trends/visual-analysis-panels.tsx');
-  const { createTrendApi } = load('web/src/features/trends/api.ts');
+  const { createTrendApi } = load('web/src/features/trends/api.ts', {
+    './public-source-types': load('web/src/features/trends/public-source-types.ts'),
+  });
   const f = analysisFixtures();
   const now = Date.parse(f.forecast.as_of) + 3000;
   const reset = (data, flags=f.flags) => { context={w:f.workspace,flags,enabled:true};queryResult={data,isFetching:false,isError:false};requested=false;queryCalls.length=0; };

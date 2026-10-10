@@ -22,6 +22,27 @@ class TrendStorageError(ContractError):
     pass
 
 
+def same_meta_sample_revision(value, prior, operation):
+    """An unchanged Meta content revision keeps its first stored fetch sequence.
+
+    These three adapters receive no native revision counter, so their sequence
+    orders newly observed content revisions by retrieval time. A later read of
+    the same revision must not invent another revision or extend its retention.
+    All other providers and sequences retain strict collision detection.
+    """
+    operations={'threads':'keyword_search','instagram':'hashtag_discovery','facebook':'page_public_posts'}
+    provider=value.get('provider_id')
+    return bool(operations.get(provider)==operation
+        and value.get('kind')=='raw_post' and value.get('operation')=='create'
+        and value.get('provenance',{}).get('access_method')==f'official_meta_{provider}_public_sample'
+        and value['revision_identity']==digest([value['source_policy_version'],value['event_at'],value['payload']])
+        and value.get('provenance',{}).get('content_revision_digest')==digest([value['event_at'],value['payload']])
+        and prior['revision_identity']==value['revision_identity']
+        and prior['payload_digest']==value['payload_digest']
+        and value['revision_sequence']==int(instant(value['received_at']).timestamp()*1_000_000)
+        and prior['revision_sequence']==int(instant(prior['received_at']).timestamp()*1_000_000))
+
+
 # Match observation admission. Metadata and licensed aggregate evidence do not
 # acquire a raw-content requirement merely by sharing a provider.
 STORAGE_PERMISSION_SQL = """CASE WHEN o.kind='aggregate_metric' THEN 'store_metrics'
@@ -106,9 +127,10 @@ def aggregate_payload(payload):
 
 
 class TrendStore:
-    def __init__(self, connection_factory, *, offline_replay=False):
+    def __init__(self, connection_factory, *, offline_replay=False, meta_vault=None):
         self.connection_factory = connection_factory
         self.offline_replay = offline_replay
+        self.meta_vault = meta_vault
 
     @contextmanager
     def transaction(self, cursor=None):
@@ -205,6 +227,18 @@ class TrendStore:
             or not instant(p['contract_start']) <= instant(at) < instant(p['contract_end'])
             or permission not in p['contract_operations'] or not permits(p['rights'],permission,scope_key,at)):
             raise TrendStorageError('source_policy_denied')
+        if (provider_id,p['manifest'].get('operation')) in (('threads','keyword_search'),('instagram','hashtag_discovery'),('facebook','page_public_posts')):
+            # Hold custody locks through the caller's transaction, including JEV
+            # pre-egress checks. OAuth revocation cannot race an admitted result.
+            cur.execute('''SELECT postriff_private.trend_meta_authorization_valid(a.authorization_id) AS valid
+                FROM public.pr_trend_meta_authorizations a JOIN public.pr_encrypted_credentials c
+                USING(workspace_id,connection_id) WHERE a.authorization_id::text=%s
+                AND 'workspace:'||a.workspace_id::text=%s AND a.provider_id=%s
+                AND a.source_policy_version=%s FOR SHARE OF a,c''',
+                (p['manifest'].get('meta_authorization_id'),scope_key,provider_id,version))
+            grant=row(cur)
+            if not grant or grant['valid'] is not True:
+                raise TrendStorageError('meta_public_authorization_unavailable')
         if not self.offline_replay:
             available = max(instant(p['available_at']),instant(p['contract_available_at']))
             if available>instant(at):
@@ -235,8 +269,19 @@ class TrendStore:
                 if cur.fetchone():
                     raise TrendStorageError('author_deleted')
             from .providers.registry import contract_runtime_version
-            if contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {}) != o['provider_contract_version']:
+            runtime = contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {})
+            if runtime != o['provider_contract_version']:
                 raise TrendStorageError('provider_contract_mismatch')
+            # Keep the same renewal contract as PR139: durable rows reference the
+            # reviewed contract; immutable runtime protocol remains provenance.
+            o['provider_contract_version'] = p['provider_contract_version']
+            if runtime != p['provider_contract_version']:
+                o['provenance'] = {**o['provenance'], 'runtime_protocol': runtime}
+            if (o['provider_id'],p['manifest'].get('operation')) in (('threads','keyword_search'),('instagram','hashtag_discovery'),('facebook','page_public_posts')):
+                cur.execute('SELECT postriff_private.trend_meta_observation_valid(%s,%s,%s,%s) AS valid',
+                    (o['scope_key'],o['provider_id'],o['source_policy_version'],bounded_json(o['provenance'])))
+                if row(cur)['valid'] is not True:
+                    raise TrendStorageError('meta_public_authorization_unavailable')
             if not permits(o['rights'],'retrieve',o['scope_key'],now):
                 raise TrendStorageError('source_right_not_permitted')
             permission = 'store_metrics' if o['kind']=='aggregate_metric' else 'store_raw' if o['payload'].get('text') else 'retrieve'
@@ -251,10 +296,11 @@ class TrendStore:
             cur.execute('SELECT 1 FROM public.pr_trend_deletion_tombstones WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s', (o['scope_key'],o['provider_id'],key))
             if cur.fetchone():
                 raise TrendStorageError('source_deleted')
-            cur.execute('SELECT observation_id,payload_digest,revision_sequence FROM public.pr_trend_observations WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s AND revision_identity=%s', (o['scope_key'],o['provider_id'],key,o['revision_identity']))
+            cur.execute('SELECT observation_id,payload_digest,revision_identity,revision_sequence,received_at FROM public.pr_trend_observations WHERE scope_key=%s AND provider_id=%s AND source_identity_digest=%s AND revision_identity=%s', (o['scope_key'],o['provider_id'],key,o['revision_identity']))
             prior = row(cur)
             if prior:
-                if prior['payload_digest'] != o['payload_digest'] or prior['revision_sequence'] != o['revision_sequence']:
+                if prior['payload_digest'] != o['payload_digest'] or (prior['revision_sequence'] != o['revision_sequence']
+                        and not same_meta_sample_revision(o,prior,p['manifest'].get('operation'))):
                     raise TrendStorageError('observation_identity_collision')
                 return {'observation_id':prior['observation_id'],'inserted':False}
             self._node(cur,o['scope_key'],o['observation_id'],'observation',o['available_at'],o['retention_until'])

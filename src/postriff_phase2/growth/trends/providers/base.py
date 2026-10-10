@@ -28,6 +28,17 @@ class Batch:
     quarantined: tuple[dict, ...] = ()
 
 
+def monetary(capability):
+    """Reviewed Meta API quotas count requests/hashtags, not currency."""
+    nonmonetary = {
+        ('threads','keyword_search','threads_search_quota'),
+        ('instagram','hashtag_discovery','ig_rolling_7_day_hashtag_quota'),
+        ('facebook','page_public_posts','facebook_ppca_page_quota'),
+    }
+    return (capability.billable_unit != 'unmetered_live_bytes_bounded'
+            and (capability.provider_id,capability.operation,capability.billable_unit) not in nonmonetary)
+
+
 def observation(*, policy: SourcePolicy, source_identity: str, revision_identity: str, sequence: int,
                 kind: str, operation: str, payload: dict, event_at: str | None, received_at: str,
                 available_at: str, coverage_epoch: str, contract_version: str, access_method: str,

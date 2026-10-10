@@ -25,7 +25,10 @@
     "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh",
     "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
-    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all"
+    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
+    "test:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh",
+    "ci:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh --full",
+    "e2e:meta:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-meta-validation.sh --web-only"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

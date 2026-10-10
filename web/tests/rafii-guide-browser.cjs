@@ -28,6 +28,15 @@ const CONNECT = read('features/rafii-guide/guides.ts').split("id: 'connect_accou
 const STEPS = (CONNECT.match(/\btarget: \[/g) ?? []).length;
 if (STEPS < 5) throw new Error(`Could not read the connect_account steps from guides.ts (found ${STEPS}).`);
 const results = [];
+const lifecycle = [];
+let activeSection = 'desktop';
+let expectedBrowserDisconnect = false;
+function browserEvent(event, detail = {}) {
+  if (lifecycle.length >= 100) return;
+  const entry = { at: new Date().toISOString(), engine: args.browser || 'chromium', section: activeSection, event, ...detail };
+  lifecycle.push(entry);
+  process.stdout.write(`BROWSER ${JSON.stringify(entry)}\n`);
+}
 const check = (name, ok, detail) => {
   results.push({ name, ok: Boolean(ok), detail: ok ? undefined : detail });
   process.stdout.write(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail !== undefined ? ` — ${JSON.stringify(detail).slice(0, 500)}` : ''}\n`);
@@ -44,6 +53,12 @@ async function shot(page, name) {
 async function context(browser, viewport) {
   const phone = viewport.width < 768;
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, colorScheme: 'dark', hasTouch: phone, isMobile: phone });
+  const section = activeSection;
+  ctx.on('page', (page) => {
+    page.on('crash', () => browserEvent('page_crash', { section }));
+    page.on('close', () => browserEvent('page_closed', { section }));
+  });
+  ctx.on('close', () => browserEvent('context_closed', { section }));
   await ctx.addCookies([
     { name: 'postriff_dev', value: '1', url: base },
     { name: 'postriff_dev_principal', value: seed.principal, url: base },
@@ -118,7 +133,9 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
   let currentPage = null;
   const executablePath = (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
+  browser.on('disconnected', () => browserEvent('browser_disconnected', { expected: expectedBrowserDisconnect }));
   try {
+    browserEvent('section_started');
     // Desktop, docked panel: the guide opens Channels and walks to the platform's own sign-in, which it leaves alone.
     const desk = await context(browser, { width: 1440, height: 900 });
     const page = await desk.newPage();
@@ -205,8 +222,11 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
     check('desktop: no sign-in started at any point', oauth.length === 0, oauth);
     await shot(page, 'guide-desktop-escape-ended.png');
     await desk.close();
+    browserEvent('section_finished', { connected: browser.isConnected() });
 
     // Phone: the Rafii drawer makes way for the page the guide shows, and the same steps run.
+    activeSection = 'phone';
+    browserEvent('section_started');
     const phone = await context(browser, { width: 390, height: 844 });
     const small = await phone.newPage();
     currentPage = small;
@@ -237,6 +257,7 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
     await card(small).waitFor({ state: 'hidden', timeout: 10000 }).catch(() => undefined);
     check('phone: Stop ends the guide', (await card(small).count()) === 0 || !(await card(small).isVisible()));
     await phone.close();
+    browserEvent('section_finished', { connected: browser.isConnected() });
   } catch (error) {
     check('the guide scene ran to the end', false, String(error?.stack ?? error).slice(0, 800));
     if (currentPage && !currentPage.isClosed()) {
@@ -249,10 +270,12 @@ const guideClicks = (page) => page.evaluate(() => window.rafiiGuideClicks ?? [])
       fs.writeFileSync(path.join(out, 'guide-failure-state.json'), JSON.stringify(state, null, 2));
     }
   } finally {
+    browserEvent('browser_close_requested');
+    expectedBrowserDisconnect = true;
     await browser.close();
   }
   const failed = results.filter((r) => !r.ok).length;
-  fs.writeFileSync(path.join(out, 'rafii-guide-browser.json'), JSON.stringify({ base, engine: args.browser || 'chromium', guide: GUIDE, steps: STEPS, results }, null, 1));
+  fs.writeFileSync(path.join(out, 'rafii-guide-browser.json'), JSON.stringify({ base, engine: args.browser || 'chromium', guide: GUIDE, steps: STEPS, results, lifecycle }, null, 1));
   process.stdout.write(`\n${results.length} checks, ${failed} failed\n`);
   process.exit(failed ? 1 : 0);
 })();

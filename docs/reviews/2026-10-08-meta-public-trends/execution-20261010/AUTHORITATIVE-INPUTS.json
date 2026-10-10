@@ -1,0 +1,25 @@
+{
+  "execution": "read-only source inventory",
+  "inputs": [
+    {
+      "path": "/Users/ouxianxing/Downloads/Rafii-Meta-JEV-Architecture-zh-Hant-2026-10-09.md",
+      "sha256": "89c2fd93082ae92c7a63b0ba6e95f700c129107421a1975c66a11d0bce8be2ff"
+    },
+    {
+      "path": "/Users/ouxianxing/Downloads/Rafii-Meta-Trends-Engineering-Spec-2026-10-09.md",
+      "sha256": "39dfd9eac111025e283056d4d027a4dfea8a4979ed9e7d43348c949dd6a4d03f"
+    },
+    {
+      "path": "/Users/ouxianxing/Downloads/Rafii-Meta-Trends-Execution-State-2026-10-09.md",
+      "sha256": "baca8f894effd930aefe2945432a18311ed213915a6b3a0a57942c49bb9cb543"
+    },
+    {
+      "path": "/Users/ouxianxing/Downloads/Rafii-Meta-Trends-Implementation-Plan-2026-10-09.md",
+      "sha256": "b627e7b520cd968f7c969e4a0806a194fb163db6670582562c91750fad7b0a65"
+    },
+    {
+      "path": "/Users/ouxianxing/Downloads/Rafii-Meta-Trends-PRD-2026-10-09.md",
+      "sha256": "d3952a487e60b8997e5440deead7626ff47847dd1ed5264bcdcfcc74a35a5c2b"
+    }
+  ]
+}
