@@ -100,6 +100,15 @@ class EvidenceModeTests(unittest.TestCase):
         self.assertEqual(metrics['views']['periodStart'], 50)
         self.assertEqual(metrics['views']['ingestedAt'], 100)
 
+    def test_growth_readings_accept_evidence_period_without_mixing_horizons(self):
+        from postriff_phase2.growth import performance
+        rows = [('threads', 'p', 'j', 'views', '2026-09', 12, 'count', 'available', 99, 100, 'c', '24h', 50)]
+        with patch.object(insights, 'latest_observations', return_value=rows):
+            posts = performance.attach_readings(None, 'workspace-a', [{'provider': 'threads', 'providerPostId': 'p', 'connectionId': 'c'}])
+        self.assertEqual(set(posts[0]['readings']), {'24h'})
+        self.assertEqual(posts[0]['readings']['24h']['views']['value'], 12)
+        self.assertEqual(posts[0]['readings']['24h']['views']['provenance'], 'official')
+
     def test_draft_uses_only_linked_active_sources_and_linked_factpack(self):
         state = {'variants': [{'id': 'v1', 'sourceIds': ['s1'], 'revision': 1}],
                  'sources': [{'id': 's1', 'title': 'Allowed', 'active': True}],

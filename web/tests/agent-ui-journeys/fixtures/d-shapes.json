@@ -1,1095 +1,1111 @@
 {
- "open": [
-  "founder_attention",
-  "founder_entity",
-  "founder_incident",
-  "founder_metrics",
-  "founder_search",
-  "founder_sources",
-  "job_detail"
- ],
- "optional": {
-  "analytics_compare": {
-   "keys": [],
-   "lists": {
-    "comparisons": [
-     "sampleSize",
-     "measured",
-     "missing",
-     "mean",
-     "minimum",
-     "reason",
-     "causalityEstablished"
-    ]
-   }
+  "shapes": {
+    "drafts_list": {
+      "keys": [
+        "drafts",
+        "offset",
+        "missingIds"
+      ],
+      "lists": {
+        "drafts": [
+          "draftId",
+          "ref",
+          "platform",
+          "language",
+          "account",
+          "channelId",
+          "revision",
+          "characters",
+          "limit",
+          "overLimit",
+          "needsReview",
+          "hasProposedUpdate",
+          "committed",
+          "committedJobState",
+          "setAside",
+          "sourceCount",
+          "warningsCount",
+          "unknownsCount",
+          "writerModel",
+          "voice",
+          "fromAutomation",
+          "createdAt",
+          "excerpt",
+          "href"
+        ]
+      }
+    },
+    "draft_read": {
+      "keys": [
+        "draftId",
+        "ref",
+        "platform",
+        "language",
+        "account",
+        "channelId",
+        "revision",
+        "characters",
+        "limit",
+        "overLimit",
+        "needsReview",
+        "hasProposedUpdate",
+        "committed",
+        "committedJobState",
+        "setAside",
+        "sourceCount",
+        "warningsCount",
+        "unknownsCount",
+        "writerModel",
+        "voice",
+        "fromAutomation",
+        "createdAt",
+        "excerpt",
+        "href",
+        "text",
+        "openings",
+        "selectedOpening",
+        "unknowns",
+        "warnings",
+        "blockedByRetraction",
+        "proposedUpdate",
+        "scheduled",
+        "editable",
+        "editBlockedReason",
+        "voiceSourceCount",
+        "revisionsCount"
+      ],
+      "lists": {
+        "scheduled": [
+          "jobId",
+          "state",
+          "title",
+          "meaning",
+          "steps",
+          "platform",
+          "account",
+          "publishAt",
+          "timeZone",
+          "attempts",
+          "demo",
+          "fromAutomation",
+          "verified",
+          "providerReference",
+          "lastEvent"
+        ]
+      }
+    },
+    "draft_evidence": {
+      "keys": [
+        "draftId",
+        "edges",
+        "sources",
+        "voiceFit",
+        "workspaceId",
+        "claimsTruncated"
+      ],
+      "lists": {
+        "sources": [
+          "sourceId",
+          "ref",
+          "available",
+          "kind",
+          "title",
+          "active",
+          "retracted",
+          "approvedFacts",
+          "facts",
+          "origin",
+          "host",
+          "published",
+          "fetchedAt",
+          "evidence",
+          "claims"
+        ]
+      }
+    },
+    "draft_revisions": {
+      "keys": [
+        "draftId",
+        "current",
+        "revisions",
+        "offset"
+      ],
+      "lists": {
+        "revisions": [
+          "revision",
+          "origin",
+          "at",
+          "characters",
+          "text",
+          "textTruncated"
+        ]
+      }
+    },
+    "writers_list": {
+      "keys": [
+        "models",
+        "selected",
+        "workspaceDefault"
+      ],
+      "lists": {
+        "models": [
+          "id",
+          "label",
+          "qualified",
+          "costClass",
+          "route",
+          "detail"
+        ]
+      }
+    },
+    "calendar_agenda": {
+      "keys": [
+        "range",
+        "entries",
+        "offset",
+        "total",
+        "statusCounts",
+        "unknownStates",
+        "days",
+        "daysNote",
+        "derived",
+        "href"
+      ],
+      "lists": {
+        "entries": [
+          "kind",
+          "id",
+          "ref",
+          "state",
+          "status",
+          "title",
+          "platform",
+          "account",
+          "channelId",
+          "atUtc",
+          "local",
+          "offset",
+          "timeZone",
+          "jobZone",
+          "jobLocal",
+          "fromAutomation",
+          "excerpt",
+          "href"
+        ],
+        "days": [
+          "date",
+          "weekday",
+          "count"
+        ]
+      }
+    },
+    "queue_status": {
+      "keys": [
+        "statusCounts",
+        "unknownStates",
+        "draftsUnscheduled",
+        "waitingApproval",
+        "upcoming",
+        "attention",
+        "totals",
+        "href"
+      ],
+      "lists": {
+        "waitingApproval": [
+          "reviewId",
+          "ref",
+          "platform",
+          "account",
+          "local",
+          "timeZone",
+          "atUtc",
+          "expired"
+        ],
+        "upcoming": [
+          "jobId",
+          "state",
+          "title",
+          "meaning",
+          "steps",
+          "platform",
+          "account",
+          "publishAt",
+          "timeZone",
+          "attempts",
+          "demo",
+          "fromAutomation",
+          "verified",
+          "providerReference",
+          "lastEvent",
+          "ref",
+          "atUtc"
+        ],
+        "attention": [
+          "jobId",
+          "state",
+          "title",
+          "meaning",
+          "steps",
+          "platform",
+          "account",
+          "publishAt",
+          "timeZone",
+          "attempts",
+          "demo",
+          "fromAutomation",
+          "verified",
+          "providerReference",
+          "lastEvent",
+          "ref"
+        ]
+      }
+    },
+    "job_detail": {
+      "keys": [
+        "kind",
+        "ref"
+      ],
+      "lists": {}
+    },
+    "slot_check": {
+      "keys": [
+        "draftId",
+        "jobId",
+        "platform",
+        "account",
+        "channelId",
+        "local",
+        "timeZone",
+        "atUtc",
+        "valid",
+        "problems",
+        "collisions",
+        "rule"
+      ],
+      "lists": {
+        "collisions": [
+          "kind",
+          "id",
+          "ref",
+          "local",
+          "minutesApart",
+          "status"
+        ]
+      }
+    },
+    "open_proposals": {
+      "keys": [
+        "proposals",
+        "conversationId",
+        "applyWith"
+      ],
+      "lists": {
+        "proposals": [
+          "proposalId",
+          "messageId",
+          "type",
+          "summary",
+          "digest",
+          "expiresAt",
+          "requiredPermission",
+          "status",
+          "view"
+        ]
+      }
+    },
+    "library_search": {
+      "keys": [
+        "items",
+        "offset",
+        "storage",
+        "capabilities",
+        "legacyMedia"
+      ],
+      "lists": {
+        "items": [
+          "ref",
+          "assetId",
+          "store",
+          "kind",
+          "title",
+          "mime",
+          "extension",
+          "bytes",
+          "createdAt",
+          "tags",
+          "collections",
+          "processing",
+          "indexingStatus",
+          "transcriptionStatus",
+          "hasSource",
+          "sourceId",
+          "duplicateOf",
+          "extractionProblem",
+          "width",
+          "height",
+          "duration",
+          "alt",
+          "href",
+          "previewKind",
+          "previewRoute"
+        ]
+      }
+    },
+    "library_item": {
+      "keys": [
+        "ref",
+        "assetId",
+        "store",
+        "kind",
+        "title",
+        "mime",
+        "extension",
+        "bytes",
+        "createdAt",
+        "tags",
+        "collections",
+        "processing",
+        "indexingStatus",
+        "transcriptionStatus",
+        "hasSource",
+        "sourceId",
+        "duplicateOf",
+        "extractionProblem",
+        "width",
+        "height",
+        "duration",
+        "alt",
+        "href",
+        "previewKind",
+        "previewRoute",
+        "excerpt",
+        "excerptTruncated",
+        "chunkCount",
+        "summary",
+        "lineage",
+        "mediaConsent"
+      ],
+      "lists": {}
+    },
+    "library_lineage": {
+      "keys": [
+        "assetId",
+        "store",
+        "edges"
+      ],
+      "lists": {}
+    },
+    "library_collections": {
+      "keys": [
+        "collections"
+      ],
+      "lists": {
+        "collections": [
+          "collectionId",
+          "name",
+          "count"
+        ]
+      }
+    },
+    "library_selection": {
+      "keys": [
+        "attachments",
+        "references",
+        "refused",
+        "note"
+      ],
+      "lists": {
+        "attachments": [
+          "assetId",
+          "role"
+        ],
+        "references": [
+          "kind",
+          "id"
+        ],
+        "refused": [
+          "assetId",
+          "reason"
+        ]
+      }
+    },
+    "voice_sources": {
+      "keys": [
+        "samples",
+        "offset",
+        "eligibility"
+      ],
+      "lists": {
+        "samples": [
+          "sourceId",
+          "ref",
+          "title",
+          "platform",
+          "language",
+          "label",
+          "origin",
+          "active",
+          "selected",
+          "revision",
+          "characters",
+          "excerpt",
+          "useGrants",
+          "grantRevision",
+          "partialCoverage",
+          "publishedAt",
+          "retainedAt",
+          "permalink",
+          "revoked"
+        ]
+      }
+    },
+    "voice_profile_state": {
+      "keys": [
+        "approved",
+        "proposed",
+        "revisions",
+        "derived",
+        "note",
+        "href"
+      ],
+      "lists": {}
+    },
+    "voice_preferences": {
+      "keys": [
+        "pending",
+        "recent",
+        "recentTotal",
+        "learned",
+        "versions",
+        "settings",
+        "stats",
+        "rule"
+      ],
+      "lists": {
+        "learned": [
+          "id",
+          "type",
+          "ruleKey",
+          "polarity",
+          "scope",
+          "statement",
+          "applyWhen",
+          "evidenceState",
+          "evidenceSummary",
+          "source",
+          "status",
+          "since"
+        ]
+      }
+    },
+    "voice_consent": {
+      "keys": [
+        "cloudMemory",
+        "samples",
+        "learning",
+        "media",
+        "webResearch",
+        "owner",
+        "rule",
+        "href"
+      ],
+      "lists": {}
+    },
+    "voice_learning_status": {
+      "keys": [
+        "enabled",
+        "eventsWaiting",
+        "pendingProposals",
+        "newestProposalAt",
+        "extractor",
+        "lastRun",
+        "lastRunNote",
+        "rule"
+      ],
+      "lists": {}
+    },
+    "campaigns_list": {
+      "keys": [
+        "campaigns",
+        "offset"
+      ],
+      "lists": {
+        "campaigns": [
+          "campaignId",
+          "goal",
+          "audience",
+          "status",
+          "missingFacts",
+          "facts",
+          "automations",
+          "platforms",
+          "href",
+          "ref",
+          "version",
+          "itemCount",
+          "createdAt",
+          "updatedAt"
+        ]
+      }
+    },
+    "campaign_detail": {
+      "keys": [
+        "campaignId",
+        "goal",
+        "audience",
+        "status",
+        "missingFacts",
+        "facts",
+        "automations",
+        "platforms",
+        "href",
+        "drafts",
+        "draftCount",
+        "posts",
+        "lastWeek",
+        "upcomingRuns",
+        "derived",
+        "ref",
+        "version",
+        "accountIds",
+        "itemCount",
+        "progress",
+        "note"
+      ],
+      "lists": {}
+    },
+    "campaign_items": {
+      "keys": [
+        "campaignId",
+        "version",
+        "items",
+        "offset",
+        "max"
+      ],
+      "lists": {
+        "items": [
+          "itemId",
+          "kind",
+          "addedAt",
+          "needsReview",
+          "addedByYou",
+          "ref",
+          "exists",
+          "draftId",
+          "platform",
+          "revision",
+          "excerpt",
+          "jobId",
+          "state",
+          "local",
+          "timeZone",
+          "atUtc",
+          "assetId"
+        ]
+      }
+    },
+    "campaign_timeline": {
+      "keys": [
+        "campaignId",
+        "timeZone",
+        "startUtc",
+        "endUtc",
+        "events",
+        "truncated"
+      ],
+      "lists": {
+        "events": [
+          "kind",
+          "ref",
+          "atUtc",
+          "local",
+          "status",
+          "automationId",
+          "name",
+          "scheduleZone",
+          "scheduleLocal",
+          "runId",
+          "items",
+          "jobId",
+          "jobZone",
+          "jobLocal",
+          "platform"
+        ]
+      }
+    },
+    "task_progress": {
+      "keys": [
+        "task",
+        "summary",
+        "rule"
+      ],
+      "lists": {}
+    },
+    "analytics_posts": {
+      "keys": [
+        "posts",
+        "offset",
+        "timeZone",
+        "startUtc",
+        "endUtc",
+        "families",
+        "rules",
+        "definitionVersion",
+        "undated",
+        "verifiedPostsInWindow",
+        "postsWithReadings",
+        "workspaceId"
+      ],
+      "lists": {
+        "posts": [
+          "ref",
+          "jobId",
+          "provider",
+          "platform",
+          "connectionId",
+          "providerPostId",
+          "language",
+          "publishedAt",
+          "publishedLocal",
+          "contentOrigin",
+          "metrics",
+          "rates",
+          "cohort",
+          "freshness"
+        ]
+      }
+    },
+    "analytics_compare": {
+      "keys": [
+        "metric",
+        "basis",
+        "comparisons",
+        "rules",
+        "startUtc",
+        "endUtc",
+        "timeZone",
+        "undated"
+      ],
+      "lists": {
+        "comparisons": [
+          "cohort",
+          "metric",
+          "interpretation",
+          "jobIds",
+          "sampleSize",
+          "measured",
+          "missing",
+          "mean",
+          "minimum",
+          "reason",
+          "causalityEstablished"
+        ]
+      }
+    },
+    "analytics_series": {
+      "keys": [
+        "metric",
+        "bucket",
+        "timeZone",
+        "series",
+        "definitionVersion",
+        "unit",
+        "rule",
+        "undated"
+      ],
+      "lists": {
+        "series": [
+          "provider",
+          "platform",
+          "connectionId",
+          "points"
+        ]
+      }
+    },
+    "analytics_coverage": {
+      "keys": [
+        "state",
+        "connections",
+        "unmatchedReadings",
+        "usesPlatformFallback",
+        "rule"
+      ],
+      "lists": {
+        "connections": [
+          "connectionId",
+          "platform",
+          "account",
+          "level",
+          "direct",
+          "providerOffersAnalytics",
+          "verifiedPosts",
+          "readPosts",
+          "readings",
+          "lastObservedAt",
+          "evidence",
+          "enableHref"
+        ]
+      }
+    },
+    "post_feedback": {
+      "keys": [
+        "jobId",
+        "readings",
+        "minimumBaselinePosts",
+        "causal"
+      ],
+      "lists": {}
+    },
+    "research_state": {
+      "keys": [
+        "allowed",
+        "web",
+        "enabledOnDeployment",
+        "hosted",
+        "decidedAt",
+        "processors",
+        "canTurnOn",
+        "guide",
+        "reason"
+      ],
+      "lists": {}
+    },
+    "research_results": {
+      "keys": [
+        "pages",
+        "recorded",
+        "searches",
+        "note",
+        "reason"
+      ],
+      "lists": {
+        "pages": [
+          "index",
+          "title",
+          "host",
+          "url",
+          "urlUnsafe",
+          "published",
+          "publishedLabel",
+          "fetchedAt",
+          "facts",
+          "untrusted"
+        ]
+      }
+    },
+    "research_sources": {
+      "keys": [
+        "sources",
+        "offset"
+      ],
+      "lists": {
+        "sources": [
+          "sourceId",
+          "ref",
+          "title",
+          "host",
+          "url",
+          "published",
+          "publishedLabel",
+          "fetchedAt",
+          "status",
+          "active",
+          "retracted",
+          "facts",
+          "approvedFacts"
+        ]
+      }
+    },
+    "automations_list": {
+      "keys": [
+        "automations",
+        "offset",
+        "statusCounts"
+      ],
+      "lists": {
+        "automations": [
+          "automationId",
+          "ref",
+          "name",
+          "status",
+          "schedule",
+          "timeZone",
+          "policy",
+          "platforms",
+          "nextRun",
+          "nextPublish",
+          "campaignId",
+          "pausedReason",
+          "version",
+          "href"
+        ]
+      }
+    },
+    "automation_detail": {
+      "keys": [
+        "taskId",
+        "name",
+        "status",
+        "scheduleText",
+        "policy",
+        "plan",
+        "platforms",
+        "needs",
+        "contentLabel",
+        "voiceMode",
+        "ref",
+        "timeZone",
+        "nextRun",
+        "nextPublish",
+        "upcoming",
+        "version",
+        "campaignId",
+        "pausedReason",
+        "history",
+        "href"
+      ],
+      "lists": {
+        "upcoming": [
+          "atUtc",
+          "local",
+          "offset"
+        ]
+      }
+    },
+    "automation_history": {
+      "keys": [
+        "automationId",
+        "runs",
+        "offset"
+      ],
+      "lists": {
+        "runs": [
+          "runId",
+          "ref",
+          "status",
+          "attention",
+          "scheduledUtc",
+          "scheduledLocal",
+          "timeZone",
+          "completedUtc",
+          "seen",
+          "cost",
+          "items"
+        ]
+      }
+    },
+    "connections_status": {
+      "keys": [
+        "accounts",
+        "publishingLive",
+        "attention",
+        "recovery",
+        "rule"
+      ],
+      "lists": {
+        "accounts": [
+          "connectionId",
+          "platform",
+          "account",
+          "connectionState",
+          "readiness",
+          "demo",
+          "revoked",
+          "levels",
+          "canPublish",
+          "publishCode",
+          "publishReason",
+          "ref",
+          "needsReconnect"
+        ]
+      }
+    },
+    "recovery_guides": {
+      "keys": [
+        "guides",
+        "pages"
+      ],
+      "lists": {
+        "guides": [
+          "guideId",
+          "title",
+          "summary",
+          "href",
+          "page",
+          "canOpen",
+          "reason"
+        ]
+      }
+    },
+    "founder_metrics": {
+      "keys": [
+        "mode",
+        "receiptId",
+        "dataState",
+        "rows",
+        "coverage",
+        "executionState",
+        "warnings",
+        "interval",
+        "note"
+      ],
+      "lists": {}
+    },
+    "founder_costs": {
+      "keys": [
+        "mode",
+        "dimension",
+        "receiptId",
+        "dataState",
+        "rows",
+        "coverage",
+        "interval",
+        "reason",
+        "previous",
+        "warnings",
+        "note"
+      ],
+      "lists": {}
+    },
+    "founder_attention": {
+      "keys": [
+        "mode",
+        "items"
+      ],
+      "lists": {}
+    },
+    "founder_sources": {
+      "keys": [
+        "mode",
+        "sources"
+      ],
+      "lists": {}
+    },
+    "founder_incident": {
+      "keys": [
+        "mode",
+        "incident"
+      ],
+      "lists": {}
+    },
+    "founder_search": {
+      "keys": [
+        "mode",
+        "collection",
+        "rows"
+      ],
+      "lists": {}
+    },
+    "founder_entity": {
+      "keys": [
+        "mode",
+        "collection",
+        "record"
+      ],
+      "lists": {}
+    }
   },
-  "campaign_items": {
-   "keys": [],
-   "lists": {
-    "items": [
-     "draftId",
-     "platform",
-     "revision",
-     "excerpt",
-     "jobId",
-     "state",
-     "local",
-     "timeZone",
-     "atUtc",
-     "assetId"
-    ]
-   }
+  "optional": {
+    "campaign_items": {
+      "keys": [],
+      "lists": {
+        "items": [
+          "draftId",
+          "platform",
+          "revision",
+          "excerpt",
+          "jobId",
+          "state",
+          "local",
+          "timeZone",
+          "atUtc",
+          "assetId"
+        ]
+      }
+    },
+    "campaign_timeline": {
+      "keys": [],
+      "lists": {
+        "events": [
+          "automationId",
+          "name",
+          "scheduleZone",
+          "scheduleLocal",
+          "runId",
+          "items",
+          "jobId",
+          "jobZone",
+          "jobLocal",
+          "platform"
+        ]
+      }
+    },
+    "analytics_compare": {
+      "keys": [],
+      "lists": {
+        "comparisons": [
+          "sampleSize",
+          "measured",
+          "missing",
+          "mean",
+          "minimum",
+          "reason",
+          "causalityEstablished"
+        ]
+      }
+    },
+    "research_results": {
+      "keys": [
+        "reason",
+        "searches",
+        "note"
+      ],
+      "lists": {}
+    },
+    "draft_evidence": {
+      "keys": [
+        "workspaceId",
+        "claimsTruncated"
+      ],
+      "lists": {
+        "sources": [
+          "ref",
+          "active",
+          "approvedFacts",
+          "facts",
+          "fetchedAt",
+          "host",
+          "kind",
+          "origin",
+          "published",
+          "retracted",
+          "title",
+          "evidence",
+          "claims"
+        ]
+      }
+    },
+    "analytics_posts": {
+      "keys": [
+        "workspaceId"
+      ],
+      "lists": {}
+    },
+    "task_progress": {
+      "keys": [
+        "summary",
+        "rule"
+      ],
+      "lists": {}
+    }
   },
-  "campaign_timeline": {
-   "keys": [],
-   "lists": {
-    "events": [
-     "automationId",
-     "name",
-     "scheduleZone",
-     "scheduleLocal",
-     "runId",
-     "items",
-     "jobId",
-     "jobZone",
-     "jobLocal",
-     "platform"
-    ]
-   }
-  },
-  "draft_evidence": {
-   "keys": [],
-   "lists": {
-    "sources": [
-     "ref",
-     "active",
-     "approvedFacts",
-     "facts",
-     "fetchedAt",
-     "host",
-     "kind",
-     "origin",
-     "published",
-     "retracted",
-     "title"
-    ]
-   }
-  },
-  "research_results": {
-   "keys": [
-    "reason",
-    "searches",
-    "note"
-   ],
-   "lists": {}
-  },
-  "task_progress": {
-   "keys": [
-    "summary",
-    "rule"
-   ],
-   "lists": {}
-  }
- },
- "shapes": {
-  "analytics_compare": {
-   "keys": [
-    "metric",
-    "basis",
-    "comparisons",
-    "rules",
-    "startUtc",
-    "endUtc",
-    "timeZone",
-    "undated"
-   ],
-   "lists": {
-    "comparisons": [
-     "cohort",
-     "metric",
-     "interpretation",
-     "jobIds",
-     "sampleSize",
-     "measured",
-     "missing",
-     "mean",
-     "minimum",
-     "reason",
-     "causalityEstablished"
-    ]
-   }
-  },
-  "analytics_coverage": {
-   "keys": [
-    "state",
-    "connections",
-    "unmatchedReadings",
-    "usesPlatformFallback",
-    "rule"
-   ],
-   "lists": {
-    "connections": [
-     "connectionId",
-     "platform",
-     "account",
-     "level",
-     "direct",
-     "providerOffersAnalytics",
-     "verifiedPosts",
-     "readPosts",
-     "readings",
-     "lastObservedAt",
-     "evidence",
-     "enableHref"
-    ]
-   }
-  },
-  "analytics_posts": {
-   "keys": [
-    "posts",
-    "offset",
-    "timeZone",
-    "startUtc",
-    "endUtc",
-    "families",
-    "rules",
-    "definitionVersion",
-    "undated",
-    "verifiedPostsInWindow",
-    "postsWithReadings"
-   ],
-   "lists": {
-    "posts": [
-     "ref",
-     "jobId",
-     "provider",
-     "platform",
-     "connectionId",
-     "providerPostId",
-     "language",
-     "publishedAt",
-     "publishedLocal",
-     "contentOrigin",
-     "metrics",
-     "rates",
-     "cohort",
-     "freshness"
-    ]
-   }
-  },
-  "analytics_series": {
-   "keys": [
-    "metric",
-    "bucket",
-    "timeZone",
-    "series",
-    "definitionVersion",
-    "unit",
-    "rule",
-    "undated"
-   ],
-   "lists": {
-    "series": [
-     "provider",
-     "platform",
-     "connectionId",
-     "points"
-    ]
-   }
-  },
-  "automation_detail": {
-   "keys": [
-    "taskId",
-    "name",
-    "status",
-    "scheduleText",
-    "policy",
-    "plan",
-    "platforms",
-    "needs",
-    "contentLabel",
-    "voiceMode",
-    "ref",
-    "timeZone",
-    "nextRun",
-    "nextPublish",
-    "upcoming",
-    "version",
-    "campaignId",
-    "pausedReason",
-    "history",
-    "href"
-   ],
-   "lists": {
-    "upcoming": [
-     "atUtc",
-     "local",
-     "offset"
-    ]
-   }
-  },
-  "automation_history": {
-   "keys": [
-    "automationId",
-    "runs",
-    "offset"
-   ],
-   "lists": {
-    "runs": [
-     "runId",
-     "ref",
-     "status",
-     "attention",
-     "scheduledUtc",
-     "scheduledLocal",
-     "timeZone",
-     "completedUtc",
-     "seen",
-     "cost",
-     "items"
-    ]
-   }
-  },
-  "automations_list": {
-   "keys": [
-    "automations",
-    "offset",
-    "statusCounts"
-   ],
-   "lists": {
-    "automations": [
-     "automationId",
-     "ref",
-     "name",
-     "status",
-     "schedule",
-     "timeZone",
-     "policy",
-     "platforms",
-     "nextRun",
-     "nextPublish",
-     "campaignId",
-     "pausedReason",
-     "version",
-     "href"
-    ]
-   }
-  },
-  "calendar_agenda": {
-   "keys": [
-    "range",
-    "entries",
-    "offset",
-    "total",
-    "statusCounts",
-    "unknownStates",
-    "days",
-    "daysNote",
-    "derived",
-    "href"
-   ],
-   "lists": {
-    "days": [
-     "date",
-     "weekday",
-     "count"
-    ],
-    "entries": [
-     "kind",
-     "id",
-     "ref",
-     "state",
-     "status",
-     "title",
-     "platform",
-     "account",
-     "channelId",
-     "atUtc",
-     "local",
-     "offset",
-     "timeZone",
-     "jobZone",
-     "jobLocal",
-     "fromAutomation",
-     "excerpt",
-     "href"
-    ]
-   }
-  },
-  "campaign_detail": {
-   "keys": [
-    "campaignId",
-    "goal",
-    "audience",
-    "status",
-    "missingFacts",
-    "facts",
-    "automations",
-    "platforms",
-    "href",
-    "drafts",
-    "draftCount",
-    "posts",
-    "lastWeek",
-    "upcomingRuns",
-    "derived",
-    "ref",
-    "version",
-    "accountIds",
-    "itemCount",
-    "progress",
-    "note"
-   ],
-   "lists": {}
-  },
-  "campaign_items": {
-   "keys": [
-    "campaignId",
-    "version",
-    "items",
-    "offset",
-    "max"
-   ],
-   "lists": {
-    "items": [
-     "itemId",
-     "kind",
-     "addedAt",
-     "needsReview",
-     "addedByYou",
-     "ref",
-     "exists",
-     "draftId",
-     "platform",
-     "revision",
-     "excerpt",
-     "jobId",
-     "state",
-     "local",
-     "timeZone",
-     "atUtc",
-     "assetId"
-    ]
-   }
-  },
-  "campaign_timeline": {
-   "keys": [
-    "campaignId",
-    "timeZone",
-    "startUtc",
-    "endUtc",
-    "events",
-    "truncated"
-   ],
-   "lists": {
-    "events": [
-     "kind",
-     "ref",
-     "atUtc",
-     "local",
-     "status",
-     "automationId",
-     "name",
-     "scheduleZone",
-     "scheduleLocal",
-     "runId",
-     "items",
-     "jobId",
-     "jobZone",
-     "jobLocal",
-     "platform"
-    ]
-   }
-  },
-  "campaigns_list": {
-   "keys": [
-    "campaigns",
-    "offset"
-   ],
-   "lists": {
-    "campaigns": [
-     "campaignId",
-     "goal",
-     "audience",
-     "status",
-     "missingFacts",
-     "facts",
-     "automations",
-     "platforms",
-     "href",
-     "ref",
-     "version",
-     "itemCount",
-     "createdAt",
-     "updatedAt"
-    ]
-   }
-  },
-  "connections_status": {
-   "keys": [
-    "accounts",
-    "publishingLive",
-    "attention",
-    "recovery",
-    "rule"
-   ],
-   "lists": {
-    "accounts": [
-     "connectionId",
-     "platform",
-     "account",
-     "connectionState",
-     "readiness",
-     "demo",
-     "revoked",
-     "levels",
-     "canPublish",
-     "publishCode",
-     "publishReason",
-     "ref",
-     "needsReconnect"
-    ]
-   }
-  },
-  "draft_evidence": {
-   "keys": [
-    "draftId",
-    "edges",
-    "sources",
-    "voiceFit"
-   ],
-   "lists": {
-    "sources": [
-     "sourceId",
-     "ref",
-     "available",
-     "kind",
-     "title",
-     "active",
-     "retracted",
-     "approvedFacts",
-     "facts",
-     "origin",
-     "host",
-     "published",
-     "fetchedAt"
-    ]
-   }
-  },
-  "draft_read": {
-   "keys": [
-    "draftId",
-    "ref",
-    "platform",
-    "language",
-    "account",
-    "channelId",
-    "revision",
-    "characters",
-    "limit",
-    "overLimit",
-    "needsReview",
-    "hasProposedUpdate",
-    "committed",
-    "committedJobState",
-    "setAside",
-    "sourceCount",
-    "warningsCount",
-    "unknownsCount",
-    "writerModel",
-    "voice",
-    "fromAutomation",
-    "createdAt",
-    "excerpt",
-    "href",
-    "text",
-    "openings",
-    "selectedOpening",
-    "unknowns",
-    "warnings",
-    "blockedByRetraction",
-    "proposedUpdate",
-    "scheduled",
-    "editable",
-    "editBlockedReason",
-    "voiceSourceCount",
-    "revisionsCount"
-   ],
-   "lists": {
-    "scheduled": [
-     "jobId",
-     "state",
-     "title",
-     "meaning",
-     "steps",
-     "platform",
-     "account",
-     "publishAt",
-     "timeZone",
-     "attempts",
-     "demo",
-     "fromAutomation",
-     "verified",
-     "providerReference",
-     "lastEvent"
-    ]
-   }
-  },
-  "draft_revisions": {
-   "keys": [
-    "draftId",
-    "current",
-    "revisions",
-    "offset"
-   ],
-   "lists": {
-    "revisions": [
-     "revision",
-     "origin",
-     "at",
-     "characters",
-     "text",
-     "textTruncated"
-    ]
-   }
-  },
-  "drafts_list": {
-   "keys": [
-    "drafts",
-    "offset",
-    "missingIds"
-   ],
-   "lists": {
-    "drafts": [
-     "draftId",
-     "ref",
-     "platform",
-     "language",
-     "account",
-     "channelId",
-     "revision",
-     "characters",
-     "limit",
-     "overLimit",
-     "needsReview",
-     "hasProposedUpdate",
-     "committed",
-     "committedJobState",
-     "setAside",
-     "sourceCount",
-     "warningsCount",
-     "unknownsCount",
-     "writerModel",
-     "voice",
-     "fromAutomation",
-     "createdAt",
-     "excerpt",
-     "href"
-    ]
-   }
-  },
-  "founder_attention": {
-   "keys": [
-    "mode",
-    "items"
-   ],
-   "lists": {}
-  },
-  "founder_costs": {
-   "keys": [
-    "mode",
-    "dimension",
-    "receiptId",
-    "dataState",
-    "rows",
-    "coverage",
-    "interval",
-    "reason",
-    "previous",
-    "warnings",
-    "note"
-   ],
-   "lists": {}
-  },
-  "founder_entity": {
-   "keys": [
-    "mode",
-    "collection",
-    "record"
-   ],
-   "lists": {}
-  },
-  "founder_incident": {
-   "keys": [
-    "mode",
-    "incident"
-   ],
-   "lists": {}
-  },
-  "founder_metrics": {
-   "keys": [
-    "mode",
-    "receiptId",
-    "dataState",
-    "rows",
-    "coverage",
-    "executionState",
-    "warnings",
-    "interval",
-    "note"
-   ],
-   "lists": {}
-  },
-  "founder_search": {
-   "keys": [
-    "mode",
-    "collection",
-    "rows"
-   ],
-   "lists": {}
-  },
-  "founder_sources": {
-   "keys": [
-    "mode",
-    "sources"
-   ],
-   "lists": {}
-  },
-  "job_detail": {
-   "keys": [
-    "kind",
-    "ref"
-   ],
-   "lists": {}
-  },
-  "library_collections": {
-   "keys": [
-    "collections"
-   ],
-   "lists": {
-    "collections": [
-     "collectionId",
-     "name",
-     "count"
-    ]
-   }
-  },
-  "library_item": {
-   "keys": [
-    "ref",
-    "assetId",
-    "store",
-    "kind",
-    "title",
-    "mime",
-    "extension",
-    "bytes",
-    "createdAt",
-    "tags",
-    "collections",
-    "processing",
-    "indexingStatus",
-    "transcriptionStatus",
-    "hasSource",
-    "sourceId",
-    "duplicateOf",
-    "extractionProblem",
-    "width",
-    "height",
-    "duration",
-    "alt",
-    "href",
-    "previewKind",
-    "previewRoute",
-    "excerpt",
-    "excerptTruncated",
-    "chunkCount",
-    "summary",
-    "lineage",
-    "mediaConsent"
-   ],
-   "lists": {}
-  },
-  "library_lineage": {
-   "keys": [
-    "assetId",
-    "store",
-    "edges"
-   ],
-   "lists": {}
-  },
-  "library_search": {
-   "keys": [
-    "items",
-    "offset",
-    "storage",
-    "capabilities",
-    "legacyMedia"
-   ],
-   "lists": {
-    "items": [
-     "ref",
-     "assetId",
-     "store",
-     "kind",
-     "title",
-     "mime",
-     "extension",
-     "bytes",
-     "createdAt",
-     "tags",
-     "collections",
-     "processing",
-     "indexingStatus",
-     "transcriptionStatus",
-     "hasSource",
-     "sourceId",
-     "duplicateOf",
-     "extractionProblem",
-     "width",
-     "height",
-     "duration",
-     "alt",
-     "href",
-     "previewKind",
-     "previewRoute"
-    ]
-   }
-  },
-  "library_selection": {
-   "keys": [
-    "attachments",
-    "references",
-    "refused",
-    "note"
-   ],
-   "lists": {
-    "attachments": [
-     "assetId",
-     "role"
-    ],
-    "references": [
-     "kind",
-     "id"
-    ],
-    "refused": [
-     "assetId",
-     "reason"
-    ]
-   }
-  },
-  "open_proposals": {
-   "keys": [
-    "proposals",
-    "conversationId",
-    "applyWith"
-   ],
-   "lists": {
-    "proposals": [
-     "proposalId",
-     "messageId",
-     "type",
-     "summary",
-     "digest",
-     "expiresAt",
-     "requiredPermission",
-     "status",
-     "view"
-    ]
-   }
-  },
-  "post_feedback": {
-   "keys": [
-    "jobId",
-    "readings",
-    "minimumBaselinePosts",
-    "causal"
-   ],
-   "lists": {}
-  },
-  "queue_status": {
-   "keys": [
-    "statusCounts",
-    "unknownStates",
-    "draftsUnscheduled",
-    "waitingApproval",
-    "upcoming",
-    "attention",
-    "totals",
-    "href"
-   ],
-   "lists": {
-    "attention": [
-     "jobId",
-     "state",
-     "title",
-     "meaning",
-     "steps",
-     "platform",
-     "account",
-     "publishAt",
-     "timeZone",
-     "attempts",
-     "demo",
-     "fromAutomation",
-     "verified",
-     "providerReference",
-     "lastEvent",
-     "ref"
-    ],
-    "upcoming": [
-     "jobId",
-     "state",
-     "title",
-     "meaning",
-     "steps",
-     "platform",
-     "account",
-     "publishAt",
-     "timeZone",
-     "attempts",
-     "demo",
-     "fromAutomation",
-     "verified",
-     "providerReference",
-     "lastEvent",
-     "ref",
-     "atUtc"
-    ],
-    "waitingApproval": [
-     "reviewId",
-     "ref",
-     "platform",
-     "account",
-     "local",
-     "timeZone",
-     "atUtc",
-     "expired"
-    ]
-   }
-  },
-  "recovery_guides": {
-   "keys": [
-    "guides",
-    "pages"
-   ],
-   "lists": {
-    "guides": [
-     "guideId",
-     "title",
-     "summary",
-     "href",
-     "page",
-     "canOpen",
-     "reason"
-    ]
-   }
-  },
-  "research_results": {
-   "keys": [
-    "pages",
-    "recorded",
-    "searches",
-    "note",
-    "reason"
-   ],
-   "lists": {
-    "pages": [
-     "index",
-     "title",
-     "host",
-     "url",
-     "urlUnsafe",
-     "published",
-     "publishedLabel",
-     "fetchedAt",
-     "facts",
-     "untrusted"
-    ]
-   }
-  },
-  "research_sources": {
-   "keys": [
-    "sources",
-    "offset"
-   ],
-   "lists": {
-    "sources": [
-     "sourceId",
-     "ref",
-     "title",
-     "host",
-     "url",
-     "published",
-     "publishedLabel",
-     "fetchedAt",
-     "status",
-     "active",
-     "retracted",
-     "facts",
-     "approvedFacts"
-    ]
-   }
-  },
-  "research_state": {
-   "keys": [
-    "allowed",
-    "web",
-    "enabledOnDeployment",
-    "hosted",
-    "decidedAt",
-    "processors",
-    "canTurnOn",
-    "guide",
-    "reason"
-   ],
-   "lists": {}
-  },
-  "slot_check": {
-   "keys": [
-    "draftId",
-    "jobId",
-    "platform",
-    "account",
-    "channelId",
-    "local",
-    "timeZone",
-    "atUtc",
-    "valid",
-    "problems",
-    "collisions",
-    "rule"
-   ],
-   "lists": {
-    "collisions": [
-     "kind",
-     "id",
-     "ref",
-     "local",
-     "minutesApart",
-     "status"
-    ]
-   }
-  },
-  "task_progress": {
-   "keys": [
-    "task",
-    "summary",
-    "rule"
-   ],
-   "lists": {}
-  },
-  "voice_consent": {
-   "keys": [
-    "cloudMemory",
-    "samples",
-    "learning",
-    "media",
-    "webResearch",
-    "owner",
-    "rule",
-    "href"
-   ],
-   "lists": {}
-  },
-  "voice_learning_status": {
-   "keys": [
-    "enabled",
-    "eventsWaiting",
-    "pendingProposals",
-    "newestProposalAt",
-    "extractor",
-    "lastRun",
-    "lastRunNote",
-    "rule"
-   ],
-   "lists": {}
-  },
-  "voice_preferences": {
-   "keys": [
-    "pending",
-    "recent",
-    "recentTotal",
-    "learned",
-    "versions",
-    "settings",
-    "stats",
-    "rule"
-   ],
-   "lists": {
-    "learned": [
-     "id",
-     "type",
-     "ruleKey",
-     "polarity",
-     "scope",
-     "statement",
-     "applyWhen",
-     "evidenceState",
-     "evidenceSummary",
-     "source",
-     "status",
-     "since"
-    ]
-   }
-  },
-  "voice_profile_state": {
-   "keys": [
-    "approved",
-    "proposed",
-    "revisions",
-    "derived",
-    "note",
-    "href"
-   ],
-   "lists": {}
-  },
-  "voice_sources": {
-   "keys": [
-    "samples",
-    "offset",
-    "eligibility"
-   ],
-   "lists": {
-    "samples": [
-     "sourceId",
-     "ref",
-     "title",
-     "platform",
-     "language",
-     "label",
-     "origin",
-     "active",
-     "selected",
-     "revision",
-     "characters",
-     "excerpt",
-     "useGrants",
-     "grantRevision",
-     "partialCoverage",
-     "publishedAt",
-     "retainedAt",
-     "permalink",
-     "revoked"
-    ]
-   }
-  },
-  "writers_list": {
-   "keys": [
-    "models",
-    "selected",
-    "workspaceDefault"
-   ],
-   "lists": {
-    "models": [
-     "id",
-     "label",
-     "qualified",
-     "costClass",
-     "route",
-     "detail"
-    ]
-   }
-  }
- }
+  "open": [
+    "founder_attention",
+    "founder_entity",
+    "founder_incident",
+    "founder_metrics",
+    "founder_search",
+    "founder_sources",
+    "job_detail"
+  ]
 }
