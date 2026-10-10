@@ -6,6 +6,8 @@ import { SegmentedControl } from '@/components/rafii';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import type { LearnedItem, MemoryProposal, MemoryProposals } from '@/lib/api/types';
 import { formatDate } from '@/lib/time';
+import { useMemoryText } from './memory-copy';
+import { useGenUiLocale } from '@/features/agent/generative-ui/core/locale';
 import { ProposalCard } from './proposal-card';
 
 const DECISION_LABEL: Record<string, string> = {
@@ -73,6 +75,8 @@ function Row({ statement, meta, badge }: { statement: string; meta: string; badg
 }
 
 function HistoryTabs({ data }: { data: MemoryProposals }) {
+  const copy = useMemoryText();
+  const locale = useGenUiLocale();
   const pending = data.pending ?? [];
   const decided = decidedRows(data);
   const retiredCount = (data.learning?.items ?? []).filter((item) => item.status === 'retired').length;
@@ -85,7 +89,7 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
     <div className='flex flex-col gap-3'>
       <SegmentedControl
         pattern='tabs'
-        label='Suggestions'
+        label={copy('Suggestions')}
         size='sm'
         value={tab}
         onChange={setTab}
@@ -97,20 +101,20 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
             value: 'waiting',
             label: (
               <span className='inline-flex items-center gap-1.5'>
-                Waiting <DigitSwap value={pending.length} />
+                {copy('Waiting')} <DigitSwap value={pending.length} />
               </span>
             )
           },
           {
             value: 'decided',
-            label: <span className='inline-flex items-center gap-1.5'>Recent {total !== null && <DigitSwap value={total} />}</span>
+            label: <span className='inline-flex items-center gap-1.5'>{copy('Recent')} {total !== null && <DigitSwap value={total} />}</span>
           }
         ]}
       />
       {tab === 'waiting' ? (
         <div role='tabpanel' id={panelIds[0]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
           {pending.length === 0 ? (
-            <p className='text-muted-foreground text-xs'>Nothing waiting.</p>
+            <p className='text-muted-foreground text-xs'>{copy('Nothing waiting.')}</p>
           ) : (
             <div className='flex flex-col gap-2'>
               {pending.map((proposal) => (
@@ -122,15 +126,15 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
       ) : (
         <div role='tabpanel' id={panelIds[1]} tabIndex={0} className='rafii-focus rounded-[var(--rafii-radius-control)]'>
           {decided.length === 0 ? (
-            <p className='text-muted-foreground text-xs'>No decisions yet.</p>
+            <p className='text-muted-foreground text-xs'>{copy('No decisions yet.')}</p>
           ) : (
             <div className='flex flex-col gap-3'>
               <ul className='flex flex-col'>
                 {decided.map((row) => (
-                  <Row key={row.key} statement={row.statement} badge={row.label} meta={[row.scope, row.when].filter(Boolean).join(' · ')} />
+                  <Row key={row.key} statement={row.statement} badge={copy(row.label)} meta={[row.scope.replace('All channels', copy('All channels')).replace('all languages', copy('all languages')), locale.language === 'en' ? row.when : row.at ? formatDate(row.at) : null].filter(Boolean).join(' · ')} />
                 ))}
               </ul>
-              {total !== null && total > decided.length && <p className='text-muted-foreground text-xs'>Latest {decided.length} of {total}</p>}
+              {total !== null && total > decided.length && <p className='text-muted-foreground text-xs'>{locale.language === 'en' ? 'Latest' : '最近'} {decided.length}/{total}</p>}
             </div>
           )}
         </div>
@@ -144,10 +148,11 @@ function HistoryTabs({ data }: { data: MemoryProposals }) {
  * decisions with `decidedAt`, and the retired preferences. If the proposals cannot be read, it says so.
  */
 export function LearningHistory({ data }: { data: MemoryProposals }) {
+  const copy = useMemoryText();
   return (
     <section aria-labelledby='learning-history-title' className='flex flex-col gap-3 pt-1'>
       <h3 id='learning-history-title' className='text-foreground text-sm font-medium'>
-        Suggestions
+        {copy('Suggestions')}
       </h3>
       <HistoryTabs data={data} />
     </section>

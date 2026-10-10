@@ -2,7 +2,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const filename=path.resolve(__dirname,'../src/features/agent/voice-consent.ts');const loaded=new Module(filename);
 loaded._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,filename);
-const {eligibleVoiceSources,effectiveVoiceMode}=loaded.exports;
+const {eligibleVoiceSources,effectiveVoiceMode,manualVoiceAvailable}=loaded.exports;
 test('changing writer never transfers exact sample consent to a different cloud model or CLI',()=>{
  const source={id:'sample',kind:'voice_sample',active:true,selected:true,useGrants:[{purpose:'generation',route:'cloud:gateway:model-a'},{purpose:'analysis',route:'cloud:gateway:model-b'}]};
  const model={qualified:true,voiceRoute:'cloud:gateway:model-a'};
@@ -27,4 +27,18 @@ test('drafts write like the author by default only when this writer may read an 
  assert.equal(effectiveVoiceMode('neutral',2),'neutral','the person can still choose neutral');
  assert.equal(effectiveVoiceMode(null,0),'neutral');
  assert.equal(effectiveVoiceMode('personalized',0),'neutral','no eligible sample for this writer means neutral');
+});
+
+test('manual approved voice requires explicit selection, current approval and cloud memory permission',()=>{
+ const speaker={activeRevision:3,revisions:[{revision:3,profile:{tone:'plain',evidenceSourceIds:[]}}]};
+ const local={qualified:true,voiceRoute:'local-cli'}, cloud={qualified:true,voiceRoute:'cloud:gateway:model'};
+ assert.equal(manualVoiceAvailable(speaker,local,false),true);
+ assert.equal(manualVoiceAvailable(speaker,cloud,false),false);
+ assert.equal(manualVoiceAvailable(speaker,cloud,true),true);
+ assert.equal(effectiveVoiceMode(null,0,true),'neutral','existing default unchanged');
+ assert.equal(effectiveVoiceMode('neutral',0,true),'neutral');
+ assert.equal(effectiveVoiceMode('personalized',0,true),'personalized');
+ assert.equal(manualVoiceAvailable(undefined,local,true),false);
+ assert.equal(manualVoiceAvailable({...speaker,revisions:[{revision:3,profile:{status:'stale'}}]},local,true),false);
+ assert.equal(manualVoiceAvailable({...speaker,revisions:[{revision:3,profile:{evidenceSourceIds:['revoked']}}]},local,true),false);
 });

@@ -1,14 +1,14 @@
 import type { MemoryEgress, MemoryFile } from '@/lib/api/types';
 
 /**
- * Which rendered memory files a writing route actually receives. The API names them in
+ * Which rendered memory files are candidates for a writing route. The API names them in
  * `egress.sharedFiles` (the prompt files, in prompt order); every other file is rendered for people
  * to read. Nothing here assumes the list: when the API leaves it out, no file is labelled.
  */
 export type DraftGroup = 'given' | 'reference';
 
 export const DRAFT_GROUP_LABEL: Record<DraftGroup, string> = {
-  given: 'Sent to writers',
+  given: 'Writer context candidates',
   reference: 'For you to read'
 };
 

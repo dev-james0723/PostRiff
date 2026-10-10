@@ -1,0 +1,118 @@
+Ran 179 tests in 1.728s
+OK
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_brand_brain.py exit=0
+{
+  "status": "pass",
+  "checks": [
+    "canonical analysis and actual paired template writer preserve active voice",
+    "real repository owner and stale fencing plus draft invalidation and schedule holds",
+    "append-only restore activation and revocation prevents restored evidence use",
+    "workspace isolation and idempotent imports",
+    "single-use exact quote, real reservation/settlement, injected AI result and no auto activation",
+    "existing CreditBook exact limit approval, insufficient balance denial, claimed quote and real credit settlement",
+    "approved canonical ZIP export, restricted data omission, read-role access and foreign workspace denial",
+    "durable content-free audit rows"
+  ],
+  "execution": "disposable-postgresql; no paid providers"
+}
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_brand_brain.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_brand_brain_memory.py exit=0
+postgres_memory_egress: 14/14 checks passed
+postgres_brand_brain_memory: 28/28 checks passed
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_brand_brain_memory.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_raffi_voice_sources.py exit=0
+PASS: persisted import, exact grant, personalized binding, viewer denial, revocation cleanup, completion race and stale-apply block
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_raffi_voice_sources.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_memory_proposals.py exit=0
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "a chat instruction becomes a pending proposal with no run, no charge, and a card in the reply",
+    "a repeated instruction proposes nothing new; a fact is refused with the reason",
+    "deciding is owner-only, and a refused edit leaves proposal, versions and state untouched",
+    "remembering writes the version and the style revision in one transaction and VOICE.md shows it",
+    "the next LinkedIn draft carries the learned item and the Instagram draft does not; both runs record the binding",
+    "dismiss suppresses the scope; pause and retire update the version row with the state",
+    "reset is owner-only and clears versions, proposals and events with the state",
+    "Recent total includes all decisions and excludes pending proposals"
+  ]
+}
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_memory_proposals.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_growth_phase1.py exit=0
+{"status": "PASS", "execution": "disposable PostgreSQL + zero-network deterministic models", "checks": ["default off, consent, API token and workspace isolation", "check ledger, exact replay, rewrite/recheck, selective edits and stale rejection", "rewrite quota, grounding rejection and full recheck binding", "in-flight revocation fencing and actual-attempt ledger", "memory revocation stops the next model call", "owned history, proposed/approve/restore, voice reuse, label-only sharing and revocation", "workspace route revocation overrides older sample grants", "ten signed checks per day enforced before model dispatch", "anonymous minimization, abuse allowance and retention cleanup", "verified revision prediction and official like-for-like 1h/24h/7d feedback", "RLS privileges and deletion cascades"], "realModelCalls": 0}
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_growth_phase1.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping
+WARNING: password file "/dev/null" is not a plain file
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/034_unified_notifications.sql:62: NOTICE:  trigger "pr_phone_sms_binding" for relation "public.pr_phone_numbers" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/099_youtube_policy_acceptance.sql:27: NOTICE:  trigger "pr_youtube_policy_immutable" for relation "public.pr_youtube_policy_revisions" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:45: NOTICE:  trigger "pr_youtube_agent_history_immutable" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:77: NOTICE:  trigger "pr_youtube_agent_history_provider" for relation "public.pr_youtube_agent_history" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/105_youtube_agent_history.sql:80: NOTICE:  trigger "pr_youtube_agent_history_provider_change" for relation "public.pr_encrypted_credentials" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:153: NOTICE:  trigger "pr_youtube_workspace_projection_trg" for relation "public.pr_workspaces" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:171: NOTICE:  trigger "pr_youtube_upload_projection_trg" for relation "public.pr_youtube_uploads" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_operations_service_read" for relation "public.pr_youtube_operations" does not exist, skipping
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/106_youtube_operations_projection.sql:188: NOTICE:  policy "pr_youtube_planner_candidates_service_read" for relation "public.pr_youtube_planner_candidates" does not exist, skipping
+== tests/phase2/postgres_consumer_campaign_worker.py exit=0
+PASS: relational persistence, real worker/runtime call, restart/lease, idempotency, pause/cancel, legacy authority and no publish side effects
+PASS: explicit occurrence cost cap, in-flight cancellation, crash after provider completion reconciled without repeat charge
+PASS: automation drafts every activated account with its own content type, brief text stays data, disconnected accounts skipped then paused
+PASS: countdown and recap context reach the writer, costs and draft counts recorded, batched cron, one deduplicated drafts-ready email, countdown finishes
+PASS: new idea triggers exactly one run that reads it, strong-post scan reads real insights without side effects, evergreen without candidates still drafts
+PASS: an automation in your voice without an allowed writing sample drafts in a neutral voice and says so
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_consumer_campaign_worker.py"]}
+psql:/home/runner/work/PostRiff/PostRiff/migrations/postriff/109_agent_permissions.sql:177: NOTICE:  trigger "pr_agent_grants_revocation_once" for relation "public.pr_agent_grants" does not exist, skipping

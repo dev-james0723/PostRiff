@@ -72,6 +72,7 @@ interface ComposerProps {
   voiceMode?: 'neutral' | 'personalized';
   onVoiceMode?: (mode: 'neutral' | 'personalized') => void;
   voiceAvailable?: boolean;
+  voiceRevision?: number | null;
   imageGeneration?: { enabled: boolean; available: boolean; detail: string; onChange: (enabled: boolean) => void };
   /** First message only: consent to draft from the text, and whether it may be quoted. */
   consent?: { own: boolean; use: boolean; onOwn: (v: boolean) => void; onUse: (v: boolean) => void };
@@ -98,7 +99,7 @@ const MORE_VIEW: Record<string, PlusView> = { post: 'posts', template: 'template
  * show it with an amber dot. The brief's own language never decides a post's language.
  */
 export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, imageGeneration, consent, submitLabel, compact, hint, accountLabel, deliveryPlanner, attachments, attachmentBar, slash },
+  { value, onChange, onSubmit, busy, disabled, submitDisabled, placeholder, chips, languages, models, model, modelSelection, autoModel, onModel, reasoning, reasoningOptions, onReasoning, voiceMode = 'neutral', onVoiceMode, voiceAvailable = false, voiceRevision, imageGeneration, consent, submitLabel, compact, hint, accountLabel, deliveryPlanner, attachments, attachmentBar, slash },
   ref
 ) {
   // An unavailable model is never swapped for another paid one: the person chooses again. Send also waits for uploads (SPEC §4.7).
@@ -211,7 +212,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
               className={cn(TOOL, ICON_ON_PHONES, voiceMode === 'personalized' ? 'rafii-glass-selected text-foreground' : 'rafii-glass text-muted-foreground hover:text-foreground')}
             >
               <IconWaveSine aria-hidden className='size-4' />
-              <span className='@max-xl/composer:sr-only'>{voiceMode === 'personalized' ? 'Writing like me' : 'Neutral voice'}</span>
+              <span className='@max-xl/composer:sr-only'>{voiceMode === 'personalized' ? `Writing like me${voiceRevision ? ` · v${voiceRevision}` : ''}` : 'Neutral override'}</span>
             </button>
           )}
           {imageGeneration && (

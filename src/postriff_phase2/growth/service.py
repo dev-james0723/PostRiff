@@ -15,6 +15,7 @@ import secrets
 import time
 import uuid
 from types import SimpleNamespace
+from datetime import datetime, timezone
 
 from postriff_alpha.domain import AlphaError
 from .. import memory, voice_sources
@@ -202,6 +203,7 @@ class GrowthService:
             state=row[1]
             if self._context(state)!=run['context']:
                 raise AlphaError('The input or AI permission changed. Check the current version.',409,code='growth_input_changed')
+            memory.validate_receipt(state, run['prepared'].get('memoryReceipt'))
             draft=run['prepared'].get('draft')
             if draft and draft.get('id'):
                 current=self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']})
@@ -331,6 +333,10 @@ class GrowthService:
                 require(_membership(row),run.get('requirement','edit'))
                 current=row[1]
                 valid=self._context(current)==run['context']
+                try:
+                    memory.validate_receipt(current, (run.get('prepared') or {}).get('memoryReceipt'))
+                except AlphaError:
+                    valid=False
                 draft=(run.get('prepared') or {}).get('draft')
                 if draft and draft.get('id'):
                     candidate=next((v for v in current.get('variants',[]) if v['id']==draft['id']),{})
@@ -423,13 +429,17 @@ class GrowthService:
             route='cloud:vercel-ai-gateway:'+writer
             if route not in state.get('growthConsent',{}).get('routes',[]):
                 raise AlphaError('The owner must allow this exact rewrite model first.',403,code='growth_writer_consent_required')
-            voice=memory.projection(state,'cloud',voice_route=route)
+            voice,memory_receipt=memory.prepare_writer(state,'cloud',route,
+                destinations=[{'platform':draft.get('platform'), 'language':draft.get('language')}],
+                content_type_id=draft.get('formatId'), voice_mode='personalized')
+            from ..agent_runtime import FixtureAgentRuntime
+            memory_receipt['execution']='fixture' if isinstance(runtime,FixtureAgentRuntime) else 'completed'
             payload={'original':draft['text'],'sentences':rewrite.sentences(draft['text']),
                      'creatorFacts':facts,'weakDimensions':check['change'],'voice':voice['files']}
             messages=[{'role':'system','content':rewrite.SYSTEM},{'role':'user','content':json.dumps(payload,ensure_ascii=False)}]
             prompt_bytes=len(json.dumps(messages,ensure_ascii=False).encode())
             if prompt_bytes>60_000:raise AlphaError('This rewrite context is too large; shorten the draft or examples.',413)
-            return {'draft':draft,'check':check,'facts':facts,'writer':writer,'messages':messages,'promptBytes':prompt_bytes,'posts':self._history(cur,workspace_id,state)}
+            return {'draft':draft,'check':check,'facts':facts,'writer':writer,'messages':messages,'promptBytes':prompt_bytes,'posts':self._history(cur,workspace_id,state),'memoryReceipt':memory_receipt}
         run=self._begin(workspace_id,token,'rewrite',body,prepare)
         if 'replayed' in run:return run['replayed']
         sink=MemoryUsageSink();result=None;error=None
@@ -443,7 +453,9 @@ class GrowthService:
             if (grounding.probability('claims_supported') or 0)<.9:
                 raise AlphaError('New claims could not be grounded in your facts.',409,code='rewrite_ungrounded')
             after=self._check(router,workspace_id,run['state'],{**p['draft'],'text':result['rewrite']},p['posts'])
-            result.update(before=p['check'],after=after,original=p['draft']['text'],facts=p['facts'],checkId=body['checkId'],draft=p['draft'],grounding='passed')
+            result.update(before=p['check'],after=after,original=p['draft']['text'],facts=p['facts'],checkId=body['checkId'],draft=p['draft'],grounding='passed',
+                memoryReceipt={**p['memoryReceipt'],'workspaceId':workspace_id,'runId':run['id'],
+                    'draftId':p['draft'].get('id'),'generatedAt':datetime.fromtimestamp(self.clock(),timezone.utc).isoformat()})
             if p['check']['questionSet']=='postdoctor.v2':
                 ctx=after.get('_adviceContext',{})
                 comparison_state=advice.comparison_state(p['draft']['text'],result['rewrite'],context=ctx,facts=p['facts'],order='original_first')
@@ -607,7 +619,9 @@ class GrowthService:
                 cur.execute("SELECT body,context_fingerprint FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id::text=%s AND kind='rewrite' AND status='completed' FOR UPDATE",(workspace_id,payload.get('rewriteId')))
                 row=cur.fetchone()
                 if not row or row[1]!=self._context(state):raise AlphaError('This rewrite is stale or unavailable.',409)
-                result=row[0];draft=result['draft'];variant=self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']}) if draft.get('id') else None
+                result=row[0]
+                memory.validate_receipt(state, result.get('memoryReceipt'))
+                draft=result['draft'];variant=self._draft(state,{'variantId':draft['id'],'variantRevision':draft['revision']}) if draft.get('id') else None
                 if not variant or variant['text']!=result['original'] or not self._draft_matches(state,draft):raise AlphaError('Save this draft before accepting changes.',409)
                 selected=payload.get('changeIds',[])
                 if not selected:raise AlphaError('Select at least one sentence change.')
@@ -623,6 +637,8 @@ class GrowthService:
                 self.hosted.commands(state,principal,'variant_edit',{'variantId':draft['id'],'variantRevision':draft['revision'],'text':text})
                 target=next(v for v in state['variants'] if v['id']==draft['id'])
                 target['needsReview']=True
+                if result.get('memoryReceipt'):
+                    target['memoryReceipt']={**result['memoryReceipt'],'draftId':target['id']}
                 if result.get('missingFacts'):
                     target['unknowns']=list(dict.fromkeys([*target.get('unknowns',[]),*result['missingFacts']]))
                 target['postDoctorAccepted']={'runId':payload['rewriteId'],'changeIds':selected,'textDigest':digest(text),

@@ -46,7 +46,7 @@ import { SettingButtons } from './setting-buttons';
 import { selectionKey, useChannelLanguages, type ChannelTarget } from './use-channel-languages';
 import { useDestinations } from './use-destinations';
 import { modelName, useModelChoice } from './use-model';
-import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
+import { effectiveVoiceMode, eligibleVoiceSources, manualVoiceAvailable } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
 import { useAuth } from '@/lib/auth/session';
@@ -307,7 +307,8 @@ function HomeWorkspace() {
       />
     ) : null;
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
-  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
+  const manualVoice = manualVoiceAvailable(state?.speaker, choice.option, memory.data?.egress?.cloud === true && !memory.isRefetchError);
+  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length, manualVoice);
   const maximum = parseCreditLimit(creditLimit);
   const estimateRequest = useMemo(
     () => creditRequestFor(quickStartPayload({ text: text.trim(), ownContent: own, destinations: languages.destinations, ...choice.requestFields, voiceMode, voiceSourceIds, timeZone, sourceIds: included, ...chipFields })),
@@ -317,7 +318,7 @@ function HomeWorkspace() {
   const creditEstimate = useCreditEstimate(creditMode && canEdit && text.trim().length > 0 && languages.destinations.length > 0 && !imageRequested, { operation: 'quick-start', request: estimateRequest }, choice.auto ? choice.model : undefined, snapshot.data?.revision);
   const ceiling = creditEstimate.estimate?.ceilingMilliCredits ?? null;
   const creditInvalid = creditMode && (!maximum || maximum > (usage.data?.credits?.availableMilliCredits ?? 0) || imageRequested || (ceiling !== null && maximum < ceiling));
-  const voiceAvailable = voiceSourceIds.length > 0;
+  const voiceAvailable = voiceSourceIds.length > 0 || manualVoice;
   const imageCapability = models.data?.imageGeneration;
   const generation = useHomeGeneration(params.get('run'));
   // Time back: once a writing run has a conversation, active time here counts toward its first approved draft.
@@ -665,7 +666,7 @@ function HomeWorkspace() {
                 <SettingButtons
                   language={{ value: languageSummary, onClick: () => setDialog('language'), expanded: dialog === 'language', controls: ids.language, disabled: languages.selection.length === 0 }}
                   model={{ value: modelSummary, title: choice.level ? `${choice.level.label} reasoning` : undefined, onClick: () => setDialog('model'), expanded: dialog === 'model', controls: ids.model, disabled: !models.data }}
-                  voice={{ value: voiceMode === 'personalized' ? 'Writing like you' : 'Neutral', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
+                  voice={{ value: voiceMode === 'personalized' ? `Writing like you${voiceRevision ? ` · v${voiceRevision}` : ''}` : 'Neutral override', onClick: () => setDialog('voice'), expanded: dialog === 'voice', controls: ids.voice }}
                 />
               }
               notes={creditMode && usage.data?.credits ? <div className='mb-3'><CreditLimitField value={creditLimit} onChange={setCreditLimit} availableMilliCredits={usage.data.credits.availableMilliCredits} disabled={preparing || generation.busy || generation.running} estimate={creditEstimate.estimate} estimating={creditEstimate.loading} estimateError={creditEstimate.error} autoModel={choice.auto ? choice.model : null} modelLabel={(id) => modelName(choice.options.find((m) => m.id === id), id)} /></div> : undefined}

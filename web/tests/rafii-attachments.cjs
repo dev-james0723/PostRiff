@@ -219,6 +219,26 @@ async function open(page) {
   await plus(page).waitFor({ state: 'visible', timeout: 60000 });
 }
 
+// The plus wrapper must reserve its entire hit target even when the neighbouring
+// voice/model labels consume the available width. Test actual clicks, never force.
+async function checkComposerTools(page, phone = false) {
+  const model = page.getByRole('combobox', { name: 'Model', exact: true });
+  await plus(page).scrollIntoViewIfNeeded();
+  const addBox = await plus(page).boundingBox();
+  const modelBox = await model.boundingBox();
+  const separate = addBox && modelBox &&
+    (addBox.x + addBox.width <= modelBox.x || modelBox.x + modelBox.width <= addBox.x ||
+      addBox.y + addBox.height <= modelBox.y || modelBox.y + modelBox.height <= addBox.y);
+  check(`${phone ? 'phone' : 'desktop'}: attachment and model hit targets do not overlap`, Boolean(separate), { addBox, modelBox });
+  if (phone) await model.tap();
+  else await model.click();
+  await page.getByRole('dialog', { name: 'Select model and provider' }).waitFor({ state: 'visible' });
+  check(`${phone ? 'phone' : 'desktop'}: model control opens independently`, await model.getAttribute('aria-expanded') === 'true');
+  await page.keyboard.press('Escape');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(`${phone ? 'phone' : 'desktop'}: composer controls do not overflow the page`, overflow <= 0, { overflow });
+}
+
 async function waitChipWord(page, index, pattern, timeout = 60000) {
   const started = Date.now();
   const seen = new Set();
@@ -254,6 +274,7 @@ async function waitChipWord(page, index, pattern, timeout = 60000) {
       return route.continue();
     });
     await open(page);
+    await checkComposerTools(page);
 
     await plus(page).click();
     const menu = page.getByRole('menu');
@@ -406,6 +427,7 @@ async function waitChipWord(page, index, pattern, timeout = 60000) {
     const phone = await context(browser, { width: 390, height: 844 });
     const small = await phone.newPage();
     await open(small);
+    await checkComposerTools(small, true);
     await plus(small).tap();
     const sheet = small.getByRole('dialog', { name: 'Add to this message' });
     await sheet.waitFor({ state: 'visible', timeout: 15000 });

@@ -136,9 +136,9 @@ denied(lambda: service.learning.decide(service.repository, wid, "fixture-one", s
 checks.append("remembering writes the version and the style revision in one transaction and VOICE.md shows it")
 
 # 5. The next draft receives only the items that apply to its destinations, recorded on the run.
-linkedin = ideas.turn(wid, "fixture-one", cid, {"text": "Write about the seed swap.", "destinations": [{"platform": "LinkedIn", "language": "English"}], "timeZone": "Asia/Hong_Kong"})
+linkedin = ideas.turn(wid, "fixture-one", cid, {"text": "Write about the seed swap.", "voiceMode": "personalized", "destinations": [{"platform": "LinkedIn", "language": "English"}], "timeZone": "Asia/Hong_Kong"})
 assert linkedin["status"] == "completed" and linkedin["usage"]["memoryBindings"]["used"] == [proposal["id"]] and linkedin["usage"]["memoryBindings"]["styleRevision"] == 1
-instagram = ideas.turn(wid, "fixture-one", cid, {"text": "Write about the seed swap for Instagram.", "destinations": [{"platform": "Instagram", "language": "繁體中文"}], "timeZone": "Asia/Hong_Kong"})
+instagram = ideas.turn(wid, "fixture-one", cid, {"text": "Write about the seed swap for Instagram.", "voiceMode": "personalized", "destinations": [{"platform": "Instagram", "language": "繁體中文"}], "timeZone": "Asia/Hong_Kong"})
 assert instagram["status"] == "completed" and instagram["usage"]["memoryBindings"]["used"] == []
 last = ideas.messages(wid, "fixture-one", cid)["messages"][-1]["body"]
 assert last["memory"] == instagram["usage"]["memoryBindings"]
