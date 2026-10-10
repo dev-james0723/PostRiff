@@ -136,6 +136,7 @@ def draft_read(dctx, inputs, _cursor):
 
 def draft_evidence(dctx, inputs, _cursor):
     from .. import graph
+    from ... import evidence
     from ...site_agent import reads
     v = _variant(dctx.state, inputs["draftId"])
     edges = graph.neighbours(dctx.state, "draft", v["id"])
@@ -153,13 +154,27 @@ def draft_evidence(dctx, inputs, _cursor):
                         "active": bool(source.get("active")), "retracted": bool(source.get("retracted")), "approvedFacts": sum(1 for f in facts if f.get("approved")),
                         "facts": len(facts), "origin": origin.get("kind"), "host": origin.get("host"), "published": origin.get("published") or None,
                         "fetchedAt": origin.get("fetchedAt")})
+    claim_budget = 30
+    claims_truncated = False
+    for item in sources:
+        stored = by_id.get(item["sourceId"])
+        item["evidence"] = evidence.source(dctx.workspace_id, stored or {"id": item["sourceId"], "available": False})
+        item["claims"] = []
+        if stored and stored.get("active", True) and not stored.get("retracted"):
+            for campaign in (dctx.state.get("coworker") or {}).get("sourceCampaigns") or []:
+                if campaign.get("sourceId") != item["sourceId"] or not campaign.get("factPack") or not campaign.get("source"):
+                    continue
+                item["claims"].extend(evidence.fact_pack(dctx.workspace_id, campaign["factPack"], [campaign["source"]]))
+            claims_truncated = claims_truncated or len(item["claims"]) > claim_budget
+            item["claims"] = item["claims"][:claim_budget]
+            claim_budget -= len(item["claims"])
     try:
         check = reads.voice_check(dctx.site_context(), draftId=v["id"])["data"]
         voice = {k: check.get(k) for k in ("empty", "findings", "basis", "summary", "platform") if k in check}
     except AlphaError:
         voice = None
     missing = [s["sourceId"] for s in sources if not s.get("available")]
-    return ui_contracts.query_result("partial" if missing else "available", {"draftId": v["id"], "edges": edges.get("edges") or [], "sources": sources, "voiceFit": voice},
+    return ui_contracts.query_result("partial" if missing else "available", {"workspaceId": dctx.workspace_id, "claimsTruncated": claims_truncated, "draftId": v["id"], "edges": edges.get("edges") or [], "sources": sources, "voiceFit": voice},
                                      as_of=common.iso(dctx.now), source_refs=[common.ref("draft", v["id"])] + [s["ref"] for s in sources if s.get("ref")],
                                      revision=str(v.get("revision")), known=len(sources) - len(missing), total=len(sources),
                                      note="Each relationship names the stored field it comes from." if edges.get("edges") else None,

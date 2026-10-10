@@ -65,7 +65,7 @@ def attach_readings(cur, workspace_id, posts):
                     'provenance':'user_supplied','observedAt':None}
     index = {(p.get('provider'), p.get('providerPostId'), p.get('connectionId')): p for p in posts}
     for horizon in HORIZONS:
-        for provider, post_id, _, metric, version, value, unit, availability, observed, _, conn, offset in latest_observations(cur, workspace_id, horizon):
+        for provider, post_id, _, metric, version, value, unit, availability, observed, _, conn, offset, *_period in latest_observations(cur, workspace_id, horizon):
             post = index.get((provider, post_id, conn))
             if post is None or offset != horizon:
                 continue
