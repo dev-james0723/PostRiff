@@ -210,7 +210,7 @@ class UniversalLibrary:
                 if not workspace or workspace[0].get('accountBlock') or workspace[0].get('accountDeletion'):
                     return 'workspace_frozen'
                 current = self._row(cur,w,i,True)
-                cur.execute('SELECT lease_expires_at > now() FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s', (w,i))
+                cur.execute('SELECT lease_expires_at > clock_timestamp() FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s', (w,i))
                 lease_live = cur.fetchone()
                 if str(current.get('lease_token')) != lease or current['processing_status'] != 'processing' or not lease_live or not lease_live[0]:
                     return 'lease_lost'
@@ -232,7 +232,7 @@ class UniversalLibrary:
                      'Access to the file could not be verified. Review it before retrying.' if kind == 'permission' else str(e)[:300])
             delay = max(0, (info['retryAt'] or time.time()) - time.time())
             with connect() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s THEN 'pending' ELSE 'failed' END,extraction_error=%s,provenance=jsonb_set(provenance,'{recovery}',%s::jsonb),lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>%s),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND lease_expires_at>now() AND processing_status='processing'",
+                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s THEN 'pending' ELSE 'failed' END,extraction_error=%s,provenance=jsonb_set(provenance,'{recovery}',%s::jsonb),lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>%s),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND lease_expires_at>clock_timestamp() AND processing_status='processing'",
                             (transient,transient,error,json.dumps(info),delay,w,i,lease))
                 if cur.rowcount != 1:
                     return 'lease_lost'

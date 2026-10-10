@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 import time
+import threading
 import unittest
 import uuid
+import psycopg
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -191,6 +193,41 @@ class RecoveryPG(unittest.TestCase):
         self.assertEqual(row['processing_status'],'failed')
         self.assertEqual(row['provenance']['recovery']['category'],'timeout')
         self.assertFalse(row['provenance']['recovery']['automaticRetry'])
+
+    def test_lease_expiring_while_waiting_for_workspace_lock_discards_completion(self):
+        ident=self.asset()
+        seen=[]; errors=[]; threads=[]
+        def after_read():
+            locker=connect()
+            locker.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(self.w,))
+            def release_after_expiry():
+                try:
+                    deadline=time.monotonic()+5
+                    with connect() as observer:
+                        while time.monotonic()<deadline:
+                            waiting=observer.execute("SELECT 1 FROM pg_stat_activity WHERE application_name='recovery-fence-drill' AND wait_event_type='Lock'").fetchone()
+                            observer.commit()
+                            if waiting:
+                                observer.execute("UPDATE public.pr_library_assets SET lease_expires_at=clock_timestamp()+interval '0.2 seconds' WHERE id=%s",(ident,))
+                                observer.commit()
+                                time.sleep(.25)
+                                seen.append(True)
+                                break
+                            time.sleep(.01)
+                except Exception as error: errors.append(error)
+                finally:
+                    locker.commit();locker.close()
+            thread=threading.Thread(target=release_after_expiry)
+            threads.append(thread);thread.start()
+        def finisher():
+            return psycopg.connect(task_fixture.DSN,client_encoding='utf8',application_name='recovery-fence-drill')
+        self.storage.after_read=after_read
+        result=self.library.process(finisher,self.w,ident)
+        for thread in threads: thread.join(timeout=6)
+        self.assertFalse(errors)
+        self.assertEqual(seen,[True],'must actually observe the completion waiting on its workspace lock')
+        self.assertEqual(result,'lease_lost')
+        self.assertIsNone(self.row(ident)['sha256'])
 
     def publish(self):
         state=copy.deepcopy(PUBLISH_BASE)
