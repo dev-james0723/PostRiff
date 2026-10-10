@@ -76,7 +76,7 @@ def ingest_sample(plan):
 # 60 normal cases. A changed, dropped, replaced or reordered case is a new corpus: it needs a new decision and a new id, and
 # results measured on different corpora are never pooled.
 G03_CORPUS_V1 = json.loads((Path(__file__).resolve().parent / "fixtures" / "g03-corpus-v1.json").read_text(encoding="utf-8"))
-G03_CORPUS_SHA256 = "69d6bee39eb53ec74c47cd1a126b93b27d47242daeb4e3b15c1e0b0e422f2ba3"
+G03_CORPUS_SHA256 = "ef9e061b3705f7617b5467f6b1e8e9b904aa5fd5d0538d1a5a9299e937dbe4e3"
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 JOURNEYS = tuple(f"J0{i}" for i in range(1, 10))
 
@@ -308,13 +308,87 @@ class LiveRunnerGuards(unittest.TestCase):
         v = LIVE.ingest(replaced, unrepaired, plan)["verdicts"]["G03"]
         self.assertEqual(v["status"], "fail", "a known unrepaired failure fails the gate even while another case is missing")
 
-        # A case re-run under the same id (two artifacts in one case) never counts as first-pass valid.
+        # A case re-run under the same id (two artifacts of its own) is a first-pass miss and not functional, even when its
+        # first attempt was fine: only the first attempt counts, and a re-run makes the case's evidence unattributable.
         rerun = json.loads(json.dumps(browser))
         rerun["marks"].append({"caseId": "J02-c", "name": "rafii-genui:ready", "at": 19100.0, "artifactId": "00000000-0000-4000-8000-999999999999", "revision": 1})
         v = LIVE.ingest(rerun, rows, plan)["verdicts"]["G03"]
-        self.assertEqual((v["repeatedCases"], v["firstPassValid"], v["status"]), (["J02-c"], 59, "pass"))
-        rerun["marks"].append({"caseId": "J06-e", "name": "rafii-genui:ready", "at": 19100.0, "artifactId": "00000000-0000-4000-8000-999999999998", "revision": 1})
-        self.assertEqual(LIVE.ingest(rerun, rows, plan)["verdicts"]["G03"]["status"], "fail")
+        self.assertEqual((v["repeatedCases"], v["firstPassValid"], v["functional"], v["status"]), (["J02-c"], 59, 59, "fail"))
+
+    def test_ingest_counts_each_cases_first_attempt_only(self):
+        """D-A53: a failed case is never replaced by running it again under the same id."""
+        plan = LIVE.sample_plan()
+        index = {c["caseId"]: i for i, c in enumerate(plan["normal"])}
+        rerun_a, rerun_b = "00000000-0000-4000-8000-900000000001", "00000000-0000-4000-8000-900000000002"
+
+        def case_row(out, case_id):
+            return next(c for c in out["cases"] if c["caseId"] == case_id)
+
+        # J02-c: its first artifact fails and so does its one repair (no ready mark); a re-run under the same tag then
+        # makes another artifact ready. The case keeps its first artifact and is neither first-pass valid nor functional.
+        browser, rows = ingest_sample(plan)
+        first = f"00000000-0000-4000-8000-{index['J02-c']:012d}"
+        browser["marks"] = [m for m in browser["marks"] if not (m["caseId"] == "J02-c" and m["name"] == "rafii-genui:ready")]
+        rows[index["J02-c"]] = {**rows[index["J02-c"]], "state": "failed", "reason": "parse_rejected", "ready_at": None}
+        rows.append({**rows[index["J02-c"]], "kind": "repair"})
+        browser["resources"] += [{"caseId": "J02-c", "route": "/api/workspaces/:id/agent/turns", "start": 30000.0},
+                                 {"caseId": "J02-c", "route": "/api/workspaces/:id/agent/ui/presentations", "start": 30100.0}]
+        browser["marks"] += [{"caseId": "J02-c", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_a},
+                             {"caseId": "J02-c", "name": "rafii-genui:ready", "at": 39100.0, "artifactId": rerun_a, "revision": 1}]
+        rows.append({**rows[0], "artifact_id": rerun_a})
+        out = LIVE.ingest(browser, rows, plan)
+        case, g03 = case_row(out, "J02-c"), out["verdicts"]["G03"]
+        self.assertEqual((case["artifactId"], case["repeated"], case["firstPassValid"], case["functional"], case["usable"]), (first, True, False, False, False))
+        self.assertEqual((g03["status"], g03["firstPassValid"], g03["functional"], g03["repeatedCases"]), ("fail", 59, 59, ["J02-c"]))
+        self.assertIn(rerun_a, g03["uncountedArtifacts"], "server artifacts no case counts are reported for review")
+
+        # J04-e: its first attempt left no mark at all (a native answer, or rejected before the first component); only the
+        # second turn under the tag shows up as an artifact. Two turns under one case id are a re-run.
+        browser, rows = ingest_sample(plan)
+        browser["marks"] = [m for m in browser["marks"] if m["caseId"] != "J04-e"]
+        browser["resources"] += [{"caseId": "J04-e", "route": "/api/workspaces/:id/agent/turns", "start": 30000.0},
+                                 {"caseId": "J04-e", "route": "/api/workspaces/:id/agent/ui/presentations", "start": 30100.0}]
+        browser["marks"] += [{"caseId": "J04-e", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_b},
+                             {"caseId": "J04-e", "name": "rafii-genui:ready", "at": 39100.0, "artifactId": rerun_b, "revision": 1}]
+        rows.append({**rows[0], "artifact_id": rerun_b})
+        out = LIVE.ingest(browser, rows, plan)
+        case, g03 = case_row(out, "J04-e"), out["verdicts"]["G03"]
+        self.assertEqual((case["repeated"], case["turns"], case["firstPassValid"], case["functional"]), (True, 2, False, False))
+        self.assertEqual((g03["status"], g03["repeatedCases"]), ("fail", ["J04-e"]))
+
+        # A full reload in the middle of a conversation re-renders earlier artifacts; their marks can land under the next
+        # case's tag. An artifact first seen under an earlier case belongs to that case: not a re-run, not this case's view.
+        browser, rows = ingest_sample(plan)
+        earlier = f"00000000-0000-4000-8000-{index['J01-d']:012d}"
+        page_1 = {**browser, "timeOrigin": 1_000_000.0, "cases": {k: v for k, v in browser["cases"].items() if k != "J01-e"},
+                  "marks": [m for m in browser["marks"] if m["caseId"] != "J01-e"], "resources": [r for r in browser["resources"] if r["caseId"] != "J01-e"]}
+        page_2 = {"timeOrigin": 2_000_000.0, "cases": {"J01-e": {"begunAt": 10.0}},
+                  "marks": [{"caseId": "J01-e", "name": "rafii-genui:first-component", "at": 500.0, "artifactId": earlier},
+                            {"caseId": "J01-e", "name": "rafii-genui:ready", "at": 600.0, "artifactId": earlier, "revision": 1},
+                            *[m for m in browser["marks"] if m["caseId"] == "J01-e"]],
+                  "resources": [r for r in browser["resources"] if r["caseId"] == "J01-e"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, page in (("consumer-1.json", page_1), ("consumer-2.json", page_2)):
+                Path(tmp, name).write_text(json.dumps(page))
+            merged = LIVE.merge_browser([Path(tmp, "consumer-1.json"), Path(tmp, "consumer-2.json")])
+        out = LIVE.ingest(merged, rows, plan)
+        case, g03 = case_row(out, "J01-e"), out["verdicts"]["G03"]
+        self.assertEqual((case["artifactId"], case["repeated"], case["functional"]), (f"00000000-0000-4000-8000-{index['J01-e']:012d}", False, True))
+        self.assertEqual((g03["status"], g03["firstPassValid"], g03["repeatedCases"], g03["uncountedArtifacts"]), ("pass", 60, [], []))
+        self.assertEqual(case_row(out, "J01-e")["client"]["presentationStartToFirstComponentMs"], 2000.0, "timings stay within one page")
+
+    def test_ingest_counts_an_edit_on_its_base_artifact(self):
+        plan = LIVE.sample_plan()
+        browser, rows = ingest_sample(plan)
+        base = "00000000-0000-4000-8000-000000000000"
+        browser["cases"]["J01-edit"] = {"begunAt": 99_000.0}
+        browser["resources"].append({"caseId": "J01-edit", "route": "/api/workspaces/:id/agent/ui/presentations/:id/edits", "start": 99_100.0})
+        browser["marks"].append({"caseId": "J01-edit", "name": "rafii-genui:ready", "at": 104_100.0, "artifactId": base, "revision": 2})
+        rows.append({**rows[0], "kind": "edit", "target_revision": 2, "admitted_at": "2026-10-09T11:00:00Z", "ready_at": "2026-10-09T11:00:05Z"})
+        out = LIVE.ingest(browser, rows, plan)
+        edit = next(c for c in out["cases"] if c["caseId"] == "J01-edit")
+        self.assertEqual((edit["artifactId"], edit["revision"], edit["functional"], edit["repeated"]), (base, 2, True, False))
+        self.assertEqual(out["verdicts"]["G03"]["status"], "pass", "an edit of J01-a's artifact is not a re-run of J01-a")
 
     def test_api_mode_runs_each_conversation_in_order_and_threads_its_id(self):
         plan = LIVE.sample_plan()
@@ -437,24 +511,37 @@ class G03Corpus(unittest.TestCase):
         self.assertEqual(steps, LIVE.run_sequence(self.plan))
         group_of = {case_id: group for group in self.plan["runOrder"] for case_id in group["cases"]}
         started = []
-        for group in self.plan["runOrder"]:
+        for position, group in enumerate(self.plan["runOrder"]):
             self.assertEqual({by_id[c]["journey"] for c in group["cases"]}, {group["journey"]}, "one journey per conversation")
             self.assertEqual({by_id[c]["surface"] for c in group["cases"]}, {group["surface"]})
+            self.assertIn(group["start"], ("new", "continue"), "nothing is reopened: the founder panel cannot reopen an earlier conversation")
             if group["start"] == "new":
                 self.assertNotIn(group["conversation"], started)
                 started.append(group["conversation"])
                 self.assertTrue(all(by_id[c]["kind"] == "generate" for c in group["cases"]))
             else:
-                self.assertIn(group["conversation"], started, "an edit reopens a conversation that already ran")
+                self.assertEqual(group["conversation"], self.plan["runOrder"][position - 1]["conversation"],
+                                 "an edit continues the conversation that just ran, before the next one starts")
         for edit in self.plan["edits"]:
             group = group_of[edit["caseId"]]
-            self.assertEqual(group["start"], f"reopen {edit['baseCase']}")
+            self.assertEqual((group["start"], group["editOf"], group["cases"]), ("continue", edit["baseCase"], [edit["caseId"]]))
             self.assertEqual(group["conversation"], group_of[edit["baseCase"]]["conversation"])
             self.assertGreater(steps.index(edit["caseId"]), steps.index(edit["baseCase"]))
+        consumer = [(g["conversation"], g["start"]) for g in self.plan["runOrder"] if g["journey"] == "J01"]
+        self.assertEqual(consumer, [("J01-1", "new"), ("J01-1", "continue"), ("J01-2", "new")])
         surfaces = [group["surface"] for group in self.plan["runOrder"]]
         self.assertEqual(surfaces, sorted(surfaces, key=lambda s: s == "founder"), "consumer chat first, then the founder panel once")
-        self.assertEqual({c for g in self.plan["runOrder"] if g["surface"] == "founder" for c in g["cases"]},
-                         {c["caseId"] for c in self.normal + self.plan["edits"] if c["journey"] == "J09"})
+        founder = [(g["conversation"], g["start"], g["cases"]) for g in self.plan["runOrder"] if g["surface"] == "founder"]
+        self.assertEqual(founder, [("J09-1", "new", ["J09-a", "J09-b", "J09-c"]), ("J09-1", "continue", ["J09-edit"]),
+                                   ("J09-2", "new", ["J09-d", "J09-e", "J09-f"])],
+                         "J09-edit runs while J09-a's view is still in the founder thread ('New conversation' clears it)")
+
+    def test_every_new_case_asks_for_a_view(self):
+        """Spec §2.3: plain questions never reach the Presenter, so a case whose spec-correct answer has no view could never
+        be functional. Every case added by D-A53 states an explicit view request under the deterministic eligibility
+        predicate (ui_projection.wants_ui on the base); the v1 cases are frozen byte for byte and are not reworded."""
+        from postriff_phase2.agent_runtime_v2 import ui_projection
+        self.assertEqual([c["caseId"] for c in self.new if not ui_projection.wants_ui(c["prompt"])], [])
 
 
 class FixtureProvider(unittest.TestCase):
