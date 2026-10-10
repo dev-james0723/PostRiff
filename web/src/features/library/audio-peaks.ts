@@ -452,7 +452,7 @@ function pushBuffer(meter: PeakMeter, audio: AudioBuffer) {
   meter.pushChannels(channels, audio.length);
 }
 
-async function download(url: string, signal: AbortSignal) {
+export async function downloadAudio(url: string, signal: AbortSignal) {
   const response = await fetch(url, { signal });
   if (!response.ok || !response.body) throw new WaveformError('The original audio could not be read.');
   if (Number(response.headers.get('content-length') || 0) > AUDIO_PEAK_BYTE_LIMIT) throw new WaveformError('This file is larger than the Library keeps.');
@@ -483,7 +483,7 @@ async function download(url: string, signal: AbortSignal) {
  * reads. `durationHint` (seconds, from the player) only guards the whole-file fallback against running out of memory.
  */
 export async function readAudioPeaks(url: string, signal: AbortSignal, onProgress: (snapshot: PeakSnapshot) => void, durationHint = 0): Promise<PeakSnapshot> {
-  const bytes = await download(url, signal);
+  const bytes = await downloadAudio(url, signal);
   const meter = new PeakMeter();
   const report = () => onProgress(meter.snapshot(false));
   const container = sniffAudio(bytes);
@@ -523,4 +523,65 @@ export async function readAudioPeaks(url: string, signal: AbortSignal, onProgres
   pushBuffer(whole, await decode(bytes.buffer));
   signal.throwIfAborted();
   return whole.snapshot(true);
+}
+
+/** Pieces any decoder can take on their own for this container, or null when only the whole file decodes. */
+function decodablePieces(bytes: Uint8Array): Iterable<ArrayBuffer> | null {
+  const container = sniffAudio(bytes);
+  const track = container === 'mp4' ? parseMp4Audio(bytes) : null;
+  return container === 'mp3' ? mpegPieces(bytes)
+    : container === 'adts' ? adtsPieces(bytes)
+    : container === 'ogg' ? oggPieces(bytes)
+    : track ? mp4Pieces(bytes, track) : null;
+}
+
+function appendMono(target: { data: Float32Array; length: number }, audio: AudioBuffer, room: number) {
+  const ratio = audio.sampleRate / SPEECH_RATE;
+  const frames = Math.min(room, Math.floor(audio.length / ratio));
+  if (target.length + frames > target.data.length) {
+    const grown = new Float32Array(Math.max(target.length + frames, target.data.length * 2));
+    grown.set(target.data.subarray(0, target.length));
+    target.data = grown;
+  }
+  const channels = Array.from({ length: Math.min(audio.numberOfChannels, 2) }, (_, channel) => audio.getChannelData(channel));
+  for (let frame = 0; frame < frames; frame++) {
+    const at = Math.min(audio.length - 1, Math.round(frame * ratio));
+    let sum = 0;
+    for (const channel of channels) sum += channel[at];
+    target.data[target.length + frame] = sum / channels.length;
+  }
+  target.length += frames;
+  return frames;
+}
+
+/** Sample rate speech recognition (Whisper) expects. */
+export const SPEECH_RATE = 16_000;
+
+/**
+ * The first `maxSeconds` of a recording as mono 16 kHz samples, decoded piece by piece like the peaks so a long file
+ * never sits fully decoded in memory. Used only for the free on-device speech check and transcript.
+ */
+export async function readMonoPcm(bytes: Uint8Array, maxSeconds: number, signal: AbortSignal, onProgress?: (seconds: number) => void): Promise<Float32Array> {
+  const decode = decoder();
+  const limit = Math.floor(maxSeconds * SPEECH_RATE);
+  const target = { data: new Float32Array(SPEECH_RATE * 60), length: 0 };
+  const pieces = decodablePieces(bytes);
+  if (pieces) {
+    try {
+      for (const piece of pieces) {
+        signal.throwIfAborted();
+        appendMono(target, await decode(piece), limit - target.length);
+        onProgress?.(target.length / SPEECH_RATE);
+        if (target.length >= limit) break;
+        await yieldToMain();
+      }
+      if (target.length) return target.data.slice(0, target.length);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      target.length = 0;
+    }
+  }
+  appendMono(target, await decode(bytes.slice().buffer), limit);
+  signal.throwIfAborted();
+  return target.data.slice(0, target.length);
 }

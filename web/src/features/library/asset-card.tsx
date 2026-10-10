@@ -227,8 +227,9 @@ export function AssetContextItems({ actions }: { actions: CardAction[] }) {
 export function AssetMoreMenu({ title, actions, className }: { title: string; actions: CardAction[]; className?: string }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<IconControl label={`More actions for ${title}`} size='sm' tooltip={false} className={cn("bg-background/90 hover:bg-background ring-foreground/10 relative shadow-xs ring-1 after:absolute after:-inset-1.5 after:content-[''] pointer-coarse:size-8", className)} />}>
-        <Icons.moreHorizontal aria-hidden />
+      {/* Small frosted glass over any picture; the invisible ::after keeps a full finger-sized target. */}
+      <DropdownMenuTrigger render={<IconControl label={`More actions for ${title}`} size='sm' tooltip={false} className={cn("bg-background/40 hover:bg-background/65 data-[popup-open]:bg-background/70 text-foreground relative size-6 rounded-full shadow-none ring-1 ring-white/15 backdrop-blur-md backdrop-saturate-150 after:absolute after:-inset-2.5 after:content-[''] pointer-coarse:size-7", className)} />}>
+        <Icons.moreHorizontal aria-hidden className='size-3.5' />
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='rafii-elevated min-w-48 rounded-[var(--rafii-radius-card)] p-1'>
         {actions.map((action) => (

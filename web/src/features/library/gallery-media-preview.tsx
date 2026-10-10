@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { useInView } from 'motion/react';
@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useNowPlaying } from '@/lib/media/now-playing';
 import { IconControl } from './ui/controls';
-import { ScrubWaveform, useAudioPeaks } from './scrub-waveform';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ProgressScrubber, ScrubWaveform, useAudioPeaks } from './scrub-waveform';
 import type { LibraryAsset } from './use-library';
 
 const PLAY_EVENT = 'rafii-library-inline-play';
@@ -48,13 +49,35 @@ function useSilentOwner() {
   );
 }
 
+/** Width of an element, kept current (0 until measured). */
+function useWidth(element: RefObject<HTMLElement | null>) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const node = element.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [element]);
+  return width;
+}
+
+/** Below this width a tile shows the whole recording at once (tap or drag to a point) instead of a scrolling window. */
+const TIGHT_TILE = 220;
+
 /**
- * Private, source-backed playback inside a gallery tile or a list row. Play, time and the timeline stay visible; speed
- * and volume sit behind Playback options so a tile never turns into a control panel.
+ * Private, source-backed playback in three layouts: a gallery `tile` (any density), a list `row`, and the asset
+ * `detail` sheet. Every layout keeps play, the current time and a way to move through the media in view; speed and
+ * volume sit in a popover so nothing in a small tile overlaps.
  */
-export function GalleryMediaPreview({ asset, video = false, posterUrl, compact = false, enabled = true }: {
-  asset: LibraryAsset; video?: boolean; posterUrl?: string; compact?: boolean; enabled?: boolean;
+export function GalleryMediaPreview({ asset, video = false, posterUrl, compact = false, enabled = true, variant }: {
+  asset: LibraryAsset; video?: boolean; posterUrl?: string;
+  /** Kept for list rows; same as `variant='row'`. */
+  compact?: boolean;
+  enabled?: boolean;
+  variant?: 'tile' | 'row' | 'detail';
 }) {
+  const layout = variant ?? (compact ? 'row' : 'tile');
   const { api, workspaceId } = useWorkspaceApi();
   const slot = useId();
   // Motion 11 snapshots this preference; media playback must follow live OS changes.
@@ -76,7 +99,6 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   const [volume, setVolume] = useState(video ? 0 : 0.8);
   const [failure, setFailure] = useState('');
   const [refreshAttempts, setRefreshAttempts] = useState(0);
-  const [options, setOptions] = useState(false);
   const [primed, setPrimed] = useState(false);
   const owner = useSilentOwner();
   const ownsSilent = video && owner === slot;
@@ -256,89 +278,133 @@ export function GalleryMediaPreview({ asset, video = false, posterUrl, compact =
   };
   const busy = activated && source.isFetching && !source.data;
   const knownDuration = duration > 0 ? duration : (asset.duration ?? 0);
-  return (
-    <div
-      ref={container}
-      role='group'
-      data-library-media-player={video ? 'video' : 'audio'}
-      data-library-thumbnail={video ? 'video' : (asset.extension || 'audio')}
-      data-thumbnail-preview={video ? 'video-poster' : 'audio-player'}
-      aria-label={`${video ? 'Video' : 'Audio'} preview: ${title}`}
-      onPointerEnter={(event) => { if (video && event.pointerType === 'mouse' && !reduce && !userPaused && !activated) claimSilent(slot, true); }}
-      onFocus={() => { if (video && !reduce && !userPaused && !activated) claimSilent(slot, true); }}
-      className={cn('bg-foreground/[0.035] relative flex min-w-0 flex-col overflow-hidden', compact ? 'rounded-[var(--rafii-radius-control)]' : 'aspect-[4/3]')}
-    >
-      <div className={cn('relative flex min-h-0 flex-1 items-center justify-center', compact ? (video ? 'aspect-video max-h-48' : 'min-h-14') : 'pb-11')}>
-        {video ? <>
-          {posterUrl ? <Image src={posterUrl} alt='' fill unoptimized sizes={compact ? '320px' : '400px'} className='object-contain' /> : <Icons.video aria-hidden className='text-muted-foreground size-8' />}
-          {/* Uploaded originals do not provide a timed caption track. Never fabricate one;
-              audio transcripts can be imported/read through the asset details. */}
-          {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-          <video ref={node => { media.current = node; }} src={playbackUrl} poster={posterUrl} muted={volume === 0} playsInline loop preload='metadata' aria-label={`Video preview of ${title}`} {...mediaEvents} className='absolute inset-0 h-full w-full object-contain' />
-          {playing && volume === 0 ? <span className='bg-background/85 pointer-events-none absolute top-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium'>Silent preview</span> : null}
-          {!playing && knownDuration > 0 ? <span className='bg-background/85 pointer-events-none absolute top-2 right-2 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums'>{timeLabel(knownDuration)}</span> : null}
-        </> : <>
-          {/* An audio-only upload has no timed captions; its optional imported transcript
-              remains available in details, rather than inventing synchronization. */}
-          {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
-          <audio ref={node => { media.current = node; }} src={playbackUrl} preload={activated ? 'metadata' : 'none'} {...mediaEvents} />
-          {activated ? <div className='w-full px-3'>
-            <ScrubWaveform
-              snapshot={waveform.snapshot}
-              duration={duration}
-              position={position}
-              media={media}
-              playing={playing}
-              reduce={reduce}
-              compact={compact}
-              disabled={!metadataReady || !duration}
-              label={`Audio waveform: drag left or right to move through ${title}`}
-              valueText={`${timeLabel(position)} of ${duration ? timeLabel(duration) : 'unknown length'}`}
-              onScrubStart={scrubStart}
-              onScrub={scrubTo}
-              onScrubEnd={scrubEnd}
-              onSeek={seek}
-            />
-          </div> : <button type='button' onClick={() => { setActivated(true); setUserPaused(true); }} disabled={!ready} className={cn('rafii-focus text-muted-foreground hover:text-foreground flex items-center gap-2 rounded-md p-3 text-center transition-colors duration-150', compact ? 'flex-row' : 'flex-col')}>
-            <Icons.music aria-hidden className={compact ? 'size-5' : 'size-7'} />
-            <span className='text-xs'>{knownDuration > 0 ? `Audio · ${timeLabel(knownDuration)}` : 'Listen to this audio'}</span>
-            <span className='sr-only'>Show waveform</span>
-          </button>}
-        </>}
-      </div>
-      <div className={cn('bg-card/95 z-10 flex min-w-0 flex-col', compact ? 'px-1' : 'absolute inset-x-0 bottom-0 border-t border-foreground/[0.06]')}>
-        {/* A container: in a narrow card the time label gives way so the timeline stays usable (the slider still says "x of y"). */}
-        <div className='@container flex min-w-0 items-center gap-1 px-1'>
-          <button type='button' onClick={toggle} disabled={!ready || busy} aria-label={`${playing ? 'Pause' : 'Play'} ${video ? 'video' : 'audio'} preview`} className='rafii-focus hover:bg-foreground/[0.06] flex size-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-50 pointer-coarse:size-11'>
-            {busy ? <Icons.spinner aria-hidden className='size-4 animate-spin motion-reduce:animate-none' /> : playing ? <Icons.pause aria-hidden className='size-4' /> : <Icons.play aria-hidden className='size-4' />}
-          </button>
-          <input type='range' min={0} max={duration || 1} step={0.05} value={Math.min(position, duration || 1)} onChange={event => seek(Number(event.target.value))} disabled={!metadataReady || !duration} aria-label={`${video ? 'Video' : 'Audio'} preview timeline`} aria-valuetext={`${timeLabel(position)} of ${duration || knownDuration ? timeLabel(duration || knownDuration) : 'unknown length'}`} className='rafii-focus accent-foreground h-9 min-w-0 flex-1 cursor-pointer disabled:cursor-default pointer-coarse:h-11' />
-          <span className='text-muted-foreground shrink-0 px-1 text-[11px] tabular-nums @max-[15rem]:hidden'>
-            {/* The length is shown once it is known (from the file or its metadata), never as a made-up 0:00. */}
-            {timeLabel(position)} / {duration || knownDuration ? timeLabel(duration || knownDuration) : '–:––'}
-          </span>
-          <IconControl label='Playback options' size='sm' tooltip={false} aria-expanded={options} active={options} onClick={() => setOptions(value => !value)}>
-            <Icons.adjustments aria-hidden />
-          </IconControl>
+  const width = useWidth(container);
+  const tile = layout === 'tile', detail = layout === 'detail';
+  const tight = tile && width > 0 && width < TIGHT_TILE;
+  const noun = video ? 'video' : 'audio';
+  const valueText = `${timeLabel(position)} of ${duration || knownDuration ? timeLabel(duration || knownDuration) : 'unknown length'}`;
+  const seekable = metadataReady && duration > 0;
+  const scrubProps = { onScrubStart: scrubStart, onScrub: scrubTo, onScrubEnd: scrubEnd, onSeek: seek };
+  // Small tiles: the waveform is the whole recording (it is the timeline). Larger: a Voice Memos window plus a thin
+  // whole-length timeline underneath, so the place in the file is always visible.
+  const waveMode = tight ? 'overview' : 'scroll';
+  const showTimeline = video || (activated && waveMode === 'scroll');
+  const message = source.isError || failure
+    ? failure || 'Private preview unavailable. Press play to retry.'
+    : !video && waveform.status === 'error' ? `${waveform.error} Playback and the timeline still work.` : '';
+
+  const playButton = (
+    <button type='button' onClick={toggle} disabled={!ready || busy} aria-label={`${playing ? 'Pause' : 'Play'} ${noun} preview`} className={cn('rafii-focus hover:bg-foreground/[0.08] flex shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-50', detail ? 'bg-foreground text-background hover:bg-foreground/90 size-11' : tile ? 'size-8' : 'size-9 pointer-coarse:size-10')}>
+      {busy ? <Icons.spinner aria-hidden className='size-4 animate-spin motion-reduce:animate-none' /> : playing ? <Icons.pause aria-hidden className='size-4' /> : <Icons.play aria-hidden className='size-4' />}
+    </button>
+  );
+  // The current time is always shown; the total gives way first in a very narrow tile.
+  const clock = (
+    <span className={cn('min-w-0 flex-1 truncate tabular-nums', detail ? 'text-sm' : 'text-[11px]')}>
+      <span className='text-foreground font-medium'>{timeLabel(position)}</span>
+      <span className='text-muted-foreground @max-[7.5rem]:hidden'> / {duration || knownDuration ? timeLabel(duration || knownDuration) : '–:––'}</span>
+    </span>
+  );
+  const options = (
+    <Popover>
+      <PopoverTrigger render={<IconControl label='Playback options' size='sm' tooltip={false} className={cn('shrink-0', tile && 'size-7')} />}>
+        <Icons.adjustments aria-hidden />
+      </PopoverTrigger>
+      <PopoverContent side='top' align='end' className='w-60 gap-3 p-3'>
+        <label className='flex items-center justify-between gap-3 text-xs'>
+          <span className='text-muted-foreground'>Speed</span>
+          <select aria-label={`${video ? 'Video' : 'Audio'} playback speed`} value={rate} onChange={event => setRate(Number(event.target.value))} className='rafii-focus bg-foreground/[0.06] h-8 rounded-md px-2 text-xs pointer-coarse:h-10'>
+            {[0.5, 0.75, 1, 1.25, 1.5, 2].map(speed => <option key={speed} value={speed}>{speed}×</option>)}
+          </select>
+        </label>
+        <label className='flex items-center gap-2 text-xs'>
+          <span className='text-muted-foreground shrink-0'>Volume</span>
+          <input type='range' min={0} max={1} step={0.05} value={volume} aria-label={`${video ? 'Video' : 'Audio'} preview volume`} aria-valuetext={`${Math.round(volume * 100)} percent`} onChange={event => { setVolume(Number(event.target.value)); if (Number(event.target.value) > 0) { useNowPlaying.getState().setPlaying(false); window.dispatchEvent(new CustomEvent(PLAY_EVENT, { detail: asset.id })); } }} className='rafii-focus accent-foreground h-8 min-w-0 flex-1 cursor-pointer' />
+          <span className='w-9 shrink-0 text-right tabular-nums'>{Math.round(volume * 100)}%</span>
+        </label>
+      </PopoverContent>
+    </Popover>
+  );
+  const timeline = showTimeline ? <ProgressScrubber duration={duration} position={position} disabled={!seekable} label={`${video ? 'Video' : 'Audio'} preview timeline`} valueText={valueText} {...scrubProps} /> : null;
+
+  const audioArea = !video ? (activated ? (
+    <ScrubWaveform
+      snapshot={waveform.snapshot}
+      duration={duration}
+      position={position}
+      media={media}
+      playing={playing}
+      reduce={reduce}
+      mode={waveMode}
+      className={detail ? 'h-28' : tile ? 'h-full' : 'h-14'}
+      disabled={!seekable}
+      label={waveMode === 'overview' ? `Audio waveform: tap or drag to move through ${title}` : `Audio waveform: drag left or right to move through ${title}`}
+      valueText={valueText}
+      {...scrubProps}
+    />
+  ) : (
+    <button type='button' onClick={() => { setActivated(true); setUserPaused(true); }} disabled={!ready} className={cn('rafii-focus text-muted-foreground hover:text-foreground flex h-full w-full items-center justify-center gap-2 rounded-md p-2 text-center transition-colors duration-150', tile ? 'flex-col' : 'flex-row', detail && 'min-h-28')}>
+      <Icons.music aria-hidden className={detail ? 'size-8' : tight ? 'size-5' : 'size-6'} />
+      <span className={detail ? 'text-sm' : 'text-xs tabular-nums'}>{knownDuration > 0 ? (tight ? timeLabel(knownDuration) : `Audio · ${timeLabel(knownDuration)}`) : 'Audio'}</span>
+      <span className={detail ? 'text-xs' : 'sr-only'}>Show waveform</span>
+    </button>
+  )) : null;
+
+  const videoArea = video ? <>
+    {posterUrl ? <Image src={posterUrl} alt='' fill unoptimized sizes={tile ? '400px' : '640px'} className='object-contain' /> : <Icons.video aria-hidden className='text-muted-foreground size-8' />}
+    {/* Uploaded originals do not provide a timed caption track. Never fabricate one;
+        audio transcripts can be imported/read through the asset details. */}
+    {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
+    <video ref={node => { media.current = node; }} src={playbackUrl} poster={posterUrl} muted={volume === 0} playsInline loop preload='metadata' aria-label={`Video preview of ${title}`} {...mediaEvents} className='absolute inset-0 h-full w-full object-contain' />
+    {playing && volume === 0 && !tight ? <span className='bg-background/70 pointer-events-none absolute top-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur-md'>Silent preview</span> : null}
+  </> : null;
+  // An audio-only upload has no timed captions; its optional imported transcript remains available in details.
+  // oxlint-disable-next-line jsx-a11y/media-has-caption
+  const audioElement = !video ? <audio ref={node => { media.current = node; }} src={playbackUrl} preload={activated ? 'metadata' : 'none'} {...mediaEvents} /> : null;
+
+  const root = {
+    ref: container,
+    role: 'group',
+    'data-library-media-player': video ? 'video' : 'audio',
+    'data-library-thumbnail': video ? 'video' : (asset.extension || 'audio'),
+    'data-thumbnail-preview': video ? 'video-poster' : 'audio-player',
+    'data-player-layout': tight ? 'tile-tight' : layout,
+    'aria-label': `${video ? 'Video' : 'Audio'} preview: ${title}`,
+    onPointerEnter: (event: ReactPointerEvent) => { if (video && event.pointerType === 'mouse' && !reduce && !userPaused && !activated) claimSilent(slot, true); },
+    onFocus: () => { if (video && !reduce && !userPaused && !activated) claimSilent(slot, true); }
+  } as const;
+
+  if (tile) {
+    // Gallery tile: the media fills a 4:3 box; a frosted bar keeps play, time and options in one line at any width.
+    return (
+      <div {...root} className='bg-foreground/[0.035] @container relative aspect-[4/3] min-w-0 overflow-hidden'>
+        {videoArea}
+        {audioElement}
+        {!video ? <div className={cn('absolute inset-x-2 top-2', showTimeline ? 'bottom-[3.75rem]' : 'bottom-11')}>{audioArea}</div> : null}
+        {timeline ? <div className='absolute inset-x-2 bottom-9 z-10'>{timeline}</div> : null}
+        {message ? <p role='status' className='bg-background/75 text-muted-foreground absolute top-1.5 right-10 left-1.5 z-10 line-clamp-2 rounded-md px-1.5 py-0.5 text-[10px] backdrop-blur-md'>{message}</p> : null}
+        <div className='bg-background/70 border-foreground/[0.06] absolute inset-x-0 bottom-0 z-10 flex h-9 min-w-0 items-center gap-0.5 border-t px-1 backdrop-blur-md'>
+          {playButton}
+          {clock}
+          {options}
         </div>
-        {options ? (
-          <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1.5'>
-            <label className='text-muted-foreground flex items-center gap-1.5 text-[11px]'>
-              <span>Speed</span>
-              <select aria-label={`${video ? 'Video' : 'Audio'} playback speed`} value={rate} onChange={event => setRate(Number(event.target.value))} className='rafii-focus h-8 rounded-md bg-transparent px-1 text-xs pointer-coarse:h-11'>
-                {[0.5,0.75,1,1.25,1.5,2].map(speed => <option key={speed} value={speed}>{speed}×</option>)}
-              </select>
-            </label>
-            <label className='text-muted-foreground flex min-w-0 flex-1 items-center gap-2 text-[11px]'>
-              <span>Volume</span>
-              <input type='range' min={0} max={1} step={0.05} value={volume} aria-label={`${video ? 'Video' : 'Audio'} preview volume`} aria-valuetext={`${Math.round(volume * 100)} percent`} onChange={event => { setVolume(Number(event.target.value)); if (Number(event.target.value) > 0) { useNowPlaying.getState().setPlaying(false); window.dispatchEvent(new CustomEvent(PLAY_EVENT, { detail: asset.id })); } }} className='rafii-focus accent-foreground h-8 min-w-0 flex-1 cursor-pointer pointer-coarse:h-11' />
-              <span className='w-8 text-right tabular-nums'>{Math.round(volume * 100)}%</span>
-            </label>
-          </div>
-        ) : null}
-        {(source.isError || failure) ? <p role='status' className='text-muted-foreground px-2 pb-1.5 text-[11px]'>{failure || 'Private preview unavailable. Press play to retry.'}</p> : null}
-        {!video && waveform.status === 'error' ? <p className='text-muted-foreground px-2 pb-1.5 text-[11px]'>{waveform.error} Playback and the timeline still work.</p> : null}
       </div>
+    );
+  }
+  // List row and detail sheet: waveform or picture, the whole-length timeline, then one control line.
+  return (
+    <div {...root} className={cn('@container flex min-w-0 flex-col', detail ? 'gap-2' : 'bg-foreground/[0.035] gap-0.5 rounded-[var(--rafii-radius-control)] px-1 pb-1')}>
+      {video ? <div className={cn('relative flex items-center justify-center overflow-hidden', detail ? 'bg-foreground/[0.035] aspect-video max-h-[44vh] rounded-[var(--rafii-radius-card)]' : 'aspect-video max-h-48')}>{videoArea}</div> : null}
+      {audioElement}
+      {!video ? <div className={cn('flex items-center', detail ? 'bg-foreground/[0.035] min-h-28 rounded-[var(--rafii-radius-card)] px-3 py-2' : 'min-h-14 px-2 pt-1')}>{audioArea}</div> : null}
+      {timeline ? <div className={detail ? 'px-1' : 'px-2'}>{timeline}</div> : null}
+      <div className='flex min-w-0 items-center gap-1.5 px-1'>
+        {playButton}
+        {clock}
+        {options}
+      </div>
+      {detail && activated && !video && waveform.status !== 'error' ? <p className='text-muted-foreground px-1 text-xs'>Drag the waveform left or right to move through the recording.</p> : null}
+      {message ? <p role='status' className='text-muted-foreground px-1 pb-1 text-[11px]'>{message}</p> : null}
     </div>
   );
 }

@@ -49,18 +49,21 @@ export function useAudioPeaks(key: string, url: string | undefined, enabled: boo
 }
 
 /**
- * The recording's waveform under a fixed centre playhead, like Voice Memos: drag or flick it left and right to move
- * through the audio. Bars are measured from decoded samples; parts not read yet show as a flat line. Drawing happens
- * outside React (a pool of SVG bars) so playback and dragging stay smooth on a phone.
+ * The recording's waveform as a scrubber. Bars are measured from decoded samples; parts not read yet show as a flat
+ * line. Drawing happens outside React (a pool of SVG bars) so playback and dragging stay smooth on a phone.
+ *  - `scroll` (Voice Memos): a fixed centre playhead; drag or flick the waveform left and right to move through it.
+ *  - `overview` (small tiles): the whole recording across the width; drag along it or tap a point to go there.
  */
-export function ScrubWaveform({ snapshot, duration, position, media, playing, reduce, compact, disabled, label, valueText, onScrubStart, onScrub, onScrubEnd, onSeek }: {
+export function ScrubWaveform({ snapshot, duration, position, media, playing, reduce, mode = 'scroll', className, disabled, label, valueText, onScrubStart, onScrub, onScrubEnd, onSeek }: {
   snapshot: PeakSnapshot | null;
   duration: number;
   position: number;
   media: RefObject<HTMLMediaElement | null>;
   playing: boolean;
   reduce: boolean;
-  compact?: boolean;
+  mode?: 'scroll' | 'overview';
+  /** Sizing (height) of the waveform; it fills its width. */
+  className?: string;
   disabled?: boolean;
   label: string;
   valueText: string;
@@ -71,29 +74,35 @@ export function ScrubWaveform({ snapshot, duration, position, media, playing, re
 }) {
   const root = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
+  const playhead = useRef<HTMLSpanElement>(null);
   const bars = useRef<SVGRectElement[]>([]);
   const size = useRef({ width: 0, height: 0 });
   const gesture = useRef<{ id: number; x: number; y: number; from: number; time: number; dragging: boolean; samples: { x: number; t: number }[] } | null>(null);
   const momentum = useRef(0);
-  const live = useRef({ snapshot, duration, position });
-  useEffect(() => { live.current = { snapshot, duration, position }; });
+  const live = useRef({ snapshot, duration, position, mode });
+  useEffect(() => { live.current = { snapshot, duration, position, mode }; });
 
   const clamp = (time: number) => Math.max(0, Math.min(live.current.duration || 0, time));
   const pxPerSecond = () => size.current.width / visibleSeconds(live.current.duration);
 
   const draw = (time: number) => {
     const { width, height } = size.current;
-    const { snapshot: peaks, duration: total } = live.current;
+    const { snapshot: peaks, duration: total, mode: layout } = live.current;
     if (!width || !height) return;
-    const perSecond = pxPerSecond(), barSeconds = PITCH / perSecond;
+    const overview = layout === 'overview';
+    // Overview: the whole recording in whole bars; scroll: a fixed number of seconds across, centred on `time`.
+    const count = Math.max(1, Math.floor(width / PITCH));
+    const perSecond = overview ? (total > 0 ? count * PITCH / total : 0) : pxPerSecond();
+    const barSeconds = overview ? (total > 0 ? total / count : 0) : PITCH / perSecond;
     // Once finished, the measured peaks span exactly the player's duration (the decoder's frame padding drops out).
     const peakSeconds = peaks?.done && total > 0 ? total / peaks.length : 1 / PEAKS_PER_SECOND;
-    const first = Math.floor((time - width / 2 / perSecond) / barSeconds);
+    const first = overview ? 0 : Math.floor((time - width / 2 / perSecond) / barSeconds);
     const scale = peaks && peaks.max > 0 ? 1 / peaks.max : 0;
+    if (playhead.current) playhead.current.style.transform = overview ? `translateX(${(total > 0 ? Math.min(1, time / total) : 0) * count * PITCH}px)` : '';
     bars.current.forEach((bar, index) => {
       const start = (first + index) * barSeconds;
-      const x = width / 2 + (start - time) * perSecond;
-      if (start < 0 || (total > 0 && start >= total) || x > width) { bar.setAttribute('height', '0'); return; }
+      const x = overview ? index * PITCH : width / 2 + (start - time) * perSecond;
+      if (!barSeconds || start < 0 || (total > 0 && start >= total) || x > width || (overview && index >= count)) { bar.setAttribute('height', '0'); return; }
       let peak = -1;
       if (peaks) {
         const from = Math.floor(start / peakSeconds), to = Math.min(peaks.length, Math.ceil((start + barSeconds) / peakSeconds));
@@ -158,6 +167,12 @@ export function ScrubWaveform({ snapshot, duration, position, media, playing, re
     onScrub(time);
   };
 
+  /** Overview: the time under a horizontal position. */
+  const timeAt = (element: HTMLElement, clientX: number) => {
+    const box = element.getBoundingClientRect(), span = Math.max(1, Math.floor(box.width / PITCH) * PITCH);
+    return clamp((clientX - box.left) / span * (live.current.duration || 0));
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const wasCoasting = Boolean(momentum.current);
@@ -181,8 +196,10 @@ export function ScrubWaveform({ snapshot, duration, position, media, playing, re
       current.x = event.clientX;
       current.samples = [{ x: event.clientX, t: event.timeStamp }];
       onScrubStart();
+      if (mode === 'overview') move(timeAt(event.currentTarget, event.clientX));
       return;
     }
+    if (mode === 'overview') { move(timeAt(event.currentTarget, event.clientX)); return; }
     current.samples.push({ x: event.clientX, t: event.timeStamp });
     while (current.samples.length > 2 && event.timeStamp - current.samples[0].t > 100) current.samples.shift();
     move(clamp(current.from - (event.clientX - current.x) / pxPerSecond()));
@@ -191,7 +208,13 @@ export function ScrubWaveform({ snapshot, duration, position, media, playing, re
   const finish = (event: PointerEvent<HTMLDivElement>, cancelled: boolean) => {
     const current = gesture.current;
     if (!current || current.id !== event.pointerId) return;
-    if (!current.dragging) { gesture.current = null; return; }
+    if (!current.dragging) {
+      gesture.current = null;
+      // A tap on the overview goes straight to that point.
+      if (mode === 'overview' && !cancelled) onSeek(timeAt(event.currentTarget, event.clientX));
+      return;
+    }
+    if (mode === 'overview') { gesture.current = null; onScrubEnd(current.time); return; }
     const oldest = current.samples[0], newest = current.samples[current.samples.length - 1];
     // A finger that stopped before lifting does not flick; a burst of events is measured over at least one frame.
     const resting = event.timeStamp - newest.t > 60;
@@ -244,13 +267,86 @@ export function ScrubWaveform({ snapshot, duration, position, media, playing, re
       onKeyDown={onKeyDown}
       className={cn(
         'rafii-focus relative w-full touch-pan-y select-none overscroll-x-contain rounded-md',
-        compact ? 'h-14' : 'h-20',
-        disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        className ?? 'h-20',
+        disabled ? 'cursor-default' : mode === 'overview' ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
       )}
     >
-      <svg ref={svg} aria-hidden className='text-foreground absolute inset-0 h-full w-full [mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]' />
-      <span aria-hidden className='bg-primary pointer-events-none absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 rounded-full' />
-      {progress !== null ? <span aria-hidden className='bg-background/85 text-muted-foreground pointer-events-none absolute top-1 left-2 rounded-full px-1.5 text-[10px] tabular-nums'>Reading {progress}%</span> : null}
+      <svg ref={svg} aria-hidden className={cn('text-foreground absolute inset-0 h-full w-full', mode === 'scroll' && '[mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]')} />
+      <span ref={playhead} aria-hidden className={cn('bg-primary pointer-events-none absolute inset-y-0 w-0.5 rounded-full', mode === 'scroll' ? 'left-1/2 -translate-x-1/2' : 'left-0')} />
+      {progress !== null ? <span aria-hidden className='bg-background/85 text-muted-foreground pointer-events-none absolute top-0.5 left-1 rounded-full px-1.5 text-[10px] tabular-nums'>Reading {progress}%</span> : null}
+    </div>
+  );
+}
+
+/**
+ * A thin whole-length timeline: where the playhead is in the file, draggable and tappable (any point), with the
+ * keyboard steps of a slider. Used for video and under the scrolling audio waveform.
+ */
+export function ProgressScrubber({ duration, position, disabled, label, valueText, className, onScrubStart, onScrub, onScrubEnd, onSeek }: {
+  duration: number;
+  position: number;
+  disabled?: boolean;
+  label: string;
+  valueText: string;
+  className?: string;
+  onScrubStart: () => void;
+  onScrub: (time: number) => void;
+  onScrubEnd: (time: number) => void;
+  onSeek: (time: number) => void;
+}) {
+  const active = useRef<{ id: number; time: number } | null>(null);
+  const [dragTime, setDragTime] = useState<number | null>(null);
+  const clamp = (time: number) => Math.max(0, Math.min(duration || 0, time));
+  const timeAt = (element: HTMLElement, clientX: number) => {
+    const box = element.getBoundingClientRect();
+    return clamp((clientX - box.left) / Math.max(1, box.width) * duration);
+  };
+  const shown = dragTime ?? position;
+  const fraction = duration > 0 ? Math.min(1, Math.max(0, shown / duration)) : 0;
+  const end = (event: PointerEvent<HTMLDivElement>) => {
+    const current = active.current;
+    if (!current || current.id !== event.pointerId) return;
+    active.current = null; setDragTime(null);
+    onScrubEnd(current.time);
+  };
+  return (
+    <div
+      role='slider'
+      tabIndex={disabled ? -1 : 0}
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration)}
+      aria-valuenow={Math.round(position)}
+      aria-valuetext={valueText}
+      aria-disabled={disabled || undefined}
+      onPointerDown={event => {
+        if (disabled || !event.isPrimary || !duration || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* not capturable */ }
+        const time = timeAt(event.currentTarget, event.clientX);
+        active.current = { id: event.pointerId, time };
+        onScrubStart(); setDragTime(time); onScrub(time);
+      }}
+      onPointerMove={event => {
+        const current = active.current;
+        if (!current || current.id !== event.pointerId) return;
+        current.time = timeAt(event.currentTarget, event.clientX);
+        setDragTime(current.time); onScrub(current.time);
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onKeyDown={event => {
+        if (disabled) return;
+        const step = { ArrowLeft: -5, ArrowDown: -5, ArrowRight: 5, ArrowUp: 5, PageDown: -30, PageUp: 30 }[event.key];
+        const target = event.key === 'Home' ? 0 : event.key === 'End' ? duration : step === undefined ? null : position + step;
+        if (target === null) return;
+        event.preventDefault();
+        onSeek(clamp(target));
+      }}
+      className={cn('rafii-focus group/scrub relative h-6 w-full touch-pan-y select-none rounded-full', disabled ? 'cursor-default opacity-50' : 'cursor-pointer', className)}
+    >
+      <span aria-hidden className='bg-foreground/20 pointer-events-none absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full' />
+      <span aria-hidden className='bg-foreground pointer-events-none absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full' style={{ width: `${fraction * 100}%` }} />
+      <span aria-hidden className={cn('bg-foreground pointer-events-none absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-sm transition-transform duration-150 group-hover/scrub:scale-125', dragTime !== null && 'scale-150')} style={{ left: `${fraction * 100}%` }} />
     </div>
   );
 }

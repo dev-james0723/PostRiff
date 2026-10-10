@@ -13,6 +13,14 @@ function peaksModule() {
  return loaded.exports;
 }
 const peaks = peaksModule();
+function understandingModule() {
+ const filename = path.join(root, 'features/library/audio-understanding.ts');
+ const loaded = new Module(filename); loaded.paths = module.paths;
+ loaded.require = (id) => id === './audio-peaks' ? peaks : require(id);
+ loaded._compile(ts.transpileModule(read('features/library/audio-understanding.ts'), {compilerOptions:{module:ts.ModuleKind.CommonJS, target:ts.ScriptTarget.ES2020}}).outputText, filename);
+ return loaded.exports;
+}
+const hearing = understandingModule();
 const ascii = (text) => [...text].map(c => c.charCodeAt(0));
 const u32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
 const box = (type, ...parts) => { const body = parts.flat(); return [...u32(body.length + 8), ...ascii(type), ...body]; };
@@ -112,7 +120,28 @@ test('the Library player scrubs on the waveform and no longer limits it to 5 min
  const player = read('features/library/gallery-media-preview.tsx');
  const scrub = read('features/library/scrub-waveform.tsx');
  assert.ok(!/5 minutes|WAVEFORM_DURATION_LIMIT|16 \* 1024 \* 1024/.test(player));
- assert.ok(player.includes('<ScrubWaveform') && player.includes('onScrubEnd={scrubEnd}'));
+ assert.ok(player.includes('<ScrubWaveform') && player.includes('onScrubEnd: scrubEnd'));
+ // Small tiles: whole-recording waveform, time always shown, speed/volume in a popover (nothing overlaps).
+ assert.ok(player.includes("tight ? 'overview' : 'scroll'") && player.includes('<PopoverContent') && !player.includes('setOptions'));
+ assert.ok(read('features/library/asset-detail.tsx').includes("variant='detail'"), 'the asset sheet plays and scrubs audio');
  assert.ok(scrub.includes("role='slider'") && scrub.includes('touch-pan-y'), 'horizontal drags scrub while vertical swipes still scroll');
  assert.ok(scrub.includes('ArrowLeft') && scrub.includes('Home'), 'the waveform is keyboard operable');
+});
+
+test('the free speech check tells syllable-like speech from sustained sound', () => {
+ const rate = 16000, seconds = 20;
+ const tone = new Float32Array(rate * seconds).map((_, i) => 0.5 * Math.sin(2 * Math.PI * 440 * i / rate));
+ // 180 ms bursts with 120 ms gaps, like syllables and the pauses between words.
+ const bursts = new Float32Array(rate * seconds).map((_, i) => ((i / rate) % 0.3 < 0.18 ? 0.5 : 0.01) * Math.sin(2 * Math.PI * 220 * i / rate));
+ assert.ok(hearing.speechLikelihood(tone) < 0.05, 'a steady tone is not speech');
+ assert.ok(hearing.speechLikelihood(bursts) > 0.5, 'syllable-rate bursts look like speech');
+ assert.equal(hearing.speechLikelihood(new Float32Array(rate * 5)), 0, 'silence is not speech');
+});
+
+test('invented Whisper filler over music is removed before deciding there is speech', () => {
+ assert.equal(hearing.cleanTranscript('[Music] ♪ (piano) '), '');
+ assert.equal(hearing.cleanTranscript('Thank you. Thank you. Thank you. Thank you.'), '');
+ assert.equal(hearing.cleanTranscript('Thanks for watching!'), '');
+ assert.equal(hearing.cleanTranscript('字幕由某某提供'), '');
+ assert.equal(hearing.cleanTranscript('Today we practise slow scales. [Music] Then the left hand.'), 'Today we practise slow scales. Then the left hand.');
 });

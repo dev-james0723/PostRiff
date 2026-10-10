@@ -59,6 +59,10 @@ export interface Asset {
   duplicateOf?: string | null;
   displayTitle?: string;
   aiSummary?: string;
+  /** Audio: 'detected' once its words were transcribed, 'none' when a free speech check heard no speech (music). */
+  speech?: 'detected' | 'none' | null;
+  /** Who made the transcript: 'user_supplied', or 'browser_whisper' for free on-device recognition. */
+  transcriptSource?: string | null;
   aiTags?: string[];
   extractedText?: string;
   extension?: string;

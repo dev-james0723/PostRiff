@@ -21,6 +21,8 @@ FILENAME = re.compile(r"^[^/\\\x00-\x1f\x7f]{1,255}$")
 EXT = re.compile(r"^[a-z0-9]{1,12}$")
 ASSET_ID = re.compile(r"^[0-9a-f]{32}$")
 READY = ('ready', 'unsupported')
+# Transcripts made without any paid service: speech recognition running in the person's own browser.
+AUTO_TRANSCRIPT_SOURCES = frozenset({'browser_whisper'})
 INLINE = {'txt','md','markdown','html','htm','csv','json'}
 # Documents up to this size are read in the uploader's own request (bounded child processes, well inside the function
 # duration), so a file is ready, or honestly failed, when its upload finishes. The cron worker only picks up what is
@@ -88,6 +90,9 @@ def _asset(a):
         'uploadedBy': str(a['created_by']), 'originalFilename': a['original_filename'],
         'displayTitle': a['display_title'], 'titleSource': a['title_source'],
         'summary': a['summary'], 'aiSummary': a['summary'], 'tags': a['tags'],
+        # Audio only: 'detected' once words were transcribed, 'none' when a free speech check found no speech (music).
+        'speech': provenance.get('speech') if provenance.get('speech') in ('detected','none') else None,
+        'transcriptSource': provenance.get('transcriptSource') if isinstance(provenance.get('transcriptSource'), str) else None,
         # Tags the server took from the file itself (never a model); the UI marks them as automatic.
         'aiTags': [t for t in (provenance.get('autoTags') or []) if isinstance(t, str)][:10],
         'kind': a['kind'], 'assetKind': a['kind'], 'mime': a['mime'], 'extension': a['extension'],
@@ -348,20 +353,39 @@ class UniversalLibrary:
             cur.execute('SELECT c.id::text,c.name,count(i.asset_key),c.kind FROM public.pr_library_collections c LEFT JOIN public.pr_library_collection_items i ON i.workspace_id=c.workspace_id AND i.collection_id=c.id WHERE c.workspace_id=%s GROUP BY c.id ORDER BY c.name',(w,))
             return {'collections':[{'id':i.replace('-',''),'name':n,'count':int(c),'kind':k} for i,n,c,k in cur.fetchall()]}
 
-    def transcript(self,w,t,i,text):
-        if not isinstance(text,str) or not text.strip() or len(text)>250000 or '\x00' in text:
+    def transcript(self,w,t,i,text,source=None,speech=None):
+        """A person's own transcript, or what free on-device recognition in their browser heard (`source`
+        'browser_whisper'): the words, or `speech='none'` when the recording has no speech (music). An automatic result
+        never replaces a transcript someone supplied."""
+        automatic = source in AUTO_TRANSCRIPT_SOURCES
+        if source is not None and not automatic:
+            raise AlphaError('Unknown transcript source.')
+        if speech not in (None, 'none') or (speech == 'none' and not automatic):
+            raise AlphaError('Only automatic speech checks can report a recording without speech.')
+        if speech is None and (not isinstance(text,str) or not text.strip() or len(text)>250000 or '\x00' in text):
             raise AlphaError('Supply a transcript within 250,000 characters.')
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             a = self._row(cur,w,i,True)
             if a['kind'] != 'audio' or a['processing_status'] not in READY:
                 raise AlphaError('Finish an audio upload before adding its transcript.',409)
+            if automatic and (a['provenance'] or {}).get('transcriptSource') == 'user_supplied':
+                return self.detail(w,t,i)
+            if speech == 'none':
+                cur.execute("UPDATE public.pr_library_assets SET provenance=provenance||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id=%s",(json.dumps({'speech':'none','speechCheckedBy':source}),w,i))
+                return self.detail(w,t,i)
             self._retract_source(cur,row,w,p,a)
             cur.execute('UPDATE public.pr_library_assets SET source_id=null WHERE workspace_id=%s AND id=%s',(w,i))
             cur.execute('DELETE FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s',(w,i))
             for n,part in enumerate(chunks(text)):
                 cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
-            cur.execute("UPDATE public.pr_library_assets SET transcription_status='ready',indexing_status='ready',summary=%s,provenance=provenance||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id=%s",(normalize(text)[:360],json.dumps({'transcriptSource':'user_supplied','transcriptBy':p}),w,i))
+            # The same free, model-free summary and tags as documents: one sentence and key phrases from the words.
+            from .library_autometa import suggest
+            auto = suggest(text, a.get('original_filename') or '')
+            # Suggested tags are shown as automatic (provenance) and replaced with each transcript; the person's own tags
+            # are never written here, so a replaced transcript leaves nothing of its old words behind.
+            extra = {'transcriptSource':source or 'user_supplied','transcriptBy':p,'speech':'detected','autoTags':auto['tags'],'autoMeta':'extract-v1'}
+            cur.execute("UPDATE public.pr_library_assets SET transcription_status='ready',indexing_status='ready',summary=%s,provenance=provenance||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id=%s",(auto['summary'] or normalize(text)[:360],json.dumps(extra),w,i))
         return self.detail(w,t,i)
 
     @staticmethod
