@@ -15,7 +15,7 @@ half-open window [start, end):
 - runs: rafii_control.business_agent_runs (054) — durable run outcomes by kind (agent / task / voice).
 - genui: rafii_control.business_genui_artifacts / business_genui_attempts (110 over 102) — validation outcomes, repairs and
   retries. The existing genui.validation_rejected log line is not duplicated.
-Each section reports its own dataState: measured | not_instrumented (installed, nothing in the window) | source_not_configured
+Each section reports its own dataState: measured | partial (group limit exceeded; totals withheld) | not_instrumented (installed, nothing in the window) | source_not_configured
 (the projection is not installed yet) | unavailable. Agent metrics carry no workspace id, so internal or test traffic cannot be
 excluded there (like request metrics); providerCalls, runs and genui exclude internal/test/demo workspaces.
 """
@@ -38,25 +38,34 @@ AGENT_SQL = ('WITH w AS (SELECT m.metric, m.label, m."eventCount", m."valueSum",
              'b AS (SELECT x.metric, x.label, array_agg(x.s ORDER BY x.i) AS buckets FROM (SELECT w.metric, w.label, u.i, sum(u.v)::bigint AS s '
              'FROM w CROSS JOIN LATERAL unnest(w."valueBuckets") WITH ORDINALITY AS u(v, i) GROUP BY w.metric, w.label, u.i) x GROUP BY x.metric, x.label) '
              'SELECT t.metric, t.label, t.events, t.total, b.buckets FROM t LEFT JOIN b ON b.metric = t.metric AND b.label = t.label '
-             'ORDER BY t.events DESC, t.metric, t.label LIMIT ' + str(LIMIT))
+             'ORDER BY t.events DESC, t.metric, t.label LIMIT ' + str(LIMIT + 1))
 COVERAGE_SQL = 'SELECT min(m.minute) AS earliest, max(m.minute) AS latest FROM ' + METRICS_VIEW + ' m'
 CALLS_SQL = ('SELECT pc.feature, pc.workload, count(*) AS calls, count(*) FILTER (WHERE pc.status = \'ok\') AS ok, '
              'count(*) FILTER (WHERE pc.status <> \'ok\') AS failed, count(*) FILTER (WHERE pc."httpStatus" IN (401, 403)) AS refused, '
              'count(*) FILTER (WHERE pc."attemptNo" > 1) AS retries, coalesce(sum(pc."costUsdMicro") FILTER (WHERE pc."costUsdMicro" IS NOT NULL), 0)::bigint AS known_usd_micro, '
              'count(*) FILTER (WHERE pc."costUsdMicro" IS NULL) AS unknown_cost '
              'FROM rafii_control.business_ai_calls pc WHERE ' + interval_clause('pc.at') + ' AND ' + excluded('pc."workspaceId"')
-             + ' GROUP BY pc.feature, pc.workload ORDER BY calls DESC LIMIT 200')
+             + ' GROUP BY pc.feature, pc.workload ORDER BY calls DESC LIMIT 201')
 RUNS_SQL = ('SELECT r."idempotencyPrefix" AS kind, r.status, count(*) AS runs, '
             'percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM r."updatedAt" - r."createdAt")) AS p50_seconds, '
             'percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM r."updatedAt" - r."createdAt")) AS p95_seconds '
             'FROM rafii_control.business_agent_runs r WHERE ' + interval_clause('r."createdAt"') + " AND r.\"idempotencyPrefix\" IN ('agent', 'task', 'voice') AND "
-            + excluded('r."workspaceId"') + ' GROUP BY r."idempotencyPrefix", r.status ORDER BY runs DESC LIMIT 100')
+            + excluded('r."workspaceId"') + ' GROUP BY r."idempotencyPrefix", r.status ORDER BY runs DESC LIMIT 101')
 GENUI_ARTIFACTS_SQL = ('SELECT a.surface, a."validationState" AS validation, a."generationState" AS generation, a."reasonCode" AS reason, count(*) AS artifacts '
                        'FROM rafii_control.business_genui_artifacts a WHERE ' + interval_clause('a."createdAt"') + ' AND ' + excluded('a."workspaceId"')
-                       + ' GROUP BY 1, 2, 3, 4 ORDER BY artifacts DESC LIMIT 200')
+                       + ' GROUP BY 1, 2, 3, 4 ORDER BY artifacts DESC LIMIT 201')
 GENUI_ATTEMPTS_SQL = ('SELECT t.kind, t.state, t."reasonCode" AS reason, count(*) AS attempts, count(*) FILTER (WHERE t."providerAttempts" > 1) AS provider_retries '
                       'FROM rafii_control.business_genui_attempts t WHERE ' + interval_clause('t."createdAt"') + ' AND ' + excluded('t."workspaceId"')
-                      + ' GROUP BY 1, 2, 3 ORDER BY attempts DESC LIMIT 200')
+                      + ' GROUP BY 1, 2, 3 ORDER BY attempts DESC LIMIT 201')
+
+# One sentinel group detects truncation without loading an unbounded result. Never
+# derive totals or rates from the most frequent groups alone: rare failures matter.
+GROUP_LIMITS = {AGENT_SQL: LIMIT, CALLS_SQL: 200, RUNS_SQL: 100, GENUI_ARTIFACTS_SQL: 200, GENUI_ATTEMPTS_SQL: 200}
+
+
+class _SourceTruncated(Exception):
+    def __init__(self, limit):
+        self.limit = limit
 
 
 def percentile(buckets, q):
@@ -108,7 +117,11 @@ def _events(row):
 def _read(queries, sql, params):
     """Rows, or None when the projection is not installed (source_not_configured)."""
     try:
-        return queries.store.metric_rows(MetricStatement('agent_observability', sql), params, LIMIT)
+        limit = GROUP_LIMITS.get(sql, LIMIT)
+        rows = queries.store.metric_rows(MetricStatement('agent_observability', sql), params, limit + 1)
+        if len(rows) > limit:
+            raise _SourceTruncated(limit)
+        return rows
     except MISSING_SOURCE:
         return None
 
@@ -120,6 +133,9 @@ def _state(rows):
 def _section(reader):
     try:
         return reader()
+    except _SourceTruncated as error:
+        return {'dataState': 'partial', 'reason': 'source_truncated', 'groupLimit': error.limit,
+                'totalsAvailable': False}
     except Exception as error:  # noqa: BLE001 — one unavailable source never hides the others; the class name only
         return {'dataState': 'unavailable', 'reason': 'source_error', 'errorClass': type(error).__name__}
 
@@ -290,7 +306,7 @@ def summary(app, principal, request):
         'genui': _section(lambda: genui_section(_read(queries, GENUI_ARTIFACTS_SQL, params), _read(queries, GENUI_ATTEMPTS_SQL, params))),
     }
     states = [s.get('dataState') for s in sections.values()]
-    overall = 'measured' if all(s == 'measured' for s in states) else ('unavailable' if not any(s in ('measured', 'not_instrumented') for s in states) else 'partial')
+    overall = 'measured' if all(s == 'measured' for s in states) else ('unavailable' if not any(s in ('measured', 'not_instrumented', 'partial') for s in states) else 'partial')
     return {'mode': 'live', 'interval': interval, 'sections': sections, 'contentFree': True,
             'limitations': ['Agent metrics carry no workspace id, so internal and test traffic is included there.',
                             'Agent metrics are per-minute aggregates flushed from each server process; a crashed or frozen process can lose its last minutes.',

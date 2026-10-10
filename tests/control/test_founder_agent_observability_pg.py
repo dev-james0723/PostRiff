@@ -187,6 +187,18 @@ class AgentObservabilityPostgresTests(unittest.TestCase):
         reason = self.connect('rafii_control_reader').execute('SELECT "reasonCode" FROM rafii_control.business_genui_attempts WHERE "artifactId"=%s', (artifact,)).fetchone()[0]
         self.assertIsNone(reason, 'free text in a reason column reads NULL')
 
+    def test_group_limit_sentinel_withholds_truncated_totals(self):
+        with self.service_factory() as con:
+            con.execute("INSERT INTO public.pr_agent_metrics(minute,metric,label,event_count,value_sum,value_buckets) "
+                        "SELECT to_timestamp(%s),'agent.tool','tool_' || i::text || ':verified',1,0,%s::bigint[] "
+                        "FROM generate_series(1,%s) AS i", (NOW - 120, [0] * 20, fao.LIMIT + 1))
+        store = PostgresStore(connection_factory(self.dsn, 'rafii_control_session', 'local'), connection_factory(self.dsn, 'rafii_control_reader', 'local'), 'local')
+        out = fao.summary(types.SimpleNamespace(queries=types.SimpleNamespace(store=store)), PRINCIPAL,
+                          dict(query={'window': ['1h']}, mode='live', now=NOW))
+        self.assertEqual(out['sections']['agent'], {'dataState': 'partial', 'reason': 'source_truncated',
+                                                    'groupLimit': fao.LIMIT, 'totalsAvailable': False})
+        self.assertEqual(out['_dataState'], 'partial')
+
 
 if __name__ == '__main__':
     unittest.main()

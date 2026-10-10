@@ -342,6 +342,34 @@ class EmitterApiTest(ObservabilityCase):
             self.assertEqual(obs.path_of(trace), path)
         self.assertEqual(obs.outcome_summary({}, {"founder": {"mode": "live"}}, "completed")["tenant"], "founder")
 
+    def test_preparing_a_proposal_does_not_count_as_verified_completion(self):
+        for tool, effect in (("schedule_propose", "PREPARE_EXTERNAL"), ("automation_change_propose", "MUTATE_REVERSIBLE")):
+            with self.subTest(tool=tool):
+                result = {"toolActivity": [{"tool": tool, "effect": effect, "status": "verified"}],
+                          "pendingApprovals": [{"proposalId": "synthetic"}]}
+                summary = obs.outcome_summary(result, {}, "completed")
+                self.assertEqual(summary["outcome"], "pending_approval")
+                self.assertEqual(summary["counts"]["mutations"], 0)
+                # A verified draft in the same turn is still counted, while the turn awaits a decision.
+                result["changedEntities"] = [{"verified": True}]
+                summary = obs.outcome_summary(result, {}, "completed")
+                self.assertEqual(summary["outcome"], "pending_approval")
+                self.assertEqual(summary["counts"]["changes_verified"], 1)
+
+    def test_applied_proposal_is_verified_and_pending_turn_metric_stays_pending(self):
+        applied = {"toolActivity": [{"tool": "proposal_apply", "effect": "PREPARE_EXTERNAL", "status": "verified"}]}
+        self.assertEqual(obs.outcome_summary(applied, {}, "completed")["outcome"], "verified")
+
+        def turn(*_):
+            obs.run_persisted(None, run_id=RUN, status="completed", trace={"traceId": TRACE}, result={
+                "toolActivity": [{"tool": "schedule_propose", "effect": "PREPARE_EXTERNAL", "status": "verified"}],
+                "pendingApprovals": [{"proposalId": "synthetic"}]})
+            return {"runId": RUN, "status": "completed"}
+
+        obs.instrument_turn(turn)(object(), "workspace", "token", {})
+        self.assertEqual(self.labels()[("agent.outcome", "pending_approval")][0], 1)
+        self.assertNotIn(("agent.outcome", "verified"), self.labels())
+
 
 # --- approvals ---------------------------------------------------------------------------------------------------------------
 class ApprovalTest(ObservabilityCase):

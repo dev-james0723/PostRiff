@@ -185,6 +185,34 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual({k: v['dataState'] for k, v in out['sections'].items()},
                          {'agent': 'not_instrumented', 'providerCalls': 'not_instrumented', 'runs': 'not_instrumented', 'genui': 'not_instrumented'})
 
+    def test_group_limit_is_partial_without_sampled_totals(self):
+        class Many(Store):
+            def metric_rows(self, statement, params, limit=1000):
+                group_limit = fao.GROUP_LIMITS.get(statement.sql)
+                if group_limit:
+                    self.asserted_limit = limit
+                    return [{'metric': 'agent.tool', 'label': f'tool_{i}:verified', 'events': 1} for i in range(group_limit + 1)]
+                return []
+
+        store = Many()
+        out = fao.summary(app(store), PRINCIPAL, request())
+        self.assertEqual(out['_dataState'], 'partial')
+        for section, limit in (('agent', 1000), ('providerCalls', 200), ('runs', 100), ('genui', 200)):
+            self.assertEqual(out['sections'][section], {'dataState': 'partial', 'reason': 'source_truncated',
+                                                       'groupLimit': limit, 'totalsAvailable': False})
+        self.assertEqual(store.asserted_limit, 201)
+
+    def test_exact_group_limit_keeps_complete_totals(self):
+        class Exact(Store):
+            def metric_rows(self, statement, params, limit=1000):
+                if statement.sql == fao.AGENT_SQL:
+                    return [{'metric': 'agent.tool', 'label': f'tool_{i}:verified', 'events': 1} for i in range(fao.LIMIT)]
+                return super().metric_rows(statement, params, limit)
+
+        out = fao.summary(app(Exact()), PRINCIPAL, request())
+        self.assertEqual(out['sections']['agent']['dataState'], 'measured')
+        self.assertEqual(out['sections']['agent']['tools']['calls'], fao.LIMIT)
+
     def test_demo_is_not_simulated_and_window_is_validated(self):
         store = Store()
         out = fao.summary(app(store), PRINCIPAL, request(mode='demo'))

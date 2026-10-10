@@ -75,6 +75,8 @@ TENANTS = frozenset({"workspace", "founder"})
 
 # Planning tools (the Manager's own plan; CF-1 R0) and today's authorization refusals in tool_adapter.execute.
 PLAN_TOOLS = frozenset({"task_plan", "task_update"})
+# These verify that a proposal was prepared; neither applies its proposed change.
+PROPOSAL_PREPARERS = frozenset({"schedule_propose", "automation_change_propose"})
 LEGACY_AUTHZ_CODES = frozenset({"tool_forbidden", "forbidden", "voice_not_allowed", "tool_tenant", "tool_out_of_scope", "youtube_analytics_read_only"})
 # CF-2 refusals: counted through permission_decision (lane B1), so a tool line carrying one is not counted twice.
 CF2_AUTHZ_CODES = frozenset({"agent_permission_denied", "agent_permission_revoked", "needs_confirmation", "native_only", "approval_stale"})
@@ -590,7 +592,8 @@ def outcome_summary(result: dict, trace: dict, status: str) -> dict:
     for activity in tools:
         state = activity.get("status") if activity.get("status") in TOOL_STATUSES else "other"
         counts["tools_" + state] = counts.get("tools_" + state, 0) + 1
-    mutations = [a for a in tools if a.get("effect") in EFFECTS and a.get("effect") != "READ"]
+    mutations = [a for a in tools if a.get("effect") in EFFECTS and a.get("effect") != "READ"
+                 and a.get("tool") not in PROPOSAL_PREPARERS]
     changes = [c for c in result.get("changedEntities") or [] if isinstance(c, dict)]
     verified_changes = sum(1 for c in changes if c.get("verified") is True)
     counts.update({"mutations": len(mutations), "mutations_unverified": sum(1 for a in mutations if a.get("status") == "unverified"),
@@ -610,10 +613,10 @@ def outcome_summary(result: dict, trace: dict, status: str) -> dict:
         outcome = "cancelled"
     elif counts["changes_unverified"] or counts["mutations_unverified"]:
         outcome = "unverified"
-    elif verified_changes or any(a.get("status") == "verified" for a in mutations):
-        outcome = "verified"
     elif counts["pending_approvals"]:
         outcome = "pending_approval"
+    elif verified_changes or any(a.get("status") == "verified" for a in mutations):
+        outcome = "verified"
     else:
         outcome = "no_change"
     usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
