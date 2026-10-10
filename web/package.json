@@ -25,7 +25,8 @@
     "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh",
     "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
-    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all"
+    "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
+    "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
