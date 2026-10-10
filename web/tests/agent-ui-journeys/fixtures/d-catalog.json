@@ -1025,7 +1025,9 @@
        "draftId",
        "edges",
        "sources",
-       "voiceFit"
+       "voiceFit",
+       "workspaceId",
+       "claimsTruncated"
       ],
       "lists": {
        "sources": [
@@ -1041,12 +1043,17 @@
         "origin",
         "host",
         "published",
-        "fetchedAt"
+        "fetchedAt",
+        "evidence",
+        "claims"
        ]
       },
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "workspaceId",
+        "claimsTruncated"
+       ],
        "lists": {
         "sources": [
          "ref",
@@ -1059,7 +1066,9 @@
          "origin",
          "published",
          "retracted",
-         "title"
+         "title",
+         "evidence",
+         "claims"
         ]
        }
       }
@@ -3168,7 +3177,8 @@
        "definitionVersion",
        "undated",
        "verifiedPostsInWindow",
-       "postsWithReadings"
+       "postsWithReadings",
+       "workspaceId"
       ],
       "lists": {
        "posts": [
@@ -3190,7 +3200,9 @@
       },
       "open": false,
       "optional": {
-       "keys": [],
+       "keys": [
+        "workspaceId"
+       ],
        "lists": {}
       }
      },
@@ -4565,7 +4577,8 @@
      "definitionVersion",
      "undated",
      "verifiedPostsInWindow",
-     "postsWithReadings"
+     "postsWithReadings",
+     "workspaceId"
     ],
     "lists": {
      "posts": [
@@ -4587,7 +4600,9 @@
     },
     "open": false,
     "optional": {
-     "keys": [],
+     "keys": [
+      "workspaceId"
+     ],
      "lists": {}
     }
    },
@@ -5327,7 +5342,9 @@
      "draftId",
      "edges",
      "sources",
-     "voiceFit"
+     "voiceFit",
+     "workspaceId",
+     "claimsTruncated"
     ],
     "lists": {
      "sources": [
@@ -5343,12 +5360,17 @@
       "origin",
       "host",
       "published",
-      "fetchedAt"
+      "fetchedAt",
+      "evidence",
+      "claims"
      ]
     },
     "open": false,
     "optional": {
-     "keys": [],
+     "keys": [
+      "workspaceId",
+      "claimsTruncated"
+     ],
      "lists": {
       "sources": [
        "ref",
@@ -5361,7 +5383,9 @@
        "origin",
        "published",
        "retracted",
-       "title"
+       "title",
+       "evidence",
+       "claims"
       ]
      }
     }
@@ -5982,7 +6006,7 @@
      "lists": {}
     }
    },
-   "description": "Bounded search (≤50 rows) over customers, workspaces, subscriptions, payments, usage or support requests; safe metadata only.",
+   "description": "Bounded search (\u226450 rows) over customers, workspaces, subscriptions, payments, usage or support requests; safe metadata only.",
    "invalidatedBy": [],
    "journey": "J09",
    "name": "founder_search",
@@ -6580,7 +6604,7 @@
      "lists": {}
     }
    },
-   "description": "The in-app step-by-step guides that fix common problems (connect an account, set up voice, check the plan…) and whether you can open each.",
+   "description": "The in-app step-by-step guides that fix common problems (connect an account, set up voice, check the plan\u2026) and whether you can open each.",
    "invalidatedBy": [],
    "journey": "J08",
    "name": "recovery_guides",
