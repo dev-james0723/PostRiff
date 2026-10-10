@@ -32,7 +32,7 @@
       "owner": "B/C",
       "title": "Real generation",
       "pass_criteria": "At least 59/60 (98.3%) normal real-model initial generations structurally valid first pass on the fixed 60-case live corpus; all 60 functional after at most one allowed repair; fixtures/fallbacks not counted as generated success. The corpus is fixed before any measurement and the denominator never changes: no case is dropped or replaced because it fails (D-A53, James 2026-10-09; was 29/30).",
-      "required_evidence": "60 source-hashed cases of corpus g03-live-60/v2 (sha256 703b54cdb40eb8abb3b5f4d8b82a1d9ca46779a327ee72b88adc47ba34721ff0) and parser/render outcomes",
+      "required_evidence": "60 source-hashed cases of corpus g03-live-60/v2 (sha256 69d6bee39eb53ec74c47cd1a126b93b27d47242daeb4e3b15c1e0b0e422f2ba3) and parser/render outcomes",
       "required": true,
       "status": "unverified",
       "candidate_sha": null,

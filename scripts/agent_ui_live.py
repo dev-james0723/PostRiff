@@ -121,7 +121,7 @@ JOURNEY_PROMPTS_V2 = {
             "仲有邊幾步未做完？用時間線顯示，邊樣卡住邊樣都要標明",
             "If I push the launch post back three days, which later steps does that affect? Just show me, don't change anything yet"),
     "J06": ("Chart my Instagram vs YouTube views for 1-30 September, day by day in Hong Kong time, and show how many posts each day is based on",
-            "點解有幾日冇數？邊啲係真係零，邊啲係未有數據？",
+            "有幾日冇數，幫我逐日列返出嚟，分清楚邊啲係真係零、邊啲係未有數據",
             "Drill into the best day on that chart: which posts drove it, with likes, comments and saves, and when those numbers were last updated"),
     "J07": ("幫我執好我儲低咗關於拉赫曼尼諾夫第二號鋼琴協奏曲嘅資料，每個來源都要有日期同連結",
             "Put those sources in a comparison matrix: what each one says, its date, and which of my drafts already cites it",

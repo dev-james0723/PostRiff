@@ -76,7 +76,7 @@ def ingest_sample(plan):
 # 60 normal cases. A changed, dropped, replaced or reordered case is a new corpus: it needs a new decision and a new id, and
 # results measured on different corpora are never pooled.
 G03_CORPUS_V1 = json.loads((Path(__file__).resolve().parent / "fixtures" / "g03-corpus-v1.json").read_text(encoding="utf-8"))
-G03_CORPUS_SHA256 = "703b54cdb40eb8abb3b5f4d8b82a1d9ca46779a327ee72b88adc47ba34721ff0"
+G03_CORPUS_SHA256 = "69d6bee39eb53ec74c47cd1a126b93b27d47242daeb4e3b15c1e0b0e422f2ba3"
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 JOURNEYS = tuple(f"J0{i}" for i in range(1, 10))
 

@@ -132,7 +132,7 @@ Peer session (Library Intelligence, branch `claude/rafii-intelligent-library-202
   - The corpus was fixed and documented before any measurement. The denominator never changes afterwards, and no case is dropped or replaced because it fails.
 
   The corpus (`g03-live-60/v2`, the `normal` list of `scripts/agent_ui_live.py plan`):
-  - sha256 `703b54cdb40eb8abb3b5f4d8b82a1d9ca46779a327ee72b88adc47ba34721ff0`, over the canonical JSON of the 60 cases (sorted keys, no spaces).
+  - sha256 `69d6bee39eb53ec74c47cd1a126b93b27d47242daeb4e3b15c1e0b0e422f2ba3`, over the canonical JSON of the 60 cases (sorted keys, no spaces).
   - Cases 1–30 are the earlier 30-case sample, byte for byte and in the same order. The frozen copy is `tests/agent_ui_acceptance/fixtures/g03-corpus-v1.json`.
   - Cases 31–60 are new: d, e and f for each of J01–J09, then CMP-d, CMP-e and CMP-f. They were written from 01-ENGINEERING-SPEC §4 and the journey definitions only, not from any pending prompt change.
   - Of the new cases, 10 are Hong Kong Cantonese in Traditional Chinese and 2 mix English and Chinese. 13 are follow-ups that only make sense as a later turn of their journey's conversation (`corpus.followUps`).

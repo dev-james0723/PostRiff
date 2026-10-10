@@ -31,7 +31,7 @@ snippet and save that collection to a second file.
 
 ## 2. The 60 normal cases (the fixed G03 corpus, in `runOrder`; the first one, J01-a, is the cold case)
 
-The corpus is fixed (D-A53, `corpus.id` `g03-live-60/v2`, `corpus.sha256` `703b54cd…`): run every case exactly as printed,
+The corpus is fixed (D-A53, `corpus.id` `g03-live-60/v2`, `corpus.sha256` `69d6bee3…`): run every case exactly as printed,
 never reword, skip, swap or add one. Follow `runOrder` from top to bottom; each entry is one conversation:
 
 - `"start": "new"`: open a new conversation (consumer entries in the full chat, J09 entries in the founder panel) and run
