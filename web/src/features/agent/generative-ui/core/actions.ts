@@ -6,9 +6,14 @@
  * else is dropped. Saved data changes only through Rafii's ActionButton and D's action bridge, never through here.
  *   - `sanitizePlan` filters a model-built `Action([...])` plan before it reaches OpenUI's `triggerAction`;
  *   - `createHostActionHandler` is the `<Renderer onAction>`: `continue_conversation` → the existing turn path with the
- *     artifact's ids (model `context` and the form snapshot are never forwarded); `open_url` → same-origin path only.
+ *     artifact's ids (model `context` and the form snapshot are never forwarded); `open_url` → `safeOpenUrl`, i.e. a
+ *     same-origin path the site agent's route manifest allows (`safeHref`), never a script/data/blob or other-host URL.
  */
 import type { ActionPlan, ActionStep } from '@openuidev/lang-core';
+import routeManifestJson from '@/lib/site-agent/route-manifest.json';
+import { safeHref, type RouteManifest } from '@/lib/site-agent/routes';
+
+const ROUTES = routeManifestJson as RouteManifest;
 
 const SAFE_STEPS = new Set(['set', 'reset', 'continue_conversation', 'open_url']);
 export const MAX_FOLLOW_UP_CHARS = 500;
@@ -40,9 +45,42 @@ export function safeInAppPath(url: unknown, origin?: string | null): string | nu
     const parsed = new URL(value);
     if (parsed.origin !== origin) return null;
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    if (parsed.username || parsed.password) return null;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whitespace or a control character anywhere (C0, space, DEL, C1, NBSP, BOM, line separators): browsers strip or ignore
+ * some of these, so `\tjavascript:` or `java\nscript:` could otherwise reach a scheme. No allowed in-app href contains one.
+ */
+function hasUnsafeChar(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x20 || (code >= 0x7f && code <= 0xa0)) return true;
+  }
+  return /\s/.test(value);
+}
+const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i;
+
+/**
+ * HF-3: the only target `@OpenUrl` may open. An in-app path (or this app's own https/http origin reduced to its path,
+ * without credentials) that the route manifest allows through the app's existing `safeHref` — a known page, declared query
+ * keys and values, an anchor only on help articles. Script/data/blob/file schemes in any case or encoding,
+ * protocol-relative and backslash forms, other hosts, dot segments and undeclared pages or parameters are refused (null).
+ */
+export function safeOpenUrl(url: unknown, origin?: string | null): string | null {
+  if (typeof url !== 'string' || !url || hasUnsafeChar(url)) return null;
+  const path = safeInAppPath(url, origin);
+  if (!path) return null;
+  const pathname = path.split(/[?#]/, 1)[0];
+  if (pathname.split('/').some((segment) => DOT_SEGMENT.test(segment))) return null;
+  try {
+    return safeHref(ROUTES, path);
+  } catch {
+    return null; // a malformed percent-escape in the query (decodeURIComponent) is a refusal, never a crash
   }
 }
 
@@ -75,7 +113,7 @@ export function createHostActionHandler(options: HostActionOptions): (event: Hos
       return;
     }
     if (event.type === 'open_url') {
-      const path = safeInAppPath(event.params?.url, options.origin ?? null);
+      const path = safeOpenUrl(event.params?.url, options.origin ?? null);
       if (path) options.onNavigate(path);
       else options.onBlocked?.('link');
     }
