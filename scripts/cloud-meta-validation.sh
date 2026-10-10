@@ -13,6 +13,8 @@ if [ "${1:-}" != --schema-only ]; then
   "$TREND_VISUAL_TEST_PYTHON" -m unittest discover -s tests -p 'test_trend_meta*.py'
   # Preserve the integrated release registry across test discovery order.
   "$TREND_VISUAL_TEST_PYTHON" -m unittest test_agent_capability_registry test_agent_ui_library_browse
+  # This API-loader contract must resolve the actual public-source schemas.
+  node --test web/tests/visual-analysis.test.cjs
 fi
 # Keep synthetic credentials unmistakable to the release secret detector.
 "$TREND_VISUAL_TEST_PYTHON" - <<'META_SECRET_SCAN'
