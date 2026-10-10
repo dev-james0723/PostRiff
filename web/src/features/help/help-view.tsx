@@ -102,7 +102,7 @@ export function HelpArticleView({ documentId }: { documentId: string }) {
   const article = doc.data;
   return (
     <PageContainer pageTitle={article.title} pageEyebrow='Help' pageDescription={article.summary ?? undefined} width='reading'
-      pageHeaderAction={<Button variant='glass' size='sm' onClick={() => panelStore.ask(`About “${article.title}”: `)}>Ask {siteConfig.name} about this</Button>}>
+      pageHeaderAction={<Button variant='glass' size='sm' onClick={() => panelStore.ask(`About “${article.title}”: `, workspaceId)}>Ask {siteConfig.name} about this</Button>}>
       <article className='flex flex-col gap-6'>
         {article.sections.map((section) => (
           <section key={section.anchor} id={section.anchor} aria-labelledby={`${section.anchor}-title`} className='scroll-mt-20 flex flex-col gap-2'>

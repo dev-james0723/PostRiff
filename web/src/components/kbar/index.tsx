@@ -13,6 +13,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import RenderResults from './render-result';
 import useThemeSwitching from './use-theme-switching';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
+import { panelStore } from '@/features/site-agent/store';
 
 export default function KBar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -56,7 +57,7 @@ export default function KBar({ children }: { children: React.ReactNode }) {
       return baseAction ? [baseAction, ...childActions] : childActions;
     });
 
-    return navActions;
+    return [{ id: 'askRafiiAction', name: 'Ask Rafii', keywords: 'agent assistant ask help context', section: 'Rafii', perform: () => panelStore.setOpen(true) }, ...navActions];
   }, [router, filteredGroups]);
 
   return (
