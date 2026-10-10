@@ -191,13 +191,17 @@ class LibraryMetadataChanges:
             raise AlphaError('Choose a prepared Library change.')
         return body['receiptId']
 
-    def apply_in(self, cur, w, principal, ident):
-        from .hosted import audit
+    def prepared_in(self, cur, w, principal, ident):
+        """Fresh creator-scoped approval preview, without applying or reserving an effect."""
         self._ready(cur)
         row = self._context(cur, w, principal)
         status, payload, expires, undo_expires = self._receipt(cur, w, principal, ident)
         if status != 'prepared':
-            return self._result(cur, row, w, ident, status, payload, expires, undo_expires)
+            raise AlphaError('Choose a prepared Library change.', 409, code='library_metadata_not_prepared')
+        self._validate_prepared(cur, row, w, payload, expires)
+        return self._view(ident, status, payload, expires, undo_expires)
+
+    def _validate_prepared(self, cur, row, w, payload, expires):
         if self.service.repository.clock() >= expires:
             raise AlphaError('This preview expired. Create a fresh preview.', 409, code='library_metadata_expired')
         current = self._current(cur, row, w, payload['entries'])
@@ -206,6 +210,15 @@ class LibraryMetadataChanges:
                 raise AlphaError('Library details changed. Create a fresh preview.', 409, code='library_metadata_conflict')
             if 'collections' in entry['changes'] and self._collections(cur, w, entry['changes']['collections']) != entry['proposed']['collections']:
                 raise AlphaError('A collection changed. Create a fresh preview.', 409, code='library_metadata_conflict')
+
+    def apply_in(self, cur, w, principal, ident):
+        from .hosted import audit
+        self._ready(cur)
+        row = self._context(cur, w, principal)
+        status, payload, expires, undo_expires = self._receipt(cur, w, principal, ident)
+        if status != 'prepared':
+            return self._result(cur, row, w, ident, status, payload, expires, undo_expires)
+        self._validate_prepared(cur, row, w, payload, expires)
         for entry in payload['entries']:
             # Preserve inherited tags when adding the first label row (including collection-only edits).
             cur.execute('INSERT INTO public.pr_library_labels(workspace_id,asset_key,tags) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING', (w, entry['assetId'], entry['before']['fields']['tags']))

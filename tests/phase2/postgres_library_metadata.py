@@ -217,6 +217,42 @@ class LibraryMetadataPostgres(unittest.TestCase):
         with connection() as db:
             self.assertIsNone(db.execute('SELECT 1 FROM public.pr_library_labels WHERE workspace_id=%s AND asset_key=%s', (self.w, legacy)).fetchone())
 
+    def prepared(self, receipt, actor=None):
+        with self.service.repository.transaction(actor or self.actor, self.w) as (cur, _, principal):
+            return self.changes.prepared_in(cur, self.w, principal, receipt['receiptId'])
+
+    def test_task_engine_prepared_preview_rechecks_exact_metadata_and_collections(self):
+        group = self.library.collections(self.w, self.actor, {'name': 'Before'})['collections'][0]['id']
+        receipt = self.preview({'title': 'Approval title', 'collections': [group]})
+        self.assertEqual(self.prepared(receipt), receipt)
+        self.assertEqual(self.state()[0], 'Original title')
+        with connection() as db:
+            db.execute('UPDATE public.pr_library_collections SET name=%s WHERE id=%s', ('Renamed', group))
+        self.assert_error(409, self.prepared, receipt)
+        receipt = self.preview({'title': 'Approval title'})
+        self.library.metadata(self.w, self.actor, self.asset, {'tags': ['later']})
+        self.assert_error(409, self.prepared, receipt)
+        receipt = self.preview({'title': 'Approval title'})
+        self.apply(receipt)
+        self.assert_error(409, self.prepared, receipt)
+
+    def test_task_engine_prepared_preview_requires_creator_role_and_unexpired_receipt(self):
+        receipt = self.preview({'title': 'Approval title'})
+        stranger = str(uuid.uuid4())
+        with connection() as db:
+            db.execute('INSERT INTO auth.users VALUES(%s)', (stranger,))
+        self.service.bootstrap(stranger, 'studio')
+        with connection() as db:
+            db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active')", (self.w, stranger))
+        self.assert_error(404, self.prepared, receipt, stranger)
+        with connection() as db:
+            db.execute("UPDATE public.pr_memberships SET role='viewer' WHERE workspace_id=%s AND user_id=%s", (self.w, self.actor))
+        self.assert_error(403, self.prepared, receipt)
+        with connection() as db:
+            db.execute("UPDATE public.pr_memberships SET role='owner' WHERE workspace_id=%s AND user_id=%s", (self.w, self.actor))
+        self.now = receipt['expiresAt']
+        self.assert_error(409, self.prepared, receipt)
+
     def test_task_engine_cursor_inverse_digest_and_idempotency(self):
         receipt = self.preview({'tags': ['engine']})
         self.apply(receipt)
