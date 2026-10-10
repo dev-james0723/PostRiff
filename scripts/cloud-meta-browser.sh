@@ -15,7 +15,7 @@ cleanup() {
 import base64,hashlib,json,sys
 from pathlib import Path
 root=Path(sys.argv[1])
-for name in ['results.json']+[f'meta-public-{w}.png' for w in (1440,390,320)]+[f'failure-{w}.txt' for w in (1440,390,320)]:
+for name in ['results.json']+[f'meta-public-{w}.png' for w in (1440,390,320)]+[f'meta-public-viewport-{w}.png' for w in (1440,390,320)]+[f'failure-{w}.txt' for w in (1440,390,320)]:
  p=root/name
  if p.is_file() and not p.is_symlink() and p.stat().st_size<1048576:
   d=p.read_bytes();print('RAFII_META_EVIDENCE '+json.dumps(dict(name=name,sha256=hashlib.sha256(d).hexdigest(),base64=base64.b64encode(d).decode()),separators=(',',':')))

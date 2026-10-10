@@ -23,13 +23,17 @@ Test-only follow-up: independently reviewed the later purge assertion change in 
 
 Web/cloud-selector follow-up: reviewed the control-character predicate replacement, matching localized accessible names on the three input/select declarations, and explicit NUL/LF/DEL/whitespace/Unicode contract cases. The new character predicate preserves the previous rejection set; no selection or authorization boundary is widened. Reviewed `--web-only`, its package script, and the JCB e2e mapping: the route still requires CI, Linux, and the cloud bootstrap; it runs wire contracts, typecheck, lint, build, and browser checks. `--full` retains the existing Python, secret scan, five PostgreSQL scripts, and web cohort. No deployment or local-heavy fallback was added. No new P0/P1 concern was identified. Python/SQL product hashes remain unchanged; this is a scoped static review, not confirmation of the parent's reported cloud outcomes or the pending web rerun.
 
+Final integration follow-up (observed HEAD `5c6e39cdc37e577a1360718726a0a7343155fc78`): independently compared the new `114_meta_public_trends.sql` bytes with the committed former `110_meta_public_trends.sql`; they are identical. Existing migration DDL has no working-tree difference against `origin/consumer-saas`, and `110_agent_observability.sql` was separately byte-compared unchanged. The executable Meta fixture and current release/rollback instructions now reference 114; the retention change is comment-only. Historical review snapshots retain their original filenames. The parent was notified to update the old number in its untracked final receipt draft. The existing migration-number test is now explicitly included in the normal/full cloud cohort. No existing applied migration was renumbered or edited by this integration change.
+
+The same follow-up reviewed the browser's inactive-workspace selector correction to the actual fixture item name, the additional viewport PNG captures after the existing full-page captures, and the three matching fixed artifact names in `cloud-meta-browser.sh`. Submission, revocation, cache, expiry, workspace-switch, accessibility, and runtime-error assertions remain intact. Artifact export retains the existing regular-file/non-symlink and less-than-1-MiB checks. No new P0/P1 was found in this frozen integration scope. The combined post-renumber cloud run and the separately investigated Library browser failure remain outside this static disposition; no test-pass claim is added here.
+
 ## Reviewed SHA-256 snapshot
 
 ```text
 bfaed161f0d8a71e252bddafdccd1fe395f9323c255121d54a575a1d30f0f3ce  src/postriff_phase2/growth/trends/store.py
-de5c4666aec77e72fa04deb5b5983373d6e186242013464af99c152ce87bd127  src/postriff_phase2/growth/trends/retention.py
+24968066b0b94d721ace5d3092a6f2ff52c353ed57a321f1078cbfb01850da6d  src/postriff_phase2/growth/trends/retention.py
 a6f885b1ccadc0133ecfb0745ad7f1fb01545216bef0d882603b769a088aa43e  src/postriff_phase2/growth/trends/meta_discovery.py
-e2d5fde79103f742d40312a261ed18a8c2db2dbd88e4d3c1b611066288449005  migrations/postriff/110_meta_public_trends.sql
+e2d5fde79103f742d40312a261ed18a8c2db2dbd88e4d3c1b611066288449005  migrations/postriff/114_meta_public_trends.sql
 6e33f6f11a0663abe9fd46c488ca97bc3859e4b0d87102a5a89427feb88336a2  src/postriff_phase2/growth/trends/providers/meta_runtime.py
 495e95da2c9c19b00f10ac66f61a293234467b35414e17a3dd15a1472f8ab074  src/postriff_phase2/growth/trends/providers/meta_public.py
 78d82d297eaf963a7aff9a96ec8824d31c06bfcdb8c09de74ef523010292b8ca  src/postriff_phase2/growth/trends/worker.py
@@ -38,15 +42,19 @@ e2d5fde79103f742d40312a261ed18a8c2db2dbd88e4d3c1b611066288449005  migrations/pos
 93019af7ef34a975f80bd90ad7c872b457b4a808544533072a1ef4664b8768a1  web/src/features/trends/public-sources.tsx
 835480951936acbd005534a45ed7a65a1e79fb888d037d5b819ef20fd70d5258  tests/test_trend_meta_dispatch.py
 d16189919294d3e70cb27fbdf4c428d82729fdea5de01e68e84e2a6a26424159  tests/test_trend_meta_discovery.py
-55c9bafc3c82b1158dc0c3d75556b4767604965892ccf30825f860830435302c  tests/phase2/postgres_trend_meta.py
+d362fed3cac4fffa56e64602c24e6ff635fd7e4fd098dcccc27dd248f2ec8eb8  tests/phase2/postgres_trend_meta.py
 3c609f3d46f3a15458b25ba454a4b681a8f817cc38a77a36a8843b1eaa407553  web/tests/trend-meta-discovery.test.cjs
-ce8a1d756dc05ddd94b977e637f573708cc2431f1ce587417b739d086e1f685d  web/tests/trend-browser.cjs
+11d30318a4bc679fa2a239b699818663060b6f8ad71d838f793e41930dd5c38c  web/tests/trend-browser.cjs
 0e2dc9a4d8d9899092017af3c1ee0682890be246cda53f0534cdddd3e5c422f9  src/postriff_phase2/growth/trends/pipeline.py
 a469db3b25fa70a29d354ad6117180f95780148192951a716bb799da009af948  src/postriff_phase2/growth/trends/metrics.py
 aba6d676af64c9cba1be62d47cd6c7d5fbbe927ec9cdf5b3e2c610772abfe541  src/postriff_phase2/growth/trends/membership.py
-5e441816fc57bd4c932ecdf0ceb38aae9ebaf27c99ff4ab85a53e647f915e61a  scripts/cloud-meta-validation.sh
+5b523eb3eca240b2f1cfa14cf1ce9e097314270492273f899c6ef13440bb700a  scripts/cloud-meta-validation.sh
 1fb055ddf40b29f59ae33cbb64b9fff1d9b23480fc079f5a87c389fbee363066  web/package.json
 85f5f461b0e9e3bd604c87f9bc57a7e98302a08d5dfaa210a1a2fcb0846fbf2b  .james-cloud-build.json
+be1fd0674b3c6bb147f3010075434fb69d510397cdecf9c14d6f32d6648b9c8c  scripts/cloud-meta-browser.sh
+8c249ed809dc22b0365e4b897de49b694e824896603102161d47b049c6f432ff  migrations/postriff/110_agent_observability.sql
+65056e78e6f87c637647366a0dc0a044508f1d427b653ff779c2e18464b55814  tests/test_migration_numbers.py
+effdd8b3414178901d5769120d046be10ac920087c41d650cca36767df0f5641  docs/reviews/2026-10-08-meta-public-trends/execution-20261010/RELEASE-AND-ROLLBACK.md
 ```
 
 Any change to these files requires review of the changed portions before carrying this disposition forward. Usage/cost for this static review: unknown.

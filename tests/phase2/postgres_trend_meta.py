@@ -47,14 +47,14 @@ class MetaPostgres(unittest.TestCase):
         with psycopg.connect(cls.dsn) as db:
             if not db.execute("SELECT to_regclass('public.pr_trend_jobs')").fetchone()[0]:
                 db.execute((ROOT / 'migrations/postriff/040_social_trend_intelligence.sql').read_text())
-            migration = ROOT / 'migrations/postriff/110_meta_public_trends.sql'
+            migration = ROOT / 'migrations/postriff/114_meta_public_trends.sql'
             if migration.exists(): db.execute(migration.read_text())
             assert db.execute("SELECT to_regclass('public.pr_trend_meta_authorizations')").fetchone()[0], \
                 'Meta public authorization schema missing'
             db.execute('CREATE ROLE ' + cls.role + ' NOSUPERUSER NOBYPASSRLS INHERIT')
             db.execute('GRANT service_role TO ' + cls.role)
             # Legacy tenancy expects Supabase BYPASSRLS; only this old table needs
-            # a fixture policy. Migration110 supplies all new-table RLS policies.
+            # a fixture policy. Migration114 supplies all new-table RLS policies.
             db.execute('CREATE POLICY meta_fixture_workspace ON public.pr_workspaces '
                        'FOR ALL TO service_role USING(true) WITH CHECK(true)')
 

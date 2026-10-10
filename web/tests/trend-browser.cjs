@@ -501,7 +501,7 @@ async function run() {
           // Return to the original workspace before independent cached-source expiry checks.
           if(width<768) await page.locator('[data-sidebar="trigger"]').first().click();
           await page.getByRole('button',{name:/Other Synthetic workspace/}).first().click();
-          await page.getByRole('menuitem',{name:/My agency/}).click();
+          await page.getByRole('menuitem',{name:/Synthetic Trend workspace/}).click();
           if(width<768) await page.keyboard.press('Escape');
           publicSourceScenario='expires_soon';
           await page.reload({waitUntil:'domcontentloaded',timeout:120000});
@@ -534,6 +534,8 @@ async function run() {
           await axe(page,width+' Meta public sources');
           assert.deepEqual(errors,[],'No browser runtime errors');
           await page.screenshot({path:path.join(out,`meta-public-${width}.png`),fullPage:true});
+          await chineseSources.locator('summary').evaluate(element=>element.scrollIntoView({block:'start'}));
+          await page.screenshot({path:path.join(out,`meta-public-viewport-${width}.png`),fullPage:false});
           record(width+' explicit synthetic pending Meta source UI');
           continue;
         }

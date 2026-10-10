@@ -37,7 +37,7 @@ def sweep(store, *, limit=100, cursor=None):
         for n in storage_roots:
             cur.execute("UPDATE public.pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",
                 (n['scope_key'],n['node_id']))
-        # Migration110 adds current Meta grant validity; old installations retain
+        # Migration114 adds current Meta grant validity; old installations retain
         # their existing sweep until the additive migration has landed.
         cur.execute("SELECT to_regprocedure('postriff_private.trend_meta_observation_valid(text,text,text,jsonb)') AS helper")
         meta_guard = (" OR NOT postriff_private.trend_meta_observation_valid(o.scope_key,o.provider_id,o.source_policy_version,o.provenance)"
