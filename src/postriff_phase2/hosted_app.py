@@ -31,7 +31,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import tools
+from . import agent_observability, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -471,6 +471,8 @@ class HostedApplication:
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
+        # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
+        correlation = agent_observability.bind_request(request_id)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -500,6 +502,7 @@ class HostedApplication:
                 observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
             except Exception:
                 pass
+            agent_observability.release_request(correlation)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
