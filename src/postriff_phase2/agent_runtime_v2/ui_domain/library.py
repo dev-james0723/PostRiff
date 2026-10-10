@@ -29,6 +29,9 @@ PAGING_NOTE = "The Library does not report a total; more pages follow while a cu
 EMPTY_FILTERED = "Nothing in your Library matches these filters."
 EMPTY_LIBRARY = "Your Library has no items yet."
 EMPTY_PICKED = "This answer didn't list any Library items."   # `ids: []`: the turn found nothing (never the whole Library)
+PARTIAL_WINDOW = "This page searched part of your Library; matching items may remain. Continue with the next page."
+BOUNDED_WINDOW = "This search reached its scan limit; matching items may remain. Narrow the filters to continue."
+END_WINDOW = "No more matching items in the remaining part of your Library."
 
 
 def _library(dctx):
@@ -172,30 +175,87 @@ def _search_ids(dctx, library, inputs, cursor, window):
                                      total=len(assets), note=note, warnings=warnings)
 
 
-def _search_scanned(dctx, library, inputs, cursor, args, window):
-    """An addedFrom/addedTo window (items with a recorded added date inside it; photos have none). One bounded scan of the
-    Library service, then one ordered list paged with the binding's own cursor."""
+def _window_cursor(inputs, cursor):
+    """A signed (file scan offset, match offset) pair. Both positions are needed: matches can be empty for an entire scan
+    segment while later files still match. The scan offset is included in the signed input hash, never trusted alone."""
+    query_inputs = {k: v for k, v in inputs.items() if k != "limit"}
+    if cursor is None:
+        return 0, 0, query_inputs
+    try:
+        prefix, raw_start, signed = cursor.split(".", 2)
+        start = int(raw_start)
+    except (ValueError, TypeError, AttributeError):
+        raise AlphaError("Invalid cursor.", 400, code="ui_cursor") from None
     browse = _browse()
+    if prefix != "lw1" or not 0 <= start <= browse.MAX_START or start % browse.SEGMENT:
+        raise AlphaError("Invalid cursor.", 400, code="ui_cursor")
+    offset = common.decode_cursor("library_search_window", {**query_inputs, "scanStart": start}, signed)
+    return start, offset, query_inputs
+
+
+def _next_window_cursor(query_inputs, start, offset):
+    return f"lw1.{start}." + common.encode_cursor("library_search_window", {**query_inputs, "scanStart": start}, offset)
+
+
+def _selected(dctx, binding):
+    """The parent answer's selection, from the persisted server manifest; absence keeps ordinary Library queries intact."""
+    constraint = ((dctx.manifest or {}).get("queryConstraints") or {}).get(binding) or {}
+    if "ids" not in constraint:
+        return None
+    ids = constraint["ids"]
+    return [i for i in ids if isinstance(i, str) and re.fullmatch(HEX, i)][:PICK_MAX] if isinstance(ids, list) else []
+
+
+def _require_selected(dctx, binding, asset_id):
+    selected = _selected(dctx, binding)
+    if selected is not None and asset_id not in selected:
+        raise AlphaError("That item isn't in this answer's Library selection.", 404, code="not_found")
+
+
+def _search_scanned(dctx, library, inputs, cursor, args, window):
+    """One bounded date scan, with pagination inside its matches and continuation into the next file segment. An incomplete
+    scan is partial (never an exact empty result); subsequent segments cannot claim a whole-Library total."""
+    browse = _browse()
+    scan_start, offset, query_inputs = _window_cursor(inputs, cursor)
     found = browse.scan(library, dctx.workspace_id, query=args["query"], kind=args["kind"], tag=args["tag"], collection=args["collection"],
-                        sort=args["sort"], stop_before=window[0] if window else None)
+                        sort=args["sort"], stop_before=window[0] if window else None, start=scan_start)
     assets, dates = _dated(dctx, found["legacy"] + found["files"])
     warnings = []
     assets = _windowed(assets, dates, window, warnings)
-    page, next_cursor, start = common.paginate("library_search", inputs, cursor, assets, default=50)
+    page = assets[offset:offset + common.page_size(inputs, 50)]
+    following = offset + len(page)
+    complete = bool(found["complete"])
+    upcoming = found.get("next")
+    if following < len(assets):
+        next_cursor = _next_window_cursor(query_inputs, scan_start, following)
+    elif not complete and type(upcoming) is int and scan_start < upcoming <= browse.MAX_START and upcoming % browse.SEGMENT == 0:
+        next_cursor = _next_window_cursor(query_inputs, upcoming, 0)
+    else:
+        next_cursor = None
     rows = [_row(dctx, a) for a in page]
     first = found["first"]
     storage = first.get("storage") or {}
-    data = {"items": rows, "offset": start, "storage": {"usedBytes": storage.get("usedBytes"), "limitBytes": storage.get("limitBytes")},
+    data = {"items": rows, "offset": offset, "storage": {"usedBytes": storage.get("usedBytes"), "limitBytes": storage.get("limitBytes")},
             "capabilities": first.get("capabilities") or {}, "legacyMedia": len([a for a in assets if not _is_file(a)])}
-    exact = bool(found["complete"])
-    note = _empty_note(inputs) if not rows and start == 0 else (None if exact else PAGING_NOTE)
-    return ui_contracts.query_result("available" if rows else ("empty" if start == 0 else "available"), data, as_of=common.iso(dctx.now),
+    exact = complete and scan_start == 0
+    if not complete:
+        note = PARTIAL_WINDOW if next_cursor else BOUNDED_WINDOW
+    elif not rows:
+        note = _empty_note(inputs) if exact and offset == 0 else END_WINDOW
+    else:
+        note = None
+    state = "partial" if not complete else ("empty" if exact and not rows and offset == 0 else "available")
+    return ui_contracts.query_result(state, data, as_of=common.iso(dctx.now),
                                      source_refs=[r["ref"] for r in rows], revision=str(dctx.revision), next_cursor=next_cursor, known=len(rows),
                                      total=len(assets) if exact else None, note=note, warnings=warnings)
 
 
 def library_search(dctx, inputs, cursor):
     library = _library(dctx)
+    selected = _selected(dctx, "library_search")
+    if selected is not None:
+        requested = inputs.get("ids")
+        inputs = {**inputs, "ids": [i for i in selected if requested is None or i in requested]}
     window = _browse().added_window(inputs.get("addedFrom"), inputs.get("addedTo"), dctx.zone, dctx.now, code="ui_window")
     if inputs.get("ids") is not None:
         return _search_ids(dctx, library, inputs, cursor, window)
@@ -242,6 +302,7 @@ def _legacy(state, asset_id):
 def library_item(dctx, inputs, _cursor):
     from ... import media_consent
     asset_id = inputs["assetId"]
+    _require_selected(dctx, "library_item", asset_id)
     legacy = _legacy(dctx.state, asset_id)
     consent = {"modelMayView": bool(media_consent.decision(dctx.state).get("cloud")) if hasattr(media_consent, "decision") else None}
     if legacy is not None:
@@ -259,6 +320,7 @@ def library_item(dctx, inputs, _cursor):
 def library_lineage(dctx, inputs, _cursor):
     from .. import graph
     asset_id = inputs["assetId"]
+    _require_selected(dctx, "library_lineage", asset_id)
     legacy = _legacy(dctx.state, asset_id)
     if legacy is not None:
         found = graph.neighbours(dctx.state, "asset", asset_id)
@@ -289,6 +351,7 @@ def library_selection(dctx, inputs, _cursor):
     from ... import asset_kinds
     chips, references, refused = [], [], []
     for asset_id in inputs["assetIds"]:
+        _require_selected(dctx, "library_selection", asset_id)
         legacy = _legacy(dctx.state, asset_id)
         if legacy is not None:
             if not asset_kinds.is_ready(legacy):

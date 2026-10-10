@@ -20,6 +20,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +30,7 @@ from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2.permissions import Membership  # noqa: E402
 from postriff_phase2 import media_consent  # noqa: E402
 from postriff_phase2.agent_runtime_v2 import (config, contracts, context as rt_context, creative, domain_tools, library_browse as lb, manager,  # noqa: E402
-                                              service as rt_service, specialists, tool_adapter, ui_capabilities, ui_domain, ui_presenter, ui_projection)
+                                              service as rt_service, specialists, tool_adapter, ui_capabilities, ui_contracts, ui_domain, ui_presenter, ui_projection)
 from postriff_phase2.agent_runtime_v2.ui_domain import common, library as j03, shapes  # noqa: E402
 from postriff_phase2.agent_runtime_v2.ui_http import UiAuth  # noqa: E402
 
@@ -842,9 +843,11 @@ class J03Binding(unittest.TestCase):
                                     state=state, revision=3, artifact={"id": "a"}, manifest={}, now=NOW, zone=zone,
                                     _bound=SimpleNamespace(library=self.lib))
 
-    def search(self, service, inputs, cursor=None):
+    def search(self, service, inputs, cursor=None, manifest=None):
         inputs = ui_domain.validate(ui_domain.QUERIES["library_search"].args, inputs)
-        out = j03.library_search(self.dctx(service), inputs, cursor)
+        dctx = self.dctx(service)
+        dctx.manifest = manifest or {}
+        out = j03.library_search(dctx, inputs, cursor)
         declared = shapes.SHAPES["library_search"]
         self.assertLessEqual(set(out["data"] or {}), set(declared["keys"]))
         for item in (out["data"] or {}).get("items") or []:
@@ -917,6 +920,105 @@ class J03Binding(unittest.TestCase):
         out = self.search(library(), {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"})
         self.assertTrue(self.lib.calls, "a window without ids is the bounded scan")
         self.assertEqual({i["assetId"] for i in out["data"]["items"]}, {hexid(5), hexid(10)})
+
+    def test_date_search_continues_after_a_segment_with_no_matches(self):
+        recent = [file(100 + n, f"recent{n}.pdf", created=hk(2026, 9, 1) + n) for n in range(lb.SEGMENT)]
+        older = file(5000, "august.pdf", created=hk(2026, 8, 15))
+        service = FakeService(files=recent + [older])
+        inputs = {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"}
+        first = self.search(service, inputs)
+        self.assertEqual((first["state"], first["data"]["items"], first["coverage"]["total"]), ("partial", [], None))
+        self.assertEqual(first["coverage"]["note"], j03.PARTIAL_WINDOW)
+        self.assertIsNotNone(first["nextCursor"])
+        self.assertEqual(len(self.lib.calls), lb.SCAN_CALLS, "one bounded scan per request")
+        last = self.search(service, inputs, first["nextCursor"])
+        self.assertEqual([i["assetId"] for i in last["data"]["items"]], [older["id"]])
+        self.assertEqual(self.lib.calls[0]["offset"], lb.SEGMENT, "continue the file scan, not the truncated match list")
+        self.assertEqual((last["state"], last["nextCursor"], last["coverage"]["total"]), ("available", None, None))
+
+    def test_date_search_pages_all_matches_across_the_scan_boundary_without_duplicates(self):
+        files = [file(100 + n, f"august{n}.pdf", created=hk(2026, 8, 20) - n) for n in range(lb.SEGMENT + 1)]
+        service = FakeService(files=files)
+        inputs = {"addedFrom": "2026-08-01", "addedTo": "2026-08-31", "limit": 100}
+        seen, cursor = [], None
+        for page in range(11):
+            result = self.search(service, inputs, cursor)
+            seen.extend(item["assetId"] for item in result["data"]["items"])
+            self.assertLessEqual(len(self.lib.calls), lb.SCAN_CALLS)
+            self.assertIsNone(result["coverage"]["total"], "a segment never claims a whole-Library total")
+            if page == 10:
+                self.assertEqual(self.lib.calls[0]["offset"], lb.SEGMENT)
+            cursor = result["nextCursor"]
+        self.assertIsNone(cursor)
+        self.assertEqual(seen, [f["id"] for f in files])
+        self.assertEqual(len(seen), len(set(seen)))
+
+    def test_date_cursor_is_bound_to_filters_and_both_positions_but_not_page_size(self):
+        files = [file(100 + n, f"august{n}.pdf", created=hk(2026, 8, 20) - n) for n in range(8)]
+        service = FakeService(files=files)
+        inputs = {"addedFrom": "2026-08-01", "addedTo": "2026-08-31", "limit": 2}
+        cursor = self.search(service, inputs)["nextCursor"]
+        next_page = self.search(service, {**inputs, "limit": 3}, cursor)
+        self.assertEqual([i["assetId"] for i in next_page["data"]["items"]], [f["id"] for f in files[2:5]])
+        for query, bad in (({**inputs, "q": "other"}, cursor), (inputs, cursor.replace("lw1.0.", "lw1.1000.", 1)),
+                           (inputs, "lw1.1." + cursor.split(".", 2)[2]), (inputs, "lw1.100000." + cursor.split(".", 2)[2])):
+            with self.subTest(cursor=bad), self.assertRaises(AlphaError) as refused:
+                self.search(service, query, bad)
+            self.assertEqual(refused.exception.code, "ui_cursor")
+
+    def test_an_exhausted_scan_bound_is_unknown_and_a_complete_empty_scan_is_empty(self):
+        inputs = {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"}
+        cursor = j03._next_window_cursor(inputs, lb.MAX_START, 0)
+        bounded = {"legacy": [], "files": [], "complete": False, "next": lb.MAX_START + lb.SEGMENT, "first": {}}
+        with mock.patch.object(lb, "scan", return_value=bounded):
+            result = self.search(FakeService(), inputs, cursor)
+        self.assertEqual((result["state"], result["nextCursor"], result["coverage"]["total"], result["coverage"]["note"]),
+                         ("partial", None, None, j03.BOUNDED_WINDOW))
+        empty = self.search(FakeService(), inputs)
+        self.assertEqual((empty["state"], empty["coverage"]["total"]), ("empty", 0))
+
+    def selection_manifest(self, selected):
+        auth = self.dctx(library()).auth
+        projection = {"journey_ids": ["J03"], "allowed_context": {"suggestedInputs": [{"binding": "library_search", "inputs": {"ids": selected}}]}}
+        manifest = ui_capabilities.build_manifest(None, auth, projection, scope="workspace")
+        effective = ui_capabilities.current(None, auth, manifest)
+        self.assertEqual(effective["queryConstraints"], manifest["queryConstraints"], "role refresh preserves server constraints")
+        self.assertNotIn("queryConstraints", ui_contracts.public_manifest(manifest), "selection constraints are server-owned")
+        return effective
+
+    def test_persisted_selection_cannot_be_broadened_by_omitted_or_invented_ids(self):
+        manifest = self.selection_manifest([hexid(10), hexid(3)])
+        for supplied, expected in (({}, [hexid(10), hexid(3)]), ({"ids": [hexid(11), hexid(3)]}, [hexid(3)]),
+                                   ({"ids": []}, []), ({"q": "programme"}, [hexid(10)])):
+            with self.subTest(supplied=supplied):
+                out = self.search(library(), supplied, manifest=manifest)
+                self.assertEqual([i["assetId"] for i in out["data"]["items"]], expected)
+                self.assertEqual(self.lib.calls, [], "generated source cannot turn an exact selection into a scan")
+
+    def test_persisted_empty_selection_stays_empty_for_any_generated_query(self):
+        manifest = self.selection_manifest([])
+        for supplied in ({}, {"ids": [hexid(10)]}, {"addedFrom": "2026-08-01", "addedTo": "2026-08-31"}):
+            with self.subTest(supplied=supplied):
+                out = self.search(library(), supplied, manifest=manifest)
+                self.assertEqual((out["state"], out["data"]["items"], out["coverage"]["note"]), ("empty", [], j03.EMPTY_PICKED))
+                self.assertEqual(self.lib.calls, [])
+
+    def test_other_item_queries_cannot_bypass_the_persisted_selection(self):
+        manifest = self.selection_manifest([hexid(3)])
+        dctx = self.dctx(library())
+        dctx.manifest = manifest
+        self.assertEqual(j03.library_item(dctx, {"assetId": hexid(3)}, None)["data"]["assetId"], hexid(3))
+        for handler, inputs in ((j03.library_item, {"assetId": hexid(10)}), (j03.library_lineage, {"assetId": hexid(10)}),
+                                (j03.library_selection, {"assetIds": [hexid(10)]})):
+            with self.subTest(binding=handler.__name__), self.assertRaises(AlphaError) as refused:
+                handler(dctx, inputs, None)
+            self.assertEqual((refused.exception.status, refused.exception.code), (404, "not_found"))
+
+    def test_manifest_without_a_suggested_selection_keeps_ordinary_browsing(self):
+        auth = self.dctx(library()).auth
+        manifest = ui_capabilities.build_manifest(None, auth, {"journey_ids": ["J03"]}, scope="workspace")
+        self.assertNotIn("ids", manifest["queryConstraints"]["library_search"])
+        self.assertTrue(self.search(library(), {}, manifest=manifest)["data"]["items"])
 
     def test_the_browser_rows_keep_their_existing_shape_with_a_video_date(self):
         listed = self.search(library(), {"kind": "video"})
