@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Invoke only through cloud-python-bootstrap.sh on the remote Linux runner.
 set -euo pipefail
+if [ "$#" -gt 1 ]; then echo "Unexpected validation arguments." >&2; exit 64; fi
+case "${1:-}" in ""|--contracts-only) ;; *) echo "Unknown validation selection." >&2; exit 64 ;; esac
 
 case "${CI:-}" in
   1|true|TRUE) ;;
@@ -64,6 +66,8 @@ print(f'Selected {count} Python regression cases.', flush=True)
 result = unittest.TextTestRunner(verbosity=1).run(suite)
 raise SystemExit(0 if result.wasSuccessful() else 1)
 PY
+
+if [ "${1:-}" = "--contracts-only" ]; then exit 0; fi
 
 # Preserve the current production Library's real parser regression. Its legacy
 # RTF/Office viewer cases need the same official Ubuntu tools as the existing

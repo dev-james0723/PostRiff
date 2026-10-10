@@ -226,12 +226,22 @@ class OAuthService:
         lane = binding.get('authorizationLane') if binding.get('v') == 2 else 'standard'
         adapter = self._youtube_provider(lane)
         if binding.get('v') == 2:
+            if lane == 'standard' and binding.get('clientId') != adapter.client_id:
+                legacy = getattr(adapter, 'legacy_provider', None)
+                if (legacy is not None and getattr(legacy, 'legacy_refresh_only', False)
+                        and getattr(legacy, 'authorization_lane', None) == 'standard'
+                        and binding.get('clientId') == legacy.client_id):
+                    if not getattr(adapter, 'execution_enabled', True):
+                        raise AlphaError('This platform is paused for now. Your post history stays available.', 503)
+                    adapter = legacy
             adapter._bound(access_token, 'at')
         return adapter
 
     def provider_for_grant(self, grant):
         """Server-only routing from protected token custody, never a projected lane."""
         provider = self._provider_for_access(grant['provider'], grant['accessToken'])
+        if getattr(provider, 'legacy_refresh_only', False):
+            provider.assert_read_scopes(grant.get('scopes'))
         return self.youtube_policy.guarded_provider(provider, grant) if grant['provider'] == 'youtube' else provider
 
     def provider_for_connection(self, workspace_id, connection_id):
@@ -1039,6 +1049,11 @@ class OAuthService:
                 with self._credential_errors(row[0], row[1], authorization_generation):
                     provider, access_ct, refresh_ct, key_id, expires, refresh_supported, _, scopes, account_id, issued_at = row
                     adapter = self._provider_for_access(provider, self.vault.decrypt(access_ct, key_id))
+                    if getattr(adapter, 'legacy_refresh_only', False):
+                        adapter.assert_read_scopes(scopes)
+                        # Moving old custody must not weaken the active app's policy gate.
+                        youtube_policy_required = youtube_policy_required or self.youtube_policy.required(
+                            self._provider('youtube'), scopes=scopes)
                     if provider == 'youtube':
                         self.youtube_policy.assert_connection(workspace_id, connection_id, adapter, scopes=scopes,
                             generation=authorization_generation, force=youtube_policy_required, cur=cur)
@@ -1108,6 +1123,8 @@ class OAuthService:
                             # Block this request without erasing the last verified scope set.
                             raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable')
                         scopes = reported if authoritative else []
+                        if getattr(adapter, 'legacy_refresh_only', False):
+                            adapter.assert_read_scopes(scopes)
                         if provider == 'youtube':
                             self.youtube_policy.assert_connection(workspace_id, connection_id, adapter, scopes=scopes,
                                 generation=authorization_generation, force=youtube_policy_required, cur=cur)
@@ -1149,7 +1166,9 @@ class OAuthService:
                 generation_row = cur.fetchone()
                 starting_generation = generation_row[0] if generation_row else None
                 adapter = self._provider_for_access('youtube', self.vault.decrypt(stored[3], stored[4]))
-                self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2])
+                policy_force = (getattr(adapter, 'legacy_refresh_only', False)
+                                and self.youtube_policy.required(self._provider('youtube'), scopes=stored[2]))
+                self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter, scopes=stored[2], force=policy_force)
         provider_id, account_id, scopes, starting_ciphertext = stored[:4]
         grant = None
         reported = []
