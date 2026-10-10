@@ -122,7 +122,7 @@ def retry(runtime, workspace_id: str, token: str, task_id: str, step_key: str, p
             raise errors.error("retry_budget_exhausted")
         verdict = authz_seam.decide_for_step(cur, task, {**step, "generation": int(step["generation"]) + 1},
                                              actor=authz_seam.Actor("retry", principal, ""), now=time.time(),
-                                             allowed_before=store.allowed_before(cur, workspace_id, task_id))
+                                             allowed_before=store.allowed_before(cur, workspace_id, task_id), config=getattr(runtime, "cfg", None))
         if verdict.verdict == "deny":
             raise errors.error("agent_permission_revoked" if verdict.reason_code == "permission_revoked" else "agent_permission_denied")
         generation = int(step["generation"]) + 1
@@ -270,10 +270,17 @@ def _resume(runtime, workspace_id, token, task, checkpoint, key) -> dict:
     with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
         applied = [p for p in checkpoint["proposalIds"]
                    if ((legacy.find(cur, workspace_id, conversation_id, p) or {}).get("proposal") or {}).get("status") == "applied"]
-    trace_id = contracts.new_trace_id()
-    run_id, _ = runtime._open_run(workspace_id, token, conversation_id, "Continue", "text", "agent:continue:" + key[:80], trace_id, [], model="rafii-approvals")
     with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
-        claimed = checkpoints.claim(cur, workspace_id, task["taskId"], principal, "req:" + run_id)
+        claimed = checkpoints.claim(cur, workspace_id, task["taskId"], principal, "req:" + model.sha256(key)[:60])
+    if claimed is None:
+        return {"taskId": task["taskId"], "resumed": "none"}
+    trace_id = contracts.new_trace_id()
+    try:
+        run_id, _ = runtime._open_run(workspace_id, token, conversation_id, "Continue", "text", "agent:continue:" + key[:80], trace_id, [], model="rafii-approvals")
+    except BaseException:
+        with store.service_tx(runtime.service, workspace_id) as cur:
+            checkpoints.release(cur, claimed[0])
+        raise
     resumed = None
     if claimed is not None and applied:
         checkpoint_id, payload = claimed

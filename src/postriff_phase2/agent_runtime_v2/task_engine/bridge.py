@@ -68,6 +68,11 @@ def _supersede_open(cur, ideas, workspace_id, conversation_id, principal, *, exc
                 "AND origin IN ('chat','voice','adopted') AND parent_task_id IS NULL AND state IN ('queued','running','awaiting_approval','blocked')",
                 (workspace_id, conversation_id, principal, exclude))
     for (old_id,) in cur.fetchall():
+        pending = store.approvals_for(cur, workspace_id, old_id, state="pending")
+        open_steps = [s for s in store.load_steps(cur, workspace_id, old_id) if s["state"] in model.OPEN_STATES]
+        if pending or any(s["state"] != "blocked" or s["reasonCode"] != "needs_conversation" for s in open_steps):
+            from . import errors
+            raise errors.error("task_conflict", "Your existing task is still active.")
         close(cur, ideas, workspace_id, old_id, "task_superseded")
 
 
@@ -202,7 +207,7 @@ def dispatch_bound(ctx, tool, args):
     from postriff_alpha.domain import AlphaError
     from . import executor, errors
     from .. import task_state
-    if not args.get("stepId") or getattr(ctx, "step_binding", None) or not flags.enabled_for(ctx.workspace_id, ctx.config):
+    if tool.name in ("task_plan", "task_update") or not args.get("stepId") or getattr(ctx, "step_binding", None) or not flags.enabled_for(ctx.workspace_id, ctx.config):
         return None
     if ctx.task is None or ctx.task.created_by != ctx.principal:
         raise errors.error("task_forbidden")
@@ -215,20 +220,33 @@ def dispatch_bound(ctx, tool, args):
         if step is None:
             raise errors.error("step_unavailable")
         if step["kind"] == "model":
-            return None
-        if step["kind"] != "tool" or step["capabilityId"] != tool.name or step["inputDigest"] != model.input_digest(tool.name, clean):
+            model_step = True
+        else:
+            model_step = False
+        if model_step:
+            pass  # Run outside this workspace transaction, below.
+        elif step["kind"] != "tool" or step["capabilityId"] != tool.name or step["inputDigest"] != model.input_digest(tool.name, clean):
             raise AlphaError("This call does not match the planned step.", 409, code="task_conflict")
-        claim = executor.claim_next(cur, ctx.service.ideas, workspace_id=ctx.workspace_id, executor="inline", principal=principal,
-                                    task_id=task["taskId"], step_key=step["stepKey"], seconds_left=ctx.remaining() or 240,
-                                    owner=executor.lease_owner("inline"), actor_kind="agent", request_text=ctx.request_text,
-                                    run_id=ctx.run_id, config=ctx.config)
-        if claim is None or claim == "handled":
+        if model_step:
+            claim = None
+        else:
+            claim = executor.claim_next(cur, ctx.service.ideas, workspace_id=ctx.workspace_id, executor="inline", principal=principal,
+                                        task_id=task["taskId"], step_key=step["stepKey"], seconds_left=ctx.remaining() or 240,
+                                        owner=executor.lease_owner("inline"), actor_kind="agent", request_text=ctx.request_text,
+                                        run_id=ctx.run_id, config=ctx.config)
+        if model_step:
+            pass
+        elif claim is None or claim == "handled":
             current = store.load_step(cur, ctx.workspace_id, task["taskId"], step["stepKey"])
             return {"ok": current["state"] == "completed", "verified": current["verified"], "needsUser": current["state"] != "completed",
                     "code": current["reasonCode"] or "step_waiting", "taskId": task["taskId"], "stepId": step["stepKey"], "state": current["state"]}
+    if model_step:
+        from .model_calls import dispatch
+        return dispatch(ctx, tool, args)
     from types import SimpleNamespace
     runtime = SimpleNamespace(service=ctx.service, cfg=ctx.config, clock=ctx.now, image_studio=ctx.image_studio, vision=ctx.vision)
     result = executor.execute(runtime, claim, token=ctx.token, seconds_left=ctx.remaining() or 240, return_result=True)
     with ctx.workspace() as (cur, _row, _principal, _member, _state):
         ctx.task = task_state.load(cur, ctx.workspace_id, task["taskId"])
     return result
+

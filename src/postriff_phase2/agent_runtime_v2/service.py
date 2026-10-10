@@ -1175,7 +1175,7 @@ class AgentRuntimeService:
             style = agent_style.load(cur, principal)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text="(approved)", style=style,
+                              vision=self.vision, request_text="", style=style,
                               writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
@@ -1345,7 +1345,15 @@ def decide(runtime: "AgentRuntimeService", workspace_id, token, payload) -> dict
     spoken = ("Done, and I checked it in your workspace." if decided["outcome"] == "applied" and decided["verified"]
               else "I applied it, but the check didn't fully match. Please look at the panel." if decided["outcome"] == "applied"
               else "Okay, I left it. Nothing was changed.")
-    return {**{k: v for k, v in decided.items() if k != "revision"}, "speakableSummary": spoken}
+    continuation = {"resumed": "none"}
+    if _engine_on(workspace_id) and decided.get("outcome") == "applied" and decided.get("verified"):
+        from .task_engine import approvals as engine_approvals, store as engine_store
+        with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            record = engine_store.approval_by_proposal(cur, workspace_id, payload["proposalId"])
+        if record:
+            continuation = engine_approvals.continue_after_decision(runtime, workspace_id, token, record["taskId"], payload["proposalId"] + ":" + payload["digest"])
+    return {**{k: v for k, v in decided.items() if k != "revision"}, "speakableSummary": spoken,
+            **({"resumed": continuation["resumed"]} if _engine_on(workspace_id) else {})}
 
 
 def attach_upload(runtime: "AgentRuntimeService", workspace_id, token, payload) -> dict:

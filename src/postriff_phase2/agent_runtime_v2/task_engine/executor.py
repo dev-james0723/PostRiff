@@ -316,8 +316,13 @@ def _context(runtime, claim: Claim, *, token, service, member, seconds_left: flo
     ctx.cancelled = cancelled
     # The step binding (CF-3 §8.1): a receipt-aware executor commits the receipt in its own domain transaction (receipts.commit_in).
     ctx.step_binding = {"taskId": task["taskId"], "stepId": step["stepId"], "stepKey": step["stepKey"], "effectKey": step["effectKey"],
-                        "attemptId": claim.attempt_id, "leaseOwner": claim.lease_owner, "inputDigest": step["inputDigest"], "workspaceId": task["workspaceId"],
+                        "attemptId": claim.attempt_id, "attemptNo": claim.attempt_no, "leaseOwner": claim.lease_owner, "inputDigest": step["inputDigest"], "workspaceId": task["workspaceId"],
                         "principal": task["createdBy"], "traceId": claim.trace_id}
+    from .spend import bind_service
+    bind_service(ctx)
+    # A durable plan may use only ids validated when it was created.
+    for ref in step.get("targetRefs") or []:
+        ctx.ledger.reference(ref.get("type"), ref.get("id"), "Validated task target")
     return ctx
 
 
@@ -389,6 +394,13 @@ def finish(runtime, claim: Claim, result: dict, *, ctx=None, elapsed_ms: int = 0
             _finish_attempt(cur, claim.attempt_id, "succeeded", None, None, timings)
             _complete_from_receipt(cur, ideas, task, step, committed)
             return {"stepKey": step["stepKey"], "state": "completed", "taskState": store.load_task(cur, workspace_id, task_id)["state"]}
+        if result.get("code") == "budget_ceiling":
+            from .approvals import request_approval
+            _finish_attempt(cur, claim.attempt_id, "failed", "budget", "budget_ceiling", timings)
+            verdict = authz_seam.StepVerdict("approve", "spend", "budget", "cost_limit", task["authzToken"])
+            request_approval(cur, ideas, task, step, verdict, trace_id=claim.trace_id)
+            store.refresh(cur, ideas, task)
+            return {"stepKey": step["stepKey"], "state": "awaiting_approval"}
         ok = bool(result.get("ok", True)) and not result.get("needsUser")
         verified = bool(result.get("verified", result.get("ok", True)))
         changed = list(getattr(getattr(ctx, "ledger", None), "changed", []) or [])

@@ -155,8 +155,10 @@ def _ui_action(cur, task, step):
     if row[0] != "done":
         return Observation("running")
     verified = outcome.get("verified") is True
-    return _stored("ui_action", step["delegateId"], "applied" if outcome.get("outcome") == "applied" and verified else
-                   str(outcome.get("outcome") or "failed"), ("applied",), ("rejected", "conflict", "failed", "unknown"))
+    state = str(outcome.get("outcome") or "failed")
+    if state == "applied" and not verified:
+        return Observation("failed", "outcome_unknown", "The action completed without a verified result.")
+    return _stored("ui_action", step["delegateId"], state, ("applied",), ("rejected", "conflict", "failed", "unknown"))
 
 
 @adapter("library_job")

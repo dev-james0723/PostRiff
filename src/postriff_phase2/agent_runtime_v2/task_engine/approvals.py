@@ -218,7 +218,7 @@ def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, p
         executed = executor.drive_inline(runtime, workspace_id, token, principal, task["taskId"], actor_kind="approval")
         resumed = "inline" if executed else "none"
         if _has_checkpoint(runtime, workspace_id, task["taskId"]):
-            resumed = "needs_continue"
+            resumed = continue_after_decision(runtime, workspace_id, token, task["taskId"], decision_key).get("resumed", "needs_continue")
     with service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         member = ideas._member(row)
         current = store.load_task(cur, workspace_id, task["taskId"])
@@ -265,6 +265,9 @@ def _resolve_proposal(runtime, workspace_id, token, ctx: dict, decision, digest,
                                       surface=surface, decision_key=decision_key)
     runtime._resolve_task_steps(workspace_id, token, approval["conversationId"], approval["proposalId"],
                                 decided["outcome"] if decision == "approve" else "dismissed", verified=decided["verified"])
+    if decided.get("outcome") == "applied" and decided.get("verified"):
+        continuation = continue_after_decision(runtime, workspace_id, token, approval["taskId"], decision_key)
+        record["resumed"] = continuation["resumed"]
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, principal):
         from . import views
         task = store.load_task(cur, workspace_id, approval["taskId"])
@@ -333,3 +336,24 @@ def _wrap_for_waiting_step(cur, ideas, workspace_id, proposal_id):
         return None
     item = legacy.find(cur, workspace_id, task["conversationId"], proposal_id)
     return ensure_proposal_approval(cur, ideas, task, step, item, just_decided=True) if item else None
+
+
+def continue_after_decision(runtime, workspace_id, token, task_id, key, *, seconds_left=240):
+    """All native surfaces share the creator-only continuation rule.
+
+    The checkpoint claim is atomic; replays and other members cannot reserve or
+    run a second continuation. A short request leaves the visible Continue action.
+    """
+    from . import checkpoints, actions
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+        task = store.lock_task(cur, runtime.service.ideas, workspace_id, task_id)
+        if task is None or task["createdBy"] != principal:
+            return {"resumed": "none"}
+        checkpoint = checkpoints.available(cur, workspace_id, task_id)
+        if checkpoint is None:
+            return {"resumed": "none"}
+        checkpoints.needs_continue(cur, runtime.service.ideas, task)
+        store.refresh(cur, runtime.service.ideas, task)
+    if seconds_left < 215:
+        return {"resumed": "needs_continue"}
+    return actions._resume(runtime, workspace_id, token, task, checkpoint, "approval:" + model.sha256(key)[:64])
