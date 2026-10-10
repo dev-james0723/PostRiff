@@ -43,13 +43,13 @@ EVIDENCE = ("trace", "audit", "receipt")
 VERIFICATIONS = ("none", "reread", "provider_receipt")
 COMPENSATIONS = ("none", "inverse", "manual", "irreversible")
 CAPABILITY_KINDS = ("tool", "ui_action", "ui_query", "context", "native_only")
-SURFACES = ("manager", "specialist", "site_agent", "commands_direct", "genui_action", "genui_query", "context")
+SURFACES = ("manager", "specialist", "site_agent", "commands_direct", "genui_action", "genui_query", "context", "task_engine")
 DATA_DOMAINS = ("public", "web", "account", "screen", "content", "campaigns", "library", "memory_brand", "connections",
                 "analytics", "growth_trends", "notifications", "usage_billing", "members", "agent_activity", "automations")
 CONSENT_KEYS = ("memory_cloud", "research_web", "media_cloud", "connector_cloud", "growth", "radar",
                 "voice_sample_route", "library_purpose")
 AUTONOMY = ("ask", "assist")             # autopilot is never a grant level; it is a bounded policy (CF-2 §2)
-CATALOGUE_GENERATION = 1                 # +1 whenever a capability is added or its policy widened
+CATALOGUE_GENERATION = 2                 # Library metadata writes are post-freeze; old grants still ask.
 R3_REAUTH_SECONDS = 300                  # DP-5: agent-originated R3 needs a sign-in verified within 5 minutes
 
 

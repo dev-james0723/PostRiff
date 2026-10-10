@@ -30,10 +30,10 @@ TASK_COLUMNS = ("t.id::text,t.workspace_id::text,t.conversation_id::text,t.paren
                 "t.partial,t.reason_code,t.version,t.autonomy_mode,t.authz_token,t.budget_ceiling_usd_micro,t.spent_usd_micro,t.spend_unknown,"
                 "t.attempts_left,t.request_key,t.request_digest,t.root_trace_id,extract(epoch from t.cancel_requested_at),t.cancel_requested_by::text,"
                 "extract(epoch from t.next_wake_at),extract(epoch from t.expires_at),extract(epoch from t.hard_expires_at),"
-                "extract(epoch from t.created_at),extract(epoch from t.updated_at),extract(epoch from t.finished_at)")
+                "extract(epoch from t.created_at),extract(epoch from t.updated_at),extract(epoch from t.finished_at),t.autopilot_policy_id::text")
 _TASK_KEYS = ("taskId", "workspaceId", "conversationId", "parentTaskId", "createdBy", "origin", "title", "state", "partial", "reasonCode", "version",
               "autonomyMode", "authzToken", "budgetCeilingUsdMicro", "spentUsdMicro", "spendUnknown", "attemptsLeft", "requestKey", "requestDigest",
-              "rootTraceId", "cancelRequestedAt", "cancelRequestedBy", "nextWakeAt", "expiresAt", "hardExpiresAt", "createdAt", "updatedAt", "finishedAt")
+              "rootTraceId", "cancelRequestedAt", "cancelRequestedBy", "nextWakeAt", "expiresAt", "hardExpiresAt", "createdAt", "updatedAt", "finishedAt", "autopilotPolicyId")
 STEP_COLUMNS = ("s.id::text,s.task_id::text,s.workspace_id::text,s.step_key,s.label,s.kind,s.capability_id,s.capability_version,s.risk_class,s.effect,"
                 "s.background_allowed,s.depends_on,s.inputs,s.input_digest,s.target_refs,s.planned_run_id::text,s.state,s.reason_code,s.reason,s.verified,"
                 "s.retry_class,s.max_attempts,s.attempts,s.generation,s.timeout_seconds,extract(epoch from s.next_attempt_at),s.effect_key,s.delegate_type,"
@@ -287,10 +287,14 @@ def existing_request(cur, workspace_id: str, request_key: str, created_by: str, 
 
 def create_task(cur, ideas, *, workspace_id: str, conversation_id: str, created_by: str, origin: str, title: str, request_key: str, payload,
                 steps: list[dict], trace_id: str, anchor_id: str | None = None, dedupe_key: str | None = None, parent_task_id: str | None = None,
-                autonomy_mode: str = "ask", authz_token: str | None = None, budget_ceiling_usd_micro: int | None = None) -> tuple[dict, bool]:
+                autonomy_mode: str = "ask", authz_token: str | None = None, budget_ceiling_usd_micro: int | None = None,
+                autopilot_policy_id: str | None = None) -> tuple[dict, bool]:
     """Create a task with its steps, or return the one this creator already made with this key (deduplicated=True)."""
     if origin not in model.ORIGINS:
         raise ValueError("unknown task origin")
+    if origin == 'recipe' or autonomy_mode == 'autopilot' or autopilot_policy_id is not None:
+        if origin != 'recipe' or autonomy_mode != 'autopilot' or not _uuid(autopilot_policy_id):
+            raise ValueError('A recipe task requires its exact Autopilot policy.')
     title = model.clip(title, 140) or "Task"
     request_key = _request_key(request_key)
     request_digest = model.request_digest(created_by, payload)
@@ -309,11 +313,11 @@ def create_task(cur, ideas, *, workspace_id: str, conversation_id: str, created_
     try:
         anchor = anchor_id or new_anchor(cur, ideas, workspace_id, conversation_id, created_by, title, trace_id)
         cur.execute("INSERT INTO public.pr_agent_tasks(id,workspace_id,conversation_id,parent_task_id,created_by,origin,title,autonomy_mode,authz_token,"
-                    "budget_ceiling_usd_micro,attempts_left,request_key,request_digest,dedupe_key,root_trace_id,expires_at,hard_expires_at) "
-                    "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs => %s),now()+make_interval(secs => %s)) "
+                    "budget_ceiling_usd_micro,attempts_left,request_key,request_digest,dedupe_key,root_trace_id,autopilot_policy_id,expires_at,hard_expires_at) "
+                    "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs => %s),now()+make_interval(secs => %s)) "
                     "ON CONFLICT (workspace_id, request_key) DO NOTHING RETURNING id::text",
                     (anchor, workspace_id, conversation_id, parent_task_id, created_by, origin, title, autonomy_mode, token, budget_ceiling_usd_micro,
-                     model.TASK_ATTEMPTS, request_key, request_digest, dedupe_key, trace_id, model.TTL_SECONDS, model.HARD_TTL_SECONDS))
+                     model.TASK_ATTEMPTS, request_key, request_digest, dedupe_key, trace_id, autopilot_policy_id, model.TTL_SECONDS, model.HARD_TTL_SECONDS))
         row = cur.fetchone()
     except Exception as error:  # noqa: BLE001 — the open-task index or a guard refused it: nothing of this attempt remains
         cur.execute("ROLLBACK TO SAVEPOINT agent_task_create")
@@ -422,7 +426,7 @@ def build_step(task: dict, spec: dict, key: str, earlier: list[str]) -> dict:
         retry_class = "never" if cap.retry_class == "never" else "manual" if cap.retry_class == "manual" or rules.retry_class == "manual" else rules.retry_class
         rules = model.StepDefaults(min(rules.timeout_seconds, int(cap.timeout_seconds)), retry_class, min(rules.max_attempts, cap.max_attempts))
         background = bool(spec.get("background")) and risk == "R0" and cap.background_eligible
-        row.update({"capabilityId": capability, "capabilityVersion": 1, "riskClass": risk, "effect": tool.spec.effect, "backgroundAllowed": background,
+        row.update({"capabilityId": capability, "capabilityVersion": cap.version, "riskClass": risk, "effect": tool.spec.effect, "backgroundAllowed": background,
                     "inputs": inputs, "inputDigest": model.input_digest(capability, inputs), "retryClass": rules.retry_class,
                     "maxAttempts": max(1, min(rules.max_attempts, int(spec.get("maxAttempts") or rules.max_attempts))),
                     "timeoutSeconds": max(5, min(rules.timeout_seconds, int(spec.get("timeoutSeconds") or rules.timeout_seconds))),

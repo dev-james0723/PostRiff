@@ -35,7 +35,7 @@ import logging
 import re
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -198,7 +198,7 @@ def capability_for(spec) -> Capability:
 
 def tool_surface(spec, agent: str | None = None) -> Surface:
     from . import capability_registry
-    name = "manager" if agent in (None, "rafii_manager") else "specialist"
+    name = "task_engine" if agent == "task_engine" else "manager" if agent in (None, "rafii_manager") else "specialist"
     try:
         binding = capability_registry.surface(name, spec.name)
     except LookupError:
@@ -206,6 +206,13 @@ def tool_surface(spec, agent: str | None = None) -> Surface:
             raise
         binding = capability_registry.surface("specialist", spec.name)
     return Surface(name, spec.name, binding.legacy_confirmation)
+
+
+def capability_for_refs(cap, refs):
+    """A stored brief retains the data grants of its typed source, on every fresh decision."""
+    from .task_engine.targets import required_domains
+    extra = required_domains(refs)
+    return replace(cap, data_grants=tuple(sorted(set(cap.data_grants) | extra))) if extra and cap.data_grants is not None else cap
 
 
 # --- LEGACY_BASELINE_V1 (CF-1 §12) ---------------------------------------------------------------------------------------
@@ -404,7 +411,9 @@ def _autopilot(cap, grants, mode, required, actor, target, now, out) -> Decision
         return out("approve", "needs_approval", required=required)
     if grants.source != "explicit" or mode != "assist" or (cap.risk == "R1" and not cap.autopilot_eligible):
         return out("deny", "autopilot_not_covered", required=required)
-    policy = next((p for p in grants.autopilot if cap.capability_id in p.capability_ids and p.expires_at > now and _within(p, target)), None)
+    named = (actor.evidence or {}).get('autopilotPolicyId')
+    policy = next((p for p in grants.autopilot if (named is None or p.id == named) and cap.capability_id in p.capability_ids
+                   and p.expires_at > now and _within(p, target)), None)
     if policy is None:
         return out("deny", "autopilot_not_covered", required=required)
     limits, usage = policy.limits or {}, policy.usage or {}
@@ -689,7 +698,7 @@ def active_tool(ctx, spec, args, agent=None):
     try:
         if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "off" and spec.tenant != "founder":
             try:
-                ctx.active_capability = capability_for(spec)
+                ctx.active_capability = capability_for_refs(capability_for(spec), getattr(ctx, 'authz_target_refs', ()))
                 ctx.authz_actor = getattr(ctx, "authz_actor", None) or Actor("agent", ctx.principal, ctx.request_text or "", getattr(ctx, "authz_evidence", None))
                 ctx.authz_args = args
                 ctx.authz_surface = tool_surface(spec, agent)
@@ -723,6 +732,8 @@ def recheck(cur, ctx, *, state, member):
     bind_context(ctx, cur=cur, state=state, member=member)
     now = ctx.now() if callable(ctx.now) else ctx.now
     actor = _tool_actor(cur, ctx, ctx.active_capability, getattr(ctx, "authz_args", None), now)
+    from .task_engine.autopilot import for_context
+    ctx.grants, actor = for_context(cur, ctx, ctx.active_capability, getattr(ctx, 'authz_args', None), ctx.grants, actor, now)
     decision = gate(ctx, ctx.active_capability, getattr(ctx, "authz_args", None), getattr(ctx, "authz_surface", None), actor=actor)
     if decision.outcome != "allow":
         raise AuthzError("Rafii's permissions changed before this action. Confirm again.", "agent_permission_revoked")
@@ -970,7 +981,7 @@ def _log(event: str, decision: Decision, mode: str, ctx) -> None:
 def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = None) -> Decision:
     """The decision for one model tool call, read in its own short transaction (never the turn's)."""
     from . import agent_permissions
-    cap = capability_for(spec)
+    cap = capability_for_refs(capability_for(spec), getattr(ctx, 'authz_target_refs', ()))
     surface = tool_surface(spec, agent)
     now = ctx.now() if callable(getattr(ctx, "now", None)) else time.time()
     service = ctx.service
@@ -981,6 +992,8 @@ def evaluate_tool(ctx, spec, args: dict | None = None, *, agent: str | None = No
         state = service.ideas._state(row)
         actor = _tool_actor(cur, ctx, cap, args, now)
         grants = load_grants(cur, ctx.workspace_id, principal, now=now, mode=mode_for(ctx.config, ctx.workspace_id))
+        from .task_engine.autopilot import for_context
+        grants, actor = for_context(cur, ctx, cap, args, grants, actor, now)
         view = provider_view_current(cur, state, ctx.workspace_id, now) if cap.provider_scopes else None
         return decide(cap, surface=surface, member=member, grants=grants, state=state, actor=actor, provider_view=view, target=args, now=now)
 
@@ -1120,6 +1133,16 @@ def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, co
     if member is None:
         return StepVerdict("deny", None, "member_inactive", "membership_missing", **common)
     mode = mode_for(config, workspace_id)
+    from .task_engine import autopilot
+    recipe_grants = None
+    if autopilot.required(task):
+        try:
+            if mode != 'enforce':
+                raise ValueError('Recipes require current enforced permissions')
+            recipe_grants = autopilot.for_step(cur, task, step, load_grants(cur, workspace_id, creator, now=now, mode=mode), now)
+            actor = autopilot.actor_for(task, actor)
+        except Exception:
+            return StepVerdict('deny', None, 'permission_revoked', 'autopilot_not_covered', **common)
     if step.get("kind") != "tool":
         if step.get("kind") not in ("delegate", "wait", "approval", "model", "continuation"):
             return StepVerdict("deny", None, "feature_unavailable", "feature_off", **common)
@@ -1132,6 +1155,8 @@ def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, co
         if policy is None or policy.kind != "tool" or policy.tenant != "workspace":
             raise LookupError("step capability is not a workspace tool")
         cap = _registry_capability(policy)
+        if mode != 'off':
+            cap = capability_for_refs(cap, step.get('targetRefs'))
         common["required_permission"] = cap.permission
         common["approver_policy"] = "role_approve" if cap.approval else "task_owner"
         legacy_result = StepVerdict("allow" if member.allows(cap.permission) else "deny", None,
@@ -1145,7 +1170,7 @@ def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, co
         if recorded:
             binding = capability_registry.surface(recorded, step.get("bindingRef") or cap.name)
         else:
-            bindings = [b for b in capability_registry.bindings(cap.capability_id) if b.surface in ("manager", "specialist", "tool")]
+            bindings = [b for b in capability_registry.bindings(cap.capability_id) if b.surface in ("manager", "specialist", "task_engine")]
             if not bindings:
                 raise LookupError("step tool has no registered surface")
             binding = max(bindings, key=lambda b: CONFIRMATIONS.index(b.legacy_confirmation))
@@ -1154,7 +1179,7 @@ def decide_for_step(cur, task: dict, step: dict, *, actor: Actor, now: float, co
         if not row or not isinstance(row[0], dict):
             raise LookupError("workspace state unavailable")
         state = row[0]
-        grants = load_grants(cur, workspace_id, creator, now=now, mode=mode)
+        grants = recipe_grants or load_grants(cur, workspace_id, creator, now=now, mode=mode)
         target = step.get("inputs") if isinstance(step.get("inputs"), dict) else None
         decision = decide(cap, surface=Surface(binding.surface, binding.binding_ref, binding.legacy_confirmation), member=member,
                           grants=grants, state=state, actor=Actor(actor.kind, creator, actor.request_text, actor.evidence),
