@@ -28,7 +28,7 @@ from .. import asset_kinds, attachment_rows, intent as writing_intent, media_con
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import require
-from . import answer_policy, approvals, commands, config as runtime_config, contracts, creative, domain_tools, followups, style as agent_style, task_state
+from . import answer_policy, approvals, commands, config as runtime_config, context_lens, contracts, creative, domain_tools, followups, style as agent_style, task_state
 from .context import RafiiRunContext, screen_outline
 
 KEY_PREFIX = "agent:"
@@ -49,6 +49,10 @@ TRACE_HOOKS: list = []
 def register_trace_hook(fn) -> None:
     if fn not in TRACE_HOOKS:
         TRACE_HOOKS.append(fn)
+
+
+# Context Lens (P0.6/P1.1): records the lens a turn used; adds nothing to a turn without it (flag off).
+register_trace_hook(context_lens.trace_hook)
 EPOCH = digest({"runtime": RUNTIME_VERSION})
 log = logging.getLogger("postriff.agent_runtime")
 _IMAGE_ORDINAL = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:image|picture|photo|pic|one\s+you\s+made)\b"
@@ -78,19 +82,27 @@ class AgentRuntimeService:
             require(member, "read")
         voice = self.cfg.route("voice_front_end", reason="status")
         manager = self.cfg.route("standard_reasoning", reason="status")
-        return {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
+        out = {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
                 # Voice delegates every request to the agent runtime, so it needs both flags.
                 "voice": {"available": voice.available and self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") and member.allows("edit"),
                           "blocker": voice.blocker if not voice.available else
                           (None if self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") else "Voice Mode is not enabled on this deployment.")},
                 "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker},
                 "genui": self.cfg.genui_for(workspace_id)}
+        lens = context_lens.status_block(self, workspace_id)   # only when on: the body is unchanged when off
+        if lens is not None:
+            out["contextLens"] = lens
+        return out
 
     # --- turn --------------------------------------------------------------------------------------------------------
     def turn(self, workspace_id, token, payload) -> dict:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured turn.", 400)
         from ..site_agent import contracts as site_contracts
+        if context_lens.scope_for(self, workspace_id).enabled:
+            # Context Lens: what the person removed leaves the payload before anything reads it (front door, commands,
+            # Manager, site-agent fallback, writing pipeline). Off: the payload is untouched.
+            payload = context_lens.filter_payload(payload, context_lens.exclusions(payload))
         text = clean(payload.get("message", ""), MAX_MESSAGE)
         modality = payload.get("modality") if payload.get("modality") in contracts.MODALITIES else "text"
         # Chat-context SPEC §9: each attachment has a role for this turn; role-less means `reference` (the panel's images).
@@ -447,9 +459,12 @@ class AgentRuntimeService:
 
         from . import manager as manager_mod
 
+        lens = context_lens.ManagerTurn.start(self, workspace_id, payload)   # None when the Context Lens is off
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
             state = self.service.ideas._state(row)
+            if lens is not None:
+                page = lens.check_page(cur, state, member, principal, page)
             focus, refs_note = self._resolve(cur, state, workspace_id, conversation_id, text, page)
             chips = chip_refs.parse({"references": payload.get("references")})
             resolved_chips = chip_refs.resolved_ids(state, {"references": chips["references"], "attachments": []}) + \
@@ -467,6 +482,11 @@ class AgentRuntimeService:
             spoken = recent_transcript(cur, workspace_id, conversation_id)
             style = agent_style.load(cur, principal)
             ui_context, ui_selection = ui_turn_context(self.cfg, cur, workspace_id, principal, member, payload.get("uiContext"))
+            if lens is not None:
+                refs_note, ui_selection, style = lens.finish(cur, state, member, principal, page, text=text, focus=focus, references=chips["references"],
+                                                             resolved=resolved_chips, attachments=attachments, conversation_id=conversation_id, history=history,
+                                                             images=images, plan=plan, last=last, open_items=open_items, style=style, ui_context=ui_context,
+                                                             ui_selection=ui_selection, refs_note=refs_note)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, page=page, zone=zone, locale=payload.get("locale") if isinstance(payload.get("locale"), str) else None,
                               writer_model=payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None, attachments=attachments,
@@ -475,6 +495,7 @@ class AgentRuntimeService:
                               style=style, command=commands.parse(payload.get("command")), ui_context=ui_context, ui_selection=ui_selection,
                               voice_choice=voice_choice(payload))
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
+        ctx.context_lens = lens.lens if lens is not None else None
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
         ctx.thinking("working", "run", "run_open")
@@ -488,7 +509,8 @@ class AgentRuntimeService:
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
                            **({"attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]} if attachments else {})}
-        items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last)
+        items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last,
+                               extra_state=lens.app_state(ctx.page) if lens is not None else None)
         manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
         collector = manager_mod.collector(self.cfg)
         run_config = RunConfig(workflow_name="rafii.turn", trace_id=trace_id, group_id=conversation_id, trace_metadata={"modality": modality, "runtime": RUNTIME_VERSION},
@@ -601,8 +623,9 @@ class AgentRuntimeService:
             out.append({"role": role, "text": words[:1200], **({"modality": modality} if modality else {})})
         return out[:-1] if out and out[-1]["role"] == "user" else out
 
-    def _assemble(self, ctx: RafiiRunContext, text, history, refs_note, open_items, images, superseded, spoken=(), last=None) -> list[dict]:
-        """Bounded, labelled context (spec §15). Exact ids stay in machine context; every block says what kind of data it is."""
+    def _assemble(self, ctx: RafiiRunContext, text, history, refs_note, open_items, images, superseded, spoken=(), last=None, extra_state=None) -> list[dict]:
+        """Bounded, labelled context (spec §15). Exact ids stay in machine context; every block says what kind of data it is.
+        `extra_state` holds the Context Lens keys (None when it is off: byte-identical to before, tests/test_context_lens.py)."""
         from ..site_agent import contracts as site_contracts
         app_state = {"kind": "APP_STATE", "page": site_contracts.page_summary(ctx.page), "timeZone": ctx.zone, "now": site_contracts.iso(ctx.now()),
                      "modality": ctx.modality, "member": ctx.membership.summary(), "resolvedReferences": refs_note,
@@ -622,6 +645,8 @@ class AgentRuntimeService:
         screen = screen_outline(ctx.page)   # Contract 3: visible labels only, re-validated; untrusted data
         if screen:
             app_state["screen"] = screen
+        if extra_state:
+            app_state.update(extra_state)
         for asset_id in app_state["attachedThisTurn"]:
             ctx.ledger.known_ids.add(asset_id.lower())
         for item in images:
