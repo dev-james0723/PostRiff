@@ -1,6 +1,7 @@
 -- Rafii durable agent execution: the shared task engine (contract CF-3, "EX"). PROPOSED DDL, docs copy only: this file is
 -- not in the runner's sequence. Lane J creates migrations/postriff/108_agent_tasks.sql byte-identical to it (a test
--- enforces that); after either copy is applied anywhere, every change is a new forward migration (109+).
+-- enforces that). The number is proposed; J re-checks base and every open PR before creating the file, and renames this
+-- copy with it if the number moved. After either copy is applied anywhere, every change is a new forward migration.
 --
 -- Additive only; no existing table is altered. A task's anchor stays its existing `task:<uuid>` pr_agent_runs row (same id
 -- = the taskId clients already hold); its client-visible log stays pr_agent_events (progress.updated stages, so that
@@ -12,8 +13,10 @@
 -- CASCADE); the server has no DELETE privilege, so rows leave only with their conversation or workspace.
 -- Every task belongs to exactly one person: created_by is the anchor run's actor (guard trigger), one open chat task
 -- exists per person per conversation, and every attempt, receipt and approval is bound to that person.
--- Background (cron) attempts can only run R0 reads, delegate polls and waits (CHECK + guard trigger).
--- No foreign key into 107, so 108 can ship (in shadow) before or after it.
+-- Background (cron) attempts can only run R0 reads, delegate polls and waits (CHECK + guard trigger). A poll of a step that
+-- observes an external effect (publish job, automation item) may record the read-only verdict 'observe': it keeps
+-- observing after a cancel or a membership end, never acts, and still records the creator as actor (guard).
+-- No foreign key into the permissions DDL (109), so 108 can ship (in shadow) before or after it.
 begin;
 
 create table if not exists public.pr_agent_tasks (
@@ -30,7 +33,7 @@ create table if not exists public.pr_agent_tasks (
   reason_code text check (reason_code is null or reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
   version integer not null default 0 check (version >= 0),
   autonomy_mode text not null default 'ask' check (autonomy_mode in ('ask','assist','autopilot')),
-  autopilot_policy_id uuid,                                                   -- 107 pr_agent_autopilot_policies.id (P2); no FK
+  autopilot_policy_id uuid,                                                   -- 109 pr_agent_autopilot_policies.id (P2); no FK
   authz_token text not null check (authz_token ~ '^[0-9a-f]{64}$'),          -- Grants.token() at the last decision; compared with <>
   budget_ceiling_usd_micro bigint check (budget_ceiling_usd_micro is null or budget_ceiling_usd_micro >= 0),
   spent_usd_micro bigint not null default 0 check (spent_usd_micro >= 0),
@@ -98,7 +101,8 @@ create table if not exists public.pr_agent_steps (
   verified boolean not null default false,
   retry_class text not null default 'manual' check (retry_class in ('auto','manual','never')),
   max_attempts smallint not null default 1 check (max_attempts between 1 and 5),
-  attempts smallint not null default 0 check (attempts between 0 and 20),
+  -- Delegate polls last until the hard TTL; they are not limited to twenty work attempts.
+  attempts integer not null default 0 check (attempts >= 0 and (kind = 'delegate' or attempts <= 20)),
   generation smallint not null default 1 check (generation between 1 and 4),
   timeout_seconds integer not null default 30 check (timeout_seconds between 5 and 240),
   next_attempt_at timestamptz,
@@ -142,7 +146,7 @@ create table if not exists public.pr_agent_step_attempts (
   task_id uuid not null,
   workspace_id uuid not null references public.pr_workspaces(id) on delete cascade,
   actor uuid not null,                                                        -- always the task's created_by (guard trigger)
-  attempt_no smallint not null check (attempt_no between 1 and 20),
+  attempt_no integer not null check (attempt_no >= 1),
   generation smallint not null check (generation between 1 and 4),
   executor text not null check (executor in ('inline','cron')),
   run_id uuid references public.pr_agent_runs(id) on delete set null,       -- the agent: turn that ran it (GenUI parent, ledger)
@@ -152,7 +156,8 @@ create table if not exists public.pr_agent_step_attempts (
   heartbeat_at timestamptz not null default now(),
   deadline_at timestamptz not null,
   authz_token text not null check (authz_token ~ '^[0-9a-f]{64}$'),          -- decide_for_step ran at this claim (every claim)
-  authz_verdict text not null check (authz_verdict in ('allow','approve','step_up','deny')),
+  -- 'observe': the read-only external-effect observer (CF-3 §6.1); allowed only on observes_external steps (guard), by cron.
+  authz_verdict text not null check (authz_verdict in ('allow','approve','step_up','deny','observe')),
   authz_reason text check (authz_reason is null or authz_reason ~ '^[a-z][a-z0-9_]{0,63}$'),
   trace_id text not null check (trace_id ~ '^trace_[0-9a-f]{32}$'),
   request_id text check (request_id is null or length(request_id) <= 80),
@@ -167,6 +172,7 @@ create table if not exists public.pr_agent_step_attempts (
   started_at timestamptz not null default now(),
   finished_at timestamptz,
   constraint pr_agent_step_attempts_id_workspace unique (id, workspace_id),
+  constraint pr_agent_step_attempts_subject_key unique (id, step_id, task_id, workspace_id),
   constraint pr_agent_step_attempts_no unique (step_id, attempt_no),
   constraint pr_agent_step_attempts_step foreign key (step_id, task_id, workspace_id)
     references public.pr_agent_steps(id, task_id, workspace_id) on delete cascade,
@@ -174,6 +180,7 @@ create table if not exists public.pr_agent_step_attempts (
     references public.pr_agent_tasks(id, workspace_id) on delete cascade,
   constraint pr_agent_step_attempts_lease_owner check ((executor = 'inline' and lease_owner like 'req:%')
                                                or (executor = 'cron' and lease_owner like 'cron:%')),
+  constraint pr_agent_step_attempts_observer check (authz_verdict <> 'observe' or executor = 'cron'),
   constraint pr_agent_step_attempts_finished check ((state = 'running') = (finished_at is null))
 );
 create unique index if not exists pr_agent_step_attempts_one_live on public.pr_agent_step_attempts (step_id) where state = 'running';
@@ -266,6 +273,8 @@ create table if not exists public.pr_agent_approvals (
   constraint pr_agent_approvals_step_up check (kind <> 'step_up_action' or requires_step_up),
   -- Correction 2 / EX-D8: only the task's creator decides new agent confirmations and spend in P0.
   constraint pr_agent_approvals_owner_kinds check (kind not in ('agent_action','spend') or approver_policy = 'task_owner'),
+  constraint pr_agent_approvals_owner_decider check (kind not in ('agent_action','spend')
+    or decided_by is null or decided_by = requested_for),
   -- Correction 17 / DP-5: a typed or spoken "yes" decides only the legacy schedule and automation proposals.
   constraint pr_agent_approvals_yes check (decision_surface not in ('text','voice')
     or (kind = 'proposal' and proposal_type in ('schedule_draft','reschedule_post','automation_change'))),
@@ -300,12 +309,13 @@ create table if not exists public.pr_agent_receipts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (workspace_id, effect_key),
+  constraint pr_agent_receipts_subject_key unique (workspace_id, effect_key, task_id, step_id),
   constraint pr_agent_receipts_task foreign key (task_id, workspace_id)
     references public.pr_agent_tasks(id, workspace_id) on delete cascade,
   constraint pr_agent_receipts_step foreign key (step_id, task_id, workspace_id)
     references public.pr_agent_steps(id, task_id, workspace_id) on delete cascade,
-  constraint pr_agent_receipts_attempt foreign key (attempt_id, workspace_id)
-    references public.pr_agent_step_attempts(id, workspace_id) on delete cascade,
+  constraint pr_agent_receipts_attempt foreign key (attempt_id, step_id, task_id, workspace_id)
+    references public.pr_agent_step_attempts(id, step_id, task_id, workspace_id) on delete cascade,
   constraint pr_agent_receipts_done check ((state = 'done') = (outcome is not null))
 );
 create index if not exists pr_agent_receipts_by_task on public.pr_agent_receipts (task_id, created_at);
@@ -333,8 +343,8 @@ create table if not exists public.pr_agent_compensations (
     references public.pr_agent_tasks(id, workspace_id) on delete cascade,
   constraint pr_agent_compensations_step foreign key (step_id, task_id, workspace_id)
     references public.pr_agent_steps(id, task_id, workspace_id) on delete cascade,
-  constraint pr_agent_compensations_receipt foreign key (workspace_id, effect_key)
-    references public.pr_agent_receipts(workspace_id, effect_key) on delete cascade,
+  constraint pr_agent_compensations_receipt foreign key (workspace_id, effect_key, task_id, step_id)
+    references public.pr_agent_receipts(workspace_id, effect_key, task_id, step_id) on delete cascade,
   constraint pr_agent_compensations_window check (undo_until <= created_at + interval '7 days'),   -- product default 24 h (DP-13)
   constraint pr_agent_compensations_applied check ((state = 'applied')
     = (applied_at is not null and applied_by is not null and applied_effect_key is not null))
@@ -361,28 +371,52 @@ begin
   return new;
 end $body$;
 
--- Attempts run as the task's creator; cron attempts only on background-allowed steps; the turn row is in the workspace.
+-- Plan-time turns must belong to the step's workspace. SET NULL on deletion remains allowed.
+create or replace function postriff_private.agent_step_plan_guard()
+returns trigger language plpgsql set search_path='' as $body$
+begin
+  if new.planned_run_id is not null and not exists (
+    select 1 from public.pr_agent_runs r where r.id = new.planned_run_id and r.workspace_id = new.workspace_id
+  ) then
+    raise exception 'a planned run must belong to the step workspace' using errcode = '23514';
+  end if;
+  return new;
+end $body$;
+revoke all on function postriff_private.agent_step_plan_guard() from public, anon, authenticated;
+grant execute on function postriff_private.agent_step_plan_guard() to service_role;
+drop trigger if exists pr_agent_steps_plan_guard on public.pr_agent_steps;
+create trigger pr_agent_steps_plan_guard before insert or update of planned_run_id, workspace_id on public.pr_agent_steps
+  for each row execute function postriff_private.agent_step_plan_guard();
+
+-- Attempts run as the task's creator; cron attempts only on background-allowed steps; the read-only 'observe' verdict
+-- only on a step that observes an external effect; the turn row is in the workspace.
 -- On UPDATE only the identity is checked: the run_id ON DELETE SET NULL action fires while its conversation (and so the
 -- task) is being deleted, and must not be refused.
 create or replace function postriff_private.agent_attempt_guard()
 returns trigger language plpgsql set search_path='' as $body$
-declare creator uuid; may_background boolean; previous_run uuid;
+declare creator uuid; may_background boolean; observer boolean; step_kind text; previous_run uuid;
 begin
   if tg_op = 'UPDATE' then
     previous_run := old.run_id;
-    if (new.step_id, new.task_id, new.workspace_id, new.actor, new.executor)
-         is distinct from (old.step_id, old.task_id, old.workspace_id, old.actor, old.executor) then
+    if (new.step_id, new.task_id, new.workspace_id, new.actor, new.executor, new.authz_verdict, new.attempt_no)
+         is distinct from (old.step_id, old.task_id, old.workspace_id, old.actor, old.executor, old.authz_verdict, old.attempt_no) then
       raise exception 'an agent step attempt''s identity cannot change' using errcode = '55000';
     end if;
   else
     select t.created_by into creator from public.pr_agent_tasks t where t.id = new.task_id and t.workspace_id = new.workspace_id;
-    select s.background_allowed into may_background from public.pr_agent_steps s
+    select s.background_allowed, s.observes_external, s.kind into may_background, observer, step_kind from public.pr_agent_steps s
      where s.id = new.step_id and s.task_id = new.task_id and s.workspace_id = new.workspace_id;
     if creator is null or new.actor is distinct from creator then
       raise exception 'an agent step attempt runs only as the task''s creator' using errcode = '23514';
     end if;
+    if step_kind <> 'delegate' and new.attempt_no > 20 then
+      raise exception 'a work step cannot exceed twenty lifetime attempts' using errcode = '23514';
+    end if;
     if new.executor = 'cron' and may_background is not true then
       raise exception 'the background executor may only claim background-allowed steps' using errcode = '23514';
+    end if;
+    if new.authz_verdict = 'observe' and observer is not true then
+      raise exception 'only a step that observes an external effect may record the observe verdict' using errcode = '23514';
     end if;
   end if;
   if new.run_id is not null and new.run_id is distinct from previous_run
@@ -410,8 +444,9 @@ begin
       raise exception 'an approval is requested for the task''s creator' using errcode = '23514';
     end if;
     if new.conversation_id is not null and not exists (select 1 from public.pr_conversations c
-         where c.id = new.conversation_id and c.workspace_id = new.workspace_id) then
-      raise exception 'an approval''s conversation must belong to the same workspace' using errcode = '23514';
+         where c.id = new.conversation_id and c.workspace_id = new.workspace_id
+           and c.id = (select t.conversation_id from public.pr_agent_tasks t where t.id = new.task_id and t.workspace_id = new.workspace_id)) then
+      raise exception 'an approval''s conversation must be its task conversation' using errcode = '23514';
     end if;
     if new.message_id is not null and not exists (select 1 from public.pr_messages m
          where m.id = new.message_id and m.workspace_id = new.workspace_id and m.conversation_id = new.conversation_id) then
@@ -451,7 +486,7 @@ drop trigger if exists pr_agent_tasks_anchor_guard on public.pr_agent_tasks;
 create trigger pr_agent_tasks_anchor_guard before insert or update of id, workspace_id, conversation_id, created_by, origin, request_key
   on public.pr_agent_tasks for each row execute function postriff_private.agent_task_anchor_guard();
 drop trigger if exists pr_agent_step_attempts_guard on public.pr_agent_step_attempts;
-create trigger pr_agent_step_attempts_guard before insert or update of step_id, task_id, workspace_id, actor, executor, run_id
+create trigger pr_agent_step_attempts_guard before insert or update of step_id, task_id, workspace_id, actor, executor, authz_verdict, attempt_no, run_id
   on public.pr_agent_step_attempts for each row execute function postriff_private.agent_attempt_guard();
 drop trigger if exists pr_agent_approvals_guard on public.pr_agent_approvals;
 create trigger pr_agent_approvals_guard before insert or update of task_id, step_id, requested_for, kind, digest, conversation_id, message_id, run_id

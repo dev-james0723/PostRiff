@@ -1,12 +1,14 @@
 -- Rafii agent permissions (rafii-agent-authz/1, contract CF-2). PROPOSED DDL, docs copy only: this file is not in the
--- runner's sequence. Lane J creates migrations/postriff/107_agent_permissions.sql byte-identical to it (a test enforces
--- that). Once either copy has been applied anywhere (staging, a shared disposable database or production), the runner's
--- checksum ledger forbids editing it: every later change is a new forward migration (109+).
+-- runner's sequence. Lane J creates migrations/postriff/109_agent_permissions.sql byte-identical to it (a test enforces
+-- that). The number is proposed (the earlier proposal's number went to PR #162, see the README's register); J re-checks
+-- base and every open PR before creating the file, and renames this copy with it if the number moved. Once either copy
+-- has been applied anywhere (staging, a shared disposable database or production), the runner's checksum ledger forbids
+-- editing it: every later change is a new forward migration.
 --
 -- Additive only. NO BACKFILL: a member without a pr_agent_permission_state row resolves in code to LEGACY_BASELINE_V1,
 -- which is exactly today's behaviour; nothing in this file grants anything. Service-role only (the 102/105 pattern);
 -- browsers read through /api/workspaces/{id}/agent/permissions. pr_agent_approvals is NOT created here: one approvals
--- table lives in 108 (amendment X1).
+-- table lives in the task engine's 108 (amendment X1). No foreign key into 108 and none from it, so either can ship first.
 --
 -- History is append-only for the server: receipts are insert/select only, grants only ever gain revoked_* values, and
 -- state rows are never deleted by the server. Ending a membership is an UPDATE (pr_memberships.status='revoked'), which
@@ -42,7 +44,8 @@ create table if not exists public.pr_agent_permission_state (
   constraint pr_agent_permission_state_member foreign key (workspace_id, user_id)
     references public.pr_memberships(workspace_id, user_id) on delete restrict,
   constraint pr_agent_permission_state_ended check (ended_at is null or (preset = 'none' and baseline is null)),
-  constraint pr_agent_permission_state_full_step_up check (preset <> 'full' or step_up_at is not null)
+  constraint pr_agent_permission_state_full_step_up check (preset <> 'full' or (step_up_at is not null
+    and step_up_at >= decided_at - interval '300 seconds' and step_up_at <= decided_at))
 );
 
 -- Every change a person (or a cascade) makes is one receipt, written before the grant rows it explains.
@@ -71,8 +74,10 @@ create table if not exists public.pr_agent_consent_receipts (
   request_fingerprint text not null check (request_fingerprint ~ '^[0-9a-f]{64}$'),      -- same key + other body = 409
   created_at timestamptz not null default now(),
   constraint pr_agent_consent_receipts_id_workspace unique (id, workspace_id),
+  constraint pr_agent_consent_receipts_subject_key unique (id, workspace_id, user_id),
   constraint pr_agent_consent_receipts_subject check (user_id is not null or kind = 'workspace_consent_narrowed'),
   constraint pr_agent_consent_receipts_widening check (not widened or kind in ('preset_applied','custom_changed','autopilot_enabled')),
+  -- Receipt JSON records proof presence; the server verifies its signed timestamp and 300-second freshness.
   constraint pr_agent_consent_receipts_full_step_up check (preset_after is distinct from 'full' or not widened or step_up ? 'at')
 );
 create unique index if not exists pr_agent_consent_receipts_key on public.pr_agent_consent_receipts (workspace_id, actor, idempotency_key);
@@ -102,8 +107,8 @@ create table if not exists public.pr_agent_grants (
   constraint pr_agent_grants_epochs check (revoked_epoch is null or revoked_epoch >= granted_epoch),
   constraint pr_agent_grants_state foreign key (workspace_id, user_id)
     references public.pr_agent_permission_state(workspace_id, user_id) on delete restrict,
-  constraint pr_agent_grants_receipt foreign key (receipt_id, workspace_id)
-    references public.pr_agent_consent_receipts(id, workspace_id)
+  constraint pr_agent_grants_receipt foreign key (receipt_id, workspace_id, user_id)
+    references public.pr_agent_consent_receipts(id, workspace_id, user_id)
 );
 create unique index if not exists pr_agent_grants_active on public.pr_agent_grants (workspace_id, user_id, scope) where revoked_at is null;
 create index if not exists pr_agent_grants_history on public.pr_agent_grants (workspace_id, user_id, granted_at desc);
@@ -139,8 +144,8 @@ create table if not exists public.pr_agent_autopilot_policies (
   constraint pr_agent_autopilot_revoked check ((revoked_at is null) = (revoke_reason is null)),
   constraint pr_agent_autopilot_state foreign key (workspace_id, user_id)
     references public.pr_agent_permission_state(workspace_id, user_id) on delete restrict,
-  constraint pr_agent_autopilot_receipt foreign key (receipt_id, workspace_id)
-    references public.pr_agent_consent_receipts(id, workspace_id)
+  constraint pr_agent_autopilot_receipt foreign key (receipt_id, workspace_id, user_id)
+    references public.pr_agent_consent_receipts(id, workspace_id, user_id)
 );
 create index if not exists pr_agent_autopilot_active on public.pr_agent_autopilot_policies (workspace_id, user_id, expires_at) where revoked_at is null;
 

@@ -1,9 +1,9 @@
 # CF-1 — Capability registry (`rafii-agent-authz/1` §1), amended
 
-**Status:** PROPOSED, freeze-ready. Freezes as written once lane J records it in its ledger. Correction 6 (legacy confirmation on the surface binding) is folded in, which was the only condition the critic set for freezing CF-1.
+**Status:** PROPOSED, amended; independent review and recorded validation required before freeze. Freezes as written once lane J records it in its ledger. Correction 6 (legacy confirmation on the surface binding) is folded in, which was the only condition the critic set for freezing CF-1.
 **Base verified:** `origin/consumer-saas` `de4e5907` (PR #138 merged after `2af255fd`). Every file:line below was re-read at that SHA.
 **Labels:** IMPLEMENTED = in code today. PROPOSED = defined here, not built. Paths are relative to `src/postriff_phase2/` unless they start with `migrations/`, `web/`, `tests/` or `docs/`.
-**Behaviour change:** none. CF-1 is vocabulary, declarations and a read-only registry. Nothing is enforced until CF-2's gate runs in `shadow` or `enforce` mode.
+**Behaviour change:** none. CF-1 is vocabulary, declarations and a read-only registry. Nothing is enforced until CF-2's gate runs in `enforce` mode; `shadow` only computes and logs (INV-11).
 **Consumers:** CF-2 (decides with it), CF-3 (reads the engine fields), lane C/H web (reads the public catalogue).
 
 ---
@@ -17,6 +17,7 @@
 | Effects; `FORBIDDEN_EFFECTS = (EXTERNAL_EFFECT, DESTRUCTIVE, SECRET)`; PREPARE_EXTERNAL needs `approval` | `contracts.py:18-21, 59-65` (`__post_init__`) | Unchanged. |
 | The single tool gate | `tool_adapter.py:96-144`: scope `:102`, tenant `:104`, voice `:107`, role `:109` (skipped when `ctx.membership is None`), YouTube read-only turn `:111`, cancel before a non-READ effect `:119-120`, schema `:121` | CF-2 adds its gate after `:109`. |
 | Role classes; `classify()` falls back to `"edit"` | `permissions.py:15-24, 86-89` | Hotfix HF-1 makes it fail closed (R0, separate lane). |
+| Grounded site-agent catalogue: 37 dotted ids (`site_agent/tools.py:30-96` `CATALOG`); `tool_adapter.register_site_tools` (`:406-422`, names from `_SITE_NAMES` `:233`) adapts the 36 read/client tools into `REGISTRY` with the same executor; `automation.patch_propose` (`workspace_mutation`) is not adapted. The grounded agent (viewers, approvers, runtime off) calls `site_tools.run` with the dotted ids. | `site_agent/tools.py`; `agent_runtime_v2/tool_adapter.py` | A registry source with a frozen id rule (§5.1). |
 | GenUI action/query bindings; manifest with server-only `actionTargets` | `ui_domain/__init__.py`; `ui_capabilities.py:42 (permission_revision), 91 (build_manifest), 168 (current)`; `ui_contracts.py:398-399` (`SERVER_ONLY_MANIFEST_KEYS`) | Bindings gain a server-only `capability` field; the public contract hash is unchanged. |
 | GenUI first-pass gate in code: G03 ≥ 29/30 | `tests/agent_ui_acceptance/test_agent_ui_acceptance_release.py:158` | Superseded for enforcement by DP-1 (§9). |
 | Skill lockfile digest hashes explicit keys only | `skill_registry.py` `tool_digest` | New ToolSpec fields must not enter it (INV-9). |
@@ -33,6 +34,7 @@
 - **INV-8 Truthful states.** Every denial carries a reason code and the native page where the person can change it. "Unavailable" (flag off, provider missing) is never shown as "off".
 - **INV-9** New ToolSpec fields never enter `skill_registry.tool_digest`.
 - **INV-10 Confirmation never drops (correction 6).** At every enforcement point (CF-2 E1, E6, E7) the effective confirmation is `required = max(surface.legacy_confirmation, decision.required)` in the order of `CONFIRMATIONS`. No mode (off, shadow, enforce) and no preset can lower the confirmation a surface asks for today.
+- **INV-11 Shadow is invisible.** In `shadow` the gate computes `decide()` and logs what it would do; every value a person, a client or the model receives (manifests, query results, tool lists and results, confirmations, receipts, APP_STATE, `permission_revision`) is byte-identical to `off`. Only `enforce` may narrow, deny or add a confirmation (CF-2 §8.2). This is what makes shadow safe on a GenUI workspace before DP-1's live gate (§9).
 
 ## 3. Vocabulary (PROPOSED; appended to `agent_runtime_v2/contracts.py`)
 
@@ -153,7 +155,8 @@ class SurfaceBinding:                                       # correction 6: conf
     legacy_confirmation: str                                # what today's code asks on THIS surface (CONFIRMATIONS)
     binding_ref: str                                        # tool name, actionId or query name on that surface
 
-def ensure() -> dict[str, CapabilitySpec]        # lazily from tool_adapter.REGISTRY + ui_domain.ACTIONS/QUERIES + CONTEXT + NATIVE_ONLY
+def ensure() -> dict[str, CapabilitySpec]        # lazily from tool_adapter.REGISTRY + site_tools.CATALOG + ui_domain.ACTIONS/QUERIES + CONTEXT + NATIVE_ONLY
+def site_capability(tool_id: str) -> str          # the frozen id rule for the grounded site agent's dotted ids (§5.1)
 def get(capability_id) -> CapabilitySpec | None
 def for_tool(name) -> CapabilitySpec
 def for_action(binding) -> CapabilitySpec
@@ -167,6 +170,15 @@ def lint() -> list[str]                                         # §14
 
 The registry is built lazily (tests reset `REGISTRY`), cached by the registered name sets.
 
+### 5.1 Site-agent ids (frozen rule)
+
+The grounded site agent is the only surface viewers and approvers reach (`service.py:161-162`), so every entry of its catalogue must have a capability; under INV-2 an unknown id would be denied in enforce. `site_capability(tool_id)` is:
+
+- `"tool." + n`, where `n = tool_id.replace(".", "_")`, when `register_site_tools` registered `n` for this id (the same `_site_executor(tool_id)`). One capability is then bound on two surfaces, `manager`/`specialist` and `site_agent`, each with its own `legacy_confirmation`, and one revoke covers both. At `de4e5907` that is 36 of the 37 ids, and `_SITE_NAMES[id] == n` holds for every one of them.
+- `"site." + n` otherwise. At `de4e5907` that is only `automation.patch_propose` → `site.automation_patch_propose` (§7).
+
+`ensure()` adds a `CapabilitySpec` for each `site.` id, with the `data_grants`, risk and confirmation from §7, and a `SurfaceBinding(surface="site_agent", binding_ref=<dotted id>)` for every one of the 37 ids. CF-2 E3 looks ids up only through `site_capability()`.
+
 ## 6. Surface bindings and legacy confirmation (correction 6)
 
 The draft stored `legacy_confirmation` on `CapabilitySpec`. The same capability needs different confirmations on different surfaces: GenUI's `draft_edit` action has `requires_confirmation` (native dialog today), while the Manager's `draft_edit` tool runs with none. Under a per-capability value the GenUI edit would have been applied without today's dialog. The value therefore moves to `SurfaceBinding`:
@@ -174,7 +186,7 @@ The draft stored `legacy_confirmation` on `CapabilitySpec`. The same capability 
 | Surface | `legacy_confirmation` today |
 |---|---|
 | `manager`, `specialist`, `commands_direct` (model tool calls through `tool_adapter.execute`) | `proposal` when `ToolSpec.approval`, else `none` |
-| `site_agent` (grounded agent, `site_agent/tools.py`) | `proposal` for `automation.patch_propose` and the schedule proposals, else `none` |
+| `site_agent` (grounded agent, `site_agent/tools.py`; ids through `site_capability()`, §5.1) | `proposal` for `site.automation_patch_propose` and the schedule proposals, else `none` |
 | `genui_action` | `native` when the binding has `requires_confirmation`; `proposal` when `prepare_only`; else `none` |
 | `genui_query`, `context` | `none` |
 
@@ -182,7 +194,7 @@ INV-10 applies everywhere: `required = max(surface(...).legacy_confirmation, dec
 
 ## 7. Classification of existing tools (PROPOSED overrides)
 
-Lane A.1 applies these as keyword arguments in each registering module. Unlisted rows take the §4 defaults plus the `data_grants` shown. Each `cost` value is confirmed by locating a `ledger.reserve(` call in the executor (`agent_runtime_v2/creative.py:388` image generation; `ideas.py:1463` writer run); a tool without its own reservation is `free`.
+Lane A.1 applies these as keyword arguments in each registering module. Unlisted rows take the §4 defaults plus the `data_grants` shown. Each `cost` value is confirmed by locating a `ledger.reserve(` call in the executor (`agent_runtime_v2/creative.py:388` image generation; `ideas.py:1463` writer run); a tool without its own reservation is `free`. A site-agent id takes the row of its capability (§5.1): the 36 adapted ids are the `tool.*` rows below under their underscore names (`help_search`, `brand_summary`, `ui_guide`, ...); the one site-only id has its own row.
 
 | Tools | category | risk | cost | data_grants | other |
 |---|---|---|---|---|---|
@@ -192,6 +204,7 @@ Lane A.1 applies these as keyword arguments in each registering module. Unlisted
 | `ui_voice` (MUTATE_REVERSIBLE override) | navigate_interact | R1 | free | `("account",)` | `client_requirement="voice"` |
 | `task_plan`, `task_update`, `pending_approvals` | read_analyze | R0 | free | `("agent_activity",)` | — |
 | `proposal_apply` | execute_automations | R2 | free | `("content","automations")` | confirmation `proposal` |
+| `site.automation_patch_propose` (grounded site agent only; `workspace_mutation`, requirement `edit`) | execute_automations | R2 | free | `("automations",)` | confirmation `proposal`; `legacy_confirmation` `proposal` on `site_agent`; nothing changes until a person applies it |
 | `schedule_propose` | execute_automations | R2 | free | `("content","connections")` | `idempotency="native_key"`; `autopilot_eligible` |
 | `automation_change_propose` | execute_automations | R2 | free | `("automations",)` | MUTATE_REVERSIBLE + approval ⇒ R2 |
 | `draft_create`, `draft_rewrite` | create_edit | R1 | text_credits | `("content","memory_brand")` | `idempotency="native_key"` (writing-run key) |
@@ -243,7 +256,7 @@ Lane A.1 applies these as keyword arguments in each registering module. Unlisted
 | `voice_sample_grant`, `voice_profile_approve`, `preference_decide` (owner) | `ui.action.*` | manage_settings | **R2** with native confirmation (DP-5, decided) | native | free |
 | `voice_profile_analyze_ai` (owner, two-phase) | `ui.action.voice_profile_analyze_ai` | create_edit | R1 | native | text_credits |
 
-Manifest effect (CF-2 E4): `build_manifest`/`current` keep a binding only when `decide(...)` is not `deny`; `actionTargets[id]` gains server-only `capabilityId`, `capabilityVersion`, `risk`; `permission_revision(member, grants=None)` becomes `sha256(role, summary, grants.token())` only when the permissions mode is not `off`, so no manifest churns before then. Page `uiCapabilities` stays a rendering claim matched against `client_requirement`; it is never an input to `decide()`.
+Manifest effect (CF-2 E4): `build_manifest`/`current` keep a binding only when `authz.gate(...)` is not `deny`, which can happen only in `enforce` (INV-11); `actionTargets[id]` gains server-only `capabilityId`, `capabilityVersion`, `risk`; `permission_revision(member, grants=None)` becomes `sha256(role, summary, grants.token())` only when the permissions mode is `enforce`. In `off` and `shadow` the manifest, including `permissionRevision` and the `revised` flag `current()` derives from it, is byte-identical to today's. Page `uiCapabilities` stays a rendering claim matched against `client_requirement`; it is never an input to `decide()`.
 
 ## 9. GenUI gate before enforcement (DP-1, decided 2026-10-09; corrections 7 and 8)
 
@@ -258,7 +271,7 @@ Manifest effect (CF-2 E4): `build_manifest`/`current` keep a binding only when `
 
 `NATIVE_ONLY` (kind `native_only`, R3, confirmation `approval_step_up`, no executor, `reauth_seconds = R3_REAUTH_SECONDS = 300`). Rafii may only navigate or guide to `route_id`; every `route_id` must exist in `web/src/lib/site-agent/route-manifest.json` (lint): `connections.connect`, `connections.disconnect` → `channels`; `consent.memory_egress`, `consent.media_egress` → `memory`; `consent.research_egress` → `privacy`; `consent.connector_egress` → `api`; `billing.checkout` → `billing`; `members.manage` → `members`; `security.sessions_mfa` → `profile`; `security.api_tokens` → `api`; `account.delete` → `privacy`; `publish.approve` → `queue`; `automations.auto_publish_authority` → `automations`; `library.delete` → `library`.
 
-**R3 re-authentication (DP-5).** When Rafii hands the person to an R3 route (`ui_navigate`/`ui_guide`), the navigation carries `{reauth: "required", maxAgeSeconds: 300}` and the native action reached through that handoff calls `authz.require_step_up(window=300)` (CF-2 §10). The marker can only make a page stricter than today, so a client that drops it gets today's rule, never a looser one. Whether the 5-minute rule should also apply to native R3 actions not reached through Rafii is DECISIONS-NEEDED R3-1.
+**R3 re-authentication (DP-5).** When Rafii hands the person to an R3 route (`ui_navigate`/`ui_guide`), the navigation carries `{reauth: "required", maxAgeSeconds: 300}` and the native action reached through that handoff calls `authz.require_step_up(window=300)` (CF-2 §10). The server issues a single-use handoff nonce bound to principal, workspace, route/action and expiry, stores the pending handoff server-side, and the native endpoint consumes it only after a verified sign-in within 300 seconds. A pending Rafii handoff remains subject to this check if a client omits or changes its marker; a bare client flag is not evidence. Ordinary native actions with no pending Rafii handoff retain today's rule. Whether the 5-minute rule should also apply to native R3 actions not reached through Rafii is DECISIONS-NEEDED R3-1.
 
 ## 11. Public catalogue (read by the permissions UI)
 
@@ -275,12 +288,19 @@ Manifest effect (CF-2 E4): `build_manifest`/`current` keep a binding only when `
 
 ## 12. `LEGACY_BASELINE_V1` and the golden tests
 
-The baseline is a frozen `frozenset` of capability ids, generated once at the freeze commit into `tests/fixtures/agent_permissions/legacy_baseline_v1.json`: every tool reachable through `sdk_tools` today (`MANAGER_TOOLS` in `manager.py`, every `SPECIALISTS[*]["tools"]` in `specialists.py`, the `EXTRA_SCOPES` filled by the coworker, trends and YouTube extensions), the `site_tools.CATALOG` tools of the grounded agent, and all 17 GenUI actions and 45 GenUI queries. Anything with `since > 1` (for example `library_browse`) is never in it.
+The baseline is a frozen `frozenset` of capability ids, generated once at the freeze commit into `tests/fixtures/agent_permissions/legacy_baseline_v1.json`. It is **every consumer-tenant capability with `since == 1`, of every kind except `native_only`**. Today that is:
+- every tool reachable through `sdk_tools` (`MANAGER_TOOLS` in `manager.py`, every `SPECIALISTS[*]["tools"]` in `specialists.py`, the `EXTRA_SCOPES` filled by the coworker, trends and YouTube extensions);
+- the grounded site agent's whole `site_tools.CATALOG` (37 ids), under the ids `site_capability()` gives them (§5.1), including `site.automation_patch_propose`;
+- all 17 GenUI actions and 45 GenUI queries;
+- all five `CONTEXT_CAPABILITIES` (§10): `context.page_summary`, `context.screen_outline`, `context.memory_layers`, `context.attention`, `context.connections`. E11 gates each APP_STATE section by one of them, so leaving them out would strip every existing user's page context in enforce.
+
+`native_only` entries are not in it, because `decide()` answers them (navigate-only) before the baseline check. Founder-tenant capabilities bypass grants (INV-7). Anything with `since > 1` (for example `library_browse`) is never in it. Because the fixture is generated from the registry rather than hand-listed, a kind cannot be forgotten; test 1 also asserts the count per kind.
 
 Golden tests (all remote, `jcb test`/CI):
-1. The registry at the freeze equals the fixture (no capability vanishes or appears).
-2. **Per-surface confirmation (correction 6):** for every tool on every surface it is reachable from, and for all 17 GenUI actions, the effective confirmation under `legacy`, `none`, `recommended`, `full` and a narrowed `custom` is ≥ the surface's `legacy_confirmation`. The fixture stores the expected value per (surface, binding, preset).
-3. **Revoke-from-legacy never widens (correction 5):** for every single-scope revoke applied to a legacy person, `reach()` over every surface gains no capability and no confirmation is lowered.
+1. The registry at the freeze equals the fixture (no capability vanishes or appears), and the fixture holds every kind above: 17 actions, 45 queries, 5 context entries, the 37 site-agent ids, and every `sdk_tools` tool.
+2. **Legacy is exactly today (DP-3/DP-4; equality, not ≥).** For each legacy form (no row, an ended row, and `LEGACY_EQUIVALENT` before any revoke) and under `off`, `shadow` and `enforce`, `authz.gate` for every baseline capability on every surface it is bound to (`manager`, `specialist`, `commands_direct`, `site_agent`, `genui_action`, `genui_query`, `context`) returns `outcome != "deny"` and `required == legacy_confirmation`. It returns `outcome == "allow"` when the actor carries the evidence that surface collects today: none when the legacy confirmation is `none`, the consumed activation for `native`, the applied proposal for `proposal`. The fixture member is an owner with every declared workspace consent on, every declared provider scope connected, and request text that satisfies `explicit_request`. For an editor and a viewer the only difference allowed is `deny/role`, exactly where today's `member.allows(cap.permission)` refuses.
+3. **Explicit presets never lower a surface (correction 6).** Under `none`, `recommended`, `full` and a narrowed `custom`, for every tool on every surface it is reachable from and for all 17 GenUI actions, the effective confirmation is ≥ the surface's `legacy_confirmation`. The fixture stores the expected value per (surface, binding, preset). Only these explicit presets use ≥; legacy uses test 2's equality.
+4. **Revoke-from-legacy never widens (correction 5).** For every single-scope revoke applied to a legacy person, `reach()` over every surface gains no capability, no confirmation is lowered, and every baseline capability outside the revoked scope still passes test 2.
 
 ## 13. Agent reach and the Manager expansion (correction 5)
 
@@ -289,11 +309,11 @@ Golden tests (all remote, `jcb test`/CI):
 - `LEGACY_EQUIVALENT` (what a legacy person's first revoke materializes) keeps `baseline="legacy_v1"`, so it keeps exactly today's Manager toolset. The draft keyed the expansion on `source == "explicit"` alone, which let a narrowing revoke silently add three Manager tools that then ran under `create_edit=assist`.
 - Specialists, site agent and GenUI reach are today's sets, filtered by `decide() != deny` (CF-2 E10).
 
-`reach()` is part of the catalogue diff that computes `widened` and `denied_now` (CF-2 §5).
+`reach()` is part of the catalogue diff that computes `widened` and `denied_now` (CF-2 §5). `reach(site_agent, ...)` is the 37 ids of §5.1.
 
 ## 14. Lint and CI (lane A.1; remote only)
 
-`capability_registry.lint()` and `tests/test_agent_capability_registry.py` assert: every workspace-tenant tool declares `data_grants`; the expected tool count holds; every inverse pair and native `route_id` exists; binding/tool agreement; every non-READ capability declares `idempotency` and `retry_class`; `background_eligible` only on R0 READ; no capability's executor imports `agent_permissions` write functions (PI-3); `consents` are declared only where the executor pre-checks them (a static list of verified call sites); `tool_digest` and the GenUI contract hash are unchanged.
+`capability_registry.lint()` and `tests/test_agent_capability_registry.py` assert: every workspace-tenant tool declares `data_grants`; the expected tool count holds; every inverse pair and native `route_id` exists; binding/tool agreement; every `site_tools.CATALOG` id maps through `site_capability()` to exactly one registered capability, and an adapted id's tool runs `_site_executor(id)`; every non-READ capability declares `idempotency` and `retry_class`; `background_eligible` only on R0 READ; no capability's executor imports `agent_permissions` write functions (PI-3); `consents` are declared only where the executor pre-checks them (a static list of verified call sites); `tool_digest` and the GenUI contract hash are unchanged.
 
 ## 15. Ownership and merge order
 
@@ -307,4 +327,6 @@ Lane **A.1** owns `contracts.py` (vocabulary, fields, `derive_policy`), the new 
 - [x] Manager expansion keyed on `baseline IS NULL AND preset IN (...)` (correction 5).
 - [x] DP-1 gate wording, fail-closed GenUI preflight (corrections 7, 8).
 - [x] `library_browse` outside the baseline (LIB-D5b, decided).
+- [x] Shadow is invisible (INV-11); the manifest revision changes only in enforce (review of #160).
+- [x] The baseline covers every kind, including `context.*` and the grounded site agent's catalogue (frozen `site_capability()` rule); the legacy golden test asserts equality (review of #160).
 - [ ] J records the freeze in its ledger and copies the frozen sections into `A-DECISIONS` as one amendment.

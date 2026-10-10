@@ -1,18 +1,23 @@
-"""The PROPOSED agent OS migrations 107/108 (docs/design/rafii-agent-os/migrations) on a disposable PostgreSQL 17.
+"""The PROPOSED agent OS migrations 108/109 (docs/design/rafii-agent-os/migrations) on a disposable PostgreSQL 17.
 
-The DDL is a frozen proposal, not yet a numbered migration: this suite applies it on top of the real migration chain
+The DDL is a frozen proposal, not yet a numbered migration: this suite applies it on top of the repository's partial disposable-test migration chain
 (tests/phase2/rls.sql) and proves the database-level rules the contracts rely on, so the files are freeze-ready before
 lane J copies them into migrations/postriff/:
 - service-only tables with forced RLS; browser roles can read nothing and call nothing;
 - consent history is append-only for the server; membership end keeps it; only account deletion erases it;
 - every task belongs to the person whose `task:` run anchors it; one open chat task per person per conversation;
 - child rows cannot cross a workspace or a task; cron can only claim reads, observers and waits; every attempt runs as
-  the task's creator; new approval kinds are owner-decided on a native surface; closing an approval records when.
+  the task's creator; new approval kinds are owner-decided on a native surface; closing an approval records when;
+- the read-only 'observe' verdict exists only on steps that observe an external effect (publish job, automation item).
+
+Numbering (README §5 register): 108 = task engine (CF-3), 109 = permissions (CF-2). They are applied in number order, as
+the runner would; neither depends on the other.
 
 Run (cloud CI): PYTHONPATH=src:tests python scripts/postriff_pg_suite.py postgres_agent_os_ddl
 """
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -29,9 +34,9 @@ A = "00000000-0000-0000-0000-000000000001"   # owner of the main workspace (rls.
 C = "00000000-0000-0000-0000-000000000002"   # owner of another tenant (rls.sql bootstrap)
 B = "00000000-0000-0000-0000-000000000005"   # editor of the main workspace (added here)
 HEX = "a" * 64
-TABLES_107 = ("pr_agent_permission_state", "pr_agent_consent_receipts", "pr_agent_grants", "pr_agent_workspace_policy",
+TABLES_PERMISSIONS = ("pr_agent_permission_state", "pr_agent_consent_receipts", "pr_agent_grants", "pr_agent_workspace_policy",
               "pr_agent_autopilot_policies", "pr_agent_permission_reminders")
-TABLES_108 = ("pr_agent_tasks", "pr_agent_steps", "pr_agent_step_attempts", "pr_agent_checkpoints", "pr_agent_approvals",
+TABLES_TASKS = ("pr_agent_tasks", "pr_agent_steps", "pr_agent_step_attempts", "pr_agent_checkpoints", "pr_agent_approvals",
               "pr_agent_receipts", "pr_agent_compensations")
 EVIDENCE = []
 errors = psycopg.errors
@@ -109,12 +114,17 @@ def step(db, task_id, workspace, key="s1", risk="R0", effect="READ", background=
 
 ATTEMPT_SQL = ("INSERT INTO public.pr_agent_step_attempts(step_id,task_id,workspace_id,actor,attempt_no,generation,executor,lease_owner,"
                "lease_expires_at,deadline_at,authz_token,authz_verdict,trace_id) VALUES(%s,%s,%s,%s,%s,1,%s,%s,now()+interval '60 seconds',"
-               "now()+interval '30 seconds',%s,'allow',%s) RETURNING id::text")
+               "now()+interval '30 seconds',%s,%s,%s) RETURNING id::text")
 
 
-def attempt_params(step_id, task_id, workspace, actor, executor="inline", no=1):
+def attempt_params(step_id, task_id, workspace, actor, executor="inline", no=1, verdict="allow"):
     owner = ("req:" if executor == "inline" else "cron:") + uuid.uuid4().hex
-    return (step_id, task_id, workspace, actor, no, executor, owner, HEX, trace())
+    return (step_id, task_id, workspace, actor, no, executor, owner, HEX, verdict, trace())
+
+
+DELEGATE_SQL = ("INSERT INTO public.pr_agent_steps(task_id,workspace_id,step_key,label,kind,risk_class,effect,background_allowed,retry_class,"
+                "max_attempts,timeout_seconds,delegate_type,delegate_id) VALUES(%s,%s,%s,'Watch it publish','delegate','R0','READ',true,'auto',5,10,%s,%s) "
+                "RETURNING id::text")
 
 
 APPROVAL_SQL = ("INSERT INTO public.pr_agent_approvals(workspace_id,task_id,step_id,generation,requested_for,kind,capability_id,capability_version,"
@@ -134,8 +144,8 @@ def count(db, table, workspace):
 # --- environment: the real chain (rls.sql), then the proposal twice (it must be re-runnable) ---------------------------------
 with connection(autocommit=True) as db:
     for _ in range(2):
-        db.execute((DOCS / "107_agent_permissions.sql").read_text())
         db.execute((DOCS / "108_agent_tasks.sql").read_text())
+        db.execute((DOCS / "109_agent_permissions.sql").read_text())
     W = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s ORDER BY workspace_id LIMIT 1", (A,)).fetchone()[0])
     W2 = str(db.execute("SELECT workspace_id FROM public.pr_memberships WHERE user_id=%s AND workspace_id<>%s ORDER BY workspace_id LIMIT 1",
                         (C, W)).fetchone()[0])
@@ -146,10 +156,10 @@ with connection(autocommit=True) as db:
                "ON CONFLICT (workspace_id,user_id) DO UPDATE SET status='active', role='editor'", (W, B))
 
 
-@scenario("AOS-01", "107 and 108 apply on the full migration chain and re-apply without error")
+@scenario("AOS-01", "108 and 109 apply on the partial disposable-test migration chain and re-apply without error")
 def _applied():
     with connection() as db:
-        for table in TABLES_107 + TABLES_108:
+        for table in TABLES_PERMISSIONS + TABLES_TASKS:
             assert db.execute("SELECT to_regclass(%s)", (f"public.{table}",)).fetchone()[0], table
             forced = db.execute("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid=to_regclass(%s)", (f"public.{table}",)).fetchone()[0]
             assert forced, f"{table} must force RLS"
@@ -162,7 +172,7 @@ def _browser():
             with db.transaction(force_rollback=True):
                 db.execute(f"SET LOCAL ROLE {role}")
                 db.execute("SELECT set_config('request.jwt.claim.sub', %s, true)", (A,))
-                for table in TABLES_107 + TABLES_108:
+                for table in TABLES_PERMISSIONS + TABLES_TASKS:
                     expect(db, errors.InsufficientPrivilege, f"SELECT count(*) FROM public.{table}")
                 expect(db, errors.InsufficientPrivilege, "SELECT postriff_private.agent_permissions_erase(%s)", (W,))
 
@@ -221,13 +231,14 @@ def _membership_end():
         assert removed >= 3, removed
         db.execute("RESET ROLE")
         db.execute("DELETE FROM public.pr_memberships WHERE workspace_id=%s AND user_id=%s", (W, B))
-        for table in TABLES_107:
+        for table in TABLES_PERMISSIONS:
             assert count(db, table, W) == 0, table
 
 
 @scenario("AOS-05", "a task is anchored on its creator's own task: run in the same workspace, and its identity never changes")
 def _anchor():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         run = anchor(db, W, conv, A)
         expect(db, errors.CheckViolation, TASK_SQL, task_params(run, W, conv, B))                       # someone else's run
@@ -241,6 +252,7 @@ def _anchor():
 @scenario("AOS-06", "one open chat task per person per conversation (not per conversation)")
 def _one_open():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         first = task(db, anchor(db, W, conv, A), W, conv, A)
         task(db, anchor(db, W, conv, B), W, conv, B)                       # B's own task in A's conversation is separate
@@ -253,6 +265,7 @@ def _one_open():
 @scenario("AOS-07", "children cannot cross a workspace or a task")
 def _composite():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         mine = task(db, anchor(db, W, conv, A), W, conv, A)
         s1 = step(db, mine, W)
@@ -266,6 +279,7 @@ def _composite():
 @scenario("AOS-08", "cron claims only reads, observers and waits; every attempt runs as the creator; one live attempt per step")
 def _executors():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         owned = task(db, anchor(db, W, conv, A), W, conv, A)
         expect(db, errors.CheckViolation, STEP_SQL, step_params(owned, W, key="s1", risk="R1", effect="CREATE_DRAFT", background=True))
@@ -281,12 +295,15 @@ def _executors():
 @scenario("AOS-09", "approvals: owner-decided new kinds, native surfaces only, every close records when")
 def _approvals():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         owned = task(db, anchor(db, W, conv, A), W, conv, A)
         s1 = step(db, owned, W, risk="R1", effect="MUTATE_REVERSIBLE")
         expect(db, errors.CheckViolation, APPROVAL_SQL, approval_params(W, owned, s1, B))
         expect(db, errors.CheckViolation, APPROVAL_SQL, approval_params(W, owned, s1, A, policy="role_approve"))
         first = db.execute(APPROVAL_SQL, approval_params(W, owned, s1, A)).fetchone()[0]
+        expect(db, errors.CheckViolation, "UPDATE public.pr_agent_approvals SET state='approved',decided_by=%s,decided_at=now(),decision_surface='panel' "
+               "WHERE id=%s", (B, first))
         expect(db, errors.CheckViolation, "UPDATE public.pr_agent_approvals SET state='approved',decided_by=%s,decided_at=now(),decision_surface='voice' "
                "WHERE id=%s", (A, first))
         expect(db, errors.CheckViolation, "UPDATE public.pr_agent_approvals SET state='expired' WHERE id=%s", (first,))
@@ -308,6 +325,7 @@ def _approvals():
 @scenario("AOS-10", "a request key is unique per workspace, so another member's reuse conflicts instead of creating a second task")
 def _request_key():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         task(db, anchor(db, W, conv, A), W, conv, A, origin="task_center", key="req-shared-key-0000000001")
         expect(db, errors.UniqueViolation, TASK_SQL, task_params(anchor(db, W, conv, B), W, conv, B, origin="task_center", key="req-shared-key-0000000001"))
@@ -316,6 +334,7 @@ def _request_key():
 @scenario("AOS-11", "private model state is cleared when a checkpoint is consumed or discarded")
 def _checkpoint():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         owned = task(db, anchor(db, W, conv, A), W, conv, A)
         cp = db.execute("INSERT INTO public.pr_agent_checkpoints(task_id,workspace_id,kind,payload,runtime_version,sdk_version,expires_at) "
@@ -327,6 +346,7 @@ def _checkpoint():
 @scenario("AOS-12", "the server cannot delete engine rows; deleting the conversation removes them with it")
 def _cascade():
     with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
         conv = conversation(db, W, A)
         owned = task(db, anchor(db, W, conv, A), W, conv, A)
         s1 = step(db, owned, W)
@@ -346,15 +366,115 @@ def _cascade():
         expect(db, errors.CheckViolation, "INSERT INTO public.pr_agent_receipts(workspace_id,effect_key,task_id,step_id,principal,capability_id,input_digest,"
                "trace_id) VALUES(%s,%s,%s,%s,%s,'tool.help_search',%s,%s)", (W, f"tsk:{uuid.uuid4().hex}:s1:g1", owned, s1, B, "c" * 64, trace()))
         db.execute("SET LOCAL ROLE service_role")
-        for table in TABLES_108:
+        for table in TABLES_TASKS:
             expect(db, errors.InsufficientPrivilege, f"DELETE FROM public.{table} WHERE workspace_id=%s", (W,))
         db.execute("RESET ROLE")
         db.execute("DELETE FROM public.pr_conversations WHERE id=%s", (conv,))
-        for table in TABLES_108:
+        for table in TABLES_TASKS:
             assert count(db, table, W) == 0, table
 
 
+@scenario("AOS-13", "the read-only 'observe' verdict is accepted only on a step that observes an external effect")
+def _observer():
+    with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
+        conv = conversation(db, W, A)
+        owned = task(db, anchor(db, W, conv, A), W, conv, A)
+        publish = db.execute(DELEGATE_SQL, (owned, W, "s1", "publish_job", "job-1")).fetchone()[0]
+        proposal = db.execute(DELEGATE_SQL, (owned, W, "s2", "proposal", "prop-1")).fetchone()[0]
+        read = step(db, owned, W, key="s3", background=True)
+        assert db.execute("SELECT observes_external FROM public.pr_agent_steps WHERE id=%s", (publish,)).fetchone()[0] is True
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(proposal, owned, W, A, executor="cron", verdict="observe"))
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(read, owned, W, A, executor="cron", verdict="observe"))
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(publish, owned, W, A, executor="inline", verdict="observe"))
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(publish, owned, W, A, executor="cron", verdict="watch"))
+        # A cancelled task (or an ended membership) still lets its publish observer record a read-only poll, as the creator.
+        db.execute("UPDATE public.pr_agent_tasks SET cancel_requested_at=now(), cancel_requested_by=%s WHERE id=%s", (A, owned))
+        db.execute(ATTEMPT_SQL, attempt_params(publish, owned, W, A, executor="cron", verdict="observe"))
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(publish, owned, W, B, executor="cron", no=2, verdict="observe"))
+
+
+@scenario("AOS-14", "Full sign-in is fresh at decision time and grants cannot cite another person's receipt")
+def _permission_subject_and_freshness():
+    with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
+        receipt_a, _ = consent(db, A)
+        consent(db, B)
+        expect(db, errors.CheckViolation, "UPDATE public.pr_agent_permission_state SET preset='full', step_up_at=decided_at-interval '301 seconds' WHERE workspace_id=%s AND user_id=%s", (W, A))
+        expect(db, errors.CheckViolation, "UPDATE public.pr_agent_permission_state SET preset='full', step_up_at=decided_at+interval '1 second' WHERE workspace_id=%s AND user_id=%s", (W, A))
+        db.execute("UPDATE public.pr_agent_permission_state SET preset='full',step_up_at=decided_at-interval '299 seconds' WHERE workspace_id=%s AND user_id=%s", (W, A))
+        expect(db, errors.ForeignKeyViolation, "INSERT INTO public.pr_agent_grants(workspace_id,user_id,scope,mode,granted_epoch,granted_by,receipt_id) VALUES(%s,%s,'category:navigate_interact','assist',1,%s,%s)", (W, B, B, receipt_a))
+
+
+@scenario("AOS-15", "receipts and compensations cannot cite another task's attempt or effect")
+def _receipt_subjects():
+    with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
+        conv = conversation(db, W, A)
+        mine = task(db, anchor(db, W, conv, A), W, conv, A)
+        other = task(db, anchor(db, W, conv, B), W, conv, B)
+        s1, s2 = step(db, mine, W), step(db, other, W)
+        a1 = db.execute(ATTEMPT_SQL, attempt_params(s1, mine, W, A)).fetchone()[0]
+        a2 = db.execute(ATTEMPT_SQL, attempt_params(s2, other, W, B)).fetchone()[0]
+        effect = 'tsk:' + uuid.uuid4().hex + ':s1:g1'
+        insert = "INSERT INTO public.pr_agent_receipts(workspace_id,effect_key,task_id,step_id,attempt_id,principal,capability_id,input_digest,trace_id) VALUES(%s,%s,%s,%s,%s,%s,'tool.help_search',%s,%s)"
+        expect(db, errors.ForeignKeyViolation, insert, (W, effect, mine, s1, a2, A, HEX, trace()))
+        db.execute(insert, (W, effect, mine, s1, a1, A, HEX, trace()))
+        undo = "INSERT INTO public.pr_agent_compensations(workspace_id,task_id,step_id,effect_key,inverse_capability_id,target_type,target_id,post_image_digest,inverse_inputs,undo_until) VALUES(%s,%s,%s,%s,'tool.draft_restore','draft','test',%s,'{}',now()+interval '24 hours')"
+        expect(db, errors.ForeignKeyViolation, undo, (W, other, s2, effect, HEX))
+        db.execute(undo, (W, mine, s1, effect, HEX))
+
+
+@scenario("AOS-16", "plan runs stay in the workspace and approvals stay in the task's conversation")
+def _plan_and_approval_subjects():
+    with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
+        conv = conversation(db, W, A)
+        mine = task(db, anchor(db, W, conv, A), W, conv, A)
+        s1 = step(db, mine, W)
+        foreign = anchor(db, W2, conversation(db, W2, C), C, key="agent")
+        expect(db, errors.CheckViolation, "UPDATE public.pr_agent_steps SET planned_run_id=%s WHERE id=%s", (foreign, s1))
+        local = anchor(db, W, conv, A, key="agent")
+        db.execute("UPDATE public.pr_agent_steps SET planned_run_id=%s WHERE id=%s", (local, s1))
+        wrong_conv = conversation(db, W, A)
+        # Use an explicit INSERT so the same-tenant conversation mismatch is isolated from other validation.
+        sql = "INSERT INTO public.pr_agent_approvals(workspace_id,task_id,step_id,generation,requested_for,kind,conversation_id,capability_id,risk_class,confirmation,input_digest,inputs,digest,required_permission,approver_policy,authz_token,expires_at) VALUES(%s,%s,%s,1,%s,'agent_action',%s,'tool.draft_edit','R1','native',%s,'{}',%s,'edit','task_owner',%s,now()+interval '24 hours')"
+        expect(db, errors.CheckViolation, sql, (W, mine, s1, A, wrong_conv, HEX, HEX, HEX))
+        db.execute(sql, (W, mine, s1, A, conv, HEX, HEX, HEX))
+
+
+@scenario("AOS-17", "frozen claim SQL preserves external observers after cancel and membership end, even with another approval pending")
+def _observer_claim():
+    with connection() as db, db.transaction(force_rollback=True):
+        db.execute("SET LOCAL ROLE service_role")
+        conv = conversation(db, W, A)
+        mine = task(db, anchor(db, W, conv, A), W, conv, A)
+        publish = db.execute(DELEGATE_SQL, (mine, W, "s1", "publish_job", "job-claim")).fetchone()[0]
+        db.execute("UPDATE public.pr_agent_tasks SET state='awaiting_approval',cancel_requested_at=now(),cancel_requested_by=%s,attempts_left=0 WHERE id=%s", (A, mine))
+        db.execute("UPDATE public.pr_agent_steps SET next_attempt_at=now(),attempts=20 WHERE id=%s", (publish,))
+        db.execute("RESET ROLE")
+        db.execute("UPDATE public.pr_memberships SET status='revoked' WHERE workspace_id=%s AND user_id=%s", (W, A))
+        db.execute("SET LOCAL ROLE service_role")
+        doc = (DOCS.parent / "CF-3-task-engine.md").read_text()
+        claim = re.search(r"```sql\n(.*?)```", doc[doc.index("### 5.2"):], re.S).group(1)
+        claim = claim[:claim.index(";", claim.index("RETURNING")) + 1]
+        args = dict(kinds=['delegate'], engine_all=False, engine_workspaces=[], executor='cron', principal=A, seconds_left=300)
+        assert db.execute(claim, args).fetchone() is None, "an unlisted workspace was claimed"
+        args['engine_workspaces'] = [W]
+        row = db.execute(claim, args).fetchone()
+        assert row is not None and str(row[0]) == publish and row[4] == 21, row
+        attempt = db.execute(ATTEMPT_SQL, attempt_params(publish, mine, W, A, executor='cron', no=21, verdict='observe')).fetchone()[0]
+        expect(db, errors.ObjectNotInPrerequisiteState, "UPDATE public.pr_agent_step_attempts SET attempt_no=22 WHERE id=%s", (attempt,))
+        ordinary = step(db, mine, W, key='s2', background=True)
+        expect(db, errors.CheckViolation, "UPDATE public.pr_agent_steps SET attempts=21 WHERE id=%s", (ordinary,))
+        expect(db, errors.CheckViolation, ATTEMPT_SQL, attempt_params(ordinary, mine, W, A, executor='cron', no=21))
+        db.execute("UPDATE public.pr_agent_step_attempts SET state='succeeded',finished_at=now() WHERE id=%s", (attempt,))
+        db.execute("UPDATE public.pr_agent_steps SET state='queued',next_attempt_at=now() WHERE id=%s", (publish,))
+        db.execute("UPDATE public.pr_agent_tasks SET hard_expires_at=now()-interval '1 second',expires_at=now()-interval '1 second' WHERE id=%s", (mine,))
+        assert db.execute(claim, args).fetchone() is None, 'an observer outlived the hard TTL'
+
+
 summary = {"PASS": sum(1 for e in EVIDENCE if e["result"] == "PASS"), "FAIL": sum(1 for e in EVIDENCE if e["result"] == "FAIL")}
-print(json.dumps({"execution": "disposable PostgreSQL; proposed agent OS DDL 107/108 on the real migration chain", "summary": summary,
+print(json.dumps({"execution": "disposable PostgreSQL; proposed agent OS DDL 108/109 on the partial disposable-test migration chain", "summary": summary,
                   "failed": [e for e in EVIDENCE if e["result"] == "FAIL"]}, default=str))
 sys.exit(1 if summary["FAIL"] or not summary["PASS"] else 0)

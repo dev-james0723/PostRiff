@@ -1,6 +1,6 @@
 # Decisions still needed from James
 
-Only decisions that are still open after James's 2026-10-09 decisions (DP-1, DP-3/DP-4, DP-5, DP-8, DP-10, LIB-D1..D5) and that nobody else can settle. Technical conflicts (X1–X12, the engine defaults, renumbers that touch no applied ledger) are settled by the coordinator and recorded in [00-README.md](00-README.md). None of these blocks freezing CF-1, CF-2 or CF-3.
+Decisions below distinguish unresolved questions from approvals already given. Human transcript decisions at 2026-10-09T21:52:56Z (DP-2) and 2026-10-10T01:05:39Z (DP-9, DP-17, DP-11) supersede the earlier open labels. Technical conflicts (X1–X12, the engine defaults, renumbers that touch no applied ledger) are settled by the coordinator and recorded in [00-README.md](00-README.md). An approval is not evidence of execution or acceptance.
 
 Grouped by when the answer is needed.
 
@@ -23,24 +23,36 @@ DP-5 says R3 actions (connect or disconnect an account, billing checkout, member
 
 - **Recommendation: Rafii-originated only, in P0.** Native pages are unchanged until a separate security review.
 - **If you want it everywhere:** lane B tightens every R3 native action to a 5-minute sign-in, including ones people reach without Rafii. People will be asked to sign in again more often (for example, removing a member 7 minutes after signing in would now ask again), and the account security help text must change.
-- **If Rafii-originated only:** a person who opens the page by themselves gets today's rule. The contract's handoff marker can only make a page stricter, so dropping it is never looser than today.
+- **If Rafii-originated only:** a person who opens the page by themselves gets today's rule. The server-bound single-use handoff record enforces the 5-minute rule for pending Rafii handoffs even if a client drops the marker. Independent native visits keep today's rule.
 
-### DP-2 — Approve the paid live runs that DP-1 requires
+## Approved, with conditions still to verify
+
+### DP-2 — Paid live runs: US$20 total cap approved
 
 DP-1 (decided) requires a fixed 60-case live corpus with at least 59/60 first-pass valid. It must pass twice on the release SHA: once with the full manifest and once with a narrowed-grant fixture. Until then, permissions cannot be enforced on a GenUI workspace (267f7d90).
 
-- **Recommendation:** approve two runs of 60 cases on the live provider, plus at most one re-run of each after a fix, under a hard budget stop in the existing live runner. The earlier 30-case run was planned inside the US$5 canary cap. Two 60-case runs are about four times that work, so a US$20 hard stop is a reasonable cap. This is an estimate, not a measured cost.
+- **Approved:** James raised the total cap to US$20 at 2026-10-09T21:52:56Z. This supersedes US$5/US$10 and is not US$20 of new remaining allowance. Reconcile already incurred and unknown costs and open reservations before each paid run; stop before the cap rather than guessing. No approval to increase the cap is implied.
 - **Prerequisite (no decision needed):** GA-A fixes the 60 cases and the denominator in the corpus file before the first measurement, and they never change afterwards.
-- **If you decline:** enforcement can still start on 332ed6e6, which has no GenUI, using native surfaces. 267f7d90 stays in shadow mode.
+- **Gate remains:** payment authorization does not waive either fixed-corpus pass, ordinary-account acceptance or independent review.
 
-### DP-9 — Apply migrations 107 and 108, and set the allowlists
+### DP-9 — Permissions and task migrations approved after release gates
 
-- **Recommendation:** approve two release steps, each taken only after CI is green on the exact head and the dark deploy is done:
-  1. Staging, then production: apply 107, verify (forced RLS, no browser access, server privileges as designed), then apply 108 and verify the same way.
-  2. Set the fail-closed allowlists for 332ed6e6 first, then 267f7d90: `RAFII_AGENT_PERMISSIONS_WORKSPACES`, then `RAFII_TASK_ENGINE_WORKSPACES`, with the flags in shadow mode.
+- **Approved:** James's 2026-10-10T01:05:39Z decision covers the permissions migration followed by the task migration as separate production release steps, each only after its exact PR passes CI and independent review, merges, and deploys with its features OFF. The permissions file is now proposed as 109 and tasks remain 108; authorization follows their reviewed purpose/content, never a number alone. The occupied YouTube number is excluded.
+- **Order:** the two DDL files have no dependency on each other. This docs suite tests numeric order for compatibility, but production retains the approved permissions-then-tasks release order. A runner that automatically applies every lower pending migration is not sufficient: the release owner must prepare an exact-file, pinned-checksum action preview for each approved step and verify its ledger and privileges afterwards.
+- **Rollout remains separate:** initial allowlists stay fail-closed. This migration approval does not itself prove or authorize broader enforcement, general availability or additional external effects; follow the recorded canary and acceptance gates.
 - **Method:** `scripts/postriff_migrate.py --apply-local` refuses any host that is not loopback, so production uses the reviewed runner method already used for earlier production migrations: a one-off pinned-checksum runner build, executed by the designated release executor, with the connection set to `prepare_threshold=None` for the transaction pooler. Before applying, J reads every environment's `postriff_private.schema_migrations` read-only.
-- **Consequence:** after either file is applied anywhere, it can never be edited. Any change becomes migration 109 or later (the runner's checksum ledger).
-- **If you wait:** nothing is enforced, and the engine and the permission store stay off. Today's behaviour continues unchanged.
+- **Consequence:** after either file is applied anywhere, it can never be edited. Any change becomes a new, later migration (the runner's checksum ledger).
+- **Current evidence:** read-only production audit at 2026-10-10T02:20Z found neither migration nor any of their 13 relations. No migration was executed by the takeover audit.
+
+### DP-17 — Visible context approved for the canary behind its own flag
+
+James approved allowlisted on-screen tab state, filter ids and date ranges at 2026-10-10T01:05:39Z. Lane C5 must pass review first. Use the separate `RAFII_CONTEXT_VISIBLE_STATE_ENABLED` flag and initially only workspace `267f7d90`; this does not authorize raw document contents, arbitrary DOM text or broader workspace rollout.
+
+### DP-11 — Real publication test approved in principle only
+
+The same decision approves preparing a real publish/schedule test, but the exact account and post still require a fresh action-specific confirmation at execution time. D Festival public channels remain excluded. No public post is authorized merely by this document.
+
+## Still needed before the first canary (continued)
 
 ### LIB-D6a — Library card titles in the page outline
 

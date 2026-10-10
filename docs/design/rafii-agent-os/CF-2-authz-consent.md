@@ -1,6 +1,6 @@
 # CF-2 — Consent, permissions and enforcement (`rafii-agent-authz/1` §2–§5), amended
 
-**Status:** PROPOSED, freeze-ready. Every critical and high correction that touches CF-2 is folded into this text and into the one DDL file [`migrations/107_agent_permissions.sql`](migrations/107_agent_permissions.sql). One literal stays open by James's instruction: the Recommended preset's spend-confirmation scope (DECISIONS-NEEDED **SD-1**). It is a versioned preset value, not schema: the column already accepts every option, so CF-2 can freeze with the recommended value and change only `PRESETS` if James picks the other one before launch.
+**Status:** PROPOSED, amended; independent review and recorded validation required before freeze. Every critical and high correction that touches CF-2 is folded into this text and into the one DDL file [`migrations/109_agent_permissions.sql`](migrations/109_agent_permissions.sql). One literal stays open by James's instruction: the Recommended preset's spend-confirmation scope (DECISIONS-NEEDED **SD-1**). It is a versioned preset value, not schema: the column already accepts every option, so CF-2 can freeze with the recommended value and change only `PRESETS` if James picks the other one before launch.
 **Depends on:** CF-1 (registry, `SurfaceBinding`, INV-10). **Consumed by:** CF-3 (`decide_for_step`, `Grants.token()`, error codes), lanes C/H (HTTP shapes, error table), G (autopilot shape).
 **Base verified:** `origin/consumer-saas` `de4e5907`. Paths relative to `src/postriff_phase2/` unless they start with `migrations/`, `web/`, `tests/` or `docs/`.
 
@@ -47,20 +47,20 @@ SPEND = {"none": (), "media": ("media_credits",), "all": ("text_credits", "media
 ## 3. Defaults (DP-3/DP-4, decided)
 
 - **Existing members, new members and anyone choosing "Not now"** resolve to `Grants(source="legacy", preset="legacy", user_epoch=0)`: exactly today (`LEGACY_BASELINE_V1` with each surface's legacy confirmation). No backfill, no new category (`manage_connected_services` has nothing), no autopilot, no R3.
-- **Reminder:** non-blocking, at most every 7 days per person and workspace, across devices. The cadence is server-side in `pr_agent_permission_reminders` (107), which never grants or narrows anything. GET returns `reminder: {due, nextAt}`; the client reports `POST …/agent/permissions/reminder {action: "shown"|"not_now"|"dismissed", idempotencyKey}`. "Not now" stores only the reminder row.
+- **Reminder:** non-blocking, at most every 7 days per person and workspace, across devices. The cadence is server-side in `pr_agent_permission_reminders` (109), which never grants or narrows anything. GET returns `reminder: {due, nextAt}`; the client reports `POST …/agent/permissions/reminder {action: "shown"|"not_now"|"dismissed"}`. "Not now" stores only the reminder row.
 - **Viewers and approvers** may save any preset; `decide()` step (b) always clips by role. They still reach only the grounded site agent (`service.py:161-162`).
 
-## 4. Data model — migration 107 (full DDL in [`migrations/107_agent_permissions.sql`](migrations/107_agent_permissions.sql))
+## 4. Data model — migration 109 (full DDL in [`migrations/109_agent_permissions.sql`](migrations/109_agent_permissions.sql))
 
 | Table | Purpose | Amendments folded in |
 |---|---|---|
 | `pr_agent_permission_state` | one row per person and workspace after a choice | FK to `pr_memberships(workspace_id, user_id)` **ON DELETE RESTRICT**; `ended_at` (membership ended, correction 12); `step_up_at` with CHECK "Full needs a recorded fresh sign-in"; server has **no DELETE** |
-| `pr_agent_consent_receipts` | append-only receipt per change | `request_fingerprint` (correction 11); `source` excludes GenUI (PI-7); `unique (id, workspace_id)` so grants and autopilot reference it by composite key (correction 13); CHECK "a widening to Full carries step-up evidence" |
+| `pr_agent_consent_receipts` | append-only receipt per change | `request_fingerprint` (correction 11); `source` excludes GenUI (PI-7); `unique (id, workspace_id, user_id)` so grants and autopilot reference the same person by composite key (correction 13); CHECK "a widening to Full carries step-up evidence" |
 | `pr_agent_grants` | one row per granted scope | FK to state **ON DELETE RESTRICT** (a cascade cannot erase history, correction 12); composite FK to its receipt; server may only write `revoked_*`, once (trigger) |
 | `pr_agent_workspace_policy` | workspace epoch + optional category ceiling | unchanged (owner API deferred, DP-22) |
 | `pr_agent_autopilot_policies` | P2 bounded autopilot | FK to state **ON DELETE RESTRICT**; composite FK to receipt; `membership_ended` revoke reason |
 | `pr_agent_permission_reminders` | reminder cadence (DP-3/DP-4) | new; not history, follows the membership row |
-| ~~`pr_agent_approvals`~~ | — | **removed from 107** (X1): one approvals table, in 108 |
+| ~~`pr_agent_approvals`~~ | — | **removed from 109** (X1): one approvals table, in 108 |
 
 All tables: forced RLS, `service_only` policy, `REVOKE ALL` from `public, anon, authenticated, service_role` then explicit per-table server grants (the 105/106 pattern, which also neutralizes Supabase's default privileges). `postriff_private.agent_permissions_erase(wid)` is the only delete path (§6). Rollback: flags off; tables stay.
 
@@ -121,17 +121,21 @@ def register_revocation_handler(name, fn) -> None
 - `load()` treats `ended_at IS NOT NULL` as no choice (legacy + `needsChoice`), so a re-invited member is like any other member and old grants never return. A later confirmed PUT clears `ended_at`.
 - **Account deletion** (`account_deletion.py`, which deletes `pr_memberships` at `:154` and then `pr_workspaces`) calls `agent_permissions.erase_workspace(cur, workspace_id)` — i.e. `postriff_private.agent_permissions_erase(wid)` — in the same transaction, **before** the membership delete. The function refuses unless the workspace carries `accountDeletion` and deletes children first. Without the call the RESTRICT foreign key makes the membership delete fail loudly; it never silently drops or keeps history. The disposable-PostgreSQL suite proves both (tests/phase2/postgres_agent_os_ddl.py AOS-04). The function is `SECURITY DEFINER` like `100_youtube_api_privacy_erasure.sql`'s erasure function; J confirms read-only that the migration owner bypasses RLS on staging, as that precedent already requires.
 
+**Other delete paths:** `scripts/validate_postriff_hosted_preview.py` deletes test memberships before deleting their workspace; it must perform approved disposable workspace erasure first once permission rows exist. Cross-workspace profile deletion is currently unsupported by the legacy account-delete path: RESTRICT must fail closed, without deleting another workspace's consent history. A person-scoped erasure workflow and its authorization are explicitly deferred with DP-18; do not claim multi-workspace deletion works.
+
 ## 7. Revocation: one transaction, derivative invalidation
 
 PUT, revoke, membership end and consent paths run inside `repository.transaction` (`hosted.py:113-133`), which locks `pr_workspaces FOR UPDATE OF w`; every tool's `ctx.workspace()` takes the same lock, so a revocation and an in-flight effect serialize.
 
+**Mode boundary:** in shadow, permission choices and shadow diagnostics may be stored, but H1–H4 and all read-time filters below must not change legacy proposals, activations, task state, context, manifests or receipts. Compute would-invalidate counts only. Enforcement effects run only in `enforce`; workspace consent paths retain their pre-existing independent enforcement. `user_id=None` means every affected person in that workspace, never an SQL equality to NULL.
+
 1. Lock or insert the state row; bump `epoch`; set `revoked_*` on replaced/removed grants; insert new rows (receipt first).
 2. `diff = catalogue_diff(before, after)`.
 3. Run `REVOCATION_HANDLERS`, storing counts in `receipt.invalidated`:
-   - **H1 `approvals`** (rows now in 108): `UPDATE pr_agent_approvals SET state='revoked', decided_at=now(), decision_surface='system' WHERE workspace_id=%s AND requested_for=%s AND state IN ('pending','approved') AND capability_id = ANY(%s)`.
+   - **H1 `approvals`** (rows now in 108): `UPDATE pr_agent_approvals SET state='revoked', decided_at=now(), decision_surface='system' WHERE workspace_id=%s AND (requested_for=%s OR %s IS NULL) AND state IN ('pending','approved') AND capability_id = ANY(%s)`.
    - **H2 `proposals`:** open `siteAgent.proposals` created in the last 24 h by this person whose type maps to a denied capability (`schedule_draft`/`reschedule_post` → `tool.schedule_propose`, `automation_change` → `tool.automation_change_propose`) close with the `dismiss_proposal` transition and `closedReason: "permission_revoked"`.
-   - **H3 `agent_tasks`** (CF-3 §14): open steps of this person's tasks whose capability is denied become `blocked/permission_revoked`; their checkpoints are discarded; `next_wake_at=now()` on the rest. For `membership_ended`, the person's open tasks are cancelled (`cancelled_by_revocation`) except delegate steps that observe an external effect (CF-3 §4.4).
-   - **H4 `ui_activations`:** `UPDATE pr_ui_activations SET used_at=now() WHERE workspace_id=%s AND principal=%s AND used_at IS NULL AND expires_at > now()`.
+   - **H3 `agent_tasks`** (CF-3 §14): open steps of this person's tasks whose capability is denied become `blocked/permission_revoked`; their checkpoints are discarded; `next_wake_at=now()` on the rest. For `membership_ended`, the person's open tasks are cancelled (`cancelled_by_revocation`) except delegate steps that observe an external effect (CF-3 §4.4), which keep polling as the read-only observer (CF-3 §6.1, verdict `observe`) until the job is final or the hard cap.
+   - **H4 `ui_activations`:** `UPDATE pr_ui_activations SET used_at=now() WHERE workspace_id=%s AND (principal=%s OR %s IS NULL) AND used_at IS NULL AND expires_at > now()`.
    - **H5 `autopilot`:** revoke policies whose `capability_ids && denied_now` (`permission_changed`).
    - Placeholders other lanes fill: `suggestions` (P2), `memory_proposals` (Brand Brain lane).
 4. **Read-time filters** (no writes, effective from the next request): GenUI manifests narrow in `current()` because `permission_revision` includes `grants.token()`; `ui_store.snapshot` serves the native fallback with `revokedByPermission: true`; `service._history` (`service.py:590`) drops prior assistant messages whose `artifact.trace.authz.capabilities` overlap the denied set; in-process caches key on `grants.token()`.
@@ -235,24 +239,39 @@ def decide(cap, *, surface, member, grants, state, actor, provider_view=None, ta
 
 ### 8.2 Modes
 
-`authz.gate(ctx, cap, args, surface) -> Decision` wraps `decide()` with `RuntimeConfig.permissions_for(workspace_id)`: `off` returns `allow` without evaluating (exactly today's behaviour, surface confirmations unchanged); `shadow` evaluates, logs `agent.authz.shadow` with `wouldOutcome`, returns `allow`; `enforce` returns the decision. Rate and cost limits apply after an `allow` (`hosted.throttle`, ledger counters, the executor's estimate). **Enforce requires the task-engine flag in the same workspace** (X1: approvals are engine rows); shadow needs no approval rows.
+`authz.gate(ctx, cap, args, surface) -> Decision` wraps `decide()` with `RuntimeConfig.permissions_for(workspace_id)`. The other entry points (`gate_site`, `gate_proposal`, `recheck`, `recheck_principal`, `decide_for_step`) apply the same three modes:
+
+- **`off`** returns `allow` without evaluating, with `required` = the surface's `legacy_confirmation`: exactly today's behaviour.
+- **`shadow`** evaluates `decide()` and logs `agent.authz.shadow` with `wouldOutcome`, `wouldRequired` and `wouldReason`, then returns the **same Decision `off` returns**. Everything a person, a client or the model receives is byte-identical to `off`: every GenUI manifest (bindings, `actionTargets`, `permissionRevision` and the `revised` flag), every query result, the activate response including `confirmation.required`, every execute receipt and `pr_ui_actions` row, tool results and error bodies (E1–E3), the Manager and specialist tool lists (E10), APP_STATE (E11), proposal applies (E7), and the task engine's step verdicts. No approval row is created and no grant-derived value enters a cache key a client can see.
+- **`enforce`** returns the decision. **Only `enforce` may narrow, deny or add a confirmation**; `shadow` and `off` never do (CF-1 INV-11). So shadow on a GenUI workspace (267f7d90) is allowed before DP-1's live gate, and enforce is not.
+
+Rate and cost limits apply after an `allow` (`hosted.throttle`, ledger counters, the executor's estimate), as today. **Enforce requires `task_engine_for(ws) == 'on'` in the same workspace** (X1: approvals are engine rows; CF-3 §21.1); shadow needs no approval rows.
 
 ### 8.3 Where it runs
 
 | # | Path | Today (file:line) | Change |
 |---|---|---|---|
-| E1 | Every model tool call (Manager, specialists, `commands.direct`, GenUI `run_tool`) | `tool_adapter.execute` `:96-144` | After the role check at `:109`, `decision = authz.gate(ctx, spec.policy(), args, surface)`. **deny** → `{ok:false, code:"agent_permission_denied", reason, category, settingsHref:"/app/account/agent"}`. **confirm** → `task_engine.request_approval(...)` (CF-3 §10.1) and `{ok:false, needsUser:true, code:"needs_confirmation", approvalId, summary, expiresAt}`. **step_up** → `{ok:false, needsUser:true, code:"native_only", href, reauth:{maxAgeSeconds:300}}`. Sets `ctx.active_capability` and the `authz.IN_TOOL` ContextVar around the executor. Enforce: `ctx.membership is None` is a deny. |
-| E2 | Every executor transaction | `context.py:141-150` `workspace()` | When `ctx.active_capability` is set, `authz.recheck(cur, ctx)` re-runs `decide()` in this transaction (cheap, pure); on deny raises `AlphaError(403, code="agent_permission_revoked")`. |
-| E3 | Grounded site agent | `site_agent/tools.py` `run()` | `authz.gate_site(ctx, tool_id)` when `ctx.grants` is present; `automation.patch_propose` maps to `site.automation_patch_propose` (R2, proposal). |
-| E4 | GenUI manifest | `ui_capabilities.py:42, 91, 168` | Keep bindings whose decide ≠ deny; revision includes `grants.token()`; `UiAuth` gains `grants` when the mode is not off. |
-| E5 | GenUI query | `ui_queries.py` | `decide(actor=human_ui)`; deny → the existing 403 → `denied`. |
-| E6 | GenUI activate/execute | `ui_actions.py:84 (_confirmation), 91 (activate), 193 (execute)` | Mode `off`: today's `_confirmation` unchanged. Shadow/enforce — activate: deny → 403 `agent_permission_denied`; **`confirmation.required = (decision.required != "none")`**, which with INV-10 can only turn a confirmation on, never off. Execute: re-decide; deny → stored `rejected` receipt with that code. Two-phase: recheck immediately before the paid dispatch. |
-| E7 | Legacy proposal apply | `approvals.py:136` decide; `service.py:1081, 1095` claim/resume pending run | `authz.gate_proposal(...)` re-decides the proposal's capability **for its creator** with `actor.kind="approval"`; denied → 409 `agent_permission_revoked`. The decider's own right to apply (approve class) is checked as today. **Resume rule (correction 2, same as CF-3 §10.3):** the paused run resumes only when the decider is the task's `created_by`; otherwise the proposal is applied, the continuation becomes `blocked/needs_input` with `needsMe.kind='continue'` for the creator, the response says `resumed:'none'`, and no continuation text is returned to the decider. |
+| E1 | Every model tool call (Manager, specialists, `commands.direct`, GenUI `run_tool`) | `tool_adapter.execute` `:96-144` | After the role check at `:109`, `decision = authz.gate(ctx, spec.policy(), args, surface)`. In enforce: **deny** → `{ok:false, code:"agent_permission_denied", reason, category, settingsHref:"/app/account/agent"}`; **confirm** → `task_engine.request_approval(...)` (CF-3 §10.1) and `{ok:false, needsUser:true, code:"needs_confirmation", approvalId, summary, expiresAt}`; **step_up** → `{ok:false, needsUser:true, code:"native_only", href, reauth:{maxAgeSeconds:300}}`; `ctx.membership is None` is a deny. In off and shadow the gate returns the off result, so the call runs as today. Sets `ctx.active_capability` and the `authz.IN_TOOL` ContextVar around the executor. |
+| E2 | Every executor transaction | `context.py:141-150` `workspace()` | When `ctx.active_capability` is set, `authz.recheck(cur, ctx)` re-runs the gate in this transaction (cheap, pure); a deny (enforce only) raises `AlphaError(403, code="agent_permission_revoked")`. |
+| E3 | Grounded site agent | `site_agent/tools.py` `run()` | `authz.gate_site(ctx, capability_registry.site_capability(tool_id))` when `ctx.grants` is present, on the grounded path only (a call that arrives through `tool_adapter._site_executor` was gated by E1 under its own surface and carries `authz.IN_TOOL`). All 37 ids resolve (CF-1 §5.1): the 36 adapted ids to their `tool.*` capability, `automation.patch_propose` to `site.automation_patch_propose` (R2, proposal). A deny (enforce only) is a `blocked` tool record with code `agent_permission_denied`. |
+| E4 | GenUI manifest | `ui_capabilities.py:42, 91, 168` | Keep bindings whose `authz.gate` is not deny (so bindings narrow only in enforce); `permission_revision` includes `grants.token()` only in enforce; `UiAuth` gains `grants` when the mode is not off, so shadow can log what it would remove. |
+| E5 | GenUI query | `ui_queries.py` | `authz.gate(actor=human_ui)`; a deny (enforce only) → the existing 403 → `denied`. |
+| E6 | GenUI activate/execute | `ui_actions.py:84 (_confirmation), 91 (activate), 193 (execute)` | Modes `off` and `shadow`: today's `_confirmation` and execute path unchanged; shadow only logs `wouldOutcome`/`wouldRequired`. **Enforce** — activate: deny → 403 `agent_permission_denied`; **`confirmation.required = (decision.required != "none")`**, which with INV-10 can only turn a confirmation on, never off. Execute: the gate runs again; deny → stored `rejected` receipt with that code. Two-phase: recheck immediately before the paid dispatch. |
+| E7 | Legacy proposal apply | `approvals.py:136` decide; `service.py:1081, 1095` claim/resume pending run | `authz.gate_proposal(...)` re-decides the proposal's capability **for its creator** with `actor.kind="approval"`; a deny (enforce only) → 403 `agent_permission_revoked`. The decider's own right to apply (approve class) is checked as today. **Resume rule (correction 2, same as CF-3 §10.3; it is the engine's rule, so it applies where `task_engine_for(ws) == 'on'` and today's apply path runs unchanged elsewhere):** the paused run resumes only when the decider is the task's `created_by`; otherwise the proposal is applied, the continuation becomes `blocked/needs_input` with `needsMe.kind='continue'` for the creator, the response says `resumed:'none'`, and no continuation text is returned to the decider. |
 | E8 | New approvals | — | Decided only through CF-3's `resolve_approval` (§11). There is no separate `agent_approvals.decide` executor. |
 | E9 | Background principals | `automation_runs.py:38` `principal_repository` | Gains `capability=`; every transaction calls `authz.recheck_principal(...)`. Human-configured automations are not gated by agent grants in P0 (they are the person's own standing instructions). |
-| E10 | Manager and specialist build | `manager.py`; `specialists.build` | Tools come from `reach(surface, grants)`; drop those whose decide is `deny`. Tools that only need confirmation stay. |
-| E11 | Context assembly | `service.py:604` `_assemble`, `:590` `_history` | Each APP_STATE section is gated by its `context.*` capability; `_history` applies the revoked-capability filter. |
+| E10 | Manager and specialist build | `manager.py`; `specialists.build` | Tools come from `reach(surface, grants)`; drop those whose `authz.gate` is deny (enforce only). Tools that only need confirmation stay. |
+| E11 | Context assembly | `service.py:604` `_assemble`, `:590` `_history` | Each APP_STATE section is passed through the explicit `authz.context_gate` protocol below on its `context.*` capability (all five are in `LEGACY_BASELINE_V1`, CF-1 §12); enforce reads only when its effective result is `allow`. `_history` applies the revoked-capability filter in enforce. |
 | E12 | Grants at turn start | `service.py` turn transaction | `ctx.grants = agent_permissions.load(...)`; same in `run_tool`, `commands.direct` and the site-agent context. |
+
+**E11 adapter protocol (shared by assembly and Context Lens):**
+
+```python
+def context_gate(capability_id: str, *, cur, state: dict, workspace_id: str,
+                 principal: str, member, config, now: float) -> Literal["allow", "deny"]: ...
+```
+
+Call with the caller's already-open, workspace-locked transaction and server-resolved state/member, including Context Lens `Inputs.cur`/`state`; never open a nested transaction. `off` returns `allow` before registry or database reads. Otherwise resolve the registered context capability and its `context` surface binding, load this principal's grants once for the transaction, then call `decide()` with `Actor("agent", principal, request_text="")`. In `shadow`, log content-free `wouldOutcome`/`wouldReason` or evaluation error and return effective `allow` regardless. In `enforce`, only `Decision.outcome == "allow"` returns `allow`; `confirm`, `approve`, `step_up`, `deny`, an unknown capability or any lookup/evaluation error returns `deny`. No prompt text, content or provider/model calls enter the adapter. Existing membership, role and workspace checks apply independently in every mode. A missing permission module preserves the pre-integration path; a present module with an incompatible/missing adapter is an integration failure, covered by tests using the actual modules rather than only a fake `gate`.
 
 New `RafiiRunContext` fields (added by A.1's first commit together with CF-3's stubs, X11): `grants`, `active_capability`, `authz_actor`, `authz_evidence`, `authz_mode`, plus CF-3's `step_binding` and `effect_key()`.
 
@@ -261,7 +280,7 @@ New `RafiiRunContext` fields (added by A.1's first commit together with CF-3's s
 ```python
 @dataclass(frozen=True)
 class StepVerdict:
-    verdict: str          # 'allow' | 'approve' | 'step_up' | 'deny'
+    verdict: str          # 'allow' | 'approve' | 'step_up' | 'deny' | 'observe' (read-only external-effect observer, CF-3 §6.1)
     approval_kind: str | None   # 'agent_action' (from confirm) | 'proposal' (from approve) | 'spend' | 'step_up_action'
     reason_code: str      # CF-3 step reason code (table below), or 'allowed'
     authz_reason: str     # the REASON_CODES value
@@ -271,7 +290,9 @@ class StepVerdict:
 def decide_for_step(cur, task, step, *, actor: Actor, now) -> StepVerdict
 ```
 
-It loads grants, workspace state and the provider view in `cur`, calls `decide()` with the step's capability and `surface=manager` (or the step's recorded surface), and maps the outcome. **CF-3 calls it on every claim and every inline step start**; the epoch is used only to invalidate cached `Grants`. A provider disconnect between s1 and s2 therefore blocks s2 with zero epoch change (acceptance test CF-2 A7).
+It loads grants, workspace state and the provider view in `cur`, calls `decide()` with the step's capability and `surface=manager` (or the step's recorded surface), and maps the outcome. **CF-3 calls it on every claim and every inline step start**; the epoch is used only to invalidate cached `Grants`. A provider disconnect between s1 and s2 therefore blocks s2 with zero epoch change (acceptance test CF-2 A7). In `off` and `shadow` it returns `allow` (shadow logs the would-be verdict), and the permission gate adds no restriction to independently enabled engine execution (CF-3 §21.1). The read-only observer exception below is engine lifecycle authority, not a new permission grant.
+
+**Observer exception (one rule).** For a cron poll of a `delegate` step with `observes_external` (`publish_job`, `automation_item`) **on a task that is cancel-requested or whose creator's membership has ended**, `decide_for_step` returns `observe` without loading grants: the poll reads one record by id inside `step.workspace_id`, writes only that step's mirror, never acts, never spends and makes no provider request. Every other claim, including the same observer while its creator is an active member on an open task, is decided normally. 108 accepts the `observe` verdict only on such steps and only from cron (guard + CHECK).
 
 | `decide()` outcome / reason | Step verdict | Step `reason_code` |
 |---|---|---|
@@ -289,6 +310,7 @@ It loads grants, workspace state and the provider view in `cur`, calls `decide()
 | deny / feature_off | deny | `feature_unavailable` |
 | deny / cost_limit, autopilot_limit | deny | `budget` |
 | allow then rate_limited (post-allow limit) | — | retried with backoff (`retryable`), never blocked |
+| — (observer exception above) | observe | — (the step keeps mirroring its job) |
 
 ## 9. Approvals (owned by CF-3's engine; the rules are frozen here)
 
@@ -304,7 +326,7 @@ It loads grants, workspace state and the provider view in `cur`, calls `decide()
 
 | Change | Window | Proof stored |
 |---|---|---|
-| PUT `preset:'full'` (DP-4) | 300 s | `state.step_up_at`, `receipt.step_up {method, at, aal}` (a CHECK in 107 refuses a Full widening without it) |
+| PUT `preset:'full'` (DP-4) | 300 s | `state.step_up_at`, `receipt.step_up {method, at, aal}` (a CHECK in 109 refuses a Full widening without it) |
 | PUT that sets `assist` on `manage_settings`, `manage_connected_services` or `execute_automations` (by category or by a capability in them) (correction 21) | 300 s | same |
 | Agent-originated R3 handoff; `step_up_action` approvals (DP-5) | 300 s (`R3_REAUTH_SECONDS`) | approval `step_up` |
 | Autopilot create (P2) | 300 s | policy `step_up_at` |
@@ -325,7 +347,7 @@ It loads grants, workspace state and the provider view in `cur`, calls `decide()
 - **PI-4 No self-approval:** approvals are created only from a `confirm`/`approve` verdict and decided only by a session whose principal satisfies the approver policy. The model has no approve tool.
 - **PI-5 Targets (extended by correction 9):** at **plan time** every target id in a step's inputs must be in that turn's `ctx.ledger.known_ids ∪ ctx.chip_refs`; at **execution** it is re-resolved with `workspace_id = step.workspace_id`. External text cannot introduce new targets.
 - **PI-6 Pure decisions:** `decide()` reads no model field; copy is server-authored and digest-checked.
-- **PI-7 GenUI cannot widen:** no GenUI binding targets agent permissions in P0 (107 refuses `source='genui'` receipts).
+- **PI-7 GenUI cannot widen:** no GenUI binding targets agent permissions in P0 (109 refuses `source='genui'` receipts).
 - **PI-8 Summaries quote:** generic `SUMMARIZERS` render model-supplied strings as labelled, quoted data, each line ≤ 240 characters.
 
 ## 12. Cross-member exposure rules that CF-2 relies on
@@ -347,7 +369,7 @@ This is the **only** client-visible error vocabulary for the agent permission an
 | `step_up_required` | 403 | PUT (Full, sensitive Assist), approval decide (R3), R3 handoff, autopilot create | A sign-in verified within `maxAgeSeconds` is needed; body `{stepUp:{required:true, reason, maxAgeSeconds}}`. |
 | `agent_permissions_human_only` | 403 | grant writes | Called from a tool context or with an API token. |
 | `scope_invalid` | 400 | PUT, revoke, autopilot | Unknown, founder-tenant or native-only capability; unknown domain; a constraint id outside this workspace (correction 13). |
-| `idempotency_conflict` | 409 | PUT, revoke, reminder, approval decide, task create, cancel, retry, undo | The key was used with a different body, or by another member; nothing about the other use is revealed (correction 11). |
+| `idempotency_conflict` | 409 | PUT, revoke, approval decide, task create, cancel, retry, undo | Same namespaced key with a different body; task/approval workspace-wide keys also reject another member. Permission receipt keys are per actor (§16). Nothing about another actor is revealed. |
 | `agent_permission_denied` | 403 / tool result | E1, E3, E5, E6; step claim | `decide()` denied; body `{reason, category, settingsHref}`. |
 | `agent_permission_revoked` | 403 / tool result | E2, E7, approval decide, step claim and retry | Allowed earlier, denied now. |
 | `approval_unavailable` | 404 | `approvals/{id}/decide` | Unknown, another workspace's, or not visible to the caller. |
@@ -367,6 +389,8 @@ This is the **only** client-visible error vocabulary for the agent permission an
 | `undo_unavailable` | 409 | undo | No compensation for this step. |
 | `undo_expired` | 409 | undo | Past `undo_until`. |
 | `undo_conflict` | 409 | undo | The target changed since Rafii edited it; nothing was undone. |
+| `proposal_digest` | 409 | legacy proposal apply | Existing digest mismatch; no new grant is inferred. |
+| `approve_required`, `edit_required`, `owner_required` | 403 | legacy proposal apply | Existing role errors are preserved; no new grant is inferred. |
 | `proposal_closed` | 409 | legacy `approvals/decide` body only | Unchanged legacy code (`site_agent/proposals.py:191`). |
 | `proposal_expired` | 409 | legacy body only | Unchanged (`proposals.py:193`). |
 | `proposal_stale` | 409 | legacy body only | Unchanged (`proposals.py:207-216`). |
@@ -398,8 +422,8 @@ Clients render reason codes through copy keys; the mapping from `REASON_CODES` i
 
 ## 15. Flags, rollout and gates
 
-- `config.FLAGS` gains `RAFII_AGENT_PERMISSIONS_ENABLED` (store, UI, shadow) and `RAFII_AGENT_PERMISSIONS_ENFORCED`, plus `RAFII_AGENT_PERMISSIONS_WORKSPACES` (empty = **no** workspace; `*` must be explicit, X10). `RuntimeConfig.permissions_for(ws)` → `off | shadow | enforce`; it is not in `ui_contracts.FLAGS`, so the GenUI hash is unchanged.
-- **Rollout:** off → shadow on 267f7d90 (requirement: zero would-deny on baseline turns) → shadow on 332ed6e6 → enforce on 332ed6e6 (not a GenUI workspace; native surfaces) → enforce on 267f7d90 **only after** DP-1's two live runs (CF-1 §9) → wider.
+- `config.FLAGS` gains `RAFII_AGENT_PERMISSIONS_ENABLED` (store, UI, shadow) and `RAFII_AGENT_PERMISSIONS_ENFORCED`, plus `RAFII_AGENT_PERMISSIONS_WORKSPACES` (empty = **no** workspace; `*` must be explicit, X10). `RuntimeConfig.permissions_for(ws)` → `off | shadow | enforce`; it is not in `ui_contracts.FLAGS`, so the GenUI hash is unchanged. If the requested mode is enforce and `genui_for(ws).enabled`, the effective mode is shadow unless a verified DP-1 receipt for the current release SHA covers both fixed 60-case runs (full manifest and narrowed grants). Missing/stale evidence always downgrades to shadow, including when the GenUI allowlist later becomes empty or broadens. This server-side check is re-evaluated on every config resolution; a rollout checklist alone is insufficient.
+- **Rollout:** off → shadow on 267f7d90 (allowed before DP-1 because shadow returns exactly the off result, §8.2 and A13; requirement: zero would-deny on baseline turns, which is an observation on top of the deterministic legacy golden A1) → shadow on 332ed6e6 → enforce on 332ed6e6 (not a GenUI workspace; native surfaces) → enforce on 267f7d90 **only after** DP-1's two live runs (CF-1 §9) → wider.
 - **GenUI allowlist preflight (correction 8):** a deploy is refused when `RAFII_GENUI_ENABLED=1` and `RAFII_GENUI_WORKSPACES` is empty, until R4 passes (CF-1 §9).
 - **Ordinary-user evidence (correction 20; DP-8):** every R1–R3 gate receipt records read-only proof that 332ed6e6 has no `founderOps` marker (`billing.py` founder markers) and no Founder plan (PR #121), is not in `RAFII_GENUI_WORKSPACES` or any founder allowlist during the native runs (`genui_for(332ed6e6).enabled == false`), and that the editor and viewer runs use invited accounts that are not the founder account. Owner steps run as dfestival.office.
 - **Library (LIB-D1..D5, approved canary-first):** `library_browse` is outside `LEGACY_BASELINE_V1`; under enforce a person picks a preset once before Rafii browses their Library. LIB-D1's general-release condition (an owner toggle, off by default, plus the privacy page update) is an R2 GA gate item, not a P0 contract change.
@@ -443,13 +467,13 @@ Rules:
 - `expectedEpoch` must equal the current epoch (0 for legacy) → else 409 `agent_permissions_changed`. `copyDigest` must match → else 409 `agent_permissions_copy_stale`.
 - **Widening** is `catalogue_diff(before, after).widened` non-empty or `spend_looser`; it needs `confirmed: true` → else 400 `confirmation_required`. Narrowing needs nothing.
 - **Step-up (correction 21, DP-4):** when the target is `preset:'full'`, or the change sets `assist` on any `SENSITIVE_ASSIST` category (or a capability in one), the body must carry `stepUp: true` **and** `authz.require_step_up(window=300)` must pass → else 403 `step_up_required`. `stepUp: true` is only the client's declaration that it ran the re-auth flow for this change (so a page cannot silently upgrade with a token that happens to be fresh); the server's check is the authority. The receipt stores `step_up {method, at, aal}`; the state stores `step_up_at`.
-- **Idempotency (correction 11):** `request_fingerprint = sha256(principal, canonical body without idempotencyKey)`. Same key + same fingerprint → the stored receipt; same key + different fingerprint → 409 `idempotency_conflict`.
+- **Idempotency (correction 11):** `request_fingerprint = sha256(principal, canonical body without idempotencyKey)`. Within `(workspace_id, actor)`, same key + same fingerprint → the stored receipt; same key + different fingerprint → 409 `idempotency_conflict`. Another actor uses an independent key namespace and cannot retrieve the first actor's receipt. Task request and approval-decision keys keep their separately documented workspace-wide scope.
 - A PUT on an `ended_at` row clears `ended_at`.
 - Response: `{state, receipt: {id, kind, epochBefore, epochAfter, widened, invalidated, notRecallable, stepUp}, ...GET body}`.
 
 **`POST …/agent/permissions/revoke`** `{"scopes": [...]}` or `{"all": true}`, plus `idempotencyKey`. Narrowing only: no `confirmed`, no step-up, no `expectedEpoch`. For a legacy person it materializes `LEGACY_EQUIVALENT` minus the revoked scopes (`preset: custom`, `baseline: legacy_v1`), so the Manager toolset never grows (CF-1 §13). Returns the receipt.
 
-**`POST …/agent/permissions/reminder`** `{"action": "shown|not_now|dismissed", "idempotencyKey"}` → `{reminder: {due:false, nextAt}}`. Never touches grants.
+**`POST …/agent/permissions/reminder`** `{"action": "shown|not_now|dismissed"}` → `{reminder: {due:false, nextAt}}`. No request-key field is promised: update the single person/workspace reminder row only when its seven-day cadence is due, in the same transaction. Replays during the same cadence window do not increment `prompts`. Never touches grants.
 
 **`GET …/agent/permissions/history?cursor=<receiptId>&limit=50`** → `{"items": [{id, at, kind, source, actorIsYou, presetBefore, presetAfter, changes: [{scope, from, to}], widened, invalidated, notRecallable}], "next": null}`. Own receipts only; owners and admins see everyone's through the workspace audit log.
 
@@ -467,12 +491,12 @@ Rules:
 
 | Lane A.2 (enforcement) | Lane B (store, API, UI) |
 |---|---|
-| `authz.py`, `provider_grants.py`; `tool_adapter.py` E1; `context.py` E2 (fields land in A.1's commit, X11); `site_agent/tools.py` E3; GenUI E4–E6 through lanes D/F with GA-A; `approvals.py`/`service.py` E7 seams via J; `automation_runs.py` E9 | 107 DDL handed to J (J creates the file, D-A18); `agent_permissions.py`, `permission_copy.json`; HTTP routes in `http.py` (J-owned seam); `SECURITY_KINDS`; `permissions.py` ACTION_CLASSES and STEP_UP_ACTIONS; `on_membership_ended` call sites; `account_deletion.py` erase call; revocation handlers H1, H2, H4, H5; all web files in §17 |
+| `authz.py`, `provider_grants.py`; `tool_adapter.py` E1; `context.py` E2 (fields land in A.1's commit, X11); `site_agent/tools.py` E3; GenUI E4–E6 through lanes D/F with GA-A; `approvals.py`/`service.py` E7 seams via J; `automation_runs.py` E9 | 109 DDL handed to J (J creates the file, D-A18); `agent_permissions.py`, `permission_copy.json`; HTTP routes in `http.py` (J-owned seam); `SECURITY_KINDS`; `permissions.py` ACTION_CLASSES and STEP_UP_ACTIONS; `on_membership_ended` call sites; `account_deletion.py` erase call; revocation handlers H1, H2, H4, H5; all web files in §17 |
 
-Frozen interfaces: B → A: `Grants`, `load`, `epochs`, `catalogue_diff`, `RevocationEvent`, `register_revocation_handler`, `LEGACY_EQUIVALENT`, `PRESETS`. A → B: `CapabilitySpec`, `SurfaceBinding`, `public_catalogue()`, `catalogue_digest()`, `reach()`, `decide()`, `Actor`, `Decision`, `REASON_CODES`, `decide_for_step`, `authz.IN_TOOL`. Merge order: A1 (CF-1) → B1 (107, store, GET/PUT/revoke/history/reminder, shadow only) → A2 (gates in shadow) → B2 (UI) → enforce on 332ed6e6 → enforce on 267f7d90 after DP-1.
+Frozen interfaces: B → A: `Grants`, `load`, `epochs`, `catalogue_diff`, `RevocationEvent`, `register_revocation_handler`, `LEGACY_EQUIVALENT`, `PRESETS`. A → B: `CapabilitySpec`, `SurfaceBinding`, `public_catalogue()`, `catalogue_digest()`, `reach()`, `decide()`, `Actor`, `Decision`, `REASON_CODES`, `decide_for_step`, `authz.IN_TOOL`. Merge order: A1 (CF-1) → B1 (109, store, GET/PUT/revoke/history/reminder, shadow only) → A2 (gates in shadow) → B2 (UI) → enforce on 332ed6e6 → enforce on 267f7d90 after DP-1.
 
 **Acceptance (all remote: `jcb test`/CI; PG tests with real owner/editor/viewer roles and a second tenant, never asserting through a service-role bypass):**
-- A1 Legacy golden: the per-surface confirmation fixture (CF-1 §12) holds under `off`, `shadow` and `enforce`.
+- A1 Legacy golden (CF-1 §12 test 2): for no row, an ended row and `LEGACY_EQUIVALENT`, under `off`, `shadow` and `enforce`, every baseline capability on every surface (including `site_agent` and the five `context.*` entries) is not denied and has `required == legacy_confirmation`; explicit presets keep the ≥ fixture (CF-1 §12 test 3).
 - A2 Revoke-from-legacy never adds a reachable capability or lowers a confirmation (correction 5).
 - A3 Each preset writes exactly its rows; widening without `confirmed` → 400; stale epoch → 409; stale copy → 409; Full without `stepUp` → 403; Full with a stale sign-in → 403 `step_up_required`; sensitive Assist the same.
 - A4 Idempotency: same key + same body replays; same key + other body → 409 `idempotency_conflict`.
@@ -484,10 +508,12 @@ Frozen interfaces: B → A: `Grants`, `load`, `epochs`, `catalogue_diff`, `Revoc
 - A10 Ask flip: `confirmation.required` true for `campaign_link` under Ask; never false where the surface asked today (INV-10).
 - A11 DDL behaviour on PostgreSQL: `tests/phase2/postgres_agent_os_ddl.py` (this PR) — forced RLS, browser roles denied, append-only history, RESTRICT on membership delete, erase guard.
 - A12 GenUI: CI-fake G03 unchanged pre-merge; DP-1 live 60-case gate twice (full + narrowed) before enforce on any GenUI workspace.
+- A13 Shadow is invisible: for a narrowed-grant person (Recommended with `create_edit=ask` and the `analytics` domain off) in shadow on a GenUI workspace, the GenUI manifest (public and server-only keys, including `actionTargets` and `permissionRevision`), every query result, the activate response with its `confirmation`, the execute receipt, E1–E3 tool results, the E10 tool lists, the E11 APP_STATE and the E7 proposal apply are byte-identical to `off` for the same requests, while `agent.authz.shadow` logs carry the would-deny and would-confirm values.
+- A14 Grounded site agent: a viewer and an editor under legacy in enforce get today's record for every one of the 37 site-agent ids (CF-1 §5.1), and `site.automation_patch_propose` still only prepares a proposal.
 
 ## 19. Freeze checklist
 
-- [x] X1: no approvals table in 107; one route and one digest (correction 4).
+- [x] X1: no approvals table in 109; one route and one digest (correction 4).
 - [x] `authz_token` compared with `<>`; decide on every claim; epoch sum dropped (correction 3).
 - [x] Resume rule identical to CF-3 (correction 2).
 - [x] `widened` and `denied_now` from one catalogue diff; Manager expansion keyed on baseline and preset (correction 5).
@@ -499,5 +525,8 @@ Frozen interfaces: B → A: `Grants`, `load`, `epochs`, `catalogue_diff`, `Revoc
 - [x] `yes` only for legacy proposals (correction 17, DP-5).
 - [x] PUT `stepUp` field; Full and sensitive Assist need a fresh sign-in (correction 21, DP-4).
 - [x] Non-founder proof and GenUI allowlist preflight in the gates (corrections 8, 20).
+- [x] Shadow returns exactly the off result at every enforcement point; only enforce narrows, denies or adds a confirmation; A13 (review of #160).
+- [x] E3 resolves every site-agent id through `site_capability()`; E11's context capabilities are in the baseline; A1 is an equality golden (review of #160).
+- [x] Observer exception for cancelled tasks and ended memberships (`observe` verdict, 108 guard) (review of #160).
 - [ ] SD-1 (Recommended spend scope) — open; the frozen default is `all`.
 - [ ] DP-6 copy and languages before B2 reaches general release (does not block the freeze).
