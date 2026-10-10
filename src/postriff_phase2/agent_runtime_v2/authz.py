@@ -737,6 +737,8 @@ def recheck(cur, ctx, *, state, member):
     decision = gate(ctx, ctx.active_capability, getattr(ctx, "authz_args", None), getattr(ctx, "authz_surface", None), actor=actor)
     if decision.outcome != "allow":
         raise AuthzError("Rafii's permissions changed before this action. Confirm again.", "agent_permission_revoked")
+    if "memory_brand" in (ctx.active_capability.data_grants or ()):
+        record_memory_context(ctx, state)
 
 
 def gate_site(ctx, capability_id: str, tool_id: str, args=None):
@@ -839,6 +841,13 @@ def filter_tools(ctx, names, *, agent=None):
 
 
 
+def record_memory_context(ctx, state=None):
+    """Pin the first memory supplied in this turn; later rebinds cannot relabel old prose."""
+    if getattr(ctx, "authz_memory_revision", None) is None:
+        from . import memory_layers
+        ctx.authz_memory_revision = memory_layers.context_revision(state if state is not None else getattr(ctx, "authz_state", {}) or {})
+
+
 def filter_context(ctx):
     """Keep private context fields out of system instructions and tool fallback context too."""
     if mode_for(getattr(ctx, "config", None), ctx.workspace_id) != "enforce":
@@ -852,6 +861,7 @@ def filter_context(ctx):
             ctx.style = None
     elif getattr(ctx, "style", None):
         ctx.authz_used_capabilities = set(getattr(ctx, "authz_used_capabilities", ())) | {"context.memory_layers"}
+        record_memory_context(ctx)
     if not allowed("context.page_summary"):
         for key, empty in (("page", {}), ("page_raw", None), ("focus", None), ("ui_selection", None), ("chip_refs", [])):
             if hasattr(ctx, key):
@@ -890,6 +900,8 @@ def filter_app_state(ctx, app_state):
                     out[key] = [] if isinstance(out[key], list) else None
         elif mode == "enforce" and any(out.get(key) for key in keys):
             used.add(ident)
+            if ident == "context.memory_layers":
+                record_memory_context(ctx)
     if mode == "enforce":
         ctx.authz_used_capabilities = used
     return out if mode == "enforce" else app_state
@@ -908,10 +920,29 @@ def history_eligible(cur, ctx, role, body):
     if not isinstance(provenance, dict):
         return getattr(getattr(ctx, "grants", None), "source", None) == "legacy"
     from . import capability_registry
-    for ident in provenance.get("capabilities") or []:
+    domains = provenance.get("sourceDomains") or []
+    if not isinstance(domains, list) or any(d not in DATA_DOMAINS for d in domains):
+        return False
+    capabilities = provenance.get("capabilities") or []
+    if not isinstance(capabilities, list) or any(not isinstance(ident, str) for ident in capabilities):
+        return False
+    if domains and not capabilities:
+        return False  # Source provenance without a capability cannot prove current access.
+    memory_derived = False
+    for ident in capabilities:
         cap = capability_registry.get(ident)
         surfaces = capability_registry.bindings(ident) if cap else ()
-        if not cap or not surfaces or gate(ctx, cap, surface=surfaces[0]).outcome != "allow":
+        if not cap or not surfaces:
+            return False
+        memory_derived |= "memory_brand" in (cap.data_grants or ())
+        cap = _registry_capability(cap)
+        if domains and cap.data_grants is not None:
+            cap = replace(cap, data_grants=tuple(sorted(set(cap.data_grants) | set(domains))))
+        if gate(ctx, cap, surface=surfaces[0]).outcome != "allow":
+            return False
+    if memory_derived:
+        from . import memory_layers
+        if provenance.get("memoryContextRevision") != memory_layers.context_revision(getattr(ctx, "authz_state", {}) or {}):
             return False
     return True
 
@@ -926,7 +957,15 @@ def trace_for(ctx):
         if item.get("status") == "verified" and capability_registry.get("tool." + str(item.get("tool", ""))):
             used.add("tool." + item["tool"])
     grants = getattr(ctx, "grants", None)
-    return {"capabilities": sorted(used), "token": grants.token() if grants else "unavailable"}
+    result = {"capabilities": sorted(used), "token": grants.token() if grants else "unavailable"}
+    from .task_engine.targets import required_domains
+    domains = set(getattr(ctx, "authz_used_source_domains", ())) | required_domains(getattr(ctx, "authz_target_refs", ()))
+    if domains:
+        result["sourceDomains"] = sorted(domains)
+    if any("memory_brand" in (cap.data_grants or ()) for ident in used if (cap := capability_registry.get(ident))):
+        from . import memory_layers
+        result["memoryContextRevision"] = getattr(ctx, "authz_memory_revision", None) or memory_layers.context_revision(getattr(ctx, "authz_state", {}) or {})
+    return result
 
 
 def context_gate(capability_id: str, *, cur, state: dict, workspace_id: str,
