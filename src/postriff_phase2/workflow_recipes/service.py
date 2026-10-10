@@ -19,9 +19,13 @@ def enabled(workspace_id, config=None):
             and flags.enabled_for(workspace_id, config) and authz.mode_for(config, workspace_id) == 'enforce')
 
 
-def ready(cur):
+def schema_available(cur):
     cur.execute("SELECT to_regclass('public.pr_workflow_recipes'),to_regclass('public.pr_workflow_recipe_runs'),to_regclass('public.pr_agent_autopilot_policies')")
-    if not all(cur.fetchone()):
+    return all(cur.fetchone())
+
+
+def ready(cur):
+    if not schema_available(cur):
         raise AlphaError('Workflow recipes are not available yet.', 503, code='workflow_recipes_unavailable')
 
 
@@ -104,8 +108,10 @@ class Recipes:
 
     def list(self, w, token):
         with self.service.repository.transaction(token, w) as (cur, _, principal):
-            self._require(cur, w)
             _, _member, state = context(self.service, cur, w, principal)
+            # An authorized rollout probe is not a failed operation. Keep writes/reports on _require.
+            if not enabled(w, self.config) or not schema_available(cur):
+                return {'available': False}
             grants = agent_permissions.load(cur, w, principal, now=self.clock())
             cur.execute("SELECT replace(id::text,'-','') FROM public.pr_workflow_recipes WHERE workspace_id=%s AND created_by=%s ORDER BY updated_at DESC LIMIT 20", (w, principal))
             recipes = [load(cur, w, principal, i, lock=False) for (i,) in cur.fetchall()]

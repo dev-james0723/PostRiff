@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ApiError } from '@/lib/api/client';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useSignInAgain } from '@/lib/auth/use-sign-in-again';
-import type { Recipe, RecipeList, RecipeReport, RecipeSettings } from './types';
+import type { Recipe, AvailableRecipeList, RecipeReport, RecipeSettings } from './types';
 
 const field = 'min-h-10 w-full rounded-md border bg-background px-3 py-2 text-sm';
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -36,7 +36,7 @@ function RecipesPanel() {
   const reportId = params.get('recipeReport') ?? '';
   const [dismissedReport, setDismissedReport] = useState('');
   const linkedReport = useQuery({ queryKey: ['workflow-recipe-report', w, reportId], queryFn: () => api.workflowRecipeReport(w, reportId),
-    enabled: Boolean(data && /^[0-9a-f-]{32,36}$/.test(reportId) && reportId !== dismissedReport), retry: false });
+    enabled: Boolean(data?.available && /^[0-9a-f-]{32,36}$/.test(reportId) && reportId !== dismissedReport), retry: false });
   const displayedReport = report ?? (reportId !== dismissedReport ? linkedReport.data : null);
   async function act(name: string, fn: (key: string) => Promise<unknown>) {
     if (busy) return;
@@ -55,6 +55,7 @@ function RecipesPanel() {
   }
   if (query.error instanceof ApiError && [404, 503].includes(query.error.status)) return null;
   if (!data) return query.error ? <p role='alert'>Personal recipes are unavailable. <button onClick={() => void query.refetch()} className='underline'>Retry</button></p> : null;
+  if (!data.available) return null;
   function create() {
     setEditing({ settings: { templateId: 'library_review', name: 'Review Library metadata', trigger: 'weekly', planningDay: 0, planningHour: 9,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', connectionId: null, collectionId: null,
@@ -91,12 +92,12 @@ function RecipesPanel() {
   </section>;
 }
 
-function PolicyDetails({ settings: s, data }: { settings: RecipeSettings; data: RecipeList }) {
+function PolicyDetails({ settings: s, data }: { settings: RecipeSettings; data: AvailableRecipeList }) {
   const scope = s.templateId === 'weekly_performance' ? data.connections.find(c => c.id === s.connectionId)?.name ?? 'Selected account unavailable' : s.collectionId ? data.collections.find(c => c.id === s.collectionId)?.name ?? 'Selected collection unavailable' : 'Whole Library';
   return <dl className='grid gap-1 text-sm'><div><dt className='inline font-medium'>Scope: </dt><dd className='inline break-words'>{scope}{s.templateId === 'library_review' ? ' · up to 20 assets' : ' · previous 7 days · first 50 posts'}</dd></div><div><dt className='inline font-medium'>Trigger: </dt><dd className='inline'>{s.trigger === 'weekly' ? `${days[s.planningDay]} at ${String(s.planningHour).padStart(2, '0')}:00 (${s.timeZone})` : 'New document, audio or file uploads after enabling; checked on worker ticks'}</dd></div><div><dt className='inline font-medium'>Limits: </dt><dd className='inline'>{s.actionsPerDay}/day · {s.actionsTotal} total operations · $0 cost · expires {date(s.expiresAt)}</dd></div><div><dt className='inline font-medium'>Errors: </dt><dd className='inline'>At most 3 attempts per run; new runs back off 5, 10, 20 minutes after failures; pause after 3 failed runs.</dd></div><div><dt className='inline font-medium'>Notifications: </dt><dd className='inline'>{s.notificationPolicy === 'none' ? 'None' : s.notificationPolicy === 'all' ? 'All task outcomes, in app' : 'Failures and approval requests, in app'}</dd></div></dl>;
 }
 
-function RecipeEditor({ value, data, busy, onSave, onClose }: { value: RecipeSettings; data: RecipeList; busy: boolean; onSave: (settings: RecipeSettings) => void; onClose: () => void }) {
+function RecipeEditor({ value, data, busy, onSave, onClose }: { value: RecipeSettings; data: AvailableRecipeList; busy: boolean; onSave: (settings: RecipeSettings) => void; onClose: () => void }) {
   const [settings, set] = useState(value);
   const template = data.templates.find(t => t.id === settings.templateId)!;
   function change<K extends keyof RecipeSettings>(key: K, value: RecipeSettings[K]) { set(s => ({ ...s, [key]: value })); }

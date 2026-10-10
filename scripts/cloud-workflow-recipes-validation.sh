@@ -4,7 +4,7 @@ set -euo pipefail
 if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ] || [ -z "${TREND_VISUAL_TEST_PYTHON:-}" ]; then
   echo 'Use JCB through cloud-python-bootstrap.sh.' >&2; exit 64
 fi
-case "${1:---core}" in --core|--browser|--all) ;; *) exit 64 ;; esac
+case "${1:---core}" in --core|--browser|--browser-only|--all) ;; *) exit 64 ;; esac
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="$PWD/src:$PWD/tests" PYTHONDONTWRITEBYTECODE=1 POSTRIFF_RESEARCH=0
 if ! command -v pg_config >/dev/null; then
@@ -14,16 +14,18 @@ fi
 export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 sudo -n install -d -m 1777 /var/run/postgresql
 validation_failed=0
-if [ "${1:---core}" != --browser ]; then
+if [ "${1:---core}" = --core ] || [ "${1:---core}" = --all ]; then
   python -m unittest discover -s tests -p 'test_workflow_recipes.py' || validation_failed=1
   python -m unittest discover -s tests -p 'test_agent_capability_registry.py' || validation_failed=1
+  python -m unittest test_agent_runtime.GateTest.test_voice_never_gains_more_than_text || validation_failed=1
   python scripts/postriff_pg_suite.py postgres_workflow_recipes || validation_failed=1
 fi
-if [ "${1:---core}" != --core ]; then
+if [ "${1:---core}" = --browser ] || [ "${1:---core}" = --all ]; then
   (cd web && node node_modules/next/dist/bin/next typegen && npm run typecheck && npm run lint && node --test tests/agent-tasks.test.cjs) || validation_failed=1
 fi
 if [ "$validation_failed" -ne 0 ]; then exit "$validation_failed"; fi
 if [ "${1:---core}" != --core ]; then
+  test -f skills/rafii-registry.json || { echo 'Missing tracked product registry required by coworker/status.' >&2; exit 64; }
   npm --prefix web run build
   (cd web && node node_modules/playwright/cli.js install --with-deps chromium webkit)
   mkdir -p .jcb-artifacts/workflow-recipes

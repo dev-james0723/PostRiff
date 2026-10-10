@@ -87,6 +87,30 @@ let currentPage;
         assert.deepEqual(errors, []);
         checks.push({ engine, width, check: 'Pause refuses run; explicit resume creates new policy; revoke refuses run; native deep-link reopens retained receipt; source revoke hides report' });
         await context.close(); currentPage = null;
+        // A fresh workspace is outside the recipe allowlist: real authorized 200 availability, no report fetch.
+        const offPrincipal = randomUUID();
+        const offHeaders = { ...headers, Authorization: 'Bearer dev:' + offPrincipal };
+        const off = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' });
+        const boot = await off.request.post(base + '/api/auth/verify', { headers: offHeaders, data: { plan: 'studio' } });
+        assert.equal(boot.status(), 201, await boot.text());
+        const offWorkspace = (await boot.json()).workspaceId;
+        const offPath = base + '/api/workspaces/' + offWorkspace + '/agent/recipes';
+        await off.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: offPrincipal, url: base }]);
+        await off.addInitScript(id => localStorage.setItem('postriff-dev-principal', id), offPrincipal);
+        const offPage = currentPage = await off.newPage(); const offErrors = [], reports = [];
+        offPage.on('pageerror', e => offErrors.push(e.message));
+        offPage.on('console', m => { if (m.type() === 'error') offErrors.push(m.text()); });
+        offPage.on('request', r => { if (r.url().startsWith(offPath + '/reports/')) reports.push(r.url()); });
+        const available = offPage.waitForResponse(r => r.url() === offPath && r.request().method() === 'GET');
+        await offPage.goto(base + '/app/automations?recipeReport=' + reportId, { waitUntil: 'domcontentloaded' });
+        const availability = await available; assert.equal(availability.status(), 200, await availability.text());
+        assert.deepEqual(await availability.json(), { available: false });
+        await offPage.getByRole('heading', { name: 'Automations', level: 1, exact: true }).waitFor();
+        assert.equal(await offPage.getByRole('region', { name: 'Personal workflow recipes', exact: true }).count(), 0);
+        assert.deepEqual(reports, [], 'Unavailable recipes never request a deep-linked report');
+        assert.deepEqual(offErrors, [], 'Default-off availability creates no console/page errors');
+        checks.push({ engine, width, check: 'Default-off workspace returns authorized unavailable200, hides recipes, requests no linked report, and emits no browser errors' });
+        await off.close(); currentPage = null;
       }
     } finally { await browser.close(); }
   }

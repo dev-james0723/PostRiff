@@ -25,7 +25,9 @@
     "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
     "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
+    "ci:workflow-recipes:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --all",
     "test:workflow-recipes:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --core",
+    "e2e:workflow-recipes:browser-only:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --browser-only",
     "e2e:workflow-recipes:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-workflow-recipes-validation.sh --browser",
     "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh"
   },

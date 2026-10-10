@@ -86,6 +86,29 @@ class RecipesPG(unittest.TestCase):
             grants.revoke(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=self.token,
                 payload={'scopes':[scope],'idempotencyKey':uuid.uuid4().hex},now=self.now,mode='enforce')
 
+    def test_24_feature_off_availability_is_authorized_and_writes_remain_blocked(self):
+        r=self.recipe()
+        with patch.dict(os.environ,{'RAFII_WORKFLOW_RECIPES_ENABLED':'0'}):
+            self.assertEqual(self.domain.list(self.w,self.token),{'available':False})
+            with self.assertRaises(AlphaError) as foreign:self.domain.list(self.w,self.other_token)
+            self.assertEqual(foreign.exception.status,403)
+            with self.assertRaises(AlphaError) as write:self.domain.save(self.w,self.token,{'settings':{},'expectedVersion':None})
+            self.assertEqual(write.exception.status,404)
+            with self.assertRaises(AlphaError) as report:self.domain.report(self.w,self.token,r['id'])
+            self.assertEqual(report.exception.status,404)
+
+    def test_25_missing_schema_availability_does_not_weaken_operation_guards(self):
+        # Disposable database only. The product availability check uses to_regclass, never DDL.
+        with admin() as db:db.execute('ALTER TABLE public.pr_workflow_recipe_runs RENAME TO pr_workflow_recipe_runs_probe')
+        try:
+            self.assertEqual(self.domain.list(self.w,self.token),{'available':False})
+            with self.assertRaises(AlphaError) as write:self.domain.save(self.w,self.token,{'settings':{},'expectedVersion':None})
+            self.assertEqual(write.exception.status,503)
+            with self.assertRaises(AlphaError) as report:self.domain.report(self.w,self.token,uuid.uuid4().hex)
+            self.assertEqual(report.exception.status,503)
+        finally:
+            with admin() as db:db.execute('ALTER TABLE public.pr_workflow_recipe_runs_probe RENAME TO pr_workflow_recipe_runs')
+
     def test_01_explicit_policy_binds_version_template_and_no_permission_expansion(self):
         before=self.domain.list(self.w,self.token)['permissionToken'];r=self.recipe()
         after=self.domain.list(self.w,self.token)

@@ -13,6 +13,14 @@ class RecipeRules(unittest.TestCase):
     def settings(self, **extra):
         return dict(templateId='library_review', expiresAt=time.time()+86400, **extra)
 
+    def test_schema_probe_is_read_only_and_missing_tables_fail_closed(self):
+        from postriff_phase2.workflow_recipes.service import schema_available, ready
+        cur=Mock();cur.fetchone.return_value=('recipes',None,'policies')
+        self.assertFalse(schema_available(cur))
+        with self.assertRaises(AlphaError) as unavailable:ready(cur)
+        self.assertEqual(unavailable.exception.status,503)
+        self.assertTrue(all(call.args[0].startswith('SELECT to_regclass') for call in cur.execute.call_args_list))
+
     def test_only_server_owned_free_templates(self):
         for extra in ({'templateId':'publish'}, {'steps':['send']}, {'usdMicroPerDay':1}, {'usdMicroPerDay':False}, {'actionsPerDay':True}, {'actionsTotal':51}):
             body = self.settings(); body.update(extra)
