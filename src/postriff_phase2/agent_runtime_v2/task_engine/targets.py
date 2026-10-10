@@ -6,6 +6,21 @@ from __future__ import annotations
 import json
 
 RESOLVERS: dict = {}
+SOURCE_DOMAINS = {'campaign': 'campaigns', 'draft': 'content', 'job': 'content', 'post': 'content',
+                  'asset': 'library', 'library_asset': 'library', 'library_collection': 'library',
+                  'channel': 'connections', 'automation': 'automations'}
+
+
+def required_domains(refs):
+    """Only typed server-validated provenance adds grants; legacy untyped refs keep their contract."""
+    domains = set()
+    for ref in refs or ():
+        if not isinstance(ref, dict) or not ref.get('type'):
+            continue
+        if ref['type'] not in SOURCE_DOMAINS:
+            raise ValueError('Unknown source domain for a typed task reference')
+        domains.add(SOURCE_DOMAINS[ref['type']])
+    return domains
 
 
 def resolver(kind: str):

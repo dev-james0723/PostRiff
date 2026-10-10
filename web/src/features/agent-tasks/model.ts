@@ -45,6 +45,14 @@ export function receiptVerified(receipt: TaskReceipt): boolean {
   if (receipt.verified !== true || receipt.outcome !== 'applied' || receipt.checks.some((check) => check.ok !== true)) return false;
   return !receipt.providerReceipt || (receipt.providerReceipt.state === 'verified' && Boolean(receipt.providerReceipt.verifiedAt));
 }
+export function changedResourceHref(ref: { type: string; id: string }): string | null {
+  if (!/^[A-Za-z0-9_.:-]{1,120}$/.test(ref.id)) return null;
+  if (ref.type === 'draft') return `/app/queue?view=drafts&draft=${encodeURIComponent(ref.id)}`;
+  if (ref.type === 'source') return `/app/ideas?source=${encodeURIComponent(ref.id)}`;
+  // Library has no asset-query deep link. Its native history exposes the exact changed assets.
+  if (['library_asset', 'library_collection', 'asset'].includes(ref.type)) return '/app/library';
+  return null;
+}
 export function summaryLines(value: Record<string, unknown>): { lines: { label: string; value: string }[]; complete: boolean } {
   const out: { label: string; value: string }[] = [];
   let complete = true;

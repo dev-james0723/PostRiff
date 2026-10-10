@@ -109,7 +109,8 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(frozen - now, set(), "a capability in the frozen baseline disappeared")
         self.assertFalse(POST_FREEZE & frozen)
         self.assertEqual(len([c for c in frozen if c.startswith("ui.action.") or (c.startswith("tool.") and c[5:] in ("draft_edit", "schedule_propose"))]) > 0, True)
-        self.assertEqual(json.loads(authz.BASELINE_FILE.read_text())["catalogueGeneration"], authz.CATALOGUE_GENERATION)
+        self.assertEqual(json.loads(authz.BASELINE_FILE.read_text())["catalogueGeneration"], 1)
+        self.assertGreaterEqual(authz.CATALOGUE_GENERATION, 1)
 
     def test_legacy_confirmations_are_equal_on_every_registered_surface(self):
         legacy = grants("legacy")

@@ -70,4 +70,4 @@ def engine_block(runtime, cur, workspace_id: str, task_id: str, principal: str, 
     task = store.load_task(cur, workspace_id, task_id)
     if task is None:
         return {"state": "untracked"}
-    return views.engine_block(cur, task, principal, member)
+    return views.engine_block(cur, task, principal, member, config=getattr(runtime, "cfg", None))

@@ -691,6 +691,7 @@ def ensure_registered() -> None:
     """Import side effects in one place (the registry is filled at import), then optional extensions if installed."""
     import importlib
     from . import creative, library_browse, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, library_browse, weather_now, skills_list, web_research)
+    from .task_engine import library_tools  # noqa: F401 — receipt-only, no model scope
     from .tool_adapter import register_site_tools
     register_site_tools()
     for name in EXTENSION_MODULES:

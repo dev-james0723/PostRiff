@@ -562,6 +562,24 @@ class TaskEnginePG(unittest.TestCase):
         self.assertTrue(result['verified'])
         with connect() as db:self.assertEqual(db.execute('SELECT enabled,revision FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s',(self.w,saved['watch_id'])).fetchone(),(False,2))
 
+    def _library_fixture(self, mode='assist'):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions
+        from postriff_phase2.library_metadata import LibraryMetadataChanges
+        with connect() as db:
+            db.execute((ROOT/'migrations/postriff/112_library_metadata_changes.sql').read_text())
+            ident=uuid.uuid4().hex
+            db.execute("INSERT INTO public.pr_library_assets(id,workspace_id,created_by,original_filename,display_title,title_source,tags,kind,mime,extension,bytes,bucket,object_name,processing_status,provenance) VALUES(%s,%s,%s,'original.txt','Before','generated',ARRAY['old'],'document','text/plain','txt',1,'test',%s,'ready','{}')",(ident,self.w,A,ident+'.txt'))
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            epoch=agent_permissions.load(cur,self.w,A,now=time.time()).user_epoch
+            agent_permissions.apply_decision(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                payload={'preset':'custom','scopes':{'capability:tool.library_metadata_apply':mode,'domain:library':True},'expectedEpoch':epoch,'consentVersion':agent_permissions.CONSENT_VERSION,
+                         'copyDigest':agent_permissions.COPY_DIGEST,'confirmed':True,'source':'settings','idempotencyKey':'library-grant-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+        domain=LibraryMetadataChanges(self.service.library)
+        preview=domain.preview(self.w,OWNER,{'changes':[{'assetId':ident,'changes':{'title':'After','tags':['new']}}]})
+        task=self.create([{'label':'Reviewed Library details','kind':'tool','capabilityId':'library_metadata_apply','inputs':{'receiptId':preview['receiptId']}}])
+        runtime=SimpleNamespace(service=self.service,cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on'),clock=time.time)
+        return ident,preview,task,runtime,domain
+
     def test_35_paid_provider_revocation_settles_without_saving_derived_asset(self):
         from postriff_phase2.agent_runtime_v2 import agent_permissions
         from postriff_phase2.agent_runtime_v2.task_engine import approvals
@@ -600,5 +618,222 @@ class TaskEnginePG(unittest.TestCase):
             state,receipt=db.execute('SELECT state,result FROM public.pr_agent_receipts WHERE task_id=%s',(t['taskId'],)).fetchone()
             self.assertEqual(state,'done');self.assertEqual(receipt['cannotRecall'],['sent_to_provider']);self.assertEqual(receipt['costState'],'known')
             self.assertEqual(receipt['changedRefs'],[])
+
+    def test_36_library_atomic_receipt_replay_and_shared_inverse(self):
+        from postriff_phase2.agent_runtime_v2 import tool_adapter
+        ident,preview,t,runtime,domain=self._library_fixture();c=self.claim(t)
+        with store.service_tx(self.service,self.w) as cur:member=authz_seam.membership(cur,self.w,A)
+        ctx=executor._context(runtime,c,token=OWNER,service=self.service,member=member,seconds_left=240)
+        tool=tool_adapter.REGISTRY['library_metadata_apply'];args={'receiptId':preview['receiptId']}
+        first=tool_adapter.execute(ctx,tool,args,agent='task_engine');self.assertTrue(first.get('verified'),first)
+        again=tool_adapter.execute(ctx,tool,args,agent='task_engine');self.assertTrue(again.get('replayed'),again)
+        executor.finish(runtime,c,first,ctx=ctx)
+        with connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0],1)
+            compensation_id=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+        undone=actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',{'compensationId':compensation_id,'idempotencyKey':'library-undo-'+uuid.uuid4().hex})
+        self.assertTrue(undone['verified'])
+        with connect() as db:self.assertEqual(db.execute('SELECT display_title,tags FROM public.pr_library_assets WHERE id=%s',(ident,)).fetchone(),('Before',['old']))
+        self.assertEqual(domain.read(self.w,OWNER,preview['receiptId'])['status'],'undone')
+
+    def test_37_library_approval_shows_exact_prepared_diff_and_rejects_drift(self):
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals
+        ident,preview,t,runtime,domain=self._library_fixture('ask')
+        with store.service_tx(self.service,self.w) as cur:
+            claimed=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=A,task_id=t['taskId'],seconds_left=240,owner='req:'+uuid.uuid4().hex,config=runtime.cfg)
+            self.assertEqual(claimed,'handled');approval=store.approvals_for(cur,self.w,t['taskId'])[0]
+            self.assertEqual(approval['summary']['libraryChanges']['entries'],[{**e,'changedFields':sorted(e['changedFields'])} for e in preview['entries']])
+            self.assertEqual(approval['summary']['libraryChanges']['expiresAt'],preview['expiresAt'])
+        with connect() as db:db.execute("UPDATE public.pr_library_assets SET display_title='Intervening edit' WHERE id=%s",(ident,))
+        with self.assertRaises(AlphaError) as error:
+            approvals.resolve_approval(runtime,self.w,OWNER,approval['approvalId'],{'decision':'approve','digest':approval['digest'],'idempotencyKey':'library-drift-'+uuid.uuid4().hex})
+        self.assertEqual(error.exception.code,'approval_stale')
+        with connect() as db:self.assertEqual(db.execute('SELECT status FROM public.pr_library_metadata_changes WHERE id=%s',(preview['receiptId'],)).fetchone()[0],'prepared')
+
+    def test_38_library_undo_refuses_revoked_role_and_later_metadata(self):
+        ident,preview,t,runtime,_domain=self._library_fixture();c=self.claim(t)
+        result=executor.execute(runtime,c,token=OWNER,return_result=True);self.assertTrue(result.get('verified'),result)
+        with connect() as db:
+            compensation_id=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+            db.execute("UPDATE public.pr_memberships SET role='viewer' WHERE workspace_id=%s AND user_id=%s",(self.w,A))
+        body={'compensationId':compensation_id,'idempotencyKey':'library-revoke-'+uuid.uuid4().hex}
+        try:
+            with self.assertRaises(AlphaError) as error:actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',body)
+            self.assertEqual(error.exception.status,403)
+        finally:
+            with connect() as db:db.execute("UPDATE public.pr_memberships SET role='owner' WHERE workspace_id=%s AND user_id=%s",(self.w,A))
+        with connect() as db:db.execute("UPDATE public.pr_library_assets SET display_title='Keep later edit' WHERE id=%s",(ident,))
+        with self.assertRaises(AlphaError) as error:actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',body)
+        self.assertEqual(error.exception.code,'undo_conflict')
+
+    def test_39_library_receipt_rejects_other_creator_and_unbound_calls(self):
+        from postriff_phase2.agent_runtime_v2.task_engine import library_tools
+        ident,preview,t,runtime,domain=self._library_fixture()
+        with store.service_tx(self.service,self.w) as cur:
+            with self.assertRaises(AlphaError):domain.prepared_in(cur,self.w,B,preview['receiptId'])
+        with self.assertRaises(AlphaError):library_tools.apply(SimpleNamespace(step_binding=None),{'receiptId':preview['receiptId']})
+        with connect() as db:self.assertEqual(db.execute('SELECT display_title FROM public.pr_library_assets WHERE id=%s',(ident,)).fetchone()[0],'Before')
+
+    def test_40_library_exact_approval_consumes_once(self):
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals
+        ident,preview,t,runtime,domain=self._library_fixture('ask')
+        with store.service_tx(self.service,self.w) as cur:
+            self.assertEqual(executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=A,task_id=t['taskId'],seconds_left=240,
+                owner='req:'+uuid.uuid4().hex,config=runtime.cfg),'handled')
+            approval=store.approvals_for(cur,self.w,t['taskId'])[0]
+        body={'decision':'approve','digest':approval['digest'],'idempotencyKey':'library-approve-'+uuid.uuid4().hex}
+        first=approvals.resolve_approval(runtime,self.w,OWNER,approval['approvalId'],body)
+        self.assertEqual(first['resumed'],'inline',first)
+        self.assertTrue(approvals.resolve_approval(runtime,self.w,OWNER,approval['approvalId'],body)['replayed'])
+        self.assertEqual(domain.read(self.w,OWNER,preview['receiptId'])['status'],'applied')
+        with connect() as db:
+            self.assertEqual(db.execute('SELECT state,verified FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)).fetchone(),('completed',True))
+            self.assertEqual(db.execute('SELECT state FROM public.pr_agent_approvals WHERE id=%s',(approval['approvalId'],)).fetchone()[0],'consumed')
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0],1)
+
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            current=store.load_task(cur,self.w,t['taskId'])
+            full=views.full(cur,current,principal,self.service.ideas._member(row),config=runtime.cfg)
+            self.assertTrue(full['steps'][0]['can']['undo'])
+            compensation_id=full['steps'][0]['undo']['compensationId']
+        undo_body={'compensationId':compensation_id,'idempotencyKey':'ask-undo-'+uuid.uuid4().hex}
+        with self.assertRaises(AlphaError):actions.undo(runtime,self.w,EDITOR,t['taskId'],'s1',undo_body)
+        from postriff_phase2.agent_runtime_v2 import authz
+        in_tool=authz.IN_TOOL.set(True)
+        try:
+            with self.assertRaises(AlphaError):actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',undo_body)
+        finally:authz.IN_TOOL.reset(in_tool)
+        undone=actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',undo_body)
+        self.assertTrue(undone['verified']);self.assertEqual(actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',undo_body),undone)
+        self.assertEqual(domain.read(self.w,OWNER,preview['receiptId'])['status'],'undone')
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            full=views.full(cur,store.load_task(cur,self.w,t['taskId']),principal,self.service.ideas._member(row),config=runtime.cfg)
+            self.assertFalse(full['steps'][0]['can']['undo'])
+        with connect() as db:self.assertEqual(db.execute("SELECT count(*) FROM public.pr_agent_receipts WHERE task_id=%s AND effect_key LIKE 'undo:%%'",(t['taskId'],)).fetchone()[0],1)
+
+    def test_41_typed_source_domain_rechecks_at_claim_and_e1_e2(self):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions,authz,tool_adapter
+        cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on')
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            grants=agent_permissions.load(cur,self.w,A)
+            agent_permissions.apply_decision(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                payload={'preset':'custom','scopes':{'category:read_analyze':'assist','domain:campaigns':True},'expectedEpoch':grants.user_epoch,
+                    'consentVersion':agent_permissions.CONSENT_VERSION,'copyDigest':agent_permissions.COPY_DIGEST,'confirmed':True,'source':'settings',
+                    'idempotencyKey':'source-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+            campaign=self.service.ideas._state(row)['raffi']['campaignPlanning']['campaigns'][0]
+        refs=[{'type':'campaign','id':campaign['id'],'revision':campaign['version']}]
+        t=self.create([{'label':'Read campaign-derived brief','kind':'tool','capabilityId':'help_search','inputs':{'query':'test'},'targetRefs':refs}])
+        runtime=SimpleNamespace(service=self.service,cfg=cfg,clock=time.time)
+        with store.service_tx(self.service,self.w) as cur:
+            c=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=A,task_id=t['taskId'],seconds_left=240,owner='req:'+uuid.uuid4().hex,config=cfg)
+            member=authz_seam.membership(cur,self.w,A)
+        self.assertIsInstance(c,executor.Claim)
+        ctx=executor._context(runtime,c,token=OWNER,service=self.service,member=member,seconds_left=240)
+        spec=tool_adapter.REGISTRY['help_search'].spec
+        self.assertEqual(authz.evaluate_tool(ctx,spec,{'query':'test'}).outcome,'allow')
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            agent_permissions.revoke(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                payload={'scopes':['domain:campaigns'],'idempotencyKey':'source-revoke-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+        self.assertEqual(authz.evaluate_tool(ctx,spec,{'query':'test'}).reason,'domain_off')
+        with authz.active_tool(ctx,spec,{'query':'test'}):
+            with self.assertRaises(AlphaError) as error:
+                with ctx.workspace():self.fail('Revoked source reached a work transaction')
+        self.assertEqual(error.exception.code,'agent_permission_revoked')
+        with store.service_tx(self.service,self.w) as cur:
+            verdict=authz.decide_for_step(cur,t,c.step,actor=authz.Actor('agent',A),now=time.time(),config=cfg)
+        self.assertEqual((verdict.verdict,verdict.authz_reason),('deny','domain_off'))
+
+    def _recipe_fixture(self):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions
+        from postriff_phase2.agent_runtime_v2.task_engine import autopilot
+        cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on')
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            epoch=agent_permissions.load(cur,self.w,A).user_epoch
+            receipt=agent_permissions.apply_decision(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                payload={'preset':'custom','scopes':{'category:read_analyze':'assist'},'expectedEpoch':epoch,'consentVersion':agent_permissions.CONSENT_VERSION,
+                    'copyDigest':agent_permissions.COPY_DIGEST,'confirmed':True,'source':'settings','idempotencyKey':'recipe-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+            policies=[]
+            for _ in range(2):
+                cur.execute("INSERT INTO public.pr_agent_autopilot_policies(workspace_id,user_id,capability_ids,constraints,limits,created_epoch,receipt_id,step_up_at,expires_at) "
+                    "VALUES(%s,%s,ARRAY['tool.help_search'],'{}','{\"actionsTotal\":2}',%s,%s,now(),now()+interval '1 hour') RETURNING id::text",
+                    (self.w,A,epoch+1,receipt['id']))
+                policies.append(cur.fetchone()[0])
+            cur.execute("INSERT INTO public.pr_conversations(workspace_id,created_by,title) VALUES(%s,%s,'Recipe policy test') RETURNING id::text",(self.w,A))
+            t,_=store.create_task(cur,self.service.ideas,workspace_id=self.w,conversation_id=cur.fetchone()[0],created_by=A,origin='recipe',title='Recipe test',
+                request_key='recipe-task-'+uuid.uuid4().hex,payload={'recipe':'test'},steps=[{'label':'Read','kind':'tool','capabilityId':'help_search','inputs':{'query':'test'}}],
+                trace_id='trace_'+uuid.uuid4().hex,autonomy_mode='autopilot',autopilot_policy_id=policies[0])
+        autopilot.register_policy_validator(lambda cur,task,step,policy,now:policy)
+        self.addCleanup(autopilot.register_policy_validator,None)
+        return t,policies,cfg
+
+    def test_42_exact_recipe_policy_never_falls_back_between_e1_e2(self):
+        from postriff_phase2.agent_runtime_v2 import authz,tool_adapter
+        t,policies,cfg=self._recipe_fixture()
+        with store.service_tx(self.service,self.w) as cur:
+            c=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=A,task_id=t['taskId'],seconds_left=240,owner='req:'+uuid.uuid4().hex,config=cfg)
+            member=authz_seam.membership(cur,self.w,A)
+        self.assertIsInstance(c,executor.Claim)
+        ctx=executor._context(SimpleNamespace(cfg=cfg,service=self.service,clock=time.time),c,token=OWNER,service=self.service,member=member,seconds_left=240)
+        spec=tool_adapter.REGISTRY['help_search'].spec
+        self.assertEqual(authz.evaluate_tool(ctx,spec,{'query':'test'}).policy_id,policies[0])
+        with connect() as db:db.execute("UPDATE public.pr_agent_autopilot_policies SET revoked_at=now(),revoke_reason='revoked' WHERE id=%s",(policies[0],))
+        with self.assertRaises(AlphaError):authz.evaluate_tool(ctx,spec,{'query':'test'})
+        with authz.active_tool(ctx,spec,{'query':'test'}):
+            with self.assertRaises(AlphaError):
+                with ctx.workspace():self.fail('A different live policy replaced the revoked recipe policy')
+        with store.service_tx(self.service,self.w) as cur:
+            verdict=authz.decide_for_step(cur,t,c.step,actor=authz.Actor('cron',A),now=time.time(),config=cfg)
+        self.assertEqual((verdict.verdict,verdict.authz_reason),('deny','autopilot_not_covered'))
+
+    def test_43_recipe_expired_policy_changed_epoch_and_lost_lease_refuse(self):
+        from postriff_phase2.agent_runtime_v2 import authz,tool_adapter
+        t,policies,cfg=self._recipe_fixture()
+        with store.service_tx(self.service,self.w) as cur:
+            c=executor.claim_next(cur,self.service.ideas,workspace_id=self.w,executor='inline',principal=A,task_id=t['taskId'],seconds_left=240,owner='req:'+uuid.uuid4().hex,config=cfg)
+            member=authz_seam.membership(cur,self.w,A)
+        self.assertIsInstance(c,executor.Claim)
+        ctx=executor._context(SimpleNamespace(cfg=cfg,service=self.service,clock=time.time),c,token=OWNER,service=self.service,member=member,seconds_left=240)
+        spec=tool_adapter.REGISTRY['help_search'].spec
+        with connect() as db:db.execute("UPDATE public.pr_agent_step_attempts SET lease_expires_at=now()-interval '1 second' WHERE id=%s",(c.attempt_id,))
+        with self.assertRaises(AlphaError):authz.evaluate_tool(ctx,spec,{'query':'test'})
+        with connect() as db:db.execute('UPDATE public.pr_agent_permission_state SET epoch=epoch+1 WHERE workspace_id=%s AND user_id=%s',(self.w,A))
+        with store.service_tx(self.service,self.w) as cur:
+            self.assertEqual(authz.decide_for_step(cur,t,c.step,actor=authz.Actor('cron',A),now=time.time(),config=cfg).verdict,'deny')
+        with connect() as db:
+            db.execute('UPDATE public.pr_agent_autopilot_policies SET created_epoch=created_epoch+1,starts_at=now()-interval \'1 day\',expires_at=now()-interval \'1 second\' WHERE id=%s',(policies[0],))
+        with store.service_tx(self.service,self.w) as cur:
+            self.assertEqual(authz.decide_for_step(cur,t,c.step,actor=authz.Actor('cron',A),now=time.time(),config=cfg).verdict,'deny')
+
+
+    def test_44_undo_shared_eligibility_rejects_expiry_revocation_generation_and_unverified(self):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions
+        for failure in ('window','native_window','revoked','generation','unverified'):
+            with self.subTest(failure=failure):
+                ident,preview,t,runtime,domain=self._library_fixture()
+                result=executor.execute(runtime,self.claim(t),token=OWNER,return_result=True)
+                self.assertTrue(result.get('verified'),result)
+                with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+                    grants=agent_permissions.load(cur,self.w,A)
+                    agent_permissions.apply_decision(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                        payload={'preset':'custom','scopes':{'capability:tool.library_metadata_apply':'ask','domain:library':True},'expectedEpoch':grants.user_epoch,
+                            'consentVersion':agent_permissions.CONSENT_VERSION,'copyDigest':agent_permissions.COPY_DIGEST,'confirmed':True,'source':'settings',
+                            'idempotencyKey':'undo-ask-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+                with connect() as db:
+                    comp=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+                    if failure=='window':db.execute("UPDATE public.pr_agent_compensations SET undo_until=now()-interval '1 second' WHERE id=%s",(comp,))
+                    if failure=='native_window':db.execute("UPDATE public.pr_library_metadata_changes SET undo_expires_at=now()-interval '1 second' WHERE id=%s",(preview['receiptId'],))
+                    if failure=='generation':db.execute('UPDATE public.pr_agent_steps SET generation=generation+1 WHERE task_id=%s',(t['taskId'],))
+                    if failure=='unverified':db.execute('UPDATE public.pr_agent_receipts SET verified=false WHERE task_id=%s',(t['taskId'],))
+                if failure=='revoked':
+                    with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+                        agent_permissions.revoke(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                            payload={'scopes':['domain:library'],'idempotencyKey':'undo-revoke-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+                with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+                    full=views.full(cur,store.load_task(cur,self.w,t['taskId']),principal,self.service.ideas._member(row),config=runtime.cfg)
+                    self.assertFalse(full['steps'][0]['can']['undo'],failure)
+                with self.assertRaises(AlphaError):actions.undo(runtime,self.w,OWNER,t['taskId'],'s1',{'compensationId':comp,'idempotencyKey':'refuse-'+uuid.uuid4().hex})
+                with connect() as db:
+                    self.assertEqual(db.execute('SELECT display_title FROM public.pr_library_assets WHERE id=%s',(ident,)).fetchone()[0],'After')
+                    self.assertEqual(db.execute("SELECT count(*) FROM public.pr_agent_receipts WHERE task_id=%s AND effect_key LIKE 'undo:%%'",(t['taskId'],)).fetchone()[0],0)
 
 if __name__=='__main__':unittest.main(verbosity=2)

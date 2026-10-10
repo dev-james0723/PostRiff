@@ -43,6 +43,11 @@ def request_approval(cur, ideas, task: dict, step: dict, verdict: authz_seam.Ste
     if kind == "spend" and isinstance(spend_limit, int) and spend_limit > 0:
         summary["budgetCeilingUsdMicro"] = spend_limit
         summary["what"] = "increase_task_spending_limit"
+    expires_at = None
+    if subject['capabilityId'] == 'library_metadata_apply':
+        from .library_tools import approval_preview
+        summary['libraryChanges'] = approval_preview(cur, ideas, task, subject)
+        expires_at = summary['libraryChanges']['expiresAt']
     approval_id = store.insert_approval(
         cur, task=task, step=step, kind=kind, risk=risk, confirmation="approval_step_up" if step_up else "native", digest=digest, summary=summary,
         required_permission=(verdict.required_permission if verdict and verdict.required_permission in ("edit", "approve", "owner") else "edit"),
@@ -50,7 +55,7 @@ def request_approval(cur, ideas, task: dict, step: dict, verdict: authz_seam.Ste
         authz_token=(verdict.token if verdict else task["authzToken"]),
         ttl_seconds=model.STEP_UP_APPROVAL_TTL_SECONDS if step_up else model.APPROVAL_TTL_SECONDS,
         capability_id=subject["capabilityId"], input_digest=subject["inputDigest"], inputs=subject["inputs"] or {}, target_refs=subject["targetRefs"],
-        trace_id=trace_id, requires_step_up=step_up)
+        trace_id=trace_id, requires_step_up=step_up, expires_at=expires_at)
     store.set_step(cur, step, state="awaiting_approval", reason_code=None, reason="Waiting for your approval.")
     store.emit(cur, ideas, task, "approval", approvalId=approval_id, stepKey=step["stepKey"], state="pending", approvalKind=kind)
     store.log_event("approval_requested", taskId=task["taskId"], stepKey=step["stepKey"], approvalId=approval_id, kind=kind, traceId=trace_id)
@@ -125,6 +130,16 @@ def _targets_present(cur, task: dict, refs: list) -> bool:
     return targets.all_present(cur, task["workspaceId"], refs)
 
 
+def _prepared_library_present(cur, ideas, task, approval):
+    if approval['capabilityId'] != 'library_metadata_apply':
+        return True
+    from .library_tools import approval_preview
+    try:
+        return approval_preview(cur, ideas, task, approval) == approval['summary'].get('libraryChanges')
+    except AlphaError:
+        return False
+
+
 def validate_payload(payload) -> tuple[str, str, str]:
     if not isinstance(payload, dict) or payload.get("decision") not in _DECISIONS or not isinstance(payload.get("digest"), str):
         raise AlphaError("Send the decision, the digest you saw and an idempotency key.", 400)
@@ -174,7 +189,8 @@ def resolve_approval(runtime, workspace_id: str, token: str, approval_id: str, p
             deferred = errors.error("approval_expired")
         elif digest != approval["digest"]:
             raise errors.error("approval_stale")
-        elif approval["kind"] != "proposal" and not _targets_present(cur, task, approval["targetRefs"]):
+        elif approval["kind"] != "proposal" and (not _targets_present(cur, task, approval["targetRefs"])
+                                                   or not _prepared_library_present(cur, ideas, task, approval)):
             store.close_approval(cur, approval, "revoked", surface="system")
             store.set_step(cur, own, state="blocked", reason_code="target_changed", reason="What this approval was about has changed or moved.")
             store.refresh(cur, ideas, task)

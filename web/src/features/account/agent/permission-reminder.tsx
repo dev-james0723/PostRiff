@@ -49,7 +49,7 @@ function ReminderCard() {
     <p className='text-sm font-medium'>{view.copy.reminder.title}</p>
     <p className='text-muted-foreground text-sm'>{view.copy.reminder.summary}</p>
     <label className='flex min-h-11 items-start gap-3 text-sm'>
-      <input type='radio' name='permission-reminder-preset' checked readOnly className='mt-1 size-4 shrink-0' />
+      <input type='radio' aria-label={view.copy.presets.recommended.title} name='permission-reminder-preset' checked readOnly className='mt-1 size-4 shrink-0' />
       <span><strong>{view.copy.presets.recommended.title}</strong><br />{view.copy.presets.recommended.summary}</span>
     </label>
     {view.mode === 'shadow' && <p className='text-muted-foreground text-sm'>{view.copy.shadow}</p>}

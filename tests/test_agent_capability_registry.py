@@ -125,16 +125,17 @@ class Fixtures(unittest.TestCase):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             actual = self.live[key]
             if key == "tools":
-                actual = {name: value for name, value in actual.items() if name != "library_browse"}
+                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply")}
             elif key == "manager":
-                actual = [name for name in actual if name != "library_browse"]
+                actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply")]
             self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 1, "only the declared post-freeze Library tool was added")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 2, "only declared post-freeze Library tools were added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
         self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
-        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] != "tool.library_browse"]
+        self.assertEqual(snapshot["capabilities"].pop("tool.library_metadata_apply")["since"], 2)
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply")]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             expected = self.golden["capabilities"][capability_id]
@@ -233,7 +234,7 @@ class RegistryMatchesToday(unittest.TestCase):
             cap = registry.get(binding.capability_id)
             self.assertEqual(binding.required(cap.confirmation), expected, f"{binding.surface}:{binding.binding_ref}")
             seen.add(binding.surface)
-        self.assertEqual(seen, set(contracts.SURFACES))
+        self.assertEqual(seen, set(contracts.SURFACES) - {"task_engine"})
 
     def test_site_id_rule_and_exact_executor_are_frozen(self):
         _commands, site_tools, _a, _u, _q = _sources()

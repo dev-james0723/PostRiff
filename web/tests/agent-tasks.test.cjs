@@ -17,6 +17,13 @@ test('Queued provider work is never presented as verified publication', () => {
   assert.equal(model.receiptVerified({ ...receipt, providerReceipt: null, checks: [{ name: 'saved', ok: false }] }), false);
   assert.equal(model.receiptVerified({ ...receipt, providerReceipt: null, verified: null }), false);
 });
+test('Changed resources open supported native destinations without inventing asset deep links', () => {
+  assert.equal(model.changedResourceHref({ type: 'library_asset', id: 'abc123' }), '/app/library');
+  assert.equal(model.changedResourceHref({ type: 'draft', id: 'draft-1' }), '/app/queue?view=drafts&draft=draft-1');
+  assert.equal(model.changedResourceHref({ type: 'source', id: 'source-1' }), '/app/ideas?source=source-1');
+  assert.equal(model.changedResourceHref({ type: 'library_asset', id: '../private' }), null);
+  assert.equal(model.changedResourceHref({ type: 'unknown', id: 'safe' }), null);
+});
 test('Approval preview preserves long text and marks omitted or empty summaries incomplete', () => {
   const body = 'x'.repeat(12000);
   const full = model.summaryLines({ platform: 'Threads', body, targets: [{ account: 'creator', quantity: 3 }], empty: null });

@@ -22,6 +22,7 @@ class Inverse:
     image: Callable[[dict, str, str], object]                     # (workspace state, target_type, target_id) -> what the digest covers
     cursor_image: Callable | None = None                         # (cursor, workspace_id, target_id) -> current relational image
     apply_in: Callable | None = None                             # (runtime, cursor, workspace_id, principal, inputs, effect_key)
+    validate_in: Callable | None = None                          # read-only current domain Undo eligibility, or raise
 
 
 INVERSES: dict[str, Inverse] = {}

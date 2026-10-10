@@ -2,7 +2,7 @@
 name: postriff-security-and-approval
 description: Use when reviewing campaign permissions, freezing an exact approval manifest, checking route freshness, cancelling pending jobs, or handling identity and credential incidents.
 metadata:
-  version: 1.3.0
+  version: 1.3.1
 ---
 
 # Campaign security and approval

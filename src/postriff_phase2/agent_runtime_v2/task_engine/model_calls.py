@@ -75,6 +75,7 @@ def dispatch(ctx, tool, args):
         if evidence:
             executor.consume_approval(cur,evidence)
     bound = copy.copy(ctx)
+    bound.authz_target_refs = copy.deepcopy(subject['targetRefs'])
     bound.step_binding = {"taskId":task["taskId"],"stepId":step["stepId"],"stepKey":step["stepKey"],"effectKey":key,
                           "attemptId":aid,"attemptNo":attempt_no,"leaseOwner":owner,"inputDigest":digest,"workspaceId":ctx.workspace_id,
                           "principal":ctx.principal,"traceId":ctx.trace_id,"modelCall":True,"capabilityId":tool.name,"riskClass":subject["riskClass"],"inputs":clean,"approvalId":(evidence or {}).get("approvalId")}
