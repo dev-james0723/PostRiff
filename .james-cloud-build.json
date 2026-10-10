@@ -8,9 +8,9 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:jcb",
-    "ci": "ci:youtube:jcb",
-    "e2e": "ci:youtube:frontend:jcb"
+    "test": "test:meta:jcb",
+    "ci": "ci:meta:jcb",
+    "e2e": "ci:meta:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",

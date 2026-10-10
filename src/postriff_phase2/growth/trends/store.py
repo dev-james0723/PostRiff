@@ -106,9 +106,10 @@ def aggregate_payload(payload):
 
 
 class TrendStore:
-    def __init__(self, connection_factory, *, offline_replay=False):
+    def __init__(self, connection_factory, *, offline_replay=False, meta_vault=None):
         self.connection_factory = connection_factory
         self.offline_replay = offline_replay
+        self.meta_vault = meta_vault
 
     @contextmanager
     def transaction(self, cursor=None):
@@ -205,6 +206,18 @@ class TrendStore:
             or not instant(p['contract_start']) <= instant(at) < instant(p['contract_end'])
             or permission not in p['contract_operations'] or not permits(p['rights'],permission,scope_key,at)):
             raise TrendStorageError('source_policy_denied')
+        if (provider_id,p['manifest'].get('operation')) in (('threads','keyword_search'),('instagram','hashtag_discovery'),('facebook','page_public_posts')):
+            # Hold custody locks through the caller's transaction, including JEV
+            # pre-egress checks. OAuth revocation cannot race an admitted result.
+            cur.execute('''SELECT postriff_private.trend_meta_authorization_valid(a.authorization_id) AS valid
+                FROM public.pr_trend_meta_authorizations a JOIN public.pr_encrypted_credentials c
+                USING(workspace_id,connection_id) WHERE a.authorization_id::text=%s
+                AND 'workspace:'||a.workspace_id::text=%s AND a.provider_id=%s
+                AND a.source_policy_version=%s FOR SHARE OF a,c''',
+                (p['manifest'].get('meta_authorization_id'),scope_key,provider_id,version))
+            grant=row(cur)
+            if not grant or grant['valid'] is not True:
+                raise TrendStorageError('meta_public_authorization_unavailable')
         if not self.offline_replay:
             available = max(instant(p['available_at']),instant(p['contract_available_at']))
             if available>instant(at):
@@ -235,8 +248,19 @@ class TrendStore:
                 if cur.fetchone():
                     raise TrendStorageError('author_deleted')
             from .providers.registry import contract_runtime_version
-            if contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {}) != o['provider_contract_version']:
+            runtime = contract_runtime_version(p['provider_contract_version'], p.get('contract_manifest') or {})
+            if runtime != o['provider_contract_version']:
                 raise TrendStorageError('provider_contract_mismatch')
+            # Keep the same renewal contract as PR139: durable rows reference the
+            # reviewed contract; immutable runtime protocol remains provenance.
+            o['provider_contract_version'] = p['provider_contract_version']
+            if runtime != p['provider_contract_version']:
+                o['provenance'] = {**o['provenance'], 'runtime_protocol': runtime}
+            if (o['provider_id'],p['manifest'].get('operation')) in (('threads','keyword_search'),('instagram','hashtag_discovery'),('facebook','page_public_posts')):
+                cur.execute('SELECT postriff_private.trend_meta_observation_valid(%s,%s,%s,%s) AS valid',
+                    (o['scope_key'],o['provider_id'],o['source_policy_version'],bounded_json(o['provenance'])))
+                if row(cur)['valid'] is not True:
+                    raise TrendStorageError('meta_public_authorization_unavailable')
             if not permits(o['rights'],'retrieve',o['scope_key'],now):
                 raise TrendStorageError('source_right_not_permitted')
             permission = 'store_metrics' if o['kind']=='aggregate_metric' else 'store_raw' if o['payload'].get('text') else 'retrieve'

@@ -1,0 +1,54 @@
+{
+  "checked_at": "2026-10-10T14:26:49.944Z",
+  "execution": "read-only baseline; Meta candidate not deployed",
+  "deployment": {
+    "id": "dpl_DQ1JAkCZpG1cptQXcW3VwiBXTq63",
+    "name": "postriff-phase2-private",
+    "url": "postriff-phase2-private-5to6qkv6c-jamesau0723-6572s-projects.vercel.app",
+    "type": "LAMBDAS",
+    "state": "READY",
+    "createdAt": 1791641364077,
+    "creator": {
+      "uid": "ec4oryASfKgevRj8ZxZaxoLF",
+      "username": "jamesau0723-6572"
+    },
+    "project": {
+      "id": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+      "name": "postriff-phase2-private",
+      "framework": null
+    },
+    "meta": {
+      "githubCommitRef": "consumer-saas",
+      "githubCommitSha": "4f261246638ba07e561701397ee8f504f47279ac",
+      "githubCommitMessage": "Merge pull request #163 from dev-james0723/claude/rafii-capability-registry-20261010\n\nAgent capability registry CF-1: one authority for every tool and GenUI action (no behaviour change)",
+      "githubRepo": "PostRiff",
+      "githubOrg": "dev-james0723"
+    },
+    "alias": [
+      "rafii.io",
+      "postriff-phase2-private.vercel.app",
+      "www.rafii.io",
+      "postriff-phase2-private-jamesau0723-6572s-projects.vercel.app",
+      "postriff-phase2-private-git-c-a436d2-jamesau0723-6572s-projects.vercel.app"
+    ],
+    "target": "production",
+    "regions": [
+      "iad1"
+    ],
+    "buildingAt": 1791641365481,
+    "ready": 1791641505107,
+    "readyState": "READY",
+    "source": "git",
+    "aliasError": null
+  },
+  "health": {
+    "status": 200,
+    "configured": true,
+    "sourceRevision": "4f261246638ba07e561701397ee8f504f47279ac",
+    "execution": "phase2-hosted-candidate",
+    "customerValidated": false
+  },
+  "sign_in": {
+    "status": 200
+  }
+}

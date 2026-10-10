@@ -25,6 +25,14 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         # Every static path is resolved before /{trend_id}.
         if not tail and method == "GET":
             data = service.list(workspace_id, token, q)
+        elif tail == ["public-sources"] and method == "GET":
+            if q: raise error("invalid_request",400)
+            from . import meta_sources
+            data=meta_sources.read(service,workspace_id,token)
+        elif len(tail)==2 and tail[0]=="public-sources" and method=="DELETE":
+            if q: raise error("invalid_request",400)
+            from . import meta_sources
+            data=meta_sources.revoke(service,workspace_id,token,tail[1])
         elif tail in (["methodology"], ["calibration"], ["language-patterns"]) and method == "GET":
             if q:
                 raise error("invalid_request", 400)
@@ -98,7 +106,7 @@ def handle(app, environ, start_response, service, workspace_id, token, method, t
         elif tail == ["refreshes"] and method == "POST":
             body()
             data = service.gated_mutation(workspace_id, token, "PROVIDER_OPERATIONS")
-        elif tail and tail[0] in {"generation-jobs", "methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts"}:
+        elif tail and tail[0] in {"public-sources", "generation-jobs", "methodology", "calibration", "language-patterns", "watches", "opportunities", "opportunity-lab", "refreshes", "exposures", "learning", "media", "forecasts"}:
             raise error("not_found", 404)
         elif len(tail) == 1 and method == "GET":
             data = service.get(workspace_id, token, tail[0])

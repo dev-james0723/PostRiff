@@ -125,6 +125,17 @@ async function run() {
           assert.match(req.headers().authorization, /^Bearer dev:/);
           assert.equal(req.headers()['x-postriff-request'], 'founder-alpha');
           const endpoint = pathname.slice(root.length);
+          if (endpoint === '/public-sources' && req.method() === 'GET') {
+            return send(f.envelope([
+              ['instagram','hashtag_discovery','Instagram hashtags'],
+              ['threads','keyword_search','Threads keywords'],
+              ['facebook','page_public_posts','Facebook public Pages']
+            ].map(([provider,operation,label]) => ({provider,operation,label,
+              status:'APP_REVIEW_REQUIRED',authorization_id:null,latest_successful_read:null,
+              expires_at:null,dispatch_enabled:false,
+              coverage:'Selected hashtags, queries or reviewed Pages only. Not all public posts.',
+              semantic_evaluation:'Requires current source rights, workspace consent and model budget.'}))));
+          }
           if (endpoint === '' && req.method() === 'GET') {
             if (scenario === 'loading') await new Promise((r) => setTimeout(r, 700));
             if (scenario === 'unavailable')
@@ -354,6 +365,21 @@ async function run() {
         record(width + ' browse stored data only, authenticated contract');
         await noOverflow(page, width + ' radar');
         await axe(page, width + ' radar');
+        if (process.env.TREND_META_SMOKE_ONLY === '1') {
+          const sources = page.getByRole('region', {name:'Public discovery sources'});
+          await sources.locator('summary').click();
+          await sources.getByText('Instagram hashtags', {exact:true}).waitFor();
+          assert.equal(await sources.getByText('Public access approval required', {exact:true}).count(),3);
+          assert.equal(await sources.getByText('No verified third-party public reading.', {exact:true}).count(),3);
+          assert.equal(await sources.getByText('Live within this source scope', {exact:true}).count(),0);
+          assert.equal(calls.some(c => c.path.includes('/public-sources') && c.method !== 'GET'),false);
+          await noOverflow(page,width+' Meta public sources');
+          await axe(page,width+' Meta public sources');
+          assert.deepEqual(errors,[],'No browser runtime errors');
+          await page.screenshot({path:path.join(out,`meta-public-${width}.png`),fullPage:true});
+          record(width+' explicit synthetic pending Meta source UI');
+          continue;
+        }
         if (process.env.TREND_GROWTH_BETA_SMOKE_ONLY === '1') {
           await visibleText(page, 'Source coverage is limited; live discovery is not verified.');
           assert.deepEqual(errors, [], 'browser runtime errors');

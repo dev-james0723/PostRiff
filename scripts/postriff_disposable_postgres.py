@@ -53,7 +53,10 @@ def main(scripts: list[str]) -> int:
     version = subprocess.run([str(PG / "postgres"), "--version"], check=True, capture_output=True, text=True).stdout.strip()
     dsn = f"host=127.0.0.1 port={PORT} dbname=postgres user={USER}"
     test_env = {**os.environ, "PGUSER": USER, "PGHOST": "127.0.0.1", "PGPORT": str(PORT), "PGDATABASE": "postgres",
-                "PGPASSFILE": os.devnull, "PGSERVICEFILE": os.devnull, "POSTRIFF_TEST_DSN": dsn, "POSTRIFF_RESEARCH": "0"}
+                "PGPASSFILE": os.devnull, "POSTRIFF_TEST_DSN": dsn, "POSTRIFF_RESEARCH": "0"}
+    # Explicit DSN only: even an empty PGSERVICE triggers libpq service lookup.
+    for key in ("PGSERVICE", "PGSERVICEFILE", "PGHOSTADDR"):
+        test_env.pop(key, None)
     results = []
     # Runner temp roots may be private to root; /tmp lets the dropped server UID
     # traverse to its own mode-0700 cluster directory without opening the venv.

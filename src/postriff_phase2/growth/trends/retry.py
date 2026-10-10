@@ -13,7 +13,7 @@ from . import source_health
 from .contracts import ContractError, instant, iso
 from .jobs import TrendJobs
 from .planner import integer
-from .store import row, utcnow
+from .store import row, utcnow, trust_lock
 
 
 @dataclass(frozen=True)
@@ -99,6 +99,11 @@ def fail_attempt(store, claim, *, status=None, headers=None, dispatched,
         max_attempts=claim['max_attempts'], dispatched=dispatched, proven_unbilled=proven_unbilled,
         jitter=jitter, deadline=deadline, base_seconds=base_seconds, ceiling_seconds=ceiling_seconds)
     with store.transaction(cursor) as cur:
+        if status in (401,403) and (claim.get('provider_id'),claim.get('payload',{}).get('operation')) in (
+                ('threads','keyword_search'),('instagram','hashtag_discovery'),('facebook','page_public_posts')):
+            # Known permission failure withdraws public evidence under the same
+            # fence held by JEV pre-egress and result attachment.
+            trust_lock(cur,exclusive=True)
         result = TrendJobs(store).fail(claim, code=decision.code, retry_after_seconds=decision.delay_seconds,
                                      proven_unbilled=not dispatched or proven_unbilled, cursor=cur)
         if claim.get('provider_id'):
@@ -111,8 +116,15 @@ def fail_attempt(store, claim, *, status=None, headers=None, dispatched,
             prior = row(cur)
             if prior and prior['status'] == 'revoked':
                 return {'job': result, 'decision': decision}
+            # Provider cooldown outlives a terminal job's attempt budget. Otherwise
+            # a new scheduled job can immediately repeat a rate-limited request.
+            health_delay = decision.delay_seconds
+            if status == 429:
+                health_delay = max(health_delay or 0, retry_after(headers, now=now) or base_seconds)
+            if prior and prior.get('next_allowed_at'):
+                health_delay = max(health_delay or 0, math.ceil((instant(prior['next_allowed_at'])-instant(now)).total_seconds()))
             source_health.record(store, claim['scope_key'], claim['provider_id'],
                 status='revoked' if decision.pause else 'unavailable', reason_code=decision.code,
-                observed_at=now, next_allowed_at=iso(instant(now) + timedelta(seconds=decision.delay_seconds))
-                if decision.delay_seconds is not None else None, cursor=cur)
+                observed_at=now, next_allowed_at=iso(instant(now) + timedelta(seconds=health_delay))
+                if health_delay is not None else None, cursor=cur)
         return {'job': result, 'decision': decision}

@@ -14,6 +14,7 @@ from .contracts import ContractError, canonical, digest, instant, iso
 from .jobs import TrendJobs, micro_usd
 from .policy import SourcePolicy, admit
 from .providers.registry import contract_runtime_version
+from .providers.base import monetary
 from .store import row, rows, utcnow
 
 
@@ -81,13 +82,15 @@ class FrontierPlanner:
         if (canonical(asdict(current)) != canonical(asdict(policy))
                 or runtime_version != cap.version):
             raise ContractError('planner_contract_mismatch')
+        if hasattr(_adapter, 'assert_current'):
+            _adapter.assert_current(policy, at, cursor=cur)
         if controls['seconds'] > cap.timeout_seconds:
             raise ContractError('schedule_timeout_exceeded')
         admit(cap, current, at=at, requested_scope=scope_key,
               enabled=config.dispatch_allowed(provider_id, current.operation, self.values),
               item_limit=controls['max_items'], byte_limit=cap.max_response_bytes,
               reservation_microusd=controls['reservation_microusd'], entitlement_current=True,
-              billable=cap.billable_unit != 'unmetered_live_bytes_bounded')
+              billable=monetary(cap))
         cur.execute('SELECT * FROM public.pr_trend_source_health WHERE scope_key=%s AND provider_id=%s FOR SHARE',
                     (scope_key, provider_id))
         health = row(cur)

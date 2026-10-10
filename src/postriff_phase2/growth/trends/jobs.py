@@ -316,6 +316,24 @@ class TrendJobs:
             cur.execute("UPDATE public.pr_trend_jobs SET state='succeeded',payload='{}',lease_until=NULL,lease_owner=NULL WHERE scope_key=%s AND job_id=%s",(job['scope_key'],job['job_id']))
             return {'batch_key':batch_key,'generation':expected_generation+1,'item_count':len(observations),'cost_state':'known' if actual_micro_usd is not None else 'unknown'}
 
+    def defer_local(self, claim, *, code, delay_seconds=60, cursor=None):
+        """Return a proven pre-HTTP capacity denial without consuming an attempt.
+
+        Caller owns the trusted transport boundary. Never use after any I/O.
+        A new lease generation/reservation is required for the next attempt.
+        """
+        if code != 'meta_provider_quota_exhausted' or type(delay_seconds) is not int or not 1 <= delay_seconds <= 86400:
+            raise TrendStorageError('invalid_local_deferral')
+        with self.store.transaction(cursor) as cur:
+            job = self._fence(cur, claim, revalidate_policy=False)
+            if job['reservation_id']:
+                self._abandon_reservation(job['scope_key'],job['reservation_id'],proven_unbilled=True,cursor=cur)
+            cur.execute("""UPDATE public.pr_trend_jobs SET state='retry_wait',attempts=greatest(0,attempts-1),
+                error_code=%s,due_at=clock_timestamp()+%s*interval '1 second',lease_owner=NULL,lease_until=NULL,
+                reservation_id=NULL WHERE scope_key=%s AND job_id=%s RETURNING *""",
+                (code,delay_seconds,job['scope_key'],job['job_id']))
+            return row(cur)
+
     def fail(self, claim, *, code, retry_after_seconds=None, proven_unbilled=False, cursor=None):
         if not code.replace('_','').isalnum() or len(code)>80:
             raise TrendStorageError('unsafe_error_code')

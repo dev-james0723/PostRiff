@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { publicSourceSchema } from './public-source-types';
 import { ApiError, APP_GUARD_HEADER, type TokenSource } from '@/lib/api/client';
 import {
   envelopeSchema,
@@ -91,6 +92,10 @@ export function createTrendApi(getToken: TokenSource) {
   }
   const seg = encodeURIComponent;
   return {
+    publicSources: (w: string, signal?: AbortSignal) =>
+      request(w, '/public-sources', envelopeSchema(z.array(publicSourceSchema)), signal),
+    revokePublicSource: (w: string, id: string) =>
+      request(w, `/public-sources/${seg(id)}`, envelopeSchema(z.object({ authorization_id: z.string().uuid(), status: z.literal('REVOKED') }).strict()), undefined, 'DELETE'),
     generateAngles: (w: string, id: string, revision: number, key: string) =>
       request(w, `/opportunities/${seg(id)}/angles`, envelopeSchema(angleGenerationSchema), undefined, 'POST', { revision, idempotency_key: key }),
     generationStatus: (w: string, job: string, signal?: AbortSignal) =>

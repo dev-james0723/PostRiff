@@ -34,10 +34,15 @@ def sweep(store, *, limit=100, cursor=None):
         for n in storage_roots:
             cur.execute("UPDATE public.pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",
                 (n['scope_key'],n['node_id']))
+        # Migration110 adds current Meta grant validity; old installations retain
+        # their existing sweep until the additive migration has landed.
+        cur.execute("SELECT to_regprocedure('postriff_private.trend_meta_observation_valid(text,text,text,jsonb)') AS helper")
+        meta_guard = (" OR NOT postriff_private.trend_meta_observation_valid(o.scope_key,o.provider_id,o.source_policy_version,o.provenance)"
+                      if row(cur)['helper'] else '')
         # Prefilter invalid roots once and walk the reverse dependency index.
         # The final predicate is deliberately identical to the original purge
         # authorization: preselection alone can NEVER authorize erasure.
-        cur.execute("""WITH RECURSIVE policy_state AS MATERIALIZED (
+        cur.execute(f"""WITH RECURSIVE policy_state AS MATERIALIZED (
             SELECT p.scope_key,p.provider_id,p.version,p.rights,
                 (NOT sc.enabled OR p.revoked_at IS NOT NULL OR p.expires_at<=clock_timestamp() OR p.valid_from>clock_timestamp()
                  OR p.readiness<>'ready' OR NOT 'retrieve'=ANY(p.operations)
@@ -49,7 +54,7 @@ def sweep(store, *, limit=100, cursor=None):
             JOIN public.pr_trend_scopes sc ON sc.scope_key=p.scope_key), source_state AS MATERIALIZED (
             SELECT o.scope_key,o.observation_id,
                 (o.operation='delete' OR o.purged_at IS NOT NULL OR p.unavailable
-                 OR NOT postriff_private.trend_permits(o.rights,'retrieve',o.scope_key)) AS unavailable
+                 OR NOT postriff_private.trend_permits(o.rights,'retrieve',o.scope_key){meta_guard}) AS unavailable
             FROM public.pr_trend_observations o
             JOIN policy_state p ON(p.scope_key,p.provider_id,p.version)=(o.scope_key,o.provider_id,o.source_policy_version)), roots(scope_key,node_id) AS (
             SELECT n.scope_key,n.node_id FROM public.pr_trend_nodes n JOIN public.pr_trend_scopes s USING(scope_key)
@@ -94,7 +99,7 @@ def sweep(store, *, limit=100, cursor=None):
                 OR (node_kind='frontier_control' AND NOT EXISTS(
                     SELECT 1 FROM public.pr_trend_outbox e JOIN public.pr_trend_jobs j
                     ON(j.scope_key,j.job_id::text)=(e.scope_key,e.payload->>'job_id')
-                    WHERE(e.scope_key,e.node_id)=(n.scope_key,n.node_id) AND j.payload<>'{}'::jsonb)))
+                    WHERE(e.scope_key,e.node_id)=(n.scope_key,n.node_id) AND j.payload<>'{{}}'::jsonb)))
             ORDER BY n.retention_until,n.node_id FOR UPDATE OF n SKIP LOCKED""",(limit,))
         candidates = rows(cur)
         for n in candidates:

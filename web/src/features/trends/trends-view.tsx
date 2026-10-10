@@ -15,6 +15,7 @@ import {
   fieldClass
 } from './present';
 import { Watchlist } from './watches';
+import { PublicSources } from './public-sources';
 import { VisualCollection } from './visual-intelligence';
 import { exposurePage } from './opportunity-exposure';
 import { Disclosure } from './disclosure';
@@ -417,6 +418,7 @@ export function TrendsView() {
           <p className='text-muted-foreground mb-4 text-sm' data-trend-beta-status>
             Beta · Stored conversations. Source coverage is limited; live discovery is not verified.
           </p>
+          <PublicSources />
           <RadarResults key={w} />
         </>
       )}

@@ -5,6 +5,7 @@ switch are checked before claiming, immediately before I/O, and at commit.
 Maintenance is independent of rollout switches, including after rollback.
 """
 from __future__ import annotations
+from .providers.base import monetary
 
 from dataclasses import fields
 from decimal import Decimal
@@ -24,6 +25,8 @@ from . import quarantine
 from .policy import SourcePolicy, admit
 from .providers.base import Batch
 from .providers.registry import ProviderRegistry, contract_runtime_version
+from .providers.meta_runtime import MetaCollector
+from .providers.meta_public import MetaTransportError
 from .store import TrendStore, row, rows, utcnow
 
 LOG = logging.getLogger('postriff.trends')
@@ -72,7 +75,7 @@ def configured_registry(store):
                     and contract_manifest.get('billable_unit') == bluesky.CAPABILITY.billable_unit):
                 selected = (bluesky.CAPABILITY, _bluesky)
             else:
-                selected = runtime.binding(store, p, item['provider_contract_version'])
+                selected = runtime.binding(store, p, runtime_version)
             if selected:
                 registry.register(selected[0], policy, selected[1])
         except (TypeError, ValueError):
@@ -114,6 +117,8 @@ class TrendWorker:
         if (policy.provider_id, policy.operation) == ('web', 'corroborate'):
             from .providers.runtime import workspace_state
             workspace_state(self.store, policy)
+        if hasattr(adapter, 'assert_current'):
+            adapter.assert_current(policy, self.clock())
         # A cost cap is explicit even for currently unmetered traffic. Positive
         # priced calls also require the reviewed attempt cap and price reference.
         budget_keys = payload.get('budget_keys')
@@ -127,7 +132,7 @@ class TrendWorker:
         admit(capability, policy, at=self.clock(), requested_scope=job['scope_key'], enabled=True,
               item_limit=payload.get('max_items', 100), byte_limit=capability.max_response_bytes,
               reservation_microusd=amount, entitlement_current=True,
-              billable=capability.billable_unit != 'unmetered_live_bytes_bounded')
+              billable=monetary(capability))
         with self.store.transaction() as cur:
             cur.execute('''SELECT status,next_allowed_at FROM public.pr_trend_source_health
                 WHERE scope_key=%s AND provider_id=%s''', (job['scope_key'], job['provider_id']))
@@ -243,6 +248,8 @@ class TrendWorker:
                 self._admission(claim, registry)
                 completeness = 'gap' if batch.quarantined else batch.completeness
                 with self.store.transaction() as cur:
+                    if hasattr(adapter, 'assert_current'):
+                        adapter.assert_current(policy, self.clock(), cursor=cur)
                     if 'frontier' in claim['payload']:
                         frontier.dispatch_context(claim, cursor=cur)
                     from .revocation import revoke_author
@@ -269,9 +276,17 @@ class TrendWorker:
             except Exception as exc:
                 # Never log provider response text, URLs, account IDs or evidence.
                 code = exc.code if isinstance(exc, ContractError) else 'provider_or_commit_failure'
+                # Only our server-owned collector may report the actual I/O boundary.
+                if isinstance(adapter, MetaCollector) and dispatched and adapter.http_attempts == 0:
+                    dispatched = False
+                    result['dispatched'] -= 1
+                    if code == 'meta_provider_quota_exhausted':
+                        self.jobs.defer_local(claim, code=code)
+                        result['blocked'] += 1
+                        continue
                 LOG.warning('trend.job_failed code=%s dispatched=%s', code, dispatched)
                 try:
-                    unmetered = cap.billable_unit == 'unmetered_live_bytes_bounded' and amount == 0
+                    unmetered = not monetary(cap) and amount == 0
                     if dispatched and accounting is None:
                         from ..usage import UsageEvent
                         self.jobs.account_attempt(claim['scope_key'], claim['reservation_id'], UsageEvent(
@@ -281,8 +296,9 @@ class TrendWorker:
                             cost_usd=0 if unmetered else None,
                             cost_source='table:trend-provider-contract-v1' if unmetered else 'unknown'))
                     fail_attempt(self.store, claim,
-                        status=exc.code if isinstance(exc, urllib.error.HTTPError) else None,
-                        headers=exc.headers if isinstance(exc, urllib.error.HTTPError) else None,
+                        status=exc.status if isinstance(exc, MetaTransportError) else exc.code if isinstance(exc, urllib.error.HTTPError) else None,
+                        headers=({'Retry-After': str(exc.retry_after_seconds)} if exc.retry_after_seconds is not None else None)
+                        if isinstance(exc, MetaTransportError) else exc.headers if isinstance(exc, urllib.error.HTTPError) else None,
                         dispatched=dispatched, proven_unbilled=not dispatched or unmetered,
                         jitter=random.random(), now=self.clock())
                 except ContractError:
@@ -299,7 +315,7 @@ def cron(service):
         return {'status': 'unavailable', 'dispatched': 0}
     try:
         started = time.monotonic()
-        store = TrendStore(repository.connection_factory)
+        store = TrendStore(repository.connection_factory, meta_vault=getattr(getattr(service, 'oauth', None), 'vault', None))
         result = TrendWorker(store).tick()
         if result['status'] == 'migration_pending':
             return result

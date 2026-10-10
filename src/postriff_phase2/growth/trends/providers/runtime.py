@@ -81,4 +81,7 @@ def binding(store, manifest, contract_version):
                 workspace_consent=True, scope_context={'workspace_id':policy.scope_key[10:], 'limit':6})
             return replace(result, bytes_received=web.CAPABILITY.max_response_bytes-backend.remaining)
         return web.CAPABILITY, collect_web
+    if manifest.get('provider_id') in ('threads', 'instagram', 'facebook'):
+        from .meta_runtime import binding as meta_binding
+        return meta_binding(store, manifest, contract_version)
     return None
