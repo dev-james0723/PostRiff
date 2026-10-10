@@ -31,15 +31,18 @@ snippet and save that collection to a second file.
 
 ## 2. The 60 normal cases (the fixed G03 corpus, in `runOrder`; the first one, J01-a, is the cold case)
 
-The corpus is fixed (D-A53, `corpus.id` `g03-live-60/v2`, `corpus.sha256` `69d6bee3…`): run every case exactly as printed,
-never reword, skip, swap or add one. Follow `runOrder` from top to bottom; each entry is one conversation:
+The corpus is fixed (D-A53, `corpus.id` `g03-live-60/v2`, `corpus.sha256` `ef9e061b…`): run every case exactly as printed,
+never reword, skip, swap or add one. Follow `runOrder` from top to bottom; each entry is one step:
 
-- `"start": "new"`: open a new conversation (consumer entries in the full chat, J09 entries in the founder panel) and run
-  its `cases` in order as consecutive turns. A case listed in `corpus.followUps` refers to the turn before it, so it only
-  makes sense in that conversation; never run it on its own.
-- `"start": "reopen <caseId>"`: an edit case (section 3); reopen that conversation and the case's artifact.
+- `"start": "new"`: open a new conversation (consumer entries in the full chat, J09 entries in the founder panel with
+  "New conversation") and run its `cases` in order as consecutive turns. A case listed in `corpus.followUps` refers to the
+  turn before it, so it only makes sense in that conversation; never run it on its own.
+- `"start": "continue"`: an edit case (section 3) in the conversation you just ran. Do not start a new conversation and do
+  not reload; scroll back to the view of `editOf` (that conversation's first case) and edit it.
 
-All consumer entries come first, then the founder panel once (J09-1, J09-2, J09-edit). For each `normal` case:
+Per journey that is `<J>-1` (cases a–c), `<J>-edit`, then `<J>-2` (cases d–f). All consumer entries come first, then the
+founder panel once (J09-1, J09-edit, J09-2): the founder panel cannot reopen an earlier conversation, and "New
+conversation" clears its thread, so J09-edit must run before J09-2 starts. For each `normal` case:
 
 ```
 __rafiiLive.begin('<caseId>')        // e.g. 'J01-a'
@@ -47,15 +50,17 @@ __rafiiLive.begin('<caseId>')        // e.g. 'J01-a'
 type the case's `prompt` into the composer and send; wait until `performance.getEntriesByName('rafii-genui:ready').length`
 grows (or the view falls back natively); then `__rafiiLive.end()`. Touch nothing else during a case. Never retry a failed
 case: a failure is recorded as it happened, because the denominator is fixed at 60. `ingest` counts only the plan's case
-ids (any other id is reported as unplanned and never counted), and a case that shows more than one artifact (re-run under
-the same id) never counts as first-pass valid.
+ids (any other id is reported as unplanned and never counted) and only each case's first attempt. A case run more than once
+under its id (more than one turn, or more than one artifact of its own) counts as a first-pass miss and as not functional,
+whatever the later attempt did. A case answered natively, with no view, is not functional. Server artifacts that no case
+counts are listed in `G03.uncountedArtifacts`; check that the only ones are your fault cases.
 
 ## 3. The 9 edit cases
 
-In `runOrder` they follow the consumer conversations (J09-edit runs in the founder panel). Reopen the artifact of `<J>-a`,
-`__rafiiLive.begin('<J>-edit')`, use the view's explicit edit affordance and type the case's `instruction`, wait for
-`rafii-genui:ready`, `__rafiiLive.end()`. Check by eye that filters/selections/typed values survived (note anything lost
-in `faults` below).
+In `runOrder` each one follows its journey's first conversation (`"start": "continue"`; J09-edit in the founder panel,
+before J09-2). Scroll back to the view of `<J>-a` in that conversation, `__rafiiLive.begin('<J>-edit')`, use the view's
+explicit edit affordance and type the case's `instruction`, wait for `rafii-genui:ready`, `__rafiiLive.end()`. Check by
+eye that filters/selections/typed values survived (note anything lost in `faults` below).
 
 ## 4. G04, G05, G18 in the page
 
