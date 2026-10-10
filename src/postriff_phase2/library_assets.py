@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 from postriff_alpha.domain import AlphaError
 from .permissions import require
+from . import recovery
 from .library_extract import MIMES, MAX_FILE_BYTES, MAX_TEXT, chunks, extract_text, extract_isolated, normalize, AUDIO_MIMES, LEGACY
 
 TOKEN_SECONDS = 7200
@@ -66,7 +67,7 @@ def _asset(a):
         'analysisStatus': a['analysis_status'], 'indexingStatus': a['indexing_status'],
         'createdAt': float(a['epoch']), 'provenance': provenance, 'deleted': False,
         'extractionError': a['extraction_error'], 'attempts': a.get('attempts', 0),
-        'canRetryProcessing': a['processing_status'] in ('failed','queued') or (a['processing_status']=='unsupported' and a['extension'] in LEGACY),
+        'canRetryProcessing': a['processing_status'] in ('failed','queued') or (a['processing_status']=='unsupported' and a['extension'] in LEGACY) or (a['processing_status']=='ready' and a['indexing_status']=='failed'),
         'transcriptionStatus': a.get('transcription_status', 'not_applicable'), 'sourceId': a.get('source_id'),
         'duplicateOf': str(a['duplicate_of']).replace('-', '') if a.get('duplicate_of') else None,
     }
@@ -209,7 +210,9 @@ class UniversalLibrary:
                 if not workspace or workspace[0].get('accountBlock') or workspace[0].get('accountDeletion'):
                     return 'workspace_frozen'
                 current = self._row(cur,w,i,True)
-                if str(current.get('lease_token')) != lease or current['processing_status'] != 'processing':
+                cur.execute('SELECT lease_expires_at > now() FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s', (w,i))
+                lease_live = cur.fetchone()
+                if str(current.get('lease_token')) != lease or current['processing_status'] != 'processing' or not lease_live or not lease_live[0]:
                     return 'lease_lost'
                 cur.execute("SELECT id FROM public.pr_library_assets WHERE workspace_id=%s AND sha256=%s AND id<>%s AND processing_status IN ('ready','unsupported') ORDER BY created_at,id LIMIT 1", (w,digest,i))
                 duplicate = cur.fetchone()
@@ -219,22 +222,29 @@ class UniversalLibrary:
                 cur.execute('DELETE FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s',(w,i))
                 for n, part in enumerate(parts):
                     cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
-                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
+                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,provenance=provenance-'recovery',token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
             return status
         except Exception as e:
-            transient = not isinstance(e,AlphaError) or e.status >= 500
-            error = 'Private storage is temporarily unavailable.' if transient else str(e)[:300]
+            kind = recovery.category(e)
+            info = recovery.record(kind, a['attempts'], now=time.time(), retry_after=getattr(e,'retry_after',None))
+            transient = info['automaticRetry']
+            error = ('Private storage is temporarily unavailable.' if kind == 'retryable' else
+                     'Access to the file could not be verified. Review it before retrying.' if kind == 'permission' else str(e)[:300])
+            delay = max(0, (info['retryAt'] or time.time()) - time.time())
             with connect() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s AND attempts<3 THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s AND attempts<3 THEN 'pending' ELSE 'failed' END,extraction_error=%s,lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>least(300,30*attempts)),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND processing_status='processing'",(transient,transient,error,w,i,lease))
-            return 'retrying' if transient and a['attempts'] < 3 else 'failed'
+                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s THEN 'pending' ELSE 'failed' END,extraction_error=%s,provenance=jsonb_set(provenance,'{recovery}',%s::jsonb),lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>%s),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND lease_expires_at>now() AND processing_status='processing'",
+                            (transient,transient,error,json.dumps(info),delay,w,i,lease))
+                if cur.rowcount != 1:
+                    return 'lease_lost'
+            return 'retrying' if transient else 'failed'
 
     def retry(self,w,t,i):
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             a = self._row(cur,w,i,True)
-            if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY):
+            if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY) and not (a['processing_status']=='ready' and a['indexing_status']=='failed'):
                 raise AlphaError('This file is not waiting for a retry.',409)
-            cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
+            cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,provenance=provenance-'recovery',next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
         # An explicit retry can complete a bounded small file without waiting
         # for cron (preview deployments do not run production cron schedules).
         # Larger files retain their durable background queue and lease.
@@ -485,7 +495,7 @@ class UniversalLibrary:
     def sweep(self,connect,limit=100):
         s=self._store();removed=failed=processed=0
         with connect() as db,db.cursor() as cur:
-            cur.execute("UPDATE public.pr_library_assets SET processing_status='failed',indexing_status='failed',extraction_error='Processing timed out. Retry this file.',lease_token=null,lease_expires_at=null WHERE processing_status='processing' AND lease_expires_at<now() AND attempts>=3")
+            cur.execute("UPDATE public.pr_library_assets SET processing_status='failed',indexing_status='failed',extraction_error='Processing timed out. Retry this file.',provenance=jsonb_set(provenance,'{recovery}',jsonb_build_object('category','timeout','automaticRetry',false,'attempts',3,'maxAttempts',3,'retryAt',null)),lease_token=null,lease_expires_at=null,updated_at=now() WHERE processing_status='processing' AND lease_expires_at<now() AND attempts>=3")
             cur.execute("SELECT workspace_id::text,id::text FROM public.pr_library_assets WHERE attempts<3 AND next_attempt_at<=now() AND (processing_status='queued' OR (processing_status='processing' AND lease_expires_at<now())) ORDER BY created_at LIMIT 3")
             jobs=cur.fetchall()
         for w,i in jobs:

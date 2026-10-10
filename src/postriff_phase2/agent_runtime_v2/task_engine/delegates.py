@@ -59,7 +59,13 @@ def _publish_job(cur, task, step) -> Observation:
         return Observation("completed", None, None, [receipt])
     if job_state in ("failed", "canceled"):
         return Observation("failed", None, "The post didn't publish." if job_state == "failed" else "The post was cancelled in the queue.", [receipt])
+    if job_state == "held":
+        receipt['recovery'] = {'category': 'permission', 'automaticRetry': False, 'action': 'review_queue'}
+        return Observation("blocked", "needs_input", "This post is held in Queue. Review its current approval and connection before continuing.", [receipt])
     if job_state == "uncertain":
+        receipt['recovery'] = {'category': 'outcome_unknown', 'automaticRetry': False, 'action': 'review_queue'}
+        if int(job.get('checks') or 0) >= 5:
+            return Observation("blocked", "outcome_unknown", "The platform result is still unknown. Review the existing post in Queue; do not submit another copy.", [receipt])
         return Observation("running", None, "Rafii can't confirm yet whether the platform published it.", [receipt])
     return Observation("running", None, None, [receipt])
 
@@ -163,10 +169,30 @@ def _ui_action(cur, task, step):
 
 @adapter("library_job")
 def _library_job(cur, task, step):
-    cur.execute("SELECT to_regclass('public.pr_library_jobs')")
-    if not cur.fetchone()[0]:
-        return Observation("blocked", "feature_unavailable", "Library processing is unavailable in this release.")
-    cur.execute("SELECT status FROM public.pr_library_jobs WHERE id::text=%s AND workspace_id=%s", (step["delegateId"], task["workspaceId"]))
+    """The extraction job is the creator's durable Library asset row, not another queue."""
+    cur.execute("SELECT to_regclass('public.pr_library_assets')")
+    if cur.fetchone()[0] is None:
+        return Observation('blocked','feature_unavailable','Library processing is unavailable.')
+    import uuid
+    try:
+        asset_id = uuid.UUID(step['delegateId'])
+    except (ValueError, TypeError, AttributeError):
+        return Observation('blocked','target_changed','That Library job is unavailable.')
+    cur.execute("SELECT processing_status,indexing_status,attempts,extract(epoch from next_attempt_at),provenance->'recovery' "
+                "FROM public.pr_library_assets WHERE id=%s AND workspace_id=%s AND created_by=%s",
+                (str(asset_id),task['workspaceId'],task['createdBy']))
     row = cur.fetchone()
-    return (_stored("library_job", step["delegateId"], row[0], ("completed", "partial"), ("failed", "cancelled"), ("blocked",)) if row else
-            Observation("blocked", "target_changed", "That Library job is unavailable."))
+    if not row:
+        return Observation('blocked','target_changed','That Library job is unavailable.')
+    status, indexing, attempts, retry_at, recovery = row
+    out = {'type':'asset','id':asset_id.hex,'state':status,'href':'/app/library',
+           'recovery': {'category': (recovery or {}).get('category'), 'automaticRetry': status == 'queued' and attempts < 3,
+                        'retryAt': float(retry_at) if status == 'queued' and retry_at else None,
+                        'attempts': attempts, 'maxAttempts': 3, 'action': 'review_library'}}
+    if status == 'ready' and indexing == 'ready':
+        return Observation('completed', outputs=[out])
+    if status in ('failed','unsupported') or status == 'ready' and indexing == 'failed':
+        return Observation('blocked','needs_input','Open Library to review this file and its available recovery action.',[out])
+    if status in ('duplicate','deleting'):
+        return Observation('blocked','target_changed','This file was replaced or removed. Select the current file in Library.',[out])
+    return Observation('running',outputs=[out])
