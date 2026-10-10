@@ -15,10 +15,9 @@ export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 sudo -n install -d -m 1777 /var/run/postgresql
 if [ "${1:---core}" != --browser ]; then
   python scripts/postriff_pg_suite.py postgres_library_metadata
-  (cd web && node node_modules/next/dist/bin/next typegen && npm run typecheck && npm run lint)
 fi
+(cd web && node node_modules/next/dist/bin/next typegen && npm run typecheck && npm run lint)
 if [ "${1:---core}" != --core ]; then
-  if [ "${1:---core}" = --browser ]; then npm --prefix web run lint; fi
   npm --prefix web run build
   (cd web && node node_modules/playwright/cli.js install --with-deps chromium webkit)
   mkdir -p .jcb-artifacts/library-metadata

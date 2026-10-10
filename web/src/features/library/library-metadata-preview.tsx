@@ -133,11 +133,11 @@ export function LibraryBatchOrganizer({ assets, collections }: { assets: Library
           <span className='min-w-0 break-words'>{asset.displayTitle || asset.originalFilename || asset.id}</span>
         </label>)}
       </fieldset>
-      <label className='flex min-h-10 items-center gap-2 text-sm'><input type='checkbox' checked={replaceTags} onChange={e => setReplaceTags(e.target.checked)} />Replace tags for selected assets</label>
+      <label className='flex min-h-10 items-center gap-2 text-sm'><input type='checkbox' aria-label='Replace tags for selected assets' checked={replaceTags} onChange={e => setReplaceTags(e.target.checked)} />Replace tags for selected assets</label>
       {replaceTags ? <Input aria-label='Replacement tags' value={tags} maxLength={1200} onChange={e => setTags(e.target.value)} placeholder='Comma-separated tags; empty removes all tags' /> : null}
-      <label className='flex min-h-10 items-center gap-2 text-sm'><input type='checkbox' checked={replaceCollections} onChange={e => setReplaceCollections(e.target.checked)} />Replace collections for selected assets</label>
+      <label className='flex min-h-10 items-center gap-2 text-sm'><input type='checkbox' aria-label='Replace collections for selected assets' checked={replaceCollections} onChange={e => setReplaceCollections(e.target.checked)} />Replace collections for selected assets</label>
       {replaceCollections ? <fieldset className='flex flex-wrap gap-3'><legend className='mb-2 text-xs'>Choose collections; none removes all memberships</legend>{collections.map(c => <label key={c.id} className='flex min-h-10 items-center gap-2 text-sm'>
-        <input type='checkbox' checked={groups.includes(c.id)} onChange={e => setGroups(e.target.checked ? [...groups, c.id] : groups.filter(id => id !== c.id))} />{c.name}
+        <input type='checkbox' aria-label={c.name} checked={groups.includes(c.id)} onChange={e => setGroups(e.target.checked ? [...groups, c.id] : groups.filter(id => id !== c.id))} />{c.name}
       </label>)}</fieldset> : null}
       <LibraryMetadataPreview changes={changes} disabled={!replaceTags && !replaceCollections} />
     </div>
