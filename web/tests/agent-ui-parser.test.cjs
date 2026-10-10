@@ -368,6 +368,57 @@ test('query children cannot hide behind value aliases, nested lists, conditional
   }
 });
 
+test('rendered queries cannot escape through logical operators, container selectors or Each bindings', () => {
+  const prefix = 'root = RafiiRoot([box])\nrows = Query("drafts_list", {}, null)\n';
+  for (const body of [
+    'box = Stack([true && rows])',
+    'box = Stack([false || rows])',
+    'box = Stack([rows || Text("Empty")])',
+    'box = Stack([[rows][0]])',
+    'box = Stack([[rows]["non-numeric-index"]])',
+    'items = [rows]\nbox = Stack([items[0]])',
+    'holder = {child: rows}\nbox = Stack([holder.child])',
+    'holder = {child: rows}\nbox = Stack([holder["child"]])',
+    'box = Stack([@First([{child: rows}]).child])',
+    'box = Stack([@Each([rows], "item", item)])',
+    'box = Stack([@Each([rows], item, item)])',
+    'box = Stack([@Each([{child: rows}], "item", item.child)])',
+    'box = Stack([@Each([rows], "item", Card([item]))])',
+    'box = Stack([@Each([[rows]], "group", @Each(group, "item", item))])',
+    'box = Stack([@Each([rows], "item", item)[0]])',
+    'box = Stack([@Filter([rows], "state", "!=", "empty")])',
+    'box = Stack([@Sort([rows], "state")[0]])',
+    'box = Stack([ToolBoundTable(rows, [{field: "title", label: "Draft"}]).props.source])',
+    '$child = rows\nbox = Stack([$child])',
+  ]) {
+    const result = validate(prefix + body);
+    assert.equal(result.accepted, false, body);
+    assert.deepEqual(errorsOf(result, 'query_as_child'), ['query_as_child:rows'], `${body}: ${JSON.stringify(result.errors)}`);
+  }
+});
+
+test('query conditions, scalar expressions and lexically scoped component children stay valid', () => {
+  const prefix = 'root = RafiiRoot([table, box])\nrows = Query("drafts_list", {}, null)\n'
+    + 'table = ToolBoundTable(rows, [{field: "title", label: "Draft"}])\n';
+  for (const body of [
+    'box = Stack([rows && Text("Loaded")])',
+    'box = Stack([@Count(rows.data.rows) > 0 && Text("Drafts")])',
+    'box = Stack([Text(@Count(rows.data.rows) > 0 ? "Drafts" : "Empty")])',
+    'box = Stack([Text(rows.data.title || "Empty")])',
+    'box = Stack([rows.data.title])',
+    'box = Stack([@Each(rows.data.rows, "row", Card([Text(row.title)]))])',
+    'box = Stack([@Each(["Visible"], "rows", Card([rows]))])',
+    'box = Stack([@Each(["Visible"], rows, Card([rows]))])',
+    'box = Stack([@Each([["Visible"]], "item", @Each(item, "item", Card([item])))])',
+    'holder = {ignored: rows, child: Text("Visible")}\nbox = Stack([holder.child])',
+    'items = [rows, Text("Visible")]\nbox = Stack([items[1]])',
+    'box = Stack([[{length: rows}].length])',
+  ]) {
+    const result = validate(prefix + body);
+    assert.equal(result.accepted, true, `${body}: ${JSON.stringify(result.errors)}`);
+  }
+});
+
 test('child alias cycles and excessive depth fail closed; valid component data sources still pass', () => {
   const cycle = validate('root = RafiiRoot([first])\nfirst = second\nsecond = first');
   assert.equal(cycle.accepted, false);

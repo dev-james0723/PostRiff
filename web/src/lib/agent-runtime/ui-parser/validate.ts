@@ -452,45 +452,107 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
     return isBound(node);
   };
 
-  // Follow values only where they become rendered children. A query used as a component's source, an Each collection or a
-  // condition is legitimate data; an alias/conditional/list that returns that query is still a non-rendering child.
-  // A shared visit budget also bounds highly connected alias graphs without evaluating expressions or running queries.
+  // Follow only values that can become rendered children. Selectors carry literal container provenance through aliases;
+  // Each bindings retain their enclosing scope so shadowed iterator names never resolve to an unrelated global Query.
+  // This mirrors value-returning forms in pinned lang-core 0.3.2 without executing expressions, actions or queries.
+  type Selection = { kind: 'index' | 'member'; key: string | number | null };
+  type ChildBinding = { node: ASTNode; scope: ReadonlyMap<string, ChildBinding>; selections: readonly Selection[] };
+  const anyItem: Selection = { kind: 'index', key: null };
   let childVisits = 0;
-  const checkChild = (node: ASTNode, seen: ReadonlySet<string> = new Set(), scoped: ReadonlySet<string> = new Set(), depth = 0): void => {
+  const checkChild = (node: ASTNode, seen: ReadonlySet<string> = new Set(), scope: ReadonlyMap<string, ChildBinding> = new Map(),
+    depth = 0, selections: readonly Selection[] = []): void => {
     if (depth > 32 || ++childVisits > 4096) {
       errors.push('bounds_depth');
       return;
     }
-    if (node.k === 'Ref') {
-      if (scoped.has(node.n)) return;
-      if (kinds.get(node.n) === 'query') {
-        errors.push(`query_as_child:${ident(node.n)}`);
-      } else if (kinds.get(node.n) === 'value') {
+    const follow = (value: ASTNode, steps = selections) => checkChild(value, seen, scope, depth + 1, steps);
+    if (node.k === 'Ref' || node.k === 'StateRef') {
+      const binding = node.k === 'Ref' ? scope.get(node.n) : undefined;
+      if (binding) {
+        checkChild(binding.node, seen, binding.scope, depth + 1, [...binding.selections, ...selections]);
+      } else if (kinds.get(node.n) === 'query') {
+        if (!selections.length) errors.push(`query_as_child:${ident(node.n)}`);
+      } else if (kinds.get(node.n) === 'value' || kinds.get(node.n) === 'state') {
         if (seen.has(node.n)) {
           errors.push(`unresolved_ref:${ident(node.n)}`);
           return;
         }
         const target = asts.get(node.n);
-        if (target) checkChild(target, new Set([...seen, node.n]), scoped, depth + 1);
+        if (target) checkChild(target, new Set([...seen, node.n]), scope, depth + 1, selections);
       }
     } else if (node.k === 'RuntimeRef' && node.refType === 'query') {
-      errors.push(`query_as_child:${ident(node.n)}`);
+      if (!selections.length) errors.push(`query_as_child:${ident(node.n)}`);
     } else if (node.k === 'Arr') {
-      for (const child of node.els) checkChild(child, seen, scoped, depth + 1);
+      const [selected, ...rest] = selections;
+      if (!selected) {
+        for (const child of node.els) follow(child);
+      } else if (selected.kind === 'member') {
+        if (selected.key === 'length') return; // Arrays expose their scalar length instead of mapping this field.
+        // Member access on an array maps the field over its items. An index into that result may select any mapped value.
+        const afterMap = rest[0]?.kind === 'index' ? rest.slice(1) : rest;
+        for (const child of node.els) follow(child, [selected, ...afterMap]);
+      } else if (selected.key === null) {
+        for (const child of node.els) follow(child, rest);
+      } else {
+        // lang-core's toNumber converts non-numeric string indices to zero.
+        const parsed = Number(selected.key);
+        const index = Number.isNaN(parsed) ? 0 : parsed;
+        if (Number.isInteger(index) && index >= 0 && node.els[index]) follow(node.els[index], rest);
+      }
+    } else if (node.k === 'Obj' && selections.length) {
+      const [selected, ...rest] = selections;
+      for (const [key, child] of node.entries) if (selected.key === null || key === String(selected.key)) follow(child, rest);
+    } else if (node.k === 'Member') {
+      follow(node.obj, [{ kind: 'member', key: node.field }, ...selections]);
+    } else if (node.k === 'Index') {
+      const key = node.index.k === 'Str' || node.index.k === 'Num' ? node.index.v : null;
+      follow(node.obj, [{ kind: 'index', key }, ...selections]);
     } else if (node.k === 'Ternary') {
-      checkChild(node.then, seen, scoped, depth + 1);
-      checkChild(node.else, seen, scoped, depth + 1);
+      follow(node.then);
+      follow(node.else);
+    } else if (node.k === 'BinOp') {
+      // && returns its left operand only when falsy, so that operand cannot return a Query object. || can return either.
+      if (node.op === '||') follow(node.left);
+      if (node.op === '&&' || node.op === '||') follow(node.right);
+    } else if (node.k === 'Assign') {
+      // In non-reactive props lang-core unwraps an assignment to the target's current state value.
+      follow({ k: 'StateRef', n: node.target });
     } else if (node.k === 'Comp') {
       if (node.name === 'Each' && node.args[2]) {
         const variable = node.args[1];
-        const local = variable?.k === 'Str' ? new Set([...scoped, variable.v]) : scoped;
-        checkChild(node.args[2], seen, local, depth + 1);
-      } else if (['First', 'Last', 'Filter', 'Sort'].includes(node.name) && node.args[0]) {
-        checkChild(node.args[0], seen, scoped, depth + 1);
+        const name = variable?.k === 'Str' ? variable.v : variable?.k === 'Ref' ? variable.n : null;
+        const local = new Map(scope);
+        if (name) local.set(name, { node: node.args[0], scope, selections: [anyItem] });
+        // Each produces an array. Its template may be selected or rendered directly, with the same lexical binding.
+        const steps = selections[0]?.kind === 'index' ? selections.slice(1) : selections;
+        checkChild(node.args[2], seen, local, depth + 1, steps);
+      } else if (['First', 'Last'].includes(node.name) && node.args[0]) {
+        follow(node.args[0], [anyItem, ...selections]);
+      } else if (['Filter', 'Sort'].includes(node.name) && node.args[0]) {
+        const steps = selections[0]?.kind === 'index' ? [anyItem, ...selections.slice(1)] : selections;
+        follow(node.args[0], steps);
+      } else if (!isBuiltin(node.name)) {
+        const params = lib.params[node.name] ?? [];
+        if (selections.length) {
+          // Catalog expressions materialize to ElementNodes; a selector may explicitly extract one of their data props.
+          const [field, prop, ...rest] = selections;
+          if ((field.key === 'props' || field.key === null) && prop) {
+            for (const [index, name] of params.entries()) {
+              if ((prop.key === null || prop.key === name) && node.args[index]) follow(node.args[index], rest);
+            }
+          }
+        } else {
+          for (const prop of childListProps(lib).get(node.name) ?? []) {
+            const child = node.args[params.indexOf(prop)];
+            if (child) follow(child);
+          }
+        }
       }
-      // Ordinary components consume their data props themselves. Their child props are checked by the statement walk below.
     }
+    // Scalars, arithmetic/comparisons, unary operators and action builtins cannot return a Query object as a child.
   };
+  const rootAst = asts.get('root');
+  if (rootAst) checkChild(rootAst);
 
   const components = new Set<string>();
   const actionIds: string[] = [];
@@ -518,10 +580,6 @@ export function validateCandidate(request: UiValidatorRequest, lib: ValidatorLib
         return;
       }
       if (node.args.length > params.length) errors.push(`excess_args:${id}`);
-      for (const prop of childListProps(lib).get(node.name) ?? []) {
-        const list = node.args[params.indexOf(prop)];
-        if (list) checkChild(list);
-      }
       if (node.name === 'Form') {
         const formName = node.args[0];
         if (!formName || formName.k !== 'Str' || !FORM_NAME.test(formName.v)) errors.push(`form_name_invalid:${id}`);
