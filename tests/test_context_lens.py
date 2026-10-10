@@ -241,7 +241,7 @@ class AttachmentRemovalTests(unittest.TestCase):
         self.ctx.image_studio = SimpleNamespace(route=lambda *_a, **_kw: SimpleNamespace(available=True))
         self.ctx.service.assets = object()
         self.ctx.service.ledger = SimpleNamespace(reserve=lambda *_a, **_kw: self.fail("no paid work before both context checks"))
-        with mock.patch.object(creative, '_attached_only', return_value=True), mock.patch.object(creative, 'conversation_images', return_value=[]):
+        with patch.object(creative, '_attached_only', return_value=True), patch.object(creative, 'conversation_images', return_value=[]):
             with self.assertRaises(AlphaError) as removed:
                 creative._generate(self.ctx, {"prompt": "Use it", "referenceAssetIds": [self.ids[1]]}, operation='generate')
             self.assertEqual(removed.exception.status, 404)
