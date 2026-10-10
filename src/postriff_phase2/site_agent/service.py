@@ -24,7 +24,7 @@ from .. import ai_call_events, automation_edit, intent as writing_intent, reques
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import Membership, require
-from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, reads, references, routes, tools
+from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, references, routes, tools
 
 KEY_PREFIX = "site:"
 CLOUD_WITHHELD = ("Your chosen writer runs in the cloud, and this answer uses Brand Brain memory or sources your workspace keeps out of cloud models, "
@@ -412,7 +412,8 @@ class SiteAgentService:
         runtime, note = self._runtime(model_id)
         call = request_model.call_for(runtime, self.model, model_tier) if runtime is not None else None
         wants_model = reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify", "compound", "campaign_link", "campaign_unlink") and member.allows("edit") and call is not None
-        if wants_model and not getattr(call, "local", False) and not reads.cloud_may_read(ctx, plan["tools"][: tools.MAX_TOOLS_PER_TURN], results):
+        from .reads import cloud_may_read   # reads imports tools; a module-level import here would be circular
+        if wants_model and not getattr(call, "local", False) and not cloud_may_read(ctx, plan["tools"][: tools.MAX_TOOLS_PER_TURN], results):
             # This answer holds memory or sources the workspace keeps out of cloud models: it stays Rafii's own answer.
             wants_model, note = False, note or {"code": "cloud_withheld", "message": CLOUD_WITHHELD}
         read_labels = [r["label"] for r in records if r["status"] == "verified" and r["effect"] == "read"]

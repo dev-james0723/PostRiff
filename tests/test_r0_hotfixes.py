@@ -217,6 +217,18 @@ class PanelCloudWriterTest(unittest.TestCase):
         local = ctx(state, "local")
         self.assertTrue(reads.cloud_may_read(local, [("brand.summary", {})], {"brand.summary": tools.run("brand.summary", {}, local)[1]}))
 
+    def test_withheld_counts_alone_never_hold_back_the_writer(self):
+        """A local-only source that the search doesn't touch, or an empty Brand Brain, withholds nothing from this answer."""
+        from postriff_phase2.site_agent import reads
+        for state, planned in ((search_state(), [("content.search", {"query": "recital"})]), (initial_state(WS), [("brand.summary", {}), ("voice.profile", {})])):
+            local = ctx(state, "local")
+            results = {tool_id: tools.run(tool_id, args, local)[1] for tool_id, args in planned}
+            with self.subTest(tools=planned):
+                self.assertTrue(reads.cloud_may_read(local, planned, results))
+        launch = [("content.search", {"query": "budget"})]   # only the local-only source holds this word
+        local = ctx(search_state(), "local")
+        self.assertFalse(reads.cloud_may_read(local, launch, {"content.search": tools.run("content.search", launch[0][1], local)[1]}))
+
 
 class NotificationListUntrustedTest(unittest.TestCase):
     def test_notification_items_are_wrapped_as_untrusted_data(self):
@@ -580,6 +592,20 @@ class AgentChannelViewYouTubeTest(unittest.TestCase):
         cur = FakeChannelCursor([])
         tools.run("channels.capabilities", {}, ctx(only_linkedin, "cloud", cur=cur, service=self.service()))
         self.assertFalse(any("pr_encrypted_credentials" in s for s in cur.sql), "no vault read for a workspace without YouTube")
+
+
+class ColdImportTest(unittest.TestCase):
+    """Each changed module imports first in a fresh interpreter (site_agent.reads and tools import each other)."""
+
+    def test_changed_modules_import_cold(self):
+        import subprocess
+        for module in ("postriff_phase2.hosted", "postriff_phase2.site_agent.service", "postriff_phase2.site_agent.tools", "postriff_phase2.notifications.detector",
+                       "postriff_phase2.agent_runtime_v2.ui_domain.automations", "postriff_phase2.agent_runtime_v2.context", "postriff_phase2.ideas",
+                       "postriff_phase2.coworker.agent_tools", "postriff_phase2.permissions", "postriff_phase2.api_tokens"):
+            with self.subTest(module=module):
+                done = subprocess.run([sys.executable, "-c", f"import {module}"], cwd=str(ROOT), env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin"},
+                                      capture_output=True, text=True, timeout=60)
+                self.assertEqual(done.returncode, 0, done.stderr[-2000:])
 
 
 if __name__ == "__main__":

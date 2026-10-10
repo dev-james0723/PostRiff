@@ -303,10 +303,15 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
 CLOUD_GATED_READS = ("brand.summary", "voice.profile", "content.search")
 
 
+def _content(data):
+    """A read's content, without the cloud reader's `withheld` counts (they describe the workspace, not this answer)."""
+    return {k: v for k, v in data.items() if k != "withheld"} if isinstance(data, dict) else data
+
+
 def cloud_may_read(ctx, planned, results):
     """Whether a cloud writer may phrase an answer built from `results` (read for the member, ctx.egress "local"): every
-    gated read in it reads the same for a cloud reader, so nothing the owner's cloud memory setting or a source's cloud
-    sharing keeps out of cloud models is in it."""
+    gated read in it has the same content for a cloud reader, so nothing the owner's cloud memory setting or a source's
+    cloud sharing keeps out of cloud models is in it."""
     from . import tools
     cloud = copy.copy(ctx)
     cloud.egress = "cloud"
@@ -314,7 +319,7 @@ def cloud_may_read(ctx, planned, results):
         seen = results.get(tool_id) or {}
         if tool_id in CLOUD_GATED_READS and seen.get("ok"):
             _, as_cloud = tools.run(tool_id, args, cloud)
-            if as_cloud.get("data") != seen.get("data"):
+            if _content(as_cloud.get("data")) != _content(seen.get("data")):
                 return False
     return True
 
