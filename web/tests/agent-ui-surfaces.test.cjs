@@ -391,9 +391,9 @@ test('a chip is a type="button" QuietButton that only calls onPick (no request);
   // The same chip with new words (the selection went from 2 to 3) is another suggestion: a tap replaces the words, never clears.
   const two = { id: 'selection:draft:compare', rule: 'selection', instruction: 'Compare only the 2 selected drafts' };
   const three = { ...two, instruction: 'Compare only the 3 selected drafts' };
-  const picked = editFieldReducer(editFieldReducer(EMPTY_FIELD, { type: 'pick', suggestion: two }), { type: 'pick', suggestion: three });
-  assert.deepEqual(picked, { text: three.instruction, filled: three, saved: null });
-  assert.deepEqual(editFieldReducer(picked, { type: 'pick', suggestion: { ...three } }), { text: '', filled: null, saved: null }, 'the same words again: cleared');
+  const recounted = editFieldReducer(editFieldReducer(EMPTY_FIELD, { type: 'pick', suggestion: two }), { type: 'pick', suggestion: three });
+  assert.deepEqual(recounted, { text: three.instruction, filled: three, saved: null });
+  assert.deepEqual(editFieldReducer(recounted, { type: 'pick', suggestion: { ...three } }), { text: '', filled: null, saved: null }, 'the same words again: cleared');
   assert.equal(editForm.sameSuggestion(two, three), false);
   assert.equal(editForm.sameSuggestion(three, { ...three }), true);
   assert.equal(editForm.sameSuggestion(null, three), false);
