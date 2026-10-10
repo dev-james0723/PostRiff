@@ -425,7 +425,8 @@ def _encode(filters: dict, start: int, offset: int) -> str:
     return common.encode_cursor(NAME, filters, offset) if start == 0 else common.encode_cursor(MORE, filters, start + offset)
 
 
-@register(contracts.ToolSpec(NAME, contracts.READ, "read", DESCRIPTION, voice=False), SCHEMA, "Browsed the Library")
+@register(contracts.ToolSpec(NAME, contracts.READ, "read", DESCRIPTION, voice=False,
+                             data_grants=("library",), since=2), SCHEMA, "Browsed the Library")
 def library_browse(ctx: RafiiRunContext, args: dict) -> dict:
     if not enabled_for(ctx.config, ctx.workspace_id):
         raise AlphaError("Library browsing isn't turned on for this workspace.", 403, code="library_browse_off")

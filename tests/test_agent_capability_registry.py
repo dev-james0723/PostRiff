@@ -18,6 +18,7 @@ from collections import Counter
 from dataclasses import replace
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,15 +44,18 @@ def _sources():
     return commands, site_tools, ui_actions, ui_domain, ui_queries
 
 
-def live_snapshot() -> dict:
+def live_snapshot(*, since: int | None = None) -> dict:
     """Today's behaviour, read from the code paths themselves (never from capability_registry)."""
     commands, site_tools, ui_actions, ui_domain, ui_queries = _sources()
     tools = {name: {"effect": t.spec.effect, "permission": t.spec.permission, "approval": t.spec.approval, "voice": t.spec.voice,
                     "idempotent": t.spec.idempotent, "audit": t.spec.audit, "tenant": t.spec.tenant}
-             for name, t in sorted(tool_adapter.REGISTRY.items())}
+             for name, t in sorted(tool_adapter.REGISTRY.items()) if since is None or t.spec.since == since}
     manager_names = specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", []))
     specialist_names = {key: sorted(specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])))
                         for key, spec in sorted(specialists.SPECIALISTS.items())}
+    if since is not None:
+        manager_names = [name for name in manager_names if name in tools]
+        specialist_names = {key: [name for name in names if name in tools] for key, names in specialist_names.items()}
     import inspect
     import re
     direct = sorted(set(re.findall(r'REGISTRY\["([a-z][a-z0-9_]*)"\]', inspect.getsource(commands))))
@@ -88,8 +92,8 @@ _POLICY = ("kind", "version", "category", "risk", "confirmation", "permission", 
            "auth_state", "resource_scope", "audit", "voice", "idempotent")
 
 
-def registry_snapshot() -> dict:
-    caps = registry.ensure()
+def registry_snapshot(*, since: int | None = None) -> dict:
+    caps = {key: cap for key, cap in registry.ensure().items() if since is None or cap.since == since}
     out = {}
     for capability_id, cap in sorted(caps.items()):
         entry = {key: getattr(cap, key) for key in _POLICY}
@@ -99,7 +103,7 @@ def registry_snapshot() -> dict:
         entry["limits"] = cap.limits.public()
         out[capability_id] = entry
     bindings = [{"surface": b.surface, "binding": b.binding_ref, "capabilityId": b.capability_id, "legacyConfirmation": b.legacy_confirmation,
-                 "legacyLimits": b.legacy_limits.public(), "legacyTimeoutSeconds": b.legacy_timeout_seconds} for b in registry.bindings()]
+                 "legacyLimits": b.legacy_limits.public(), "legacyTimeoutSeconds": b.legacy_timeout_seconds} for b in registry.bindings() if b.capability_id in caps]
     return {"capabilities": out, "bindings": bindings}
 
 
@@ -119,15 +123,15 @@ class Fixtures(unittest.TestCase):
     def setUpClass(cls):
         domain_tools.ensure_registered()
         cls.golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
-        cls.live = live_snapshot()
+        cls.live = live_snapshot(since=1)
 
     def test_todays_behaviour_is_unchanged(self):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             self.assertEqual(self.live[key], self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"], "a tool vanished or appeared")
+        self.assertEqual(sum(tool.spec.since == 1 for tool in tool_adapter.REGISTRY.values()), self.golden["counts"]["registryTools"], "a tool vanished or appeared")
 
     def test_registry_policy_is_frozen(self):
-        snapshot = registry_snapshot()
+        snapshot = registry_snapshot(since=1)
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             self.assertEqual(entry, self.golden["capabilities"][capability_id], capability_id)
@@ -158,15 +162,30 @@ class Fixtures(unittest.TestCase):
         self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names}, expected)
 
     def test_post_freeze_tool_never_joins_legacy(self):
-        # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.
+        # A temporary post-freeze probe must preserve any already integrated executor.
         spec = contracts.ToolSpec("library_browse", contracts.READ, "read", "Library metadata", voice=False,
                                   data_grants=("library",), since=2)
-        tool_adapter.REGISTRY[spec.name] = tool_adapter.Tool(spec, {}, lambda ctx, args: {}, "Browse Library")
-        try:
+        with patch.dict(tool_adapter.REGISTRY, {spec.name: tool_adapter.Tool(spec, {}, lambda ctx, args: {}, "Browse Library")}):
             self.assertEqual(registry.for_tool(spec.name).since, 2)
             self.assertNotIn("tool.library_browse", registry.legacy_baseline_v1())
-        finally:
-            tool_adapter.REGISTRY.pop(spec.name, None)
+
+
+class FixtureIsolation(unittest.TestCase):
+    def test_registered_library_browse_is_post_freeze_with_declared_data_grants(self):
+        cap = registry.for_tool("library_browse")
+        self.assertEqual(cap.since, 2)
+        self.assertEqual(cap.data_grants, ("library",))
+
+    def test_post_freeze_probe_restores_an_existing_tool_registration(self):
+        # Discovery may import later integrated tools before this legacy fixture.
+        # Its temporary probe must never delete the registered production executor.
+        registry.ensure()  # Match full discovery: importing registering modules precedes the probe.
+        spec = contracts.ToolSpec("library_browse", contracts.READ, "read", "Existing Library reader", voice=False,
+                                  data_grants=("library",), since=2)
+        existing = tool_adapter.Tool(spec, {}, lambda ctx, args: {"existing": True}, "Existing Library")
+        with patch.dict(tool_adapter.REGISTRY, {spec.name: existing}):
+            Fixtures("test_post_freeze_tool_never_joins_legacy").test_post_freeze_tool_never_joins_legacy()
+            self.assertIs(tool_adapter.REGISTRY.get(spec.name), existing)
 
 
 class RegistryMatchesToday(unittest.TestCase):
