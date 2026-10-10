@@ -190,19 +190,51 @@ jobs:
         # Linux WebKit: the pinned Playwright's macOS WebKit build needs macOS 15.4 or later.
         run: npx --prefix web playwright install --with-deps webkit
       - name: Site agent journey, WebKit (the same checks)
+        env:
+          DEBUG: pw:browser
         run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
       - name: Rafii style, commands and weather, WebKit
         env:
+          DEBUG: pw:browser
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
         run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
       - name: Rafii Agent Chat and Meshy Live, WebKit
         env:
+          DEBUG: pw:browser
           RAFII_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
         run: node web/tests/rafii-chat-concepts-browser.cjs --browser=webkit --out=docs/design/rafii-agent-chat-redesign/evidence/ci-browser-webkit
       - name: Rafii guide, WebKit (safe guide clicks, stop, Escape and phone)
+        env:
+          DEBUG: pw:browser
         run: node web/tests/rafii-guide-browser.cjs --browser=webkit --out=docs/design/rafii-live-agent/evidence/ci-guide-webkit
+      - name: Preserve bounded runner crash diagnostics
+        if: always()
+        shell: bash
+        run: |
+          evidence=docs/design/rafii-live-agent/evidence/ci-runner-diagnostics
+          mkdir -p "$evidence"
+          {
+            date -u
+            free -m
+            # Command names only: never environment or full process arguments.
+            ps -eo pid,ppid,comm,rss --sort=-rss | sed -n '1,21p'
+            for counter in /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.events; do
+              if [ -r "$counter" ]; then
+                printf '%s\n' "$counter"
+                head -c 2048 "$counter"
+                printf '\n'
+              fi
+            done
+          } > "$evidence/resources.txt" 2>&1
+          # Keep only bounded crash/OOM evidence from this job's time horizon.
+          # Missing kernel access is diagnostic unavailability, not a test pass.
+          if ! sudo -n journalctl -k --since '-90 minutes' --no-pager -n 1000 2>&1 \
+            | grep -Ei 'out of memory|oom-kill|killed process|segfault|WebProcess|MiniBrowser' \
+            | tail -n 80 | cut -c 1-1200 > "$evidence/kernel-crashes.txt"; then
+            printf '%s\n' 'No matching kernel events, or kernel journal unavailable.' >> "$evidence/kernel-crashes.txt"
+          fi
       - name: Keep the evidence for this commit
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -222,6 +254,7 @@ jobs:
             docs/design/rafii-live-agent/evidence/ci-browser-webkit/
             docs/design/rafii-live-agent/evidence/ci-guide-webkit/
             docs/design/rafii-live-agent/evidence/ci-phone-chromium/
+            docs/design/rafii-live-agent/evidence/ci-runner-diagnostics/
             harness.log
             web.log
             voice-harness.log

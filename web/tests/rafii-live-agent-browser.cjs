@@ -67,6 +67,15 @@ if (COMMAND_NAMES.length < 10 || COMMAND_GROUPS.length < 3 || Object.keys(PRESET
 }
 
 const results = [];
+const lifecycle = [];
+let activeSection = 'startup';
+let expectedBrowserDisconnect = false;
+function browserEvent(event, detail = {}) {
+  if (lifecycle.length >= 100) return;
+  const entry = { at: new Date().toISOString(), engine: args.browser || 'chromium', section: activeSection, event, ...detail };
+  lifecycle.push(entry);
+  process.stdout.write(`BROWSER ${JSON.stringify(entry)}\n`);
+}
 const check = (name, ok, detail) => {
   results.push({ name, ok: Boolean(ok), detail: ok ? undefined : detail });
   process.stdout.write(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok && detail !== undefined ? ` — ${JSON.stringify(detail).slice(0, 500)}` : ''}\n`);
@@ -193,6 +202,12 @@ async function qaHarness(who) {
 async function context(browser, who, viewport, { fakeLive = false, ...extra } = {}) {
   const phone = viewport.width < 768;
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, colorScheme: 'dark', hasTouch: phone, isMobile: phone, ...extra });
+  const section = activeSection;
+  ctx.on('page', (page) => {
+    page.on('crash', () => browserEvent('page_crash', { section }));
+    page.on('close', () => browserEvent('page_closed', { section }));
+  });
+  ctx.on('close', () => browserEvent('context_closed', { section }));
   await ctx.addCookies([
     { name: 'postriff_dev', value: '1', url: who.url },
     { name: 'postriff_dev_principal', value: who.principal, url: who.url },
@@ -1080,23 +1095,30 @@ async function weatherSection(browser) {
 
 const RUN = { style: styleSection, 'style-phone': stylePhoneSection, slash: slashSection, 'slash-phone': slashPhoneSection, voice: voiceSection, 'voice-phone': voicePhoneSection, weather: weatherSection };
 const report = (extra = {}) => fs.writeFileSync(path.join(out, 'rafii-live-agent-browser.json'),
-  JSON.stringify({ base, voiceBase, engine: args.browser || 'chromium', principal: 'synthetic', sections: asked, results, ...extra }, null, 1));
+  JSON.stringify({ base, voiceBase, engine: args.browser || 'chromium', principal: 'synthetic', sections: asked, results, lifecycle, ...extra }, null, 1));
 
 (async () => {
   const executablePath = (args.browser === 'webkit' ? process.env.RAFII_WEBKIT_PATH : process.env.RAFII_CHROMIUM_PATH) || undefined;
   const browser = await engine.launch({ headless: true, executablePath });
+  browser.on('disconnected', () => browserEvent('browser_disconnected', { expected: expectedBrowserDisconnect }));
   try {
     for (const name of SECTIONS) {
       if (!want(name)) continue;
+      activeSection = name;
+      browserEvent('section_started');
       process.stdout.write(`\n— ${name}\n`);
       try {
         await RUN[name](browser);
       } catch (error) {
         // One section stopping (a timeout, a crash) is recorded and the next section still runs.
         check(`${name}: the section ran to the end`, false, String(error?.stack ?? error).slice(0, 800));
+      } finally {
+        browserEvent('section_finished', { connected: browser.isConnected() });
       }
     }
   } finally {
+    browserEvent('browser_close_requested');
+    expectedBrowserDisconnect = true;
     await browser.close();
   }
   const failed = results.filter((r) => !r.ok);
