@@ -14,6 +14,8 @@ Three kinds of check:
 All in-process and deterministic: no database, network or model.
 """
 import json
+from collections import Counter
+from dataclasses import replace
 import sys
 import unittest
 from pathlib import Path
@@ -137,13 +139,34 @@ class Fixtures(unittest.TestCase):
         caps = registry.ensure()
         self.assertTrue(all(caps[c].since == 1 for c in frozen["capabilities"]))
         self.assertFalse(any(caps[c].kind == "native_only" for c in frozen["capabilities"]))
-        # every model-, site- and GenUI-reachable tool, all 17 GenUI actions and all 45 GenUI queries
+        expected = {c for c, cap in caps.items() if cap.tenant == "workspace" and cap.since == 1 and cap.kind != "native_only"}
+        self.assertEqual(set(frozen["capabilities"]), expected, "every consumer kind is frozen; founder bypass is separate")
+        self.assertEqual(dict(Counter(caps[c].kind for c in expected)), frozen["countsByKind"])
+        self.assertEqual(frozen["countsByKind"], {"tool": 97, "ui_action": 12, "ui_query": 16, "context": 5})
+        self.assertEqual(set(registry.CONTEXT_CAPABILITIES), {"context.page_summary", "context.screen_outline", "context.memory_layers",
+                                                            "context.attention", "context.connections"})
+        self.assertLessEqual(set(registry.CONTEXT_CAPABILITIES), expected)
+        # All 17 actions and 45 queries resolve: seven founder queries bypass consumer grants rather than entering the baseline.
         self.assertEqual(len(self.live["genuiActions"]), 17)
         self.assertEqual(len(self.live["genuiQueries"]), 45)
-        for action_id in self.live["genuiActions"]:
-            self.assertIn(registry.for_action(action_id).capability_id, frozen["capabilities"])
-        for name in self.live["genuiQueries"]:
-            self.assertIn(registry.for_query(name).capability_id, frozen["capabilities"])
+        for cap in [registry.for_action(a) for a in self.live["genuiActions"]] + [registry.for_query(q) for q in self.live["genuiQueries"]]:
+            self.assertEqual(cap.capability_id in expected, cap.tenant == "workspace", cap.capability_id)
+        self.assertEqual(len(self.live["siteAgent"]), 37)
+        for tool_id in self.live["siteAgent"]:
+            self.assertIn(registry.site_capability(tool_id), expected)
+        sdk_names = set(self.live["manager"]) | {n for names in self.live["specialists"].values() for n in names}
+        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names}, expected)
+
+    def test_post_freeze_tool_never_joins_legacy(self):
+        # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.
+        spec = contracts.ToolSpec("library_browse", contracts.READ, "read", "Library metadata", voice=False,
+                                  data_grants=("library",), since=2)
+        tool_adapter.REGISTRY[spec.name] = tool_adapter.Tool(spec, {}, lambda ctx, args: {}, "Browse Library")
+        try:
+            self.assertEqual(registry.for_tool(spec.name).since, 2)
+            self.assertNotIn("tool.library_browse", registry.legacy_baseline_v1())
+        finally:
+            tool_adapter.REGISTRY.pop(spec.name, None)
 
 
 class RegistryMatchesToday(unittest.TestCase):
@@ -183,6 +206,33 @@ class RegistryMatchesToday(unittest.TestCase):
         self.assertEqual(registry.surface("genui_action", "schedule_prepare").legacy_confirmation, "proposal")
         self.assertEqual(registry.surface("genui_action", "campaign_link").legacy_confirmation, "none")
         self.assertEqual(registry.surface("site_agent", "automation.patch_propose").capability_id, "site.automation_patch_propose")
+
+    def test_legacy_confirmation_is_exact_for_every_baseline_surface(self):
+        baseline = registry.legacy_baseline_v1()
+        seen = set()
+        for binding in registry.bindings():
+            if binding.capability_id not in baseline:
+                continue
+            expected = live_confirmation(binding.surface, binding.binding_ref, self.live)
+            cap = registry.get(binding.capability_id)
+            self.assertEqual(binding.required(cap.confirmation), expected, f"{binding.surface}:{binding.binding_ref}")
+            seen.add(binding.surface)
+        self.assertEqual(seen, set(contracts.SURFACES))
+
+    def test_site_id_rule_and_exact_executor_are_frozen(self):
+        _commands, site_tools, _a, _u, _q = _sources()
+        adapted = []
+        for tool_id in site_tools.CATALOG:
+            cap_id = registry.site_capability(tool_id)
+            self.assertEqual(cap_id, registry.surface("site_agent", tool_id).capability_id)
+            self.assertEqual(cap_id, registry.for_tool(tool_id).capability_id)
+            if cap_id.startswith("tool."):
+                adapted.append(tool_id)
+                self.assertEqual(cap_id, "tool." + tool_id.replace(".", "_"))
+        self.assertEqual(len(adapted), 36)
+        self.assertEqual(registry.site_capability("automation.patch_propose"), "site.automation_patch_propose")
+        with self.assertRaises(LookupError):
+            registry.site_capability("not.a_site_tool")
 
     def test_role_requirement_per_surface(self):
         for tool_id, site in self.live["siteAgent"].items():
@@ -246,6 +296,17 @@ class NoUndeclaredDispatch(unittest.TestCase):
             self.assertTrue(any("capability_probe_undeclared: non-READ capability must declare" in p for p in problems), problems)
         finally:
             tool_adapter.REGISTRY.pop(spec.name, None)
+        self.assertEqual(registry.lint(), [])
+
+    def test_wrong_site_executor_is_not_mistaken_for_an_adapter(self):
+        registry.ensure()
+        original = tool_adapter.REGISTRY["help_search"]
+        for executor in (lambda ctx, args: {}, tool_adapter._site_executor("help.get")):
+            tool_adapter.REGISTRY["help_search"] = replace(original, executor=executor)
+            try:
+                self.assertTrue(any("help.search: adapter does not run" in p for p in registry.lint()))
+            finally:
+                tool_adapter.REGISTRY["help_search"] = original
         self.assertEqual(registry.lint(), [])
 
     def test_unknown_ids_fail_closed(self):
@@ -324,7 +385,7 @@ class Invariants(unittest.TestCase):
         for capability_id, cap in registry.ensure().items():
             self.assertLessEqual(set(cap.consents), set(registry.VERIFIED_CONSENT_PRECHECKS.get(capability_id, ())), capability_id)
         self.assertEqual(registry.for_tool("memory_context").consents, (), "memory_context filters; it never refuses")
-        self.assertEqual(registry.for_tool("brand_summary").consents, (), "gated only after HF-1 adds its egress check")
+        self.assertEqual(registry.for_tool("brand_summary").consents, (), "R0 filters memory; filtering never adds a consent-denial gate")
         self.assertEqual(registry.for_tool("image_generate").consents, (), "only reference images leave, so it never refuses up front")
 
     def test_youtube_provider_scope_matches_the_executor(self):
@@ -408,11 +469,18 @@ class PublicCatalogue(unittest.TestCase):
                           "inputSchema", "input_schema", "description", "executor", "agent_runtime_v2", "\"scopes\""):
             self.assertNotIn(forbidden, text)
         keys = {"capabilityId", "version", "kind", "category", "risk", "confirmation", "cost", "dataGrants", "consents", "providerScopes", "requirement",
-                "surfaces", "nativeOnly", "routeId", "reauthSeconds", "baseline", "since", "explicitRequest", "titleKey", "title"}
+                "surfaces", "legacyConfirmation", "nativeOnly", "routeId", "reauthSeconds", "baseline", "since", "explicitRequest", "titleKey", "title"}
         for entry in self.entries:
             self.assertEqual(set(entry), keys)
             for scope in entry["providerScopes"]:
                 self.assertEqual(set(scope), {"provider", "title"})
+
+    def test_per_surface_legacy_confirmation_is_published(self):
+        draft_edit = next(e for e in self.entries if e["capabilityId"] == "tool.draft_edit")
+        self.assertEqual(draft_edit["legacyConfirmation"], {"genui_action": "native", "manager": "none"})
+        self.assertEqual(draft_edit["confirmation"], "none", "the policy floor is not the surface's confirmation")
+        for entry in self.entries:
+            self.assertEqual(sorted(entry["legacyConfirmation"]), entry["surfaces"])
 
     def test_native_only_routes_and_reauth(self):
         native = [e for e in self.entries if e["nativeOnly"]]

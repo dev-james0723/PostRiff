@@ -105,8 +105,8 @@ TOOL_POLICY: dict[str, dict] = {
     "image_analyze": _read("content", consents=("media_cloud",)),
     "image_list": _read("content", resource_scope="conversation"),
     # memory: these executors FILTER private layers when cloud memory is off (memory_layers.cloud_allowed, overlays); they
-    # never refuse, so no consent is declared (a declared consent would deny where today they answer). brand_summary and
-    # voice_profile have no egress check at all today (site_agent/reads.py); HF-1 adds it, then they declare it.
+    # never refuse, so no consent is declared (a declared consent would deny where today they answer). R0/#158 also
+    # filters brand_summary/voice_profile through site_agent.reads._memory_allowed; filtering is not a consent refusal.
     **{name: _read("memory_brand") for name in ("memory_context", "memory_summary", "voice_check", "brand_summary", "voice_profile")},
     "overlay_context": _read("memory_brand", feature_flag="RAFII_ADAPTIVE_SKILLS_ENABLED"),
     # the web: web_research refuses unless research.allowed(state); the broker tools also have providers (MCP connector,
@@ -461,20 +461,41 @@ def _cache_key():
     from . import manager, specialists, tool_adapter, ui_domain
     return (tuple((name, id(tool)) for name, tool in tool_adapter.REGISTRY.items()),
             tuple((name, id(b)) for name, b in ui_domain.ACTIONS.items()), tuple((name, id(b)) for name, b in ui_domain.QUERIES.items()),
-            tuple(site_tools.CATALOG), tuple(manager.MANAGER_TOOLS), tuple((k, tuple(v)) for k, v in specialists.EXTRA_SCOPES.items()))
+            tuple((name, id(value)) for name, value in site_tools.CATALOG.items()), tuple(manager.MANAGER_TOOLS),
+            tuple((k, tuple(v["tools"])) for k, v in specialists.SPECIALISTS.items()),
+            tuple((k, tuple(v)) for k, v in specialists.EXTRA_SCOPES.items()))
 
 
 def _tool_cap_id(tool_name: str | None) -> str | None:
-    """The capability of a binding's `tool`: an agent tool name or a site tool id (adapted to its runtime name)."""
+    """The capability of a binding's `tool`: an agent tool name or a site tool id (adapted to its runtime name). A tool's
+    id is `tool.<name>` unless its ToolSpec or TOOL_POLICY entry declares another `capability_id`."""
     from . import tool_adapter
     if not tool_name:
         return None
     if "." in tool_name:
         if tool_name in SITE_ONLY:
             return SITE_ONLY[tool_name]["capability_id"]
-        adapted = tool_adapter.site_tool_name(tool_name)
-        return f"tool.{adapted}" if adapted else None
-    return f"tool.{tool_name}"
+        tool_name = tool_adapter.site_tool_name(tool_name)
+        if not tool_name:
+            return None
+    tool = tool_adapter.REGISTRY.get(tool_name)
+    declared = (tool.spec.capability_id if tool is not None else None) or (TOOL_POLICY.get(tool_name) or {}).get("capability_id")
+    return declared or f"tool.{tool_name}"
+
+
+def site_capability(tool_id: str) -> str:
+    """CF-1 §5.1 frozen site id rule; unknown catalogue ids fail closed. Pure metadata, never dispatches a tool.
+
+    An adapted catalogue entry shares tool.<dotted_id_with_underscores>; an unadapted entry uses site.<...>. Lint checks
+    that each adapter is the exact _site_executor(id), rather than accepting a coincidentally named tool as equivalent.
+    """
+    from ..site_agent import tools as site_tools
+    from . import tool_adapter
+    if tool_id not in site_tools.CATALOG:
+        raise LookupError(f"unknown site tool {tool_id!r}")
+    name = tool_id.replace(".", "_")
+    adapted = tool_adapter.site_tool_name(tool_id)
+    return f"tool.{name}" if adapted == name and name in tool_adapter.REGISTRY else f"site.{name}"
 
 
 def _commands_direct() -> list[str]:
@@ -532,20 +553,17 @@ def _build() -> _Built:
 
     # Model tool calls through tool_adapter.execute: the FunctionTool timeout, and a proposal for approval tools.
     for name in specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])):
-        bind("manager", name, f"tool.{name}", tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
+        bind("manager", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
     for key, spec in specialists.SPECIALISTS.items():
         for name in specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])):
-            bind("specialist", name, f"tool.{name}", tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
+            bind("specialist", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
     for name in _commands_direct():
         if name in tool_adapter.REGISTRY:
-            bind("commands_direct", name, f"tool.{name}", tool_legacy(name))
+            bind("commands_direct", name, _tool_cap_id(name), tool_legacy(name))
     # The grounded site agent: its catalog (at most MAX_TOOLS_PER_TURN tools per turn) and its own proposal flows.
     site_turn = Limits(per_turn=site_tools.MAX_TOOLS_PER_TURN)
     for tool_id, definition in site_tools.CATALOG.items():
-        capability_id = _tool_cap_id(tool_id)
-        if capability_id is None:
-            problems.append(f"site_agent:{tool_id}: no capability (neither adapted nor in SITE_ONLY)")
-            continue
+        capability_id = site_capability(tool_id)
         bind("site_agent", tool_id, capability_id, "proposal" if definition["effect"] == "workspace_mutation" else "none", site_turn)
     for ref, capability_id in SITE_PROPOSALS.items():
         bind("site_agent", ref, capability_id, "proposal")
@@ -559,8 +577,9 @@ def _build() -> _Built:
     for capability_id in CONTEXT_CAPABILITIES:
         bind("context", capability_id, capability_id, "none")
 
-    reached = {b.capability_id for b in bindings.values()}
-    baseline = frozenset(c for c in reached if caps[c].since == 1 and caps[c].kind != "native_only")
+    # The freeze covers every consumer capability of every executable/context kind, not merely a reachability subset.
+    # Founder capabilities bypass consumer grants; native-only navigation is decided before the legacy baseline check.
+    baseline = frozenset(c for c, cap in caps.items() if cap.tenant != FOUNDER_TENANT and cap.since == 1 and cap.kind != "native_only")
     return _Built(caps, bindings, tuple(problems), baseline)
 
 
@@ -570,11 +589,14 @@ def ensure() -> dict[str, CapabilitySpec]:
 
 
 def _built() -> _Built:
+    """Cached by what is registered. The registering imports run again only when that changed (or on first use), so a
+    hot-path lookup costs one pass over the registry names."""
+    if _CACHE["built"] is not None and _CACHE["key"] == _cache_key():
+        return _CACHE["built"]
     _ensure_sources()
     key = _cache_key()
-    if _CACHE["key"] != key or _CACHE["built"] is None:
-        _CACHE["built"] = _build()
-        _CACHE["key"] = key
+    _CACHE["built"] = _build()
+    _CACHE["key"] = key
     return _CACHE["built"]
 
 
@@ -591,7 +613,8 @@ def _require(capability_id: str | None) -> CapabilitySpec:
 
 
 def for_tool(name: str) -> CapabilitySpec:
-    return _require(f"tool.{name}" if name and "." not in name else _tool_cap_id(name))
+    """By runtime tool name, or by site tool id (`help.search`, `automation.patch_propose`)."""
+    return _require(_tool_cap_id(name))
 
 
 def for_action(binding) -> CapabilitySpec:
@@ -625,8 +648,8 @@ def bindings(capability_id: str | None = None) -> list[SurfaceBinding]:
 
 
 def legacy_baseline_v1() -> frozenset:
-    """LEGACY_BASELINE_V1 as computed now: every capability some surface reaches today with since == 1 (frozen in
-    tests/fixtures/agent_permissions/legacy_baseline_v1.json; a capability added later is never in it)."""
+    """Every consumer since-1 capability except native-only, checked against the frozen baseline fixture in CI.
+    Founder bypass is separate. A post-freeze capability must declare since > 1 and can never enter this set."""
     return _built().baseline
 
 
@@ -659,9 +682,10 @@ def public_catalogue() -> list[dict]:
     built = _built()
     copy = copy_table()
     titles, providers = copy.get("capabilities") or {}, copy.get("providers") or {}
-    surfaces: dict[str, set] = {}
+    surfaces: dict[str, dict] = {}
     for b in built.bindings.values():
-        surfaces.setdefault(b.capability_id, set()).add(b.surface)
+        per = surfaces.setdefault(b.capability_id, {})
+        per[b.surface] = max_confirmation(per.get(b.surface, "none"), b.legacy_confirmation)
     out = []
     for capability_id in sorted(built.caps):
         cap = built.caps[capability_id]
@@ -670,7 +694,9 @@ def public_catalogue() -> list[dict]:
         out.append({"capabilityId": capability_id, "version": cap.version, "kind": cap.kind, "category": cap.category, "risk": cap.risk,
                     "confirmation": cap.confirmation, "cost": cap.cost, "dataGrants": list(cap.data_grants or ()), "consents": list(cap.consents),
                     "providerScopes": [{"provider": s.provider, "title": providers.get(_provider_key(s))} for s in cap.provider_scopes],
-                    "requirement": cap.permission, "surfaces": sorted(surfaces.get(capability_id, ())), "nativeOnly": cap.kind == "native_only",
+                    "requirement": cap.permission, "surfaces": sorted(surfaces.get(capability_id, {})),
+                    # what each surface asks today (correction 6); an enforcement point asks max(this, decision) (INV-10)
+                    "legacyConfirmation": dict(sorted(surfaces.get(capability_id, {}).items())), "nativeOnly": cap.kind == "native_only",
                     "routeId": cap.route_id, "reauthSeconds": cap.reauth_seconds, "baseline": capability_id in built.baseline, "since": cap.since,
                     "explicitRequest": cap.explicit_request, "titleKey": f"capabilities.{capability_id}", "title": titles.get(capability_id)})
     return out
@@ -689,7 +715,7 @@ def lint() -> list[str]:
     caps = built.caps
     problems = list(built.problems)
     for name, tool in tool_adapter.REGISTRY.items():
-        cap = caps.get(f"tool.{name}")
+        cap = caps.get(_tool_cap_id(name))
         inline = contracts.inline_policy(tool.spec)
         table = TOOL_POLICY.get(name)
         if table is None and not inline:
@@ -706,10 +732,24 @@ def lint() -> list[str]:
         if name not in tool_adapter.REGISTRY:
             problems.append(f"TOOL_POLICY[{name}]: no such registered tool")
     for tool_id in site_tools.CATALOG:
-        if _tool_cap_id(tool_id) not in caps:
-            problems.append(f"site_agent:{tool_id}: no capability")
-        elif site_tools.REQUIREMENT.get(tool_id, "read") != caps[_tool_cap_id(tool_id)].permission:
+        capability_id = site_capability(tool_id)
+        if capability_id not in caps:
+            problems.append(f"site_agent:{tool_id}: no capability {capability_id}")
+        elif site_tools.REQUIREMENT.get(tool_id, "read") != caps[capability_id].permission:
             problems.append(f"site_agent:{tool_id}: requirement differs from its capability's permission")
+        if _tool_cap_id(tool_id) != capability_id:
+            problems.append(f"site_agent:{tool_id}: adapter mapping differs from the frozen site id rule")
+        adapted = tool_adapter.site_tool_name(tool_id)
+        if adapted and adapted in tool_adapter.REGISTRY:
+            executor = tool_adapter.REGISTRY[adapted].executor
+            expected = tool_adapter._site_executor(tool_id)
+            try:
+                same_executor = (getattr(executor, "__code__", None) is expected.__code__
+                                 and inspect.getclosurevars(executor).nonlocals.get("tool_id") == tool_id)
+            except (TypeError, ValueError):
+                same_executor = False
+            if not same_executor:
+                problems.append(f"site_agent:{tool_id}: adapter does not run _site_executor({tool_id!r})")
     for kind, table in (("action", ui_domain.ACTIONS), ("query", ui_domain.QUERIES)):
         for ref, binding in table.items():
             capability_id = _tool_cap_id(binding.tool) or f"ui.{kind}.{ref}"
