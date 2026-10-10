@@ -52,7 +52,11 @@ grows (or the view falls back natively); then `__rafiiLive.end()`. Touch nothing
 case: a failure is recorded as it happened, because the denominator is fixed at 60. `ingest` counts only the plan's case
 ids (any other id is reported as unplanned and never counted) and only each case's first attempt. A case run more than once
 under its id (more than one turn, or more than one artifact of its own) counts as a first-pass miss and as not functional,
-whatever the later attempt did. A case answered natively, with no view, is not functional. Server artifacts that no case
+whatever the later attempt did. An explicit same-artifact retry also invalidates the case. Only a repair whose `retry_of`
+names that first attempt and whose `target_revision` matches it can count; later edit repairs belong to the edit alone.
+Functional success requires an accepted server revision and a browser ready mark for that same revision. A case answered
+natively, with no view, is not functional. Missing warm render timings leave G17 unverified, never a smaller passing sample.
+Server artifacts that no case
 counts are listed in `G03.uncountedArtifacts`; check that the only ones are your fault cases.
 
 ## 3. The 9 edit cases

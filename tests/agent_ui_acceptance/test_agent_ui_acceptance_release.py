@@ -64,11 +64,15 @@ def ingest_sample(plan):
         browser["cases"][case["caseId"]] = {"begunAt": index * 1000}
         browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/turns", "start": 0.0})
         browser["resources"].append({"caseId": case["caseId"], "route": "/api/workspaces/:id/agent/ui/presentations", "start": 100.0})
-        browser["marks"] += [{"caseId": case["caseId"], "name": "rafii-genui:first-component", "at": 2100.0, "artifactId": artifact},
+        browser["marks"] += [{"caseId": case["caseId"], "name": "rafii-genui:first-component", "at": 2100.0, "artifactId": artifact, "revision": 1},
                              {"caseId": case["caseId"], "name": "rafii-genui:ready", "at": 9100.0, "artifactId": artifact, "revision": 1}]
-        rows.append({"artifact_id": artifact, "kind": "generate", "state": "ready", "accepted": True, "provider_attempts": 1, "cost_usd_micro": 900,
+        rows.append({"artifact_id": artifact, "attempt_id": f"generate-{index}", "target_revision": 1, "retry_of": None, "kind": "generate", "state": "ready", "accepted": True, "provider_attempts": 1, "cost_usd_micro": 900,
                      "cost_state": "known", "admitted_at": "2026-10-09T10:00:00Z", "first_delta_at": "2026-10-09T10:00:01.5Z", "ready_at": "2026-10-09T10:00:08Z"})
     return browser, rows
+
+
+def repaired_attempt(initial, **over):
+    return {**initial, "attempt_id": f"repair-{initial['attempt_id']}", "kind": "repair", "retry_of": initial["attempt_id"], **over}
 
 
 # D-A53 (James, 2026-10-09): the G03 corpus is fixed before any measurement. Its first 30 cases, 9 edits and 3 faults are the
@@ -245,7 +249,7 @@ class LiveRunnerGuards(unittest.TestCase):
         plan = LIVE.sample_plan()
         browser, rows = ingest_sample(plan)
         rows[3] = {**rows[3], "state": "failed", "reason": "parse_rejected"}
-        rows.append({**rows[3], "kind": "repair", "state": "ready", "reason": None})
+        rows.append(repaired_attempt(rows[3], state="ready", reason=None))
         browser["probe"] = {"ok": True, "frames": [{"at": 10, "event": "ui.started", "multibyte": False}, {"at": 1510, "event": "ui.delta", "multibyte": True},
                                                    {"at": 3010, "event": "ui.ready", "multibyte": False}], "endedAt": 3020, "splitInsideCharacter": True}
         out = LIVE.ingest(browser, rows, plan)
@@ -282,12 +286,12 @@ class LiveRunnerGuards(unittest.TestCase):
 
         one_miss = [dict(r) for r in rows]
         one_miss[3] = {**one_miss[3], "state": "failed", "reason": "parse_rejected"}
-        one_miss.append({**one_miss[3], "kind": "repair", "state": "ready", "reason": None})
+        one_miss.append(repaired_attempt(one_miss[3], state="ready", reason=None))
         self.assertEqual(LIVE.ingest(browser, one_miss, plan)["verdicts"]["G03"]["status"], "pass", "59/60 first pass, 60/60 functional")
 
         two_misses = [dict(r) for r in one_miss]
         two_misses[40] = {**two_misses[40], "state": "failed", "reason": "parse_rejected"}
-        two_misses.append({**two_misses[40], "kind": "repair", "state": "ready", "reason": None})
+        two_misses.append(repaired_attempt(two_misses[40], state="ready", reason=None))
         v = LIVE.ingest(browser, two_misses, plan)["verdicts"]["G03"]
         self.assertEqual((v["status"], v["firstPassValid"], v["functional"]), ("fail", 58, 60))
 
@@ -330,10 +334,10 @@ class LiveRunnerGuards(unittest.TestCase):
         first = f"00000000-0000-4000-8000-{index['J02-c']:012d}"
         browser["marks"] = [m for m in browser["marks"] if not (m["caseId"] == "J02-c" and m["name"] == "rafii-genui:ready")]
         rows[index["J02-c"]] = {**rows[index["J02-c"]], "state": "failed", "reason": "parse_rejected", "ready_at": None}
-        rows.append({**rows[index["J02-c"]], "kind": "repair"})
+        rows.append(repaired_attempt(rows[index["J02-c"]]))
         browser["resources"] += [{"caseId": "J02-c", "route": "/api/workspaces/:id/agent/turns", "start": 30000.0},
                                  {"caseId": "J02-c", "route": "/api/workspaces/:id/agent/ui/presentations", "start": 30100.0}]
-        browser["marks"] += [{"caseId": "J02-c", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_a},
+        browser["marks"] += [{"caseId": "J02-c", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_a, "revision": 1},
                              {"caseId": "J02-c", "name": "rafii-genui:ready", "at": 39100.0, "artifactId": rerun_a, "revision": 1}]
         rows.append({**rows[0], "artifact_id": rerun_a})
         out = LIVE.ingest(browser, rows, plan)
@@ -348,7 +352,7 @@ class LiveRunnerGuards(unittest.TestCase):
         browser["marks"] = [m for m in browser["marks"] if m["caseId"] != "J04-e"]
         browser["resources"] += [{"caseId": "J04-e", "route": "/api/workspaces/:id/agent/turns", "start": 30000.0},
                                  {"caseId": "J04-e", "route": "/api/workspaces/:id/agent/ui/presentations", "start": 30100.0}]
-        browser["marks"] += [{"caseId": "J04-e", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_b},
+        browser["marks"] += [{"caseId": "J04-e", "name": "rafii-genui:first-component", "at": 32100.0, "artifactId": rerun_b, "revision": 1},
                              {"caseId": "J04-e", "name": "rafii-genui:ready", "at": 39100.0, "artifactId": rerun_b, "revision": 1}]
         rows.append({**rows[0], "artifact_id": rerun_b})
         out = LIVE.ingest(browser, rows, plan)
@@ -363,7 +367,7 @@ class LiveRunnerGuards(unittest.TestCase):
         page_1 = {**browser, "timeOrigin": 1_000_000.0, "cases": {k: v for k, v in browser["cases"].items() if k != "J01-e"},
                   "marks": [m for m in browser["marks"] if m["caseId"] != "J01-e"], "resources": [r for r in browser["resources"] if r["caseId"] != "J01-e"]}
         page_2 = {"timeOrigin": 2_000_000.0, "cases": {"J01-e": {"begunAt": 10.0}},
-                  "marks": [{"caseId": "J01-e", "name": "rafii-genui:first-component", "at": 500.0, "artifactId": earlier},
+                  "marks": [{"caseId": "J01-e", "name": "rafii-genui:first-component", "at": 500.0, "artifactId": earlier, "revision": 1},
                             {"caseId": "J01-e", "name": "rafii-genui:ready", "at": 600.0, "artifactId": earlier, "revision": 1},
                             *[m for m in browser["marks"] if m["caseId"] == "J01-e"]],
                   "resources": [r for r in browser["resources"] if r["caseId"] == "J01-e"]}
@@ -384,11 +388,76 @@ class LiveRunnerGuards(unittest.TestCase):
         browser["cases"]["J01-edit"] = {"begunAt": 99_000.0}
         browser["resources"].append({"caseId": "J01-edit", "route": "/api/workspaces/:id/agent/ui/presentations/:id/edits", "start": 99_100.0})
         browser["marks"].append({"caseId": "J01-edit", "name": "rafii-genui:ready", "at": 104_100.0, "artifactId": base, "revision": 2})
-        rows.append({**rows[0], "kind": "edit", "target_revision": 2, "admitted_at": "2026-10-09T11:00:00Z", "ready_at": "2026-10-09T11:00:05Z"})
+        rows.append({**rows[0], "attempt_id": "edit-0", "kind": "edit", "target_revision": 2, "admitted_at": "2026-10-09T11:00:00Z", "ready_at": "2026-10-09T11:00:05Z"})
         out = LIVE.ingest(browser, rows, plan)
         edit = next(c for c in out["cases"] if c["caseId"] == "J01-edit")
         self.assertEqual((edit["artifactId"], edit["revision"], edit["functional"], edit["repeated"]), (base, 2, True, False))
         self.assertEqual(out["verdicts"]["G03"]["status"], "pass", "an edit of J01-a's artifact is not a re-run of J01-a")
+
+    def test_explicit_retry_and_its_repair_cannot_replace_the_first_attempt(self):
+        plan = LIVE.sample_plan()
+        browser, rows = ingest_sample(plan)
+        rows[0].update(state="failed", accepted=False, reason="provider_unavailable", ready_at=None)
+        retry = {**rows[0], "attempt_id": "retry-0", "kind": "retry", "retry_of": rows[0]["attempt_id"],
+                 "admitted_at": "2026-10-09T10:01:00Z", "reason": "parse_rejected"}
+        rows += [retry, repaired_attempt(retry, state="ready", accepted=True, reason=None,
+                                        admitted_at="2026-10-09T10:01:01Z", ready_at="2026-10-09T10:01:02Z")]
+        browser["resources"].append({"caseId": "J01-a", "route": "/api/workspaces/:id/agent/ui/presentations", "start": 60_000.0})
+        out = LIVE.ingest(browser, rows, plan)
+        case = next(c for c in out["cases"] if c["caseId"] == "J01-a")
+        self.assertEqual((case["repeated"], case["repaired"], case["functional"]), (True, False, False))
+        self.assertEqual((out["verdicts"]["G03"]["status"], out["verdicts"]["G03"]["functional"]), ("fail", 59))
+        self.assertEqual(out["verdicts"]["G03"]["repeatedCases"], ["J01-a"])
+
+    def test_repair_must_name_the_initial_attempt_and_the_same_target_revision(self):
+        plan = LIVE.sample_plan()
+        for changes in ({"retry_of": "another-attempt"}, {"target_revision": 2}):
+            with self.subTest(changes=changes):
+                browser, rows = ingest_sample(plan)
+                rows[0].update(state="failed", accepted=False, ready_at=None)
+                rows.append(repaired_attempt(rows[0], state="ready", accepted=True, ready_at="2026-10-09T10:00:08Z", **changes))
+                out = LIVE.ingest(browser, rows, plan)
+                self.assertEqual((out["verdicts"]["G03"]["status"], out["verdicts"]["G03"]["functional"]), ("fail", 59))
+
+    def test_edit_repair_belongs_to_the_edit_and_never_changes_its_base_generation(self):
+        plan = LIVE.sample_plan()
+        for repair_state in ("ready", "failed"):
+            with self.subTest(repair_state=repair_state):
+                browser, rows = ingest_sample(plan)
+                base = rows[0]["artifact_id"]
+                browser["cases"]["J01-edit"] = {"begunAt": 99_000.0}
+                browser["resources"].append({"caseId": "J01-edit", "route": "/api/workspaces/:id/agent/ui/presentations/:id/edits", "start": 99_100.0})
+                # A re-render of the base is never evidence that the edit's target revision rendered.
+                browser["marks"].append({"caseId": "J01-edit", "name": LIVE.READY_MARK, "at": 99_050.0, "artifactId": base, "revision": 1})
+                if repair_state == "ready":
+                    browser["marks"].append({"caseId": "J01-edit", "name": LIVE.READY_MARK, "at": 104_100.0, "artifactId": base, "revision": 2})
+                edit = {**rows[0], "attempt_id": "edit-0", "kind": "edit", "target_revision": 2, "state": "failed", "accepted": False,
+                        "admitted_at": "2026-10-09T11:00:00Z", "ready_at": None}
+                rows += [edit, repaired_attempt(edit, state=repair_state, accepted=repair_state == "ready",
+                                               admitted_at="2026-10-09T11:00:01Z", ready_at="2026-10-09T11:00:05Z" if repair_state == "ready" else None)]
+                out = LIVE.ingest(browser, rows, plan)
+                generation = next(c for c in out["cases"] if c["caseId"] == "J01-a")
+                changed = next(c for c in out["cases"] if c["caseId"] == "J01-edit")
+                self.assertEqual((generation["firstPassValid"], generation["repaired"], generation["functional"]), (True, False, True))
+                self.assertEqual((changed["repaired"], changed["functional"]), (True, repair_state == "ready"))
+                self.assertEqual(out["verdicts"]["G03"]["status"], "pass")
+
+    def test_unknown_attempt_identity_or_unaccepted_revision_never_passes(self):
+        plan = LIVE.sample_plan()
+        for changes in ({"attempt_id": None}, {"target_revision": None}, {"accepted": None}):
+            with self.subTest(changes=changes):
+                browser, rows = ingest_sample(plan)
+                rows[0].update(changes)
+                self.assertEqual(LIVE.ingest(browser, rows, plan)["verdicts"]["G03"]["status"], "fail")
+
+    def test_server_ready_without_rendered_revisions_cannot_pass_functional_or_timing_gates(self):
+        plan = LIVE.sample_plan()
+        browser, rows = ingest_sample(plan)
+        # Only one warm case rendered. p95 over that single survivor must not certify the other 59 views.
+        browser["marks"] = [m for m in browser["marks"] if m["name"] != LIVE.READY_MARK or m["caseId"] == "J01-b"]
+        out = LIVE.ingest(browser, rows, plan)
+        self.assertEqual((out["verdicts"]["G03"]["status"], out["verdicts"]["G03"]["functional"]), ("fail", 1))
+        self.assertEqual(out["verdicts"]["G17"]["status"], "unverified")
 
     def test_api_mode_runs_each_conversation_in_order_and_threads_its_id(self):
         plan = LIVE.sample_plan()

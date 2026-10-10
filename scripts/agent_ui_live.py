@@ -446,7 +446,9 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
     the earliest one of its own (an artifact first seen under an earlier case, e.g. re-rendered after a reload, belongs to that
     case). A case run more than once under its id (more than one turn, or more than one artifact of its own) is `repeated`:
     it is neither first-pass valid nor functional, whatever a later attempt did, so a failed case can never be replaced by
-    running it again. Server artifacts no case counts are listed as `uncountedArtifacts` for review (fault cases make some).
+    running it again. Explicit retries are also repeated; only the first attempt's direct repair at the same target revision
+    may count. Functional requires the matching accepted revision to render. Server artifacts no case counts are listed as
+    `uncountedArtifacts` for review (fault cases make some).
     Cases are listed in run order, so the cold case is the first case run."""
     by_artifact: dict = {}
     for row in rows:
@@ -471,24 +473,37 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
         seen = list(dict.fromkeys(m["artifactId"] for m in mine if m.get("artifactId")))
         own = [a for a in seen if owner.get(a) == case_id] if kind == "generate" else seen
         artifact = own[0] if own else None
-        first = next((m for m in mine if m.get("name") == FIRST_MARK and m.get("artifactId") == artifact), None)
-        ready = next((m for m in mine if m.get("name") == READY_MARK and m.get("artifactId") == artifact), None)
         res = [r for r in resources if r.get("caseId") == case_id]
         turns = [r for r in res if str(r.get("route") or "").endswith("/agent/turns")]
         turn = turns[0] if turns else None
         present = next((r for r in res if re.search(r"/agent/ui/presentations(/:id/edits)?$", str(r.get("route") or ""))), None)
         attempts = sorted(by_artifact.get(str(artifact), []), key=lambda r: str(r.get("admitted_at")))
-        repeated = kind == "generate" and (len(turns) > 1 or len(own) > 1)
-        relevant = [a for a in attempts if (a.get("kind") in ("edit",) if kind == "edit" else a.get("kind") in ("generate", "repair"))]
-        initial = next((a for a in relevant if a.get("kind") in ("generate", "edit")), None)
-        repair = next((a for a in relevant if a.get("kind") == "repair"), None)
+        roots = [a for a in attempts if a.get("kind") == kind]
+        initial = roots[0] if roots else None
+        initial_id = (initial or {}).get("attempt_id")
+        target = (initial or {}).get("target_revision")
+        chain_known = bool(initial_id) and isinstance(target, int) and not isinstance(target, bool) and target > 0
+        # A repair belongs to one failed attempt and its target revision, not to every case sharing the artifact.
+        # In particular, a later edit's repair and a repair of an explicit retry cannot rescue the original generation.
+        repairs = [a for a in attempts if chain_known and a.get("kind") == "repair"
+                   and a.get("retry_of") == initial_id and a.get("target_revision") == target]
+        retries = [a for a in attempts if chain_known and a.get("kind") == "retry" and a.get("target_revision") == target]
+        repeated = (len(own) > 1 or len(roots) > 1 or len(repairs) > 1 or bool(retries)
+                    or (kind == "generate" and len(turns) > 1))
+        repair = repairs[0] if repairs else None
+        relevant = ([initial] if initial else []) + repairs
         final = repair or initial or {}
+        first = next((m for m in mine if m.get("name") == FIRST_MARK and m.get("artifactId") == artifact
+                      and m.get("revision") == target), None)
+        ready = next((m for m in mine if m.get("name") == READY_MARK and m.get("artifactId") == artifact
+                      and m.get("revision") == target), None)
+        functional = bool(chain_known and not repeated and ready and final.get("state") == "ready" and final.get("accepted") is True)
         cost = sum(int(a["cost_usd_micro"]) for a in relevant if a.get("cost_usd_micro") is not None)
         cases.append({
             "caseId": case_id, "journey": planned.get("journey"), "kind": kind, "planned": bool(planned), "repeated": repeated,
             "turns": len(turns), "artifactId": artifact, "revision": (ready or {}).get("revision"),
-            "firstPassValid": bool(not repeated and initial and initial.get("state") == "ready" and initial.get("accepted") is not False),
-            "repaired": bool(repair), "functional": not repeated and final.get("state") == "ready", "reason": final.get("reason"),
+            "firstPassValid": bool(chain_known and not repeated and initial.get("state") == "ready" and initial.get("accepted") is True),
+            "repaired": bool(repair), "functional": functional, "reason": final.get("reason"),
             "providerAttempts": sum(int(a.get("provider_attempts") or 0) for a in relevant), "sourceHash": final.get("source_hash"),
             "statementCount": final.get("statement_count"), "componentNames": final.get("component_names"), "queryNames": final.get("query_names"),
             "actionIds": final.get("action_ids"), "costUsdMicro": cost if relevant else None,
@@ -499,7 +514,7 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
                        "presentationStartToReadyMs": round(ready["at"] - present["start"], 1) if ready and present else None,
                        "turnStartToReadyMs": round(ready["at"] - turn["start"], 1) if ready and turn else None,
                        "rendered": bool(ready)},
-            "usable": not repeated and bool(ready) and final.get("state") == "ready",
+            "usable": functional,
         })
     normal = [c for c in cases if c["kind"] == "generate" and c["planned"]]
     edits = [c for c in cases if c["kind"] == "edit" and c["planned"]]
@@ -520,7 +535,10 @@ def ingest(browser: dict, rows: list, plan: dict) -> dict:
            "pass" if first_pass >= need["firstPassValidAtLeast"] and functional == need["functionalAfterOneRepair"] == len(plan["normal"]) else "fail")
     fc = p95([c["client"]["presentationStartToFirstComponentMs"] for c in warm])
     full = p95([c["client"]["presentationStartToReadyMs"] for c in warm])
-    g17 = "unverified" if missing_normal or fc is None or full is None else ("pass" if fc <= FIRST_COMPONENT_P95_MS and full <= FULL_UI_P95_MS else "fail")
+    timings_complete = all(c["client"]["presentationStartToFirstComponentMs"] is not None
+                           and c["client"]["presentationStartToReadyMs"] is not None for c in warm)
+    g17 = "unverified" if missing_normal or not timings_complete or fc is None or full is None else (
+        "pass" if fc <= FIRST_COMPONENT_P95_MS and full <= FULL_UI_P95_MS else "fail")
     probe = browser.get("probe") or {}
     frames = [f for f in probe.get("frames") or [] if f.get("event") != "ui.heartbeat"]
     g04 = "unverified"
