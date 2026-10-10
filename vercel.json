@@ -104,5 +104,10 @@
       "path": "/api/cron/worker",
       "schedule": "* * * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "codex/rafii-brand-brain-v11": false
+    }
+  }
 }

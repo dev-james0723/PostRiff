@@ -30,7 +30,8 @@ def missing(qs, state):
 
 def fingerprint(state):
     from ..contracts import digest
-    return digest([state.get('growthConsent'),state.get('memoryEgress'),state.get('brandHub'),state.get('speaker'),
+    from ..memory import boundary_fields
+    return digest([boundary_fields(state), state.get('growthConsent'),state.get('memoryEgress'),state.get('brandHub'),state.get('speaker'),
                    state.get('you'),state.get('learning'),state.get('writerDefaults'),
                    [(s.get('id'),s.get('revision'),s.get('active'),s.get('selected'),s.get('useGrants'))
                     for s in state.get('sources',[]) if s.get('kind')=='voice_sample']])

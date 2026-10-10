@@ -1,0 +1,321 @@
+/** Cloud-only real Next -> hosted Python -> disposable PostgreSQL. Identity/providers are synthetic. */
+const assert = require('node:assert/strict');
+const { randomUUID } = require('node:crypto');
+const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+const { chromium, webkit } = require('playwright');
+assert.equal(process.platform, 'linux');
+assert.match(process.env.CI || '', /^(1|true)$/i);
+const base = process.env.BRAND_BRAIN_WEB_URL || 'http://127.0.0.1:4448';
+assert.equal(new URL(base).hostname, '127.0.0.1');
+const out = resolve(process.env.BRAND_BRAIN_BROWSER_EVIDENCE_DIR || '.jcb-artifacts/brand-brain-browser');
+mkdirSync(out, { recursive: true });
+const results = [];
+const record = item => { results.push(item); console.log('Brand Brain browser checkpoint: ' + JSON.stringify(item)); };
+const dismissedTours = Object.fromEntries([...readFileSync(resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map(m => [m[1], 1]));
+let activePage;
+const proof = (status, error) => ({ status, error, execution: 'Cloud real application and disposable PostgreSQL; synthetic identities/providers',
+  paidModelCalls: 0, productionChanges: false, physicalIPhone: false, humanScreenReader: false, capturedAt: new Date().toISOString(), results });
+const hydrated = async locator => {
+  await locator.waitFor();
+  await locator.evaluate(el => new Promise((resolve, reject) => {
+    const end = Date.now() + 30000;
+    const check = () => Object.keys(el).some(k => k.startsWith('__reactProps')) ? resolve() : Date.now() > end ? reject(Error('Hydration timeout')) : setTimeout(check, 50);
+    check();
+  }));
+};
+(async () => {
+  for (const [engineName, engine, width] of [['chromium', chromium, 1440], ['chromium', chromium, 375], ['webkit', webkit, 375]]) {
+    const browser = await engine.launch({ headless: true });
+    try {
+      const principal = randomUUID();
+      const context = await browser.newContext({ viewport: { width, height: width < 768 ? 844 : 1000 }, reducedMotion: 'reduce' });
+      await context.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: principal, url: base }, { name: 'postriff_theme', value: 'rafii', url: base }]);
+      await context.addInitScript(({ id, tours }) => {
+        localStorage.setItem('postriff-dev-principal', id);
+        localStorage.setItem('postriff-onboarding:' + id, JSON.stringify({ completed: {}, dismissed: tours, nudged: tours }));
+      }, { id: principal, tours: dismissedTours });
+      // No API responses are mocked. Only block external browser destinations.
+      await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+      const headers = { Authorization: 'Bearer dev:' + principal, Origin: base, 'X-PostRiff-Request': 'founder-alpha' };
+      const api = async (method, path, data, status = 200) => {
+        const response = await context.request.fetch(base + path, { method, headers, data });
+        assert.equal(response.status(), status, `${method} ${path}: ${await response.text()}`);
+        return response.json();
+      };
+      const boot = await api('POST', '/api/auth/verify', { plan: 'studio' }, 201);
+      await context.addInitScript(wid => localStorage.setItem('postriff-workspace', wid), boot.workspaceId);
+      const ws = `/api/workspaces/${boot.workspaceId}`;
+      const snapshot = () => api('GET', ws);
+      const action = async (name, payload = {}) => {
+        const current = await snapshot();
+        return api('POST', ws + '/actions', { expectedRevision: current.revision, action: name, payload: { ...payload, requestId: randomUUID() } });
+      };
+      const initial = await snapshot();
+      const initialPerson = await api('GET', '/api/me');
+      assert.ok(initialPerson.preferences.agentStyle && typeof initialPerson.preferences.agentStyle === 'object');
+      const beforeMemory = await api('GET', ws + '/memory');
+      const page = await context.newPage(); activePage = page;
+      page.setDefaultTimeout(30000);
+      const pageErrors = []; page.on('pageerror', e => pageErrors.push(e.message));
+      await page.goto(base + '/app/workspace/brand');
+      await page.getByTestId('brand-brain').waitFor();
+      await page.getByRole('heading', { name: 'Brand Brain', exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      const teach = page.getByTestId('teach-voice'); await hydrated(teach);
+      assert.equal(await teach.count(), 1);
+      assert.equal(await teach.evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight - (innerWidth < 768 ? 80 : 0) && el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)); }), true, 'Primary CTA visible on first fold');
+      const reviewLink = await page.getByRole('link', { name: 'Review content', exact: true }).boundingBox();
+      const createLink = await page.getByRole('link', { name: 'Open in Create', exact: true }).boundingBox();
+      assert.ok(createLink.x >= reviewLink.x + reviewLink.width + 8 || createLink.y >= reviewLink.y + reviewLink.height, 'Content links have visible separation');
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-overview-${engineName}-${width}.png`), fullPage: true });
+      await teach.focus(); await page.keyboard.press('Enter');
+      const sample = 'Hello friends. I love the quiet work behind creative practice.\nSmall changes add up. Thank you for listening. 🎵';
+      const oversized = '文'.repeat(initial.state.brandBrain.limits.maxTextChars + 1);
+      await page.getByTestId('bb-sample-text').fill(oversized);
+      await page.getByRole('checkbox', { name: 'I wrote this or have permission to use it.', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Retain this sample privately. Analysis and writer use need separate permission.', exact: true }).check();
+      assert.equal(await page.getByTestId('bb-sample-text').inputValue(), oversized, 'No silent input truncation');
+      assert.equal(await page.getByTestId('bb-save-sample').isDisabled(), true, 'Over-limit input blocked even with both consents');
+      await page.getByRole('checkbox', { name: 'I wrote this or have permission to use it.', exact: true }).uncheck();
+      await page.getByRole('checkbox', { name: 'Retain this sample privately. Analysis and writer use need separate permission.', exact: true }).uncheck();
+      await page.getByTestId('bb-sample-text').fill(sample);
+      await page.getByLabel('Sample title', { exact: true }).fill('Synthetic practice sample');
+      const save = page.getByTestId('bb-save-sample');
+      assert.equal(await save.isDisabled(), true);
+      await page.getByRole('checkbox', { name: 'I wrote this or have permission to use it.', exact: true }).check();
+      assert.equal(await save.isDisabled(), true, 'Authorship does not imply retention');
+      await page.getByRole('checkbox', { name: 'Retain this sample privately. Analysis and writer use need separate permission.', exact: true }).check();
+      await save.click();
+      await page.getByRole('heading', { name: 'Synthetic practice sample', exact: true }).waitFor();
+      let current = await snapshot();
+      const source = current.state.sources.find(s => s.kind === 'voice_sample');
+      assert.equal(source.text, sample); assert.equal(source.authorshipConfirmed, true); assert.deepEqual(source.useGrants, []);
+      // Grant a free writer separately through the actual source ledger.
+      await page.getByRole('tab', { name: 'Sources & permissions', exact: true }).click();
+      const grantCard = page.getByTestId(`bb-ledger-source-${source.id}`);
+      await grantCard.locator('summary').click();
+      await grantCard.getByRole('combobox', { name: /^Allow style for a specific writer/ }).selectOption('local-cli');
+      await page.getByTestId(`bb-writer-grant-${source.id}`).click();
+      await grantCard.getByText('Writer · local-cli', { exact: true }).waitFor();
+      assert.deepEqual((await snapshot()).state.sources.find(s => s.id === source.id).useGrants, [{ purpose: 'generation', route: 'local-cli' }]);
+      await page.getByRole('tab', { name: 'Teach', exact: true }).click();
+      // The entire basic journey uses visible controls; API readback independently verifies persistence.
+      await page.getByTestId(`bb-source-${source.id}`).getByRole('checkbox').click();
+      await page.getByTestId(`bb-source-${source.id}`).locator('[role=checkbox][aria-checked=true]').waitFor();
+      await page.getByRole('button', { name: 'Next: permissions & analysis', exact: true }).click();
+      await page.getByTestId('bb-step-analysis').waitFor();
+      assert.equal(await page.getByTestId('bb-analyse-local').isDisabled(), true);
+      await page.getByRole('checkbox', { name: 'Allow selected samples for this analysis', exact: true }).check();
+      await page.getByRole('button', { name: 'Save analysis permission', exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector('[data-testid="bb-analyse-local"]')?.disabled);
+      await page.getByTestId('bb-analyse-local').click();
+      await page.getByTestId('bb-step-review').waitFor();
+      current = await snapshot();
+      assert.equal(current.state.speaker.activeRevision, initial.state.speaker.activeRevision);
+      const afterAnalysisMemory = await api('GET', ws + '/memory');
+      assert.deepEqual(afterAnalysisMemory.files, beforeMemory.files, 'Analysis cannot mutate active derived files');
+      assert.ok(current.state.speaker.provisional.dimensions.length > 0);
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-review-${engineName}-${width}.png`), fullPage: true });
+      record({ engine: engineName, width, check: 'First-fold CTA, keyboard entry, separate authorship/retention and real stored sample; local analysis remains pending with unchanged active memory' });
+      await page.getByTestId('bb-save-proposal').click();
+      await page.getByTestId('bb-step-preview').waitFor();
+      await page.getByTestId('bb-preview').click();
+      await page.getByText('Preview only · not active', { exact: true }).waitFor();
+      current = await snapshot();
+      assert.equal(current.state.speaker.activeRevision, initial.state.speaker.activeRevision);
+      assert.equal(current.state.brandBrain.preview.generated, false);
+      assert.match(current.state.brandBrain.preview.label, /guideline|not.*generated/i);
+      await page.getByRole('combobox', { name: /^Preview method/ }).selectOption('deterministic-preview');
+      await page.getByTestId('bb-preview').click();
+      await page.getByText('Template comparison · not AI generated', { exact: true }).waitFor();
+      current = await snapshot();
+      const pair = current.state.brandBrain.preview;
+      assert.equal(pair.generated, true); assert.equal(pair.receipt.generationKind, 'template');
+      assert.equal(pair.receipt.memory.length, 2);
+      assert.equal(pair.receipt.memory[0].effectiveVoiceMode, 'neutral');
+      assert.equal(pair.receipt.memory[1].effectiveVoiceMode, 'override');
+      assert.equal(current.state.speaker.activeRevision, initial.state.speaker.activeRevision);
+      await page.getByText('Preview details', { exact: true }).click();
+      await page.getByRole('heading', { name: 'Proposed request', exact: true }).waitFor();
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-paired-${engineName}-${width}.png`), fullPage: true });
+      record({ engine: engineName, width, check: 'Separate writer grant, real paired template execution and actual neutral/candidate Memory receipts; no model or activation' });
+      await page.getByTestId('bb-approve').click();
+      const approval = page.getByRole('alertdialog'); await approval.waitFor();
+      await approval.getByRole('button', { name: 'Keep current voice', exact: true }).click();
+      assert.equal((await snapshot()).state.speaker.activeRevision, initial.state.speaker.activeRevision);
+      await page.getByTestId('bb-approve').click();
+      await approval.getByRole('button', { name: 'Confirm approval', exact: true }).click();
+      await approval.waitFor({ state: 'hidden' });
+      await page.getByTestId('teach-voice').waitFor();
+      current = await snapshot();
+      assert.ok(current.state.speaker.activeRevision > (initial.state.speaker.activeRevision || 0));
+      await page.reload(); await page.getByTestId('brand-brain').waitFor();
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-approved-${engineName}-${width}.png`), fullPage: true });
+      await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+      const axe = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations.map(v => ({ id: v.id, impact: v.impact, targets: v.nodes.map(n => n.target) })));
+      record({ engine: engineName, width, check: 'Pending review, explicitly labeled guideline fallback, owner activation and persistent readback', accessibilityViolations: axe });
+      assert.deepEqual(axe, [], 'Automated accessibility violations');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      // Create a second canonical version, then exercise the real history restore UI.
+      await action('brand_brain_analyze', { sourceIds: [source.id] });
+      let versionState = (await snapshot()).state;
+      await action('brand_brain_review', { proposalDigest: versionState.brandBrain.proposalDigest,
+        decisions: versionState.speaker.provisional.dimensions.map(d => ({ id: d.id, decision: 'accept' })), tone: 'Clear and reflective' });
+      versionState = (await snapshot()).state;
+      await action('brand_brain_approve', { proposalDigest: versionState.brandBrain.proposalDigest,
+        impactDigest: versionState.brandBrain.impact.impactDigest, confirmed: true });
+      await page.reload(); await page.getByTestId('brand-brain').waitFor();
+      await page.getByRole('tab', { name: 'Versions', exact: true }).click();
+      await page.getByTestId('bb-restore-1').click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm restore', exact: true }).click();
+      await page.getByRole('alertdialog').waitFor({ state: 'hidden' });
+      const restored = (await snapshot()).state;
+      assert.equal(restored.speaker.activeRevision, 3);
+      assert.equal(restored.speaker.revisions.at(-1).restoredFrom, 1);
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-restored-${engineName}-${width}.png`), fullPage: true });
+      await page.getByRole('tab', { name: 'Sources & permissions', exact: true }).click();
+      const sourceCard = page.getByTestId(`bb-ledger-source-${source.id}`);
+      await sourceCard.locator('summary').click();
+      const revoke = page.getByTestId(`bb-source-revoke-${source.id}`);
+      await revoke.click();
+      await revoke.click();
+      await sourceCard.getByText('Source revoked · No future use', { exact: true }).waitFor();
+      record({ engine: engineName, width, check: 'Visible history restore creates revision3 from revision1; source revoke requires two explicit clicks' });
+      current = await snapshot();
+      assert.equal(current.state.sources.find(s => s.id === source.id).text, '');
+      assert.equal(JSON.stringify(current.state.brandBrain).includes(sample), false);
+      // Manual setup is also a pending proposal, including explicitly authored identity.
+      const beforeManual = (await snapshot()).state;
+      await page.getByRole('tab', { name: 'Teach', exact: true }).click();
+      await page.getByRole('button', { name: /1\. Choose writing/ }).click();
+      await page.getByRole('button', { name: 'Set up without samples', exact: true }).click();
+      await page.locator('#voice-purpose').fill('Share a synthetic practice journal');
+      await page.locator('#voice-audience').fill('Curious beginner musicians');
+      await page.locator('#tone-warm').click();
+      await page.getByTestId('bb-manual-propose').click();
+      await page.getByTestId('bb-step-review').waitFor();
+      const manual = (await snapshot()).state;
+      assert.deepEqual(manual.brandHub, beforeManual.brandHub, 'Manual proposal cannot change active identity');
+      assert.equal(manual.speaker.activeRevision, beforeManual.speaker.activeRevision);
+      assert.equal(manual.speaker.provisional.analysisMethod, 'user-authored');
+      await page.getByTestId('bb-save-proposal').click();
+      await page.getByTestId('bb-step-preview').waitFor();
+      await page.getByTestId('bb-approve').click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm approval', exact: true }).click();
+      await page.getByRole('alertdialog').waitFor({ state: 'hidden' });
+      assert.equal((await snapshot()).state.brandHub.audience, 'Curious beginner musicians');
+      record({ engine: engineName, width, check: 'Manual no-sample setup preserves active identity and voice until owner impact confirmation' });
+      const clickAction = async (actionName, locator) => {
+        const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/actions') && r.request().postDataJSON()?.action === actionName);
+        await locator.click(); const saved = await response; assert.ok(saved.ok(), await saved.text());
+        await page.waitForFunction(() => !document.querySelector('[data-testid="brand-brain"]')?.getAttribute('aria-busy'));
+      };
+      await page.getByRole('tab', { name: 'Voice & identity', exact: true }).click();
+      await page.getByLabel('My identity', { exact: true }).fill('A synthetic practice teacher');
+      await clickAction('brand_brain_identity', page.getByRole('button', { name: 'Confirm identity changes', exact: true }));
+      assert.equal((await snapshot()).state.you.identitySentence, 'A synthetic practice teacher');
+      await page.getByLabel('New boundary title', { exact: true }).fill('Synthetic privacy rule');
+      await page.getByRole('button', { name: 'Add rule', exact: true }).click();
+      await page.getByLabel('Synthetic privacy rule', { exact: true }).fill('Do not identify synthetic students');
+      await clickAction('brand_brain_boundaries', page.getByRole('button', { name: 'Confirm boundary changes', exact: true }));
+      assert.deepEqual((await api('GET', '/api/me')).preferences.agentStyle, initialPerson.preferences.agentStyle, 'Writing voice does not change the separate person-level Rafii chat style');
+      const savedMemory = await api('GET', ws + '/memory');
+      assert.equal(savedMemory.files.length, 5);
+      assert.ok(savedMemory.files.find(f => f.name === 'IDENTITY.md').body.includes('A synthetic practice teacher'));
+      assert.ok(savedMemory.files.find(f => f.name === 'BOUNDARIES.md').body.includes('Do not identify synthetic students'));
+      await page.getByRole('tab', { name: 'Advanced', exact: true }).click();
+      await page.getByRole('heading', { name: 'What Rafii knows and uses', exact: true }).waitFor();
+      const derived = page.getByRole('combobox', { name: /^View derived file/ });
+      assert.equal(await derived.locator('option').count(), 5);
+      await derived.selectOption('IDENTITY.md');
+      const fileTargets = page.getByRole('heading', { name: 'What the writer would receive', exact: true }).locator('..').locator('summary');
+      for (const target of await fileTargets.all()) assert.ok((await target.boundingBox()).height >= 44, 'Memory disclosures have 44px targets');
+      await page.getByRole('combobox', { name: /^Route projection/ }).selectOption('cloud');
+      await page.getByText('No memory files eligible for this route.', { exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-memory-${engineName}-${width}.png`), fullPage: true });
+      record({ engine: engineName, width, check: 'Canonical identity and private boundary editor read back through the same five Memory files; Advanced cloud-denied projection is empty' });
+      await page.goto(base + '/app/workspace/memory');
+      await page.getByRole('heading', { name: /Memory/, exact: false }).first().waitFor();
+      const exportButton = page.getByRole('button', { name: 'Export voice package', exact: true });
+      await hydrated(exportButton);
+      const downloadEvent = page.waitForEvent('download');
+      void downloadEvent.catch(() => {}); // Keep the original HTTP assertion if export is refused.
+      const exportResponse = page.waitForResponse(r => r.url().endsWith('/profile-export'));
+      await exportButton.click();
+      const exported = await exportResponse; assert.ok(exported.ok(), await exported.text());
+      const download = await downloadEvent; assert.equal(await download.failure(), null);
+      const bytes = readFileSync(await download.path()); assert.equal(bytes.subarray(0, 2).toString(), 'PK');
+      record({ engine: engineName, width, check: 'Legacy Memory voice package export downloads an actual ZIP' });
+      assert.deepEqual(pageErrors, []);
+      record({ engine: engineName, width, check: 'Revocation removes retained text; legacy Memory route works; no browser errors', physicalIPhone: false });
+    } catch (error) {
+      await activePage?.screenshot({ path: resolve(out, 'CLOUD-SYNTHETIC-failure.png'), fullPage: true }).catch(() => {});
+      writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('FAIL', String(error)), null, 2));
+      throw error;
+    } finally { await browser.close(); }
+  }
+  // New localized core journey uses the existing account/browser locale resolver.
+  const localeBrowser = await chromium.launch({ headless: true });
+  try {
+    for (const [locale, title, consent, retain] of [
+      ['zh-Hant-HK', '範例標題', '這是我寫的文字，或我已獲准使用。', '私人儲存此範例。分析及寫作使用需要另行授權。'],
+      ['zh-Hans-CN', '样本标题', '这是我写的文字，或我已获准使用。', '私密保存此样本。分析及写作使用需要另行授权。']
+    ]) {
+      const principal = randomUUID();
+      const context = await localeBrowser.newContext({ viewport: { width: 375, height: 844 }, locale, reducedMotion: 'reduce' });
+      await context.addCookies([{ name: 'postriff_dev', value: '1', url: base }, { name: 'postriff_dev_principal', value: principal, url: base }, { name: 'postriff_theme', value: 'rafii', url: base }]);
+      await context.addInitScript(({ id, tours }) => {
+        localStorage.setItem('postriff-dev-principal', id);
+        localStorage.setItem('postriff-onboarding:' + id, JSON.stringify({ completed: {}, dismissed: tours, nudged: tours }));
+      }, { id: principal, tours: dismissedTours });
+      await context.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : route.abort());
+      const boot = await context.request.post(base + '/api/auth/verify', { headers: { Authorization: 'Bearer dev:' + principal, Origin: base, 'X-PostRiff-Request': 'founder-alpha' }, data: { plan: 'studio' } });
+      assert.ok(boot.ok());
+      const page = await context.newPage(); activePage = page;
+      await page.goto(base + '/app/workspace/brand');
+      await hydrated(page.getByTestId('teach-voice')); await page.getByTestId('teach-voice').click();
+      await page.getByLabel(title, { exact: true }).waitFor();
+      await page.getByTestId('bb-sample-text').fill('這是一段保留原文的測試。');
+      await page.getByRole('checkbox', { name: consent, exact: true }).check();
+      await page.getByRole('checkbox', { name: retain, exact: true }).check();
+      assert.equal(await page.getByTestId('bb-save-sample').isEnabled(), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-locale-${locale}.png`), fullPage: true });
+      const hant = locale === 'zh-Hant-HK';
+      const workspaceId = (await boot.json()).workspaceId;
+      const headers = { Authorization: 'Bearer dev:' + principal, Origin: base, 'X-PostRiff-Request': 'founder-alpha' };
+      const snapshot = async () => { const r = await context.request.get(base + `/api/workspaces/${workspaceId}`, { headers }); assert.ok(r.ok()); return r.json(); };
+      await page.getByTestId('bb-save-sample').click();
+      await page.waitForFunction(() => document.querySelector('[data-testid="bb-sample-text"]')?.value === '');
+      let current = await snapshot();
+      const source = current.state.sources.find(s => s.kind === 'voice_sample');
+      assert.equal(source.text, '這是一段保留原文的測試。'); assert.deepEqual(source.useGrants, []);
+      const originalRevision = current.state.speaker.activeRevision;
+      await page.getByTestId(`bb-source-${source.id}`).getByRole('checkbox').click();
+      await page.getByTestId(`bb-source-${source.id}`).locator('[role=checkbox][aria-checked=true]').waitFor();
+      await page.getByRole('button', { name: hant ? '下一步：權限及分析' : '下一步：权限及分析', exact: true }).click();
+      await page.getByRole('checkbox', { name: hant ? '允許所選範例用於此分析' : '允许所选样本用于此分析', exact: true }).check();
+      await page.getByRole('button', { name: hant ? '儲存分析權限' : '保存分析权限', exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector('[data-testid="bb-analyse-local"]')?.disabled);
+      await page.getByTestId('bb-analyse-local').click();
+      await page.getByTestId('bb-step-review').waitFor();
+      assert.equal((await snapshot()).state.speaker.activeRevision, originalRevision);
+      await page.getByTestId('bb-save-proposal').click();
+      await page.getByTestId('bb-step-preview').waitFor();
+      await page.getByTestId('bb-preview').click();
+      await page.getByText(hant ? '僅供預覽 · 尚未啟用' : '仅供预览 · 尚未启用', { exact: true }).waitFor();
+      await page.getByTestId('bb-approve').click();
+      await page.getByRole('alertdialog').getByRole('button', { name: hant ? '確認批准' : '确认批准', exact: true }).click();
+      await page.getByRole('alertdialog').waitFor({ state: 'hidden' });
+      assert.ok((await snapshot()).state.speaker.activeRevision > (originalRevision || 0));
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-brand-locale-approved-${locale}.png`), fullPage: true });
+      record({ locale, check: '375px translated intake, separate storage/analysis consent, exact original Chinese, pending review and guideline preview, owner activation and readback; no horizontal overflow' });
+      await context.close();
+    }
+  } finally { await localeBrowser.close(); }
+  writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify(proof('PASS'), null, 2));
+  console.log(JSON.stringify(proof('PASS')));
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -10,7 +10,7 @@ from postriff_phase2 import reply_writer
 from postriff_phase2.learning_model import ModelResponse
 from postriff_phase2.model_runtime import ServerModelRuntime
 
-STATE = {"phase2": {"jobs": [{"providerReference": "post-1", "manifest": {"payload": {"text": "Spring recital on 12 April at the Town Hall."}}}]}, "sources": []}
+STATE = {"phase2": {"jobs": [{"providerReference": "post-1", "manifest": {"payload": {"text": "Spring recital on 12 April at the Town Hall."}}}]}, "sources": [], "speaker": {"activeRevision": 1, "revisions": [{"revision": 1, "profile": {"tone": "Warm, brief, no exclamation marks."}}]}}
 
 
 class Cursor:
@@ -72,8 +72,7 @@ PATCHES = (mock.patch("postriff_phase2.reply_writer.require"),
            mock.patch("postriff_phase2.source_policy.project_context", return_value={"sources": [
                {"id": "brief", "facts": [{"text": "Entry is free."}]},
                # A research find (or a rewritten source) whose public use the owner has not approved yet.
-               {"id": "found", "candidateOnly": True, "facts": [{"text": "Tickets sell out every year."}]}]}),
-           mock.patch("postriff_phase2.memory.projection", return_value={"files": [{"name": "VOICE.md", "body": "Warm, brief, no exclamation marks."}]}))
+               {"id": "found", "candidateOnly": True, "facts": [{"text": "Tickets sell out every year."}]}]}))
 
 
 class ReplyWriterTest(unittest.TestCase):
@@ -88,7 +87,7 @@ class ReplyWriterTest(unittest.TestCase):
         def call(system, user, schema):
             seen.update(system=system, user=json.loads(user))
             return ModelResponse({"reply": "Yes, entry is free. See you at the Town Hall on 12 April.", "needs": [], "language": "en"}, 1200)
-        svc = service(managed())
+        svc = service(managed(), state={**STATE, "memoryEgress": {"cloud": True}})
         written = reply_writer.write(svc, "ws", "tok", "th1", call=call)
         self.assertEqual(written["text"], "Yes, entry is free. See you at the Town Hall on 12 April.")
         self.assertEqual(seen["user"]["post"], "Spring recital on 12 April at the Town Hall.")
@@ -98,6 +97,23 @@ class ReplyWriterTest(unittest.TestCase):
         self.assertEqual(svc.ideas.ledger.reserved[0][0], "text_model")
         self.assertEqual(svc.ideas.ledger.settled, [("completed", 1200)])
         self.assertEqual(written["provenance"]["route"]["model"], "openai/gpt-6-sol")
+        self.assertEqual(written["provenance"]["memoryReceipt"]["filesIncluded"], ["BOUNDARIES.md", "IDENTITY.md", "VOICE.md"])
+        self.assertEqual(written["provenance"]["memoryReceipt"]["effectiveVoiceMode"], "approved")
+
+    def test_revocation_after_reservation_prevents_reply_dispatch_and_releases_cost(self):
+        import copy
+        state = copy.deepcopy(STATE)
+        state['memoryEgress'] = {'cloud': True}
+        class RevokingLedger(Ledger):
+            def reserve(self, *args, **kwargs):
+                result = super().reserve(*args, **kwargs)
+                state['memoryEgress']['cloud'] = False
+                return result
+        ledger = RevokingLedger()
+        with self.assertRaises(AlphaError) as caught:
+            reply_writer.write(service(managed(), ledger, state), 'ws', 'tok', 'th1', call=lambda *args: self.fail('revoked memory must never reach provider'))
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(ledger.settled, [('failed', 0)])
 
     def test_no_managed_writer_means_no_reply_and_no_reservation(self):
         svc = service(runtime=mock.Mock(cost_class="none", provider_class="local"))
@@ -191,7 +207,8 @@ class ReviewFixesTest(unittest.TestCase):
                 return ModelResponse({"reply": "Yes, entry is free.", "needs": []}, 800)
             state = {**STATE, **({"memoryEgress": egress} if egress is not None else {})}
             with mock.patch("postriff_phase2.coworker.overlays.effective_view", side_effect=view):
-                reply_writer.write(service(managed(), state=state), "ws", "tok", "th1", call=call)
+                written = reply_writer.write(service(managed(), state=state), "ws", "tok", "th1", call=call)
+                self.assertEqual(bool(written["provenance"]["memoryReceipt"]["filesIncluded"]), shared)
             self.assertEqual("PRIVATE-PREFERENCE" in seen["system"], shared, egress)
 
     def test_the_reply_language_follows_the_comment_and_the_workspace(self):

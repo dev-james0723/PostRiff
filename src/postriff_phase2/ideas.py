@@ -13,6 +13,7 @@ import time
 import math
 import uuid
 import binascii
+from datetime import datetime, timezone
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL  # noqa: F401 (legacy callers import it from here)
@@ -396,7 +397,11 @@ class IdeasService:
             state = self._state(row)
             learned = {**(self.learning.summary(state) if self.learning else learning.summary(state)), "pendingProposals": len(pending_proposals(cur, workspace_id))}
             from . import media_consent
-            return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned,
+            shareable = None if self._member(row).role == "owner" else memory.CLOUD_SHAREABLE
+            return {"files": memory.render_files(state, shareable=shareable), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned,
+                    "snapshot": memory.snapshot(state, row[0], shareable=shareable),
+                    "routeViews": {"local": memory.diagnostic_projection(state, "local", owner=shareable is None, voice_route="local-cli"),
+                                   "cloud": memory.projection(state, "cloud")},
                     "media": media_consent.summary(state, self.media_consent_current())}
 
     def _read_request(self, workspace_id, token, text, zone, runtime):
@@ -982,6 +987,7 @@ class IdeasService:
         if current['sources'] != previous['sources']:
             raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
+        memory.validate_receipt(current_state, outcome.get("memoryReceipt"), outcome.get("voiceContext"))
         cost_known = "costUsd" in usage and usage.get("costUsd") is not None
         settlement = self.ledger.settle(
             cur,
@@ -1026,8 +1032,12 @@ class IdeasService:
                 if outcome.get("contentType"):
                     variant.update({k: outcome["contentType"].get(k) for k in ("contentTypeId", "contentTypeVersion", "formatId")})
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
+        if outcome.get("memoryReceipt"):
+            artifact["memoryReceipt"] = {**outcome["memoryReceipt"], "workspaceId": workspace_id, "runId": run_id,
+                                         "generatedAt": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
+                                         "execution": "fixture" if outcome.get("memoryExecution") == "fixture" or usage.get("provenance") in ("fixture", "fake") else "completed"}
         artifact_hash = digest(artifact)
-        usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
+        usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "memoryReceipt": artifact.get("memoryReceipt"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
         if references is not None:
             usage.update({"references": references, "media": artifact.get("media", [])})
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=usage || %s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
@@ -1463,7 +1473,7 @@ class IdeasService:
                 raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "memoryReceipt": projected.get("memoryReceipt"), "memoryExecution": "fixture" if isinstance(runtime, FixtureAgentRuntime) else "completed", "voiceContext": voice_context, "paid": paid, "actor": principal}
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
@@ -1548,6 +1558,15 @@ class IdeasService:
         if dispatch:
             # Only after the run row is committed can a background thread or device see it.
             runtime, run_id, request, sink = dispatch
+            # Re-check consent at the dispatch boundary after the reservation transaction
+            # committed. A concurrent revocation must not become a fresh provider request.
+            try:
+                dispatch_state = self.repository.get(workspace_id, token)["state"]
+                memory.validate_receipt(dispatch_state, sink.outcome.get("memoryReceipt"), sink.outcome.get("voiceContext"))
+                voice_sources.validate_bindings(dispatch_state, sink.outcome.get("voiceContext") or {})
+            except AlphaError as error:
+                sink.fail(str(error), known_cost_usd=0.0)
+                raise
             if runtime.asynchronous:
                 runtime.dispatch(run_id, request, sink)
             else:
@@ -1666,20 +1685,23 @@ class IdeasService:
             except AlphaError as error:
                 if not recurring and error.status not in (404, 409):
                     raise   # a malformed request, not a missing or disallowed sample
-            if not (voice_projection or {}).get("samples"):
+            if not (voice_projection or {}).get("samples") and not memory.manual_profile_available(state, provider_class):
                 # No chosen sample may be used by this writer right now (none selected, removed, or not allowed for
                 # this route): every caller (Home, a conversation, Rafii, an automation) still gets its draft, in a
                 # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
-        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
         if voice_projection:
             voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
             style_directives = voice_sources.style_directives(voice_projection)
         else:
-            voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
+            voice_context = {"mode": voice_mode, "route": voice_route if voice_mode == "personalized" else None, "bindings": [], "digest": None}
             style_directives = {}
-        request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        from .model_runtime import MAX_MEMORY_BYTES
+        shared, memory_receipt = memory.prepare_writer(state, provider_class, voice_route, destinations=destinations,
+            content_type_id=content_type_id if content_type_id != "unclassified" else None, voice_mode=voice_mode,
+            max_bytes=MAX_MEMORY_BYTES if provider_class == "cloud" else None, voice_context=voice_context)
+        request = {"context": context, "idea": idea, "tone": self._tone(state) if memory_receipt["effectiveVoiceMode"] == "approved" else "neutral", "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         report = None
@@ -1711,7 +1733,7 @@ class IdeasService:
                                      content_type_id if content_type_id != "unclassified" else None,
                                      max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
-        projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
+        projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "memoryReceipt": memory_receipt, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
         if resolved:
             used_types = selection if resolved["contentType"] and selection.get("contentTypeId") != "unclassified" else None
             projected.update({"references": report, "media": resolved["media"], "materialRef": resolved["materialRef"], "reworkOf": resolved["reworkOf"],
@@ -1912,6 +1934,7 @@ class IdeasService:
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
             voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
+            memory.validate_receipt(state, artifact.get("memoryReceipt"), artifact.get("voiceContext"))
             if artifact.get("trendLineage"):
                 from .growth.trends.opportunities import validate_lineage as validate_trend_lineage
                 validate_trend_lineage(state, artifact["trendLineage"], self.clock())
@@ -1942,7 +1965,7 @@ class IdeasService:
                 media = [m for m in candidate.get("media") or artifact.get("media") or [] if m.get("assetId") in live_assets]
                 media_lost = len(candidate.get("media") or artifact.get("media") or []) > len(media)
                 content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId") if candidate.get(k) is not None}
-                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
+                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id, "memoryReceipt": copy.deepcopy(artifact.get("memoryReceipt"))}
                 if media or media_lost or "media" in candidate:
                     values["media"] = media
                 if media_lost:
@@ -1955,6 +1978,8 @@ class IdeasService:
                 if old:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
+                    if values.get("memoryReceipt"):
+                        values["memoryReceipt"]["draftId"] = old["id"]
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
                     # Keeps the link to this run after the proposal is accepted or edited, so reopening the
@@ -1965,6 +1990,8 @@ class IdeasService:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
+                    if variant.get("memoryReceipt"):
+                        variant["memoryReceipt"]["draftId"] = variant["id"]
                     if tag:
                         variant["automation"] = dict(tag)
                     if rework:

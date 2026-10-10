@@ -8,6 +8,7 @@ import { ActionSwapIcon, ActionSwapText } from '@/components/motion/action-swap'
 import type { MemoryBinding, Run, SchedulePlan } from '@/lib/api/types';
 import { EASE_OUT } from '@/lib/ease';
 import { STATUS } from '@/lib/status-labels';
+import { MemoryReceiptDetails, type MemoryRunReceipt } from '@/features/memory/brand-brain-memory';
 
 // On first mount the lines settle in one after another; a line that arrives later (a new warning) fades in on its own.
 const STRIP: Variants = { hidden: {}, shown: { transition: { staggerChildren: 0.04 } } };
@@ -55,7 +56,7 @@ export function ActivityStrip({ run, plan, intent, destinations, skills, memory 
   const first = events[0]?.at;
   const last = events[events.length - 1]?.at;
   const seconds = first && last ? Math.max(0, Math.round(last - first)) : null;
-  const usage = run.usage as { modelRequests?: number; costUsd?: number; cliCostUsd?: number | null; billing?: string; provenance?: string };
+  const usage = run.usage as { modelRequests?: number; costUsd?: number; cliCostUsd?: number | null; billing?: string; provenance?: string; memoryReceipt?: MemoryRunReceipt };
   const running = run.status === 'running';
   // Money stays visible: what this run cost, and who paid for it.
   const cost = usage?.billing === 'subscription' ? ' · Billed to your subscription · $0 here' : usage?.modelRequests === 0 ? ' · $0' : usage?.costUsd != null ? ` · $${usage.costUsd.toFixed(2)}` : '';
@@ -110,6 +111,7 @@ export function ActivityStrip({ run, plan, intent, destinations, skills, memory 
               ))}
             </Detail>
           )}
+          {run.status === 'completed' && usage.memoryReceipt && <MemoryReceiptDetails receipt={usage.memoryReceipt} />}
           {memory && memory.used.length > 0 && (
             <Detail>
               Memory · <b>{memory.used.length}</b> learned rule{memory.used.length === 1 ? '' : 's'} used

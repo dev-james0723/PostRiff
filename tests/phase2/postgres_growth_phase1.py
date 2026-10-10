@@ -81,9 +81,15 @@ refused(409,lambda:growth.check(wid,TOKEN,{**body,'variantRevision':4}))
 rewrite=growth.rewrite(wid,TOKEN,{'checkId':result['runId'],'model':MODEL,'facts':{},'confirmed':True,'requestKey':str(uuid.uuid4())})
 assert rewrite['grounding']=='passed' and len(rewrite['changes'])==2
 assert rewrite['before']['questionSet']==rewrite['after']['questionSet']
+assert rewrite['memoryReceipt']['filesIncluded']==[] and rewrite['memoryReceipt']['execution']=='fixture'
+assert rewrite['memoryReceipt']['writerRoute']=='cloud:vercel-ai-gateway:'+MODEL
+with connection() as db:
+    persisted=db.execute('SELECT body FROM public.pr_post_doctor_runs WHERE workspace_id=%s AND id::text=%s',(wid,rewrite['runId'])).fetchone()[0]
+    assert persisted['memoryReceipt']==rewrite['memoryReceipt']
 action('post_doctor_accept',{'rewriteId':rewrite['runId'],'changeIds':['0']})
 assert draft()['text']=='A clearer opening. Another idea!' and draft()['revision']==2 and draft()['needsReview']
 assert 'postDoctor' not in draft()
+assert draft()['memoryReceipt']=={**rewrite['memoryReceipt'],'draftId':draft()['id']}
 refused(409,lambda:action('post_doctor_accept',{'rewriteId':rewrite['runId'],'changeIds':['1']}))
 refused(409,lambda:growth.check(wid,TOKEN,body))
 checks.append('check ledger, exact replay, rewrite/recheck, selective edits and stale rejection')
@@ -94,8 +100,13 @@ advance();models.ungrounded=True
 latest=check()
 refused(409,lambda:growth.rewrite(wid,TOKEN,{'checkId':latest['runId'],'model':MODEL,'facts':{},'confirmed':True,'requestKey':str(uuid.uuid4())}))
 models.ungrounded=False
+mutate('memory_egress',{'cloud':True,'confirmed':True})
 advance();latest=check()
 rewrite=growth.rewrite(wid,TOKEN,{'checkId':latest['runId'],'model':MODEL,'facts':{},'confirmed':True,'requestKey':str(uuid.uuid4())})
+sent_memory=json.loads(models.messages[-1][-1]['content'])['voice']
+assert rewrite['memoryReceipt']['filesIncluded']==[f['name'] for f in sent_memory]
+assert rewrite['memoryReceipt']['memoryContextDigest']==memory.fingerprint(sent_memory)
+assert {'IDENTITY.md','BOUNDARIES.md'}<=set(rewrite['memoryReceipt']['filesIncluded'])
 action('post_doctor_accept',{'rewriteId':rewrite['runId'],'changeIds':[c['id'] for c in rewrite['changes']]})
 assert draft()['postDoctor']['revision']==draft()['revision']
 assert draft()['postDoctor']['evaluation']['answers']

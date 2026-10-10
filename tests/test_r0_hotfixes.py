@@ -745,6 +745,7 @@ HANDLERS = [
     ("postriff_phase2/productivity_connectors.py", "apply_connector_egress", ""),
     ("postriff_phase2/writer_defaults.py", "apply_action", ""),
     ("postriff_phase2/voice_analysis.py", "apply_action", ""),
+    ("postriff_phase2/brand_brain.py", "apply_action", ""),
     ("postriff_phase2/voice_sources.py", "apply_action", ""),
     ("postriff_phase2/campaigns.py", "apply_action", ""),
     ("postriff_phase2/suggestions.py", "apply_action", ""),
@@ -759,7 +760,7 @@ HANDLERS = [
 DELEGATES = {
     ("postriff_phase2/hosted.py", "HostedPhase2Commands.__call__"): {
         "source_policy.apply_policy_action", "memory.apply_memory_action", "media_consent.apply_action", "locales.apply_language_action",
-        "research.apply_research_action", "productivity_connectors.apply_connector_egress", "writer_defaults.apply_action", "voice_analysis.apply_action",
+        "research.apply_research_action", "productivity_connectors.apply_connector_egress", "writer_defaults.apply_action", "voice_analysis.apply_action", "brand_brain.apply_action",
         "voice_sources.apply_action", "campaigns.apply_action", "suggestions.apply_action", "self.engine._apply", "isinstance"},
     ("postriff_phase2/store.py", "Phase2Store.apply_phase2"): {"apply_content_action", "channel_folders.apply_action"},
     ("postriff_alpha/domain.py", "Store._apply"): {"learning.apply", "visuals.apply", "profiles.apply", "isinstance"},

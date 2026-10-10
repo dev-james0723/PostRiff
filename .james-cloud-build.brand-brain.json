@@ -1,0 +1,57 @@
+{
+  "packageRoot": "web",
+  "provider": "depot",
+  "packageManager": "npm",
+  "nodeVersion": "24.15.0",
+  "installCommand": "npm ci",
+  "tasks": {
+    "lint": "lint",
+    "typecheck": "typecheck",
+    "build": "build",
+    "test": "test:brand-brain:jcb",
+    "ci": "ci:brand-brain:jcb",
+    "e2e": "e2e:brand-brain:jcb"
+  },
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
+  },
+  "outputs": [],
+  "envAllowlist": [],
+  "localFallback": false,
+  "environment": {
+    "DO_NOT_TRACK": "1",
+    "LC_ALL": "C",
+    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4448",
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "OPENUI_TELEMETRY_DISABLED": "1",
+    "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4348",
+    "POSTRIFF_DEV_SSR": "1",
+    "NEXT_PUBLIC_BRAND_BRAIN_V11": "1"
+  },
+  "taskArgs": {},
+  "inputExcludes": [
+    "docs/**",
+    "desktop/**",
+    "vendor/**",
+    "studio/**",
+    "motion/**",
+    "downloads/**",
+    "artifacts/**",
+    "*.zip",
+    ".claude/**",
+    ".agents/**",
+    ".token-pilot/**"
+  ],
+  "checkoutPersistCredentials": true,
+  "framework": "next",
+  "transportMode": "remote_patch",
+  "cacheScope": "brand-brain-v11",
+  "packageManagerVersion": "11.12.1",
+  "lockfile": "package-lock.json",
+  "lockfileSha256": "1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5",
+  "orgId": "jf34f85hr0",
+  "baseRef": "refs/remotes/origin/consumer-saas"
+}

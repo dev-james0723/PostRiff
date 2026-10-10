@@ -110,6 +110,16 @@ class HostedAnalysisTests(unittest.TestCase):
         self.assertIsNone(self.repo.state['speaker']['provisional'])
         self.assertEqual(self.ledger.settle.call_args.args[3:5], ('failed', 200))
 
+    def test_revocation_during_reservation_blocks_provider_and_releases_zero_usage(self):
+        def reserve(*args, **kwargs):
+            voice_sources.apply_action(self.repo.state, 'voice_sample_revoke', {'sourceId': self.sid, 'confirmed': True}, 'owner', 201)
+            return {'reservationId': 'reservation', 'duplicate': False}
+        self.ledger.reserve.side_effect = reserve
+        with self.assertRaises(AlphaError):
+            self.handler.run('workspace', 'session', 1, self.payload)
+        self.runtime.analyze_voice.assert_not_called()
+        self.assertEqual(self.ledger.settle.call_args.args[3:5], ('failed', 0))
+
     def test_unknown_transport_keeps_reservation_instead_of_reporting_zero_cost(self):
         self.runtime.analyze_voice.side_effect = AlphaError('Provider outcome unknown.', 502)
         with self.assertRaises(AlphaError):

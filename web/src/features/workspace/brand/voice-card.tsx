@@ -85,7 +85,7 @@ export function ProfileDetails({ profile, observationsLabel }: { profile: VoiceP
           <>
             <ExpandableText as='blockquote' text={sample} lines={6} className='border-foreground/20 border-l-2 pl-3' />
             {/* memory.py puts the sample in VOICE.md, so every writing route reads it; analysis-only samples never land here. */}
-            <span className='text-muted-foreground text-xs leading-snug'>Every draft reads this sample.</span>
+            <span className='text-muted-foreground text-xs leading-snug'>Writer access depends on the selected voice, route and current source permissions.</span>
           </>
         ) : (
           <p className='text-muted-foreground'>No sample supplied.</p>

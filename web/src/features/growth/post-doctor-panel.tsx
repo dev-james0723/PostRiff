@@ -11,6 +11,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 import type { SnapshotVariant } from '@/lib/api/types';
 import type { AdviceGoal, PostCheck, PostRewrite } from '@/lib/growth/types';
 import { CheckResult, GrowthConsent, useGrowthCatalog } from './shared';
+import { MemoryReceiptDetails, type MemoryRunReceipt } from '@/features/memory/brand-brain-memory';
 
 export function PostDoctorPanel({
   variant,
@@ -31,7 +32,7 @@ export function PostDoctorPanel({
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [check, setCheck] = useState<PostCheck | null>(null);
-  const [rewritten, setRewritten] = useState<PostRewrite | null>(null);
+  const [rewritten, setRewritten] = useState<(PostRewrite & { memoryReceipt?: MemoryRunReceipt }) | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [facts, setFacts] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -232,6 +233,7 @@ export function PostDoctorPanel({
                 }[reason] ?? 'Review this change before accepting it.')).join(' ')}</p>
                 <p className='text-muted-foreground mt-1 text-xs'>This compares writing quality, not expected engagement.</p>
               </div>}
+              {rewritten.memoryReceipt && <MemoryReceiptDetails receipt={rewritten.memoryReceipt} />}
               <h4 className='font-medium'>Choose sentence changes</h4>
               {rewritten.changes.map((change) => (
                 <label key={change.id} className='rafii-paper flex gap-3 rounded-xl p-3 text-sm'>

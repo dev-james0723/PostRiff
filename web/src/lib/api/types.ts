@@ -361,6 +361,9 @@ export interface SnapshotSource {
   routeGrants?: string[];
   useGrants?: { purpose: 'analysis' | 'generation'; route: string }[];
   cleanupStatus?: string;
+  authorshipConfirmed?: boolean;
+  retentionConfirmed?: boolean;
+  lastAnalysis?: { route: string; model: string | null; provider: string | null; at: number; contentHash: string };
 }
 
 /** A saved account group (Rafii v9 Channel Bloom): a batch-selection shortcut keyed by connection ids. */
@@ -389,16 +392,19 @@ export interface Phase2State {
 }
 
 export interface VoiceProfile {
+  /** Proposed canonical context; committed only by owner activation. */
+  brandContext?: { mode?: string; purpose?: string; audience?: string; subject?: string; speaker?: string; layers?: string[] };
   packageSchema?: string;
   fields?: Record<string, unknown>[];
-  tone: 'warm' | 'direct' | 'reflective' | null;
+  tone: string | null;
   writingExample: string;
   observations: string[];
   unknowns: string[];
-  status?: 'proposed' | 'stale';
+  status?: 'proposed' | 'reviewing' | 'stale' | 'approved';
+  workflow?: 'brand_brain';
   staleReason?: string;
   analysisRoute?: string;
-  analysisMethod?: 'local-rules' | 'ai';
+  analysisMethod?: 'local-rules' | 'ai' | 'user-authored';
   analysisModel?: string;
   analysisProvider?: string;
   evidenceSourceIds?: string[];
@@ -408,7 +414,9 @@ export interface VoiceProfile {
     support: string[];
     counterEvidence: string[];
     quotes?: { sourceId: string; text: string }[];
-    evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient';
+    evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient' | 'user-defined';
+    decision?: 'accept' | 'edit' | 'reject';
+    userAuthored?: boolean;
   }[];
 }
 

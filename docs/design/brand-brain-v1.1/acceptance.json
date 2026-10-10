@@ -1,0 +1,574 @@
+{
+  "schema": "rafii.brand-brain.acceptance.v1",
+  "execution": "Verified implementation candidate in isolated cloud application/disposable PostgreSQL; no production or paid model calls",
+  "baseline": "4707b130",
+  "criteria": [
+    {
+      "id": "BB-01",
+      "priority": "P0",
+      "requirement": "Empty, approved, proposal-pending and error states correctly represent approved vs learned voice",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-02",
+      "priority": "P0",
+      "requirement": "One primary CTA visible at initial viewport desktop and mobile",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-03",
+      "priority": "P0",
+      "requirement": "Manual paste retains only after authorship/retention consent",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-04",
+      "priority": "P0",
+      "requirement": "Read-only provider import does not analyse/publish or grant downstream access",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports",
+      "limits": "Verified service/permission/evidence contracts with injected or deterministic transports. No live provider quality or paid-model acceptance claim."
+    },
+    {
+      "id": "BB-05",
+      "priority": "P0",
+      "requirement": "Local analysis requires correct source grant; named AI route cannot reuse another route's grant",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "BB-06",
+      "priority": "P0",
+      "requirement": "Cloud cost/egress is disclosed and no paid call fires without approved gate",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports",
+      "limits": "Verified service/permission/evidence contracts with injected or deterministic transports. No live provider quality or paid-model acceptance claim."
+    },
+    {
+      "id": "BB-07",
+      "priority": "P0",
+      "requirement": "Invalid sample count/byte limits block before request; no silent truncation",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-08",
+      "priority": "P0",
+      "requirement": "Each inferred trait has valid exact source evidence or is explicitly unknown/unsupported",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports",
+      "limits": "Verified service/permission/evidence contracts with injected or deterministic transports. No live provider quality or paid-model acceptance claim."
+    },
+    {
+      "id": "BB-09",
+      "priority": "P0",
+      "requirement": "No sensitive biography/identity/credentials inferred from style examples",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports",
+      "limits": "Verified service/permission/evidence contracts with injected or deterministic transports. No live provider quality or paid-model acceptance claim."
+    },
+    {
+      "id": "BB-10",
+      "priority": "P0",
+      "requirement": "Analysis and preview do not change approved/active revision",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-11",
+      "priority": "P0",
+      "requirement": "Editor cannot approve; owner approval works server-side; stale revision/digest returns a safe 409 path",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "BB-12",
+      "priority": "P0",
+      "requirement": "Owner approval impact dialog presents correct drafts/holds and preserves old revision",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-13",
+      "priority": "P0",
+      "requirement": "Approved/scheduled posts are held and drafts marked for review per existing domain rules",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "BB-14",
+      "priority": "P0",
+      "requirement": "Composer receipt proves effective profile or neutral override; UI does not misreport it",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-15",
+      "priority": "P0",
+      "requirement": "Revoke immediately prevents future sample use; pending proposals stale, disallowed raw evidence redacted",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-16",
+      "priority": "P0",
+      "requirement": "Voice chat personality remains independent from writing brand voice",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844",
+      "limits": "Stored person-level agentStyle is unchanged before/after writing actions; no live audio/model session was started."
+    },
+    {
+      "id": "BB-17",
+      "priority": "P0",
+      "requirement": "Source/proposal writes auditable, idempotent, conflict-safe and permission/RLS constrained",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "BB-18",
+      "priority": "P0",
+      "requirement": "Keyboard, screen reader, reduced motion and 44pt mobile consent/approval interaction verified",
+      "status": "UNVERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs",
+        "HUMAN_ACCEPTANCE.md"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844",
+      "remaining": "Human keyboard/screen-reader and physical iPhone Safari acceptance. Automated keyboard entry,44px targets,axe,no-overflow/reduced-motion browser passes are partial evidence only."
+    },
+    {
+      "id": "BB-19",
+      "priority": "P0",
+      "requirement": "English / Traditional Chinese / Simplified Chinese key flows rendered and translated correctly",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-20",
+      "priority": "P0",
+      "requirement": "No production writes/deployments in design phase; staging preview explicitly labeled non-production",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs",
+        "SOURCE_PROVENANCE.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-21",
+      "priority": "P1",
+      "requirement": "A/B preview uses matching prompt/model/factual context; only candidate voice differs",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844",
+      "limits": "Verified service/permission/evidence contracts with injected or deterministic transports. No live provider quality or paid-model acceptance claim."
+    },
+    {
+      "id": "BB-22",
+      "priority": "P1",
+      "requirement": "Per-trait accept/edit/reject, citations and counterevidence persist as an unapproved proposal",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-23",
+      "priority": "P1",
+      "requirement": "Version compare and safe restore with authorization, impact dialog and audit history",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-24",
+      "priority": "P1",
+      "requirement": "Source ledger accurately distinguishes store/analysis/writer routes and origin",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "BB-25",
+      "priority": "P1",
+      "requirement": "No permissions leak between workspaces; simultaneous sessions handle profile updates safely",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-01",
+      "priority": "P0",
+      "requirement": "Exactly five existing core files remain representable; raw Markdown never becomes a second authoritative editor",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-02",
+      "priority": "P0",
+      "requirement": "User edits approved identity/voice/boundaries through canonical fields; renderer output agrees after server readback",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-03",
+      "priority": "P0",
+      "requirement": "Only `BOUNDARIES.md`, `IDENTITY.md`, `VOICE.md` are default writer prompt files; reference files are labelled separately",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-04",
+      "priority": "P0",
+      "requirement": "Cloud memory disabled → concrete cloud run receipt contains zero memory files, even if candidate file list is present",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-05",
+      "priority": "P0",
+      "requirement": "Owner-permitted cloud route excludes private/local-only/excluded/unlabelled boundaries",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-06",
+      "priority": "P0",
+      "requirement": "Memory egress grant cannot override per-sample generation route grant; revoked samples never re-enter raw writer input",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-07",
+      "priority": "P0",
+      "requirement": "Candidate analysis does not affect active rendered `VOICE.md`; owner approval + effect confirmation required",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-08",
+      "priority": "P0",
+      "requirement": "Voice activation invalidates existing drafts and holds scheduled posts per current semantics; observable receipt",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-09",
+      "priority": "P0",
+      "requirement": "Learned preferences can change effective memory without changing voice revision; receipt exposes digest/version",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-10",
+      "priority": "P0",
+      "requirement": "Each completed writing attempt records actual route, effective voice mode, included/withheld fragments and non-sensitive hashes",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-11",
+      "priority": "P0",
+      "requirement": "Concurrent proposals/cross-session changes reject stale writes and re-render from latest approved state",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-12",
+      "priority": "P0",
+      "requirement": "Revoke stops future eligible use; previous versions cannot reactivate revoked evidence or old permission grants",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-13",
+      "priority": "P1",
+      "requirement": "Advanced raw viewer reflects the same API rendering as composer projection, with local vs cloud route explanation",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-14",
+      "priority": "P1",
+      "requirement": "Pending/active/paused/retired learned preferences are readable/editable via existing authorized backend actions",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports"
+    },
+    {
+      "id": "MEM-15",
+      "priority": "P1",
+      "requirement": "Legacy `/app/workspace/memory` deep links/export/access controls remain usable after nav consolidation",
+      "status": "VERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844"
+    },
+    {
+      "id": "MEM-16",
+      "priority": "P1",
+      "requirement": "375px mobile, keyboard, reduced motion, screen reader, failure/empty/permission states all validated",
+      "status": "UNVERIFIED",
+      "evidence": [
+        "BACKEND_EVIDENCE.md",
+        "evidence/backend-r12.json",
+        "evidence/final-source.json",
+        "evidence/browser-final.json",
+        "../../../web/tests/brand-brain-browser.cjs",
+        "HUMAN_ACCEPTANCE.md"
+      ],
+      "testedEnvironment": "JCB/Depot Linux, Python pinned by .python-version, actual hosted handlers and PostgreSQL16.15 in disposable databases; synthetic identities and injected model transports; built Next16.3.8, Chromium1440x1000/375x844 and WebKit375x844, reduced motion; zh-Hant-HK/zh-Hans-CN core journeys375x844",
+      "remaining": "Human keyboard/screen-reader and physical iPhone Safari acceptance. Automated keyboard entry,44px targets,axe,no-overflow/reduced-motion browser passes are partial evidence only."
+    }
+  ],
+  "humanValidation": {
+    "status": "UNVERIFIED",
+    "required": "Three unfamiliar creators; physical iPhone Safari and keyboard/screen-reader pass",
+    "evidence": "HUMAN_ACCEPTANCE.md"
+  },
+  "validatedAt": "2026-10-10",
+  "automatedSummary": {
+    "verified": 39,
+    "unverified": 2,
+    "backendRun": "89wk54dsx7",
+    "frontendRun": "42xct4v28b",
+    "pythonTests": 179,
+    "postgresSuites": 5,
+    "nodeTests": 927,
+    "browserCheckpoints": 26
+  }
+}

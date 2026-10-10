@@ -1,0 +1,26 @@
+{
+  "source": "User-supplied UX spec and Agent Handoff ZIP in ~/Downloads/Rafii-Brand-Brain-v1.1",
+  "handling": "Original requirements and concept images retained locally; excluded from the public PR. Acceptance summaries and synthetic verification evidence are committed.",
+  "reviewedFiles": [
+    {
+      "name": "Rafii_Brand_Brain_Desktop_Preview_2026-10-10.png",
+      "sha256": "954658f3d66d3cacbf9160c3e791d09eaa9599ca02e7f0e18579d1b0e59455b8"
+    },
+    {
+      "name": "Rafii_Brand_Brain_Interactive_Concept_2026-10-10.html",
+      "sha256": "1facd2da37719f467ed860e26155dd4a532914dafd094a1463a31791f1fdd3aa"
+    },
+    {
+      "name": "Rafii_Brand_Brain_Memory_Integration_Addendum_2026-10-10.md",
+      "sha256": "538145afaf44ba82415d10ed573e69b60179db1d7fa051b70686a81bed8a6105"
+    },
+    {
+      "name": "Rafii_Brand_Brain_Mobile_Preview_2026-10-10.png",
+      "sha256": "bc88e65ef715c495239e64eeac1182e9d65842162f5a9a6969e0a88477dcd900"
+    },
+    {
+      "name": "Rafii_Brand_Brain_UX_Spec_v1.1_2026-10-10.md",
+      "sha256": "c9668ab712797f533650cb3a541f5d847a7a78bc054317aabe2c2da032e432b2"
+    }
+  ]
+}

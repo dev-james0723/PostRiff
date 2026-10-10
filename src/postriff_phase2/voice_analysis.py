@@ -6,6 +6,7 @@ beliefs, diagnoses, experience or factual claims, and it never activates a profi
 from __future__ import annotations
 
 import re
+import json
 
 from postriff_alpha.domain import AlphaError
 from . import voice_sources
@@ -26,6 +27,16 @@ _PROMO = re.compile(r"\b(?:sale|offer|discount|limited|tickets?|buy|book now)\b|
 _HUMOR = re.compile(r"\b(?:lol|haha|hehe)\b|哈哈|😂|🤣", re.I)
 _WARM = re.compile(r"\b(?:hello|hi|thank|thanks|welcome|glad)\b|你好|多謝|謝謝|歡迎|很高興", re.I)
 _FORMAL = re.compile(r"\b(?:therefore|furthermore|regarding|sincerely)\b|謹此|敬請|因此|此外", re.I)
+
+
+# Reject explicit instruction payloads before a model receives sampled writing.
+_INJECTION = re.compile(r'ignore\s+(?:all\s+)?(?:previous|prior|system)\s+instructions|<\s*/?\s*(?:system|assistant)\b|\[INST\]|reveal\s+(?:the\s+)?system\s+prompt', re.I)
+_IDENTITY_CLAIM = re.compile(r'\b(?:author|writer|speaker|person|they|she|he)\s+(?:is|are|has|have|believes?|suffers?|works?)\b|\b(?:diagnosis|diagnosed|ethnicity|religion|sexual orientation|political belief|qualifications?|credentials?|demographic|profession|nationality)\b|作者是|作者患有|宗教信仰|政治立場|政治立场|性取向', re.I)
+
+
+def check_untrusted_samples(samples):
+    if any(_INJECTION.search(sample.get('text', '')) for sample in samples):
+        raise AlphaError('A selected sample contains instruction-like text. Exclude or edit it before analysis; nothing was sent.', 422)
 
 
 def _level(support: list[str], counter: list[str]) -> str:
@@ -58,6 +69,9 @@ def validate_proposal(output: dict, projection: dict) -> dict:
             continue
         observation = raw.get("observation")
         support, counter = raw.get("support", []), raw.get("counterEvidence", [])
+        if isinstance(observation, str) and _IDENTITY_CLAIM.search(observation):
+            quarantined.append({'id': identifier, 'reason': 'identity_inference_not_allowed'})
+            continue
         if not isinstance(observation, str) or not observation.strip() or len(observation) > 240:
             quarantined.append({"id": identifier, "reason": "invalid_observation"})
             continue
@@ -82,6 +96,10 @@ def build_proposal(state: dict, source_ids: list[str], actor: str, now: float, r
     samples = projection["samples"]
     if not samples or projection.get('excluded'):
         raise AlphaError("Every selected writing sample must be active and allowed for this exact analysis route.", 409)
+    payload_bytes = len(json.dumps({'request': '', 'samples': [{key: sample.get(key) for key in ('id', 'text', 'platform', 'language', 'label')} for sample in samples]}, ensure_ascii=False).encode())
+    if payload_bytes > 60_000:
+        raise AlphaError('The selected samples exceed the 60 kB analysis limit. Select fewer; nothing was truncated.', 413)
+    check_untrusted_samples(samples)
     ids = [sample["id"] for sample in samples]
     texts = {sample["id"]: sample["text"] for sample in samples}
 
@@ -159,6 +177,9 @@ def build_proposal(state: dict, source_ids: list[str], actor: str, now: float, r
     dimensions.append(_dimension('recurring_patterns', '; '.join(repeated) + '. Counts are not universal style rules.', [source_id for source_id in ids if source_id in repeated_ids])
                       if repeated else _insufficient('recurring_patterns', 'No tracked local marker recurs in at least three selected samples. This does not establish an absence of other stylistic patterns.', ids))
     validated = validate_proposal({'dimensions': dimensions}, projection)
+    for dimension in validated['dimensions']:
+        dimension['quotes'] = [{'sourceId': sid, 'text': texts[sid][:160]} for sid in dict.fromkeys(dimension['support'] + dimension['counterEvidence'])]
+        dimension['evidenceBasis'] = 'Exact excerpts identify the measured corpus; local observations are bounded statistical measurements.'
     observations = [item['observation'] for item in validated['dimensions'] if item['evidenceLevel'] not in ('conflicting', 'insufficient')]
     insufficient = [item['id'] for item in validated['dimensions'] if item['evidenceLevel'] == 'insufficient']
     return {

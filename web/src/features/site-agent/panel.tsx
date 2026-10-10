@@ -13,6 +13,8 @@
  *   registers `openStyle`; `panelActions.setStyle` is registered once in the always-present shell.
  */
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { usePathname } from 'next/navigation';
+import { BRAND_BRAIN_V11 } from '@/features/workspace/brand/brain-types';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
@@ -89,12 +91,14 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
 
 /** Keyboard shortcut and restore; mounted once in the app shell. */
 export function SiteAgentHotkeys() {
+  const pathname = usePathname();
   const docked = useDocked();
   // A spoken or typed style change applies even while the panel is closed and a call carries on.
   useRegisterStyleAction();
   useEffect(() => {
-    panelStore.restore(docked);
-  }, [docked]);
+    if (BRAND_BRAIN_V11 && pathname === '/app/workspace/brand') panelStore.setOpen(false);
+    else panelStore.restore(docked);
+  }, [docked, pathname]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.isComposing || event.key.toLowerCase() !== 'j' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;

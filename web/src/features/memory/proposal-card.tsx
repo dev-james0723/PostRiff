@@ -14,6 +14,8 @@ import type { MemoryProposal } from '@/lib/api/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { expiryLabel } from './proposal-expiry';
 import { cn } from '@/lib/utils';
+import { useMemoryText } from './memory-copy';
+import { useGenUiLocale } from '@/features/agent/generative-ui/core/locale';
 
 const SOURCE_LABEL: Record<string, string> = {
   chat: 'You said so',
@@ -37,6 +39,8 @@ const DECIDED_TEXT: Record<string, string> = {
  * turn shows what was decided later instead of offering the buttons again.
  */
 export function ProposalCard({ proposal, className }: { proposal: MemoryProposal; className?: string }) {
+  const copy = useMemoryText();
+  const locale = useGenUiLocale();
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const snapshot = useSnapshot();
@@ -56,30 +60,30 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
       void client.invalidateQueries({ queryKey: keys.memoryProposals(workspaceId) });
       setEditing(false);
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Couldn’t save. Try again.')
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : copy('Couldn’t save. Try again.'))
   });
 
   const pending = status === 'pending';
   const expiry = pending ? expiryLabel(live?.expiresAt ?? proposal.expiresAt) : null;
   const busy = decide.isPending || snapshot.isLoading;
   const evidence = proposal.evidence?.length ?? 0;
-  const why = proposal.why || (proposal.source === 'chat' ? 'You said so in chat.' : evidence > 0 ? `Seen in ${evidence} of your edits.` : undefined);
+  const why = proposal.why || (proposal.source === 'chat' ? copy('You said so in chat.') : evidence > 0 ? locale.language === 'en' ? `Seen in ${evidence} of your edits.` : `${evidence} ${locale.language === 'zh-Hans' ? '次修改中出现' : '次修改中出現'}` : undefined);
 
   return (
     <Surface material='glass' className={cn('flex flex-col gap-3', className)} data-proposal={proposal.id}>
       <div className='flex flex-wrap items-center gap-2 text-xs'>
         <Icons.sparkles aria-hidden className='text-muted-foreground size-4' />
         <StatusChip icon={null}>{proposal.scopeLabel}</StatusChip>
-        <StatusChip icon={null}>{SOURCE_LABEL[proposal.source] ?? proposal.source}</StatusChip>
-        {proposal.op === 'update' && <StatusChip icon='refresh'>Replaces an earlier preference</StatusChip>}
+        <StatusChip icon={null}>{copy(SOURCE_LABEL[proposal.source] ?? proposal.source)}</StatusChip>
+        {proposal.op === 'update' && <StatusChip icon='refresh'>{copy('Replaces an earlier preference')}</StatusChip>}
       </div>
       {editing ? (
         <div className='flex flex-col gap-2'>
-          <Textarea value={wording} onChange={(e) => setWording(e.target.value)} rows={2} className={cn(TEXTAREA_CLASS, 'min-h-20')} aria-label='Preference wording' maxLength={160} />
-          <p className='text-muted-foreground text-xs'>One sentence about how you write.</p>
+          <Textarea value={wording} onChange={(e) => setWording(e.target.value)} rows={2} className={cn(TEXTAREA_CLASS, 'min-h-20')} aria-label={copy('Preference wording')} maxLength={160} />
+          <p className='text-muted-foreground text-xs'>{copy('One sentence about how you write.')}</p>
         </div>
       ) : (
-        <p className='text-foreground text-base leading-snug font-medium text-balance'>{live?.statement ?? proposal.statement}</p>
+        <p dir='auto' className='text-foreground text-base leading-snug font-medium text-balance'>{live?.statement ?? proposal.statement}</p>
       )}
       {(expiry || why) && (
         <p className='text-muted-foreground text-xs'>
@@ -102,37 +106,37 @@ export function ProposalCard({ proposal, className }: { proposal: MemoryProposal
               {editing ? (
                 <>
                   <Button size='default' variant='action' disabled={busy || !wording.trim()} onClick={() => decide.mutate({ decision: 'edit', statement: wording.trim() })}>
-                    Save wording
+                    {copy('Save wording')}
                   </Button>
                   <Button size='default' variant='glass' disabled={busy} onClick={() => setEditing(false)}>
-                    Cancel
+                    {copy('Cancel')}
                   </Button>
                 </>
               ) : (
                 <>
                   <Button size='default' variant='action' disabled={busy} onClick={() => decide.mutate({ decision: 'remember' })}>
-                    Remember this
+                    {copy('Remember this')}
                   </Button>
                   <Button size='default' variant='glass' disabled={busy} onClick={() => setEditing(true)}>
-                    Edit wording
+                    {copy('Edit wording')}
                   </Button>
                   {proposal.variantId && (
                     <Button size='default' variant='glass' disabled={busy} onClick={() => decide.mutate({ decision: 'post_only' })}>
-                      Only for this post
+                      {copy('Only for this post')}
                     </Button>
                   )}
                   <Button size='default' variant='quiet' disabled={busy} onClick={() => decide.mutate({ decision: 'dismiss' })}>
-                    Don’t use
+                    {copy('Don’t use')}
                   </Button>
                 </>
               )}
             </div>
           ) : (
-            <p className='text-muted-foreground text-xs'>Only an owner can decide.</p>
+            <p className='text-muted-foreground text-xs'>{copy('Only an owner can decide.')}</p>
           )}
         </>
       ) : (
-        <p className='text-muted-foreground text-xs'>{DECIDED_TEXT[status] ?? status}</p>
+        <p className='text-muted-foreground text-xs'>{copy(DECIDED_TEXT[status] ?? status)}</p>
       )}
     </Surface>
   );

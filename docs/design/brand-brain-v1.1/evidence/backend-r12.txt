@@ -1,0 +1,56 @@
+Brand Brain Python selection: 179 tests
+...................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 179 tests in 1.757s
+
+OK
+== tests/phase2/postgres_brand_brain.py exit=0
+{
+  "status": "pass",
+  "checks": [
+    "canonical analysis and actual paired template writer preserve active voice",
+    "real repository owner and stale fencing plus draft invalidation and schedule holds",
+    "append-only restore activation and revocation prevents restored evidence use",
+    "workspace isolation and idempotent imports",
+    "single-use exact quote, real reservation/settlement, injected AI result and no auto activation",
+    "existing CreditBook exact limit approval, insufficient balance denial, claimed quote and real credit settlement",
+    "approved canonical ZIP export, restricted data omission, read-role access and foreign workspace denial",
+    "durable content-free audit rows"
+  ],
+  "execution": "disposable-postgresql; no paid providers"
+}
+
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_brand_brain.py"]}
+== tests/phase2/postgres_brand_brain_memory.py exit=0
+postgres_memory_egress: 14/14 checks passed
+postgres_brand_brain_memory: 28/28 checks passed
+
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_brand_brain_memory.py"]}
+== tests/phase2/postgres_raffi_voice_sources.py exit=0
+PASS: persisted import, exact grant, personalized binding, viewer denial, revocation cleanup, completion race and stale-apply block
+
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_raffi_voice_sources.py"]}
+== tests/phase2/postgres_memory_proposals.py exit=0
+{
+  "status": "pass",
+  "execution": "disposable-local-postgres",
+  "checks": [
+    "a chat instruction becomes a pending proposal with no run, no charge, and a card in the reply",
+    "a repeated instruction proposes nothing new; a fact is refused with the reason",
+    "deciding is owner-only, and a refused edit leaves proposal, versions and state untouched",
+    "remembering writes the version and the style revision in one transaction and VOICE.md shows it",
+    "the next LinkedIn draft carries the learned item and the Instagram draft does not; both runs record the binding",
+    "dismiss suppresses the scope; pause and retire update the version row with the state",
+    "reset is owner-only and clears versions, proposals and events with the state",
+    "Recent total includes all decisions and excludes pending proposals"
+  ]
+}
+
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_memory_proposals.py"]}
+== tests/phase2/postgres_growth_phase1.py exit=0
+{"status": "PASS", "execution": "disposable PostgreSQL + zero-network deterministic models", "checks": ["default off, consent, API token and workspace isolation", "check ledger, exact replay, rewrite/recheck, selective edits and stale rejection", "rewrite quota, grounding rejection and full recheck binding", "in-flight revocation fencing and actual-attempt ledger", "memory revocation stops the next model call", "owned history, proposed/approve/restore, voice reuse, label-only sharing and revocation", "workspace route revocation overrides older sample grants", "ten signed checks per day enforced before model dispatch", "anonymous minimization, abuse allowance and retention cleanup", "verified revision prediction and official like-for-like 1h/24h/7d feedback", "RLS privileges and deletion cascades"], "realModelCalls": 0}
+
+{"status": "pass", "execution": "disposable-cloud-postgres", "postgresVersion": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-1.pgdg24.04+2)", "failed": [], "scripts": ["tests/phase2/postgres_growth_phase1.py"]}
+Generating route types...
+✓ Types generated successfully
+
