@@ -49,7 +49,7 @@ def live_snapshot() -> dict:
     tools = {name: {"effect": t.spec.effect, "permission": t.spec.permission, "approval": t.spec.approval, "voice": t.spec.voice,
                     "idempotent": t.spec.idempotent, "audit": t.spec.audit, "tenant": t.spec.tenant}
              for name, t in sorted(tool_adapter.REGISTRY.items())}
-    manager_names = specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", []))
+    manager_names = specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", []) + ["library_browse"])
     specialist_names = {key: sorted(specialists.available(list(spec["tools"]) + specialists.EXTRA_SCOPES.get(key, [])))
                         for key, spec in sorted(specialists.SPECIALISTS.items())}
     import inspect
@@ -123,11 +123,18 @@ class Fixtures(unittest.TestCase):
 
     def test_todays_behaviour_is_unchanged(self):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
-            self.assertEqual(self.live[key], self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"], "a tool vanished or appeared")
+            actual = self.live[key]
+            if key == "tools":
+                actual = {name: value for name, value in actual.items() if name != "library_browse"}
+            elif key == "manager":
+                actual = [name for name in actual if name != "library_browse"]
+            self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 1, "only the declared post-freeze Library tool was added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
+        self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] != "tool.library_browse"]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             self.assertEqual(entry, self.golden["capabilities"][capability_id], capability_id)
@@ -155,18 +162,22 @@ class Fixtures(unittest.TestCase):
         for tool_id in self.live["siteAgent"]:
             self.assertIn(registry.site_capability(tool_id), expected)
         sdk_names = set(self.live["manager"]) | {n for names in self.live["specialists"].values() for n in names}
-        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names}, expected)
+        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n != "library_browse"}, expected)
 
     def test_post_freeze_tool_never_joins_legacy(self):
         # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.
         spec = contracts.ToolSpec("library_browse", contracts.READ, "read", "Library metadata", voice=False,
                                   data_grants=("library",), since=2)
+        original = tool_adapter.REGISTRY.get(spec.name)
         tool_adapter.REGISTRY[spec.name] = tool_adapter.Tool(spec, {}, lambda ctx, args: {}, "Browse Library")
         try:
             self.assertEqual(registry.for_tool(spec.name).since, 2)
             self.assertNotIn("tool.library_browse", registry.legacy_baseline_v1())
         finally:
-            tool_adapter.REGISTRY.pop(spec.name, None)
+            if original is None:
+                tool_adapter.REGISTRY.pop(spec.name, None)
+            else:
+                tool_adapter.REGISTRY[spec.name] = original
 
 
 class RegistryMatchesToday(unittest.TestCase):
