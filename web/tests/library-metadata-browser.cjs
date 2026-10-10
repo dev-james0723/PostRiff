@@ -9,7 +9,7 @@ const base = 'http://127.0.0.1:4439';
 const out = process.env.RAFII_LIBRARY_EVIDENCE || resolve('.jcb-artifacts/library-metadata');
 mkdirSync(out, { recursive: true });
 // Fixed disposable address; this fixture never consumes an application DSN or credential.
-execFileSync('python', ['-c', "from pathlib import Path; import psycopg; db=psycopg.connect('host=127.0.0.1 port=55479 dbname=postgres'); db.execute(Path('migrations/postriff/112_library_metadata_changes.sql').read_text()); db.close()"], { stdio: 'inherit' });
+execFileSync('python', ['-c', "from pathlib import Path; import psycopg; db=psycopg.connect('host=127.0.0.1 port=55479 dbname=postgres'); db.execute(Path('migrations/postriff/112_library_metadata_changes.sql').read_text()); db.commit(); db.close()"], { stdio: 'inherit' });
 
 (async () => {
   const checks = [];
