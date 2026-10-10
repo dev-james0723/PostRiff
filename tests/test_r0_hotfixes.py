@@ -287,7 +287,7 @@ def search_state():
     state = initial_state(WS)
     state["phase2"] = {"channels": [], "jobs": [], "reviews": [], "assets": []}
     state["sources"] = [
-        {"id": "s-cloud", "kind": "text", "title": "Launch plan", "text": "The product launch is in October.", "active": True, "facts": [], "egressConsent": ["cloud", "local"]},
+        {"id": "s-cloud", "kind": "text", "title": "Launch plan", "text": "The product launch is in October.", "active": True, "facts": [], "egressConsent": ["cloud", "local"], "sourcePolicy": "public_quote"},
         {"id": "s-local", "kind": "text", "title": "Private launch notes", "text": "LOCALONLYMARK product launch budget.", "active": True, "facts": [],
          "egressConsent": ["local"]},
         {"id": "s-unset", "kind": "document", "title": "Unreviewed launch memo", "text": "UNSETMARK product launch memo.", "active": True, "facts": []},
@@ -311,9 +311,29 @@ class ContentSearchEgressTest(unittest.TestCase):
                 self.assertNotIn("LOCALONLYMARK", found)
                 self.assertNotIn("UNSETMARK", found)
                 self.assertNotIn("budget", found)
-                self.assertEqual(result["data"]["withheld"], {"sources": 2, "reason": "cloud_sharing_off"})
+                self.assertEqual(result["data"]["withheld"], {"sources": 2, "reason": "source_use_not_allowed"})
         related = tools.run("content.search", {"query": "Show everything related to the product launch"}, ctx(state, "cloud"))[1]["data"]
         self.assertEqual(sorted(r["id"] for r in related["results"]), ["s-cloud", "v-cloud"])
+
+    def test_cloud_consent_does_not_override_missing_or_prohibited_source_policy(self):
+        for policy in (None, "prohibited", "unknown"):
+            state = search_state()
+            state["sources"][0]["sourcePolicy"] = policy
+            result = tools.run("content.search", {"query": "product launch"}, ctx(state, "cloud"))[1]
+            self.assertNotIn("s-cloud", [r["id"] for r in result["data"]["results"]])
+            self.assertNotIn("v-cloud", [r["id"] for r in result["data"]["results"]])
+
+    def test_cloud_picker_enforces_the_same_source_boundary_as_search(self):
+        from postriff_phase2.site_agent import reads
+        state = search_state()
+        for policy, egress in ((None, ["cloud"]), ("prohibited", ["cloud"]), ("public_quote", [])):
+            state["sources"][0].update(sourcePolicy=policy, egressConsent=egress)
+            result = reads.picker_search(ctx(state, "cloud"), "launch", ["sources"])
+            self.assertNotIn('"id": "s-cloud"', json.dumps(result))
+        state["sources"][0].update(sourcePolicy="public_quote", egressConsent=["cloud"])
+        self.assertIn('"id": "s-cloud"', json.dumps(reads.picker_search(ctx(state, "cloud"), "launch", ["sources"])))
+        state["sources"][0]["egressConsent"] = []
+        self.assertIn('"id": "s-cloud"', json.dumps(reads.picker_search(ctx(state, "local"), "launch", ["sources"])))
 
     def test_golden_a_member_searching_their_own_workspace_finds_every_source(self):
         state = search_state()
@@ -686,6 +706,21 @@ class ApiTokenAgentRunsTest(unittest.TestCase):
                 with self.assertRaises(AlphaError) as denied:
                     service.events(WS, self.TOKEN, f"run-{prefix}", 0)
                 self.assertEqual((denied.exception.status, str(denied.exception)), (404, "Run unavailable."))
+
+    def test_api_tokens_never_cancel_agent_runs_but_keep_writing_scope(self):
+        for prefix in ("agent", "task", "voice", "site"):
+            runs = self.runs()
+            runs[f"run-{prefix}"]["status"] = "running"
+            service, cur = ideas_service(runs, OWNER)
+            with self.assertRaises(AlphaError) as denied:
+                service.cancel(WS, self.TOKEN, f"run-{prefix}")
+            self.assertEqual(denied.exception.status, 404)
+            self.assertFalse(any(statement.startswith("UPDATE") for statement in cur.sql))
+            service._insert_event.assert_not_called()
+        runs = self.runs()
+        runs["run-writing"]["status"] = "running"
+        service, _ = ideas_service(runs, OWNER)
+        self.assertEqual(service.cancel(WS, self.TOKEN, "run-writing")["status"], "cancelled")
 
     def test_golden_writing_runs_and_sessions_read_as_before(self):
         service, _ = ideas_service(self.runs(), OWNER)

@@ -66,7 +66,7 @@ CLOUD_MEMORY_OFF = ("The owner hasn't allowed cloud memory, so Brand Brain, voic
                     "It stays on the Brand and Memory pages.")
 CLOUD_SAMPLE_VOICE = ("This voice profile was built from writing samples, and a sample reaches only the writer it was shared with, "
                       "so the profile isn't sent to a cloud model here. It stays on the Brand page.")
-CLOUD_SOURCES_OFF = "Sources with cloud sharing off were not searched for a cloud model. Allow sharing for a source on the Memory page."
+CLOUD_SOURCES_OFF = "Sources without an allowed use policy and cloud-sharing permission were not searched for a cloud model. Review source permissions on the Memory page."
 
 
 def _cloud_memory_allowed(state):
@@ -81,8 +81,9 @@ def _sample_voice(profile):
 
 
 def _cloud_shared_source(source):
-    """A source a cloud model may read: its cloud sharing is on (source_policy.classify's egress rule)."""
-    return "cloud" in (source.get("egressConsent") or [])
+    """Cloud source reads require both a reviewed use policy and the existing egress consent."""
+    from .. import source_policy
+    return source.get("sourcePolicy") in source_policy.POLICIES and source_policy.classify(source, "internal_summary", "cloud")[0]
 
 
 # --- Brand Brain and voice -----------------------------------------------------------------------------------------
@@ -311,7 +312,7 @@ def content_search(ctx, query, kinds=None, platform=None, since=None, until=None
     data = {"query": query, "terms": list(dict.fromkeys(phrases or words)), "results": results[:12], "total": len(results), "direct": len(results) - linked,
             "linked": linked, "searched": sorted(wanted), "range": {"label": label or "in those dates"} if dated else None, "undated": undated}
     if withheld_sources:
-        return contracts.result({**data, "withheld": {"sources": withheld_sources, "reason": "cloud_sharing_off"}}, now=ctx.now, warnings=[CLOUD_SOURCES_OFF])
+        return contracts.result({**data, "withheld": {"sources": withheld_sources, "reason": "source_use_not_allowed"}}, now=ctx.now, warnings=[CLOUD_SOURCES_OFF])
     return contracts.result(data, now=ctx.now)
 
 
@@ -913,6 +914,8 @@ def picker_search(ctx, query="", categories=None, limit=8):
     if "sources" in wanted:
         for index, source in enumerate(state.get("sources") or []):
             if not isinstance(source, dict) or not source.get("active") or source.get("kind") == "voice_sample" or source.get("sourcePolicy") == "prohibited":
+                continue
+            if ctx.cloud_reader and not _cloud_shared_source(source):
                 continue
             approved = sum(1 for f in source.get("facts") or [] if isinstance(f, dict) and f.get("approved"))
             label = turn_references.label_for("source", source)

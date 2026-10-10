@@ -1859,12 +1859,13 @@ class IdeasService:
         return {'recovered': recovered, 'providerRequests': 0}
 
     def cancel(self, workspace_id, token, run_id):
+        from .api_tokens import is_agent_run_key, is_api_token
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
             self._lock_run_events(cur, workspace_id, run_id)
             cur.execute("SELECT status,idempotency_key,actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
             run = cur.fetchone()
-            if not run or (str(run[1]).startswith(RUNTIME_RUN_KEY_PREFIXES) and run[2] != principal):
+            if not run or (is_api_token(token) and is_agent_run_key(run[1])) or (str(run[1]).startswith(RUNTIME_RUN_KEY_PREFIXES) and run[2] != principal):
                 # An Agent Runtime turn, task or voice session is stopped only by the person who started it (as the
                 # runtime's own cancel route does); for anyone else it is the same answer as a missing run.
                 raise AlphaError("Run unavailable.", 404)
