@@ -48,6 +48,8 @@ def recover_for_worker(service, *, budget_seconds: float = executor.RECOVERY_BUD
     _phase(counts, "expire", lambda: executor.expire(runtime, budget_seconds=max(1.0, budget_seconds - (time.monotonic() - started))))
     _phase(counts, "adopted", lambda: bridge.adopt_some(service, limit=50))
     _phase(counts, "staleTurns", lambda: reap_stale_turns(service))
+    from . import notifications
+    _phase(counts, "notifications", lambda: notifications.scan(runtime))
     counts["ms"] = round((time.monotonic() - started) * 1000)
     return counts
 

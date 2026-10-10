@@ -552,6 +552,9 @@ def _build() -> _Built:
         return "proposal" if tool_adapter.REGISTRY[name].spec.approval else "none"
 
     # Model tool calls through tool_adapter.execute: the FunctionTool timeout, and a proposal for approval tools.
+    from .task_engine.tools import ENGINE_TOOLS
+    for name in sorted(ENGINE_TOOLS):
+        bind('task_engine', name, _tool_cap_id(name), 'none', timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
     for name in specialists.available(manager.MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])):
         bind("manager", name, _tool_cap_id(name), tool_legacy(name), timeout=tool_adapter.REGISTRY[name].spec.timeout_seconds)
     # PR152's opt-in metadata tool is reachable only through the Manager's per-workspace flag.

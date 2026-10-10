@@ -91,7 +91,7 @@ def approval_view(approval: dict, steps_by_id: dict, principal: str, member) -> 
             "can": {"decide": may, "why": why}}
 
 
-def step_view(cur, task: dict, step: dict, steps: list[dict], compensations: dict, principal: str, state_cache: dict) -> dict:
+def step_view(cur, task: dict, step: dict, steps: list[dict], compensations: dict, principal: str, state_cache: dict, *, member=None, config=None) -> dict:
     creator = task["createdBy"] == principal
     fact = store.facts([step])[0]
     delegate = None
@@ -107,6 +107,18 @@ def step_view(cur, task: dict, step: dict, steps: list[dict], compensations: dic
                     "href": f"/app/queue?job={step['delegateId']}" if step["delegateType"] == "publish_job" else None}
     comp = compensations.get(step["stepKey"])
     undo = {"compensationId": comp["compensationId"], "undoUntil": iso(comp["undoUntil"])} if comp and comp["state"] == "available" and comp["undoUntil"] > time.time() else None
+    can_undo = False
+    if creator and undo is not None:
+        from . import undo as undo_plan
+        from postriff_alpha.domain import AlphaError
+        if "state" not in state_cache:
+            state_cache["state"] = targets.workspace_state(cur, task["workspaceId"])
+        record = store.compensation(cur, task["workspaceId"], comp["compensationId"])
+        try:
+            undo_plan.prepare(cur, task, step, record, principal, member, state_cache["state"], now=time.time(), config=config)
+            can_undo = True
+        except AlphaError:
+            pass
     return {"stepKey": step["stepKey"], "label": step["label"], "state": step["state"], "legacyState": model.legacy_state(step["state"], step["reasonCode"]),
             "kind": step["kind"], "capabilityId": step["capabilityId"], "riskClass": step["riskClass"], "dependsOn": list(step["dependsOn"]),
             "waitingOn": model.waiting_on(fact, store.facts(steps)), "attempts": int(step["attempts"]), "maxAttempts": int(step["maxAttempts"]),
@@ -114,7 +126,7 @@ def step_view(cur, task: dict, step: dict, steps: list[dict], compensations: dic
             "timeoutSeconds": int(step["timeoutSeconds"]), "reasonCode": step["reasonCode"], "reason": step["reason"], "verified": bool(step["verified"]),
             "outputs": step["outputs"], "entities": step["entities"], "delegate": delegate, "undo": undo,
             "can": {"retry": creator and model.can_retry(step, task),
-                    "undo": creator and undo is not None}}
+                    "undo": can_undo}}
 
 
 def receipt_view(item: dict, steps_by_key: dict, state_cache: dict, cur, task) -> dict:
@@ -126,7 +138,7 @@ def receipt_view(item: dict, steps_by_key: dict, state_cache: dict, cur, task) -
             "cannotRecall": result.get("cannotRecall") or [], "compensation": result.get("compensation") or {"available": False}, "at": iso(item["at"])}
 
 
-def full(cur, task: dict, principal: str, member) -> dict:
+def full(cur, task: dict, principal: str, member, *, config=None) -> dict:
     steps = store.load_steps(cur, task["workspaceId"], task["taskId"])
     approvals = store.approvals_for(cur, task["workspaceId"], task["taskId"])
     compensations = store.compensations_for(cur, task["workspaceId"], task["taskId"])
@@ -135,14 +147,14 @@ def full(cur, task: dict, principal: str, member) -> dict:
     receipts = [receipt_view(r, {s["stepKey"]: s for s in steps}, cache, cur, task) for r in store.receipts_for(cur, task["workspaceId"], task["taskId"])
                 if r["state"] == "done"]
     return {**summary(task, steps, approvals, principal, member), "autonomyMode": task["autonomyMode"],
-            "steps": [step_view(cur, task, s, steps, compensations, principal, cache) for s in steps],
+            "steps": [step_view(cur, task, s, steps, compensations, principal, cache, member=member, config=config) for s in steps],
             "approvals": [approval_view(a, by_id, principal, member) for a in approvals], "receipts": receipts}
 
 
-def engine_block(cur, task: dict, principal: str, member) -> dict:
+def engine_block(cur, task: dict, principal: str, member, *, config=None) -> dict:
     """GET tasks/{task}: the `engine` key by caller (§17.2). The legacy keys are unchanged and keep today's `read` rule."""
     if task["createdBy"] == principal or _owner(member):
-        return full(cur, task, principal, member)
+        return full(cur, task, principal, member, config=config)
     approvals = store.approvals_for(cur, task["workspaceId"], task["taskId"], state="pending")
     mine = [a for a in approvals if a["approverPolicy"] != "task_owner" and _may_decide(a, principal, member)]
     if mine:

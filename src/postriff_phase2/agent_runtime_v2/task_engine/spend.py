@@ -5,6 +5,7 @@ normal ledger's role, price, credits and provider limits. Unknown spend is held.
 """
 from __future__ import annotations
 import copy
+import json
 from postriff_alpha.domain import AlphaError
 from . import store
 
@@ -59,6 +60,35 @@ class TaskLedger:
                     "AND NOT EXISTS(SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id "
                     "AND s.cost_state IN ('actual','released'))) WHERE id::text=%s",
                     (workspace_id,b["taskId"],workspace_id,b["taskId"],b["taskId"]))
+        return result
+
+
+def settle_provider_failure(ctx, reservation_id, outcome, actual_usd_micro=None, *, dispatched=False):
+    """Settle only this attempt's existing reservation after authority was revoked.
+
+    This bookkeeping transaction cannot reserve money or persist provider output.
+    The derived write must still use the normal current-authorization transaction.
+    """
+    ledger = ctx.service.ledger
+    binding = getattr(ctx, "step_binding", None)
+    if not isinstance(ledger, TaskLedger) or not binding:
+        with ctx.workspace() as (cur, *_rest):
+            return ledger.settle(cur, ctx.workspace_id, reservation_id, outcome, actual_usd_micro)
+    b = ledger.binding
+    if b != binding or b["workspaceId"] != ctx.workspace_id or b["principal"] != ctx.principal:
+        raise AlphaError("Task usage identity changed.", 403, code="agent_permission_revoked")
+    with store.service_tx(ctx.service, ctx.workspace_id) as cur:
+        cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE id::text=%s AND workspace_id=%s AND member_id::text=%s "
+                    "AND run_id::text=%s AND job_id::text=%s AND kind='reserve'",
+                    (reservation_id, b["workspaceId"], b["principal"], b["taskId"], b["attemptId"]))
+        if cur.fetchone() is None:
+            raise AlphaError("Reservation unavailable.", 404)
+        result = ledger.settle(cur, ctx.workspace_id, reservation_id, outcome, actual_usd_micro)
+        if dispatched:
+            meta = {"cannotRecall": ["sent_to_provider"], "costState": "known" if result.get("state") in ("actual", "released") else "unknown"}
+            cur.execute("UPDATE public.pr_agent_receipts SET result=result || %s::jsonb,updated_at=now() "
+                        "WHERE workspace_id=%s AND effect_key=%s AND attempt_id::text=%s AND input_digest=%s",
+                        (json.dumps(meta), b["workspaceId"], b["effectKey"], b["attemptId"], b["inputDigest"]))
         return result
 
 

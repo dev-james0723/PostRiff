@@ -12,7 +12,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { usePreferences } from '@/lib/preferences';
 import { ApiError } from '@/lib/api/client';
 import { createTaskApi, taskRequestKey, forgetTaskRequest, readPendingTask, savePendingTask, clearPendingTask, runTaskRequest, type TaskRequest, type TaskDetail, type TaskView, type TaskResponse, type TaskState, type TaskApproval } from '@/lib/agent-runtime/tasks';
-import { isOpen, language, receiptVerified, safeTaskHref, stateLabel, summaryLines, text, type CopyKey, type Language } from './model';
+import { changedResourceHref, isOpen, language, receiptVerified, safeTaskHref, stateLabel, summaryLines, text, type CopyKey, type Language } from './model';
 
 type Pending = { title: TaskRequest['kind']; note: CopyKey; key: string; identity: string; taskId: string; version?: number; approval?: TaskApproval; uncertain: boolean; request: TaskRequest };
 function actionNote(kind: TaskRequest['kind']): CopyKey { return kind === 'cancel' ? 'cancelNote' : kind === 'undo' ? 'undoNote' : ['approve', 'reject'].includes(kind) ? 'reviewNote' : 'continueNote'; }
@@ -194,6 +194,10 @@ function TaskCenterWorkspace({ boundary }: { boundary: string }) {
                 <time className='mt-1 block text-xs text-muted-foreground'>{format(receipt.at)}</time>
                 {receipt.providerReceipt && <p className='mt-2 text-sm'>{receipt.providerReceipt.kind} · {receipt.providerReceipt.state}</p>}
                 <ul className='mt-2 text-sm'>{receipt.checks.map((check, i) => <li key={i}>{check.ok ? '✓' : '×'} {check.name}</li>)}</ul>
+                <ul className='mt-2 space-y-1 text-sm'>{receipt.changedRefs.map((ref, i) => <li className='break-words' key={`${ref.type}:${ref.id}:${i}`}>
+                  {ref.change.replaceAll('_', ' ')} · {ref.id}{' '}
+                  {changedResourceHref(ref) && <Link className='underline underline-offset-4' href={changedResourceHref(ref)!}>{t('result')}</Link>}
+                </li>)}</ul>
                 {receipt.cannotRecall.map((note, i) => <p key={i} className='mt-2 text-sm'>{note}</p>)}
               </li>)}</ul>}
             </section>

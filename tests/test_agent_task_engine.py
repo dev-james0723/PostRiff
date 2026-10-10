@@ -10,6 +10,23 @@ from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
 from postriff_phase2.agent_runtime_v2.task_engine import authz_seam, checkpoints, delegates, errors, flags, model, store
 
 class TaskEngineRules(unittest.TestCase):
+    def test_engine_dispatch_uses_registered_specialist_surface(self):
+        from postriff_phase2.agent_runtime_v2 import domain_tools, authz, tool_adapter
+        from postriff_phase2.agent_runtime_v2.task_engine import executor
+        domain_tools.ensure_registered()
+        agent = executor.dispatch_agent('image_generate')
+        self.assertEqual(agent, 'creative')
+        self.assertEqual(authz.tool_surface(tool_adapter.REGISTRY['image_generate'].spec, agent).name, 'specialist')
+
+    def test_library_receipt_tool_has_only_task_surface(self):
+        from postriff_phase2.agent_runtime_v2 import capability_registry, domain_tools
+        from postriff_phase2.agent_runtime_v2.task_engine import executor
+        domain_tools.ensure_registered()
+        cap = capability_registry.for_tool('library_metadata_apply')
+        self.assertEqual((cap.since, cap.risk, cap.idempotency, cap.data_grants), (2, 'R1', 'receipt_tx', ('library',)))
+        self.assertEqual([b.surface for b in capability_registry.bindings(cap.capability_id)], ['task_engine'])
+        self.assertEqual(executor.dispatch_agent(cap.name), 'task_engine')
+
     def test_off_default(self):
         self.assertEqual(flags.mode_for('w',environ={}), 'off')
 

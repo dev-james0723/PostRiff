@@ -143,7 +143,9 @@ def retry(runtime, workspace_id: str, token: str, task_id: str, step_key: str, p
 
 # --- undo (EX-27) -----------------------------------------------------------------------------------------------------------
 def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, payload: dict) -> dict:
-    from .. import domain_tools, tool_adapter
+    from .. import authz
+    from . import undo as undo_plan
+    authz.human_only(token)
     payload = payload if isinstance(payload, dict) else {}
     key = _key(payload)
     compensation_id = payload.get("compensationId")
@@ -159,51 +161,13 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
             return stored
         step = store.load_step(cur, workspace_id, task_id, step_key)
         record = store.compensation(cur, workspace_id, compensation_id, lock=True) if isinstance(compensation_id, str) else None
-        if step is None or record is None or record["stepId"] != step["stepId"]:
-            raise errors.error("undo_unavailable")
-        if record["state"] == "expired" or record["pastWindow"]:
-            raise errors.error("undo_expired")
-        if record["state"] != "available":
-            raise errors.error("undo_unavailable" if record["state"] == "applied" else "undo_conflict")
-        original_receipt = store.receipt(cur, workspace_id, record["effectKey"])
-        capability_id = (original_receipt or {}).get("capabilityId") or step["capabilityId"]
-        step = {**step, "capabilityId": capability_id}
-        if compensation.current_digest(cur, workspace_id, record, capability_id) != record["postImageDigest"]:
-            raise errors.error("undo_conflict")
-        domain_tools.ensure_registered()
-        tool = tool_adapter.REGISTRY.get(record["inverseCapabilityId"])
-        if tool is None or not member.allows(tool.spec.permission):
-            raise errors.error("agent_permission_revoked")
-        undo_key = ("undo:" + record["effectKey"])[:120]
-        inverse_inputs = dict(record["inverseInputs"] or {})
-        source = ideas._state(row)
         import copy
+        source = ideas._state(row)
         state = copy.deepcopy(source)
-        relational_inverse = compensation.INVERSES.get(capability_id)
-        relational_inverse = relational_inverse if relational_inverse and relational_inverse.apply_in else None
-        if step["capabilityId"] == "draft_edit":
-            draft = next((v for v in state.get("variants", []) if v.get("id") == inverse_inputs.get("draftId")), None)
-            old = next((r for r in (draft or {}).get("revisions", []) if r.get("revision") == inverse_inputs.get("restoreRevision")), None)
-            if not draft or not old or not old.get("text"):
-                raise errors.error("undo_unavailable")
-            inverse_inputs = {"draftId": draft["id"], "revision": draft["revision"], "text": old["text"]}
-            committed = [j for j in (state.get("phase2") or {}).get("jobs", [])
-                         if (j.get("manifest") or {}).get("variantId") == draft["id"] and j.get("state") not in ("canceled", "failed")]
-            if committed:
-                raise errors.error("undo_conflict")
-            action = "variant_edit"
-            domain_payload = {"variantId": draft["id"], "variantRevision": draft["revision"], "text": old["text"]}
-        elif record["inverseCapabilityId"] in ("campaign_link", "campaign_unlink"):
-            action = "raffi_" + record["inverseCapabilityId"]
-            domain_payload = inverse_inputs
-        elif relational_inverse:
-            action = None
-        else:
-            raise errors.error("undo_unavailable")
-        verdict = authz_seam.decide_for_step(cur, task, {**step, "kind": "tool", "capabilityId": record["inverseCapabilityId"], "inputs": inverse_inputs},
-                                           actor=authz_seam.Actor("human_ui", principal), now=time.time(), config=getattr(runtime, "cfg", None))
-        if verdict.verdict != "allow":
-            raise errors.error("agent_permission_revoked")
+        plan = undo_plan.prepare(cur, task, step, record, principal, member, state,
+                                 now=time.time(), config=getattr(runtime, "cfg", None))
+        undo_key, inverse_inputs = plan.effect_key, plan.inputs
+        relational_inverse, action, domain_payload = plan.inverse, plan.action, plan.payload
         inverse_digest = model.input_digest(record["inverseCapabilityId"], inverse_inputs)
         existing = store.receipt(cur, workspace_id, undo_key, lock=True)
         if existing is not None:
@@ -212,8 +176,11 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
         cur.execute("INSERT INTO public.pr_agent_receipts(workspace_id,effect_key,task_id,step_id,principal,capability_id,input_digest,trace_id) "
                     "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)", (workspace_id, undo_key, task_id, step["stepId"], principal,
                                                        record["inverseCapabilityId"], inverse_digest, undo_trace))
+        inverse_result = None
         if relational_inverse:
-            relational_inverse.apply_in(runtime, cur, workspace_id, principal, inverse_inputs, undo_key)
+            inverse_result = relational_inverse.apply_in(runtime, cur, workspace_id, principal, inverse_inputs, undo_key)
+            if isinstance(inverse_result, dict) and inverse_result.get("verified") is not True:
+                raise errors.error("undo_conflict")
         else:
             state = runtime.service.commands(state, principal, action, domain_payload)
             import json
@@ -222,8 +189,8 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
                 effect(cur, workspace_id, source, state, principal)
         from ...hosted import audit
         audit(cur, workspace_id, principal, "agent.task.undo", step_key,
-              {"taskId": task_id, "stepKey": step_key, "effectKey": undo_key, "traceId": undo_trace, "compensationId": record["compensationId"]})
-        refs = [{"type": record["targetType"], "id": record["targetId"], "change": "restored"}]
+              {"taskId": task_id, "stepKey": step_key, "effectKey": undo_key, "traceId": undo_trace, "compensationId": record["compensationId"], "activationId": plan.activation_id})
+        refs = (inverse_result or {}).get("changedRefs") or [{"type": record["targetType"], "id": record["targetId"], "change": "restored"}]
         store.receipt_done(cur, workspace_id, undo_key, outcome="applied", verified=True,
                            result={"checks": [{"name": "guarded_domain_inverse", "ok": True}], "changedRefs": refs})
         cur.execute("UPDATE public.pr_agent_compensations SET state='applied',applied_effect_key=%s,applied_by=%s,applied_at=now(),updated_at=now() "
