@@ -130,6 +130,8 @@ class PostgresWorkspaceRepository:
                     raise blocked_error()
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
+                from .agent_runtime_v2 import authz
+                authz.recheck_transaction(cur, workspace_id, principal, row)
                 yield cur, row, principal
 
     def assert_fresh(self, token, principal):
@@ -432,6 +434,9 @@ class HostedWorkspaceService:
         # Product taxonomy (PRD §8.6): the journey and adoption events a command implies, ids/enums only, each batch behind
         # its own savepoint; it never fails the command.
         self.repository.effects.append(product_events.capture)
+        from .agent_runtime_v2 import agent_permissions, authz
+        self.repository.effects.append(lambda cur, wid, before, after, actor: agent_permissions.consent_effect(
+            cur, wid, before, after, actor, config=authz.runtime_config_for(self), now=self.clock()))
         self.ideas.learning = self.learning
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
@@ -801,6 +806,8 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s AND status='active'", (workspace_id, principal))
             if cur.rowcount != 1:
                 raise AlphaError("Workspace unavailable.", 403)
+            from .agent_runtime_v2 import agent_permissions, authz
+            agent_permissions.on_membership_ended(cur, workspace_id, principal, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
             audit(cur, workspace_id, principal, "member.left")
         return {"workspaceId": workspace_id, "status": "left"}
 
@@ -921,7 +928,9 @@ class HostedWorkspaceService:
 
     # The account history a person may see about themselves: what they did to the account, and what
     # others did to their memberships. Workspace content activity stays in the workspace audit log.
-    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics")
+    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics",
+                      # Rafii agent permissions (CF-2 §14): a person's own consent changes are part of their account history.
+                      "agent.permission.preset_applied", "agent.permission.changed", "agent.permission.revoked", "agent.permission.revoked_all")
     ABOUT_ME_KINDS = ("member.updated", "member.removed")
 
     def security_events(self, token, limit=50):
@@ -1031,6 +1040,8 @@ class HostedWorkspaceService:
             if current[0] == "owner":
                 raise AlphaError("The owner cannot be removed.", 409)
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, user_id))
+            from .agent_runtime_v2 import agent_permissions, authz
+            agent_permissions.on_membership_ended(cur, workspace_id, user_id, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
             audit(cur, workspace_id, principal, "member.removed", user_id)
             return {"userId": user_id, "status": "revoked", "note": "Jobs this member approved are held at the next worker claim until re-approved."}
 

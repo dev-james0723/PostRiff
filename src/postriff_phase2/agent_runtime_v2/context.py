@@ -125,6 +125,7 @@ class RafiiRunContext:
     ui_context: dict | None = None            # validated uiContext {artifactId, artifactRevision, stateRevision} (rafii-genui/1)
     ui_selection: dict | None = None          # selection re-resolved from persisted UI state {references, note}
     voice_choice: dict | None = None          # {mode, sourceIds} the person chose for drafting; never swapped by the model
+    context_lens: dict | None = None          # the Context Lens this turn used (context_lens.py), None when the lens is off
     clients: list = field(default_factory=list)  # AsyncOpenAI clients this run created, closed inside its own event loop
     # --- seams for rafii-agent-authz/1 (CF-2 §8.1) and the task engine (CF-3 §8.1), declared once here (X11) so lanes B1
     # and A2 never edit this file. Every default is "absent", which is exactly today's behaviour: nothing in this release
@@ -166,7 +167,10 @@ class RafiiRunContext:
             if principal != self.principal:
                 raise AlphaError("Workspace unavailable.", 403)
             self.membership = member
-            yield cur, row, principal, member, ideas._state(row)
+            state = ideas._state(row)
+            from . import authz
+            authz.recheck(cur, self, state=state, member=member)
+            yield cur, row, principal, member, state
 
     def snapshot(self) -> dict:
         """The authoritative workspace state as it is now (re-read after every mutation)."""
@@ -179,7 +183,7 @@ class RafiiRunContext:
     def site_context(self, cur, member, state):
         from ..site_agent import tools as site_tools
         return site_tools.Context(state=state, membership=member, principal=self.principal, workspace_id=self.workspace_id, cur=cur, service=self.service,
-                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone)
+                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone, config=self.config, request_text=self.request_text)
 
     def for_agent(self, agent: str | None) -> "RafiiRunContext":
         """A view of this context for one agent's tool call: same ledger, same identity, its own attribution."""

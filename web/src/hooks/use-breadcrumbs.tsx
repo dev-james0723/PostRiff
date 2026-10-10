@@ -50,7 +50,7 @@ export function useBreadcrumbs() {
     return segments.map((segment, index) => {
       const path = `/${segments.slice(0, index + 1).join('/')}`;
       // Record identifiers (e.g. /app/agent/<conversationId>) read as their kind, never as the raw id.
-      const title = segments[index - 1] === 'agent' ? 'Conversation' : (TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1));
+      const title = path === '/app/account/agent' ? 'Rafii Agent' : segments[index - 1] === 'agent' ? 'Conversation' : (TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1));
       return { title, link: GROUP_LANDING[path] ?? path };
     });
   }, [pathname]);

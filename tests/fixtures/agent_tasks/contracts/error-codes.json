@@ -1,193 +1,48 @@
 {
-  "source": "docs/design/rafii-agent-os/CF-2-authz-consent.md §13 (PR #160)",
-  "errors": [
-    {
-      "code": "agent_permission_denied",
-      "http": 403,
-      "toolResult": true,
-      "emittedBy": "E1, E3, E5, E6; step claim"
-    },
-    {
-      "code": "agent_permission_revoked",
-      "http": 403,
-      "toolResult": true,
-      "emittedBy": "E2, E7, approval decide, step claim and retry"
-    },
-    {
-      "code": "agent_permissions_changed",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "PUT"
-    },
-    {
-      "code": "agent_permissions_copy_stale",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "PUT"
-    },
-    {
-      "code": "agent_permissions_human_only",
-      "http": 403,
-      "toolResult": false,
-      "emittedBy": "grant writes"
-    },
-    {
-      "code": "agent_permissions_unavailable",
-      "http": 404,
-      "toolResult": false,
-      "emittedBy": "permissions routes"
-    },
-    {
-      "code": "approval_closed",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "approval decide"
-    },
-    {
-      "code": "approval_expired",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "approval decide"
-    },
-    {
-      "code": "approval_forbidden",
-      "http": 403,
-      "toolResult": false,
-      "emittedBy": "approval decide"
-    },
-    {
-      "code": "approval_stale",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "approval decide"
-    },
-    {
-      "code": "approval_unavailable",
-      "http": 404,
-      "toolResult": false,
-      "emittedBy": "`approvals/{id}/decide`"
-    },
-    {
-      "code": "confirmation_required",
-      "http": 400,
-      "toolResult": false,
-      "emittedBy": "PUT"
-    },
-    {
-      "code": "idempotency_conflict",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "PUT, revoke, reminder, approval decide, task create, cancel, retry, undo"
-    },
-    {
-      "code": "proposal_closed",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "legacy `approvals/decide` body only"
-    },
-    {
-      "code": "proposal_expired",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "legacy body only"
-    },
-    {
-      "code": "proposal_stale",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "legacy body only"
-    },
-    {
-      "code": "retry_budget_exhausted",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "retry"
-    },
-    {
-      "code": "scope_invalid",
-      "http": 400,
-      "toolResult": false,
-      "emittedBy": "PUT, revoke, autopilot"
-    },
-    {
-      "code": "step_closed",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "`task_update`"
-    },
-    {
-      "code": "step_not_retryable",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "retry"
-    },
-    {
-      "code": "step_unknown",
-      "http": 404,
-      "toolResult": false,
-      "emittedBy": "step routes, `task_update`"
-    },
-    {
-      "code": "step_up_required",
-      "http": 403,
-      "toolResult": false,
-      "emittedBy": "PUT (Full, sensitive Assist), approval decide (R3), R3 handoff, autopilot create"
-    },
-    {
-      "code": "task_conflict",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "cancel, retry, `task_update`"
-    },
-    {
-      "code": "task_forbidden",
-      "http": 403,
-      "toolResult": false,
-      "emittedBy": "task routes"
-    },
-    {
-      "code": "task_terminal",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "cancel, continue"
-    },
-    {
-      "code": "task_too_long",
-      "http": 400,
-      "toolResult": false,
-      "emittedBy": "`task_plan`"
-    },
-    {
-      "code": "task_unavailable",
-      "http": 404,
-      "toolResult": false,
-      "emittedBy": "task routes"
-    },
-    {
-      "code": "undo_conflict",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "undo"
-    },
-    {
-      "code": "undo_expired",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "undo"
-    },
-    {
-      "code": "undo_unavailable",
-      "http": 409,
-      "toolResult": false,
-      "emittedBy": "undo"
-    }
-  ],
-  "resultCodes": [
+  "version": 1,
+  "source": "CF-2 \u00a713",
+  "errors": {
+    "agent_permissions_unavailable": 404,
+    "agent_permissions_changed": 409,
+    "agent_permissions_copy_stale": 409,
+    "confirmation_required": 400,
+    "step_up_required": 403,
+    "agent_permissions_human_only": 403,
+    "scope_invalid": 400,
+    "idempotency_conflict": 409,
+    "agent_permission_denied": 403,
+    "agent_permission_revoked": 403,
+    "approval_unavailable": 404,
+    "approval_closed": 409,
+    "approval_expired": 409,
+    "approval_stale": 409,
+    "approval_forbidden": 403,
+    "task_unavailable": 404,
+    "task_forbidden": 403,
+    "task_conflict": 409,
+    "task_terminal": 409,
+    "task_too_long": 400,
+    "step_unknown": 404,
+    "step_closed": 409,
+    "step_not_retryable": 409,
+    "retry_budget_exhausted": 409,
+    "undo_unavailable": 409,
+    "undo_expired": 409,
+    "undo_conflict": 409,
+    "proposal_closed": 409,
+    "proposal_expired": 409,
+    "proposal_stale": 409,
+    "proposal_digest": 409,
+    "approve_required": 403,
+    "edit_required": 403,
+    "owner_required": 403
+  },
+  "results": [
     "needs_confirmation",
     "native_only",
     "needs_panel_confirmation"
   ],
-  "reasonCodes": {
+  "stepReasons": {
     "blocked": [
       "permission_revoked",
       "permission_missing",
@@ -213,5 +68,13 @@
       "cancelled_by_person",
       "cancelled_by_revocation"
     ]
-  }
+  },
+  "retired": [
+    "permission_revoked",
+    "permission_missing",
+    "agent_approval_closed",
+    "agent_approval_expired",
+    "agent_approval_digest",
+    "agent_approval_stale"
+  ]
 }

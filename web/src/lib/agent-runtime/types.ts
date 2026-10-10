@@ -160,6 +160,8 @@ export interface AgentTurnRequest {
   /** The writer voice the person chose (ids only); the server never swaps it. */
   voiceMode?: string;
   voiceSourceIds?: string[];
+  /** Context Lens: what the person removed from this message's context (item ids from the preview); honoured by the server. */
+  contextLens?: { exclude: string[] };
 }
 
 export interface AgentStatus {
@@ -176,6 +178,8 @@ export interface AgentStatus {
   genui?: { enabled: boolean; actions: boolean; edits: boolean; canary: boolean };
   /** Current workspace eligibility; the server still authorizes every task read and action. */
   tasks?: { enabled: boolean };
+  /** Context Lens (only present when it is on for this workspace). */
+  contextLens?: { enabled: boolean; version: string; visibleState: boolean; previewTtlSeconds: number };
 }
 
 export interface ConversationImage {

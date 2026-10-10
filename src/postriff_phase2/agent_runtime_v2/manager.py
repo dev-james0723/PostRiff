@@ -418,8 +418,10 @@ def _build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standar
     def model_settings(load):
         return None if model_factory is not None else settings_for(cfg, load)
 
-    specialist_tools = specialists.build(model_for, settings_for=(model_settings if model_factory is None else None)) if cfg.enabled("RAFII_SPECIALISTS_ENABLED") or model_factory is not None else {}
-    tools = sdk_tools(specialists.available(MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])), scope_name=None) + list(specialist_tools.values())
+    specialist_tools = specialists.build(model_for, settings_for=(model_settings if model_factory is None else None), ctx=ctx) if cfg.enabled("RAFII_SPECIALISTS_ENABLED") or model_factory is not None else {}
+    from . import authz
+    names = authz.filter_tools(ctx, specialists.available(MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])))
+    tools = sdk_tools(names, scope_name=None) + list(specialist_tools.values())
     manager = Agent(name="rafii_manager", instructions=instructions(ctx), tools=tools, handoffs=[], model=model_for(workload, "rafii_manager"),
                     output_type=answer_policy.reply_type(), output_guardrails=[answer_policy.output_guardrail()],
                     input_guardrails=[answer_policy.input_guardrail()],

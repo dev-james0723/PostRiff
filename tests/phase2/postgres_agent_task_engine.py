@@ -407,4 +407,32 @@ class TaskEnginePG(unittest.TestCase):
         self.assertTrue(again['replayed'])
         with connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM public.pr_agent_step_attempts WHERE task_id=%s',(t['taskId'],)).fetchone()[0],1)
 
+    def test_29_cf2_ask_roundtrip_uses_consumed_live_attempt_authority(self):
+        from postriff_phase2.agent_runtime_v2 import agent_permissions,authz,domain_tools,tool_adapter
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals
+        from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
+        cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on')
+        runtime=SimpleNamespace(service=self.service,cfg=cfg,clock=time.time)
+        approvals.install();self.assertTrue(authz.enforcement_ready())
+        with self.service.repository.transaction(OWNER,self.w) as (cur,row,principal):
+            agent_permissions.apply_decision(cur,workspace_id=self.w,principal=principal,member=self.service.ideas._member(row),state=self.service.ideas._state(row),token=OWNER,
+                payload={'preset':'custom','scopes':{'capability:tool.campaign_link':'ask'},'expectedEpoch':0,'consentVersion':agent_permissions.CONSENT_VERSION,
+                         'copyDigest':agent_permissions.COPY_DIGEST,'confirmed':True,'source':'settings','idempotencyKey':'ask-'+uuid.uuid4().hex},now=time.time(),mode='enforce')
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            campaign=state['raffi']['campaignPlanning']['campaigns'][0]['id'];draft=state['variants'][0]['id']
+        t=self.create([{'label':'Ask before linking','kind':'model'}])
+        with store.service_tx(self.service,self.w) as cur:plan=task_state.load(cur,self.w,t['taskId']);member=authz_seam.membership(cur,self.w,A)
+        ctx=RafiiRunContext(self.service,self.w,OWNER,A,member,t['conversationId'],'trace_'+uuid.uuid4().hex,task=plan,config=cfg,request_text='Link draft to campaign')
+        ctx.ledger.reference('campaign',campaign);ctx.ledger.reference('draft',draft)
+        domain_tools.ensure_registered()
+        result=tool_adapter.execute(ctx,tool_adapter.REGISTRY['campaign_link'],{'stepId':'s1','campaignId':campaign,'draftIds':[draft]})
+        self.assertTrue(result.get('needsUser'),result)
+        with store.service_tx(self.service,self.w) as cur:approval=store.approvals_for(cur,self.w,t['taskId'])[0]
+        result=approvals.resolve_approval(runtime,self.w,OWNER,approval['approvalId'],{'decision':'approve','digest':approval['digest'],'idempotencyKey':'approved-'+uuid.uuid4().hex})
+        self.assertEqual(result['resumed'],'inline',result)
+        with connect() as db:
+            self.assertEqual(db.execute('SELECT state,verified FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)).fetchone(),('completed',True))
+            self.assertEqual(db.execute('SELECT state FROM public.pr_agent_approvals WHERE id=%s',(approval['approvalId'],)).fetchone()[0],'consumed')
+
 if __name__=='__main__':unittest.main(verbosity=2)

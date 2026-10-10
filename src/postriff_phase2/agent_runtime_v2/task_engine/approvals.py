@@ -430,6 +430,7 @@ def install():
     resolver = getattr(authz, "register_approval_actor_resolver", None)
     if resolver:
         resolver(resolve_bound_actor)
+        authz.ENFORCEMENT_POINTS.add("E8")
     return True
 
 

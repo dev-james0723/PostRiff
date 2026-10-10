@@ -40,6 +40,10 @@ ERRORS: dict[str, tuple[int, str]] = {
     "proposal_closed": (409, "That proposal was already decided."),
     "proposal_expired": (409, "That proposal expired."),
     "proposal_stale": (409, "That proposal is out of date."),
+    "proposal_digest": (409, "That proposal is out of date."),
+    "approve_required": (403, "Your role cannot approve this."),
+    "edit_required": (403, "Your role cannot edit this."),
+    "owner_required": (403, "Only a workspace owner can do this."),
 }
 
 # Non-error result codes (CF-2 §13.2): tool and turn results with HTTP 200/201.

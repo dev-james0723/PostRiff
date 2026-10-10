@@ -24,6 +24,7 @@ from .hosted_identity import (
     SupabaseIdentityAdmin,
     verified_aal,
     verified_auth_time,
+    verified_method_time,
     verified_passkey_time,
     verified_session_id,
 )
@@ -96,6 +97,8 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     # bearer.  This lets TOTP-enforced accounts use a separate, ephemeral passkey session as proof.
     verify.proof = lambda access_token: validate(access_token, enforce_mfa=False)
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
+    # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
+    verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
     return verify
 
 

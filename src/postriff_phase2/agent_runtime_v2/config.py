@@ -20,7 +20,9 @@ from dataclasses import dataclass, field
 # --- feature flags (§41) ----------------------------------------------------------------------------------------------
 FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENABLED", "RAFII_SPECIALISTS_ENABLED", "RAFII_PROACTIVE_V2_ENABLED", "RAFII_AGENT_THINKING_STATES_ENABLED",
          # Generative UI (rafii-genui/1). Off unless set; RAFII_GENUI_WORKSPACES narrows a canary to listed workspaces.
-         "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED")
+         "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED",
+         "RAFII_AGENT_PERMISSIONS_ENABLED", "RAFII_AGENT_PERMISSIONS_ENFORCED",
+         "RAFII_TASK_ENGINE_ENABLED", "RAFII_TASK_ENGINE_AUTHORITATIVE", "RAFII_TASK_ENGINE_BACKGROUND")
 
 # --- model aliases (ADR-006) ------------------------------------------------------------------------------------------
 # Defaults are aliases for development. Pin dated snapshots in production only after the evals pass (ADR-006).
@@ -70,6 +72,16 @@ def _flag(values, name) -> bool:
     return str(values.get(name, "")).strip().lower() in ("1", "true", "yes", "on")
 
 
+PERMISSIONS_MODES = ("off", "shadow", "enforce")
+
+
+def permissions_mode(value) -> str:
+    """RAFII_AGENT_PERMISSIONS_MODE as one of PERMISSIONS_MODES. Anything else (unset, a typo) is "off": today's behaviour,
+    which every existing route and tool still authorizes on its own."""
+    mode = str(value or "").strip().lower()
+    return mode if mode in PERMISSIONS_MODES else "off"
+
+
 @dataclass(frozen=True)
 class Route:
     """One routing decision, recorded in the trace (§21)."""
@@ -98,6 +110,15 @@ class RuntimeConfig:
     has_openai_key: bool = False
     has_gateway_key: bool = False
     genui_workspaces: frozenset = frozenset()   # empty: every workspace once RAFII_GENUI_ENABLED is on
+    # Rafii agent permissions (rafii-agent-authz/1, CF-2 §8.2): off | shadow | enforce, narrowed to listed workspaces.
+    # Fail-closed allowlist: empty means no workspace; "*" must be written out to mean every workspace (X10).
+    permissions_mode: str = "off"
+    permissions_workspaces: frozenset = frozenset()
+    task_engine_workspaces: frozenset = frozenset()
+    release_sha: str = ""
+    # A trusted server integration must verify both fixed-corpus receipts for this release.
+    # Never populated from browser input or an environment verified=true escape hatch.
+    permissions_gate_reader: object = field(default=None, repr=False)
 
     # The key itself is never an attribute: `credential()` reads it when a request is made.
     _env: dict = field(default_factory=dict, repr=False)
@@ -137,7 +158,12 @@ class RuntimeConfig:
         return cls(flags={name: _flag(values, name) for name in FLAGS}, models=models, provider=provider, base_url=base, prices=prices,
                    image_estimates=image_prices, openai_tracing=_flag(values, "RAFII_AGENT_OPENAI_TRACING") and has_openai,
                    has_openai_key=has_openai, has_gateway_key=has_gateway,
-                   genui_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_GENUI_WORKSPACES") or "").split(",") if w.strip()), _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
+                   genui_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_GENUI_WORKSPACES") or "").split(",") if w.strip()),
+                   permissions_mode=("enforce" if _flag(values, "RAFII_AGENT_PERMISSIONS_ENFORCED") else "shadow") if _flag(values, "RAFII_AGENT_PERMISSIONS_ENABLED") else "off",
+                   task_engine_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_TASK_ENGINE_WORKSPACES") or "").split(",") if w.strip()),
+                   release_sha=str(values.get("VERCEL_GIT_COMMIT_SHA") or ""),
+                   permissions_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_AGENT_PERMISSIONS_WORKSPACES") or "").split(",") if w.strip()),
+                   _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
 
     # --- flags -------------------------------------------------------------------------------------------------------
     def enabled(self, name: str) -> bool:
@@ -152,6 +178,46 @@ class RuntimeConfig:
             on = on and self.enabled("RAFII_GENUI_FOUNDER_ENABLED")
         return {"enabled": on, "actions": on and self.enabled("RAFII_GENUI_ACTIONS_ENABLED"), "edits": on and self.enabled("RAFII_GENUI_EDITS_ENABLED"),
                 "canary": bool(self.genui_workspaces)}
+
+    def task_engine_for(self, workspace_id: str | None) -> str:
+        """CF-3 canonical switches only; legacy draft flags cannot activate execution."""
+        if not workspace_id or not self.enabled("RAFII_AGENT_V2_ENABLED") or not self.enabled("RAFII_TASK_ENGINE_ENABLED"):
+            return "off"
+        listed = "*" in self.task_engine_workspaces or str(workspace_id).lower() in self.task_engine_workspaces
+        if not listed:
+            return "off"
+        return "on" if self.enabled("RAFII_TASK_ENGINE_AUTHORITATIVE") else "shadow"
+
+    def task_engine_background_for(self, workspace_id: str | None) -> bool:
+        return self.task_engine_for(workspace_id) == "on" and self.enabled("RAFII_TASK_ENGINE_BACKGROUND")
+
+    def permissions_for(self, workspace_id: str | None) -> str:
+        """The agent-permissions mode for one workspace (CF-2 §8.2): "off" (nothing is evaluated: today's behaviour), "shadow"
+        (decisions are computed and logged, never applied) or "enforce". Off unless the mode is set AND the workspace is
+        listed; an empty list is no workspace and "*" is every workspace. The mode never grants anything: every route and
+        tool keeps its own membership, role and approval checks."""
+        if self.permissions_mode == "off" or not workspace_id:
+            return "off"
+        listed = "*" in self.permissions_workspaces or str(workspace_id).lower() in self.permissions_workspaces
+        if not listed:
+            return "off"
+        if self.permissions_mode != "enforce":
+            return self.permissions_mode
+        engine = getattr(self, "task_engine_for", None)
+        if not callable(engine) or engine(workspace_id) != "on":
+            return "shadow"
+        # Activation still requires all enforcement adapters (E2–E10) to be wired.
+        from . import authz
+        if not authz.enforcement_ready():
+            return "shadow"
+        if self.genui_for(workspace_id)["enabled"]:
+            reader = self.permissions_gate_reader
+            try:
+                if not self.release_sha or not callable(reader) or reader(workspace_id, self.release_sha) is not True:
+                    return "shadow"
+            except Exception:
+                return "shadow"
+        return "enforce"
 
     # --- credentials (server-side only) ------------------------------------------------------------------------------
     def credential(self, provider: str | None = None) -> str | None:
@@ -197,7 +263,11 @@ class RuntimeConfig:
 
     def public(self) -> dict:
         """What the browser and traces may see: flags, aliases and availability. Never a credential."""
-        return {"flags": dict(self.flags), "models": dict(self.models), "provider": self.provider,
+        # Permission/task rollout switches have dedicated authenticated endpoints.
+        # Keeping them out preserves the existing off/shadow status contract.
+        public_flags = {key: value for key, value in self.flags.items()
+                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_"))}
+        return {"flags": public_flags, "models": dict(self.models), "provider": self.provider,
                 "voiceAvailable": self.has_openai_key and self.enabled("RAFII_VOICE_ENABLED"),
                 "imageAvailable": self.provider is not None and self.enabled("RAFII_IMAGE_AGENT_ENABLED")}
 

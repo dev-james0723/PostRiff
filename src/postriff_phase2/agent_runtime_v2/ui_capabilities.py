@@ -39,10 +39,35 @@ def _now() -> float:
     return time.time()
 
 
-def permission_revision(member) -> str:
+def permission_revision(member, grants=None, mode="off") -> str:
     """A digest of the member's role and flags: a change between issue and use narrows the capability."""
     summary = member.summary() if hasattr(member, "summary") else {}
-    return ui_contracts.sha256_text(ui_contracts.canonical_json({"role": getattr(member, "role", None), "summary": summary}, max_depth=None))
+    basis = {"role": getattr(member, "role", None), "summary": summary}
+    if mode == "enforce":
+        basis["grants"] = grants.token() if grants is not None else "unavailable"
+    return ui_contracts.sha256_text(ui_contracts.canonical_json(basis, max_depth=None))
+
+
+def permission_decision(auth, binding, *, kind, inputs=None):
+    """The registered UI surface, separate from its wrapped tool's confirmation."""
+    if getattr(auth, "authz_mode", "off") == "off" or getattr(auth, "scope", "workspace") == "founder":
+        return None
+    from . import authz, capability_registry
+    try:
+        cap = capability_registry.for_action(binding) if kind == "action" else capability_registry.for_query(binding)
+        name = binding.action_id if kind == "action" else binding.name
+        surface = capability_registry.surface("genui_action" if kind == "action" else "genui_query", name)
+        return authz.gate(auth, cap, inputs, surface, actor=authz.Actor("human_ui", auth.principal))
+    except Exception as error:
+        authz.log.error(__import__("json").dumps({"event": "agent.authz.ui_error", "errorClass": type(error).__name__}))
+        if getattr(auth, "authz_mode", "off") == "enforce":
+            raise authz.AuthzError("Rafii cannot verify this view's permissions.", "agent_permission_denied") from error
+        return None
+
+
+def permission_allows(auth, binding, *, kind):
+    decision = permission_decision(auth, binding, kind=kind)
+    return decision is None or decision.outcome != "deny"
 
 
 def _allows(member, requirement: str) -> bool:
@@ -104,6 +129,8 @@ def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
             binding = ui_domain.QUERIES[name]
             if binding.scope != scope or not tool_ok(binding.tool, scope=scope, effect="READ") or not _allows(auth.member, binding.requirement):
                 continue
+            if not permission_allows(auth, binding, kind="query"):
+                continue
             queries.append(ui_domain.public_query(binding))
             constraints[name] = {"requirement": binding.requirement, "pageMax": ui_contracts.BOUNDS["queryPageMax"],
                                  "windowDays": ui_contracts.BOUNDS["queryWindowDays"], "search": binding.search}
@@ -116,9 +143,15 @@ def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
                 binding = ui_domain.ACTIONS[action_id]
                 if not tool_ok(binding.tool, scope=scope, effect=binding.effect) or not _allows(auth.member, binding.requirement):
                     continue   # never offered to a role that can't use it; the native page explains why
+                if not permission_allows(auth, binding, kind="action"):
+                    continue
                 actions.append(ui_domain.public_action(binding))
                 targets[action_id] = {"requirement": binding.requirement, "effect": binding.effect, "prepareOnly": binding.prepare_only,
                                       "expiresAt": common.iso(issued + ACTION_TTL_SECONDS)}
+                if getattr(auth, "authz_mode", "off") == "enforce":
+                    from . import capability_registry
+                    cap = capability_registry.for_action(binding)
+                    targets[action_id].update(capabilityId=cap.capability_id, capabilityVersion=cap.version, risk=cap.risk)
     source = {"journeys": journeys, "queries": [q["name"] for q in queries], "actions": [a["actionId"] for a in actions], "scope": scope,
               "principal": auth.principal, "workspace": auth.workspace_id, "issued": issued}
     manifest_id = "mf_" + ui_contracts.sha256_text(ui_contracts.canonical_json(source, max_depth=None))[:32]
@@ -127,7 +160,7 @@ def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
             "queries": queries, "actions": actions, "expiresAt": common.iso(issued + QUERY_TTL_SECONDS),
             # --- server-only (ui_contracts.SERVER_ONLY_MANIFEST_KEYS); public_manifest() never copies these ---
             "principal": auth.principal, "scope": scope, "scopeKey": getattr(auth, "scope_key", "") or "", "workspaceId": auth.workspace_id,
-            "role": getattr(auth.member, "role", None) or getattr(auth, "role", "") or "", "permissionRevision": permission_revision(auth.member),
+            "role": getattr(auth.member, "role", None) or getattr(auth, "role", "") or "", "permissionRevision": permission_revision(auth.member, getattr(auth, "grants", None), getattr(auth, "authz_mode", "off")),
             "egress": dict(projection.get("egress_decision") or {}), "approvedRefs": list((projection.get("allowed_context") or {}).get("refs") or [])[:60],
             "queryConstraints": constraints, "actionTargets": targets, "proposalDigests": {}, "issuedAt": issued}
 
@@ -180,7 +213,7 @@ def current(cur, auth, manifest):
     now = _now()
     if expires is None or expires <= now:
         raise AlphaError("This view's live data has expired. Ask Rafii again for a fresh view.", 410, code="ui_capability_expired")
-    revised = manifest.get("permissionRevision") != permission_revision(auth.member)
+    revised = manifest.get("permissionRevision") != permission_revision(auth.member, getattr(auth, "grants", None), getattr(auth, "authz_mode", "off"))
     actions, targets = [], {}
     for entry in manifest.get("actions") or []:
         action_id = entry.get("actionId") if isinstance(entry, dict) else None
@@ -188,10 +221,12 @@ def current(cur, auth, manifest):
         target = (manifest.get("actionTargets") or {}).get(action_id or "")
         if binding is None or target is None or not _allows(auth.member, binding.requirement) or (_epoch(target.get("expiresAt")) or 0) <= now:
             continue
+        if not permission_allows(auth, binding, kind="action"):
+            continue
         actions.append(entry)
         targets[action_id] = target
     queries = [q for q in manifest.get("queries") or [] if isinstance(q, dict) and q.get("name") in ui_domain.QUERIES
-               and _allows(auth.member, ui_domain.QUERIES[q["name"]].requirement)]
+               and _allows(auth.member, ui_domain.QUERIES[q["name"]].requirement) and permission_allows(auth, ui_domain.QUERIES[q["name"]], kind="query")]
     return {**manifest, "queries": queries, "actions": actions, "actionTargets": targets, "revised": revised}
 
 

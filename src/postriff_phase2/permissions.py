@@ -25,6 +25,8 @@ CLASSES = {
 
 # Hosted actions that are not plain editorial edits. Anything absent is "edit".
 ACTION_CLASSES = {
+    "agent_permissions_set": "read", "agent_permissions_revoke": "read", "agent_permissions_remind": "read",
+    "agent_autopilot_enable": "read", "agent_workspace_ceiling": "owner",
     "p2_review": "approve", "p2_approve": "approve", "p2_approve_many": "approve", "p2_cancel": "approve",
     "p2_channel_add": "manage_connections", "p2_channel_verify": "manage_connections",
     "p2_channel_disconnect": "manage_connections",

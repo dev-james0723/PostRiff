@@ -188,6 +188,12 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'Rafii Agent',
+        url: '/app/account/agent',
+        icon: 'shieldCheck',
+        items: []
+      },
+      {
         title: 'Models',
         url: '/app/account/models',
         icon: 'adjustments',

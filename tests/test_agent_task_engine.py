@@ -61,7 +61,7 @@ class TaskEngineRules(unittest.TestCase):
 
     def test_error_contract(self):
         fixture=json.loads((Path(__file__).parent/'fixtures/agent_tasks/contracts/error-codes.json').read_text())
-        self.assertEqual(sorted((v['code'],v['http']) for v in fixture['errors']),sorted((v['code'],v['http']) for v in errors.public_table()))
+        self.assertEqual(sorted(fixture['errors'].items()),sorted((v['code'],v['http']) for v in errors.public_table()))
 
     def test_private_receipt_no_content(self):
         out=store.receipt_result({'prompt':'secret','text':'secret','checks':[],'changedRefs':[]})

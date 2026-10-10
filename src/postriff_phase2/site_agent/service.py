@@ -76,12 +76,14 @@ class SiteAgentService:
         return {"conversationId": run["conversationId"], "runId": run_id, "status": run["status"], "needsCompose": needs,
                 "events": events["events"], "cursor": events["cursor"], "messageId": message_id, "message": body}
 
-    def _history(self, cur, workspace_id, conversation_id):
+    def _history(self, cur, workspace_id, conversation_id, ctx=None):
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT 6", (conversation_id, workspace_id))
         rows = list(reversed(cur.fetchall()))
+        from ..agent_runtime_v2 import authz
         return [{"role": role, "text": (body or {}).get("text") or ""} for role, body in rows
-                if isinstance(body, dict) and (body.get("text") or "").strip() and history_eligible(role, body)]
+                if isinstance(body, dict) and (body.get("text") or "").strip() and history_eligible(role, body)
+                and (ctx is None or authz.history_eligible(cur, ctx, role, body))]
 
     def _emit(self, cur, workspace_id, run_id, event_type, **body):
         self.ideas._insert_event(cur, workspace_id, run_id, safe_event(event_type, **body))
@@ -354,7 +356,8 @@ class SiteAgentService:
         else:
             plan = procedures.select(reading, page, text, automation_count=len(names), now=now, zone=zone)
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, cur=cur, service=self.service, now=now,
-                            page=page, model_id=model_id, zone=zone)
+                            page=page, model_id=model_id, zone=zone, request_text=text)
+        page = ctx.page
         records, results = [], {}
         for tool_id, args in plan["tools"][: tools.MAX_TOOLS_PER_TURN]:
             record, result = tools.run(tool_id, args, ctx)
@@ -416,6 +419,10 @@ class SiteAgentService:
                  "tools": [{k: r.get(k) for k in ("id", "effect", "status", "latencyMs", "code")} for r in records],
                  "knowledge": knowledge.snapshot()["id"], "retrievalRefs": [f"{c['documentId']}#{c['section']}" for c in answer["citations"]],
                  "grounded": answer["grounding"]["sufficient"], "tier": model_tier, "promptVersion": prompts.PROMPT_VERSION, "toolRelease": tools.RELEASE}
+        from ..agent_runtime_v2 import authz, capability_registry
+        if ctx.authz_mode == "enforce":
+            trace["authz"] = {"capabilities": sorted({capability_registry.site_capability(r["id"]) for r in records if r["status"] == "verified"}),
+                              "token": ctx.grants.token() if ctx.grants else "unavailable"}
         if note:
             answer["blocks"].insert(0, contracts.warning(note["message"], note["code"]))
             trace["fallback"] = note["code"]
@@ -425,7 +432,7 @@ class SiteAgentService:
             draft = (results.get("draft.get") or {}).get("data") if (results.get("draft.get") or {}).get("ok") else None
             pending = {"model": model_id, "tier": model_tier, "language": reading["language"], "intent": reading["intent"],
                        "grounding": bool(reading.get("requiresGrounding", True)), "providerClass": provider_class, "page": contracts.page_summary(page),
-                       "member": member.summary(), "procedures": plan["procedures"], "message": text, "history": self._history(cur, workspace_id, conversation_id)[:-1],
+                       "member": member.summary(), "procedures": plan["procedures"], "message": text, "history": self._history(cur, workspace_id, conversation_id, ctx)[:-1],
                        "passages": ((results.get("help.search") or {}).get("data") or {}).get("passages", []) if (results.get("help.search") or {}).get("ok") else [],
                        "facts": answer["facts"], "actions": self._actions(answer, plan, page), "labels": self._labels(state),
                        "knownIds": self._known_ids(page, results, state), "draftText": draft.get("text") if draft and provider_class == "local" else None,
@@ -1110,6 +1117,8 @@ class SiteAgentService:
         def after(cur, state, actor):
             body, stored = self._proposal_row(cur, workspace_id, payload, lock=True)
             proposals.check(stored, digest_value=payload.get("digest"), now=now)
+            from ..agent_runtime_v2 import authz
+            authz.gate_proposal(cur, workspace_id, state, stored, config=authz.runtime_config_for(self.service), now=now)
             if stored.get("requiredPermission") == "owner":
                 cur.execute("SELECT m.role FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active'", (workspace_id, actor))
                 role = cur.fetchone()

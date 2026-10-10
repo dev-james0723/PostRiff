@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { permissionsUiEnabled } from '@/lib/agent-permissions/model';
 import { usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { guideStore, useGuideStore } from '@/features/rafii-guide/store';
@@ -10,6 +11,7 @@ import dynamic from 'next/dynamic';
 const TourOverlay = dynamic(() => import('./tour-overlay').then((m) => m.TourOverlay), { ssr: false });
 import { pageTourFor, WELCOME_TOUR } from './tours';
 import { useTourContext } from './use-tour-context';
+const PermissionReminder = dynamic(() => import('@/features/account/agent/permission-reminder').then((m) => m.PermissionReminder), { ssr: false });
 const WelcomeDialog = dynamic(() => import('./welcome-dialog').then((m) => m.WelcomeDialog), { ssr: false });
 
 /**
@@ -80,6 +82,7 @@ export function TourMount() {
         onDismiss={() => tourStore.dismissWithoutStarting('welcome')}
       />}
       {active && <TourOverlay />}
+      {permissionsUiEnabled() && progressReady && ready && inApp && welcomeDecided && !showWelcome && !active && !guiding && pathname !== '/app/account/agent' && <PermissionReminder />}
     </>
   );
 }
