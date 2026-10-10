@@ -103,7 +103,8 @@ test('J04 samples: exact grants and the reason each excluded sample is not used'
 
 test('J04 profile: in effect vs proposed, evidence levels, what approving affects, never "trained"', () => {
   const { env, voice } = setup({ manifestActions: J04.actions });
-  const text = textOf(render(env, voice.VoiceProfileReview, { data: J04.voice_profile_state.normal, actionId: 'voice_profile_approve' }));
+  const html = render(env, voice.VoiceProfileReview, { data: J04.voice_profile_state.normal, actionId: 'voice_profile_approve' });
+  const text = textOf(html);
   assert.match(text, /In effect/);
   assert.match(text, /Proposed/);
   assert.match(text, /Supported/);
@@ -111,8 +112,9 @@ test('J04 profile: in effect vs proposed, evidence levels, what approving affect
   assert.match(text, /marks 4 drafts for review/);
   assert.match(text, /No model was trained/);
   assert.doesNotMatch(text.replace('No model was trained', ''), /\btrained\b/i);
-  actionButtons(env)[0].onClick({ isTrusted: true });
-  assert.deepEqual(env.requests[0].inputs, { proposalKey: '0123456789abcdef01234567' }, 'approval is bound to the proposal shown');
+  assert.match(html, /href="\/app\/workspace\/brand\?section=teach&amp;step=review"/, 'approval opens canonical Brand Brain review and its current impact confirmation');
+  assert.equal(actionButtons(env).length, 0, 'the summary card cannot bypass owner review with a direct approval action');
+  assert.equal(env.requests.length, 0, 'rendering the summary never activates a proposal');
   const empty = setup({ manifestActions: J04.actions });
   assert.match(textOf(render(empty.env, empty.voice.VoiceProfileReview, { data: J04.voice_profile_state.empty, actionId: 'voice_profile_approve' })), /Nothing here yet/);
   assert.equal(actionButtons(empty.env).length, 0);

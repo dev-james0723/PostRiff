@@ -56,3 +56,5 @@ Local checks: Python AST parsing, JSON structure/acceptance completeness, shell 
 ## Review status
 
 Code and automated evidence are ready for engineering review. Human gates BB-18/MEM-16 and the three-creator study remain UNVERIFIED. This receipt does not authorize merge, deployment, feature activation, live paid models or publication. Normal PR CI is additional repository-wide evidence and must be checked before merge.
+
+PR #174's initial Generative UI regression exposed an obsolete J04 assertion that expected direct summary-card approval. The card deliberately opens the canonical Brand Brain review, where current impact and owner confirmation are required. The test now verifies that review link and that no direct write action is available. This test-only follow-up does not change the 67 source/test files validated in the dedicated cloud runs. Its validation is recorded by the subsequent PR Generative UI check; the initial failure is retained in run `38077795361`.
