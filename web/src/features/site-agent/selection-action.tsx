@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -25,11 +26,13 @@ export function SelectionAction() {
     return () => { document.removeEventListener('selectionchange', read); cancelAnimationFrame(frame); };
   }, [workspaceId, pathname]);
   if (!selected || selected.workspaceId !== workspaceId || selected.pathname !== pathname) return null;
-  return <div data-rafii-selection-action className='fixed bottom-24 left-1/2 z-40 max-w-[calc(100vw-2rem)] -translate-x-1/2 md:bottom-5'>
+  // The header's backdrop filter establishes a fixed-position containing block. Escape it so the action
+  // stays in the viewport on phones and remains above the bottom navigation.
+  return createPortal(<div data-rafii-selection-action className='fixed bottom-24 left-1/2 z-40 max-w-[calc(100vw-2rem)] -translate-x-1/2 md:bottom-5'>
     <Button variant='glass' className='min-h-11 shadow-lg' onPointerDown={(event) => event.preventDefault()} onClick={() => {
       const current = readSelectedText(document);
       if (current && workspaceId) panelStore.ask(selectionQuestion(current, pathname), workspaceId);
       setSelected(null);
     }}>Ask Rafii about selection</Button>
-  </div>;
+  </div>, document.body);
 }
