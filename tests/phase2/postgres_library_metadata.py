@@ -182,12 +182,22 @@ class LibraryMetadataPostgres(unittest.TestCase):
         self.assert_error(409, self.undo, receipt)
 
     def test_expiration_and_missing_asset_fail_closed(self):
+        self.now = int(self.now) + .1234567  # exceeds PostgreSQL microsecond precision
         receipt = self.preview({'title': 'Expired'})
-        self.now += PREVIEW_SECONDS
+        with connection() as db:
+            persisted = db.execute('SELECT extract(epoch from expires_at) FROM public.pr_library_metadata_changes WHERE id=%s', (receipt['receiptId'],)).fetchone()[0]
+        self.assertEqual(receipt['expiresAt'], persisted)
+        self.assertLessEqual(receipt['expiresAt'], self.now + PREVIEW_SECONDS)
+        self.now = receipt['expiresAt']
         self.assert_error(409, self.apply, receipt)
         receipt = self.preview({'title': 'Undo expiry'})
-        self.apply(receipt)
-        self.now += UNDO_SECONDS
+        self.now += .1234567
+        applied = self.apply(receipt)
+        with connection() as db:
+            persisted = db.execute('SELECT extract(epoch from undo_expires_at) FROM public.pr_library_metadata_changes WHERE id=%s', (receipt['receiptId'],)).fetchone()[0]
+        self.assertEqual(applied['undoExpiresAt'], persisted)
+        self.assertLessEqual(applied['undoExpiresAt'], self.now + UNDO_SECONDS)
+        self.now = applied['undoExpiresAt']
         self.assert_error(409, self.undo, receipt)
         receipt = self.preview({'title': 'Deleted'})
         with connection() as db:

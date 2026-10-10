@@ -175,7 +175,8 @@ class LibraryMetadataChanges:
         payload = {'version': 1, 'entries': entries}
         if len(json.dumps(payload).encode()) > MAX_PREVIEW_BYTES:
             raise AlphaError('This preview has too much metadata. Select fewer assets.', 413)
-        expires = self.service.repository.clock() + PREVIEW_SECONDS
+        # Whole-second deadlines round-trip through PostgreSQL without accepting an expired receipt.
+        expires = int(self.service.repository.clock()) + PREVIEW_SECONDS
         cur.execute("INSERT INTO public.pr_library_metadata_changes(id,workspace_id,actor_id,payload,expires_at) VALUES(%s,%s,%s,%s::jsonb,to_timestamp(%s))", (ident, w, principal, json.dumps(payload), expires))
         return self._view(ident, 'prepared', payload, expires, None)
 
@@ -215,7 +216,7 @@ class LibraryMetadataChanges:
         payload['after'] = after
         if len(json.dumps(payload).encode()) > MAX_RECEIPT_BYTES:
             raise AlphaError('This change has too much metadata. Select fewer assets.', 413)
-        undo_expires = self.service.repository.clock() + UNDO_SECONDS
+        undo_expires = int(self.service.repository.clock()) + UNDO_SECONDS
         cur.execute("UPDATE public.pr_library_metadata_changes SET status='applied',payload=%s::jsonb,applied_at=now(),undo_expires_at=to_timestamp(%s) WHERE workspace_id=%s AND id=%s", (json.dumps(payload), undo_expires, w, ident))
         audit(cur, w, principal, 'library.metadata_applied', ident, {'assetIds': [e['assetId'] for e in payload['entries']]})
         return self._view(ident, 'applied', payload, expires, undo_expires, True)
