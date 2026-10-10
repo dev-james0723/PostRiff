@@ -3217,9 +3217,9 @@
   },
   {
    "id": "postriff-security-and-approval",
-   "version": "1.3.1",
+   "version": "1.3.2",
    "kind": "policy",
-   "sha256": "sha256:969c332966626245d77423877768d21c68b2135f27ce79839f5b3242b782f01c",
+   "sha256": "sha256:8f4a7a6d8767d229f3218c92f7222199b2365c0b549f5b3284041d601e2a4cc6",
    "description": "Use when reviewing campaign permissions, freezing an exact approval manifest, checking route freshness, cancelling pending jobs, or handling identity and credential incidents.",
    "intents": [
     "*"
@@ -3282,7 +3282,7 @@
     }
    ],
    "notes": "Deterministic application policy. The skill text is documentation; it is never injected as an instruction.",
-   "lockedVersion": "1.3.1"
+   "lockedVersion": "1.3.2"
   },
   {
    "id": "postriff-publish-and-verify",
