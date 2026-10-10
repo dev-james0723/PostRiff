@@ -86,8 +86,7 @@ def main():
         local_ports=['--api-port',str(args.api_port),'--web-port',str(args.web_port)]
         fixtures=['--history-import-fixture'] if args.history_import else ['--founder-fixture'] if args.founder else []
         commands=[('backend',[sys.executable,'scripts/postriff_dev_hosted.py','--port',str(args.api_port),'--pg-port',str(args.pg_port)]+fixtures),('frontend',[sys.executable,'scripts/consumer_ready_web.py',*local_ports,'npm','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])]
-        if args.library or args.agent_tasks:
-        if args.library or args.universal_entry:
+        if args.library or args.agent_tasks or args.universal_entry:
             commands[1]=('frontend',['npm','--prefix','web','run','start','--','-p',str(args.web_port),'-H','127.0.0.1'])
         for name,command in commands:
             log=(out/f'durable-{name}.log').open('w');logs.append(log)
