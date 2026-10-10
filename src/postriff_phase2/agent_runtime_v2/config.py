@@ -22,7 +22,9 @@ FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENA
          # Generative UI (rafii-genui/1). Off unless set; RAFII_GENUI_WORKSPACES narrows a canary to listed workspaces.
          "RAFII_GENUI_ENABLED", "RAFII_GENUI_ACTIONS_ENABLED", "RAFII_GENUI_EDITS_ENABLED", "RAFII_GENUI_FOUNDER_ENABLED",
          "RAFII_AGENT_PERMISSIONS_ENABLED", "RAFII_AGENT_PERMISSIONS_ENFORCED",
-         "RAFII_TASK_ENGINE_ENABLED", "RAFII_TASK_ENGINE_AUTHORITATIVE", "RAFII_TASK_ENGINE_BACKGROUND")
+         "RAFII_TASK_ENGINE_ENABLED", "RAFII_TASK_ENGINE_AUTHORITATIVE", "RAFII_TASK_ENGINE_BACKGROUND",
+         "RAFII_AGENT_LIBRARY_BROWSE_ENABLED")
+LIBRARY_BROWSE_WORKSPACES_ENV = "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES"
 
 # --- model aliases (ADR-006) ------------------------------------------------------------------------------------------
 # Defaults are aliases for development. Pin dated snapshots in production only after the evals pass (ADR-006).
@@ -81,6 +83,10 @@ def permissions_mode(value) -> str:
     mode = str(value or "").strip().lower()
     return mode if mode in PERMISSIONS_MODES else "off"
 
+def _workspaces(value) -> frozenset:
+    """A comma-separated workspace allowlist (RAFII_GENUI_WORKSPACES, RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES), lower-cased."""
+    return frozenset(w.strip().lower() for w in str(value or "").split(",") if w.strip())
+
 
 @dataclass(frozen=True)
 class Route:
@@ -119,6 +125,8 @@ class RuntimeConfig:
     # A trusted server integration must verify both fixed-corpus receipts for this release.
     # Never populated from browser input or an environment verified=true escape hatch.
     permissions_gate_reader: object = field(default=None, repr=False)
+
+    library_browse_workspaces: frozenset = frozenset()   # empty: no workspace (fail closed), unlike genui_workspaces
 
     # The key itself is never an attribute: `credential()` reads it when a request is made.
     _env: dict = field(default_factory=dict, repr=False)
@@ -163,6 +171,7 @@ class RuntimeConfig:
                    task_engine_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_TASK_ENGINE_WORKSPACES") or "").split(",") if w.strip()),
                    release_sha=str(values.get("VERCEL_GIT_COMMIT_SHA") or ""),
                    permissions_workspaces=frozenset(w.strip().lower() for w in str(values.get("RAFII_AGENT_PERMISSIONS_WORKSPACES") or "").split(",") if w.strip()),
+                   library_browse_workspaces=_workspaces(values.get(LIBRARY_BROWSE_WORKSPACES_ENV)),
                    _env={k: values.get(k) for k in ("OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")})
 
     # --- flags -------------------------------------------------------------------------------------------------------
@@ -218,6 +227,14 @@ class RuntimeConfig:
             except Exception:
                 return "shadow"
         return "enforce"
+
+    def library_browse_for(self, workspace_id: str | None) -> bool:
+        """The Manager may browse this workspace's Library metadata (library_browse; D-A51): the flag is on AND the
+        workspace is listed. Unlike the GenUI canary list, an empty list enables no workspace: titles, filenames and tags can
+        hold personal data, and no consent covers sending them to the Manager's provider beyond an approved canary (D1)."""
+        if not self.enabled("RAFII_AGENT_LIBRARY_BROWSE_ENABLED") or not workspace_id:
+            return False
+        return str(workspace_id).lower() in self.library_browse_workspaces
 
     # --- credentials (server-side only) ------------------------------------------------------------------------------
     def credential(self, provider: str | None = None) -> str | None:

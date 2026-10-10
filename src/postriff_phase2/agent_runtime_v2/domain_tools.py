@@ -690,7 +690,7 @@ EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools", "postriff_phase2.yo
 def ensure_registered() -> None:
     """Import side effects in one place (the registry is filled at import), then optional extensions if installed."""
     import importlib
-    from . import creative, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, weather_now, skills_list, web_research)
+    from . import creative, library_browse, live_tools, specialists  # noqa: F401 — they register tools at import (image_*, library_browse, weather_now, skills_list, web_research)
     from .tool_adapter import register_site_tools
     register_site_tools()
     for name in EXTENSION_MODULES:

@@ -134,6 +134,18 @@ def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):
             queries.append(ui_domain.public_query(binding))
             constraints[name] = {"requirement": binding.requirement, "pageMax": ui_contracts.BOUNDS["queryPageMax"],
                                  "windowDays": ui_contracts.BOUNDS["queryWindowDays"], "search": binding.search}
+    # A Library answer names a bounded selection, including [] after a browse with no matches. Keep that selection in
+    # the persisted server-only manifest: generated source and later view edits may narrow it, never broaden it.
+    for suggestion in (projection.get("allowed_context") or {}).get("suggestedInputs") or []:
+        if not isinstance(suggestion, dict) or suggestion.get("binding") != "library_search":
+            continue
+        inputs = suggestion.get("inputs") or {}
+        if isinstance(inputs, dict) and "ids" in inputs:
+            selected = ui_domain.validate(ui_domain.QUERIES["library_search"].args, {"ids": inputs["ids"]})["ids"]
+            for name in ("library_search", "library_item", "library_lineage", "library_selection"):
+                if name in constraints:
+                    constraints[name]["ids"] = list(selected)
+            break
     actions, targets = [], {}
     # With the actions kill switch off (flags from RuntimeConfig.genui_for), the presenter is offered no write control at all;
     # the action routes refuse independently either way.

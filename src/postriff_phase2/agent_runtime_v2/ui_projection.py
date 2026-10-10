@@ -36,7 +36,7 @@ from . import ui_contracts, ui_domain
 TOOL_JOURNEYS = {
     "draft_get": "J01", "draft_create": "J01", "draft_rewrite": "J01", "draft_edit": "J01", "voice_check": "J01", "models_summary": "J01",
     "calendar_range": "J02", "queue_summary": "J02", "job_get": "J02", "schedule_propose": "J02", "reviews_list": "J02", "publishing_summary": "J02",
-    "library_search": "J03", "library_read": "J03", "image_list": "J03", "image_analyze": "J03", "workspace_search": "J03",
+    "library_search": "J03", "library_read": "J03", "library_browse": "J03", "image_list": "J03", "image_analyze": "J03", "workspace_search": "J03",
     "brand_summary": "J04", "voice_profile": "J04", "memory_context": "J04", "memory_summary": "J04", "privacy_egress_state": "J04",
     "campaign_list": "J05", "campaign_get": "J05", "campaign_items": "J05", "campaign_link": "J05", "campaign_unlink": "J05", "campaign_membership": "J05",
     "web_research": "J07", "research_search": "J07", "research_fetch": "J07",
@@ -45,11 +45,12 @@ TOOL_JOURNEYS = {
 }
 COLLECTION_TOOLS = {"calendar_range", "queue_summary", "content_search", "campaign_list", "campaign_get", "campaign_items", "automation_list", "library_search",
                     "image_list", "publishing_summary", "attention_summary", "voice_profile", "brand_summary", "memory_context", "web_research", "research_search",
-                    "reviews_list", "channels_capabilities", "workspace_search"}
+                    "reviews_list", "channels_capabilities", "workspace_search", "library_browse"}
 REF_JOURNEYS = {"draft": "J01", "post": "J01", "job": "J02", "review": "J02", "asset": "J03", "image": "J03", "library_file": "J03", "media": "J03",
                 "voice_sample": "J04", "campaign": "J05", "source": "J07", "automation": "J08", "automation_run": "J08", "connection": "J08"}
 PROPOSAL_JOURNEYS = {"schedule_draft": "J02", "reschedule_post": "J02", "automation_change": "J08"}
 MAX_JOURNEYS = 3
+LIBRARY_IDS = 25     # library_search `ids` maxItems (ui_domain/library.py PICK_MAX)
 # D-A52: run-history reads. automation_get returns an automation's latest runs and automation_explain explains one stored run;
 # each harvests a single automation reference, so without this a question about several runs was a "single fact" although
 # J08's manifest shows run history (automation_history → RunHistory). They count as a collection read only when the verified
@@ -259,7 +260,16 @@ def _refs(result: dict, selection_state: dict | None) -> list[dict]:
     return out[:60]
 
 
-def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
+def _library_ids(result: dict) -> list[str] | None:
+    """The ids library_browse listed this turn, in order (`result.libraryIds`, library_browse.result_fields), or None when it
+    never listed a page. Kept apart from `references` (capped at 20 on the message) so a 25-item page reaches the view whole."""
+    ids = result.get("libraryIds") if isinstance(result, dict) else None
+    if not isinstance(ids, list):
+        return None
+    return list(dict.fromkeys(i for i in ids if isinstance(i, str) and re.match(r"^[0-9a-f]{32}$", i)))[:LIBRARY_IDS]
+
+
+def _suggested_inputs(journeys: list[str], refs: list[dict], library_ids: list[str] | None = None) -> list[dict]:
     """Starting arguments for bindings from the turn's own references (ids only); the presenter may use or ignore them."""
     by_type: dict[str, list[str]] = {}
     for reference in refs:
@@ -276,9 +286,17 @@ def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
     if "J08" in journeys and by_type.get("automation"):
         out.append({"binding": "automation_detail", "inputs": {"automationId": by_type["automation"][0]}})
         out.append({"binding": "automation_history", "inputs": {"automationId": by_type["automation"][0]}})
-    assets = [i for i in by_type.get("asset") or [] if re.match(r"^[0-9a-f]{32}$", i)]
-    if "J03" in journeys and assets:
-        out.append({"binding": "library_item", "inputs": {"assetId": assets[0]}})
+    # The Library items the turn found: what library_browse listed (`libraryIds`, in its results' order, [] when it found nothing),
+    # else the turn's asset refs (a J03 view's selection comes back as media/library_file refs). The view lists exactly those, so
+    # the chat and the view agree; an empty browse gives `ids: []` (an empty view), never library_search {} (the whole Library).
+    if library_ids is not None:
+        found = list(library_ids)
+    else:
+        found = list(dict.fromkeys(r["id"] for r in refs if r["type"] in ("asset", "media", "library_file") and re.match(r"^[0-9a-f]{32}$", r["id"])))
+    if "J03" in journeys and (found or library_ids is not None):
+        out.append({"binding": "library_search", "inputs": {"ids": found[:LIBRARY_IDS]}})
+        if len(found) == 1:
+            out.append({"binding": "library_item", "inputs": {"assetId": found[0]}})
     return [s for s in out if s["binding"] in ui_domain.QUERIES][:12]
 
 
@@ -328,7 +346,7 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
     groups = component_groups(journeys)
     projection = {"journey_ids": journeys, "component_group_ids": groups, "egress_decision": egress_decision(result, scope=scope),
                   "allowed_context": {"refs": refs, "counts": _counts(result, refs), "toolStates": _tool_states(result), "language": result.get("language") or "en",
-                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs),
+                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs, _library_ids(result)),
                                       "selection": [r for r in refs if r in ((selection_state or {}).get("references") or [])][:12] if isinstance(selection_state, dict) else [],
                                       "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"]},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}

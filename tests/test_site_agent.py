@@ -55,7 +55,9 @@ def workspace_state():
 
 
 def ctx(state=None, role="owner", **kw):
-    return tools.Context(state=state or workspace_state(), membership=Membership.from_row(role), principal="owner-1", workspace_id="ws-one", now=NOW, **kw)
+    # The panel's reader: the member, in Rafii's own answer (a cloud reader's view is pinned in test_r0_hotfixes.py).
+    return tools.Context(state=state or workspace_state(), membership=Membership.from_row(role), principal="owner-1", workspace_id="ws-one", now=NOW,
+                         **{"egress": "local", **kw})
 
 
 class KnowledgeTest(unittest.TestCase):

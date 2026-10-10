@@ -237,6 +237,18 @@ class AttachmentRemovalTests(unittest.TestCase):
         with self.assertRaises(AlphaError):
             creative.image_analyze(self.ctx, {"assetId": self.ids[1], "question": "What is here?"})
 
+    def test_library_browse_and_lens_reference_rules_both_precede_provider_reservation(self):
+        self.ctx.image_studio = SimpleNamespace(route=lambda *_a, **_kw: SimpleNamespace(available=True))
+        self.ctx.service.assets = object()
+        self.ctx.service.ledger = SimpleNamespace(reserve=lambda *_a, **_kw: self.fail("no paid work before both context checks"))
+        with patch.object(creative, '_attached_only', return_value=True), patch.object(creative, 'conversation_images', return_value=[]):
+            with self.assertRaises(AlphaError) as removed:
+                creative._generate(self.ctx, {"prompt": "Use it", "referenceAssetIds": [self.ids[1]]}, operation='generate')
+            self.assertEqual(removed.exception.status, 404)
+            unattached = creative._generate(self.ctx, {"prompt": "Use it", "referenceAssetIds": [self.ids[0]]}, operation='generate')
+            self.assertEqual(unattached['code'], 'needs_attachment')
+            self.assertTrue(unattached['needsUser'])
+
     def test_removed_image_is_not_resolved_from_ordinals_or_a_generated_view_alias(self):
         runtime = AgentRuntimeService.__new__(AgentRuntimeService)
         _focus, notes = runtime._resolve(self.cur, self.state, "ws-one", "conv-1", "Describe the second image", queue_page(), excluded_assets=self.excluded)

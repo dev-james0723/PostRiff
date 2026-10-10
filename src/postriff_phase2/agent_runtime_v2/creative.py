@@ -263,6 +263,37 @@ def _image_at(images, index):
     return images[index] if index < 0 and -len(images) <= index else None
 
 
+NEEDS_ATTACHMENT = ("Attach that photo or video to a message first: Rafii looks at a Library photo or video only when it is attached "
+                    "in this conversation.")
+
+
+class NeedsAttachment(AlphaError):
+    """An explicit assetId that wasn't attached in this conversation, while the Manager can browse the Library (D-A51)."""
+
+
+def _attached_only(ctx: RafiiRunContext) -> bool:
+    """While library_browse is on for this workspace, the model learns every photo/video id in the Library, so naming an id is
+    no longer the person's choice: an image tool then takes an explicit id only if the person attached it (photos attach-only)."""
+    from . import library_browse
+    return library_browse.enabled_for(getattr(ctx, "config", None), getattr(ctx, "workspace_id", None))
+
+
+def _require_attached(ctx: RafiiRunContext, cur, state, asset_id: str) -> None:
+    """The id was attached to this turn, or is an image of this conversation (attached earlier, or made here by Rafii)."""
+    if not _attached_only(ctx):
+        return
+    if any(isinstance(a, dict) and a.get("assetId") == asset_id for a in ctx.attachments or []):
+        return
+    if any(item["assetId"] == asset_id for item in conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id)):
+        return
+    raise NeedsAttachment(NEEDS_ATTACHMENT, 409, code="needs_attachment")
+
+
+def _needs_attachment(refused: NeedsAttachment) -> dict:
+    """A typed request to the person (not a failure of the turn): nothing was sent to any provider and nothing was reserved."""
+    return {"ok": False, "verified": True, "needsUser": True, "code": "needs_attachment", "error": str(refused)}
+
+
 def _resolve_asset(ctx: RafiiRunContext, cur, state, args) -> dict:
     excluded = _excluded_assets(ctx)
     assets = {a.get("id"): a for a in (state.get("phase2") or {}).get("assets", [])
@@ -272,6 +303,7 @@ def _resolve_asset(ctx: RafiiRunContext, cur, state, args) -> dict:
         if asset is None:
             # Same answer for another workspace's asset and a missing one (§29 tenant isolation, MM14).
             raise AlphaError("That image is not in this workspace.", 404, code="not_found")
+        _require_attached(ctx, cur, state, asset["id"])
         return asset
     if args.get("index") is not None:
         images = conversation_images(cur, state, ctx.workspace_id, ctx.conversation_id, excluded=excluded)
@@ -336,7 +368,10 @@ def image_list(ctx: RafiiRunContext, args: dict) -> dict:
 def image_analyze(ctx: RafiiRunContext, args: dict) -> dict:
     from . import memory_layers
     with ctx.workspace() as (cur, _row, _principal, _member, state):
-        asset = _resolve_asset(ctx, cur, state, args)
+        try:
+            asset = _resolve_asset(ctx, cur, state, args)
+        except NeedsAttachment as refused:
+            return _needs_attachment(refused)
         blocked = _consent_blocked(ctx, state, "vision", ctx.config.route("vision", reason="image understanding"))
         if blocked:
             return {**blocked, "assetId": asset["id"]}
@@ -389,13 +424,14 @@ def _generate(ctx: RafiiRunContext, args: dict, *, operation: str) -> dict:
             raise AlphaError("Your role can't create images.", 403, code="tool_forbidden")
         if ctx.service.assets is None:
             raise CreativeError("Private media storage is not configured, so a generated image could not be saved.", 503, code="media_storage_not_configured")
-        if operation in ("edit", "variant"):
-            parent = _resolve_asset(ctx, cur, state, args)
-        for extra in (args.get("referenceAssetIds") or [])[:3]:
-            ref = _resolve_asset(ctx, cur, state, {"assetId": extra})
-            if ref is None:
-                raise AlphaError("A reference image is not in this workspace.", 404, code="not_found")
-            sources.append(ref)
+        try:
+            if operation in ("edit", "variant"):
+                parent = _resolve_asset(ctx, cur, state, args)
+            for extra in (args.get("referenceAssetIds") or [])[:3]:
+                ref = _resolve_asset(ctx, cur, state, {"assetId": extra})
+                sources.append(ref)
+        except NeedsAttachment as refused:
+            return _needs_attachment(refused)
         if parent is not None or sources:
             blocked = _consent_blocked(ctx, state, "image", route)
             if blocked:
@@ -525,7 +561,7 @@ def _step(ctx, args, fn):
     except AlphaError as error:
         _step_failed(ctx, args, str(error))
         raise
-    if result.get("code") == "consent_required":
+    if result.get("code") in ("consent_required", "needs_attachment"):
         _step_failed(ctx, args, result["error"])
         return result
     _step_done(ctx, args, verified=result["verified"], outputs=[{"type": "asset", "id": result["asset"]["assetId"]}] if result.get("asset") else [])
