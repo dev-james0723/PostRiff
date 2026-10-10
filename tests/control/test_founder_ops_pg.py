@@ -297,6 +297,7 @@ class FounderOpsPostgresTests(unittest.TestCase):
         channels = [youtube('yt-binding-0001'), youtube('yt-refresh-0002'),
                     {'id': 'bad id with spaces', 'platform': 'X', 'configured': True, 'identityVerified': True},
                     {'id': 'li-unverified-03', 'platform': 'LinkedIn', 'configured': True, 'identityVerified': False},
+                    {'id': 'li-falsy-json-04', 'platform': 'LinkedIn', 'configured': True, 'identityVerified': 0, 'revoked': ''},
                     youtube('yt-refresh-0002')]
         owner.execute("UPDATE public.pr_workspaces SET state=state || jsonb_build_object('phase2', coalesce(state->'phase2','{}'::jsonb) || jsonb_build_object('channels', %s::jsonb)) WHERE id=%s",
                       (json.dumps(channels), self.workspace))

@@ -610,15 +610,17 @@ CHANNELS_SQL = ("SELECT DISTINCT ON (w.id::text, c->>'id') w.id::text, c->>'id',
                 "CASE WHEN jsonb_typeof(c->'scopes')='array' THEN jsonb_array_length(c->'scopes') ELSE 0 END, c->'capabilityVerified', "
                 "CASE WHEN jsonb_typeof(c->'verifiedAt')='number' THEN (c->>'verifiedAt')::double precision END "
                 "FROM public.pr_workspaces w CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(w.state->'phase2'->'channels')='array' "
-                "THEN w.state->'phase2'->'channels' ELSE '[]'::jsonb END) AS c "
-                "WHERE jsonb_typeof(c)='object' AND c->'configured' IS NOT NULL AND c->'configured' NOT IN ('false'::jsonb,'null'::jsonb) "
+                "THEN w.state->'phase2'->'channels' ELSE '[]'::jsonb END) WITH ORDINALITY AS e(c, ord) "
+                "WHERE jsonb_typeof(c)='object' AND c->'configured' IS NOT NULL AND c->'configured' NOT IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) "
                 # Rows the projection would skip are filtered here, so the MAX_CONNECTIONS cap counts projectable connections and
                 # a capped run leaves exactly MAX_CONNECTIONS connections (the reader's partial-coverage signal): invalid ids, and
                 # configured channels that are neither revoked, verified nor tied to an account (connection_state 'disconnected').
+                # Falsy follows Python truthiness. Residual: a YouTube channel revoked only in the vault, with no verified identity
+                # and no account id in its JSON, is filtered here (the connect path always records the account id).
                 "AND c->>'id' ~ '^[A-Za-z0-9_.:-]{1,80}$' "
-                "AND NOT (coalesce(c->'revoked','null'::jsonb) IN ('false'::jsonb,'null'::jsonb) "
-                "AND coalesce(c->'identityVerified','null'::jsonb) IN ('false'::jsonb,'null'::jsonb) AND coalesce(c->>'providerAccountId','')='') "
-                "ORDER BY w.id::text, c->>'id' LIMIT %s")   # one row per (workspace, connection id): duplicates would collapse below the cap
+                "AND NOT (coalesce(c->'revoked','null'::jsonb) IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) "
+                "AND coalesce(c->'identityVerified','null'::jsonb) IN ('false'::jsonb,'null'::jsonb,'0'::jsonb,'\"\"'::jsonb,'[]'::jsonb,'{}'::jsonb) AND coalesce(c->>'providerAccountId','')='') "
+                "ORDER BY w.id::text, c->>'id', e.ord DESC LIMIT %s")   # one row per (workspace, connection id), the last entry wins as before
 CONNECTION_UPSERT = ('INSERT INTO public.pr_connection_health(workspace_id,connection_id,capability,provider,level,state,connection_state,expires_at,last_sync_at,refreshed_at) '
                      'SELECT u.w::uuid,u.c,u.cap,u.p,u.l,u.s,u.cs,to_timestamp(u.e),to_timestamp(u.v),to_timestamp(%s) '
                      'FROM unnest(%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::text[],%s::float8[],%s::float8[]) AS u(w,c,cap,p,l,s,cs,e,v) '
