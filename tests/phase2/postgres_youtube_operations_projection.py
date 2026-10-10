@@ -4,12 +4,14 @@ The projection selects IDs; it neither authorizes a job nor truncates history.
 No provider, model, production database or external credentials are used.
 """
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import sys
+import time
 from uuid import uuid4
 
 if not sys.platform.startswith('linux') or os.environ.get('CI', '').lower() not in ('1', 'true'):
@@ -19,18 +21,22 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'src'))
 import psycopg
 from postriff_phase2.youtube.workspace_provider_data import _journal_expired
+from postriff_phase2.youtube.operations import WORKER_SQL, planner_claim_order_sql, planner_sql
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 NOW, TTL = 1800000000, 30 * 86400
 WORKSPACES = [str(uuid4()), str(uuid4()), str(uuid4())]
 CONNECTION = 'synthetic-projection-' + uuid4().hex
-MIGRATION = (ROOT / 'migrations/postriff/106_youtube_operations_projection.sql').read_text()
+ROTATION_MIGRATION = (ROOT / 'migrations/postriff/107_youtube_planner_fairness.sql').read_text()
+MIGRATION = (ROOT / 'migrations/postriff/106_youtube_operations_projection.sql').read_text() + '\n' + ROTATION_MIGRATION
 TABLES = ('pr_youtube_operations', 'pr_youtube_planner_candidates')
 FUNCTIONS = (
     'public.pr_youtube_projection_number(jsonb)',
     'public.pr_youtube_projection_refresh(uuid,jsonb)',
     'public.pr_youtube_workspace_projection_trigger()',
     'public.pr_youtube_upload_projection_trigger()',
+    'public.pr_youtube_planner_claim_clock(jsonb)',
+    'public.pr_youtube_workspace_rotation_trigger()',
 )
 
 
@@ -47,6 +53,15 @@ def write_state(db, state, workspace=WORKSPACES[0]):
 def operations(db, workspace=WORKSPACES[0]):
     return db.execute('SELECT upload_due_at,planner_lease_until,last_planner_dispatch,provider_expires_at '
                       'FROM public.pr_youtube_operations WHERE workspace_id=%s', (workspace,)).fetchone()
+
+
+def claim_cursor(db, workspace=WORKSPACES[0]):
+    projected = db.execute('SELECT last_planner_claim FROM public.pr_youtube_operations WHERE workspace_id=%s',
+                           (workspace,)).fetchone()[0]
+    fallback = db.execute('SELECT ' + planner_claim_order_sql() + ' FROM public.pr_workspaces WHERE id=%s',
+                          (workspace,)).fetchone()[0]
+    assert projected == fallback, ('Indexed/fallback cursor mismatch', projected, fallback)
+    return projected
 
 
 def candidates(db, workspace=WORKSPACES[0]):
@@ -142,6 +157,76 @@ def assert_journal_selection(db):
         assert actual == expected, (clock, actual, expected)
 
 
+def rotation_snapshot(db):
+    return source_snapshot(db), operations(db), candidates(db), claim_cursor(db)
+
+
+def assert_rotation_contention_rollback():
+    """Old operations-first readers cause prompt rollback, never a wait cycle."""
+    with connection() as db:
+        before_rotation = rotation_snapshot(db)
+    with connection() as blocker, connection() as migrator:
+        blocker.execute('LOCK TABLE public.pr_youtube_operations IN ACCESS SHARE MODE')
+        started = time.monotonic()
+        try:
+            # Run only107: preceding106 DDL would obscure this contention gate.
+            migrator.execute(ROTATION_MIGRATION)
+            raise AssertionError('Rotation maintenance waited through an existing operations reader')
+        except psycopg.errors.LockNotAvailable as error:
+            elapsed = time.monotonic() - started
+            assert error.sqlstate == '55P03'
+            migrator.rollback()
+            assert elapsed < 2, ('Rotation contention did not fail promptly', elapsed)
+        # The failed transaction must release its workspace exclusion while the
+        # legacy reader still holds operations. Source authority stays identical.
+        with connection() as db:
+            db.execute('LOCK TABLE public.pr_workspaces IN ROW SHARE MODE NOWAIT')
+            assert rotation_snapshot(db) == before_rotation
+        blocker.rollback()
+        migrator.execute(ROTATION_MIGRATION)
+        assert rotation_snapshot(migrator) == before_rotation
+
+
+def assert_selector_relation_order():
+    """Observe real parser locks before the workspace blocker is released."""
+    selections = (
+        ('worker', WORKER_SQL, (NOW, NOW)),
+        ('plain planner', planner_sql(), (NOW, NOW)),
+        ('legacy fleet', planner_sql(fleet=True), (NOW, NOW, [], NOW)),
+        ('rotation fleet', planner_sql(fleet=True, claim_rotation=True), (NOW, NOW, [], NOW)),
+    )
+    with connection() as observer:
+        workspace_oid, operations_oid = observer.execute(
+            "SELECT 'public.pr_workspaces'::regclass::oid,'public.pr_youtube_operations'::regclass::oid"
+        ).fetchone()
+        for label, sql, parameters in selections:
+            # Fresh connections keep prepared/cached query locks out of the
+            # observation. Only one selector thread runs at a time.
+            with connection() as blocker, connection() as selector:
+                selector_pid = selector.execute('SELECT pg_backend_pid()').fetchone()[0]
+                blocker.execute('LOCK TABLE public.pr_workspaces IN ACCESS EXCLUSIVE MODE')
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    pending = pool.submit(lambda: selector.execute(sql, parameters).fetchall())
+                    try:
+                        deadline = time.monotonic() + 2
+                        while time.monotonic() < deadline:
+                            locks = observer.execute(
+                                'SELECT relation,mode,granted FROM pg_locks WHERE pid=%s AND relation=ANY(%s::oid[])',
+                                (selector_pid, [workspace_oid, operations_oid]),
+                            ).fetchall()
+                            if any(relation == workspace_oid and not granted for relation, mode, granted in locks):
+                                break
+                            time.sleep(.01)
+                        else:
+                            raise AssertionError((label, 'Selector did not reach the workspace lock', locks))
+                        assert not any(relation == operations_oid and granted for relation, mode, granted in locks), (
+                            label, 'Selector retained operations before locking its workspace', locks)
+                    finally:
+                        blocker.rollback()
+                    pending.result(timeout=5)
+                selector.rollback()
+
+
 class RollbackFixture(Exception):
     pass
 
@@ -174,6 +259,8 @@ with connection() as db:
     before = source_snapshot(db)
 
 try:
+    assert_rotation_contention_rollback()
+    assert_selector_relation_order()
     # A rerun repairs derived rows but must never update customer state, clocks,
     # approvals, digests or journal bodies. It works with/without prior104 setup.
     with connection() as db:
@@ -189,12 +276,47 @@ try:
         assert_original_selection(db, valid_state())
         assert len(candidates(db)) == 6, candidates(db)
         assert operations(db) == (NOW - 5, NOW + 120, NOW - 300, None)
+        assert claim_cursor(db) == NOW - 300  # Legacy fallback, not a fabricated successful dispatch.
         assert db.execute("SELECT public.pr_youtube_projection_number('1e400'::jsonb),public.pr_youtube_projection_number('-1e400'::jsonb),public.pr_youtube_projection_number('1e-400'::jsonb)").fetchone() == (math.inf, -math.inf, 0)
         assert_journal_selection(db)
         assert db.execute('SELECT youtube_api_expires_at FROM public.pr_youtube_uploads WHERE workspace_id=%s AND operation_key=%s',
                           (WORKSPACES[0], 'numeric-ingestion')).fetchone()[0] == NOW - 10 + TTL
         assert tuple(db.execute("SELECT has_table_privilege('service_role','public.pr_audit_events',%s)",
                                 (privilege,)).fetchone()[0] for privilege in ('UPDATE', 'DELETE')) == audit_permissions
+
+    # Claim rotation is derived without rewriting successful dispatch or source
+    # authority. Malformed/overflow legacy values are safe hints, never approval.
+    with connection() as db:
+        for claim, expected in ((None, NOW - 300), ('NaN', NOW - 300), (True, NOW - 300),
+                                (-1, NOW - 300), (10**400, NOW - 300), (253402300799, NOW - 300),
+                                (NOW - 20, NOW - 20), (0, 0), (1e-100, 0)):
+            state = valid_state()
+            state['youtubeAgent']['lastPlannerClaimAt'] = claim
+            write_state(db, state)
+            assert claim_cursor(db) == expected, (claim, claim_cursor(db))
+            assert operations(db)[2] == NOW - 300
+            assert db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[0],)).fetchone()[0] == state
+        # Raw JSON numbers preserve decimal underflow that Python floats cannot.
+        for raw, expected in (('1e-400', 0), ('-1e-400', NOW - 300), ('1e400', NOW - 300),
+                              ('0.0000000000000000000000000000000000000001', 0)):
+            write_state(db, valid_state())
+            db.execute("UPDATE public.pr_workspaces SET state=jsonb_set(state,'{youtubeAgent,lastPlannerClaimAt}',%s::jsonb) WHERE id=%s",
+                       (raw, WORKSPACES[0]))
+            assert claim_cursor(db) == expected, (raw, claim_cursor(db))
+            assert operations(db)[2] == NOW - 300
+        state = valid_state()
+        state['youtubeAgent'].pop('lastDispatchAt')
+        state['youtubeAgent']['lastPlannerClaimAt'] = 'malformed'
+        write_state(db, state)
+        assert claim_cursor(db) == 0
+        # INSERT must create the projection before its separate rotation trigger.
+        inserted = valid_state()
+        inserted['youtubeAgent']['lastPlannerClaimAt'] = NOW + 5
+        db.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (WORKSPACES[2],))
+        db.execute('INSERT INTO public.pr_workspaces(id,state) VALUES(%s,%s::jsonb)',
+                   (WORKSPACES[2], json.dumps(inserted)))
+        assert claim_cursor(db, WORKSPACES[2]) == NOW + 5
+        assert operations(db, WORKSPACES[2])[2] == NOW - 300
 
     # Each due value follows both nextAt and leaseUntil. Terminal history and
     # unrelated platforms never become due; missing clocks preserve zero.
@@ -335,32 +457,40 @@ try:
                                       (role, 'public.' + table, privilege)).fetchone()[0] == (role == 'service_role' and privilege == 'SELECT')
         indexes = dict(db.execute("SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND indexname=ANY(%s)",
                                   (['pr_youtube_operations_upload_due_idx', 'pr_youtube_operations_provider_due_idx',
-                                    'pr_youtube_operations_planner_dispatch_idx', 'pr_youtube_planner_candidates_due_idx',
+                                    'pr_youtube_operations_planner_dispatch_idx', 'pr_youtube_operations_planner_claim_idx',
+                                    'pr_youtube_planner_candidates_due_idx',
                                     'pr_youtube_uploads_api_expiry_idx', 'pr_youtube_uploads_workspace_api_expiry_idx'],)).fetchall())
-        assert len(indexes) == 6
+        assert len(indexes) == 7
         assert '(upload_due_at, workspace_id)' in indexes['pr_youtube_operations_upload_due_idx']
         assert '(provider_expires_at, workspace_id)' in indexes['pr_youtube_operations_provider_due_idx']
         assert '(last_planner_dispatch, workspace_id)' in indexes['pr_youtube_operations_planner_dispatch_idx']
+        assert '(last_planner_claim, workspace_id)' in indexes['pr_youtube_operations_planner_claim_idx']
         assert '(workspace_id, candidate_at, ends_at)' in indexes['pr_youtube_planner_candidates_due_idx']
         assert '(youtube_api_expires_at, workspace_id)' in indexes['pr_youtube_uploads_api_expiry_idx']
         assert '(workspace_id, youtube_api_expires_at)' in indexes['pr_youtube_uploads_workspace_api_expiry_idx']
         for signature in FUNCTIONS:
             definer, config = db.execute('SELECT prosecdef,proconfig FROM pg_proc WHERE oid=%s::regprocedure',
                                          (signature,)).fetchone()
-            assert definer == ('projection_number' not in signature)
+            assert definer == ('projection_number' not in signature and 'planner_claim_clock' not in signature)
             assert config == ['search_path=""'], (signature, config)
             for role in ('anon', 'authenticated', 'service_role'):
                 assert not db.execute('SELECT has_function_privilege(%s,%s,%s)',
                                       (role, signature, 'EXECUTE')).fetchone()[0]
-        trigger_defs = dict(db.execute("SELECT tgname,pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('pr_youtube_workspace_projection_trg','pr_youtube_upload_projection_trg')").fetchall())
-        assert len(trigger_defs) == 2 and 'AFTER INSERT OR UPDATE OF state' in trigger_defs['pr_youtube_workspace_projection_trg']
+        trigger_defs = dict(db.execute("SELECT tgname,pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('pr_youtube_workspace_projection_trg','pr_youtube_upload_projection_trg','pr_youtube_workspace_rotation_trg')").fetchall())
+        assert len(trigger_defs) == 3 and 'AFTER INSERT OR UPDATE OF state' in trigger_defs['pr_youtube_workspace_projection_trg']
+        assert 'AFTER INSERT OR UPDATE OF state' in trigger_defs['pr_youtube_workspace_rotation_trg']
+        ordered = db.execute("SELECT tgname FROM pg_trigger WHERE tgrelid='public.pr_workspaces'::regclass "
+                             "AND tgname IN ('pr_youtube_workspace_projection_trg','pr_youtube_workspace_rotation_trg') ORDER BY tgname").fetchall()
+        assert ordered == [('pr_youtube_workspace_projection_trg',), ('pr_youtube_workspace_rotation_trg',)]
         assert 'BEFORE INSERT OR UPDATE OF state, updated_at, youtube_api_expires_at' in trigger_defs['pr_youtube_upload_projection_trg']
         db.execute('SET ROLE service_role')
         state = valid_state()
         state['youtubeAgent']['lastDispatchAt'] = NOW + 1
+        state['youtubeAgent']['lastPlannerClaimAt'] = NOW + 2
         state['youtubeAgent']['fleetLease']['until'] = NOW + 121
         write_state(db, state)
         assert operations(db)[1:3] == (NOW + 121, NOW + 1)
+        assert claim_cursor(db) == NOW + 2
         for table in TABLES:
             try:
                 with db.transaction():
@@ -381,7 +511,8 @@ try:
 
     print('PASS: synthetic transactional thin YouTube selection projections, exact multi-policy timing/NULL eligibility, '
           'permanent tombstones, conservative provider/journal retention, blocked-account cleanup, source-preserving bounded '
-          'backfill/idempotence, update/rollback/cascade and service-only read/trigger privileges. No provider calls or fleet load claim.')
+          'backfill/idempotence, NOWAIT maintenance rollback and workspace-first selector locks, update/rollback/cascade and '
+          'service-only read/trigger privileges. No provider calls or fleet load claim.')
 finally:
     with connection() as db:
         db.execute('DELETE FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])', (WORKSPACES,))

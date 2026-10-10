@@ -19,6 +19,28 @@ if [ -z "${TREND_VISUAL_TEST_PYTHON:-}" ] || [ ! -x "$TREND_VISUAL_TEST_PYTHON" 
   exit 64
 fi
 
+# The fixed selection includes real legacy Office/RTF preview and media tests.
+# Provision their existing official Ubuntu dependencies before starting clusters.
+# This script's cloud/Linux guards above prohibit any installation on the Mac.
+if ! command -v libreoffice >/dev/null || ! command -v ffmpeg >/dev/null; then
+  if [ ! -r /etc/os-release ]; then
+    echo "validation_unavailable: cannot identify the cloud parser distribution." >&2
+    exit 3
+  fi
+  . /etc/os-release
+  if [ "${ID:-}" != "ubuntu" ] || [ "${VERSION_ID:-}" != "24.04" ]; then
+    echo "validation_unavailable: provide the existing Office/media parsers on this runner." >&2
+    exit 3
+  fi
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get -qq update
+    DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  else
+    sudo -n apt-get -qq update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  fi
+fi
+
 jcb_pg_repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # Reuse, rather than install or replace, the repository's isolated Python runtime.
 "$TREND_VISUAL_TEST_PYTHON" - "$jcb_pg_repo_root/.python-version" <<'PY'

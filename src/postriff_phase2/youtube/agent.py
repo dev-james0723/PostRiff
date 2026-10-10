@@ -507,10 +507,12 @@ class YouTubePublishingAgent:
             filters = " AND NOT (id=ANY(%s::uuid[])) AND coalesce((state#>>'{youtubeAgent,fleetLease,until}')::float8,0)<=%s"
             extra = (list(exclude_workspaces), self.clock())
         with self.service.connection_factory() as db, db.cursor() as cur:
-            from .operations import planner_sql, schema_ready
+            from .operations import (next_planner_claim_at, planner_claim_order_sql,
+                                     planner_rotation_ready, planner_sql, schema_ready)
             indexed = schema_ready(cur)
             if indexed:
-                cur.execute(planner_sql(fleet=fleet), (self.clock(), self.clock()) + extra)
+                rotation = fleet and planner_rotation_ready(cur)
+                cur.execute(planner_sql(fleet=fleet, claim_rotation=rotation), (self.clock(), self.clock()) + extra)
             else:
                 cur.execute("""SELECT id::text,state FROM public.pr_workspaces WHERE state ? 'youtubeAgent'
                 AND NOT state ? 'accountDeletion' AND NOT state ? 'accountBlock'
@@ -520,7 +522,8 @@ class YouTubePublishingAgent:
                       AND d->>'status'='proposed' AND d->>'connectionId'=p->>'connectionId'
                       AND (d->>'uploadWorkflow'<>'upload_later' OR (d->>'uploadAt')::float8<=%s)
                       AND EXISTS(SELECT 1 FROM jsonb_array_elements(p->'drafts') e WHERE e->>'id'=d->>'id'))
-                """ + filters + """ ORDER BY coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0),id LIMIT 100""" +
+                """ + filters + " ORDER BY " + (planner_claim_order_sql() if fleet else
+                    "coalesce((state#>>'{youtubeAgent,lastDispatchAt}')::float8,0)") + ",id LIMIT 100" +
                 (' FOR UPDATE SKIP LOCKED' if fleet else ''),
                     (self.clock(), self.clock(), self.clock() + 1800) + extra)
             for selected in cur.fetchall():
@@ -568,6 +571,7 @@ class YouTubePublishingAgent:
                     lease_id = None
                     if fleet:
                         lease_id = uuid.uuid4().hex
+                        root(state)['lastPlannerClaimAt'] = next_planner_claim_at(state, self.clock())
                         root(state)['fleetLease'] = {'id': lease_id, 'until': self.clock() + 120,
                                                     'authorization': authorization}
                         cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
