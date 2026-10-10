@@ -159,8 +159,9 @@ class RafiiRunContext:
 
     def site_context(self, cur, member, state):
         from ..site_agent import tools as site_tools
+        # The runtime is a cloud processor: site reads give it memory and sources only as their egress settings allow.
         return site_tools.Context(state=state, membership=member, principal=self.principal, workspace_id=self.workspace_id, cur=cur, service=self.service,
-                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone)
+                                  now=self.now(), page=self.page, model_id=self.writer_model, zone=self.zone, egress="cloud")
 
     def for_agent(self, agent: str | None) -> "RafiiRunContext":
         """A view of this context for one agent's tool call: same ledger, same identity, its own attribution."""

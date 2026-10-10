@@ -24,9 +24,11 @@ from .. import ai_call_events, automation_edit, intent as writing_intent, reques
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import Membership, require
-from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, references, routes, tools
+from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, reads, references, routes, tools
 
 KEY_PREFIX = "site:"
+CLOUD_WITHHELD = ("Your chosen writer runs in the cloud, and this answer uses Brand Brain memory or sources your workspace keeps out of cloud models, "
+                  "so it comes straight from your workspace.")
 GROUNDED_MODEL = "site-agent:grounded"
 MAX_BLOCK_EVENTS = 10
 STALE_COMPOSE_SECONDS = 180
@@ -353,8 +355,9 @@ class SiteAgentService:
             plan = {"procedures": ["campaign_link"], "tools": [], "navigate": None}
         else:
             plan = procedures.select(reading, page, text, automation_count=len(names), now=now, zone=zone)
+        # Read as the member: Rafii's own answer. A cloud writer phrases it only when the cloud reading is the same (below).
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, cur=cur, service=self.service, now=now,
-                            page=page, model_id=model_id, zone=zone)
+                            page=page, model_id=model_id, zone=zone, egress="local")
         records, results = [], {}
         for tool_id, args in plan["tools"][: tools.MAX_TOOLS_PER_TURN]:
             record, result = tools.run(tool_id, args, ctx)
@@ -409,6 +412,9 @@ class SiteAgentService:
         runtime, note = self._runtime(model_id)
         call = request_model.call_for(runtime, self.model, model_tier) if runtime is not None else None
         wants_model = reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify", "compound", "campaign_link", "campaign_unlink") and member.allows("edit") and call is not None
+        if wants_model and not getattr(call, "local", False) and not reads.cloud_may_read(ctx, plan["tools"][: tools.MAX_TOOLS_PER_TURN], results):
+            # This answer holds memory or sources the workspace keeps out of cloud models: it stays Rafii's own answer.
+            wants_model, note = False, note or {"code": "cloud_withheld", "message": CLOUD_WITHHELD}
         read_labels = [r["label"] for r in records if r["status"] == "verified" and r["effect"] == "read"]
         withheld = list(WITHHELD) + ([] if "memory.summary" in results else ["private memory"])
         summary = {"route": page.get("title"), "entity": page.get("selectedEntity"), "read": read_labels, "withheld": withheld, "stale": bool(page.get("stale"))}
