@@ -42,6 +42,9 @@ def commit_in(cur, ctx, *, verified: bool, result: dict | None = None) -> None:
                  b["effectKey"], b["inputDigest"], b["attemptId"], b["leaseOwner"]))
     if cur.fetchone() is None:
         raise AlphaError("This step is no longer being run here; nothing was changed.", 409, code="lease_lost")
+    from ...hosted import audit
+    audit(cur, b["workspaceId"], b["principal"], "agent.task.effect", b["stepKey"],
+          {"taskId": b["taskId"], "stepKey": b["stepKey"], "effectKey": b["effectKey"]})
 
 
 def commit_command(cur, ctx, *, verified, changed_refs, compensation_result=None):

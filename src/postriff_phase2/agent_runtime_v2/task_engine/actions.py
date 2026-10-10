@@ -179,6 +179,8 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
         source = ideas._state(row)
         import copy
         state = copy.deepcopy(source)
+        relational_inverse = compensation.INVERSES.get(capability_id)
+        relational_inverse = relational_inverse if relational_inverse and relational_inverse.apply_in else None
         if step["capabilityId"] == "draft_edit":
             draft = next((v for v in state.get("variants", []) if v.get("id") == inverse_inputs.get("draftId")), None)
             old = next((r for r in (draft or {}).get("revisions", []) if r.get("revision") == inverse_inputs.get("restoreRevision")), None)
@@ -194,6 +196,8 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
         elif record["inverseCapabilityId"] in ("campaign_link", "campaign_unlink"):
             action = "raffi_" + record["inverseCapabilityId"]
             domain_payload = inverse_inputs
+        elif relational_inverse:
+            action = None
         else:
             raise errors.error("undo_unavailable")
         verdict = authz_seam.decide_for_step(cur, task, {**step, "kind": "tool", "capabilityId": record["inverseCapabilityId"], "inputs": inverse_inputs},
@@ -207,11 +211,14 @@ def undo(runtime, workspace_id: str, token: str, task_id: str, step_key: str, pa
         cur.execute("INSERT INTO public.pr_agent_receipts(workspace_id,effect_key,task_id,step_id,principal,capability_id,input_digest,trace_id) "
                     "VALUES(%s,%s,%s,%s,%s,%s,%s,%s)", (workspace_id, undo_key, task_id, step["stepId"], principal,
                                                        record["inverseCapabilityId"], inverse_digest, executor.new_trace()))
-        state = runtime.service.commands(state, principal, action, domain_payload)
-        import json
-        cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
-        for effect in runtime.service.repository.effects:
-            effect(cur, workspace_id, source, state, principal)
+        if relational_inverse:
+            relational_inverse.apply_in(runtime, cur, workspace_id, principal, inverse_inputs, undo_key)
+        else:
+            state = runtime.service.commands(state, principal, action, domain_payload)
+            import json
+            cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
+            for effect in runtime.service.repository.effects:
+                effect(cur, workspace_id, source, state, principal)
         from ...hosted import audit
         audit(cur, workspace_id, principal, "agent.task.undo", step_key, {"taskId": task_id, "compensationId": record["compensationId"]})
         refs = [{"type": record["targetType"], "id": record["targetId"], "change": "restored"}]

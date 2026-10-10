@@ -20,6 +20,8 @@ class Inverse:
     target: Callable[[dict, dict], tuple[str, str] | None]       # (inputs, result) -> (target_type, target_id)
     inverse_inputs: Callable[[dict, dict], dict]                  # (inputs, result) -> inputs of the inverse capability
     image: Callable[[dict, str, str], object]                     # (workspace state, target_type, target_id) -> what the digest covers
+    cursor_image: Callable | None = None                         # (cursor, workspace_id, target_id) -> current relational image
+    apply_in: Callable | None = None                             # (runtime, cursor, workspace_id, principal, inputs, effect_key)
 
 
 INVERSES: dict[str, Inverse] = {}
@@ -68,6 +70,8 @@ def capture(cur, task: dict, step: dict, result: dict, refs: list) -> dict:
         return {"available": False, "reason": "not_reversible_by_rafii"}
     if inverse is None:
         return {"available": False, "reason": "no_inverse"}
+    if result.get("changed") is False:
+        return {"available": False, "reason": "nothing_changed"}
     inputs = step["inputs"] or {}
     inverse_inputs = result.get("_inverseInputs")
     if inverse_inputs is not None and step["capabilityId"] in ("campaign_link", "campaign_unlink") and not (inverse_inputs.get("draftIds") or inverse_inputs.get("jobIds")):
@@ -75,8 +79,7 @@ def capture(cur, task: dict, step: dict, result: dict, refs: list) -> dict:
     target = inverse.target(inputs, result)
     if target is None:
         return {"available": False, "reason": "no_target"}
-    state = targets.workspace_state(cur, task["workspaceId"])
-    image = digest_of(state, inverse, target[0], target[1])
+    image = _current_digest(cur, task["workspaceId"], inverse, target[0], target[1])
     if image is None:
         return {"available": False, "reason": "target_unreadable"}
     compensation_id = store.insert_compensation(cur, task=task, step=step, effect_key=step["effectKey"], inverse_capability_id=inverse.inverse_capability_id,
@@ -92,4 +95,32 @@ def current_digest(cur, workspace_id: str, record: dict, capability_id: str) -> 
     inverse = INVERSES.get(capability_id or "")
     if inverse is None or inverse.inverse_capability_id != record["inverseCapabilityId"]:
         return None
-    return digest_of(targets.workspace_state(cur, workspace_id), inverse, record["targetType"], record["targetId"])
+    return _current_digest(cur, workspace_id, inverse, record["targetType"], record["targetId"])
+
+
+def _current_digest(cur, workspace_id, inverse, kind, ident):
+    if inverse.cursor_image is not None:
+        image = inverse.cursor_image(cur, workspace_id, ident)
+        return None if image is None else model.sha256({"target": [kind, ident], "image": image})
+    return digest_of(targets.workspace_state(cur, workspace_id), inverse, kind, ident)
+
+
+def _watch_image(cur, workspace_id, watch_id):
+    cur.execute("SELECT revision,enabled,payload FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id::text=%s FOR UPDATE", (workspace_id, watch_id))
+    row = cur.fetchone()
+    return None if row is None else {"revision": row[0], "active": row[1], "payload": row[2]}
+
+
+def _watch_inverse(runtime, cur, workspace_id, principal, inputs, effect_key):
+    from ...growth.trends.store import TrendStore
+    domain = TrendStore(runtime.service.connection_factory)
+    if inputs["active"]:
+        domain.restore_watch(workspace_id, principal, inputs["watchId"], expected_revision=inputs["revision"], cursor=cur)
+    else:
+        domain.delete_watch(workspace_id, principal, inputs["watchId"], expected_revision=inputs["revision"], idempotency_key=effect_key, cursor=cur)
+
+
+for _cap, _inverse, _active in (("trend_watch_create", "trend_watch_disable", False), ("trend_watch_disable", "trend_watch_create", True)):
+    register(_cap, Inverse(_inverse, lambda _i, r: ("trend_watch", r["watchId"]),
+                           lambda _i, r, active=_active: {"watchId": r["watchId"], "revision": r["revision"], "active": active},
+                           lambda *_a: None, _watch_image, _watch_inverse))

@@ -435,4 +435,87 @@ class TaskEnginePG(unittest.TestCase):
             self.assertEqual(db.execute('SELECT state,verified FROM public.pr_agent_steps WHERE task_id=%s',(t['taskId'],)).fetchone(),('completed',True))
             self.assertEqual(db.execute('SELECT state FROM public.pr_agent_approvals WHERE id=%s',(approval['approvalId'],)).fetchone()[0],'consumed')
 
+    def test_30_draft_edit_and_conditional_restore_use_domain_revision(self):
+        from postriff_phase2.agent_runtime_v2 import domain_tools, tool_adapter
+        from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
+        draft=uuid.uuid4().hex
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            state['variants'].append({'id':draft,'revision':1,'text':'Original text','platform':'LinkedIn','needsReview':False,
+                'revisions':[{'revision':1,'text':'Original text'}]})
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s',(json.dumps(state),self.w))
+        t=self.create([{'label':'Edit draft','kind':'model'}])
+        with store.service_tx(self.service,self.w) as cur:
+            plan=task_state.load(cur,self.w,t['taskId']);member=authz_seam.membership(cur,self.w,A)
+        ctx=RafiiRunContext(self.service,self.w,OWNER,A,member,t['conversationId'],'trace_'+uuid.uuid4().hex,task=plan,request_text='Edit the draft')
+        ctx.ledger.reference('draft',draft);domain_tools.ensure_registered()
+        args={'stepId':'s1','draftId':draft,'revision':1,'text':'Revised text'}
+        result=tool_adapter.execute(ctx,tool_adapter.REGISTRY['draft_edit'],args)
+        self.assertTrue(result.get('verified'),result)
+        self.assertTrue(tool_adapter.execute(ctx,tool_adapter.REGISTRY['draft_edit'],args).get('replayed'))
+        with connect() as db:
+            comp=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+        result=actions.undo(self.runtime,self.w,OWNER,t['taskId'],'s1',{'compensationId':comp,'idempotencyKey':'draft-undo-'+uuid.uuid4().hex})
+        self.assertTrue(result['verified'])
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            saved=next(v for v in state['variants'] if v['id']==draft)
+            self.assertEqual((saved['text'],saved['revision'],saved['needsReview']),('Original text',3,True))
+
+    def test_31_trend_disable_atomic_inverse_preserves_identity_and_revision(self):
+        from postriff_phase2.agent_runtime_v2 import domain_tools, tool_adapter
+        from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
+        from postriff_phase2.growth.trends.store import TrendStore
+        from postriff_phase2.coworker.runtime import ensure
+        with connect() as db:
+            if not db.execute("SELECT to_regclass('public.pr_trend_watches')").fetchone()[0]:
+                db.execute((ROOT/'migrations/postriff/040_social_trend_intelligence.sql').read_text())
+        domain=TrendStore(connect)
+        saved=domain.put_watch(self.w,A,{'trend_id':str(uuid.uuid4()),'platforms':['bluesky'],'threshold':'stage_change','notification_policy':'in_app'},idempotency_key='watch-'+uuid.uuid4().hex)
+        t=self.create([{'label':'Disable watch','kind':'model'}])
+        with store.service_tx(self.service,self.w) as cur:
+            plan=task_state.load(cur,self.w,t['taskId']);member=authz_seam.membership(cur,self.w,A)
+        ctx=RafiiRunContext(self.service,self.w,OWNER,A,member,t['conversationId'],'trace_'+uuid.uuid4().hex,task=plan,request_text='Disable this watch')
+        domain_tools.ensure_registered();svc=ensure(self.service).coworker.trends
+        with patch.object(svc,'values',{'RAFII_TREND_INTELLIGENCE_ENABLED':'1','RAFII_TREND_WORKSPACE_ALLOWLIST':self.w}):
+            result=tool_adapter.execute(ctx,tool_adapter.REGISTRY['trend_watch_disable'],{'stepId':'s1','watch_id':saved['watch_id'],'expected_revision':1,'idempotency_key':'disable-'+uuid.uuid4().hex})
+        self.assertTrue(result.get('verified'),result)
+        with connect() as db:
+            comp=db.execute('SELECT id::text FROM public.pr_agent_compensations WHERE task_id=%s',(t['taskId'],)).fetchone()[0]
+            self.assertEqual(db.execute('SELECT enabled,revision FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s',(self.w,saved['watch_id'])).fetchone(),(False,2))
+        result=actions.undo(self.runtime,self.w,OWNER,t['taskId'],'s1',{'compensationId':comp,'idempotencyKey':'watch-undo-'+uuid.uuid4().hex})
+        self.assertTrue(result['verified'])
+        with connect() as db:
+            self.assertEqual(db.execute('SELECT enabled,revision FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s',(self.w,saved['watch_id'])).fetchone(),(True,3))
+            self.assertEqual(db.execute('SELECT count(*) FROM public.pr_trend_watches WHERE workspace_id=%s AND idempotency_key=%s',(self.w,saved['idempotency_key'])).fetchone()[0],1)
+
+    def test_32_live_approval_is_rechecked_between_e1_and_e2(self):
+        from postriff_phase2.agent_runtime_v2 import authz,domain_tools,tool_adapter
+        from postriff_phase2.agent_runtime_v2.task_engine import approvals
+        from postriff_phase2.agent_runtime_v2.context import RafiiRunContext
+        cfg=SimpleNamespace(permissions_for=lambda _w:'enforce',task_engine_for=lambda _w:'on')
+        with connect() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(self.w,)).fetchone()[0]
+            values={'campaignId':state['raffi']['campaignPlanning']['campaigns'][0]['id'],'draftIds':[state['variants'][0]['id']]}
+        t=self.create([{'label':'Approved link','kind':'tool','capabilityId':'campaign_link','inputs':values}])
+        with store.service_tx(self.service,self.w) as cur:
+            step=store.load_step(cur,self.w,t['taskId'],'s1')
+            aid=approvals.request_approval(cur,self.service.ideas,t,step,None)
+            approval=store.load_approval(cur,self.w,aid)
+            store.close_approval(cur,approval,'approved',surface='task_center',decided_by=A,decision_key='race-'+uuid.uuid4().hex,outcome={})
+            store.set_step(cur,step,state='queued',next_attempt_at=time.time());store.refresh(cur,self.service.ideas,t)
+        c=self.claim(t);self.assertIsNotNone(c)
+        with store.service_tx(self.service,self.w) as cur:
+            executor.consume_approval(cur,{'approvalId':aid});member=authz_seam.membership(cur,self.w,A)
+        ctx=RafiiRunContext(self.service,self.w,OWNER,A,member,t['conversationId'],'trace_'+uuid.uuid4().hex,config=cfg)
+        ctx.step_binding={'workspaceId':self.w,'principal':A,'taskId':t['taskId'],'stepId':c.step['stepId'],'attemptId':c.attempt_id,'leaseOwner':c.lease_owner,'approvalId':aid}
+        domain_tools.ensure_registered();spec=tool_adapter.REGISTRY['campaign_link'].spec
+        self.assertEqual(authz.evaluate_tool(ctx,spec,values).outcome,'allow')
+        with connect() as db:db.execute("UPDATE public.pr_agent_step_attempts SET lease_expires_at=now()-interval '1 second' WHERE id=%s",(c.attempt_id,))
+        with authz.active_tool(ctx,spec,values):
+            with self.assertRaises(AlphaError) as e:
+                with self.service.repository.transaction(OWNER,self.w):
+                    self.fail('Expired approval attempt reached a write transaction')
+        self.assertEqual(e.exception.code,'agent_permission_revoked')
+
 if __name__=='__main__':unittest.main(verbosity=2)
