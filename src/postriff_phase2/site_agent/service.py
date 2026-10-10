@@ -27,6 +27,8 @@ from ..permissions import Membership, require
 from . import classifier, compose as composer, contracts, knowledge, policy, procedures, prompts, proposals, references, routes, tools
 
 KEY_PREFIX = "site:"
+CLOUD_WITHHELD = ("Your chosen writer runs in the cloud, and this answer uses Brand Brain memory or sources your workspace keeps out of cloud models, "
+                  "so it comes straight from your workspace.")
 GROUNDED_MODEL = "site-agent:grounded"
 MAX_BLOCK_EVENTS = 10
 STALE_COMPOSE_SECONDS = 180
@@ -76,12 +78,14 @@ class SiteAgentService:
         return {"conversationId": run["conversationId"], "runId": run_id, "status": run["status"], "needsCompose": needs,
                 "events": events["events"], "cursor": events["cursor"], "messageId": message_id, "message": body}
 
-    def _history(self, cur, workspace_id, conversation_id):
+    def _history(self, cur, workspace_id, conversation_id, ctx=None, cloud=True):
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT 6", (conversation_id, workspace_id))
         rows = list(reversed(cur.fetchall()))
+        from ..agent_runtime_v2 import authz
         return [{"role": role, "text": (body or {}).get("text") or ""} for role, body in rows
-                if isinstance(body, dict) and (body.get("text") or "").strip() and history_eligible(role, body)]
+                if isinstance(body, dict) and (body.get("text") or "").strip() and history_eligible(role, body)
+                and not (cloud and contracts.cloud_withheld(body)) and (ctx is None or authz.history_eligible(cur, ctx, role, body))]
 
     def _emit(self, cur, workspace_id, run_id, event_type, **body):
         self.ideas._insert_event(cur, workspace_id, run_id, safe_event(event_type, **body))
@@ -353,8 +357,10 @@ class SiteAgentService:
             plan = {"procedures": ["campaign_link"], "tools": [], "navigate": None}
         else:
             plan = procedures.select(reading, page, text, automation_count=len(names), now=now, zone=zone)
+        # Read as the member: Rafii's own answer. A cloud writer phrases it only when the cloud reading is the same (below).
         ctx = tools.Context(state=state, membership=member, principal=principal, workspace_id=workspace_id, cur=cur, service=self.service, now=now,
-                            page=page, model_id=model_id, zone=zone)
+                            page=page, model_id=model_id, zone=zone, request_text=text, egress="local")
+        page = ctx.page
         records, results = [], {}
         for tool_id, args in plan["tools"][: tools.MAX_TOOLS_PER_TURN]:
             record, result = tools.run(tool_id, args, ctx)
@@ -409,6 +415,12 @@ class SiteAgentService:
         runtime, note = self._runtime(model_id)
         call = request_model.call_for(runtime, self.model, model_tier) if runtime is not None else None
         wants_model = reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify", "compound", "campaign_link", "campaign_unlink") and member.allows("edit") and call is not None
+        from .reads import cloud_may_read   # reads imports tools; a module-level import here would be circular
+        # Whether this answer holds memory or sources the workspace keeps out of cloud models. Such an answer stays Rafii's
+        # own for a cloud writer, and its message is marked so that it never becomes a cloud model's history later.
+        cloud_withheld = not cloud_may_read(ctx, plan["tools"][: tools.MAX_TOOLS_PER_TURN], results)
+        if wants_model and not getattr(call, "local", False) and cloud_withheld:
+            wants_model, note = False, note or {"code": "cloud_withheld", "message": CLOUD_WITHHELD}
         read_labels = [r["label"] for r in records if r["status"] == "verified" and r["effect"] == "read"]
         withheld = list(WITHHELD) + ([] if "memory.summary" in results else ["private memory"])
         summary = {"route": page.get("title"), "entity": page.get("selectedEntity"), "read": read_labels, "withheld": withheld, "stale": bool(page.get("stale"))}
@@ -416,6 +428,10 @@ class SiteAgentService:
                  "tools": [{k: r.get(k) for k in ("id", "effect", "status", "latencyMs", "code")} for r in records],
                  "knowledge": knowledge.snapshot()["id"], "retrievalRefs": [f"{c['documentId']}#{c['section']}" for c in answer["citations"]],
                  "grounded": answer["grounding"]["sufficient"], "tier": model_tier, "promptVersion": prompts.PROMPT_VERSION, "toolRelease": tools.RELEASE}
+        from ..agent_runtime_v2 import authz, capability_registry
+        if ctx.authz_mode == "enforce":
+            trace["authz"] = {"capabilities": sorted({capability_registry.site_capability(r["id"]) for r in records if r["status"] == "verified"}),
+                              "token": ctx.grants.token() if ctx.grants else "unavailable"}
         if note:
             answer["blocks"].insert(0, contracts.warning(note["message"], note["code"]))
             trace["fallback"] = note["code"]
@@ -425,11 +441,11 @@ class SiteAgentService:
             draft = (results.get("draft.get") or {}).get("data") if (results.get("draft.get") or {}).get("ok") else None
             pending = {"model": model_id, "tier": model_tier, "language": reading["language"], "intent": reading["intent"],
                        "grounding": bool(reading.get("requiresGrounding", True)), "providerClass": provider_class, "page": contracts.page_summary(page),
-                       "member": member.summary(), "procedures": plan["procedures"], "message": text, "history": self._history(cur, workspace_id, conversation_id)[:-1],
+                       "member": member.summary(), "procedures": plan["procedures"], "message": text, "history": self._history(cur, workspace_id, conversation_id, ctx, cloud=provider_class == "cloud")[:-1],
                        "passages": ((results.get("help.search") or {}).get("data") or {}).get("passages", []) if (results.get("help.search") or {}).get("ok") else [],
                        "facts": answer["facts"], "actions": self._actions(answer, plan, page), "labels": self._labels(state),
                        "knownIds": self._known_ids(page, results, state), "draftText": draft.get("text") if draft and provider_class == "local" else None,
-                       "grounded": answer, "summary": summary, "trace": trace}
+                       "grounded": answer, "summary": summary, "trace": trace, **({"cloudWithheld": True} if cloud_withheld else {})}
             cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps({"pending": pending}, ensure_ascii=False), run_id))
             self._emit(cur, workspace_id, run_id, "progress.updated", stage="composing", tier=model_tier)
             body = {"text": "", "pending": True, "runId": run_id, "siteAgent": {"version": contracts.VERSION, "runId": run_id, "status": "running", "intent": reading["intent"],
@@ -441,7 +457,7 @@ class SiteAgentService:
         if reading["intent"] not in ("forbidden", "greeting", "edit", "schedule", "clarify") and not note and runtime is not None and not member.allows("edit"):
             answer["blocks"].insert(0, contracts.warning("Answers from a writer model need edit access, so this one comes from Rafii's help and your workspace.", "role_grounded"))
         self._finalize(cur, workspace_id, conversation_id, run_id, answer, summary, trace, reading, proposal_list, composed_by=composed_by, model_id=model_id,
-                       follow_ups=[], usage={"provenance": "grounded", "modelRequests": 0})
+                       follow_ups=[], usage={"provenance": "grounded", "modelRequests": 0}, cloud_withheld=cloud_withheld)
         return self._response(cur, workspace_id, run_id)
 
     def _proposal_answer(self, state, text, principal, member, now, zone, page, answer, language):
@@ -850,7 +866,8 @@ class SiteAgentService:
         ids.update(re.findall(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{24,64}", blob))
         return sorted(ids)[:200]
 
-    def _finalize(self, cur, workspace_id, conversation_id, run_id, answer, summary, trace, reading, proposal_list, *, composed_by, model_id, follow_ups, usage, phrased_by=None):
+    def _finalize(self, cur, workspace_id, conversation_id, run_id, answer, summary, trace, reading, proposal_list, *, composed_by, model_id, follow_ups, usage, phrased_by=None,
+                  cloud_withheld=False):
         blocks = answer["blocks"]
         for block in blocks[:MAX_BLOCK_EVENTS]:
             self._emit(cur, workspace_id, run_id, "artifact.created", artifact="site_agent.block", block=block)
@@ -873,6 +890,8 @@ class SiteAgentService:
                                                                        "model": {"id": model_id, "composedBy": composed_by, **({"phrasedBy": phrased_by} if phrased_by else {})},
                                                                        "followUps": follow_ups, "feedback": None,
                                                                        "refs": refs}}
+        if cloud_withheld:
+            body["siteAgent"]["cloudWithheld"] = True
         if answer.get("pending"):
             body["siteAgent"]["pending"] = answer["pending"]
         if answer.get("references"):
@@ -991,7 +1010,7 @@ class SiteAgentService:
             trace = {**pending["trace"], "modelFacts": answer["facts"]}
             reading = {"intent": pending["intent"], "language": pending["language"]}
             self._finalize(cur, workspace_id, run["conversationId"], run_id, final, pending["summary"], trace, reading, [], composed_by="model",
-                           model_id=pending["model"], follow_ups=answer["followUps"], usage=usage, phrased_by=phrased_by)
+                           model_id=pending["model"], follow_ups=answer["followUps"], usage=usage, phrased_by=phrased_by, cloud_withheld=pending.get("cloudWithheld") is True)
             return self._response(cur, workspace_id, run_id)
 
     def _finish_grounded(self, cur, workspace_id, run, run_id, pending, note, usage=None):
@@ -1002,7 +1021,7 @@ class SiteAgentService:
                  **({"fallbackDetail": note["detail"]} if note.get("detail") else {})}
         reading = {"intent": pending["intent"], "language": pending["language"]}
         self._finalize(cur, workspace_id, run["conversationId"], run_id, answer, pending["summary"], trace, reading, [], composed_by="grounded",
-                       model_id=pending["model"], follow_ups=[], usage=usage or {"provenance": "grounded", "modelRequests": 0})
+                       model_id=pending["model"], follow_ups=[], usage=usage or {"provenance": "grounded", "modelRequests": 0}, cloud_withheld=pending.get("cloudWithheld") is True)
 
     def events(self, workspace_id, token, run_id, cursor=0):
         """Replay a panel run's events after `cursor`, with the answer message (reconnect, §13.4)."""
@@ -1110,6 +1129,8 @@ class SiteAgentService:
         def after(cur, state, actor):
             body, stored = self._proposal_row(cur, workspace_id, payload, lock=True)
             proposals.check(stored, digest_value=payload.get("digest"), now=now)
+            from ..agent_runtime_v2 import authz
+            authz.gate_proposal(cur, workspace_id, state, stored, config=authz.runtime_config_for(self.service), now=now)
             if stored.get("requiredPermission") == "owner":
                 cur.execute("SELECT m.role FROM public.pr_memberships m WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active'", (workspace_id, actor))
                 role = cur.fetchone()

@@ -24,6 +24,7 @@ from .hosted_identity import (
     SupabaseIdentityAdmin,
     verified_aal,
     verified_auth_time,
+    verified_method_time,
     verified_passkey_time,
     verified_session_id,
 )
@@ -31,7 +32,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import tools
+from . import agent_observability, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -96,6 +97,8 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     # bearer.  This lets TOTP-enforced accounts use a separate, ephemeral passkey session as proof.
     verify.proof = lambda access_token: validate(access_token, enforce_mfa=False)
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
+    # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
+    verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
     return verify
 
 
@@ -471,6 +474,8 @@ class HostedApplication:
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
+        # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
+        correlation = agent_observability.bind_request(request_id)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -500,6 +505,7 @@ class HostedApplication:
                 observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
             except Exception:
                 pass
+            agent_observability.release_request(correlation)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -653,6 +659,13 @@ class HostedApplication:
                     location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
+            if path == "/api/cron/agent-tasks" and method == "GET":
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Cron authorization failed.", 401)
+                from .agent_runtime_v2.task_engine import cron as task_cron
+                return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -685,6 +698,10 @@ class HostedApplication:
                             result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
                         except Exception as exc:
                             result['uiRecovery'] = {'status': 'unavailable', 'error': type(exc).__name__}
+                        from .agent_runtime_v2.task_engine import cron as task_cron
+                        task_recovery = task_cron.recover_for_worker(service)
+                        if task_recovery is not None:
+                            result['agentTaskRecovery'] = task_recovery
                         # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
                         try:
                             from .agent_runtime_v2 import ui_metering
@@ -905,10 +922,17 @@ class HostedApplication:
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connection-health" and method == "GET":
+                # Connection Health Center (connection_health.py). With RAFII_CONNECTION_HEALTH_ENABLED off this branch is
+                # never taken, so the request reaches the same 404 as any unknown route.
+                from . import connection_health
+                if connection_health.deployment_enabled(connection_health.environment(service)):
+                    return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
-                    return self._json(start_response, 200, oauth.channels(parts[2], token))
+                    from .connection_health import annotate_channels, environment
+                    return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
                     extra = {"inputs": body["input"]} if body.get("input") is not None else {}
@@ -962,6 +986,14 @@ class HostedApplication:
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
                     return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) in (6, 7) and parts[4:6] == ["metadata", "changes"] and method == "GET":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, changes.history(workspace_id, token) if len(parts) == 6 else changes.read(workspace_id, token, parts[6]))
+                if len(parts) == 6 and parts[4] == "metadata" and parts[5] in ("preview", "apply", "undo") and method == "POST":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, getattr(changes, parts[5])(workspace_id, token, self._body(environ)))
                 if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
                     return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
                 if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":
@@ -1103,7 +1135,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker" or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

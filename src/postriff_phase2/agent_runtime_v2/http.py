@@ -11,10 +11,13 @@ Mounted by hosted_app with the same session, request guard, origin checks and JS
     GET  tasks/{task}?cursor=                task plan + step events (cursor replay)
     POST approvals/decide                    apply | dismiss an agent proposal (site agent apply path + verification)
     POST attachments                         add an image to the conversation (private media path)
+    POST context-lens                        Context Lens preview: what the next typed turn would use (only when its flag is on;
+                                             otherwise this route does not exist)
     POST voice/sessions                      start GPT-Live: SDP offer in, SDP answer out (server-held key)
     POST voice/sessions/{v}/transcript       text of what was said (no audio)
     POST voice/sessions/{v}/end              end and settle the session
     *    ui/...                              Generative UI presentations, queries and guarded actions (ui_http.py)
+    *    permissions/...                     Rafii agent permissions: choices, revoke, reminder, history (agent_permissions_http.py)
 """
 from __future__ import annotations
 
@@ -51,10 +54,24 @@ def handle(app, environ, start_response, service, token, method, parts):
     workspace_id, resource = parts[2], parts[4]
     runtime = runtime_for(service)
     rest = parts[5:]
+    if resource in ("tasks", "approvals"):
+        from .task_engine import http as task_http, flags as task_flags
+        if resource == "tasks" and not rest and method == "GET" and not task_flags.enabled_for(workspace_id, runtime.cfg):
+            with service.repository.transaction(token, workspace_id) as (_cur, row, _principal):
+                from ..permissions import require
+                require(service.ideas._member(row), "read")
+            return app._json(start_response, 200, {"items": [], "engine": "disabled"})
+        response = task_http.handle(app, environ, start_response, runtime, token, method, workspace_id, resource, rest)
+        if response is not None:
+            return response
     if resource == "ui":
         # Generative UI (rafii-genui/1): its own seam, same guard/origin/session as every other agent route.
         from . import ui_http
         return ui_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
+    if resource == "permissions":
+        # rafii-agent-authz/1 (CF-2 §16): 404 agent_permissions_unavailable while the workspace's permissions mode is off.
+        from . import agent_permissions_http
+        return agent_permissions_http.handle(app, environ, start_response, runtime, token, method, workspace_id, rest)
     if resource == "status" and not rest and method == "GET":
         return app._json(start_response, 200, runtime.status(workspace_id, token))
     if resource == "turns" and not rest and method == "POST":
@@ -79,6 +96,11 @@ def handle(app, environ, start_response, service, token, method, parts):
         return app._json(start_response, 200, runtime_service.decide(runtime, workspace_id, token, app._body(environ)))
     if resource == "attachments" and not rest and method == "POST":
         return app._json(start_response, 201, runtime_service.attach_upload(runtime, workspace_id, token, app._body(environ)))
+    if resource == "context-lens" and not rest and method == "POST":
+        from . import context_lens
+        if context_lens.settings_for(runtime).enabled:
+            # Off (the default): the route stays the same 404 as before, and the body is never read.
+            return app._json(start_response, 200, context_lens.preview(runtime, workspace_id, token, app._body(environ)))
     if resource == "voice" and rest[:1] == ["sessions"] and method == "POST":
         from .live import VoiceSessions
         voice = VoiceSessions(runtime, transport=runtime.live_transport)

@@ -17,7 +17,7 @@ import time
 from postriff_alpha.domain import AlphaError
 
 from .. import automation_edit, automation_explain, automation_plan, capabilities, memory, research
-from ..channels import assisted_matrix, customer_view, unsupported_matrix
+from ..channels import assisted_matrix, customer_view, unsupported_matrix, with_youtube_credential_status, youtube_credential_status
 from ..contracts import digest
 from . import contracts, guides, knowledge, routes
 
@@ -134,13 +134,35 @@ def validate(tool_id: str, args) -> dict:
     return tool
 
 
-class Context:
-    """What a tool may see: this member's snapshot of this workspace, read inside the turn's transaction."""
+EGRESS_READERS = ("local", "cloud")
 
-    def __init__(self, *, state, membership, principal, workspace_id, cur=None, service=None, now=None, page=None, model_id=None, zone="UTC"):
+
+class Context:
+    """What a tool may see: this member's snapshot of this workspace, read inside the turn's transaction.
+
+    `egress` names who reads the results. "local": the member, in Rafii's own answer (the site-agent panel's grounded
+    answer). "cloud": a cloud model (the Agent Runtime, or a cloud writer), which receives memory only as the owner's
+    cloud memory setting allows and sources only where their cloud sharing is on (reads.py). An unnamed reader is a
+    cloud reader."""
+
+    def __init__(self, *, state, membership, principal, workspace_id, cur=None, service=None, now=None, page=None, model_id=None, zone="UTC", egress="cloud", config=None, request_text=""):
+        if egress not in EGRESS_READERS:
+            raise ValueError(f"unknown reader {egress!r}")
         self.state, self.membership, self.principal, self.workspace_id = state, membership, principal, workspace_id
         self.cur, self.service, self.now, self.page, self.model_id = cur, service, now if now is not None else time.time(), page or {}, model_id
         self.zone = zone or "UTC"
+        self.egress = egress
+        from ..agent_runtime_v2 import authz
+        self.config = config if config is not None else authz.runtime_config_for(service)
+        self.request_text = request_text
+        self.authz_mode = authz.mode_for(self.config, workspace_id)
+        self.grants = None
+        if self.authz_mode != "off" and cur is not None:
+            authz.bind_context(self, cur=cur, state=state, member=membership)
+
+    @property
+    def cloud_reader(self):
+        return self.egress == "cloud"
 
     @property
     def providers(self):
@@ -162,10 +184,15 @@ def run(tool_id: str, args: dict, ctx: Context) -> tuple[dict, dict]:
         requirement = REQUIREMENT.get(tool_id, "read")
         if not ctx.membership.allows(requirement):
             raise AlphaError("Your role can't do this.", 403, code="tool_forbidden")
+        from ..agent_runtime_v2 import authz, capability_registry
+        if not authz.IN_TOOL.get() and ctx.authz_mode != "off":
+            decision = authz.gate_site(ctx, capability_registry.site_capability(tool_id), tool_id, args)
+            if decision.outcome == "deny":
+                raise AlphaError("Rafii is not allowed to read or change this with your current permissions.", 403, code="agent_permission_denied")
         result = EXECUTORS[tool_id](ctx, **args)
         record["status"] = "verified" if result["verified"] else ("unverified" if result["ok"] else "failed")
     except AlphaError as error:
-        record["status"] = "blocked" if error.code in ("tool_unknown", "tool_input", "tool_forbidden") else "failed"
+        record["status"] = "blocked" if error.code in ("tool_unknown", "tool_input", "tool_forbidden", "agent_permission_denied") else "failed"
         record["code"] = error.code or ("not_found" if error.status == 404 else "failed")
         result = contracts.result(None, now=ctx.now, ok=False, verified=False, warnings=[str(error)])
     record["latencyMs"] = round((time.monotonic() - started) * 1000, 1)
@@ -403,18 +430,37 @@ def _can_publish(ctx):
         return None
 
 
+def _youtube_vault(ctx):
+    """The Channels page's secret-free YouTube vault facts (channels.youtube_credential_status), or None when this read
+    has no database or the workspace has no YouTube channel."""
+    if ctx.cur is None or not any(c.get("platform") == "YouTube" for c in _channels(ctx)):
+        return None
+    return youtube_credential_status(ctx.cur, [ctx.workspace_id])
+
+
+def _channels_as_shown(ctx):
+    """(channels, state) as the Channels page shows them: a YouTube channel carries its current vault facts (refresh,
+    access-token expiry, revocation), the same overlay as OAuthService.channels. The stored records are not changed."""
+    vault = _youtube_vault(ctx)
+    if vault is None:
+        return _channels(ctx), ctx.state
+    channels = [with_youtube_credential_status(c, vault.get((str(ctx.workspace_id), c.get("id")))) for c in _channels(ctx)]
+    return channels, {**ctx.state, "phase2": {**_phase2(ctx), "channels": channels}}
+
+
 def channels_capabilities(ctx, platform=None, connectionId=None):
     matrices = _matrices(ctx)
     can_publish = _can_publish(ctx)
     engine = getattr(getattr(ctx.service, "commands", None), "engine", None)
+    shown, shown_state = _channels_as_shown(ctx)
     rows = []
-    for channel in _channels(ctx):
+    for channel in shown:
         if connectionId and channel.get("id") != connectionId:
             continue
         if platform and channel.get("platform", "").lower() != platform.lower():
             continue
         view = customer_view(channel, matrices.get(channel["id"], assisted_matrix()), ctx.now)
-        route = capabilities.publish_route(ctx.state, {"platform": channel["platform"], "channelId": channel["id"]}, providers=ctx.providers, live=ctx.live, can_publish=can_publish)
+        route = capabilities.publish_route(shown_state, {"platform": channel["platform"], "channelId": channel["id"]}, providers=ctx.providers, live=ctx.live, can_publish=can_publish)
         try:
             state = engine.channel_state(channel) if engine is not None else None
         except (KeyError, TypeError):
@@ -427,7 +473,7 @@ def channels_capabilities(ctx, platform=None, connectionId=None):
         raise AlphaError("That account is not connected to this workspace.", 404, code="not_found")
     unconnected = None
     if platform and not rows:
-        route = capabilities.publish_route(ctx.state, {"platform": _canonical_platform(platform)}, providers=ctx.providers, live=ctx.live, can_publish=can_publish)
+        route = capabilities.publish_route(shown_state, {"platform": _canonical_platform(platform)}, providers=ctx.providers, live=ctx.live, can_publish=can_publish)
         unconnected = {"platform": _canonical_platform(platform), "canPublish": route["publish"], "publishCode": route["code"], "publishReason": route["reason"]}
     return contracts.result({"accounts": rows, "unconnected": unconnected, "publishingLive": ctx.live}, now=ctx.now)
 
@@ -537,8 +583,12 @@ def memory_summary(ctx):
     if ctx.cur is not None:
         from ..learning_service import pending_proposals
         pending = pending_proposals(ctx.cur, ctx.workspace_id)
+    # A cloud reader gets the bodies a cloud writing route would (memory.projection: none without the owner's cloud
+    # memory setting; never private, local-only or unlabelled boundaries), and AGENT.md, which is fixed product text.
+    # The file list and counts are not memory text.
+    readable = ([f for f in files if f.get("name") == "AGENT.md"] + memory.projection(ctx.state, "cloud")["files"]) if ctx.cloud_reader else files
     data = {"files": [{"name": f.get("name"), "purpose": f.get("purpose"), "characters": len(f.get("body") or ""), "editHref": f.get("editHref")} for f in files],
-            "bodies": {f.get("name"): (f.get("body") or "")[:1200] for f in files},
+            "bodies": {f.get("name"): (f.get("body") or "")[:1200] for f in readable},
             "pendingPreferences": len(pending), "egress": memory.egress_summary(ctx.state)}
     return contracts.result(data, now=ctx.now)
 

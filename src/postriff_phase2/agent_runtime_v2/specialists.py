@@ -160,7 +160,7 @@ def available(names) -> list[str]:
     return [name for name in dict.fromkeys(names) if name in REGISTRY]
 
 
-def build(model_for, settings_for=None) -> dict:
+def build(model_for, settings_for=None, *, ctx=None) -> dict:
     """{specialist key: FunctionTool} — each specialist Agent wrapped with as_tool."""
     from agents import Agent
 
@@ -169,6 +169,11 @@ def build(model_for, settings_for=None) -> dict:
     tools = {}
     for key, spec in SPECIALISTS.items():
         names = available(list(spec["tools"]) + EXTRA_SCOPES.get(key, []))
+        if ctx is not None:
+            from . import authz
+            names = authz.filter_tools(ctx, names, agent=key)
+            if not names and authz.mode_for(ctx.config, ctx.workspace_id) == "enforce":
+                continue
         if not names:
             raise AlphaError(f"The {spec['title']} specialist has no tools.", 500)
         agent = Agent(name=key, instructions=instructions_for(key, COMMON + "\n\n" + spec["instructions"]), tools=sdk_tools(names, scope_name=key),

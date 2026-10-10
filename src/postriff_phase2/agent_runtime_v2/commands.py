@@ -141,6 +141,8 @@ def direct(runtime, workspace_id, token, conversation_id, text, modality, run_ke
     ctx = RafiiRunContext(service=runtime.service, workspace_id=workspace_id, token=token, principal=principal, membership=member,
                           conversation_id=conversation_id, trace_id=trace_id, modality=modality, page=page, zone=zone, run_id=run_id, now=runtime.clock,
                           config=runtime.cfg, request_text=text, command=command)
+    from . import authz
+    authz.bind_context(ctx)
     ctx.deadline = time.monotonic() + 30
     ctx.thinking_emit = lambda event: runtime._emit_thinking(workspace_id, token, run_id, event)
     ctx.thinking("working", "run", "run_open")

@@ -36,7 +36,7 @@ from . import ui_contracts, ui_domain
 TOOL_JOURNEYS = {
     "draft_get": "J01", "draft_create": "J01", "draft_rewrite": "J01", "draft_edit": "J01", "voice_check": "J01", "models_summary": "J01",
     "calendar_range": "J02", "queue_summary": "J02", "job_get": "J02", "schedule_propose": "J02", "reviews_list": "J02", "publishing_summary": "J02",
-    "library_search": "J03", "library_read": "J03", "image_list": "J03", "image_analyze": "J03", "workspace_search": "J03",
+    "library_search": "J03", "library_read": "J03", "library_browse": "J03", "image_list": "J03", "image_analyze": "J03", "workspace_search": "J03",
     "brand_summary": "J04", "voice_profile": "J04", "memory_context": "J04", "memory_summary": "J04", "privacy_egress_state": "J04",
     "campaign_list": "J05", "campaign_get": "J05", "campaign_items": "J05", "campaign_link": "J05", "campaign_unlink": "J05", "campaign_membership": "J05",
     "web_research": "J07", "research_search": "J07", "research_fetch": "J07",
@@ -45,11 +45,32 @@ TOOL_JOURNEYS = {
 }
 COLLECTION_TOOLS = {"calendar_range", "queue_summary", "content_search", "campaign_list", "campaign_get", "campaign_items", "automation_list", "library_search",
                     "image_list", "publishing_summary", "attention_summary", "voice_profile", "brand_summary", "memory_context", "web_research", "research_search",
-                    "reviews_list", "channels_capabilities", "workspace_search"}
+                    "reviews_list", "channels_capabilities", "workspace_search", "library_browse"}
 REF_JOURNEYS = {"draft": "J01", "post": "J01", "job": "J02", "review": "J02", "asset": "J03", "image": "J03", "library_file": "J03", "media": "J03",
                 "voice_sample": "J04", "campaign": "J05", "source": "J07", "automation": "J08", "automation_run": "J08", "connection": "J08"}
 PROPOSAL_JOURNEYS = {"schedule_draft": "J02", "reschedule_post": "J02", "automation_change": "J08"}
 MAX_JOURNEYS = 3
+LIBRARY_IDS = 25     # library_search `ids` maxItems (ui_domain/library.py PICK_MAX)
+# D-A52: run-history reads. automation_get returns an automation's latest runs and automation_explain explains one stored run;
+# each harvests a single automation reference, so without this a question about several runs was a "single fact" although
+# J08's manifest shows run history (automation_history → RunHistory). They count as a collection read only when the verified
+# reads covered two or more distinct runs (the `runIds` the tool gate records, tool_adapter.run_ids_read) AND the person asked
+# about several runs or their history. One run's "why didn't it publish?", the verb "runs" ("what runs tomorrow?") and a
+# declined history ("唔使睇歷史") stay native answers.
+RUN_HISTORY_TOOLS = {"automation_get", "automation_explain"}
+_RUN_HISTORY = re.compile(
+    r"\brun\s+(?:history|histories|logs?|records?)\b|\bhistory\b"
+    r"|\b(?:last|latest|recent|past|previous|earlier|prior)\s+(?:(?:\d+|few|several|couple\s+of|two|three|four|five|ten)\s+)?"
+    r"(?:automation\s+|scheduled\s+)?(?:runs|times)\b"
+    r"|\b(?:my|its|their|your|the|all|these|those)\s+runs\b(?!\s+(?:at|on|every|each|daily|weekly|monthly|hourly|tomorrow|today|tonight|next|when|again)\b)"
+    r"|運行記錄|運行紀錄|运行记录|运行纪录|執行記錄|執行紀錄|执行记录|执行纪录|歷史|历史|最近幾次|最近几次|上幾次|上几次|前幾次|前几次|過去幾次|过去几次",
+    re.I)
+# A history the person declined ("no need to show the history", "唔使睇歷史", "不用看历史") is not a request for one.
+_DECLINED = re.compile(
+    r"(?:\b(?:no|not|don'?t|do\s+not|never|without|skip(?:ping)?|no\s+need\s+(?:to|for))\b[^.?!。？！,，]{0,24}"
+    r"|(?:唔使|唔駛|唔洗|唔好|唔需要|不用|不要|不需要|無需|无需|毋須|毋须|別|别|免)[^。？！,，]{0,6})$",
+    re.I)
+MIN_RUNS_FOR_HISTORY = 2
 
 # Explicit UI intents (en / zh-Hant / zh-Hans). Word boundaries for Latin words; CJK words are matched as substrings.
 _UI_INTENT = re.compile(
@@ -96,12 +117,24 @@ def wants_ui(text: str) -> bool:
     return bool(_UI_INTENT.search(text or ""))
 
 
+def asks_run_history(text: str) -> bool:
+    """The person asked about several runs or their history (en / zh-Hant / zh-Hans), and did not decline it."""
+    text = text if isinstance(text, str) else ""
+    return any(not _DECLINED.search(text[max(0, match.start() - 40):match.start()]) for match in _RUN_HISTORY.finditer(text))
+
+
+def runs_read(activity: list) -> set:
+    """Distinct run ids the turn's verified automation reads covered (D-A52; recorded by the tool gate)."""
+    return {ident for a in activity if a.get("status") == "verified" and str(a.get("tool")) in RUN_HISTORY_TOOLS
+            for ident in (a.get("runIds") if isinstance(a.get("runIds"), list) else []) if isinstance(ident, str)}
+
+
 def detect_journeys(result: dict, request_text: str = "", *, scope: str = "workspace") -> list[str]:
     """Journeys the turn touched, in order of first evidence: tools that ran (not blocked), proposals waiting, changed
     entities, references; J06 when the person asked about performance and the turn read publishing/attention data."""
     if scope == "founder":
         return ["J09"] if (result or {}).get("founder") or any(str(a.get("tool") or "").startswith("founder_") for a in (result or {}).get("toolActivity") or []
-                                                               if isinstance(a, dict)) else []
+                                                               if isinstance(a, dict) and a.get("status") in ("verified", "unverified")) else []
     found: list[str] = []
 
     def add(journey):
@@ -131,7 +164,7 @@ def detect_journeys(result: dict, request_text: str = "", *, scope: str = "works
     return found[:MAX_JOURNEYS]
 
 
-def eligibility(result, request_text, modality, *, flags):  # lane D
+def eligibility(result, request_text, modality, *, flags, scope="workspace"):  # lane D
     """{eligible, slot, reason, journeyIds}. Deterministic; never raises for odd input (the caller also guards)."""
     result = result if isinstance(result, dict) else {}
     text = request_text if isinstance(request_text, str) else ""
@@ -145,7 +178,9 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
         return {**_NOT, "reason": "not_metered"}
     if is_greeting_or_ack(text):
         return {**_NOT, "reason": "greeting"}
-    journeys = detect_journeys(result, text)
+    if scope not in ("workspace", "founder"):
+        return {**_NOT, "reason": "plain_answer"}
+    journeys = detect_journeys(result, text, scope=scope)
     intent = wants_ui(text)
     if not journeys:
         return {**_NOT, "reason": "plain_answer"}
@@ -155,9 +190,13 @@ def eligibility(result, request_text, modality, *, flags):  # lane D
     if intent:
         return {"eligible": True, "slot": "main", "reason": "ui_intent", "journeyIds": journeys}
     activity = [a for a in result.get("toolActivity") or [] if isinstance(a, dict) and a.get("status") in ("verified", "unverified")]
-    rich = (any(str(a.get("tool")) in COLLECTION_TOOLS for a in activity) or bool(result.get("pendingApprovals"))
+    founder_collections = {"founder_metric_query", "founder_cost_breakdown", "founder_attention_list", "founder_entity_search", "founder_audit_tail"}
+    rich = (any(str(a.get("tool")) in COLLECTION_TOOLS for a in activity)
+            or (scope == "founder" and any(a.get("status") == "verified" and a.get("tool") in founder_collections for a in activity))
+            or bool(result.get("pendingApprovals"))
             or any(isinstance(c, dict) and c.get("verified") for c in result.get("changedEntities") or [])
-            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2)
+            or len([r for r in result.get("references") or [] if isinstance(r, dict)]) >= 2
+            or (len(runs_read(activity)) >= MIN_RUNS_FOR_HISTORY and asks_run_history(text)))
     if rich:
         return {"eligible": True, "slot": "main", "reason": "rich_result", "journeyIds": journeys}
     return {**_NOT, "reason": "single_fact", "journeyIds": journeys}
@@ -221,7 +260,16 @@ def _refs(result: dict, selection_state: dict | None) -> list[dict]:
     return out[:60]
 
 
-def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
+def _library_ids(result: dict) -> list[str] | None:
+    """The ids library_browse listed this turn, in order (`result.libraryIds`, library_browse.result_fields), or None when it
+    never listed a page. Kept apart from `references` (capped at 20 on the message) so a 25-item page reaches the view whole."""
+    ids = result.get("libraryIds") if isinstance(result, dict) else None
+    if not isinstance(ids, list):
+        return None
+    return list(dict.fromkeys(i for i in ids if isinstance(i, str) and re.match(r"^[0-9a-f]{32}$", i)))[:LIBRARY_IDS]
+
+
+def _suggested_inputs(journeys: list[str], refs: list[dict], library_ids: list[str] | None = None) -> list[dict]:
     """Starting arguments for bindings from the turn's own references (ids only); the presenter may use or ignore them."""
     by_type: dict[str, list[str]] = {}
     for reference in refs:
@@ -237,9 +285,18 @@ def _suggested_inputs(journeys: list[str], refs: list[dict]) -> list[dict]:
         out.append({"binding": "campaign_detail", "inputs": {"campaignId": by_type["campaign"][0]}})
     if "J08" in journeys and by_type.get("automation"):
         out.append({"binding": "automation_detail", "inputs": {"automationId": by_type["automation"][0]}})
-    assets = [i for i in by_type.get("asset") or [] if re.match(r"^[0-9a-f]{32}$", i)]
-    if "J03" in journeys and assets:
-        out.append({"binding": "library_item", "inputs": {"assetId": assets[0]}})
+        out.append({"binding": "automation_history", "inputs": {"automationId": by_type["automation"][0]}})
+    # The Library items the turn found: what library_browse listed (`libraryIds`, in its results' order, [] when it found nothing),
+    # else the turn's asset refs (a J03 view's selection comes back as media/library_file refs). The view lists exactly those, so
+    # the chat and the view agree; an empty browse gives `ids: []` (an empty view), never library_search {} (the whole Library).
+    if library_ids is not None:
+        found = list(library_ids)
+    else:
+        found = list(dict.fromkeys(r["id"] for r in refs if r["type"] in ("asset", "media", "library_file") and re.match(r"^[0-9a-f]{32}$", r["id"])))
+    if "J03" in journeys and (found or library_ids is not None):
+        out.append({"binding": "library_search", "inputs": {"ids": found[:LIBRARY_IDS]}})
+        if len(found) == 1:
+            out.append({"binding": "library_item", "inputs": {"assetId": found[0]}})
     return [s for s in out if s["binding"] in ui_domain.QUERIES][:12]
 
 
@@ -289,7 +346,7 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
     groups = component_groups(journeys)
     projection = {"journey_ids": journeys, "component_group_ids": groups, "egress_decision": egress_decision(result, scope=scope),
                   "allowed_context": {"refs": refs, "counts": _counts(result, refs), "toolStates": _tool_states(result), "language": result.get("language") or "en",
-                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs),
+                                      "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs, _library_ids(result)),
                                       "selection": [r for r in refs if r in ((selection_state or {}).get("references") or [])][:12] if isinstance(selection_state, dict) else [],
                                       "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"]},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}
