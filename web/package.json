@@ -29,7 +29,11 @@
     "test:creator-pipeline:browser": "cd .. && bash scripts/cloud-python-bootstrap.sh bash scripts/creator-pipeline-validation.sh browser",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
     "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all",
-    "test:creator-pipeline:integration": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh backend && next typegen && npm run typecheck"
+    "test:creator-pipeline:integration": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/creator-pipeline-validation.sh backend && next typegen && npm run typecheck",
+    "test:opportunity-feed": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh",
+    "test:opportunity-feed:backend": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh backend",
+    "test:opportunity-feed:ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh ui",
+    "test:opportunity-feed:browser": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh browser"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

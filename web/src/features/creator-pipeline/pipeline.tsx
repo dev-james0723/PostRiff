@@ -9,6 +9,7 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { ApiError } from '@/lib/api/client';
 import { createPipelineApi, readPending, savePending, clearPending, safeHref, type Preview, type Platform, type CreateRequest, type Entry } from '@/lib/agent-runtime/creator-pipeline';
+import { OpportunityFeed } from './opportunity-feed';
 
 export function CreatorPipeline() {
   const { user } = useAuth(); const { workspaceId } = useWorkspaceApi(); const access = useWorkspaceAccess();
@@ -57,7 +58,8 @@ function PipelineWorkspace({ boundary }: { boundary: string }) {
   if (!canEdit) return <PageContainer><h1>Creator Pipeline</h1><p role='status'>Your current role cannot open creator tasks.</p></PageContainer>;
   return <PageContainer><div className='mx-auto w-full max-w-4xl space-y-6'>
     <header><h1 className='text-2xl'>Creator Pipeline</h1><p className='text-muted-foreground'>Turn a supported suggestion into an exact draft approval, then follow its saved result.</p></header>
-    <section className={box} aria-label='Prepare a creator task'>
+    <OpportunityFeed workspaceId={workspaceId} boundary={boundary} disabled={busy || Boolean(pending) || Boolean(preview)} onPrepare={(id) => { setSuggestionId(id); setCreated(null); document.getElementById('prepare-creator-task')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} onRefresh={() => { void snapshot.refetch(); void list.refetch(); }} />
+    <section id='prepare-creator-task' className={box} aria-label='Prepare a creator task'>
       <h2 className='text-lg'>Prepare a creator task</h2>
       <fieldset disabled={busy || Boolean(pending) || Boolean(preview)} className='space-y-3'>
         <label className='block'>Suggestion<select aria-label='Suggestion' className='block max-w-full rounded border bg-background p-2' value={suggestionId} onChange={(e) => setSuggestionId(e.target.value)}><option value=''>Choose a suggestion</option>{suggestions.map((s) => <option key={s.id} value={s.id}>{s.reason}</option>)}</select></label>
