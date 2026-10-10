@@ -253,7 +253,13 @@ async function waitForLoadedRaster(locator,minimumDimension,timeout){
    const visibleUploadState=await page.locator('body').innerText().catch(()=> '');
    assert.ok(doc,`uploaded Markdown asset missing from Library listing: ${JSON.stringify(listing)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
    assert.equal(doc.indexingStatus,'ready',`Markdown indexing did not become ready: ${JSON.stringify(doc)}\nUpload requests: ${JSON.stringify(uploadTrace)}\nStorage proxy: ${JSON.stringify(storageTrace)}\nVisible page: ${visibleUploadState.slice(0,2500)}`);
-   await page.locator('[data-library-thumbnail="md"]').first().waitFor({timeout:15000});
+   // The processing badge appears before the authenticated first-page fetch starts.
+   // Verify the uploaded document's actual thumbnail before the fixture setup reloads
+   // its document; WebKit reports that otherwise-interrupted fetch as a page error.
+   const markdownThumbnail=page.locator('[data-library-thumbnail="md"][data-thumbnail-preview="first-page-raster"] img').first();
+   await markdownThumbnail.waitFor({state:'visible',timeout:90000});
+   await page.waitForFunction(image=>image.complete&&image.naturalWidth>0,await markdownThumbnail.elementHandle(),{timeout:15000});
+   checks.push({engine,width,format:'md',thumbnail:'actual source-page JPEG decoded before fixture navigation'});
    const videoName=`rafii-release-${engine}-${width}.mp4`,videoBytes=readFileSync(resolve(__dirname,'../public/onboarding/welcome-loop-dark.mp4')),videoTraceStart=storageTrace.length;
    if(engine==='chromium'){
     await picker.setInputFiles({name:videoName,mimeType:'video/mp4',buffer:videoBytes});
