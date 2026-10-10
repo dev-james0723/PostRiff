@@ -106,9 +106,10 @@ def latest_observations(cur, workspace_id, basis=None):
     return None. With `basis`, only readings taken at that offset (or legacy rows
     without one) are considered, so every post is read at the same age."""
     offset = read_offset_column(cur)
+    period = "extract(epoch from o.period_start)" if offset != "NULL::text" else "NULL::numeric"
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
-    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
+    cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset},{period} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
 
 
@@ -117,12 +118,12 @@ def summary(cur, workspace_id, jobs, now, basis=None):
     latest values (basis None); anything comparing posts passes basis=COMPARISON_BASIS."""
     rows = latest_observations(cur, workspace_id, basis)
     posts = {}
-    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset in rows:
+    for provider, post_id, job_id, metric, version, value, unit, availability, observed, ingested, connection_id, read_offset, *period in rows:
         post = posts.setdefault((provider, connection_id, post_id, job_id), {"provider": provider, "providerPostId": post_id, "jobId": job_id, "connectionId": connection_id, "metrics": {}, "freshness": {"observedAt": float(observed), "ingestedAt": float(ingested)}, "definitionVersion": version})
-        if value is None or not math.isfinite(float(value)) or value < 0:
+        if availability == "available" and (value is None or not math.isfinite(float(value)) or value < 0):
             availability = "unavailable"
         # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
-        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed)}
+        post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed), "ingestedAt": float(ingested), "periodStart": float(period[0]) if period and period[0] is not None else None}
         post["metrics"][metric]["definitionVersion"] = version
     job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
     items = []

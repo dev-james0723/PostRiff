@@ -22,6 +22,7 @@
     "ci:youtube:proposal:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-proposal-validation.sh",
     "test:jcb": "bash ../scripts/cloud-python-bootstrap.sh node --test tests/*.test.mjs tests/*.test.cjs src/lib/locales/core.test.mjs",
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh",
+    "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh",
     "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
     "e2e:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --all"
