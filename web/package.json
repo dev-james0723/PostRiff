@@ -34,7 +34,8 @@
     "test:opportunity-feed": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh",
     "test:opportunity-feed:backend": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh backend",
     "test:opportunity-feed:ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh ui",
-    "test:opportunity-feed:browser": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh browser"
+    "test:opportunity-feed:browser": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/opportunity-feed-validation.sh browser",
+    "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

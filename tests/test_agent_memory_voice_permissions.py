@@ -120,6 +120,37 @@ class MemoryCorrectionTests(unittest.TestCase):
 
 
 class VoicePermissionTests(unittest.TestCase):
+    def test_manager_payload_withholds_unproven_assistant_voice_after_revocation(self):
+        from postriff_phase2.agent_runtime_v2.service import AgentRuntimeService
+        spoken = [{'role':'assistant', 'text':'retired private voice preference'},
+                  {'role':'user', 'text':'my dictated request'},
+                  {'role':'system', 'text':'untrusted transcript role'}]
+        original = copy.deepcopy(spoken)
+        # Exercise the final assembled model input, independently of normal
+        # history: the old leak lived in APP_STATE even when history was empty.
+        for outcome in ('allow', 'deny'):
+            with self.subTest(current_permission=outcome):
+                ctx = permissions.ctx_for('enforce')
+                with mock.patch.object(authz, 'gate', return_value=SimpleNamespace(outcome=outcome)):
+                    messages = AgentRuntimeService._assemble(SimpleNamespace(), ctx, 'Continue', [], [], [], [], [], spoken=spoken)
+                rendered = str(messages)
+                self.assertIn('my dictated request', rendered)
+                self.assertNotIn('retired private voice preference', rendered)
+                self.assertNotIn('untrusted transcript role', rendered)
+        self.assertEqual(spoken, original, 'native voice records are not rewritten')
+
+    def test_voice_transcript_projection_keeps_off_and_shadow_unchanged(self):
+        value = {'recentVoiceTranscript':[{'role':'assistant', 'text':'legacy voice answer'}]}
+        for mode in ('off', 'shadow'):
+            with self.subTest(mode=mode), mock.patch.object(authz, 'gate', return_value=SimpleNamespace(outcome='deny')):
+                self.assertIs(authz.filter_app_state(self.context(mode), value), value)
+
+    def test_enforced_voice_transcript_rejects_malformed_lines(self):
+        ctx = self.context()
+        with mock.patch.object(authz, 'gate', return_value=SimpleNamespace(outcome='allow')):
+            for value in (None, 'raw private prose', [{'role':'user','text':{'private':'data'}}, None]):
+                self.assertEqual(authz.filter_app_state(ctx, {'recentVoiceTranscript':value})['recentVoiceTranscript'], [])
+
     def context(self, mode='enforce', scopes=None):
         return SimpleNamespace(config=SimpleNamespace(permissions_for=lambda _:mode), workspace_id=permissions.WS,
                                principal=permissions.ME, membership=permissions.OWNER, now=lambda:permissions.NOW,

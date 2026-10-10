@@ -903,6 +903,19 @@ def filter_app_state(ctx, app_state):
             if ident == "context.memory_layers":
                 record_memory_context(ctx)
     if mode == "enforce":
+        if "recentVoiceTranscript" in out:
+            # Realtime assistant speech has no trusted per-line capability or
+            # memory-revision provenance. It cannot safely be replayed after a
+            # grant changes, even when ordinary message history was filtered.
+            # Keep the person's own dictated instructions; native transcripts
+            # remain available for inspection without becoming model context.
+            lines = out["recentVoiceTranscript"]
+            out["recentVoiceTranscript"] = [
+                {"role": "user", "text": line["text"]}
+                for line in (lines if isinstance(lines, list) else [])
+                if isinstance(line, dict) and line.get("role") == "user"
+                and isinstance(line.get("text"), str)
+            ]
         ctx.authz_used_capabilities = used
     return out if mode == "enforce" else app_state
 

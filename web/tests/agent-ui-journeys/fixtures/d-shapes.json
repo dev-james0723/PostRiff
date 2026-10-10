@@ -23,6 +23,12 @@
     ]
    }
   },
+  "analytics_posts": {
+   "keys": [
+    "workspaceId"
+   ],
+   "lists": {}
+  },
   "campaign_items": {
    "keys": [],
    "lists": {
@@ -58,7 +64,10 @@
    }
   },
   "draft_evidence": {
-   "keys": [],
+   "keys": [
+    "workspaceId",
+    "claimsTruncated"
+   ],
    "lists": {
     "sources": [
      "ref",
@@ -71,7 +80,9 @@
      "origin",
      "published",
      "retracted",
-     "title"
+     "title",
+     "evidence",
+     "claims"
     ]
    }
   },
@@ -156,7 +167,8 @@
     "definitionVersion",
     "undated",
     "verifiedPostsInWindow",
-    "postsWithReadings"
+    "postsWithReadings",
+    "workspaceId"
    ],
    "lists": {
     "posts": [
@@ -456,7 +468,9 @@
     "draftId",
     "edges",
     "sources",
-    "voiceFit"
+    "voiceFit",
+    "workspaceId",
+    "claimsTruncated"
    ],
    "lists": {
     "sources": [
@@ -472,7 +486,9 @@
      "origin",
      "host",
      "published",
-     "fetchedAt"
+     "fetchedAt",
+     "evidence",
+     "claims"
     ]
    }
   },
