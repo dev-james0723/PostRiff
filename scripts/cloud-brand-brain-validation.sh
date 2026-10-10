@@ -45,7 +45,7 @@ result = unittest.TextTestRunner(verbosity=1).run(suite)
 raise SystemExit(0 if result.wasSuccessful() else 1)
 PY
   # Each suite owns its disposable cluster; no fixture state leaks between suites.
-  for bb_suite in tests/phase2/postgres_brand_brain*.py tests/phase2/postgres_raffi_voice_sources.py tests/phase2/postgres_memory_proposals.py tests/phase2/postgres_growth_phase1.py; do
+  for bb_suite in tests/phase2/postgres_brand_brain*.py tests/phase2/postgres_raffi_voice_sources.py tests/phase2/postgres_memory_proposals.py tests/phase2/postgres_growth_phase1.py tests/phase2/postgres_consumer_campaign_worker.py; do
     [ -f "$bb_suite" ] || { echo "Missing required suite $bb_suite" >&2; exit 3; }
     "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py "$bb_suite" || bb_failed=1
   done

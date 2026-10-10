@@ -1561,9 +1561,12 @@ class IdeasService:
             # Re-check consent at the dispatch boundary after the reservation transaction
             # committed. A concurrent revocation must not become a fresh provider request.
             try:
-                dispatch_state = self.repository.get(workspace_id, token)["state"]
-                memory.validate_receipt(dispatch_state, sink.outcome.get("memoryReceipt"), sink.outcome.get("voiceContext"))
-                voice_sources.validate_bindings(dispatch_state, sink.outcome.get("voiceContext") or {})
+                # Use the normal transaction contract, including a recurring worker's
+                # bound authority. The UI read helper also permits deletion readback.
+                with self.repository.transaction(token, workspace_id) as (_, dispatch_row, _):
+                    dispatch_state = self._state(dispatch_row)
+                    memory.validate_receipt(dispatch_state, sink.outcome.get("memoryReceipt"), sink.outcome.get("voiceContext"))
+                    voice_sources.validate_bindings(dispatch_state, sink.outcome.get("voiceContext") or {})
             except AlphaError as error:
                 sink.fail(str(error), known_cost_usd=0.0)
                 raise

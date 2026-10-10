@@ -6,7 +6,8 @@
     "web/src/features/agent/attachments/attachment-bar.tsx": "debc178d30d657e017a132bfd28932f35bbce2d5e1b13b93f7d4c12ba2faa421",
     "web/tests/rafii-attachments.cjs": "406ee089884d50bab8e73204cda4d276424f04b0e285a49de3a54a460c1b1245",
     "skills/postriff-security-and-approval/SKILL.md": "9d404cbb20739b655f59de67601c472ebca083b4f238cc96564c68b5aa409216",
-    "skills/rafii-registry.json": "3aedb39efadfdce742466fdf81b5672ea95e2a71f3d0c262b503ea3037c92e8a"
+    "skills/rafii-registry.json": "3aedb39efadfdce742466fdf81b5672ea95e2a71f3d0c262b503ea3037c92e8a",
+    "tests/phase2/postgres_consumer_campaign_worker.py": "924ec2a9930010466ed53d1a4eb2ce8fef0169d39bdc18f6e54942b48cd8f0ae"
   },
   "validation": "Use latest PR checks; these files supplement dedicated cloud evidence and do not replace its recorded source hashes.",
   "localValidation": [
@@ -17,6 +18,8 @@
   "priorFailures": [
     "38077795361",
     "38078107207",
-    "38078107152"
-  ]
+    "38078107152",
+    "38078767129"
+  ],
+  "backendFollowupRun": "g47rz51ls0"
 }

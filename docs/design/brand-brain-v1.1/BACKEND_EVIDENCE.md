@@ -1,16 +1,17 @@
 # Brand Brain v1.1 backend evidence
 
-Scope: server portions of [acceptance.json](acceptance.json). This mapping does not certify UI, live-provider quality, human usability or deployment. Source was frozen after the coordinator's r12 cloud validation; this document adds no product changes.
+Scope: server portions of [acceptance.json](acceptance.json). This mapping does not certify UI, live-provider quality, human usability or deployment. Final backend source is verified by r14, including the background-worker preflight repair.
 
 ## Observed validation
 
-The retained [cloud transcript excerpt](evidence/backend-r12.txt) and [source-bound receipt](evidence/backend-r12.json) record **179 Python tests passing** and all five disposable PostgreSQL suites exiting 0:
+The retained [cloud transcript excerpt](evidence/backend-r14.txt) and [source-bound receipt](evidence/backend-r14.json) record **179 Python tests passing** and all six disposable PostgreSQL suites exiting 0:
 
 - [postgres_brand_brain.py](../../../tests/phase2/postgres_brand_brain.py): source consent, real hosted commands, candidate/preview isolation, owner approval, schedule holds, restore, workspace isolation, legacy allowance and CreditBook admission/settlement, durable audit.
 - [postgres_brand_brain_memory.py](../../../tests/phase2/postgres_brand_brain_memory.py): **28/28 checks**, including its reused baseline's 14 checks; actual supplied writer memory, stored run receipts, canonical edits and stale application rejection.
 - [postgres_raffi_voice_sources.py](../../../tests/phase2/postgres_raffi_voice_sources.py): existing source permission and retention regression.
 - [postgres_memory_proposals.py](../../../tests/phase2/postgres_memory_proposals.py): existing authorized preference proposal/activation/pause/retirement lifecycle.
 - [postgres_growth_phase1.py](../../../tests/phase2/postgres_growth_phase1.py): shared integration regression.
+- [postgres_consumer_campaign_worker.py](../../../tests/phase2/postgres_consumer_campaign_worker.py): bound worker authority, in-flight cancellation, committed provider-call reconciliation without repeat charge, and neutral fallback.
 
 Execution was remote, PostgreSQL 16.15, with synthetic identities and injected/template model transports. Database persistence, permissions, reservations and settlements were real against disposable databases; no paid provider was contacted. The coordinator owns the durable cloud run receipt in [ENGINEERING_RECEIPT.md](ENGINEERING_RECEIPT.md). No checks were rerun for this mapping.
 

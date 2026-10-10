@@ -1,12 +1,12 @@
 {
   "sha256": {
     "scripts/cloud-brand-brain-browser.sh": "b051c68d5d85c108938f2bfb2373f472410b69a49032c92d60dcfb3f8558a047",
-    "scripts/cloud-brand-brain-validation.sh": "bd1fb9caf34bf0045f9899520d7a7bf4de0f4d8962ced0ebb90fc62f92b8cee0",
+    "scripts/cloud-brand-brain-validation.sh": "93dfdcee6bfd25706ad7dee39fd39ff3678bbe5c06967afaf9116cc9beedd5d6",
     "src/postriff_phase2/brand_brain.py": "ff03d6753fb2ecef8aa88b454c5b272befd45c11b1a6f97baba5ff3bb7e815fd",
     "src/postriff_phase2/growth/advice_context.py": "d64397fce88b44bc22df5d2edfdde0dd9a641e9860f1396a5d91897a9cbdc38d",
     "src/postriff_phase2/growth/service.py": "d9902ebf716d5c9c46c96632fb66209d2fc5376fc62861366d07a579add46777",
     "src/postriff_phase2/hosted.py": "0eb8f9e83a0901469e919cf6b5f543d02d7eba197617573ce62c5311813313de",
-    "src/postriff_phase2/ideas.py": "2ce7804bf10cdd8d1ef59a9cd76551ae1ad0264632edd019c16bde6e70f2d3af",
+    "src/postriff_phase2/ideas.py": "21d850c65f4c277860834267e394c89d0aed7340bd73041c9c7ee9fad29a3f20",
     "src/postriff_phase2/memory.py": "77555e1efb8f1e6dec292bd7a21e906a08e4eb05af4cbb38ea64513a26113168",
     "src/postriff_phase2/permissions.py": "ae9b4ec1f41498c3d79f22136056c47bd62f9370fa3196ef5eabf9ecd412a5e2",
     "src/postriff_phase2/reply_writer.py": "5e61fd90651e28a177fd818fa36ce34927d9f9ad48d06097ffb5cb98e5d333d2",
@@ -76,6 +76,18 @@
   "nodeTests": 927,
   "productionBuild": "PASS",
   "browserCheckpoints": 26,
-  "backendEvidence": "backend-r12.json",
-  "finalSourceMatches": true
+  "backendEvidence": "backend-r14.json",
+  "finalSourceMatches": true,
+  "validationOverrides": {
+    "scripts/cloud-brand-brain-validation.sh": {
+      "previousHash": "bd1fb9caf34bf0045f9899520d7a7bf4de0f4d8962ced0ebb90fc62f92b8cee0",
+      "run": "g47rz51ls0",
+      "evidence": "backend-r14.json"
+    },
+    "src/postriff_phase2/ideas.py": {
+      "previousHash": "2ce7804bf10cdd8d1ef59a9cd76551ae1ad0264632edd019c16bde6e70f2d3af",
+      "run": "g47rz51ls0",
+      "evidence": "backend-r14.json"
+    }
+  }
 }
