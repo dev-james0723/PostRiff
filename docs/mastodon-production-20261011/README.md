@@ -6,6 +6,22 @@ Worktree: `/Users/ouxianxing/Documents/Open Claw/rafii-mastodon-production`.
 Branch: `codex/rafii-mastodon-production-20261011`.
 Base: `b7b9b3ee94f89a80b1d80826226584d214b17847` (`origin/consumer-saas`).
 
+## 2026-10-11 release continuation
+
+Current repair source: `27ff4437221d9e96269bdae8fbaa268bc42fef41`. Repair worktree: `/Users/ouxianxing/.codex/worktrees/rafii-mastodon-release/James-Au-Studio`; the original candidate worktree and another session's lease remain preserved. PR #176 remains **Draft**. No real A–E tests or production release actions have run.
+
+Independent source review found and closed stale worker credential admission, non-atomic disconnect, and late callback consent races. A dedicated advisory transaction now spans Mastodon publishing and serializes successful owner disconnect. In-flight writes produce a busy conflict instead of a false successful disconnect. Already accepted native schedules need separate cancellation; pause/cancel/health/reconnect retain intent-admission checks. Staging must validate pool and timeout behavior.
+
+Remote regressions pass: 211 Python contracts in `1n8ck8fxq6` and 27 Mastodon PostgreSQL tests in `hplrp9v3sn`. Failed runs and exact dirty-snapshot fingerprints are retained in `security-repair-receipt.json`; a sourceHead alone does not identify those dirty snapshots. Unchanged successful tests are reused. Local checks were AST/bash syntax and diff whitespace only. Broad GitHub checks on prior candidate `7842f874` all pass, superseding the historical pending/failure observations below. The repair's pushed-head CI is still required.
+
+Public preflight verifies separate deployments operated by Mastodon GmbH (`mastodon.social`, 4.8.0 nightly) and stux/Stuxhost (`mstdn.social`, 4.7.2). Both inspected browser pages show signed-out state. Their full owner identities and granted scopes remain unverified. `owner-authorization.md` contains exact signup/sign-in instructions; no OAuth URLs have been fabricated. Exact OAuth URLs require a real staged application registration and authenticated owner state/PKCE.
+
+The existing staging database is active for another release. A dedicated Supabase branch has a concrete action preview in `staging-action-preview.json`, pending owner approval for up to 24 hours/USD 1 and an account-specific quote. The connector's cost tool is unavailable. Real Brand Brain model budget and exact authorized handles/actions also remain pending. No passwords, tokens or client secrets are requested through chat.
+
+Hosted isolated migrations 113–115 upgrade/restoration/compatibility, real A–E, production backup readiness, release review, production migrations/gates/merge/deployment/smoke and live SHA are **NOT_RUN or NOT_VERIFIED**. Disposable migration proofs remain synthetic staging substitutes and do not satisfy that gate. Final release remains blocked. Model tokens, attributable model/infrastructure costs and Token Pilot savings are **UNKNOWN**; no reliable comparable baseline is available.
+
+The following phase history preserves earlier evidence and its original source scope.
+
 ## Candidate implemented
 
 - Arbitrary compatible public HTTPS instance domains/account handles, strict URL validation, all-answer public DNS checks, pinned TLS connections, no redirects, bounded JSON and request timeouts.

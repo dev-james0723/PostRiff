@@ -1,6 +1,6 @@
 {
   "schema": "rafii.mastodon.candidate.validation.v1",
-  "execution": "cloud synthetic external services; disposable SQL; actual application browser",
+  "execution": "candidate; real A–E blocked on owner authorization and isolated staging; NOT MERGED; NOT DEPLOYED",
   "allMissionRequirementsMet": false,
   "ci": {
     "sourceFingerprint": "cf2dfb55ff434b525d20f658025dc7d3a34f4351f551242779ac1764dc347f90",
@@ -211,13 +211,28 @@
     "merged": false,
     "deployedToRafiiIo": false,
     "migration114Applied": false,
-    "migration115Applied": false
+    "migration115Applied": false,
+    "executionByThisMission": "NONE",
+    "liveReleaseSha": "UNKNOWN",
+    "smokeTests": "NOT_RUN",
+    "backupReadiness": "NOT_VERIFIED",
+    "rollbackReadiness": "Release procedures documented; real production backup/restoration and feature-disable rehearsal NOT_RUN"
   },
   "externalInputNeeded": [
-    "Two authorized account handles on independently hosted Mastodon instances",
-    "Owner OAuth authorization and permission for clearly labelled test publication/edit/deletion"
+    "Two exact owner-authorized full public account handles; two independent operators preflighted",
+    "Owner authorization for the specific temporary media/posts/edits/schedules/automation/deletions and disconnect/reconnect actions in staging-action-preview.json",
+    "Account-owner approval for dedicated Supabase branch for up to 24 hours and USD 1 after exact quote verification",
+    "Maximum attributable USD budget for real Brand Brain model call; no purchase or top-up",
+    "Owner OAuth completion on the two exact application authorization URLs after secure staging exists"
   ],
-  "remainingEngineering": "README.md: Engineering work still open before production",
+  "remainingEngineering": [
+    "Provision and verify isolated hosted staging after cost authorization; actual application, separate DB/auth/storage/encryption keys and blocked other egress",
+    "Verify real app registration, redirect URL/state/PKCE/scopes/callback; present exact owner OAuth URLs",
+    "Execute real A–E with actual post IDs/URLs and provider-side cleanup receipts",
+    "Test migrations 113–115 upgrade/restoration/compatibility on isolated hosted staging",
+    "Final repair GitHub CI and independent release review; verify backup and rollback before conditional release",
+    "Conditional production migration/gates/merge/deployment and real smoke, including live SHA"
+  ],
   "evidence": [
     {
       "path": "evidence/CLOUD-SYNTHETIC-browser.json",
@@ -554,17 +569,82 @@
     }
   ],
   "githubCI": {
-    "observedAt": "2026-10-11T10:40:00Z",
-    "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
-    "localGates": {
-      "checkRunId": 114445381385,
-      "conclusion": "failure",
-      "python": "PASS",
-      "postgres": "FAIL: Time Back credit rolled back with failing optional insights hook; repaired and targeted SQL passes above"
-    },
-    "scenes": "PASS",
-    "otherChecks": "PASS; exact final commit checks pending after push",
-    "scope": "Prior pushed commit only; final source has not yet been pushed."
+    "observedAt": "2026-10-11T19:04:47.608984+00:00",
+    "headRevision": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+    "status": "PASS",
+    "checks": [
+      {
+        "name": "dependency-lock",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629726"
+      },
+      {
+        "name": "founder",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204688/job/114451628766"
+      },
+      {
+        "name": "growth-studio",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204790/job/114451629157"
+      },
+      {
+        "name": "native-learning-browser",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204722/job/114451628960"
+      },
+      {
+        "name": "scenes",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204741/job/114451629070"
+      },
+      {
+        "name": "local-gates",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204721/job/114451629043"
+      },
+      {
+        "name": "library",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629423"
+      },
+      {
+        "name": "generate-assets",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629594"
+      },
+      {
+        "name": "document-runtime",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629255"
+      },
+      {
+        "name": "dependency-lock",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204734/job/114451629930"
+      },
+      {
+        "name": "agent-ui",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451628873"
+      },
+      {
+        "name": "agent-ui-browser",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/38133204736/job/114451629031"
+      },
+      {
+        "context": "Vercel",
+        "state": "SUCCESS",
+        "targetUrl": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/871gFsFdiDUj4xj8efG6x5uoGFDH"
+      },
+      {
+        "name": "Vercel Preview Comments",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://vercel.com/github"
+      }
+    ],
+    "scope": "All applicable checks passed on prior candidate 7842f874. Repair source is a later revision; its final pushed-head checks remain pending."
   },
   "browserArtifact": {
     "provider": "Depot CI",
@@ -861,6 +941,19 @@
         }
       ],
       "scope": "Phase8 GitHub CI: library regression fixed; scenes fails phone revoke button contrast, with scoped foreground-text repair in phase9 candidate. local-gates pending. Vercel Preview only."
+    },
+    {
+      "observedAt": "2026-10-11T10:40:00Z",
+      "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "localGates": {
+        "checkRunId": 114445381385,
+        "conclusion": "failure",
+        "python": "PASS",
+        "postgres": "FAIL: Time Back credit rolled back with failing optional insights hook; repaired and targeted SQL passes above"
+      },
+      "scenes": "PASS",
+      "otherChecks": "PASS; exact final commit checks pending after push",
+      "scope": "Prior pushed commit only; final source has not yet been pushed."
     }
   ],
   "priorBackendValidation": {
@@ -895,5 +988,124 @@
       "actual Time Back SQL/RLS/aggregate/failed optional hook regression",
       "two-instance Automation/Brand Brain/Queue/SQL with revoke A while B remains functional"
     ]
+  },
+  "repairSourceRevision": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+  "securityRepairValidation": {
+    "status": "PASS",
+    "receipt": "security-repair-receipt.json",
+    "pythonContracts": 211,
+    "postgresMastodonManagement": 27,
+    "pythonRunId": "1n8ck8fxq6",
+    "postgresRunId": "hplrp9v3sn",
+    "providerResponses": "synthetic",
+    "scope": "Dirty JCB snapshots above candidate sourceHead, exact fingerprints retained. Python source unchanged after its successful check; SQL fixture cleanup changed and was rerun. Final GitHub CI required."
+  },
+  "independentRepairReview": {
+    "status": "SOURCE_PASS_SCOPED",
+    "reviewer": "mastodon_security_review independent read-only agent",
+    "committedSourceRevision": "27ff4437221d9e96269bdae8fbaa268bc42fef41",
+    "priorFindings": [
+      "P1 stale cached credential at worker write admission",
+      "P2 split credential/channel disconnect and late callback consent race"
+    ],
+    "remainingLimits": [
+      "Gate depends on healthy retained database transaction through HTTP; staging pool/timeout verification pending",
+      "Pause/cancel/reconnect/health mutations use per-intent checks; already admitted effects can finish",
+      "Previously accepted native schedules require explicit provider cancellation"
+    ],
+    "releaseReview": "INCOMPLETE; no GitHub approval; real A–E remains required"
+  },
+  "instancePreflight": [
+    {
+      "origin": "https://mastodon.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mastodon.social",
+      "version": "4.8.0-nightly.2026-10-06",
+      "title": "Mastodon",
+      "registrations": {
+        "enabled": true,
+        "approval_required": false,
+        "reason_required": false,
+        "message": null,
+        "min_age": 16,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "Mastodon",
+        "url": "https://mastodon.social/@Mastodon"
+      },
+      "ownerAccountAuthorized": false,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mastodon.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "Mastodon GmbH",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.210765+00:00"
+      },
+      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "signupUrl": "https://mastodon.social/auth/sign_up",
+      "signInUrl": "https://mastodon.social/auth/sign_in"
+    },
+    {
+      "origin": "https://mstdn.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mstdn.social",
+      "version": "4.7.2",
+      "title": "Mastodon 🐘",
+      "registrations": {
+        "enabled": true,
+        "approval_required": true,
+        "reason_required": true,
+        "message": null,
+        "min_age": 18,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "stux",
+        "url": "https://mstdn.social/@stux"
+      },
+      "ownerAccountAuthorized": false,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mstdn.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "stux / Stuxhost",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.211001+00:00"
+      },
+      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "signupUrl": "https://mstdn.social/auth/sign_up",
+      "signInUrl": "https://mstdn.social/auth/sign_in"
+    }
+  ],
+  "staging": {
+    "status": "BLOCKED_OWNER_COST_AUTHORIZATION",
+    "actionPreview": "staging-action-preview.json",
+    "vercelProject": "rafii-consumer-staging",
+    "existingStagingDatabase": "oxacvkhpfgytkepxcaqh",
+    "existingDatabaseIsIsolatedForThisMission": false,
+    "reason": "Recent x_request_admission migration shows shared staging is active for another release. No migrations/restoration or credentials changed there.",
+    "dedicatedDatabase": "NOT_CREATED",
+    "ownerAuthorizationUrls": [],
+    "appRegistration": "NOT_RUN",
+    "callbackConfiguration": "NOT_APPLIED",
+    "connectorCostQuote": "validation_unavailable: supabase get_cost not returned by tools/list"
+  },
+  "migrationHostedStaging": {
+    "113": "NOT_RUN; dedicated isolated staging not provisioned",
+    "114": "NOT_RUN; dedicated isolated staging not provisioned",
+    "115": "NOT_RUN; dedicated isolated staging not provisioned"
+  },
+  "costReport": {
+    "acceptancePaidModelCalls": 0,
+    "modelTokenUsage": "UNKNOWN",
+    "attributableModelCostUsd": "UNKNOWN",
+    "attributableInfrastructureCostUsd": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN",
+    "comparableBaseline": "UNKNOWN",
+    "note": "No measured provider token counters, attributable billing or comparable baseline available; no invented savings."
   }
 }

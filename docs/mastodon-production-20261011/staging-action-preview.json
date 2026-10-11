@@ -1,0 +1,145 @@
+{
+  "schema": "rafii.mastodon.staging.action-preview.v1",
+  "execution": "REVIEWABLE_CANDIDATE_NOT_EXECUTED",
+  "sourceCandidate": "7842f874f9100a98eaef98f68c2839a9368b27e3",
+  "securityRepair": "Credential admission, atomic disconnect/completion fences and shared outbound/disconnect advisory transaction; remote validation in progress.",
+  "vercel": {
+    "project": "rafii-consumer-staging",
+    "projectId": "prj_4bfvSc0AC6am9FdknFWcwNYgmcnN",
+    "target": "preview",
+    "gitBranch": "codex/rafii-mastodon-production-20261011",
+    "alias": "https://rafii-mastodon-acceptance-jamesau0723-6572s-projects.vercel.app",
+    "aliasCurrentlyUnassigned": true,
+    "keepDeploymentProtection": true
+  },
+  "database": {
+    "parentStagingProject": "oxacvkhpfgytkepxcaqh",
+    "proposedBranch": "rafii-mastodon-pr176-20261011",
+    "branchRef": "PENDING_PROVISIONING",
+    "copyProductionData": false,
+    "sharedStagingDestructiveTests": false,
+    "productionRef": "buoyhkbodnhzngaotoel",
+    "isolatedBranchCostAuthorization": "REQUIRED",
+    "accountSpecificCostQuote": "UNAVAILABLE: get_cost endpoint not returned by tools/list",
+    "documentedMicroComputeStartingUSDPerHour": 0.01344,
+    "pricingSource": "https://supabase.com/docs/guides/platform/manage-your-usage/branching",
+    "otherUsageCharges": "additional disk, egress, storage; not covered by spend cap",
+    "migrations": [
+      {
+        "path": "migrations/postriff/113_mastodon_management.sql",
+        "sha256": "c85e2d27f79947692a1bf28a7087fcbe7b0d3ea9d3c57e2e0fe2dd654bacf694"
+      },
+      {
+        "path": "migrations/postriff/114_mastodon_native_metrics.sql",
+        "sha256": "c3a887b379958bdb32282120f6b9dc5515b02882da279898453fedb8f7886d3b"
+      },
+      {
+        "path": "migrations/postriff/115_mastodon_connection_health.sql",
+        "sha256": "eeae6a4f48fb7616ce168f672c05d6ba7e169aa91951c17fc1c4c187fb437905"
+      }
+    ]
+  },
+  "callback": "https://rafii-mastodon-acceptance-jamesau0723-6572s-projects.vercel.app/api/oauth/mastodon/callback",
+  "configuration": {
+    "POSTRIFF_ENVIRONMENT": "staging",
+    "POSTRIFF_OAUTH_MASTODON_ENABLED": "true",
+    "POSTRIFF_OAUTH_MASTODON_REVIEWED": "true only after security repairs PASS; acceptance branch only",
+    "POSTRIFF_PUBLIC_BASE_URL": "exact alias above",
+    "POSTRIFF_STAGING_PUBLIC_BASE_URL": "exact alias above",
+    "POSTRIFF_STAGING_PROJECT_REF": "new independent branch ref",
+    "POSTRIFF_PRODUCTION_PROJECT_REF": "buoyhkbodnhzngaotoel",
+    "NEXT_PUBLIC_SUPABASE_URL": "new branch URL",
+    "POSTRIFF_SUPABASE_URL": "new branch URL",
+    "POSTRIFF_DATABASE_URL": "new branch TLS DSN; sensitive server store only",
+    "POSTRIFF_CREDENTIAL_KEY": "fresh independent key; sensitive server store only",
+    "POSTRIFF_STAGING_SECRET_SHA256": "exact new branch credentials pinned server-side",
+    "POSTRIFF_RESEARCH": "0",
+    "POSTRIFF_LOCAL_CLI": "0",
+    "otherProviderExecution": "disabled for acceptance branch",
+    "notificationsPhoneResearchGrowthEgress": "disabled per isolated_environment"
+  },
+  "ownerAccounts": "PENDING exact two authorized independent-instance handles",
+  "authorizationUrls": "NOT_CREATED: requires authenticated staging owner, encrypted application cache and one-use state/PKCE transaction",
+  "candidatePublicInstancePreflight": [
+    {
+      "origin": "https://mastodon.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mastodon.social",
+      "version": "4.8.0-nightly.2026-10-06",
+      "title": "Mastodon",
+      "registrations": {
+        "enabled": true,
+        "approval_required": false,
+        "reason_required": false,
+        "message": null,
+        "min_age": 16,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "Mastodon",
+        "url": "https://mastodon.social/@Mastodon"
+      },
+      "ownerAccountAuthorized": false,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mastodon.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "Mastodon GmbH",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.210765+00:00"
+      },
+      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "signupUrl": "https://mastodon.social/auth/sign_up",
+      "signInUrl": "https://mastodon.social/auth/sign_in"
+    },
+    {
+      "origin": "https://mstdn.social",
+      "observedAt": "2026-10-11T18:47:06.251953+00:00",
+      "status": "PUBLIC_API_OBSERVED",
+      "domain": "mstdn.social",
+      "version": "4.7.2",
+      "title": "Mastodon 🐘",
+      "registrations": {
+        "enabled": true,
+        "approval_required": true,
+        "reason_required": true,
+        "message": null,
+        "min_age": 18,
+        "url": null
+      },
+      "operatorAccount": {
+        "acct": "stux",
+        "url": "https://mstdn.social/@stux"
+      },
+      "ownerAccountAuthorized": false,
+      "independentHostingVerified": true,
+      "independenceEvidence": {
+        "source": "https://mstdn.social/about",
+        "method": "native Chrome accessibility inspection",
+        "operator": "stux / Stuxhost",
+        "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
+        "recordedAt": "2026-10-11T19:02:17.211001+00:00"
+      },
+      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "signupUrl": "https://mstdn.social/auth/sign_up",
+      "signInUrl": "https://mstdn.social/auth/sign_in"
+    }
+  ],
+  "mediaCandidate": {
+    "path": "web/public/raffi/avatar-256.png",
+    "sha256": "6ac56752cb008d6dc27640cc53567fd724a4cd9068123289e8705683b88d792f",
+    "alt": "Rafii application avatar used for an owner-authorized Mastodon acceptance test",
+    "rights": "project-owned asset; final owner approval pending"
+  },
+  "testContentPreview": {
+    "manual": "Rafii × Mastodon acceptance test — manual media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "nativeScheduled": "Rafii × Mastodon acceptance test — native scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "managedScheduled": "Rafii × Mastodon acceptance test — Rafii-managed scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "automation": "Rafii × Mastodon acceptance test — owner-approved automation. This temporary owner-authorized test will be deleted after verification."
+  },
+  "productionChanges": false,
+  "liveProviderWrites": false,
+  "modelCalls": false,
+  "cleanup": "only recorded owned acceptance post IDs; delete branch only after retaining redacted receipts and owner-authorized cleanup"
+}
