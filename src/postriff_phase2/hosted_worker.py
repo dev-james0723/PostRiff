@@ -305,10 +305,16 @@ class PostgresWorker:
                         if job.get("state") == "submitting":
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
-                        channel = find(state['phase2']['channels'], job['manifest']['channelId'])
-                        linkedin_reverify = (job['manifest']['platform'] == 'LinkedIn' and not reconciliation
-                                             and self.commands.engine.channel_reverification_due(channel))
-                        if (forward or (scoped and not reconciliation)) and not self._approved(cur, workspace_id, state, job, allow_reverification=linkedin_reverify):
+                        linkedin_reverify = False
+                        if job['manifest']['platform'] == 'LinkedIn' and not reconciliation:
+                            try:
+                                channel = find(state['phase2']['channels'], job['manifest']['channelId'])
+                            except AlphaError:
+                                self._event(job, 'held', 'LinkedIn connection is unavailable; a new review is required')
+                                continue
+                            linkedin_reverify = self.commands.engine.channel_reverification_due(channel)
+                        authority_options = {'allow_reverification': True} if linkedin_reverify else {}
+                        if (forward or (scoped and not reconciliation)) and not self._approved(cur, workspace_id, state, job, **authority_options):
                             self._event(job, 'held', 'Approval, account, media, timing or permission changed; a new review is required')
                             continue
                         if not reconciliation:

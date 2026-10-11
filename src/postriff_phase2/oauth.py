@@ -546,7 +546,10 @@ class OAuthService:
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
             raise AlphaError("Connection request unavailable.", 404)
         state_hash = hashlib.sha256(state.encode()).hexdigest()
-        claimed = self._claim_redirect(workspace_id, token, provider_id, state_hash) if not bot_code and not device_code else None
+        if not bot_code and not device_code and claimed is None:
+            # YouTube already commits single use before unlocked quota admission.
+            # Reuse that internal claim; consuming it twice rejects a valid callback.
+            claimed = self._claim_redirect(workspace_id, token, provider_id, state_hash)
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -1395,6 +1398,14 @@ class OAuthService:
                       "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed",
                       **({'refreshBindingRequired': grant.get('refreshBindingRequired') is True} if provider_id == 'youtube' else {})}
         except AlphaError as error:
+            if provider_id == 'youtube':
+                # Even an unavailable identity observation must not hide replacement
+                # consent. The same token text can belong to a newer generation.
+                with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                    from .hosted import _membership
+                    require(_membership(row), 'manage_connections')
+                    self._assert_youtube_generation(cur, workspace_id, connection_id,
+                        grant.get('authorizationGeneration') if grant else starting_generation)
             if provider_id == 'youtube' and error.code in ('youtube_verification_unavailable', 'youtube_oauth_binding_required', 'youtube_oauth_binding_changed', 'youtube_capacity_schema', 'youtube_capacity_delay'):
                 # Manual Verify must preserve the same authority as worker revalidation
                 # when Google cannot provide an authoritative scope observation.

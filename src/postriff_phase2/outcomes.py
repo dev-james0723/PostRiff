@@ -45,7 +45,10 @@ def normalize_result(result, job, reconciliation=False):
             or not isinstance(result.get("confirmed"), str)
             or not 1 <= len(result["confirmed"]) <= 2000):
         return unknown("Malformed adapter response; reconcile before retry")
-    if result['state'] in ('native_scheduled', 'canceled') and result.get('verification') != 'provider_lookup':
+    local_upload_stop = (youtube_progress and job.get('cancelRequested') is True
+                         and result['progress'].get('stage') == 'canceled'
+                         and job.get('progress', {}).get('stage') not in ('native_scheduled', 'native_schedule_reconciling'))
+    if (result['state'] == 'native_scheduled' or result['state'] == 'canceled' and not local_upload_stop) and result.get('verification') != 'provider_lookup':
         return unknown('Native schedule/cancellation needs provider lookup evidence')
     reference = result.get("reference", job.get("providerReference"))
     if reference is not None and (not isinstance(reference, str) or not 1 <= len(reference) <= 500):

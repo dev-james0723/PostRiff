@@ -231,26 +231,23 @@ class YouTubeIdentityFenceTests(unittest.TestCase):
                 self.assertEqual(db.identity_at, NOW)
                 self.assertEqual((db.state['phase2']['jobs'], db.state['phase2']['reviews']), (jobs, reviews))
 
-    def test_completion_after_disconnect_or_new_consent_rolls_back_profile_save(self):
-        for replacement in (False, True):
-            with self.subTest(replacement=replacement):
-                oauth, db, _ = identity_service()
-                original_get, expected = oauth.repository.get, []
-
-                def changed_after_custody(*args):
-                    db.disconnect()
-                    if replacement:
-                        db.replace()
-                    expected.append(db.durable())
-                    return original_get(*args)
-
-                with patch.object(oauth.repository, 'get', side_effect=changed_after_custody), \
-                     patch('postriff_phase2.billing.require_plan_capacity'), \
-                     patch('postriff_phase2.product_events.record'):
-                    with self.assertRaises(AlphaError) as caught:
-                        oauth._complete('workspace', 'session', 'youtube', 'x' * 32, 'synthetic-code')
-                self.assertEqual(caught.exception.code, 'youtube_connection_changed')
-                self.assertEqual(db.durable(), expected[0])
+    def test_profile_save_failure_rolls_back_connection_custody_atomically(self):
+        # Completion now saves credentials and the profile in one transaction;
+        # the old repository.get gap no longer exists. Failure after new custody
+        # must leave the existing consent, identity, grants and pictures intact.
+        oauth, db, _ = identity_service()
+        before = db.durable()
+        def failed_profile(*args, **kwargs):
+            self.assertEqual(db.depth, 1)
+            self.assertNotEqual(db.generation, before[2])
+            raise AlphaError('Synthetic profile save failure.', 503, code='synthetic_profile_failure')
+        with patch.object(oauth.commands, 'upsert_verified_channel', side_effect=failed_profile), \
+             patch('postriff_phase2.billing.require_plan_capacity'), \
+             patch('postriff_phase2.product_events.record'):
+            with self.assertRaises(AlphaError) as caught:
+                oauth._complete('workspace', 'session', 'youtube', 'x' * 32, 'synthetic-code')
+        self.assertEqual(caught.exception.code, 'synthetic_profile_failure')
+        self.assertEqual(db.durable(), before)
 
     def test_current_completion_saves_profile_and_captures_picture_generation(self):
         oauth, db, _ = identity_service()
