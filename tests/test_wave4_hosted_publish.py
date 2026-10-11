@@ -53,9 +53,11 @@ class Security(unittest.TestCase):
 
         class Response:
             status = 200
-            def read(self, _size): return b'{}'
+            def __init__(self): self.chunks = iter((b'{}', b''))
+            def read1(self, _size): return next(self.chunks)
             def getheader(self, _key, _default=""): return "application/json"
             def getheaders(self): return []
+            def close(self): pass
 
         class Connection:
             def __init__(self, host, **_kw):
@@ -65,11 +67,13 @@ class Security(unittest.TestCase):
             def close(self): pass
 
         with patch("postriff_phase2.net_guard.http.client.HTTPSConnection", Connection), patch(
-            "postriff_phase2.net_guard.socket.create_connection", return_value=SimpleNamespace(close=lambda: None)
+            "postriff_phase2.net_guard.socket.create_connection", return_value=SimpleNamespace(close=lambda: None, settimeout=lambda _seconds: None)
         ) as connect:
             self.assertEqual(pinned_public_json_transport("GET", "https://photos.example.org/api/v2/instance", resolver=resolver)["status"], 200)
         self.assertEqual(len(lookups), 1)
-        connect.assert_called_once_with(("93.184.216.34", 443), timeout=20)
+        connect.assert_called_once()
+        self.assertEqual(connect.call_args.args[0], ('93.184.216.34', 443))
+        self.assertTrue(0 < connect.call_args.kwargs['timeout'] <= 20)
 
 
 class BusinessPosts(unittest.TestCase):

@@ -149,7 +149,7 @@ class PostgresWorkspaceRepository:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             return {"revision": row[0], "state": copy.deepcopy(state), "membership": _membership(row).summary()}
 
-    def command(self, workspace_id, token, revision, trusted_command, requirement="edit", step_up=False, audit_event=None, after=None):
+    def command(self, workspace_id, token, revision, trusted_command, requirement="edit", step_up=False, audit_event=None, after=None, before=None):
         """trusted_command is application code, never a client-submitted patch. `audit_event(state)` returns
         (kind, subject, meta) for decisions that belong in the audit log, recorded in the same transaction.
         `after(cur, state, principal)` runs last, for rows that must change together with the state."""
@@ -160,9 +160,14 @@ class PostgresWorkspaceRepository:
             if type(revision) is not int or revision != row[0]:
                 raise AlphaError("Workspace changed; reload.", 409, code="workspace_revision_conflict")
             source = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-            state = trusted_command(copy.deepcopy(source), principal)
+            mutable = copy.deepcopy(source)
+            if before:
+                before(cur, mutable, principal)
+            state = trusted_command(mutable, principal)
             if not isinstance(state, dict):
                 raise AlphaError("The hosted command returned invalid state.", 500)
+            from .mastodon_media import validate_new_bindings
+            validate_new_bindings(cur, workspace_id, source, state)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if audit_event:
                 audit(cur, workspace_id, principal, *audit_event(state))
@@ -186,7 +191,12 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
-        after = None
+        after, before = None, None
+        if action == 'p2_review':
+            from .mastodon_media import prepare_library
+            payload = copy.deepcopy(payload)
+            payload.pop('_mastodonLibrary', None)
+            before = lambda cur, state, principal: prepare_library(cur, workspace_id, state, payload)
         if action == media_consent.ACTION:
             # Chat-context SPEC §8.1: the owner's decision is audited with the processors it names, and turning it off
             # deletes the kept notes in the same transaction.
@@ -199,7 +209,7 @@ class PostgresWorkspaceRepository:
         if action in ("p2_review", "p2_approve", "p2_approve_many", "raffi_run_commit"):
             from .billing import require_publishing
             after = lambda cur, state, principal: require_publishing(cur, workspace_id, self.clock())
-        return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after)
+        return self.command(workspace_id, token, expected_revision, lambda state, principal: self.commands(state, principal, action, payload), requirement=classify(action), step_up=action in STEP_UP_ACTIONS, audit_event=audit_event, after=after, before=before)
 
 
 class _NoDatabase:

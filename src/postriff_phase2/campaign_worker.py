@@ -312,6 +312,6 @@ class CampaignWorker:
         except Exception as error:  # a sweep failure never blocks scheduled runs
             logging.getLogger('postriff.automations').warning(json.dumps({'event': 'advance.failed', 'error': type(error).__name__}))
             advanced = {'error': type(error).__name__}
-        if not results and not advanced.get('workspaces') and not advanced.get('commits'):
+        if not results and not advanced.get('workspaces') and not advanced.get('commits') and not advanced.get('error'):
             return {'idle': True}
         return {'runs': results, 'advance': advanced}

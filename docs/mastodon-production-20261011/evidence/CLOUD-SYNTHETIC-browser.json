@@ -1,0 +1,84 @@
+{
+  "status": "PASS",
+  "realMastodonAcceptance": false,
+  "productionAcceptance": false,
+  "checks": [
+    {
+      "width": 1440,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+        "no runtime errors or page overflow"
+      ]
+    },
+    {
+      "width": 390,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+        "no runtime errors or page overflow"
+      ]
+    },
+    {
+      "width": 320,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
+        "no runtime errors or page overflow"
+      ]
+    }
+  ],
+  "queueChecks": [
+    {
+      "width": 1440,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    },
+    {
+      "width": 390,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    },
+    {
+      "width": 320,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    }
+  ]
+}

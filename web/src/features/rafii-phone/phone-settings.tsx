@@ -154,7 +154,7 @@ export function PhoneSettings() {
       </form>}
       {data.schedules.map((item) => <div key={item.id} className='flex items-center justify-between gap-2'><span>{item.schedule.weekdays.join(', ')} · {item.schedule.localTime} · {item.schedule.timeZone}</span><Button variant='quiet' size='control' disabled={busy} onClick={() => void run(() => api.phoneDeleteSchedule(workspaceId, item.id))}>Remove briefing</Button></div>)}
       <div><p className='mb-2 font-medium'>Recent calls</p>{data.calls.length === 0 ? <p className='text-muted-foreground'>No calls yet.</p> : <ul className='flex flex-col gap-3'>{data.calls.slice(0,10).map((call) => <li key={call.id} className='flex flex-wrap items-center justify-between gap-2'><span>{new Date(call.requestedAt * 1000).toLocaleString()} · {call.state.replaceAll('_',' ')}{call.durationSeconds !== null ? ` · ${call.durationSeconds}s` : ''}</span><Link href={`/app/agent/${call.conversationId}`} className='underline underline-offset-4'>Conversation</Link>{call.failureMessage && <p className='text-muted-foreground w-full'>{call.failureMessage}</p>}</li>)}</ul>}</div>
-      {data.number && <Button variant='quiet' size='control' disabled={busy} onClick={() => void run(() => api.phoneDelete(workspaceId))}>Revoke and delete phone number</Button>}
+      {data.number && <Button variant='quiet' size='control' className='text-foreground' disabled={busy} onClick={() => void run(() => api.phoneDelete(workspaceId))}>Revoke and delete phone number</Button>}
       {error && <p role='alert' className='text-destructive'>{error}</p>}
     </div>
   </SettingsSection></div>;

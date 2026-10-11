@@ -29,7 +29,7 @@ import type { Job, Manifest } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { cn } from '@/lib/utils';
 import { CalendarFilters, type ChannelOption } from './calendar-filters';
-import { jobKind, KIND_META, KINDS, reviewExpired, reviewKind, type Kind } from './calendar-kinds';
+import { calendarPublicationTime, jobKind, KIND_META, KINDS, reviewExpired, reviewKind, type Kind } from './calendar-kinds';
 import { useLiveSnapshotRefresh, useMinWidth, useNowSeconds } from './use-calendar-live';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 
@@ -270,7 +270,7 @@ export function CalendarView() {
     const expired = new Set(expiredKey.split(','));
     const out: CalendarEvent<Post>[] = [];
     const add = (id: string, kind: Kind, manifest: Manifest, job?: Job) => {
-      const at = new Date(manifest.timing.utc);
+      const at = new Date(calendarPublicationTime(manifest, job));
       if (Number.isNaN(at.getTime())) return;
       const firstLine = manifest.payload.text.split('\n').find((line) => line.trim())?.trim();
       const channel =

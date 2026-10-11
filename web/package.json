@@ -31,7 +31,10 @@
     "test:evidence-mode": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/evidence-mode-validation.sh",
     "ci:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh all",
     "test:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh backend",
-    "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend"
+    "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend",
+    "ci:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh",
+    "test:mastodon-automation:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-automation.sh",
+    "e2e:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh frontend"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

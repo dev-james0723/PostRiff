@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "execution": "CLOUD SYNTHETIC writer/provider; actual Automation/Queue/SQL",
+  "checks": [
+    "current account/instance and Brand Brain draft routing",
+    "review default has no provider writes",
+    "exact human approval through existing Queue and real worker",
+    "explicit definition-bound owner authority",
+    "persisted verified native status readback and restart no duplicate",
+    "pause after queuing fences external dispatch",
+    "same numeric identity on independent instances has exact destinations",
+    "revoke account A after queuing blocks A and leaves B functional"
+  ],
+  "syntheticWrites": 4,
+  "writesByInstance": {
+    "mastodon.social": 2,
+    "mastodon.online": 2
+  },
+  "realMastodonAcceptance": false,
+  "paidModelCalls": 0
+}

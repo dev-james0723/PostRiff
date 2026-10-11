@@ -28,7 +28,7 @@ from .tool_adapter import harvest, register
 
 _ID = r"^[A-Za-z0-9_.:-]{1,120}$"
 STEP = {"type": "string", "pattern": r"^s[0-9]{1,2}$", "description": "The task step this call works on (from task_plan), if any."}
-PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
+PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu", "Mastodon")
 
 
 # --- tasks (§16) -----------------------------------------------------------------------------------------------------------
@@ -705,7 +705,7 @@ def proposal_apply(ctx: RafiiRunContext, args: dict) -> dict:
 
 
 # Optional packages that extend the runtime (their `register()` registers tools, scopes and hooks; idempotent).
-EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools", "postriff_phase2.youtube.agent_tools")
+EXTENSION_MODULES = ("postriff_phase2.coworker.agent_tools", "postriff_phase2.youtube.agent_tools", "postriff_phase2.mastodon_agent_tools")
 
 
 def ensure_registered() -> None:

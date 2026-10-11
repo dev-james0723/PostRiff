@@ -17,7 +17,7 @@ REASONING = ("quick", "standard", "deep")
 # and a platform may appear several times in one request, once per language. Draftable is not publishable: X and
 # Xiaohongshu have no hosted publisher (hosted_social maps LinkedIn, Threads and Instagram only), so their drafts are
 # for review, copy and export, and the capability check reports them as having no publishing route.
-PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu")
+PLATFORMS = ("LinkedIn", "Instagram", "Threads", "X", "Xiaohongshu", "Mastodon")
 DEFAULT_REQUEST_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 

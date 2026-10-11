@@ -28,6 +28,7 @@ from postriff_phase2.agent_runtime_v2 import capability_registry as registry, co
 FIXTURES = ROOT / "tests" / "fixtures" / "agent_permissions"
 GOLDEN = FIXTURES / "capability_golden_v1.json"
 BASELINE = FIXTURES / "legacy_baseline_v1.json"
+POST_FREEZE_TOOLS = ("library_browse", "library_metadata_apply", "mastodon_account_context", "mastodon_public_context", "mastodon_analytics_summary", "mastodon_action_prepare")
 
 try:
     import agents  # noqa: F401
@@ -125,17 +126,25 @@ class Fixtures(unittest.TestCase):
         for key in ("tools", "manager", "specialists", "commandsDirect", "siteAgent", "genuiActions", "genuiQueries", "limits"):
             actual = self.live[key]
             if key == "tools":
-                actual = {name: value for name, value in actual.items() if name not in ("library_browse", "library_metadata_apply")}
+                actual = {name: value for name, value in actual.items() if name not in POST_FREEZE_TOOLS}
             elif key == "manager":
-                actual = [name for name in actual if name not in ("library_browse", "library_metadata_apply")]
+                actual = [name for name in actual if name not in POST_FREEZE_TOOLS]
+            elif key == "specialists":
+                actual = {scope: [name for name in names if name not in POST_FREEZE_TOOLS] for scope, names in actual.items()}
             self.assertEqual(actual, self.golden["live"][key], f"today's {key} changed")
-        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + 2, "only declared post-freeze Library tools were added")
+        self.assertEqual(len(tool_adapter.REGISTRY), self.golden["counts"]["registryTools"] + len(POST_FREEZE_TOOLS), "only explicitly classified post-freeze tools were added")
 
     def test_registry_policy_is_frozen(self):
         snapshot = registry_snapshot()
-        self.assertEqual(snapshot["capabilities"].pop("tool.library_browse")["since"], 2)
-        self.assertEqual(snapshot["capabilities"].pop("tool.library_metadata_apply")["since"], 2)
-        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in ("tool.library_browse", "tool.library_metadata_apply")]
+        for name in POST_FREEZE_TOOLS:
+            entry = snapshot["capabilities"].pop("tool." + name)
+            self.assertEqual(entry["since"], 2)
+            if name.startswith("mastodon_"):
+                self.assertTrue(entry["explicit_request"])
+                self.assertFalse(entry["background_eligible"])
+                self.assertFalse(entry["autopilot_eligible"])
+                self.assertEqual(entry["idempotency"], "none" if name.endswith("prepare") else "read")
+        snapshot["bindings"] = [b for b in snapshot["bindings"] if b["capabilityId"] not in {"tool." + name for name in POST_FREEZE_TOOLS}]
         self.assertEqual(sorted(snapshot["capabilities"]), sorted(self.golden["capabilities"]), "no capability vanishes or appears")
         for capability_id, entry in snapshot["capabilities"].items():
             expected = self.golden["capabilities"][capability_id]
@@ -168,7 +177,7 @@ class Fixtures(unittest.TestCase):
         for tool_id in self.live["siteAgent"]:
             self.assertIn(registry.site_capability(tool_id), expected)
         sdk_names = set(self.live["manager"]) | {n for names in self.live["specialists"].values() for n in names}
-        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n != "library_browse"}, expected)
+        self.assertLessEqual({registry.for_tool(n).capability_id for n in sdk_names if n not in POST_FREEZE_TOOLS}, expected)
 
     def test_post_freeze_tool_never_joins_legacy(self):
         # #152 registers this shape only when it is integrated; the explicit since-2 declaration is mandatory.

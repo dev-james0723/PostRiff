@@ -4,6 +4,7 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime
 
 from postriff_alpha.domain import AlphaError
 from .store import IN_FLIGHT, TERMINAL, find
@@ -97,6 +98,9 @@ class PostgresWorker:
                     and recovery['approvedAt'] <= self.clock()
                     and recovery['approvedAt'] < recovery['expiresAt'] <= recovery['approvedAt'] + 36 * 3600):
                 expires = max(expires, recovery['expiresAt'])
+            from .mastodon_media import library_bindings_current
+            if not library_bindings_current(cur, workspace_id, manifest):
+                return False
             return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve')
                         and (not job.get('youtubeAgent') or member[0] == 'owner')
                         and job['approvalDigest'] == digest(manifest) and job['approvedBy'] == manifest['actor']
@@ -174,10 +178,13 @@ class PostgresWorker:
                         if instagram and job.get('container') and not stage:
                             self._event(job, 'uncertain', 'Legacy container has no durable stage; reconcile without creating or publishing again')
                         forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
+                        from .mastodon_publishing import can_resume
+                        mastodon_forward = hasattr(self.social, 'advance_mastodon') and can_resume(job)
+                        forward = forward or mastodon_forward
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
                                            and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
-                            self._event(job, "canceled", "Canceled before provider submission")
+                            self._event(job, "canceled", "Remaining thread parts canceled; previously accepted post IDs remain on Mastodon." if (job.get('progress') or {}).get('threadReferences') else "Canceled before provider submission")
                             continue
                         if job['manifest']['platform'] == 'YouTube' and not capacity_ready:
                             # Preserve the operation, approval and journal. Once
@@ -190,7 +197,7 @@ class PostgresWorker:
                             job['nextAt'] = now + 60
                             continue
                         job.pop('capacityIntervention', None)
-                        if job.get("state") == "submitting":
+                        if job.get("state") == "submitting" and not mastodon_forward:
                             self._event(job, "uncertain", "Worker lease expired after submission started; reconcile before retry")
                         reconciliation = job.get("state") in IN_FLIGHT and not forward
                         # YouTube forward authority is checked after the fenced claim,
@@ -268,6 +275,40 @@ class PostgresWorker:
                         return selected
         return None
 
+    def mastodon_checkpoint(self, claimed, progress, *, before_external=False, authorization=None):
+        """Commit one provider boundary under the existing Queue fence, outside network calls."""
+        from .mastodon_publishing import checked_progress
+        with self.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
+            row = cur.fetchone()
+            if not row: raise AlphaError('The publishing workspace is unavailable.', 409)
+            revision, raw = row
+            state = json.loads(raw) if isinstance(raw, str) else raw
+            job = find(state['phase2']['jobs'], claimed['job']['id'])
+            if (job.get('leaseOwner') != self.worker_id or job.get('leaseId') != claimed['job'].get('leaseId')
+                    or job.get('leaseUntil', 0) <= self.clock() or job.get('privacyErased')):
+                raise AlphaError('Mastodon publishing lost its fenced Queue lease.', 409)
+            if before_external and (job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job)):
+                raise AlphaError('Approval, cancellation, account or media changed; no further Mastodon write is permitted.', 409)
+            if before_external:
+                guard = getattr(getattr(self.social, 'oauth', None), 'assert_mastodon_dispatch', None)
+                if guard is None or not authorization or authorization.get('providerAccountId') != job['manifest'].get('providerAccountId'):
+                    raise AlphaError('The exact Mastodon credential is required before dispatch.', 409)
+                required = ('write:statuses', 'write:media') if progress.get('stage') == 'media_upload_attempted' else ('write:statuses',)
+                guard(cur, claimed['workspaceId'], job['manifest']['channelId'], authorization, required)
+            if before_external and progress.get('stage') in ('media_upload_attempted', 'publish_attempted', 'thread_publish_attempted'):
+                from .hosted import throttle
+                host = str(job['manifest'].get('providerAccountId', '')).rsplit('@', 1)[-1]
+                throttle(cur, 'mastodon-worker-instance:' + host, 200, 300)
+                throttle(cur, 'mastodon-worker-account:' + claimed['workspaceId'] + job['manifest'].get('channelId', ''), 20, 300)
+            safe = checked_progress(progress, job['manifest'])
+            job['progress'] = safe
+            if safe.get('reference'): job['providerReference'] = safe['reference']
+            job['leaseUntil'] = self.clock() + 45
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
+                        (json.dumps(state), claimed['workspaceId'], revision))
+            if cur.rowcount != 1: raise AlphaError('Mastodon Queue checkpoint lost its revision.', 409)
+
     def complete(self, claimed, result):
         with self.connection_factory() as db:
             with db.cursor() as cur:
@@ -311,13 +352,28 @@ class PostgresWorker:
                     job[youtube_data.KEY] = youtube_source
                 published = result['state'] == 'verified' and (job['manifest']['platform'] != 'YouTube' or (result.get('progress') or {}).get('stage') == 'published')
                 if published and self.on_verified:
+                    mark = 'verified_hook_' + uuid.uuid4().hex[:8]
+                    cur.execute(f'SAVEPOINT {mark}')
                     try:
                         self.on_verified(cur, claimed["workspaceId"], job)
                     except Exception:
+                        # Catching a PostgreSQL error does not repair its aborted
+                        # transaction. Preserve the conclusive publication receipt.
+                        cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
                         job["insights"] = {"availability": "unavailable", "note": "Insights ingestion failed; publication verification is unaffected."}
+                        after_rollback = getattr(self.on_verified, 'after_rollback', None)
+                        if callable(after_rollback):
+                            try:
+                                after_rollback(cur, claimed["workspaceId"], job)
+                            except Exception:
+                                cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
+                                job['timeSavings'] = 'pending'
+                    finally:
+                        cur.execute(f'RELEASE SAVEPOINT {mark}')
                 if published:
                     # Learning signal (ids and numbers only); a failure to record never affects the publication.
-                    record_published(cur, claimed["workspaceId"], job, self.clock())
+                    private_mastodon = job['manifest']['platform'] == 'Mastodon' and (job['manifest'].get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted')
+                    if not private_mastodon: record_published(cur, claimed["workspaceId"], job, self.clock())
                 if result["state"] in ("verified", "failed"):
                     from . import product_events
                     # Product taxonomy (PRD §8.6): publish.verified|failed behind its own savepoint; never affects the job.
@@ -327,6 +383,13 @@ class PostgresWorker:
                 job["leaseOwner"], job["leaseUntil"] = None, 0
                 job["nextAt"] = self.clock() + (60 if result["state"] in ('scheduled', 'processing') else 5)
                 youtube_progress = job['manifest']['platform'] == 'YouTube' and (result.get('progress') or {}).get('version') == 2
+                mastodon_progress = job['manifest']['platform'] == 'Mastodon' and (result.get('progress') or {}).get('version') == 3
+                if mastodon_progress:
+                    retry_at = result['progress'].get('retryAt')
+                    if type(retry_at) in (int, float): job['nextAt'] = max(self.clock() + 1, min(self.clock() + 3600, retry_at))
+                    if result['progress']['stage'] == 'native_scheduled' and result['state'] in ('processing', 'provider_accepted'):
+                        due = datetime.fromisoformat(result['progress']['scheduledAt'].replace('Z', '+00:00')).timestamp()
+                        job['nextAt'] = max(self.clock() + 5, min(due + 5, self.clock() + 300), result['progress'].get('retryAt', 0))
                 if youtube_progress:
                     progress = result['progress']
                     retry_at = progress.get('retryAt')
@@ -338,7 +401,7 @@ class PostgresWorker:
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
                     if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
                         self._event(job, 'held', 'Container processing did not finish within bounded checks; review before continuing')
-                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and not youtube_progress:
+                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and not youtube_progress and not (mastodon_progress and (result['progress']['stage'] == 'native_scheduled' or result['progress'].get('threadReferences'))):
                     job["nextAt"] = self.clock() + 86400
                     job["nextAction"] = "Manual provider review required; do not resubmit"
                 elif job["state"] == "held":
@@ -449,8 +512,14 @@ class PostgresWorker:
         try:
             if claimed.get('instagramAction'):
                 result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+            elif claimed['reconciliation'] and claimed['job']['manifest']['platform'] == 'Mastodon' and (claimed['job'].get('progress') or {}).get('threadReferences'):
+                result = self.social.reconcile_mastodon_thread(claimed['job']['manifest'], claimed['job'],
+                    lambda progress, **kw: self.mastodon_checkpoint(claimed, progress, **kw), self.clock)
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
+            elif claimed['job']['manifest']['platform'] == 'Mastodon' and hasattr(self.social, 'advance_mastodon'):
+                result = self.social.advance_mastodon(claimed['job']['manifest'], claimed['job'],
+                    lambda progress, **kw: self.mastodon_checkpoint(claimed, progress, **kw), self.clock)
             else:
                 result = self.social.submit(claimed["job"]["manifest"])
         except Exception:
@@ -481,6 +550,14 @@ class PostgresWorker:
         maintenance = ({'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
                        youtube.maintenance(dispatch=False) if youtube and exclude_youtube else
                        youtube.maintenance() if youtube else {'enabled': False})
+        mastodon_maintenance = None
+        if not youtube_only and getattr(self.social, 'providers', {}).get('mastodon'):
+            from .mastodon_management import maintain
+            mastodon_maintenance = maintain(self.connection_factory)
+            if max_seconds >= 4 and getattr(self.social, 'oauth', None):
+                from .mastodon_health import maintain as check_health
+                mastodon_maintenance['connectionHealth'] = check_health(self.social.oauth,
+                    seconds=min(8, max_seconds / 4))
         def step():
             return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                     if youtube_only or exclude_youtube else self.step())
@@ -488,4 +565,5 @@ class PostgresWorker:
             processed += 1
         return {"processed": processed, "execution": "hosted-worker", "externalExecution": not isinstance(self.social, DisabledHostedSocial),
                 "youtubeMaintenance": maintenance, "capacityIntervention": getattr(self, 'capacity_intervention', None),
+                **({'mastodonMaintenance': mastodon_maintenance} if mastodon_maintenance is not None else {}),
                 "budget": {"maxJobs": max_jobs, "maxSeconds": max_seconds}}
