@@ -46,6 +46,7 @@ import {
   type QueueReview
 } from './job-state';
 import { ScheduleDialog } from './schedule-dialog';
+import { TelegramRescheduleDialog } from './telegram-reschedule-dialog';
 import { DraftsPanel, useDraftCount } from '@/features/pipeline/drafts-panel';
 import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
@@ -201,6 +202,7 @@ function ReviewCard({
           </p>
           <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
           <YouTubeManifestDetails manifest={manifest} />
+          {manifest.replacesJobId && <JobNote>Approval replaces the original Telegram schedule. It stays queued until approval; Rafii refuses replacement if its worker has started.</JobNote>}
           {manifest.voiceRevision === null && <JobNote>No voice profile. Check the wording before approving.</JobNote>}
         </div>
         <div data-tour={tour ? 'queue-review-phone' : undefined} className='md:pl-2'>
@@ -487,6 +489,7 @@ function Queue() {
   useSiteAgentPageContext({ selectedEntity: params.job ? { type: 'job', id: params.job } : null, visibleState: { view: params.view, filter: params.filter } });
   // A new key per opening, so "Prepare again" preselects its draft in a fresh dialog.
   const [scheduling, setScheduling] = useState<{ open: boolean; variantId: string | null; assetId?: string; key: number }>({ open: false, variantId: null, key: 0 });
+  const [reschedulingJobId, setReschedulingJobId] = useState<string | null>(null);
   useEffect(() => {
     if (!params.asset || !snapshot.data || !access.hasWorkspace) return;
     const assetId = params.asset;
@@ -641,6 +644,7 @@ function Queue() {
         nowSeconds={nowSeconds}
         onReload={reload}
       />
+      {reschedulingJobId && allJobs.find(job => job.id === reschedulingJobId) && <TelegramRescheduleDialog key={reschedulingJobId} job={allJobs.find(job => job.id === reschedulingJobId)!} onClose={() => setReschedulingJobId(null)} />}
       <JobDetailSheet
         jobId={params.job}
         jobs={allJobs}
@@ -652,6 +656,7 @@ function Queue() {
         holdEpoch={holdEpoch}
         onClose={() => void setParams({ job: null })}
         onCancel={cancel}
+        onReschedule={(job) => { void setParams({ job: null }); setReschedulingJobId(job.id); }}
         onPrepareAgain={(variantId) => {
           void setParams({ job: null });
           openSchedule(variantId);

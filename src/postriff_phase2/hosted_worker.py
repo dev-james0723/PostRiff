@@ -294,7 +294,18 @@ class PostgresWorker:
                         cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                                     (json.dumps(state), claimed['workspaceId'], revision))
                         return False
+                telegram_messages = result.get('_telegramMessages') if isinstance(result, dict) else None
+                telegram_bot_id = result.get('_telegramBotId') if isinstance(result, dict) else None
                 result = normalize_result(result, job, claimed['reconciliation'])
+                if result.get('telegram'):
+                    job['telegramReceipt'] = result['telegram']
+                    if telegram_messages and type(telegram_bot_id) is int and result['state'] in ('verified', 'published'):
+                        from .telegram.updates import save_message
+                        expected_ids = [(m['chatId'], m['messageId']) for m in result['telegram']['messages']]
+                        if [(m.get('chat', {}).get('id'), m.get('message_id')) for m in telegram_messages] != expected_ids:
+                            return False  # Untrusted/malformed adapter details cannot enter the inbox.
+                        for message in telegram_messages:
+                            save_message(cur, self.social.oauth.vault, claimed['workspaceId'], job['manifest']['channelId'], telegram_bot_id, message, job=job, api_path=result['telegram']['apiPath'])
                 self._event(job, result["state"], result["confirmed"])
                 if result.get("reference"):
                     job["providerReference"] = result["reference"]
@@ -334,6 +345,12 @@ class PostgresWorker:
                     if progress.get('stage') == 'native_scheduled':
                         job['nextAt'] = self.clock() + 300
                     job['nextAction'] = 'Reconcile the existing YouTube session or immutable Video ID; never re-upload this operation'
+                if job['manifest']['platform'] == 'Telegram' and result['state'] == 'scheduled':
+                    attempts = len(job.get('attempts', []))
+                    job['nextAt'] = self.clock() + max(result.get('retryAfter', 60), min(3600, 30 * 2 ** min(attempts, 7)))
+                    if attempts >= 8:
+                        self._event(job, 'held', 'Telegram reached its bounded retry limit before acceptance; review the dead-letter item.')
+                        job['deadLetter'] = True
                 if result['state'] == 'processing':
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
                     if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
@@ -452,7 +469,18 @@ class PostgresWorker:
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
             else:
-                result = self.social.submit(claimed["job"]["manifest"])
+                job = claimed["job"]
+                manifest = job["manifest"]
+                if manifest.get("platform") == "Telegram" and job.get("automation"):
+                    controls = self.social.oauth.telegram.controls
+                    try:
+                        with controls.dispatch_guard(claimed["workspaceId"], manifest["channelId"], "publish",
+                                                     human_approved=job["automation"].get("approvedVia") == "human"):
+                            result = self.social.submit(manifest)
+                    except AlphaError as error:
+                        result = {"state": "held", "confirmed": str(error)}
+                else:
+                    result = self.social.submit(manifest)
         except Exception:
             result = unknown()
         if crash == "after_provider":

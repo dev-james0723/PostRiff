@@ -412,6 +412,13 @@ class HostedWorkspaceService:
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
         self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, youtube_public_base_url=youtube_public_base_url)
+        from .telegram.service import TelegramService
+        self.telegram = TelegramService(self.oauth, assets=assets, clock=clock)
+        self.oauth.telegram = self.telegram
+        from .telegram.login import TelegramLogin
+        from .telegram.controls import TelegramControls
+        self.telegram_login = TelegramLogin(self.telegram, clock=clock)
+        self.telegram.controls = TelegramControls(self.telegram)
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,

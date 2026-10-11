@@ -1,0 +1,21 @@
+# Controlled production release — Issue #179
+
+Status: prepared procedure, no production execution recorded.
+
+Use only Vercel `prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L`, Supabase `buoyhkbodnhzngaotoel`, integration branch `consumer-saas`, release domain `rafii.io`. One owner-appointed Release Captain sequences the X, Mastodon and Telegram changes. Never copy staging records, credentials or grants.
+
+Before runtime acceptance, review the source/CI/security receipts and verify a recent recoverable production backup. The recorded migration ledger is metadata, **not a data backup**. Inspect actual required relations/constraints, active callbacks, non-secret feature flags and least provider rights. The database DSN remains write-only; the production build guard must validate its actual backend/TLS before any backend connection. Unknown binding fails the release.
+
+The only Telegram forward migrations are 116 and 117. They create new tables and policies; they do not transform existing user records. Do not blanket-apply all pending repository migrations. Recover migration 103 source exactly, without reapplying or changing its recorded checksum. Leave Mastodon 113–115 unchanged. Production schema absence and permissions must be rechecked when the Captain executes the reviewed migration plan.
+
+Stage a reviewed production build in the real Vercel project without automatic domain assignment (`vercel deploy --prod --skip-domain`). Retain the current live deployment/SHA, candidate source manifest, guard receipt and exact candidate deployment ID. Review cron behavior before submission; do not assume a staged build cannot affect jobs. No unaccepted candidate may be assigned to rafii.io.
+
+Default-off owner acceptance, if approved, uses `POSTRIFF_TELEGRAM_CANARY_ENABLED=true` plus a private server manifest. It requires the exact existing owner member/workspace, bot, two new private QA destinations, mode, and expiration of at most 24 hours. A Business conversation must be separately and exactly authorized. No request may invent this manifest. This is acceptance authorization, not public release evidence; fresh Telegram rights, exact action approval, immutable payload and duplicate fences still apply. Expiry removes the grant automatically.
+
+Before actual configuration/access changes, prepare exact candidate URLs, callback additions, webhook destination/update allowlist and approved test post contents for owner review. Preserve credentials and do not rotate them. Apply security access changes only with the required action-time approval. Keep private inbox context limited to new authorized test conversations. Never use an existing private conversation to manufacture Secretary acceptance.
+
+Record real A–D receipts against the exact candidate source/deployment, including native provider readback, cleanup, revoked access and no further dispatch. Synthetic CI results cannot qualify the provider. Independent source/release review and protected checks against the actual release commit remain required. Promote only the accepted production build, without rebuilding it, then verify rafii.io SHA, bindings, rights, revoked access and monitoring.
+
+Rollback preserves user data: disable/expire the owner canary and remove public qualification, pause only the affected Telegram automation, and restore the preceding accepted Vercel deployment. Reconcile ambiguous provider sends before retrying. Restore the reviewed webhook URL/update allowlist using the existing secret only when appropriate; Telegram destination removal requires its own explicit scope. Keep the additive tables in place for code rollback. No DROP, TRUNCATE, bulk delete or blanket database restore is authorized by this procedure. If database recovery is necessary, prepare the exact backup/restore action and obtain specific approval.
+
+Production backup/restore and rollback timings are unmeasured. Disposable CI backup/restore is labeled synthetic and never used as a production RPO/RTO claim.

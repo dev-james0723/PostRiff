@@ -5,6 +5,11 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 def isolated_environment(values):
     result = dict(values)
+    from .social_release import PRODUCTION_PROJECT, reject_forbidden_bindings, require_production_binding
+    reject_forbidden_bindings(result)
+    if result.get('VERCEL_PROJECT_ID') == PRODUCTION_PROJECT:
+        require_production_binding(result)
+        return result
     if result.get('VERCEL_ENV') != 'preview':
         return result
     if result.get('POSTRIFF_ENVIRONMENT') != 'staging':
@@ -42,6 +47,7 @@ def isolated_environment(values):
     if not isinstance(pins, dict):
         raise ValueError('Staging secret fingerprints must be a JSON object.')
     names = {'POSTRIFF_SUPABASE_SECRET_KEY', 'POSTRIFF_CREDENTIAL_KEY', 'CRON_SECRET', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'AI_GATEWAY_API_KEY', 'RESEND_API_KEY',
+             'POSTRIFF_TELEGRAM_BOT_TOKEN', 'POSTRIFF_TELEGRAM_WEBHOOK_SECRET', 'POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET',
              'RESEND_WEBHOOK_SECRET', 'POSTRIFF_VAPID_PRIVATE_KEY', 'POSTRIFF_NOTIFICATION_SIGNING_KEY',
              'RAFII_PHONE_ENCRYPTION_KEY','TWILIO_AUTH_TOKEN', 'DIAL_API_KEY', 'DIAL_AUDIO_SIGNING_SECRET',
              'DIAL_WEBHOOK_SIGNING_SECRET', 'DIAL_VERIFICATION_SECRET'}

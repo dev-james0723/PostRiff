@@ -13,6 +13,7 @@ import re
 import secrets
 import socket
 import string
+import time
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host
@@ -376,20 +377,28 @@ class DiscordProvider(OAuthProvider):
 
 # --- Telegram ---------------------------------------------------------------------------------------------------
 class TelegramConnector(OAuthProvider):
-    id, platform, capability_version = "telegram", "Telegram", 1
+    id, platform, capability_version = "telegram", "Telegram", 2
     API = "https://api.telegram.org"
     CODE_PREFIX = "rafii-connect-"
     CODE = re.compile(r"rafii-connect-[A-Z2-7]{16}")
-    SCOPES = {"identity": ["can_post_messages"], "publish": ["can_post_messages"], "schedule": ["can_post_messages"]}
-    EXPLAIN = {"identity": "Add Rafii's bot to your channel as an admin that can post, then post the code Rafii shows you.",
-               "publish": "Rafii's bot posts in your channel only when you approve each exact post."}
-    account_requirement = "A Telegram channel where you are an admin."
+    # Bot authorization is membership/admin rights, not OAuth scopes. The destination
+    # matrix, not a universal requested-right list, controls publication.
+    SCOPES = {"identity": [], "publish": [], "schedule": []}
+    EXPLAIN = {"identity": "Add Rafii's bot to the channel/group you control, then send the one-time code there. Rafii reads its actual membership and rights.",
+               "publish": "Choose the channel, group or topic Rafii may control. Grant only the rights you need; each post requires an exact approval."}
+    account_requirement = "A Telegram channel/group you control, or a private chat you started with the bot."
     publish_scope = "can_post_messages"
     publish_required = frozenset({"can_post_messages"})
     connect_kind = "bot_code"
     non_expiring = True
     # Revoking makes Rafii's one bot leave the channel, which every workspace connected to that channel shares.
     shared_remote = True
+    server_schedule = True
+    ALLOWED_UPDATES = ["managed_bot", "message", "edited_message", "channel_post", "edited_channel_post", "message_reaction", "message_reaction_count", "poll", "poll_answer", "business_connection", "business_message", "edited_business_message", "deleted_business_messages", "my_chat_member", "chat_member", "chat_join_request", "callback_query"]
+    # Telegram bot authorization is destination-scoped. There is no Instagram-style app review.
+    # The publisher additionally requires fresh actual rights and real acceptance evidence.
+    account_scoped_direct = True
+    ACCEPTANCE_VERSION = 'rafii.telegram.bot.v2'
 
     def __init__(self, bot_token, webhook_secret, public_base_url, transport=None, production_reviewed=False):
         self.client_id = self.client_secret = None
@@ -399,6 +408,51 @@ class TelegramConnector(OAuthProvider):
         self.production_reviewed = bool(production_reviewed)
         self.execution_enabled = True
         self._me, self._webhook_ready = None, False
+        self.acceptance = {}
+        self.candidate_scope = {}
+        self.file_check = None
+        self.credential_resolver = None
+        self.bot_ref = None
+        self.business_resolver = None
+        self.destination_authorizer=None
+
+    def for_session(self, session):
+        if not session.get("botRef"): return self
+        if not self.credential_resolver or not session.get("workspace"):
+            raise AlphaError("Bot credential unavailable.", 409)
+        return self.credential_resolver(session["workspace"], session["botRef"])
+
+    def qualified(self, chat_id, mode="bot", business_id=None):
+        from .telegram.qualification import release_capabilities, proven
+        # New destinations reuse a real-tested release, with live authorization
+        # and action rights still checked separately before every operation.
+        released = release_capabilities(self.acceptance.get('_release'), mode)
+        evidence = self.acceptance.get(str(chat_id), {})
+        if not isinstance(evidence, dict) or evidence.get("source") != "telegram_real_e2e" or evidence.get("botId") != self.me()["id"] or evidence.get('qualificationVersion') != self.ACCEPTANCE_VERSION:
+            return released
+        cases = evidence.get('cases', [])
+        if not isinstance(cases, list):
+            return released
+        return released | {case["capability"] for case in cases if proven(case)
+                and case.get("connectionType", "bot") == mode and (mode != "business" or case.get("businessConnectionId") == business_id)
+                and isinstance(case.get('capability'),str) and case.get("passed") is True and type(case.get("messageId")) is int and case["messageId"] > 0
+                }
+
+    def candidate_capabilities(self, chat_id, mode="bot", business_id=None, *, workspace_id=None, actor_id=None):
+        """A bounded owner canary is not evidence of a public production release."""
+        from .telegram.capabilities import CATALOG
+        scope = self.candidate_scope
+        if (not scope or scope.get('expiresAt', 0) <= time.time()
+                or not workspace_id or str(workspace_id) != scope.get('workspaceId')
+                or not actor_id or str(actor_id) != scope.get('actorId')
+                or scope.get('botId') != self.me()['id']):
+            return set()
+        for destination in scope.get('destinations', []):
+            if (str(destination.get('chatId')) == str(chat_id) and destination.get('mode') == mode
+                    and (mode != 'business' or destination.get('businessConnectionId') == business_id)):
+                return {name for name in destination.get('capabilities', [])
+                        if name in CATALOG and CATALOG[name].implemented}
+        return set()
 
     @classmethod
     def mount(cls, values, transport=None):
@@ -409,11 +463,70 @@ class TelegramConnector(OAuthProvider):
                  and isinstance(secret, str) and re.fullmatch(r"[A-Za-z0-9_-]{16,256}", secret) is not None and _https_origin(base))
         state = "not_configured" if token is None and secret is None else "partial_configuration" if missing else "configured" if valid else "invalid_configuration"
         diagnostic = {"configurationState": state, "credentialPresence": presence, "missingVariables": missing}
-        return (cls(token, secret, base, transport=transport) if state == "configured" else None), diagnostic
+        adapter = cls(token, secret, base, transport=transport) if state == "configured" else None
+        if adapter is None and token is None and secret is None and values.get('POSTRIFF_TELEGRAM_BYOB_ENABLED','').lower() == 'true' and _https_origin(base):
+            adapter = cls('', '', base, transport=transport)
+            diagnostic.update(configurationState='own_bot_only', managedBotAvailable=False, missingVariables=[])
+        if adapter and values.get("POSTRIFF_TELEGRAM_ACCEPTANCE_JSON"):
+            try:
+                raw = values['POSTRIFF_TELEGRAM_ACCEPTANCE_JSON']
+                evidence = json.loads(raw) if isinstance(raw, str) and len(raw) <= 65536 else None
+                if isinstance(evidence, dict): adapter.acceptance = evidence
+            except (ValueError, TypeError):
+                diagnostic['acceptanceState'] = 'unavailable'
+        elif adapter and values.get("POSTRIFF_TELEGRAM_ACCEPTANCE_FILE"):
+            try:
+                from pathlib import Path
+                path = Path(values["POSTRIFF_TELEGRAM_ACCEPTANCE_FILE"])
+                if path.stat().st_size <= 65536:
+                    evidence = json.loads(path.read_text())
+                    if isinstance(evidence, dict): adapter.acceptance = evidence
+            except (OSError, ValueError, TypeError):
+                diagnostic["acceptanceState"] = "unavailable"
+        # Issue #179: the old staging QA grant is deliberately ignored. Owner
+        # acceptance runs on the verified production service with a default-off,
+        # expiring server manifest. It never enables another member or workspace.
+        if adapter and values.get('POSTRIFF_TELEGRAM_CANARY_ENABLED') == 'true':
+            try:
+                from .telegram.qualification import positive_number
+                from .social_release import require_production_binding
+                from uuid import UUID
+                require_production_binding(values)
+                if values.get('VERCEL_ENV') != 'production':
+                    raise ValueError('Owner canary requires a held production service build.')
+                raw = values.get('POSTRIFF_TELEGRAM_CANARY_SCOPE', '')
+                scope = json.loads(raw) if isinstance(raw, str) and len(raw) <= 8192 else None
+                if (isinstance(scope, dict) and type(scope.get('botId')) is int
+                        and 0 < scope['botId'] < 2**52
+                        and all(isinstance(scope.get(k), str) and str(UUID(scope[k])) == scope[k] for k in ('workspaceId', 'actorId'))
+                        and positive_number(scope.get('expiresAt')) and time.time() < scope['expiresAt'] <= time.time() + 86400
+                        and isinstance(scope.get('destinations'), list) and 0 < len(scope['destinations']) <= 4
+                        and all(isinstance(d, dict) and type(d.get('chatId')) is int
+                                and 0 < abs(d['chatId']) < 2**52
+                                and d.get('mode') in ('bot', 'business')
+                                and isinstance(d.get('capabilities'), list)
+                                and all(isinstance(n, str) for n in d['capabilities'])
+                                and (d['mode'] != 'business' or isinstance(d.get('businessConnectionId'), str) and bool(d['businessConnectionId']))
+                                for d in scope['destinations'])):
+                    adapter.candidate_scope = scope
+                    diagnostic['candidateExecution'] = True
+            except (TypeError, ValueError):
+                diagnostic['candidateExecution'] = False
+        return adapter, diagnostic
 
-    def request(self, method, payload=None):
+    def request(self, method, payload=None, files=None):
         """The raw Bot API response, so a publisher can tell a definite rejection from an unknown outcome."""
-        return self.transport("POST", f"{self.API}/bot{self.bot_token}/{method}", body=payload or {})
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{1,80}", method):
+            raise AlphaError("Unsupported Telegram operation.", 400)
+        if not self.bot_token: raise AlphaError("The managed Rafii bot is not configured. Select an encrypted BotFather bot instead.", 409)
+        try:
+            if files:
+                data, content_type = multipart([(k, json.dumps(v) if isinstance(v, (dict, list, bool)) else str(v)) for k, v in (payload or {}).items()], files)
+                return self.transport("POST", f"{self.API}/bot{self.bot_token}/{method}", headers={"Content-Type": content_type}, data=data)
+            return self.transport("POST", f"{self.API}/bot{self.bot_token}/{method}", body=payload or {})
+        except Exception:
+            # The token is part of the request URL. Transport exceptions are confidential.
+            raise AlphaError("Telegram transport is unavailable; the request outcome may be unknown.", 502, code="telegram_transport_unknown") from None
 
     def call(self, method, payload=None):
         response = self.request(method, payload)
@@ -423,7 +536,7 @@ class TelegramConnector(OAuthProvider):
         return body.get("result")
 
     def webhook_url(self):
-        return self.public_base_url + "/api/telegram/webhook"
+        return self.public_base_url + ("/api/telegram/bots/" + self.bot_ref + "/webhook" if self.bot_ref else "/api/telegram/webhook")
 
     def me(self):
         if self._me is None:
@@ -433,12 +546,12 @@ class TelegramConnector(OAuthProvider):
             self._me = result
         return self._me
 
-    def ensure_webhook(self):
-        if self._webhook_ready:
+    def ensure_webhook(self, force=False):
+        if self._webhook_ready and not force:
             return
         info = self.call("getWebhookInfo")
-        if not isinstance(info, dict) or info.get("url") != self.webhook_url():
-            self.call("setWebhook", {"url": self.webhook_url(), "secret_token": self.webhook_secret, "allowed_updates": ["channel_post", "my_chat_member"]})
+        if force or not isinstance(info, dict) or info.get("url") != self.webhook_url() or not set(self.ALLOWED_UPDATES) <= set(info.get("allowed_updates", [])):
+            self.call("setWebhook", {"url": self.webhook_url(), "secret_token": self.webhook_secret, "allowed_updates": self.ALLOWED_UPDATES})
         self._webhook_ready = True
 
     def new_code(self):
@@ -449,21 +562,23 @@ class TelegramConnector(OAuthProvider):
         self.ensure_webhook()
         username = "@" + self.me()["username"]
         return {"botUsername": username,
-                "instructions": [f"In your Telegram channel, open Administrators and add {username}.",
-                                 "Allow it to post messages. It needs no other rights.",
-                                 "Post the code below in the channel. Rafii's bot deletes it within seconds.",
+                "openTelegramUrl": "https://t.me/" + self.me()["username"],
+                "instructions": [f"Add {username} to the channel or group you control.",
+                                 "Channels need Post Messages; groups need permission to send the selected content. Editing, pinning, topics and moderation require separate rights.",
+                                 "Send the code below as a destination administrator (or in your own private bot chat). Rafii removes it only where deletion is allowed.",
                                  "Come back here and choose Check connection."]}
 
     def observe(self, update):
         """(code, chat, message id) for a channel post carrying a Rafii connect code; otherwise None."""
-        post = update.get("channel_post") if isinstance(update, dict) else None
+        post = (update.get("channel_post") or update.get("message")) if isinstance(update, dict) else None
         if not isinstance(post, dict) or not isinstance(post.get("text"), str):
             return None
         match = self.CODE.search(post["text"])
         chat = post.get("chat") if isinstance(post.get("chat"), dict) else {}
-        if not match or chat.get("type") != "channel" or not isinstance(chat.get("id"), int) or not isinstance(post.get("message_id"), int):
+        if ('channel_post' in update) != (chat.get('type') == 'channel'): return None
+        if not match or chat.get("type") not in ("channel", "group", "supergroup", "private") or not isinstance(chat.get("id"), int) or not isinstance(post.get("message_id"), int):
             return None
-        return match.group(0), {"id": chat["id"], "title": chat.get("title"), "username": chat.get("username")}, post["message_id"]
+        return match.group(0), {"id": chat["id"], "title": chat.get("title"), "username": chat.get("username"), "type": chat.get("type"), "thread": post.get("message_thread_id"), "userId": (post.get("from") or {}).get("id"), 'senderChatId':(post.get('sender_chat') or {}).get('id')}, post["message_id"]
 
     def delete_message(self, chat_id, message_id):
         try:
@@ -473,15 +588,29 @@ class TelegramConnector(OAuthProvider):
 
     def bot_rights(self, chat_id):
         member = self.call("getChatMember", {"chat_id": chat_id, "user_id": self.me()["id"]})
-        if isinstance(member, dict) and member.get("status") == "administrator" and member.get("can_post_messages") is True:
-            return ["can_post_messages"]
+        if isinstance(member, dict) and member.get("status") in ("creator", "administrator", "member", "restricted"):
+            return sorted(k for k, v in member.items() if k.startswith("can_") and v is True)
         return []
 
     def grant_from_context(self, context):
         chat = context.get("chat") if isinstance(context.get("chat"), dict) else {}
         if not isinstance(chat.get("id"), int):
             raise AlphaError("Post the code in your channel first.", 409)
-        return {"accessToken": json.dumps({"v": 1, "chat": chat["id"]}), "refreshToken": None, "expiresIn": None, "scopes": self.bot_rights(chat["id"])}
+        destination = self.call("getChat", {"chat_id": chat["id"]})
+        if not isinstance(destination, dict) or destination.get("id") != chat["id"]:
+            raise AlphaError("Telegram destination could not be confirmed.", 409)
+        if destination.get('type') in ('group','supergroup') and chat.get('senderChatId')!=chat['id']:
+            sender=chat.get('userId')
+            if type(sender) is not int or sender<=0:raise AlphaError('Have a group administrator send the destination connection code.',409)
+            try:member=self.call('getChatMember',{'chat_id':chat['id'],'user_id':sender})
+            except AlphaError:raise AlphaError('Rafii could not verify the group administrator who sent the code. Verify bot access and send a fresh code.',409) from None
+            if not isinstance(member,dict) or member.get('status') not in ('creator','administrator'):raise AlphaError('Only a group administrator may authorize this destination in Rafii.',403)
+        session = {"v": 1, "chat": chat["id"]}
+        if context.get("botRef"):
+            session.update(botRef=context["botRef"], workspace=context["workspace"])
+        if chat.get("thread"): session["thread"] = chat["thread"]
+        if destination.get("type") == "private" and chat.get("userId") == chat["id"]: session["telegram_user_id"] = chat["userId"]
+        return {"accessToken": json.dumps(session), "refreshToken": None, "expiresIn": None, "scopes": self.bot_rights(chat["id"])}
 
     @staticmethod
     def session(access_token):
@@ -491,24 +620,38 @@ class TelegramConnector(OAuthProvider):
         return session
 
     def identity(self, access_token):
-        chat = self.call("getChat", {"chat_id": self.session(access_token)["chat"]})
-        if not isinstance(chat, dict) or chat.get("type") != "channel" or not isinstance(chat.get("id"), int):
-            raise AlphaError("Telegram could not confirm this channel right now.", 502)
+        session = self.session(access_token)
+        adapter = self.for_session(session)
+        if session.get("business_connection_id"):
+            if not adapter.business_resolver: raise AlphaError("Business connection unavailable.", 409)
+            _, chat, _ = adapter.business_resolver(session["workspace"], session["business_connection_id"], session["chat"])
+            return {"providerAccountId": str(chat["id"]), "handle": str(chat.get("first_name") or chat["id"]), "accountType": "business_conversation"}
+        chat = adapter.call("getChat", {"chat_id": session["chat"]})
+        if not isinstance(chat, dict) or chat.get("type") not in ("channel", "group", "supergroup", "private") or not isinstance(chat.get("id"), int):
+            raise AlphaError("Telegram could not confirm this destination right now.", 502)
         handle = "@" + chat["username"] if isinstance(chat.get("username"), str) else str(chat.get("title") or chat["id"])
-        return {"providerAccountId": str(chat["id"]), "handle": handle, "accountType": "channel"}
+        return {"providerAccountId": str(chat["id"]), "handle": handle, "accountType": chat["type"]}
 
     def inspect_scopes(self, access_token, expected_account_id=None):
-        chat = self.session(access_token)["chat"]
+        session = self.session(access_token)
+        chat = session["chat"]
         if expected_account_id and str(chat) != str(expected_account_id):
             return None
         try:
-            return self.bot_rights(chat)
+            if session.get("business_connection_id"):
+                adapter = self.for_session(session)
+                business, _, _ = adapter.business_resolver(session["workspace"], session["business_connection_id"], chat)
+                return sorted(k for k, v in business.get("rights", {}).items() if v is True)
+            return self.for_session(session).bot_rights(chat)
         except AlphaError:
             return None
 
     def revoke(self, token):
         # Disconnecting makes Rafii's bot leave the channel.
         try:
-            return self.call("leaveChat", {"chat_id": self.session(token)["chat"]}) is True
+            session = self.session(token)
+            if session.get("business_connection_id") or session.get('thread') or session.get('dm_topic'):
+                return False  # Local destination revoke only; never claim a global remote revocation or leave its parent chat.
+            return self.for_session(session).call("leaveChat", {"chat_id": session["chat"]}) is True
         except AlphaError:
             return False

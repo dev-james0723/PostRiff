@@ -102,7 +102,7 @@ class HostedSocial:
         grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         required = ({"LinkedIn": {"w_member_social"}, "Threads": {"threads_basic", "threads_content_publish"}, "Instagram": {"instagram_business_basic", "instagram_business_content_publish"}}.get(manifest["platform"])
                     or set(getattr(provider, "publish_required", ())))
-        if not required or not required.issubset(grant.get("scopes", [])):
+        if manifest["platform"] != "Telegram" and (not required or not required.issubset(grant.get("scopes", []))):
             return {"state": "held", "confirmed": "Publishing permissions changed or are unverified; reconnect and review again."}
         token = grant["accessToken"]
         if getattr(provider, "publisher", None) is not None and not getattr(provider, "write_qualified", lambda _token: True)(token):
@@ -247,39 +247,8 @@ class HostedSocial:
         return _uncertain("No conclusive Mastodon create response; do not resubmit")
 
     def _submit_telegram(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
-        chat, text = provider.session(token)["chat"], manifest["payload"]["text"]
-        if manifest.get("media"):
-            if len(text) > 1024:
-                return {"state": "failed", "confirmed": "Telegram photo captions allow 1024 characters. Nothing was posted."}
-            response = provider.request("sendPhoto", {"chat_id": chat, "photo": self._image_url(manifest), "caption": text})
-        else:
-            response = provider.request("sendMessage", {"chat_id": chat, "text": text, "link_preview_options": {"is_disabled": False}})
-        body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") != 200 or body.get("ok") is not True:
-            code = body.get("error_code") if isinstance(body.get("error_code"), int) else response.get("status")
-            reason = _provider_reason(body)
-            if code in (400, 403):
-                # Telegram refused before posting anything (bad request, or the bot may not post in this channel).
-                return {"state": "failed", "confirmed": "Telegram rejected the post; nothing was published" + (f": {reason}" if reason else ".")}
-            if code == 429:
-                return {"state": "scheduled", "confirmed": "Telegram rate limited the request before acceptance"}
-            return _uncertain("Telegram's answer was inconclusive; check the channel; do not resubmit")
-        message = body.get("result")
-        posted_text = (message.get("caption") if manifest.get("media") else message.get("text")) if isinstance(message, dict) else None
-        if not isinstance(message, dict) or not isinstance(message.get("message_id"), int) or (message.get("chat") or {}).get("id") != chat:
-            return _uncertain("Telegram's reply did not identify the created message; check the channel; do not resubmit")
-        reference = f"{chat}/{message['message_id']}"
-        if posted_text != text:
-            return {"state": "published", "reference": reference, "confirmed": "Telegram created the message, but its text differs from the approved text; review it in the channel"}
-        receipt = {"state": "verified", "reference": reference, "verification": "provider_receipt",
-                   "confirmed": "Telegram returned the created channel message with the exact approved text (bots cannot read messages back)"}
-        username = (message.get("chat") or {}).get("username")
-        if isinstance(username, str):
-            receipt["url"] = f"https://t.me/{username}/{message['message_id']}"
-        return receipt
+        from .telegram.publishing import submit
+        return submit(manifest, provider, token, self)
 
     def _submit_discord(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
