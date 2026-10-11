@@ -30,20 +30,26 @@ def configured_worker_limits(values=None):
     return jobs, seconds
 
 
-def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True):
+def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True, telegram_canary=False):
     """The actual bounded selection, shared with disposable query-plan acceptance."""
     dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
     dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
-    if youtube_only and exclude_youtube:
+    if youtube_only and exclude_youtube or telegram_canary and (youtube_only or exclude_youtube):
         raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
     if youtube_only and capacity_ready and operations_ready:
         from .youtube.operations import WORKER_SQL
         return WORKER_SQL
     platform_filter = (" AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
                        " AND coalesce(j#>>'{manifest,platform}','')<>'YouTube'" if exclude_youtube else '')
+    workspace_filter = " AND w.id=%s::uuid" if telegram_canary else ''
+    if telegram_canary:
+        platform_filter = """ AND j#>>'{manifest,platform}'='Telegram'
+              AND j->>'approvedBy'=%s AND j#>>'{manifest,actor}'=%s
+              AND j#>>'{manifest,workspaceId}'=w.id::text
+              AND j#>>'{manifest,channelId}'=ANY(%s::text[])"""
     return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
         """ + dispatch_join + """
-        WHERE w.state ? 'phase2' AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'
+        WHERE w.state ? 'phase2' AND NOT w.state ? 'accountDeletion' AND NOT w.state ? 'accountBlock'""" + workspace_filter + """
           AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
             WHERE coalesce(j->>'state','') NOT IN ('verified','failed','canceled','held')
               AND coalesce((j->>'leaseUntil')::double precision,0)<=%s
@@ -110,9 +116,14 @@ class PostgresWorker:
         except (AlphaError, KeyError, TypeError):
             return False
 
-    def claim(self, *, youtube_only=False, exclude_youtube=False):
+    def claim(self, *, youtube_only=False, exclude_youtube=False, telegram_canary=None):
         if youtube_only and exclude_youtube:
             raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
+        if telegram_canary is not None:
+            from .telegram.canary_worker import worker_scope
+            telegram_canary = worker_scope(telegram_canary, self.clock())
+            if youtube_only or exclude_youtube:
+                raise AlphaError('Worker platform filters conflict.', 503, code='worker_platform_filter')
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('postriff-worker-v1',0))")
@@ -130,8 +141,20 @@ class PostgresWorker:
                 # cannot monopolize every chunk lease by sorting before others.
                 from .youtube.operations import schema_ready
                 indexed = youtube_only and capacity_ready and schema_ready(cur)
+                connection_ids = []
+                if telegram_canary is not None:
+                    cur.execute("""SELECT connection_id FROM public.pr_telegram_destinations
+                        WHERE workspace_id=%s AND bot_id=%s AND chat_id=ANY(%s::bigint[])
+                          AND mode='bot' AND revoked_at IS NULL""",
+                        (telegram_canary['workspaceId'], telegram_canary['botId'], telegram_canary['chatIds']))
+                    connection_ids = [row[0] for row in cur.fetchall()]
+                    if not connection_ids:
+                        return None
+                parameters = ((telegram_canary['workspaceId'], self.clock(), self.clock(),
+                               telegram_canary['actorId'], telegram_canary['actorId'], connection_ids)
+                              if telegram_canary is not None else (self.clock(), self.clock()))
                 cur.execute(due_workspaces_sql(capacity_ready, youtube_only=youtube_only, exclude_youtube=exclude_youtube,
-                                              operations_ready=indexed), (self.clock(), self.clock()))
+                                              operations_ready=indexed, telegram_canary=telegram_canary is not None), parameters)
                 for candidate in cur.fetchall():
                     if indexed:
                         workspace_id, revision = candidate
@@ -149,12 +172,15 @@ class PostgresWorker:
                     if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
                         continue
                     original = json.dumps(state, sort_keys=True)
-                    if youtube_only or exclude_youtube:
+                    if youtube_only or exclude_youtube or telegram_canary is not None:
                         # Invalidation can hold jobs too; the isolated lane must
                         # not change another platform's review or queued job.
                         data = state['phase2']
                         jobs, reviews = data['jobs'], data['reviews']
                         def selected_platform(item):
+                            if telegram_canary is not None:
+                                from .telegram.canary_worker import selected
+                                return selected(item, telegram_canary, connection_ids)
                             match = item.get('manifest', {}).get('platform') == 'YouTube'
                             return match if youtube_only else not match
                         data['jobs'] = [job for job in jobs if selected_platform(job)]
@@ -167,6 +193,10 @@ class PostgresWorker:
                         self.commands.engine.invalidate(state)
                     selected = None
                     for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
+                        if telegram_canary is not None:
+                            from .telegram.canary_worker import selected as in_canary
+                            if not in_canary(job, telegram_canary, connection_ids):
+                                continue
                         is_youtube = job.get('manifest', {}).get('platform') == 'YouTube'
                         if (youtube_only and not is_youtube) or (exclude_youtube and is_youtube):
                             continue
@@ -449,8 +479,9 @@ class PostgresWorker:
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
             return True
 
-    def step(self, crash=None, *, youtube_only=False, exclude_youtube=False):
-        claimed = (self.claim(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
+    def step(self, crash=None, *, youtube_only=False, exclude_youtube=False, telegram_canary=None):
+        claimed = (self.claim(telegram_canary=telegram_canary) if telegram_canary is not None else
+                   self.claim(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                    if youtube_only or exclude_youtube else self.claim())
         if not claimed or crash == "after_claim":
             return bool(claimed)
@@ -467,6 +498,9 @@ class PostgresWorker:
                 return True
         elif not claimed['reconciliation'] and not self.authorize_dispatch(claimed):
             return True
+        if telegram_canary is not None:
+            from .telegram.canary_worker import worker_scope
+            worker_scope(telegram_canary, self.clock())
         try:
             if claimed.get('instagramAction'):
                 result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
@@ -501,7 +535,13 @@ class PostgresWorker:
         """Dedicated lane: no other platform or maintenance dispatch can run."""
         return self._tick(max_jobs, max_seconds, youtube_only=True)
 
-    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False):
+    def tick_telegram_canary(self, scope):
+        """One exact owner Telegram job; no global automation or maintenance."""
+        from .telegram.canary_worker import worker_scope
+        scope = worker_scope(scope, self.clock())
+        return self._tick(1, 5, telegram_canary=scope)
+
+    def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False, telegram_canary=None):
         if max_jobs is None or max_seconds is None:
             configured_jobs, configured_seconds = configured_worker_limits()
             max_jobs = configured_jobs if max_jobs is None else max_jobs
@@ -510,11 +550,14 @@ class PostgresWorker:
             raise AlphaError("Use bounded worker limits.")
         started, processed = time.monotonic(), 0
         youtube = getattr(self.social, 'youtube', None) or getattr(self, 'youtube_maintenance', None)
-        maintenance = ({'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
+        maintenance = ({'enabled': False, 'scheduler': 'isolated_telegram_acceptance'} if telegram_canary is not None else
+                       {'enabled': False, 'scheduler': 'isolated_upload_lane'} if youtube_only else
                        youtube.maintenance(dispatch=False) if youtube and exclude_youtube else
                        youtube.maintenance() if youtube else {'enabled': False})
         def step():
-            return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
+            return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube, telegram_canary=telegram_canary)
+                    if telegram_canary is not None else
+                    self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                     if youtube_only or exclude_youtube else self.step())
         while processed < max_jobs and time.monotonic() - started < max_seconds and step():
             processed += 1
