@@ -9,8 +9,8 @@
     },
     {
       "name": "CLOUD-SYNTHETIC-channels-1440.png",
-      "bytes": 386750,
-      "sha256": "1db9f30be6ca3a31ddb94a8035ba5dd0884bc964d90b904cba8e9414313c3359"
+      "bytes": 386572,
+      "sha256": "c98615bd5fe6fdcf57bcbfc289b7b8220a12011f7a5b11d4a2f56676e9acdb76"
     },
     {
       "name": "CLOUD-SYNTHETIC-channels-390.png",
@@ -24,8 +24,8 @@
     },
     {
       "name": "CLOUD-SYNTHETIC-profile-1440.png",
-      "bytes": 248569,
-      "sha256": "89f44b71e335f28cceb5aafd50ec8bfb64a95751739116b88604b4f031cba726"
+      "bytes": 248438,
+      "sha256": "1ea3981684f628e82c89dc992594eed8f1983028191e7825d4ab2b0d781c5984"
     },
     {
       "name": "CLOUD-SYNTHETIC-profile-390.png",
@@ -39,8 +39,8 @@
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-thread-1440.png",
-      "bytes": 269262,
-      "sha256": "37960fa151f8f4272946825b0703957a99cca039864a369188d8197da3100c71"
+      "bytes": 269155,
+      "sha256": "95ee9438542ddd28f849c2c07607666e66953e2926ce70b8000b6171270afd97"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-thread-390.png",
@@ -49,33 +49,33 @@
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-thread-320.png",
-      "bytes": 100066,
-      "sha256": "ffc87268c48b6178dd12970e7d2d895f4e41d47d7b49f86abb8fc9ac95c22d31"
+      "bytes": 100126,
+      "sha256": "6f3da75d0c36bd959c07896101bd420e6a0b7c9158360983542caa84c48460bc"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-images-1440.png",
-      "bytes": 282999,
-      "sha256": "d1bb01e05023f4b9b25ab979cb801ede64126daaa1a1acbb383432e661a0e589"
+      "bytes": 282761,
+      "sha256": "265614a56874c8751af37f5f517c3f05abfee21f16e4aefe14d7b3ff62c91bdc"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-images-390.png",
-      "bytes": 104379,
-      "sha256": "c2b4a44c234812c862cb96fe7fbac239518d882a299628b8581693ae76ac25b4"
+      "bytes": 104205,
+      "sha256": "4d82d49787a1fc2e4290530d49a6a78915f4c8da619196b348c89a60baca54a7"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-images-320.png",
-      "bytes": 95406,
-      "sha256": "fffc656ea3563c292ff9944f342a26910c26503a6f1d886d9445628cc76a5540"
+      "bytes": 95500,
+      "sha256": "25ebab00fa61d826958e372591889081f88a72aad0419a3e196081a2df60627d"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-audio-1440.png",
-      "bytes": 297811,
-      "sha256": "ead6245496bda62c5ef1e3af73ba52151cf232bf7b30f974acf07444ceade6d5"
+      "bytes": 297769,
+      "sha256": "574ac560d7d0e0c0a99c101d0f293a0d51f930f226465719b5da0faa89c99994"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-audio-390.png",
-      "bytes": 113276,
-      "sha256": "2a47c9e6fa35aca235caf690b8c7eb9d768d88701f51bf8bd45a7fc3b32ae441"
+      "bytes": 113254,
+      "sha256": "ca4b5ac689b164988180efc2a28c3fc56cb204af15e1a33309ec7fe7cff9af5e"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-audio-320.png",
@@ -84,18 +84,18 @@
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-native-1440.png",
-      "bytes": 304969,
-      "sha256": "ebfede8441774b174cf366c7af711f1421607b303ed898a0e6aa038b76912682"
+      "bytes": 304728,
+      "sha256": "8e4029123dee278fcb244b173eb823a3a49f228a01be21252884bcd38d868056"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-native-390.png",
-      "bytes": 113673,
-      "sha256": "e154a2029dccc088cda4ece548974e4fafbaa7a16f4ec3c2686b06c86622ef01"
+      "bytes": 113518,
+      "sha256": "50b46ce20cfb6569a57e05edf0ae9fe4b6647abf546d3999ddc560866ac41e59"
     },
     {
       "name": "CLOUD-SYNTHETIC-queue-native-320.png",
-      "bytes": 103924,
-      "sha256": "e2ff1d2b5726824184e1e37cc662971a69c4edc9f47020527fac04927187552e"
+      "bytes": 103970,
+      "sha256": "52b243313d57573c65e0cd529dc12a547f8994d55aba985afbfa00fc0243d64a"
     }
   ]
 }

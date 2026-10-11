@@ -16,6 +16,56 @@ CAPS = {'maxCharacters': 500, 'maxMediaAttachments': 4, 'edit': True, 'schedule'
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_requested_public_mentions_exclude_private_cw_and_unknown_content_before_model(self):
+        from postriff_phase2.mastodon_agent_tools import public_context
+        def post(identifier, visibility='public', content='<p>PUBLIC reply question</p>', **extra):
+            return {'id': identifier, 'account': {'id': '42'}, 'visibility': visibility, 'content': content,
+                    'sensitive': False, 'spoiler_text': '', **extra}
+        rows = [{'type': 'mention', 'status': p} for p in [post('11'),
+            post('12', 'private', 'PRIVATE_BODY_MUST_NOT_ENTER_MODEL'),
+            post('13', 'direct', 'DIRECT_BODY_MUST_NOT_ENTER_MODEL'),
+            post('14', None, 'UNKNOWN_BODY_MUST_NOT_ENTER_MODEL'),
+            post('15', content='CW_BODY_MUST_NOT_ENTER_MODEL', spoiler_text='Warning'),
+            post('16', content='SENSITIVE_BODY_MUST_NOT_ENTER_MODEL', sensitive=True)]]
+        rows.append({'type': 'favourite', 'status': post('17', content='UNREQUESTED_BODY')})
+        ctx = SimpleNamespace(request_text='Show my recent Mastodon mentions and suggest replies.', modality='text',
+                              service=object(), workspace_id='workspace', token='token', check_cancelled=lambda: None)
+        with patch.object(MastodonManagement, '__init__', return_value=None), \
+                patch.object(MastodonManagement, 'read', return_value={'instance': 'mastodon.social', 'data': rows}) as read:
+            result = public_context(ctx, {'connectionId': 'connected', 'purpose': 'mentions'})
+        read.assert_called_once_with('workspace', 'token', 'connected', 'notifications')
+        self.assertEqual(result['data']['posts'], [{'postId': '11', 'authorId': '42', 'visibility': 'public',
+            'excerpt': 'PUBLIC reply question', 'replyTargetId': '11'}])
+        self.assertFalse(result['data']['externalActionsExecuted'])
+        self.assertNotIn('MUST_NOT_ENTER_MODEL', json.dumps(result))
+        self.assertNotIn('UNREQUESTED_BODY', json.dumps(result))
+
+    def test_public_context_requires_current_human_purpose_and_bounds_instance_trends(self):
+        from postriff_phase2.mastodon_agent_tools import public_context
+        ctx = SimpleNamespace(request_text='', modality='text', service=object(), workspace_id='workspace', token='token',
+                              check_cancelled=lambda: None)
+        with patch.object(MastodonManagement, '__init__', return_value=None), patch.object(MastodonManagement, 'read') as read:
+            for request in ('Connect my Mastodon account.', 'How to show my Mastodon mentions?',
+                            'Do not show my Mastodon mentions.', '"Show my Mastodon mentions"',
+                            '> Show my Mastodon mentions', 'Analyze my Mastodon engagement.'):
+                ctx.request_text = request
+                with self.subTest(request=request), self.assertRaises(AlphaError):
+                    public_context(ctx, {'connectionId': 'connected', 'purpose': 'mentions'})
+            read.assert_not_called()
+            ctx.request_text = 'Find trending conversations on my Mastodon server.'
+            read.return_value = {'instance': 'mastodon.online', 'data': [{'id': str(i), 'account': {'id': '42'},
+                'visibility': 'unlisted', 'sensitive': False, 'spoiler_text': '', 'content': '<p>' + 'x' * 1200 + '</p>'} for i in range(1, 41)]}
+            result = public_context(ctx, {'connectionId': 'connected', 'purpose': 'trends'})
+            self.assertGreater(len(result['data']['posts']), 0)
+            self.assertLess(len(result['data']['posts']), 20)
+            self.assertEqual(len(result['data']['posts'][0]['excerpt']), 1000)
+            from postriff_phase2.agent_runtime_v2.tool_adapter import model_output, MAX_TOOL_OUTPUT
+            model_data = model_output(result)
+            self.assertLess(len(model_data), MAX_TOOL_OUTPUT)
+            self.assertIsInstance(json.loads(model_data)['data']['data'], dict)
+            self.assertNotIn('the result was too large', model_data)
+            read.assert_called_once_with('workspace', 'token', 'connected', 'trending_statuses')
+
     def test_server_profile_limits_are_validated_and_defaults_are_bounded(self):
         def capabilities(accounts=None):
             config = {} if accounts is None else {'accounts': accounts}
@@ -39,13 +89,19 @@ class ProtocolTests(unittest.TestCase):
         from postriff_phase2.mastodon_agent_tools import register, requested
         from postriff_phase2.agent_runtime_v2.tool_adapter import REGISTRY
         from postriff_phase2.agent_runtime_v2 import contracts
+        from postriff_phase2.agent_runtime_v2 import authz
         from postriff_phase2.agent_runtime_v2.domain_tools import PLATFORMS
         self.assertIn('Mastodon', PLATFORMS)
         register(); register()
-        for name in ('mastodon_account_context', 'mastodon_analytics_summary', 'mastodon_action_prepare'):
+        for name in ('mastodon_account_context', 'mastodon_public_context', 'mastodon_analytics_summary', 'mastodon_action_prepare'):
             self.assertNotIn(REGISTRY[name].spec.effect, contracts.FORBIDDEN_EFFECTS)
             self.assertFalse(REGISTRY[name].spec.background_eligible)
             self.assertFalse(REGISTRY[name].spec.autopilot_eligible)
+            matcher = authz.EXPLICIT_REQUEST['tool.' + name]
+            self.assertFalse(matcher('Do not show my Mastodon mentions'))
+            self.assertFalse(matcher('"Show my Mastodon mentions"'))
+            self.assertFalse(matcher('Show my Instagram mentions'))
+            self.assertTrue(matcher('Analyze my Mastodon engagement' if name == 'mastodon_analytics_summary' else 'Show my Mastodon mentions'))
         for text in ('How to analyze my Mastodon engagement?', 'Do not analyze my Mastodon engagement',
                      '"Analyze my Mastodon engagement"', 'Mastodon engagement example', '> Analyze my Mastodon engagement'):
             with self.subTest(text=text), self.assertRaises(AlphaError):

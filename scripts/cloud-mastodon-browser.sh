@@ -73,7 +73,13 @@ rewrites=manifest.get('rewrites',{})
 entries=rewrites if isinstance(rewrites,list) else sum(rewrites.values(),[])
 assert any(x.get('source')=='/api/:path*' and x.get('destination')=='http://127.0.0.1:4348/api/:path*' for x in entries), 'Build with POSTRIFF_API_ORIGIN=http://127.0.0.1:4348 before this script'
 for port in (4348,4448,55448):
- with socket.socket() as probe:probe.bind(('127.0.0.1',port))
+ with socket.socket() as probe:
+  # Match server bind semantics: recently closed sockets may be in TIME_WAIT.
+  # SO_REUSEADDR still rejects a live listener; never kill another run's process.
+  probe.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+  try:probe.bind(('127.0.0.1',port))
+  except OSError as error:
+   raise SystemExit(f'validation_unavailable: cloud loopback port {port} is occupied (errno={error.errno}); no process was terminated') from error
 PY
 # Pinned client only inside the disposable cloud runner; no repository install.
 npm install --prefix "$jcb_yb_home/artifact-client" --no-audit --no-fund --ignore-scripts --package-lock=false @actions/artifact@2.3.2 >"$jcb_yb_out/artifact-install.log" 2>&1

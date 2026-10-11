@@ -355,6 +355,13 @@ class PostgresWorker:
                         # transaction. Preserve the conclusive publication receipt.
                         cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
                         job["insights"] = {"availability": "unavailable", "note": "Insights ingestion failed; publication verification is unaffected."}
+                        after_rollback = getattr(self.on_verified, 'after_rollback', None)
+                        if callable(after_rollback):
+                            try:
+                                after_rollback(cur, claimed["workspaceId"], job)
+                            except Exception:
+                                cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
+                                job['timeSavings'] = 'pending'
                     finally:
                         cur.execute(f'RELEASE SAVEPOINT {mark}')
                 if published:

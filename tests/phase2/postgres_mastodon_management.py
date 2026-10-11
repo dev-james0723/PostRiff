@@ -241,6 +241,19 @@ class JournalTests(unittest.TestCase):
         with self.assertRaises(AlphaError): self.manager.read(self.foreign, self.other, self.connection_id, 'live_events')
         with self.assertRaises(AlphaError): self.manager.read(self.workspace, self.actor, self.connection_id, 'live_events')
 
+    def test_private_notification_response_is_fenced_after_revocation(self):
+        def transport(method, url, **_kwargs):
+            if '/api/v1/notifications' not in url:
+                return None
+            with connection() as db:
+                db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+            return ok([{'id': '22', 'type': 'mention', 'status': {'id': '23', 'visibility': 'direct',
+                'content': 'PRIVATE_LATE_RESPONSE_MUST_NOT_ESCAPE'}}])
+        self.scoped_transport(['read:accounts', 'read:notifications'], transport)
+        with self.assertRaises(AlphaError) as caught:
+            self.manager.read(self.workspace, self.actor, self.connection_id, 'notifications')
+        self.assertEqual(caught.exception.code, 'mastodon_read_changed')
+
     def audio(self, cur):
         asset_id = uuid.uuid4().hex
         cur.execute("INSERT INTO public.pr_library_assets(id,workspace_id,created_by,original_filename,kind,mime,extension,bytes,sha256,bucket,object_name,etag,processing_status) VALUES(%s,%s,%s,'test.mp3','audio','audio/mpeg','mp3',200,%s,'postriff-private',%s,'synthetic-etag','unsupported')",

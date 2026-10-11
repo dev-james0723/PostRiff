@@ -189,6 +189,7 @@ class DurablePublishingTests(unittest.TestCase):
         self.assertTrue(all(method == 'GET' for method, _, _ in self.calls))
 
     def test_single_and_native_readback_reject_every_changed_approved_setting(self):
+        from datetime import datetime, timedelta
         from postriff_phase2.hosted_social import HostedSocial
         p = self.native_progress()
         self.manifest['publishOptions'].update(visibility='unlisted', sensitive=True, language='en',
@@ -197,13 +198,16 @@ class DurablePublishingTests(unittest.TestCase):
         published = {'id': '51', 'account': {'id': '10'}, 'created_at': p['scheduledAt'],
             'content': '<p>An approved post</p>', 'visibility': 'unlisted', 'sensitive': True, 'language': 'en',
             'spoiler_text': 'CW', 'in_reply_to_id': '9', 'media_attachments': [{'id': '21'}],
-            'poll': {'options': [{'title': 'A'}, {'title': 'B'}], 'multiple': False},
+            'poll': {'options': [{'title': 'A'}, {'title': 'B'}], 'multiple': False,
+                     'expires_at': (datetime.fromisoformat(p['scheduledAt'].replace('Z', '+00:00')) + timedelta(seconds=600)).isoformat()},
             'quote': {'state': 'accepted', 'quoted_status_id': '8'}}
         self.now += 610
         provider = self.social._provider(None)
         hosted = HostedSocial(self.social.oauth, {})
         for change in ({}, {'language': 'fr'}, {'sensitive': False}, {'in_reply_to_id': None},
                        {'quote': {'state': 'accepted', 'quoted_status_id': '7'}},
+                       {'poll': {**published['poll'], 'expires_at': p['scheduledAt']}},
+                       {'poll': {**published['poll'], 'expires_at': None}},
                        {'poll': {'multiple': True, 'options': [{'title': 'A'}, {'title': 'B'}]}},
                        {'poll': {'multiple': False, 'options': [{'title': 'A'}, {'title': 'C'}]}}):
             with self.subTest(change=change):

@@ -3,10 +3,12 @@ import copy
 import hashlib
 import html
 import re
+from datetime import datetime
 
 from postriff_alpha.domain import AlphaError
 from .mastodon_protocol import discover, validate_status, ID
 from .outcomes import valid_receipt_url
+from .mastodon_status_text import matches_text
 
 
 def parts(manifest):
@@ -37,7 +39,18 @@ def matches(value, manifest, refs, index, instance, attachments):
     actual_poll = value.get('poll')
     if poll:
         if (not isinstance(actual_poll, dict) or actual_poll.get('multiple') is not poll.get('multiple', False)
-                or [o.get('title') for o in actual_poll.get('options', []) if isinstance(o, dict)] != poll['options']):
+                or not isinstance(actual_poll.get('options'), list)
+                or any(not isinstance(o, dict) for o in actual_poll['options'])
+                or [o.get('title') for o in actual_poll['options'] if isinstance(o, dict)] != poll['options']):
+            return False
+        try:
+            created = datetime.fromisoformat(value['created_at'].replace('Z', '+00:00'))
+            expires = datetime.fromisoformat(actual_poll['expires_at'].replace('Z', '+00:00'))
+            # The API exposes an absolute expiry, not the submitted duration.
+            # Allow five seconds of server timestamp rounding/processing skew.
+            if not created.tzinfo or not expires.tzinfo or abs((expires - created).total_seconds() - poll['expires_in']) > 5:
+                return False
+        except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
             return False
     elif actual_poll:
         return False
@@ -52,7 +65,7 @@ def matches(value, manifest, refs, index, instance, attachments):
     return (str(value.get('id')) == refs[index]
             and isinstance(value.get('account'), dict)
             and str(value['account'].get('id')) + '@' + instance == manifest['providerAccountId']
-            and plain_content(value.get('content', '')) == parts(manifest)[index].strip()
+            and matches_text(value, parts(manifest)[index], instance, plain_content)
             and value.get('visibility') == options.get('visibility', 'public')
             and (value.get('spoiler_text') or '') == options.get('spoiler_text', '')
             and value.get('sensitive') is options.get('sensitive', False)

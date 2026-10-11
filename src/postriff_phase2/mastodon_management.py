@@ -177,6 +177,19 @@ class MastodonManagement:
             raise AlphaError("The Mastodon server could not complete this request.", 503)
         return response["body"]
 
+    def _read_fence(self, workspace, token, connection, grant):
+        """Authorize the returned snapshot against the current member and exact credential after network reads."""
+        from .hosted import _membership
+        with self.repository.transaction(token, workspace) as (cur, row, _actor):
+            require(_membership(row), 'read')
+            cur.execute("SELECT access_ciphertext,key_id,provider_account_id,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL", (workspace, connection))
+            current = cur.fetchone()
+            if (not current or current[2] != grant['providerAccountId']
+                    or self.oauth.vault.decrypt(current[0], current[1]) != grant['accessToken']
+                    or not has_scopes(current[3], grant.get('scopes') or [])):
+                raise AlphaError('The connection changed during this read. Read again after reconnecting.', 409,
+                                 code='mastodon_read_changed')
+
     def read(self, workspace, token, connection, resource):
         if resource == 'health':
             from .hosted import _membership
@@ -203,14 +216,7 @@ class MastodonManagement:
             window = read_window(provider, session)
             # Recheck current membership/credential after the window before returning
             # private excerpts; revocation during the read must not leak its result.
-            with self.repository.transaction(token, workspace) as (cur, _row, _actor):
-                from .hosted import _membership
-                require(_membership(_row), 'read')
-                cur.execute("SELECT access_ciphertext,key_id,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL", (workspace, connection))
-                current = cur.fetchone()
-                if (not current or current[2] != grant['providerAccountId']
-                        or self.oauth.vault.decrypt(current[0], current[1]) != grant['accessToken']):
-                    raise AlphaError('The connection changed during this window. Read again after reconnecting.', 409)
+            self._read_fence(workspace, token, connection, grant)
             return {'connectionId': connection, 'instance': session['instance'], 'resource': resource,
                     **{k: v for k, v in window.items() if k != 'events'}, 'data': window['events']}
         if resource == "capabilities":
@@ -223,6 +229,7 @@ class MastodonManagement:
             rows = self._result(provider.api(session, "GET", f"/api/v1/accounts/{account_id}/statuses?limit=40&exclude_reblogs=true"))
             if not isinstance(rows, list):
                 raise AlphaError("Mastodon returned invalid post data.", 502)
+            self._read_fence(workspace, token, connection, grant)
             if resource == "posts":
                 return {"connectionId": connection, "instance": session["instance"], "posts": rows, "coverage": "latest 40; not complete history"}
             # Only public/unlisted authored posts may enter this broader analytics response.
@@ -231,6 +238,7 @@ class MastodonManagement:
                        for r in rows if isinstance(r, dict) and r.get("id") and r.get("visibility") in ("public", "unlisted")
                        and not r.get("reblog") and str((r.get("account") or {}).get("id")) == account_id]
             profile = self._result(provider.api(session, "GET", "/api/v1/accounts/verify_credentials"))
+            self._read_fence(workspace, token, connection, grant)
             from .mastodon_analytics import history
             with self.repository.transaction(token, workspace) as (cur, _row, _actor):
                 collected = history(cur, workspace, connection, session['instance'], [r['id'] for r in metrics])
@@ -242,8 +250,10 @@ class MastodonManagement:
         if not spec:
             raise AlphaError("This Mastodon resource is unavailable.", 404)
         self._scopes(grant, spec[1])
+        data = self._result(provider.api(session, "GET", spec[0]))
+        self._read_fence(workspace, token, connection, grant)
         return {"connectionId": connection, "instance": session["instance"], "resource": resource,
-                "data": self._result(provider.api(session, "GET", spec[0])), "coverage": "instance-local, bounded page"}
+                "data": data, "coverage": "instance-local, bounded page"}
 
     def preview(self, workspace, token, connection, payload):
         if not isinstance(payload, dict):

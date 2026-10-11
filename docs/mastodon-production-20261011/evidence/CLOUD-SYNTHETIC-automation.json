@@ -7,13 +7,15 @@
     "exact human approval through existing Queue and real worker",
     "explicit definition-bound owner authority",
     "persisted verified native status readback and restart no duplicate",
-    "pause after queuing fences external dispatch"
+    "pause after queuing fences external dispatch",
+    "same numeric identity on independent instances has exact destinations",
+    "revoke account A after queuing blocks A and leaves B functional"
   ],
-  "syntheticWrites": 2,
+  "syntheticWrites": 4,
+  "writesByInstance": {
+    "mastodon.social": 2,
+    "mastodon.online": 2
+  },
   "realMastodonAcceptance": false,
-  "paidModelCalls": 0,
-  "cloudRunId": "5f2p9bncg9",
-  "cloudExitCode": 0,
-  "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093338659739Z-test.json",
-  "scope": "One exact connected account; disposable SQL; synthetic writer and provider. No live A\u2013E acceptance."
+  "paidModelCalls": 0
 }

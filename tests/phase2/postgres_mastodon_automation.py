@@ -35,22 +35,27 @@ verify.auth_time = lambda *_args: clock[0]
 class API(SyntheticMastodon):
     def __init__(self):
         super().__init__(); self.posts = {}; self.keys = {}; self.writes = 0
+        self.writes_by_instance = {'mastodon.social': 0, 'mastodon.online': 0}
     def __call__(self, method, url, **kw):
         parts = urlsplit(url)
         if parts.path == '/api/v1/statuses' and method == 'POST':
-            assert parts.hostname == 'mastodon.social'
+            assert parts.hostname in self.writes_by_instance
             key = kw.get('headers', {}).get('Idempotency-Key'); assert key
+            key = (parts.hostname, key)
             if key in self.keys: return self.keys[key]
             body = kw['body']; self.writes += 1; identifier = str(3000 + self.writes)
+            self.writes_by_instance[parts.hostname] += 1
             value = {'id': identifier, 'account': {'id': '100'}, 'content': '<p>' + html.escape(body['status']).replace('\n', '<br />') + '</p>',
                      'visibility': body.get('visibility', 'public'), 'spoiler_text': body.get('spoiler_text', ''),
                      'sensitive': body.get('sensitive', False), 'language': body.get('language'), 'media_attachments': [],
                      'in_reply_to_id': body.get('in_reply_to_id'), 'created_at': datetime.fromtimestamp(clock[0], timezone.utc).isoformat(),
-                     'url': 'https://mastodon.social/@SYNTHETIC/' + identifier}
+                     'url': 'https://' + parts.hostname + '/@SYNTHETIC/' + identifier}
             self.posts[identifier] = value; self.keys[key] = {'status': 200, 'body': value, 'headers': {}}
             return self.keys[key]
         if parts.path.startswith('/api/v1/statuses/') and method == 'GET' and parts.path.rsplit('/', 1)[1] in self.posts:
-            return {'status': 200, 'body': self.posts[parts.path.rsplit('/', 1)[1]], 'headers': {}}
+            value = self.posts[parts.path.rsplit('/', 1)[1]]
+            assert urlsplit(value['url']).hostname == parts.hostname, 'Cross-instance readback must not succeed.'
+            return {'status': 200, 'body': value, 'headers': {}}
         return super().__call__(method, url, **kw)
 
 class Writer(FixtureAgentRuntime):
@@ -82,6 +87,10 @@ started = service.oauth.start(workspace, actor, 'mastodon', 'management', {'inst
 from urllib.parse import parse_qs
 connected = service.oauth.complete(workspace, actor, 'mastodon', parse_qs(urlsplit(started['authorizeUrl']).query)['state'][0], 'synthetic-code')
 channel = connected['connectionId']
+started_b = service.oauth.start(workspace, actor, 'mastodon', 'management', {'instance': 'mastodon.online'})
+connected_b = service.oauth.complete(workspace, actor, 'mastodon', parse_qs(urlsplit(started_b['authorizeUrl']).query)['state'][0], 'synthetic-code-b')
+channel_b = connected_b['connectionId']
+assert channel_b != channel
 destinations = [{'platform': 'Mastodon', 'language': 'en', 'channelId': channel}]
 conversation = service.ideas.create_conversation(workspace, actor, 'Synthetic Mastodon Automation')['conversationId']
 # Bounded synthetic-only error diagnostics; never log production provider data.
@@ -138,7 +147,7 @@ def advance_to_commit(identifier):
     clock[0] = run(identifier)['items'][0]['publishAt'] - COMMIT_LEAD + 1
     outcome = campaigns.tick_many(max_runs=1, max_seconds=10)
     assert jobs(identifier), {'worker': outcome, 'items': [{k: item.get(k) for k in ('state', 'reason', 'lastError', 'publishAt', 'approvedVia')} for item in run(identifier)['items']]}
-def complete(identifier):
+def complete(identifier, instance='mastodon.social'):
     [job] = jobs(identifier); clock[0] = job['manifest']['timing']['timestamp'] + 1
     for _ in range(8):
         publishing().tick(max_jobs=1, max_seconds=5)
@@ -148,7 +157,8 @@ def complete(identifier):
         clock[0] += 70
     assert job['state'] == 'verified', job
     assert job['url'] in [p['url'] for p in api.posts.values()]
-    assert job['manifest']['providerAccountId'] == '100@mastodon.social'
+    assert job['manifest']['providerAccountId'] == '100@' + instance
+    assert urlsplit(job['url']).hostname == instance
     assert publishing().tick(max_jobs=1, max_seconds=5).get('processed', 0) == 0
     return job
 
@@ -178,8 +188,38 @@ clock[0] = pending['manifest']['timing']['timestamp'] + 1
 publishing().tick(max_jobs=1, max_seconds=5)
 assert api.writes == 2, 'Pause must fence actual provider dispatch after queuing.'
 assert jobs(paused)[0]['state'] in ('held', 'canceled'), jobs(paused)[0]
+
+# Both instances deliberately report the same local numeric account ID. The
+# exact connection/instance must remain in every draft, authority and receipt.
+for identifier in (review, automatic):
+    act('raffi_recurrence_pause', {'taskId': identifier})
+destinations = [{'platform': 'Mastodon', 'language': 'en', 'channelId': channel_b}]
+independent = create('daily practice reflections', 'Publish automatically')
+advance_to_commit(independent); complete(independent, 'mastodon.online')
+assert api.writes_by_instance == {'mastodon.social': 2, 'mastodon.online': 1}
+act('raffi_recurrence_pause', {'taskId': independent})
+
+destinations = [{'platform': 'Mastodon', 'language': 'en', 'channelId': channel}]
+revoked = create('weekly practice reflections', 'Publish automatically')
+advance_to_commit(revoked); [pending] = jobs(revoked)
+service.oauth.disconnect(workspace, actor, channel)
+clock[0] = pending['manifest']['timing']['timestamp'] + 1
+publishing().tick(max_jobs=1, max_seconds=5)
+assert api.writes == 3, 'Revocation must fence the already queued account A dispatch.'
+assert jobs(revoked)[0]['state'] in ('held', 'canceled'), jobs(revoked)[0]
+with connection() as db:
+    credentials = dict(db.execute('SELECT connection_id,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s', (workspace,)).fetchall())
+assert credentials[channel] is True and credentials[channel_b] is False
+act('raffi_recurrence_pause', {'taskId': revoked})
+destinations = [{'platform': 'Mastodon', 'language': 'en', 'channelId': channel_b}]
+survivor = create('daily practice observations', 'Publish automatically')
+advance_to_commit(survivor); complete(survivor, 'mastodon.online')
+assert api.writes_by_instance == {'mastodon.social': 2, 'mastodon.online': 2}
 print(json.dumps({'status': 'PASS', 'execution': 'CLOUD SYNTHETIC writer/provider; actual Automation/Queue/SQL',
     'checks': ['current account/instance and Brand Brain draft routing', 'review default has no provider writes',
                'exact human approval through existing Queue and real worker', 'explicit definition-bound owner authority',
-               'persisted verified native status readback and restart no duplicate', 'pause after queuing fences external dispatch'],
-    'syntheticWrites': api.writes, 'realMastodonAcceptance': False, 'paidModelCalls': 0}))
+               'persisted verified native status readback and restart no duplicate', 'pause after queuing fences external dispatch',
+               'same numeric identity on independent instances has exact destinations',
+               'revoke account A after queuing blocks A and leaves B functional'],
+    'syntheticWrites': api.writes, 'writesByInstance': api.writes_by_instance,
+    'realMastodonAcceptance': False, 'paidModelCalls': 0}))

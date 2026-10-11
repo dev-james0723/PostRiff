@@ -444,4 +444,19 @@ with connection() as db:
 assert service.time_savings.maintain()["sessionsDropped"] == 1
 checks.append("activity aggregates past the 30-day window are dropped by the cron")
 
+
+def failed_sql_ingestion(cur, workspace_id, job):
+    cur.execute('SELECT 1/0')
+
+
+before_sql_fail = len(publish_rows())
+sixth = approve(3)
+sql_failed = publish(sixth, Social(ACCEPTED, VERIFIED), on_verified=tb.with_time_back(failed_sql_ingestion, service.time_savings))
+assert sql_failed['state'] == 'verified' and sql_failed['insights']['availability'] == 'unavailable'
+assert 'timeSavings' not in sql_failed, 'The independent ledger write must succeed after restoring the transaction.'
+assert [row['ref'] for row in publish_rows()].count('job:' + sixth['id']) == 1 and len(publish_rows()) == before_sql_fail + 1
+assert service.time_savings.maintain()['repaired'] == 0
+assert len(publish_rows()) == before_sql_fail + 1, 'A retry or maintenance sweep cannot duplicate the restored credit.'
+checks.append('a PostgreSQL-aborted insights hook preserves verification and restores exactly one independent Time Back credit')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres", "checks": checks}, indent=2))

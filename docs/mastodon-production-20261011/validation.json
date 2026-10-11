@@ -3,31 +3,29 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "sourceHead": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
-    "sourceFingerprint": "714d8d28ff76bdf98744a4190122e9a9338a23abe8d623d18e4d755cb997c31b",
-    "patchSha256": "fbb058ce176cbe901b07cd8cfbc55b7b91a2a5acfcac874bd29d8bb8dd651af3",
+    "sourceFingerprint": "cf2dfb55ff434b525d20f658025dc7d3a34f4351f551242779ac1764dc347f90",
+    "patchSha256": "fdafa4611494797844d26bc938a264cc04be3e349746e69ff16699577d8e892f",
+    "patchBytes": 557830,
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 536074,
-    "task": "e2e",
-    "scope": "frontend: lint/typecheck/build and actual browser; unchanged backend checks reused below. Phone contrast utility candidate awaits GitHub axe.",
-    "runId": "s1wnp53m8z",
+    "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+    "runId": "5kwfw329zp",
+    "task": "ci",
     "exitCode": 0,
+    "elapsedSeconds": 161.139,
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T100353059196Z-e2e.json",
-    "elapsedSeconds": 127.997
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103905398078Z-ci.json",
+    "scope": "Full candidate before Time Back rollback repair; affected contracts and actual PostgreSQL repair validated by targetedWorkerValidation. Small paragraph whitespace change validated by one lightweight local unit; final commit broad CI remains required."
   },
   "checks": {
     "pythonContracts": {
-      "passed": 485,
-      "runId": "b6kfs31dn5",
-      "reusedUnchangedSource": true
+      "passed": 493,
+      "runId": "5kwfw329zp"
     },
     "sqlActionIsolation": {
-      "passed": 23,
-      "postgresVersion": 16,
-      "runId": "b6kfs31dn5",
-      "reusedUnchangedSource": true
+      "passed": 24,
+      "runId": "5kwfw329zp",
+      "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
     "webContracts": {
@@ -119,10 +117,10 @@
           "realMastodonAcceptance": false
         }
       ],
-      "scope": "4.6.1 profile descriptions/limits, explicit language clear, metadata and website attribution approval, old4.2.9 unsupported controls disabled; actual Queue 4journeys, all3widths; synthetic providers."
+      "scope": "Actual Channels/Profile/Queue, 1440/390/320; all external identity/provider calls are synthetic."
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
-    "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
+    "threadContracts": "PASS: exact rendered mention URL/acct identities with remote domains, aware approved poll expiry, committed child intents and no unknown-write resends; single/native paths use the same matcher.",
     "nativeScheduleSynchronization": "PASS: exact approved time, preserved manifest, canceled schedule and old-worker fencing in disposable SQL",
     "foregroundStreaming": "PASS: bounded SSE, current tenant/credential recheck; private excerpt absent from workspace persistence",
     "simulatedConcurrentConnectedUsers": {
@@ -151,20 +149,28 @@
       "evidenceRunId": "blvhrhvvwn"
     },
     "connectionHealth": "PASS: exact credential fencing, bounded due lease/jitter/backoff, migrated/suspended/revoked identity guards; absolute request deadline includes bounded DNS admission.",
-    "optionalVerifiedHook": "PASS: actual PostgreSQL failed SQL callback rolls back to savepoint; conclusive receipt persists and repeat completion runs no callback.",
+    "optionalVerifiedHook": "PASS: actual PostgreSQL failed insights callback rolls back to savepoint; conclusive receipt survives and independent Time Back credit is restored exactly once; repeated completion/maintenance does not duplicate it.",
     "nativeQueueReview": "PASS: exact canonical native time frozen into Queue approval using service clock; no provider effect before approval.",
     "automationSqlWorker": {
       "status": "PASS",
       "realMastodonAcceptance": false,
-      "syntheticWrites": 2,
+      "syntheticWrites": 4,
       "paidModelCalls": 0,
-      "evidence": "evidence/CLOUD-SYNTHETIC-automation.json"
+      "evidence": "evidence/CLOUD-SYNTHETIC-automation.json",
+      "writesByInstance": {
+        "mastodon.social": 2,
+        "mastodon.online": 2
+      },
+      "runId": "phxgfwj25s"
     },
     "phoneAccessibility": {
-      "status": "PENDING_GITHUB_CI",
-      "priorFailedCheck": 114439837707,
-      "candidate": "Revoke/delete number quiet button now uses existing foreground text utility; axe remains enabled."
-    }
+      "status": "PASS",
+      "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "checkRunId": 114445381337,
+      "scope": "Unchanged GitHub Scenes/Phone Mode axe; revoke/delete button uses existing foreground text utility."
+    },
+    "publicAgentContext": "PASS: actual Agents SDK scripted model gets exact selected instance public mentions; private/direct/unknown/CW/sensitive omitted before model. Explicit request matchers registered for permission enforcement. Serialized excerpt budget fits the SDK envelope; no external actions.",
+    "responseAuthorizationFence": "PASS: actual SQL private notification response is rejected after revocation; current membership, exact credential/identity and scopes are checked after network reads."
   },
   "capacity": {
     "simulatedConnectedUsers": 1000,
@@ -222,8 +228,8 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-1440.png",
-      "sha256": "1db9f30be6ca3a31ddb94a8035ba5dd0884bc964d90b904cba8e9414313c3359",
-      "bytes": 386750,
+      "sha256": "c98615bd5fe6fdcf57bcbfc289b7b8220a12011f7a5b11d4a2f56676e9acdb76",
+      "bytes": 386572,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
@@ -243,8 +249,8 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-1440.png",
-      "sha256": "89f44b71e335f28cceb5aafd50ec8bfb64a95751739116b88604b4f031cba726",
-      "bytes": 248569,
+      "sha256": "1ea3981684f628e82c89dc992594eed8f1983028191e7825d4ab2b0d781c5984",
+      "bytes": 248438,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
@@ -264,8 +270,8 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-1440.png",
-      "sha256": "37960fa151f8f4272946825b0703957a99cca039864a369188d8197da3100c71",
-      "bytes": 269262,
+      "sha256": "95ee9438542ddd28f849c2c07607666e66953e2926ce70b8000b6171270afd97",
+      "bytes": 269155,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
@@ -278,43 +284,43 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-320.png",
-      "sha256": "ffc87268c48b6178dd12970e7d2d895f4e41d47d7b49f86abb8fc9ac95c22d31",
-      "bytes": 100066,
+      "sha256": "6f3da75d0c36bd959c07896101bd420e6a0b7c9158360983542caa84c48460bc",
+      "bytes": 100126,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-1440.png",
-      "sha256": "d1bb01e05023f4b9b25ab979cb801ede64126daaa1a1acbb383432e661a0e589",
-      "bytes": 282999,
+      "sha256": "265614a56874c8751af37f5f517c3f05abfee21f16e4aefe14d7b3ff62c91bdc",
+      "bytes": 282761,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-390.png",
-      "sha256": "c2b4a44c234812c862cb96fe7fbac239518d882a299628b8581693ae76ac25b4",
-      "bytes": 104379,
+      "sha256": "4d82d49787a1fc2e4290530d49a6a78915f4c8da619196b348c89a60baca54a7",
+      "bytes": 104205,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-320.png",
-      "sha256": "fffc656ea3563c292ff9944f342a26910c26503a6f1d886d9445628cc76a5540",
-      "bytes": 95406,
+      "sha256": "25ebab00fa61d826958e372591889081f88a72aad0419a3e196081a2df60627d",
+      "bytes": 95500,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-1440.png",
-      "sha256": "ead6245496bda62c5ef1e3af73ba52151cf232bf7b30f974acf07444ceade6d5",
-      "bytes": 297811,
+      "sha256": "574ac560d7d0e0c0a99c101d0f293a0d51f930f226465719b5da0faa89c99994",
+      "bytes": 297769,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-390.png",
-      "sha256": "2a47c9e6fa35aca235caf690b8c7eb9d768d88701f51bf8bd45a7fc3b32ae441",
-      "bytes": 113276,
+      "sha256": "ca4b5ac689b164988180efc2a28c3fc56cb204af15e1a33309ec7fe7cff9af5e",
+      "bytes": 113254,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
@@ -327,22 +333,22 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-1440.png",
-      "sha256": "ebfede8441774b174cf366c7af711f1421607b303ed898a0e6aa038b76912682",
-      "bytes": 304969,
+      "sha256": "8e4029123dee278fcb244b173eb823a3a49f228a01be21252884bcd38d868056",
+      "bytes": 304728,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-390.png",
-      "sha256": "e154a2029dccc088cda4ece548974e4fafbaa7a16f4ec3c2686b06c86622ef01",
-      "bytes": 113673,
+      "sha256": "50b46ce20cfb6569a57e05edf0ae9fe4b6647abf546d3999ddc560866ac41e59",
+      "bytes": 113518,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-320.png",
-      "sha256": "e2ff1d2b5726824184e1e37cc662971a69c4edc9f47020527fac04927187552e",
-      "bytes": 103924,
+      "sha256": "52b243313d57573c65e0cd529dc12a547f8994d55aba985afbfa00fc0243d64a",
+      "bytes": 103970,
       "execution": "CLOUD SYNTHETIC",
       "runId": "s1wnp53m8z"
     },
@@ -355,10 +361,10 @@
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-automation.json",
-      "sha256": "2a7ac401ab19ea31bd3fd0c087d264911584f093b5193590ec54428cac203b40",
-      "bytes": 835,
+      "sha256": "2039bda7b8ad83b1b6fe40d6da0302b9f9599c35ae3825da156fc1933b5775af",
+      "bytes": 779,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "5f2p9bncg9"
+      "runId": "phxgfwj25s"
     }
   ],
   "localChecks": [
@@ -367,6 +373,11 @@
       "check": "Phase9 Python AST, cloud-script bash syntax and source diff whitespace",
       "status": "PASS",
       "scope": "Lightweight local only; all Node/TS/build/browser/SQL ran remotely."
+    },
+    {
+      "check": "Changed Python AST/JSON/bash syntax, git diff whitespace; one test_local_mentions_and_paragraphs_preserve_exact_other_text unit (0.15s process)",
+      "status": "PASS",
+      "scope": "One narrowly targeted lightweight Python unit allowed by compute policy; all Node/TS/SQL/browser/full suites remain remote."
     }
   ],
   "priorCloudRuns": [
@@ -420,105 +431,147 @@
       "provider": "Depot/JCB",
       "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093700221976Z-ci.json",
       "elapsedSeconds": 177.984
+    },
+    {
+      "sourceHead": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
+      "sourceFingerprint": "714d8d28ff76bdf98744a4190122e9a9338a23abe8d623d18e4d755cb997c31b",
+      "patchSha256": "fbb058ce176cbe901b07cd8cfbc55b7b91a2a5acfcac874bd29d8bb8dd651af3",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 536074,
+      "task": "e2e",
+      "scope": "frontend: lint/typecheck/build and actual browser; unchanged backend checks reused below. Phone contrast utility candidate awaits GitHub axe.",
+      "runId": "s1wnp53m8z",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T100353059196Z-e2e.json",
+      "elapsedSeconds": 127.997
+    },
+    {
+      "sourceFingerprint": "8f5902a7597f7585baeddc1bf310842c79cbb8569d0f0f30cb44bc23389234c5",
+      "patchSha256": "853151819b56efed03485f1e5bf2fbf483ccf314039919c9ae07caa25c1e424a",
+      "patchBytes": 540430,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "t9cpc1glf6",
+      "task": "ci",
+      "exitCode": 0,
+      "elapsedSeconds": 164.72,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T102221376989Z-ci.json",
+      "observation": "Phase10 full pass; superseded by phase11"
+    },
+    {
+      "sourceFingerprint": "74cf58dab8ced1a0ad7c31d1112dcc4f536d587930d99fe8c6bac8973ce5c5fe",
+      "patchSha256": "a160e6e0ae80091b4be43b39e8c4f30993309275256e85c8a668f03b4bb511ec",
+      "patchBytes": 550591,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "vk2bht71cc",
+      "task": "ci",
+      "exitCode": 1,
+      "elapsedSeconds": 126.198,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T102941745642Z-ci.json",
+      "observation": "Backend/build pass; browser preflight address-in-use; socket guard repaired"
+    },
+    {
+      "sourceFingerprint": "680a665225803f2bcbc780ed83a4dff2310efdff524ae86d904f3bd94a625115",
+      "patchSha256": "e56957f09b5ab3d984e007beff0c9137ae93e726f5c1bacaca4e3a981e834355",
+      "patchBytes": 556734,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "zcvthfd39b",
+      "task": "ci",
+      "exitCode": 1,
+      "elapsedSeconds": 98.553,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103202923832Z-ci.json",
+      "observation": "493 Python/24 SQL pass; second synthetic OAuth occurred after advancing fixture time; connection moved before time advance"
+    },
+    {
+      "sourceFingerprint": "8d1308a5f258f7738eb0cfb934f55861a44e9017c8a5fc8c49fbd430cac9e5e4",
+      "patchSha256": "fe4f458f5b61d36bb2ba1f5d712405be9cf15f807344717576bea0ff92abf050",
+      "patchBytes": 572011,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "lrl15sn9s7",
+      "task": "test",
+      "exitCode": 0,
+      "elapsedSeconds": 71.618,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103357204177Z-test.json",
+      "observation": "Two synthetic independent-instance Automation pass"
+    },
+    {
+      "sourceFingerprint": "0517c600c402c7cc0bc84f72484147cdc3f5420ee58bb295ad76625a49e7d41a",
+      "patchSha256": "c49953d2a915625a56dcebbe4ce103f50b55aa327e232d955585b693adebdaf7",
+      "patchBytes": 557141,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "795zd19wz8",
+      "task": "e2e",
+      "exitCode": 1,
+      "elapsedSeconds": 97.637,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T103551238512Z-e2e.json",
+      "observation": "Google Font/Turbopack build failure; never reached browser; full CI existing cache passed"
+    },
+    {
+      "sourceFingerprint": "e51382f5ba0ca9ac832c06396787a271ac7f017529b9e81bf8e7425d9570f553",
+      "patchSha256": "5eb82dd098ce8a693461471f15548fe9eae673a3e4a590d0629f0d0322d76044",
+      "patchBytes": 575696,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "z20mrl9jwd",
+      "task": "test",
+      "exitCode": 1,
+      "elapsedSeconds": 82.093,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104110799024Z-test.json",
+      "observation": "Rollback repair passed; new fixture altered later aggregate expectations"
+    },
+    {
+      "sourceFingerprint": "b93cf6f1fe455465b5887dfcd7f90b126325a9dd6ff40a3c577e559faf82e937",
+      "patchSha256": "0bfb6cd450676cf1aceb3c144f6415b45f551b6774bda76cab4111cbb52b3020",
+      "patchBytes": 577380,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+      "runId": "v1jz2jzx13",
+      "task": "test",
+      "exitCode": 1,
+      "elapsedSeconds": 71.215,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104310062155Z-test.json",
+      "observation": "New fixture still affected later RLS aggregate; moved after original baseline assertions"
     }
   ],
   "githubCI": {
-    "observedAt": "2026-10-11T10:06:00Z",
-    "headRevision": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
-    "checks": [
-      {
-        "name": "Vercel Preview Comments",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114440219824
-      },
-      {
-        "name": "dependency-lock",
-        "status": "completed",
-        "conclusion": "skipped",
-        "id": 114439838963
-      },
-      {
-        "name": "generate-assets",
-        "status": "completed",
-        "conclusion": "skipped",
-        "id": 114439838937
-      },
-      {
-        "name": "dependency-lock",
-        "status": "completed",
-        "conclusion": "skipped",
-        "id": 114439838622
-      },
-      {
-        "name": "founder",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439838450
-      },
-      {
-        "name": "agent-ui-browser",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439838264
-      },
-      {
-        "name": "local-gates",
-        "status": "in_progress",
-        "conclusion": null,
-        "id": 114439838160
-      },
-      {
-        "name": "document-runtime",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439838130
-      },
-      {
-        "name": "agent-ui",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439838028
-      },
-      {
-        "name": "library",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439837938
-      },
-      {
-        "name": "growth-studio",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439837853
-      },
-      {
-        "name": "native-learning-browser",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114439837810
-      },
-      {
-        "name": "scenes",
-        "status": "completed",
-        "conclusion": "failure",
-        "id": 114439837707
-      }
-    ],
-    "statuses": [
-      {
-        "context": "Vercel",
-        "state": "success"
-      }
-    ],
-    "scope": "Phase8 GitHub CI: library regression fixed; scenes fails phone revoke button contrast, with scoped foreground-text repair in phase9 candidate. local-gates pending. Vercel Preview only."
+    "observedAt": "2026-10-11T10:40:00Z",
+    "headRevision": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+    "localGates": {
+      "checkRunId": 114445381385,
+      "conclusion": "failure",
+      "python": "PASS",
+      "postgres": "FAIL: Time Back credit rolled back with failing optional insights hook; repaired and targeted SQL passes above"
+    },
+    "scenes": "PASS",
+    "otherChecks": "PASS; exact final commit checks pending after push",
+    "scope": "Prior pushed commit only; final source has not yet been pushed."
   },
   "browserArtifact": {
     "provider": "Depot CI",
-    "runId": "s1wnp53m8z",
-    "artifactId": "01a12a6a-f9ab-70e7-bd64-b327d5ffebc2",
+    "runId": "5kwfw329zp",
+    "artifactId": "01a12a8b-3ecf-7a99-adfb-9ae816c743cc",
     "name": "rafii-mastodon-synthetic-browser",
-    "zipBytes": 3137829,
+    "zipBytes": 3136741,
     "files": 20,
     "manifest": "evidence/CLOUD-SYNTHETIC-manifest.json",
     "sha256Verified": true
@@ -717,9 +770,100 @@
         }
       ],
       "scope": "GitHub CI on phase7 head: local-gates and library failed; exact fixes included in phase8 candidate, new commit CI pending. Vercel Preview only."
+    },
+    {
+      "observedAt": "2026-10-11T10:06:00Z",
+      "headRevision": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114440219824
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838963
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838937
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114439838622
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838450
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838264
+        },
+        {
+          "name": "local-gates",
+          "status": "in_progress",
+          "conclusion": null,
+          "id": 114439838160
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838130
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439838028
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837938
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837853
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114439837810
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114439837707
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "Phase8 GitHub CI: library regression fixed; scenes fails phone revoke button contrast, with scoped foreground-text repair in phase9 candidate. local-gates pending. Vercel Preview only."
     }
   ],
-  "backendValidation": {
+  "priorBackendValidation": {
     "runId": "b6kfs31dn5",
     "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T094956180705Z-ci.json",
     "runExitCode": 1,
@@ -731,5 +875,25 @@
       "webContracts": 35
     },
     "whyRunFailed": "Frontend browser assumed account display order; fixed to exact instance-qualified selectors. Backend files unchanged since these passed stages."
+  },
+  "targetedWorkerValidation": {
+    "sourceFingerprint": "17fe6f23adf7965d2f02e9d0ae9e860161c037f5557ebe8ea415d6f10fbb065a",
+    "patchSha256": "5070b7d888505683e5adb1a550975acf7fa27ccc84e0db5bf5dd82a1d99460ad",
+    "patchBytes": 575589,
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "transportMode": "remote_patch",
+    "sourceHead": "8ae68cb97fbde72b4e07ab028018e9ffc6e24e41",
+    "runId": "phxgfwj25s",
+    "task": "test",
+    "exitCode": 0,
+    "elapsedSeconds": 73.003,
+    "provider": "Depot/JCB",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T104515800660Z-test.json",
+    "checks": [
+      "169 Python contracts",
+      "24 Mastodon SQL tests",
+      "actual Time Back SQL/RLS/aggregate/failed optional hook regression",
+      "two-instance Automation/Brand Brain/Queue/SQL with revoke A while B remains functional"
+    ]
   }
 }

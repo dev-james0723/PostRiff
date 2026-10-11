@@ -7,7 +7,68 @@ from unittest.mock import Mock
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.mastodon_publishing import advance, can_resume, checked_progress
-from postriff_phase2.mastodon_threads import parts, reconcile
+from postriff_phase2.mastodon_threads import parts, reconcile, matches, plain_content
+from postriff_phase2.mastodon_status_text import matches_text
+
+
+class MentionReadbackTests(unittest.TestCase):
+    def status(self, acct='Alice@remote.test', href='https://remote.test/@Alice', visible='Alice'):
+        return {'content': '<p>Hello <span class="h-card"><a href="' + href + '" class="u-url mention">@<span>' + visible + '</span></a></span>!</p>',
+                'mentions': [{'id': '42', 'username': 'Alice', 'acct': acct, 'url': 'https://remote.test/@Alice'}]}
+
+    def test_remote_identity_survives_short_html_display_without_losing_domain(self):
+        status = self.status()
+        self.assertTrue(matches_text(status, 'Hello @Alice@remote.test!', 'mastodon.social', plain_content))
+        self.assertFalse(matches_text(status, 'Hello @Alice@another.test!', 'mastodon.social', plain_content))
+        self.assertFalse(matches_text(status, 'Hello @Alice!', 'mastodon.social', plain_content))
+        self.assertTrue(matches_text(status, 'Hello @alice@REMOTE.TEST!', 'mastodon.social', plain_content))
+        self.assertFalse(matches_text(status, 'hello @Alice@remote.test!', 'mastodon.social', plain_content))
+        status['content'] = status['content'].replace('https://remote.test/@Alice', 'https://profiles.remote.test/@Alice')
+        status['mentions'][0]['url'] = 'https://profiles.remote.test/@Alice'
+        self.assertTrue(matches_text(status, 'Hello @Alice@remote.test!', 'mastodon.social', plain_content))
+
+    def test_local_mentions_and_paragraphs_preserve_exact_other_text(self):
+        status = self.status(acct='Alice')
+        status['mentions'][0]['url'] = 'https://mastodon.social/@Alice'
+        status['content'] = status['content'].replace('https://remote.test/@Alice', 'https://mastodon.social/@Alice') + '<p>Line<br>two &amp; three.</p>'
+        self.assertTrue(matches_text(status, 'Hello @Alice!\n\nLine\ntwo & three.', 'mastodon.social', plain_content))
+        self.assertTrue(matches_text(status, 'Hello @Alice@mastodon.social!\n\nLine\ntwo & three.', 'mastodon.social', plain_content))
+        status['content'] = status['content'].replace('</p><p>', '</p>\n <p>')
+        self.assertTrue(matches_text(status, 'Hello @Alice!\n\nLine\ntwo & three.', 'mastodon.social', plain_content))
+        status['content'] = status['content'].replace('!</p>', '.</p>')
+        self.assertTrue(matches_text(status, 'Hello @Alice.\n\nLine\ntwo & three.', 'mastodon.social', plain_content))
+
+    def test_unbound_wrong_or_ambiguous_mention_links_fail_closed(self):
+        for change in ({'mentions': []}, {'mentions': None},
+                       {'content': self.status(href='https://another.test/@Alice')['content']},
+                       {'content': self.status(visible='Bob')['content']},
+                       {'mentions': [{**self.status()['mentions'][0], 'username': 'Bob'}]},
+                       {'mentions': [{**self.status()['mentions'][0], 'url': 'http://remote.test/@Alice'}]},
+                       {'mentions': self.status()['mentions'] + [{**self.status()['mentions'][0], 'id': '43'}]}):
+            with self.subTest(change=change):
+                self.assertFalse(matches_text({**self.status(), **change}, 'Hello @Alice@remote.test!', 'mastodon.social', plain_content))
+                self.assertFalse(matches_text({**self.status(), **change}, 'Hello @Alice!', 'mastodon.social', plain_content))
+
+    def test_repeated_handles_do_not_rewrite_emails_links_or_unrelated_mentions(self):
+        status = self.status()
+        anchor = status['content'][3:-4]
+        status['content'] = '<p>' + anchor + ' ' + anchor + ' mail@Alice@remote.test https://remote.test/@Alice@remote.test @Unknown.</p>'
+        approved = 'Hello @Alice@remote.test! Hello @Alice@remote.test! mail@Alice@remote.test https://remote.test/@Alice@remote.test @Unknown.'
+        self.assertTrue(matches_text(status, approved, 'mastodon.social', plain_content))
+        status['content'] = '<p>Literal @Alice@remote.test remains unresolved.</p>'
+        self.assertTrue(matches_text(status, 'Literal @Alice@remote.test remains unresolved.', 'mastodon.social', plain_content))
+
+    def test_poll_expiry_requires_aware_matching_timestamps(self):
+        manifest = {'providerAccountId': '10@mastodon.social', 'payload': {'text': 'Vote'},
+                    'publishOptions': {'poll': {'options': ['A', 'B'], 'multiple': False, 'expires_in': 600}}}
+        value = {'id': '51', 'account': {'id': '10'}, 'content': '<p>Vote</p>', 'visibility': 'public',
+                 'sensitive': False, 'created_at': '2026-10-11T10:00:00Z',
+                 'poll': {'multiple': False, 'options': [{'title': 'A'}, {'title': 'B'}], 'expires_at': '2026-10-11T10:10:00Z'}}
+        self.assertTrue(matches(value, manifest, ['51'], 0, 'mastodon.social', []))
+        for expiry in (None, 'invalid', '2026-10-11T10:10:00', '2026-10-11T10:10:06Z', '2026-10-11T10:00:00Z'):
+            with self.subTest(expiry=expiry):
+                changed = {**value, 'poll': {**value['poll'], 'expires_at': expiry}}
+                self.assertFalse(matches(changed, manifest, ['51'], 0, 'mastodon.social', []))
 from postriff_phase2.outcomes import normalize_result
 
 
