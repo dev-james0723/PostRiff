@@ -1,53 +1,39 @@
-# Rafii Google / YouTube Reviewer Instructions — Candidate, not yet sendable
+# Rafii Google / YouTube reviewer instructions
 
-Prepared **2026-10-11** from the production source, merged PR #162, dated Google Console receipts and currently available official forms. **NOT SUBMITTED. NO REVIEWER ACCESS OR REAL DEMO HAS BEEN PROVISIONED.** This is a field-ready English draft with explicit unverified items; remove blockers only with matching real evidence. Never submit this file verbatim while any REQUIRED item below remains unresolved.
+Prepared 2026-10-11. **CANDIDATE ONLY: NOT SUBMITTED; REVIEWER ACCESS AND DEMONSTRATION NOT READY.** Complete the missing fields below before attaching this file or submitting a form. Do not send customer credentials or represent gated features as publicly available.
 
-## Application and project boundary
+## Application identity
 
-- **Public app / brand:** Rafii — `https://rafii.io`.
-- **Google Cloud project for this application:** `rafii-youtube-production`; project number `568838253270`.
-- **Google OAuth client type:** Web application; **two distinct registered clients**, one for direct Standard connection and one separately AI-designated Agentic connection. Never substitute credentials or proof from `postriff` / `692391842023`.
-- **Authorized redirect (both YouTube clients):** `https://rafii.io/api/oauth/youtube/callback`. No approved JavaScript origins recorded on 2026-10-10 Console snapshot.
-- **Scope set:** `https://www.googleapis.com/auth/youtube.readonly`, `https://www.googleapis.com/auth/youtube.upload`, `https://www.googleapis.com/auth/youtube.force-ssl`, `https://www.googleapis.com/auth/yt-analytics.readonly`.
-- **Availability:** Rafii supports owner-directed YouTube creator workflows in code; **creator/agentic/fleet/public release are disabled** pending independent review and owner-granted real acceptance. Do not claim these can currently be demonstrated end-to-end.
-- **Public policy pages:** `https://rafii.io/privacy`, `https://rafii.io/terms` (both HTTP 200 on 2026-10-11). **BLOCKED**: live documents explicitly say **Draft — pending qualified legal review** and mention placeholders.
+| Field | Verified value / remaining input |
+| --- | --- |
+| Product and canonical URL | Rafii — `https://rafii.io` |
+| Submitted Google project | `rafii-youtube-production`, number `568838253270` |
+| Standard OAuth client | **Rafii Production Standard** — `568838253270-gt1ggh4hecedn0c67hdfqk7pirqa5dc4.apps.googleusercontent.com`; current Console detail navigation verified 2026-10-11 |
+| Agentic OAuth client | **Rafii Production Agentic** exists; exact ID and AI designation need final current readback |
+| Callback | `https://rafii.io/api/oauth/youtube/callback`, recorded 2026-10-10 for both clients; re-read exact current fields before submission |
+| Separate existing Google sign-in | `postriff` / `692391842023`; its 2026-10-09 approval covers that project's brand only |
+| Privacy / Terms / deletion | `https://rafii.io/privacy`, `https://rafii.io/terms`, `https://rafii.io/data-deletion`; policy text remains draft pending the recorded review requirements |
+| Demonstrated release | Current observation: `b7b9b3ee94f89a80b1d80826226584d214b17847`; replace with the actual demonstrated ref and re-check production before submission |
+| Applicant | Public operator name: Au Hin Sing. Applicant type, legal name/address and required form facts remain unverified. |
+| Privacy contact | Source documents `jamesau0723@gmail.com` as operator-confirmed 2026-10-09; preserve it. Verify the actual submission/reviewer contact and response delivery. |
+| Reviewer workspace and access | **MISSING**: dedicated controlled workspace, tested login method and exact access steps |
+| English demonstration URL | **MISSING**: existing shotlist is a script; no actual review-video link |
 
-## Reviewer's proposed safe test path (enable only in an approved review environment)
+## Review walkthrough to complete and record
 
-1. Sign in to an **owner-provisioned, disposable reviewer workspace**: **REQUIRED: actual account invitation/SSO instructions and test credentials delivered privately by the owner, not in this file.** Do not disclose customer credentials. Identify the exact installed deployment/SHA to reviewers.
-2. Open **Channels → Connect → YouTube**, select the Standard direct account authorization. In the Google consent URL the submitted client ID must be shown to the reviewer; capture its exact correspondence with the dedicated project's Standard client without logging secrets.
-3. Select an independently authorized **test Google account** and its immutable intended YouTube Channel ID; demonstrate read-only channel selection and revalidation. Do not represent one channel's token as permission for another.
-4. Request upload incrementally only for the feature being tested. Use an **owner-approved disposable original** (REQUIRED: actual media provenance, file hash and owner's explicit approval) and an authorized private test upload. Distinguish upload API success, video-processing confirmation, YouTube Video ID and visibility readback. Do not set a live public or unlisted visibility absent separate explicit owner/test-publication approval and verified project eligibility.
-5. Request additional management or Analytics scopes only when demonstrating the matching implemented feature. Show owner-approved metadata/schedule/caption/comment/playlist management and non-monetary video/channel reports **only if their deployed functionality can genuinely be exercised**, with provider readback. Omit, rather than pretend to demonstrate, an unsupported feature.
-6. For AI workflows, show an **independent** Agentic client consent by the workspace owner, an exact reviewable policy with chosen channel, content source, schedule, limits, pause/revoke and intervention. **REQUIRED: separately authorized Agentic test consent** and feature-specific acceptance before claiming an autonomous outcome. Agentic is off today.
-7. Test access denial across unrelated workspaces, disconnect/revocation and in-product deletion controls with approved disposable accounts. Protect unrelated users, secrets and personal media.
+1. Open the public homepage and same-domain policy/deletion links. Explain the demonstrated product and declared Google-data/AI processing accurately.
+2. Use a dedicated reviewer workspace with controlled example data. Start the actual Standard connection and show the English Google consent screen, product name and the exact client ID in the address bar. The account holder grants consent.
+3. Show immutable selected-channel identity and read-only owned state for `youtube.readonly`. Denial/partial consent must not be presented as success.
+4. Request upload permission incrementally. Upload the reviewed original private test asset for `youtube.upload`; show the returned Video ID, processing result and private visibility. No upload has been executed by this packet.
+5. Demonstrate each submitted management feature under `youtube.force-ssl` with an exact reviewed effect and provider readback. Native scheduling that can later become public requires its own authorized eligible test. Omit unexecuted features and narrow scopes if the demonstrated release does not need them.
+6. Demonstrate real nonmonetary reports under `yt-analytics.readonly`; keep native metric names, source and dates. Revenue/membership access is outside this request.
+7. If Agentic features are submitted, show the distinct AI-designated client, separate owner consent, bounded policy, pause/revoke controls and actual covered effects. Standard consent is not Agentic authorization. Keep production activation gates off until required decisions and acceptance exist.
+8. Show the distinction between removing a Rafii connection and revoking Google authorization, actual authorized-data cleanup and any unresolved provider schedule impact. Do not revoke or delete a customer's data for a demonstration.
 
-### Reviewer-visible video plan
+Use [REVIEW-DEMO-SHOTLIST.md](REVIEW-DEMO-SHOTLIST.md) for capture detail. Redact secrets, codes, OAuth state, session/resumable URLs and unrelated identities/media. Record reviewer-access and final-video sharing authorization, the real video URL, release ref, scope-to-shot mapping and controlled provider receipts. Synthetic tests can be supporting engineering evidence; they cannot substitute for the demonstration.
 
-Follow [REVIEW-DEMO-SHOTLIST.md](REVIEW-DEMO-SHOTLIST.md), shots 1–13, as the feature-to-scope matrix. The **actual** truthful English capture must show the deployed app's branding, exact Google consent/client identity, narrow granted scopes, owner-driven operations, results, deletion and AI consent only where truly executable. Redact tokens, one-time authorization codes, PII and private unrelated accounts. **Demo URL: NOT CREATED**; no video, demo upload or publication completed in this documentation update.
+## Submission and follow-up
 
-If the release gate prevents real testing, communicate the blocker to the reviewer and delay the claim or scope. Synthetic API fixtures, source tests, preview cards and empty video links are not proof of actual Google authorization or uploading.
+Re-check [SUBMISSION-TRACKER.json](SUBMISSION-TRACKER.json) for an existing case before starting any application. For this project, finish brand publication as required by the current [Google procedure](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification), then submit exact data-access scopes in its Verification Centre. Use the separate [YouTube form](https://support.google.com/youtube/contact/yt_api_form) only when its required operator, demonstrated-feature, access and quota fields are verified. Required final attestations remain for the authorized owner to review/accept as recorded in the existing packet.
 
-## Data use and custody (draft for reviewed app disclosure)
-
-Rafii receives only OAuth scopes a workspace owner elects to grant for connected channel workflows; stores grants in protected encrypted server custody, enforces workspace/channel binding, and applies separate operation approvals and deletion/revocation paths. Legacy read-only refresh grants may remain bound to the original Standard issuer; a new Standard/Agentic client never inherits refresh credentials or scopes by migration. There is no Gmail/Calendar approval through this YouTube project and no cross-project inheritance from the `postriff` Brand Verification decision.
-
-Do not submit claims about controller identity, lawful basis, retention, legal jurisdiction, third-party processor disclosures or deletion effectiveness unless independently checked against the **final legally reviewed and deployed** policy and actual product.
-
-## Submission workflow / confirmation receipts
-
-**Google OAuth:** Review project's `Branding → Audience → Clients → Data Access → Verification centre` in the actual Console; inspect classification for all four scopes. After owner confirms legal documents, minimum scopes, consent, reviewer access and real English demo, submit scoped verification through that project's Console. Record provider application/case ID, UTC timestamp, exact project + scope snapshot, and official decision only on receipt.
-
-**YouTube compliance audit / higher quota:** Use the [official Audit and Quota Extension Form](https://support.google.com/youtube/contact/yt_api_form) for project **568838253270**. Reference [YOUTUBE-AUDIT.md](YOUTUBE-AUDIT.md) and [QUOTA-EXTENSION.md](QUOTA-EXTENSION.md) for endpoint list and separate forecast figures, but obtain the operator's true legal identity, address, contact, entity status, reviewed disclosures, reviewer access and explicit required attestations. Do not claim the proposed 4,000 uploads/day or 1.5M general units/day is an approved Google allocation or an owner-approved forecast.
-
-**Confirmation record template (fill only after official action):**
-- Project ID and project number: `PENDING READBACK`.
-- Workstream (Google OAuth scopes / YouTube audit / quota extension): `NOT SUBMITTED`.
-- Actual submitted scope snapshot, submission timestamp UTC, application ID/case reference: `PENDING PROVIDER RECEIPT`.
-- Reviewer video URL and authorized viewer list: `PENDING GENUINE OWNER-APPROVED VIDEO`.
-- Official approval status/approved scope/quota and decision timestamp: `NONE`.
-- Human form attestations: `PENDING OWNER`.
-
-## Submission blockers as of 2026-10-11
-
-The owner must confirm legal/operator/contact facts and qualified review of the still-draft privacy/terms; actual Vercel production OAuth client-to-project mapping must be read with appropriate permissions (environment list returned 403); remaining Cloud project clients/scopes need live readback; each distinct account holder must provide OAuth consent; a disposable test asset, reviewer workspace and actual feature-correct demonstration must be authorized. No evidence of these human/provider actions is present in this reconciliation. Do not weaken flags or backfill fake success receipts to bypass them.
+Capture genuine confirmation and any supplied case/application identifier. An approval must identify the correct project and scope coverage; a brand decision, submission or quota allocation does not establish public-upload eligibility. Log correction requests and resubmissions as separate dated events, and reuse the case when instructed by Google. Until those events actually occur, all submission/case fields remain null.

@@ -8,7 +8,11 @@ Earlier same-day staging receipts prove one owner's read-only Google consent, im
 
 The earlier formal 151-case matrix reported zero real passes and preceded those later staging receipts. Keep the later narrow receipts without converting them into complete formal creator acceptance. The earlier successful cloud run `hj3tjs65wn` validated its own candidate source; it does not validate the current reconciled release.
 
-## Current mission state
+## 2026-10-11 reconciliation
+
+Production clients now exist: current Standard client ID and both Standard/Agentic names were revalidated in Console. Dated 2026-10-10 branding/scopes/callback configuration is retained. PR #162 compatibility code is present in live production `b7b9b3ee` / `dpl_BUZ9hDn7pY8KwWTV2paXjtbuqv9T`. This workstream performed no new real consent, grant refresh, upload, schedule, publication or Agentic acceptance. A retained expired production grant has refresh disabled and must not be called healthy. `postriff` brand approval covers only that separate project. See [reconciliation](BRAND-APPROVAL-20261011.md).
+
+## Historical October 8–9 mission state
 
 The coordinating release agent observed creation of **Rafii YouTube Production**, project `rafii-youtube-production`, number `568838253270`. Project identity and owner-approved activation of YouTube Data API and YouTube Analytics API are verified. The production Data API allocation is100 uploads/day,100 search/day and10,000 Queries/day; exact Console labels/values are retained in `GOOGLE-QUOTAS.observed.json`. A higher-quota request has not been submitted or approved. Console activation and quotas were observed on October 8. On October 9 the current Chrome control path reports a request-header-policy error; configuration cannot continue until that session is reconnected. Production OAuth clients, consent branding/audience/publishing status and review submissions remain unconfigured; verified support/developer contacts and policy approval are still required. Existing `rafii-509720` (`81579135390`) remains a separate staging reference; its External/Testing status comes from the prior receipt.
 
@@ -16,11 +20,11 @@ The release agent observed `https://rafii.io` serving commit `bb4ca5aa`, deploym
 
 | Area | Status | Evidence boundary |
 | --- | --- | --- |
-| Production OAuth, public non-tester onboarding | BLOCKED | New project only; clients and approved scopes absent |
+| Production OAuth, public non-tester onboarding | BLOCKED | Clients now exist; exact scope approvals, current environment readback and real fresh-holder acceptance remain absent |
 | OAuth verification, YouTube audit, quota request | NOT SUBMITTED | Draft packets exist; no application IDs or provider confirmation |
 | Current production daily upload allocation | VERIFIED DEFAULT: 100/day | Actual dedicated-project Console allocation observed; higher quota and public-upload eligibility remain unapproved |
 | Read-only connection and proactive refresh | VERIFIED, prior source | One owner's earlier staging grant; not current v2 production acceptance |
-| Separate standard/agentic custody and dispatch | IMPLEMENTED BUT UNVERIFIED | Synthetic regression; no actual agentic client/grant |
+| Separate standard/agentic custody and dispatch | IMPLEMENTED BUT UNVERIFIED | Both client names exist; no real Agentic grant/dispatch acceptance |
 | Large-video private storage | BLOCKED | Verified Free 50 MB global ceiling and 50000000-byte private bucket; owner billing decision pending |
 | Private upload, processing and native scheduling | BLOCKED | Write consent, approved disposable asset and provider resources absent |
 | Public publishing and Autopilot execution | BLOCKED | Relevant provider approvals, policy/asset consent and actual provider receipts absent |
