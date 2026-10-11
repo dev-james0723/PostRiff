@@ -446,7 +446,7 @@ class Phase2Store(Store):
         if c["platform"] in ("Instagram", "Pixelfed") and not media:
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
-        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
+        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text, now=self.clock())
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
         native_mastodon = c['platform'] == 'Mastodon' and bool(options.get('scheduled_at'))
         if immediate_youtube or native_mastodon:

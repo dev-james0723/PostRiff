@@ -71,7 +71,9 @@ class Security(unittest.TestCase):
         ) as connect:
             self.assertEqual(pinned_public_json_transport("GET", "https://photos.example.org/api/v2/instance", resolver=resolver)["status"], 200)
         self.assertEqual(len(lookups), 1)
-        connect.assert_called_once_with(("93.184.216.34", 443), timeout=20)
+        connect.assert_called_once()
+        self.assertEqual(connect.call_args.args[0], ('93.184.216.34', 443))
+        self.assertTrue(0 < connect.call_args.kwargs['timeout'] <= 20)
 
 
 class BusinessPosts(unittest.TestCase):

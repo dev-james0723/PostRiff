@@ -317,7 +317,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
+      <DialogContent className='rafii-elevated max-h-[90dvh] overflow-y-auto rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
           <DialogDescription>Nothing publishes until you approve it.</DialogDescription>

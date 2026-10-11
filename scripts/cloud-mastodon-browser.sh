@@ -48,20 +48,11 @@ cleanup() {
   if [ "$jcb_yb_code" -ne 0 ]; then
     tail -n 60 "$jcb_yb_out/fixture.log" "$jcb_yb_out/next.log" 2>/dev/null || true
   fi
-  # JCB retains runner logs but currently has no artifact-export adapter. Emit
-  # only bounded, known synthetic proof files so the controller can recover
-  # screenshots without uploading any local credentials or arbitrary files.
-  "$TREND_VISUAL_TEST_PYTHON" - "$jcb_yb_out" <<'PY'
-import base64, hashlib, json, sys
-from pathlib import Path
-root = Path(sys.argv[1])
-names = ['CLOUD-SYNTHETIC-browser.json', 'CLOUD-SYNTHETIC-failure.png'] + [f'CLOUD-SYNTHETIC-{surface}-{w}.png' for surface in ('channels', 'profile') for w in (1440, 390, 320)]
-for name in names:
-    path = root / name
-    if path.is_file() and not path.is_symlink() and path.stat().st_size <= 1024 * 1024:
-        data = path.read_bytes()
-        print('RAFII_MASTODON_EVIDENCE ' + json.dumps({'name': name, 'sha256': hashlib.sha256(data).hexdigest(), 'base64': base64.b64encode(data).decode('ascii')}, separators=(',', ':')), flush=True)
-PY
+  # Preserve only explicit synthetic browser proofs as a CI artifact. Large
+  # log batches can lose the final records even when Depot reports success.
+  if ! node "$jcb_yb_root/scripts/cloud-mastodon-artifact.cjs" "$jcb_yb_out" "$jcb_yb_home/artifact-client" "$jcb_yb_code"; then
+    if [ "$jcb_yb_code" -eq 0 ]; then jcb_yb_code=3; fi
+  fi
   rm -rf -- "$jcb_yb_home"
   exit "$jcb_yb_code"
 }
@@ -84,6 +75,8 @@ assert any(x.get('source')=='/api/:path*' and x.get('destination')=='http://127.
 for port in (4348,4448,55448):
  with socket.socket() as probe:probe.bind(('127.0.0.1',port))
 PY
+# Pinned client only inside the disposable cloud runner; no repository install.
+npm install --prefix "$jcb_yb_home/artifact-client" --no-audit --no-fund --ignore-scripts --package-lock=false @actions/artifact@2.3.2 >"$jcb_yb_out/artifact-install.log" 2>&1
 cd -- "$jcb_yb_root/web"
 env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true \
   PLAYWRIGHT_BROWSERS_PATH="$jcb_yb_browsers" \
@@ -94,7 +87,7 @@ env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true LC_ALL=C \
   POSTRIFF_PG_BIN="$jcb_yb_pg" POSTRIFF_RESEARCH=0 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4448 \
   PGUSER=postriff_test PGHOST=127.0.0.1 PGPORT=55448 PGDATABASE=postgres \
   PGCONNECT_TIMEOUT=5 PGPASSFILE=/dev/null PGSERVICEFILE=/dev/null \
-  "$TREND_VISUAL_TEST_PYTHON" "$jcb_yb_root/tests/phase2/mastodon_browser_fixture.py" --port 4348 --pg-port 55448 \
+  "$TREND_VISUAL_TEST_PYTHON" "$jcb_yb_root/tests/phase2/mastodon_queue_browser_fixture.py" --port 4348 --pg-port 55448 \
   >"$jcb_yb_out/fixture.log" 2>&1 &
 jcb_yb_fixture_pid=$!
 env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true NODE_ENV=production \
@@ -130,4 +123,7 @@ env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true \
   PLAYWRIGHT_BROWSERS_PATH="$jcb_yb_browsers" MASTODON_WEB_URL=http://127.0.0.1:4448 \
   MASTODON_BROWSER_EVIDENCE_DIR="$jcb_yb_out" \
   node "$jcb_yb_root/web/tests/mastodon-account-browser.cjs"
+env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true \
+  PLAYWRIGHT_BROWSERS_PATH="$jcb_yb_browsers" MASTODON_BROWSER_EVIDENCE_DIR="$jcb_yb_out" \
+  node "$jcb_yb_root/web/tests/mastodon-queue-browser.cjs"
 echo "Cloud synthetic browser evidence: $jcb_yb_out"

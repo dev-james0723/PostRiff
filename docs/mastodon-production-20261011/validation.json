@@ -3,23 +3,24 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "sourceHead": "e0696729314c8c1fac14966d855891b1bf08627b",
-    "sourceFingerprint": "d3e03488ab62a7b7fdd5f6883cb877023febd8e4176335ad4f380782c2d25d92",
-    "patchSha256": "fdda3ce24750ea60ff0fa0f1ea6fb9362d5d14378eba4d7a64b715448cdb0ee6",
+    "sourceHead": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+    "sourceFingerprint": "bcce579d08dc38c9a0516b2b14be3687f84ec458335a16c360d19d8925282d14",
+    "patchSha256": "55c6c455ba8b4dd35d4c8018cbd7b6f5b50c3327b048e92c49f64351e9b0907e",
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 445478,
-    "runId": "d3c05ncb96",
+    "patchBytes": 481759,
+    "runId": "blvhrhvvwn",
     "exitCode": 0,
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T075727741681Z-ci.json"
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T085648508351Z-ci.json",
+    "elapsedSeconds": 177.438
   },
   "checks": {
     "pythonContracts": {
-      "passed": 463
+      "passed": 467
     },
     "sqlActionIsolation": {
-      "passed": 21,
+      "passed": 22,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
@@ -71,8 +72,49 @@
           ]
         }
       ],
-      "scope": "Channels/profile; dedicated Queue thread/media/native controls browser flow still open",
-      "evidenceRunId": "fww642glg2"
+      "scope": "Channels/profile and actual Queue approval/SQL/shared worker for thread, two images, normalized WAV, native accepted then uniquely reconciled publication; synthetic providers and advanced fixture clock",
+      "evidenceRunId": "blvhrhvvwn",
+      "queueChecks": [
+        {
+          "width": 1440,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        },
+        {
+          "width": 390,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        },
+        {
+          "width": 320,
+          "checks": [
+            "exact UI thread approval and three verified saved IDs",
+            "two decoded immutable images with separate alt text",
+            "validated Library WAV through immutable custody and media upload",
+            "native accepted pending then unique media-bound publication without resubmission",
+            "actual shared Queue worker and SQL",
+            "responsive final receipt and no runtime error"
+          ],
+          "execution": "synthetic provider; explicitly advanced fixture clock",
+          "realMastodonAcceptance": false
+        }
+      ]
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
     "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
@@ -86,29 +128,51 @@
       "completedRequests": 1000,
       "admitted": 400,
       "deferred": 600,
-      "requestP95Ms": 775.662,
-      "requestMaxMs": 795.005,
+      "requestP95Ms": 740.687,
+      "requestMaxMs": 759.366,
       "queue": {
         "seededJobs": 2000,
         "fencedClaims": 40,
         "distinctFairTenants": 40,
-        "claimP95Ms": 8.299
+        "claimP95Ms": 7.837
       },
       "execution": "cloud-synthetic-connected-users-and-disposable-sql",
       "providerCalls": 0,
       "realAccountAcceptance": false,
       "productionHttpLoadAcceptance": false,
-      "seedSeconds": 0.097,
-      "elapsedSeconds": 1.264,
-      "sqlConcurrencyBound": 32
+      "seedSeconds": 0.095,
+      "elapsedSeconds": 1.208,
+      "sqlConcurrencyBound": 32,
+      "evidenceRunId": "blvhrhvvwn"
     },
-    "connectionHealth": "PASS: current credential fencing, one due lease, migrated/suspended identity downgrade, definitive401 reconnect, service-only SQL and bounded jitter/backoff. Socket budget excludes OS resolver deadline."
+    "connectionHealth": "PASS: exact credential fencing, bounded due lease/jitter/backoff, migrated/suspended/revoked identity guards; absolute request deadline includes bounded DNS admission.",
+    "optionalVerifiedHook": "PASS: actual PostgreSQL failed SQL callback rolls back to savepoint; conclusive receipt persists and repeat completion runs no callback.",
+    "nativeQueueReview": "PASS: exact canonical native time frozen into Queue approval using service clock; no provider effect before approval."
   },
   "capacity": {
-    "syntheticContexts": 1000,
-    "maxConcurrentWorkers": 16,
-    "thousandSimultaneousUsersTested": false,
-    "realQueueCapacityValidated": false
+    "simulatedConnectedUsers": 1000,
+    "concurrentPendingRequestsPeak": 1000,
+    "pendingSqlOperationsPeak": 32,
+    "actualSqlConnectionsPeak": 31,
+    "completedRequests": 1000,
+    "admitted": 400,
+    "deferred": 600,
+    "requestP95Ms": 740.687,
+    "requestMaxMs": 759.366,
+    "queue": {
+      "seededJobs": 2000,
+      "fencedClaims": 40,
+      "distinctFairTenants": 40,
+      "claimP95Ms": 7.837
+    },
+    "execution": "cloud-synthetic-connected-users-and-disposable-sql",
+    "providerCalls": 0,
+    "realAccountAcceptance": false,
+    "productionHttpLoadAcceptance": false,
+    "seedSeconds": 0.095,
+    "elapsedSeconds": 1.208,
+    "sqlConcurrencyBound": 32,
+    "evidenceRunId": "blvhrhvvwn"
   },
   "securityReview": "candidate source review; security-review.md; release review incomplete",
   "liveAcceptance": {
@@ -124,43 +188,149 @@
     "publicExecutionGatesChanged": false,
     "merged": false,
     "deployedToRafiiIo": false,
-    "migration114Applied": false
+    "migration114Applied": false,
+    "migration115Applied": false
   },
   "externalInputNeeded": [
     "Two authorized account handles on independently hosted Mastodon instances",
     "Owner OAuth authorization and permission for clearly labelled test publication/edit/deletion"
   ],
   "remainingEngineering": "README.md: Engineering work still open before production",
-  "evidence": {
-    "CLOUD-SYNTHETIC-browser.json": {
-      "bytes": 1243,
-      "sha256": "26e43d51a1c8da5dd1411ba557c32101e5241fec51410f36966a50507c41f290"
+  "evidence": [
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-browser.json",
+      "sha256": "0051ded991ab7c6c566aacbb5dd983dbdd08201bfba9260084ba60fdb3f7e66e",
+      "bytes": 3214,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-channels-1440.png": {
-      "bytes": 389311,
-      "sha256": "bbb09de41ee0018ef9f6321c6350b1b9a5f12da423a7d49a7c089b923dd1c765"
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-1440.png",
+      "sha256": "e65fcfe334848646758b82596820f2ecdfb79b25907531466e2559b0e79071e8",
+      "bytes": 386773,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-channels-390.png": {
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-390.png",
+      "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895",
       "bytes": 144517,
-      "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895"
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-channels-320.png": {
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-channels-320.png",
+      "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013",
       "bytes": 120973,
-      "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013"
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-profile-1440.png": {
-      "bytes": 264548,
-      "sha256": "ef2b10ea4447bd6fd2c8da1c4988293ea9788e225e5ee85e5c67f41f16a7ee3e"
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-1440.png",
+      "sha256": "de91849b199cbc1ae3018ed73c05a1c43bcf4614e8bc84f67909ef0d7e6cda55",
+      "bytes": 253591,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-profile-390.png": {
-      "bytes": 127441,
-      "sha256": "02007fbc33a4e22b46162066560484b79e38a5ea544dbde0123f41ae301b895d"
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-390.png",
+      "sha256": "c3485dde02f0307ee2c806a143d328b568f69b8843aaa9078add7af8ecac1073",
+      "bytes": 127885,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     },
-    "CLOUD-SYNTHETIC-profile-320.png": {
-      "bytes": 114253,
-      "sha256": "514e911e688bd366405703a2c0aff26e4ee9d239f1e311c37d1b7fc3d43eb3de"
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-profile-320.png",
+      "sha256": "7d94f00c20cebad532e3b0f620957ae4c4d5f418622e93518cc62553b15c8620",
+      "bytes": 116245,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-1440.png",
+      "sha256": "bde68d99e9b10ee8919d9d79cfd0793e74956ceed2439ff9885a3d0f4a1e561b",
+      "bytes": 269384,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-390.png",
+      "sha256": "660eed5354ad71db4027619a8c0e11a63234feeed4736c3726dc66b145ae64f7",
+      "bytes": 109257,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-thread-320.png",
+      "sha256": "dcaef83c403f59fc687d50cd8d25acb1cbe4bee061d1fc41b7902cb05118771f",
+      "bytes": 100147,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-1440.png",
+      "sha256": "82058c667ced726a76533dfb7f6ff469d1628b4fd03cd6e61d79f6a92ab4f8c3",
+      "bytes": 282737,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-390.png",
+      "sha256": "fe8fb648791069afa2febe120853c973ae0c27c0a088252d7b3c4e536edd3b3b",
+      "bytes": 104193,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-images-320.png",
+      "sha256": "3d56f6b0cc5f38df4d8cd9dd1aabc2f276c103f4282fd5a55e48984ef94d972a",
+      "bytes": 95528,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-1440.png",
+      "sha256": "77f01656a765bf7e567e2cd2bcfe960fe01c9654e0dd1d2349748c1b41a4eb7c",
+      "bytes": 297635,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-390.png",
+      "sha256": "2c42db9d78fdd15928577c8d78096f0bb70d449e1725f5f9d3897bcedebe8344",
+      "bytes": 113250,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-audio-320.png",
+      "sha256": "968c3a1d82a15fc7b5adc9ccd6b9dd0f582e9b83c33fbb5712c083eb19bf2cb0",
+      "bytes": 103229,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-1440.png",
+      "sha256": "eca0509ec3707fe00796ddb7da0b9ac751144bf529b0ff8d9a1dbd0ccdc9f043",
+      "bytes": 304697,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-390.png",
+      "sha256": "efe8283a31e2a300e0ae82f6e9b66783ea8f447cefc047b9fa21f4afef440e99",
+      "bytes": 113843,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-queue-native-320.png",
+      "sha256": "42de44bada8733d8b0f3b329d222f359782e457ccc9cd937fffaf2cf36354ba1",
+      "bytes": 103862,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "blvhrhvvwn"
     }
-  },
+  ],
   "localChecks": [
     "Source AST parsing, JSON validation and git diff --check; no local heavy validation"
   ],
@@ -192,8 +362,116 @@
     }
   ],
   "githubCI": {
-    "head": "744b66ec0e0a6f4e604dcf1e691a27162028db84",
-    "allPassed": false,
-    "remaining": "AgentUI browser now PASS; local-gates pending latest observation; document-runtime failed on unreachable download mirror. Bounded checksum-preserving mirror repair candidate is uncommitted/unvalidated."
-  }
+    "observedAt": "2026-10-11T08:26:00Z",
+    "headRevision": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+    "checks": [
+      {
+        "name": "Vercel Preview Comments",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422461323
+      },
+      {
+        "name": "local-gates",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422110056
+      },
+      {
+        "name": "dependency-lock",
+        "status": "completed",
+        "conclusion": "skipped",
+        "id": 114422060703
+      },
+      {
+        "name": "generate-assets",
+        "status": "completed",
+        "conclusion": "skipped",
+        "id": 114422060558
+      },
+      {
+        "name": "dependency-lock",
+        "status": "completed",
+        "conclusion": "skipped",
+        "id": 114422060538
+      },
+      {
+        "name": "agent-ui-browser",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059968
+      },
+      {
+        "name": "native-learning-browser",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059861
+      },
+      {
+        "name": "agent-ui",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059859
+      },
+      {
+        "name": "growth-studio",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059825
+      },
+      {
+        "name": "scenes",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059781
+      },
+      {
+        "name": "document-runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059749
+      },
+      {
+        "name": "library",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059581
+      },
+      {
+        "name": "founder",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114422059562
+      }
+    ],
+    "statuses": [
+      {
+        "context": "Vercel",
+        "state": "success"
+      }
+    ],
+    "scope": "GitHub CI and Vercel Preview; no production deployment"
+  },
+  "browserArtifact": {
+    "provider": "Depot CI",
+    "runId": "blvhrhvvwn",
+    "artifactId": "01a12a2d-85ba-79ea-9170-046aa68d2739",
+    "name": "rafii-mastodon-synthetic-browser",
+    "zipBytes": 3157518,
+    "files": 20,
+    "manifest": "evidence/CLOUD-SYNTHETIC-manifest.json",
+    "sha256Verified": true
+  },
+  "incompleteEvidenceRuns": [
+    {
+      "runId": "txxsvh7tmk",
+      "exitCode": 0,
+      "reason": "terminal Queue logs and browser artifacts absent; superseded by retained blvhrhvvwn artifact"
+    },
+    {
+      "runId": "vcd1n5pwck",
+      "exitCode": 0,
+      "reason": "terminal Queue logs and browser artifacts absent; superseded by retained blvhrhvvwn artifact"
+    }
+  ]
 }

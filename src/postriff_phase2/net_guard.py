@@ -8,12 +8,18 @@ import ssl
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from functools import wraps
+from threading import BoundedSemaphore
 from urllib.parse import urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 
 _LABEL = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
 _BLOCKED_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home.arpa", ".invalid", ".test", ".example", ".onion")
 _REQUEST_DEADLINE = ContextVar('public_provider_request_deadline', default=None)
+_SYSTEM_RESOLVER = socket.getaddrinfo
+_DNS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='public-provider-dns')
+_DNS_SLOTS = BoundedSemaphore(8)
 
 
 @contextmanager
@@ -35,6 +41,35 @@ def _request_remaining():
     if remaining <= 0:
         raise AlphaError('The instance verification window ended. Try again later.', 503)
     return remaining
+
+
+def _public_answers(resolver, host):
+    if resolver is not _SYSTEM_RESOLVER:
+        return resolver(host, 443, type=socket.SOCK_STREAM)  # Explicit injected test transport.
+    slots = _DNS_SLOTS
+    if not slots.acquire(blocking=False):
+        raise AlphaError('Instance DNS verification is busy. Try again later.', 503)
+    try:
+        future = _DNS_EXECUTOR.submit(resolver, host, 443, type=socket.SOCK_STREAM)
+    except Exception:
+        slots.release()
+        raise
+    # Running OS calls cannot be interrupted. Keep their capacity reserved
+    # until they actually finish; do not create unbounded replacement threads.
+    future.add_done_callback(lambda _future: slots.release())
+    try:
+        return future.result(timeout=min(5, _request_remaining()))
+    except FutureTimeout as error:
+        future.cancel()
+        raise AlphaError('Instance DNS verification timed out. Try again later.', 503) from error
+
+
+def _bounded_public_transport(function):
+    @wraps(function)
+    def bounded(*args, **kwargs):
+        with request_deadline(20):
+            return function(*args, **kwargs)
+    return bounded
 
 
 def public_host(value, *, message="Enter a server name such as mastodon.social."):
@@ -61,7 +96,7 @@ def public_host(value, *, message="Enter a server name such as mastodon.social."
 
 def assert_public(host, resolver=socket.getaddrinfo):
     try:
-        answers = resolver(host, 443, type=socket.SOCK_STREAM)
+        answers = _public_answers(resolver, host)
     except (OSError, UnicodeError) as error:
         raise AlphaError("That server can't be reached.", 400) from error
     if not answers:
@@ -89,6 +124,7 @@ def public_https_url(url, resolver=socket.getaddrinfo):
     return url
 
 
+@_bounded_public_transport
 def pinned_public_json_transport(method, url, headers=None, form=None, body=None, data=None,
                                  *, resolver=socket.getaddrinfo):
     """HTTPS request to a public address resolved once, with TLS verified for the original host.
@@ -106,7 +142,7 @@ def pinned_public_json_transport(method, url, headers=None, form=None, body=None
         raise AlphaError("The instance address is not allowed.", 400)
     host = public_host(parts.hostname)
     try:
-        answers = resolver(host, 443, type=socket.SOCK_STREAM)
+        answers = _public_answers(resolver, host)
     except (OSError, UnicodeError) as error:
         raise AlphaError("That server can't be reached.", 400) from error
     addresses = []

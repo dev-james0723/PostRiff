@@ -1,6 +1,7 @@
 """Approved native schedule synchronization, synthetic provider evidence only."""
 import copy
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from postriff_phase2.mastodon_native import same_instant, synchronize
@@ -8,6 +9,18 @@ from postriff_phase2.mastodon_management import MastodonManagement
 
 
 class NativeSynchronizationTests(unittest.TestCase):
+    def test_queue_native_time_is_canonical_frozen_and_checked_against_service_clock(self):
+        from postriff_phase2.publish_options import normalize
+        from postriff_alpha.domain import AlphaError
+        now = 1_800_000_000
+        at = datetime.fromtimestamp(now + 600, timezone.utc).isoformat().replace('+00:00', 'Z')
+        options = {'scheduled_at': at, 'visibility': 'unlisted', 'spoiler_text': 'SYNTHETIC'}
+        normalized = normalize('Mastodon', options, [], 'SYNTHETIC', now=now)
+        self.assertEqual(normalized['scheduled_at'], at.replace('Z', '+00:00'))
+        self.assertEqual(normalized['visibility'], 'unlisted'); self.assertEqual(options['scheduled_at'], at)
+        with self.assertRaises(AlphaError): normalize('Mastodon', options, [], 'SYNTHETIC', now=now + 301)
+        self.assertIsNone(normalize('Mastodon', None, [], 'SYNTHETIC', now=now))
+
     def setUp(self):
         self.manifest = {'platform': 'Mastodon', 'channelId': 'one', 'providerAccountId': '10@mastodon.social',
                          'payload': {'text': 'Unchanged'}, 'timing': {'nativePublicationAt': '2026-10-12T10:00:00Z'}}

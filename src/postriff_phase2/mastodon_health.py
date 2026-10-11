@@ -17,8 +17,8 @@ def delay(state, failures, jitter=random.uniform):
 def maintain(oauth, *, seconds=8):
     """Claim and commit before network; stale responses cannot finish another lease.
 
-    A shared transport deadline bounds socket operations. OS DNS resolution is
-    still subject to the host resolver's timeout. A transient failure does not
+    A shared transport deadline bounds DNS and socket operations. Timed-out OS
+    DNS calls retain bounded executor slots until they finish. A transient failure does not
     revoke authority or extend the last successful identity verification.
     """
     if type(seconds) not in (int, float) or not 1 <= seconds <= 8:

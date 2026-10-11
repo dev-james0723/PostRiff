@@ -39,5 +39,46 @@
         "no runtime errors or page overflow"
       ]
     }
+  ],
+  "queueChecks": [
+    {
+      "width": 1440,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    },
+    {
+      "width": 390,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    },
+    {
+      "width": 320,
+      "checks": [
+        "exact UI thread approval and three verified saved IDs",
+        "two decoded immutable images with separate alt text",
+        "validated Library WAV through immutable custody and media upload",
+        "native accepted pending then unique media-bound publication without resubmission",
+        "actual shared Queue worker and SQL",
+        "responsive final receipt and no runtime error"
+      ],
+      "execution": "synthetic provider; explicitly advanced fixture clock",
+      "realMastodonAcceptance": false
+    }
   ]
 }

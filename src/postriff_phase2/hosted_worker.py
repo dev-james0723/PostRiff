@@ -346,10 +346,17 @@ class PostgresWorker:
                     job[youtube_data.KEY] = youtube_source
                 published = result['state'] == 'verified' and (job['manifest']['platform'] != 'YouTube' or (result.get('progress') or {}).get('stage') == 'published')
                 if published and self.on_verified:
+                    mark = 'verified_hook_' + uuid.uuid4().hex[:8]
+                    cur.execute(f'SAVEPOINT {mark}')
                     try:
                         self.on_verified(cur, claimed["workspaceId"], job)
                     except Exception:
+                        # Catching a PostgreSQL error does not repair its aborted
+                        # transaction. Preserve the conclusive publication receipt.
+                        cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
                         job["insights"] = {"availability": "unavailable", "note": "Insights ingestion failed; publication verification is unaffected."}
+                    finally:
+                        cur.execute(f'RELEASE SAVEPOINT {mark}')
                 if published:
                     # Learning signal (ids and numbers only); a failure to record never affects the publication.
                     private_mastodon = job['manifest']['platform'] == 'Mastodon' and (job['manifest'].get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted')

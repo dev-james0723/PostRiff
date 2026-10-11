@@ -80,6 +80,31 @@ class JournalTests(unittest.TestCase):
     def preview(self):
         return self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'favourite', 'targetId': '123'})
 
+    def test_verified_receipt_survives_actual_sql_failure_in_optional_hook(self):
+        from postriff_phase2.hosted_worker import PostgresWorker
+        calls = []
+        def failed_hook(cur, *_args):
+            calls.append('called')
+            cur.execute('SELECT 1/0')  # Real PostgreSQL transaction-abort behavior.
+        worker = PostgresWorker(connection, clock=lambda: self.now, worker_id='verified-hook-test', on_verified=failed_hook)
+        job = {'id': uuid.uuid4().hex, 'state': 'processing', 'events': [], 'leaseOwner': worker.worker_id,
+               'leaseId': 'exact-completion-lease', 'leaseUntil': self.now + 60,
+               'manifest': {'platform': 'Mastodon', 'variantId': 'synthetic-variant', 'providerAccountId': self.account,
+                            'channelId': self.connection_id, 'payload': {'text': 'SYNTHETIC verified hook regression'},
+                            'voiceRevision': None, 'styleRevision': 1}}
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['jobs'].append(job)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+        claimed = {'workspaceId': self.workspace, 'job': job, 'reconciliation': True}
+        result = {'state': 'verified', 'reference': '123', 'confirmed': 'Synthetic exact native readback', 'verification': 'provider_lookup'}
+        self.assertTrue(worker.complete(claimed, result))
+        with connection() as db:
+            current = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][-1]
+            self.assertEqual(current['state'], 'verified'); self.assertEqual(current['providerReference'], '123')
+            self.assertEqual(current['insights']['availability'], 'unavailable'); self.assertIsNone(current['leaseOwner'])
+        self.assertFalse(worker.complete(claimed, result)); self.assertEqual(calls, ['called'])
+
     def health_channel(self):
         with connection() as db:
             state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]

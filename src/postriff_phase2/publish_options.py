@@ -134,16 +134,16 @@ def _gbp(options, media):
     return {"gbp": result}
 
 
-def normalize(platform, options, media, text):
+def normalize(platform, options, media, text, *, now=None):
     """The canonical options for the manifest, or None for platforms that need none (their manifests stay unchanged)."""
     if platform == 'Mastodon':
         from .mastodon_protocol import status_options
         # Existing manifests with no options retain the approved public default.
         if options is None:
             return None
-        if isinstance(options, dict) and 'scheduled_at' in options:
-            raise AlphaError('Use the Rafii calendar here; native scheduling has its own exact-action approval.', 400)
-        return status_options(options, media)
+        # Native time is frozen into the same exact Queue review as its media
+        # and post settings. No scheduling request is sent before approval.
+        return status_options(options, media, now=now)
     if platform not in PLATFORMS:
         return None
     if not isinstance(options, dict):

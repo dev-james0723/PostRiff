@@ -82,7 +82,11 @@ def pinned_window(origin, access_token, *, resolver=socket.getaddrinfo, seconds=
     host = public_host(parsed.hostname)
     if (parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port is not None
             or parsed.path or parsed.query or parsed.fragment): raise AlphaError('Invalid streaming origin.', 400)
-    try: answers = resolver(host, 443, type=socket.SOCK_STREAM)
+    deadline = time.monotonic() + seconds
+    from .net_guard import _public_answers, request_deadline
+    try:
+        with request_deadline(seconds):
+            answers = _public_answers(resolver, host)
     except OSError: raise AlphaError('Streaming DNS is unavailable.', 503) from None
     addresses = []
     for answer in answers:
@@ -91,7 +95,6 @@ def pinned_window(origin, access_token, *, resolver=socket.getaddrinfo, seconds=
         if not address.is_global or address.is_multicast: raise AlphaError('Streaming address is not public.', 502)
         addresses.append(str(address))
     if not addresses: raise AlphaError('Streaming DNS is unavailable.', 503)
-    deadline = time.monotonic() + seconds
     connection = http.client.HTTPSConnection(host, timeout=seconds, context=ssl.create_default_context())
     chunks, total, response = [], 0, None
     def remaining():

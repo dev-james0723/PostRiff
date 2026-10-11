@@ -2,10 +2,12 @@
 import json
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.mastodon_health import delay
 from postriff_phase2.net_guard import request_deadline, _request_remaining
+from postriff_phase2 import net_guard
 from postriff_phase2.social_connectors import MastodonProvider
 from test_hosted_wave1_connectors import Wire, ok, PUBLIC, BASE
 
@@ -52,3 +54,31 @@ class HealthTests(unittest.TestCase):
     def test_deadline_rejects_invalid_unbounded_values(self):
         for seconds in (0, -1, 21, True, '8'):
             with self.assertRaises(ValueError), request_deadline(seconds): pass
+
+    def test_dns_timeout_keeps_running_capacity_reserved_until_os_call_finishes(self):
+        slots = Mock(acquire=Mock(return_value=True))
+        future = Mock(result=Mock(side_effect=TimeoutError), cancel=Mock(return_value=False))
+        pool = Mock(submit=Mock(return_value=future))
+        with patch.object(net_guard, '_DNS_EXECUTOR', pool), patch.object(net_guard, '_DNS_SLOTS', slots):
+            with self.assertRaises(AlphaError): net_guard._public_answers(net_guard._SYSTEM_RESOLVER, 'mastodon.social')
+        slots.release.assert_not_called(); future.cancel.assert_called_once()
+        self.assertTrue(0 < future.result.call_args.kwargs['timeout'] <= 5)
+        future.add_done_callback.call_args.args[0](future)
+        slots.release.assert_called_once()
+
+    def test_exhausted_dns_capacity_does_not_spawn_another_lookup(self):
+        slots, pool = Mock(acquire=Mock(return_value=False)), Mock()
+        with patch.object(net_guard, '_DNS_EXECUTOR', pool), patch.object(net_guard, '_DNS_SLOTS', slots):
+            with self.assertRaises(AlphaError): net_guard._public_answers(net_guard._SYSTEM_RESOLVER, 'mastodon.social')
+        pool.submit.assert_not_called()
+
+    def test_default_transport_has_one_absolute_deadline_even_for_small_drip_chunks(self):
+        readings = iter((100, 100, 119, 121))
+        @net_guard._bounded_public_transport
+        def transport():
+            first = _request_remaining()
+            second = _request_remaining()
+            self.assertEqual(first, 20); self.assertEqual(second, 1)
+            _request_remaining()
+        with patch('postriff_phase2.net_guard.time.monotonic', side_effect=lambda: next(readings)):
+            with self.assertRaises(AlphaError): transport()
