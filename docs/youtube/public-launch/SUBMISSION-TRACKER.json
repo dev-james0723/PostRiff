@@ -342,8 +342,15 @@
         "QUOTA-EXTENSION.md",
         "OWNER-FIELDS.md",
         "REVIEW-DEMO-SHOTLIST.md",
-        "BRAND-APPROVAL-20261011.md"
-      ]
+        "BRAND-APPROVAL-20261011.md",
+        "REVIEWER-INSTRUCTIONS-20261011.md"
+      ],
+      "reviewDemo": {
+        "status": "NOT CAPTURED",
+        "url": null,
+        "reviewerAccess": "NOT PROVISIONED",
+        "instructions": "Prepared conditional English instructions in REVIEWER-INSTRUCTIONS-20261011.md; must not submit before actual operator and holder approval."
+      }
     }
   }
 }
