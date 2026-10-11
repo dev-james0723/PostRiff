@@ -33,11 +33,11 @@ export function VoiceDialog({ open, onOpenChange, value, onApply, available, sam
     if (open) setStaged(value);
   }, [open, value]);
   const options: { id: VoiceMode; title: string; detail: string; disabled?: boolean }[] = [
-    { id: 'neutral', title: 'Neutral', detail: 'Clear and natural. Doesn’t use your writing samples.' },
+    { id: 'neutral', title: 'Neutral override', detail: 'Keeps factual context and boundaries. Does not use your approved voice, learned style preferences or writing samples.' },
     {
       id: 'personalized',
-      title: 'Writing like you',
-      detail: available ? `Uses ${sampleCount} sample${sampleCount === 1 ? '' : 's'} you approved for ${modelLabel}.` : `No samples approved for ${modelLabel} yet.`,
+      title: voiceRevision ? `Writing like you · approved v${voiceRevision}` : 'Writing like you',
+      detail: available && sampleCount === 0 ? `Uses your approved voice v${voiceRevision}. No writing samples are included.` : available ? `Uses ${sampleCount} sample${sampleCount === 1 ? '' : 's'} you approved for ${modelLabel}.` : `No samples approved for ${modelLabel} yet.`,
       disabled: !available
     }
   ];
@@ -71,7 +71,7 @@ export function VoiceDialog({ open, onOpenChange, value, onApply, available, sam
             })}
           </div>
           <Link href='/app/workspace/brand' className='rafii-focus text-foreground w-fit rounded-md text-xs underline underline-offset-2' title={voiceRevision ? `Voice profile revision ${voiceRevision} is active` : 'No voice profile yet'}>
-            Manage voice and samples
+            Manage in Brand Brain
           </Link>
         </RafiiDialogBody>
         <RafiiDialogFooter>

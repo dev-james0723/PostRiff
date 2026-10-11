@@ -66,7 +66,7 @@ export function VoiceSourcePicker({ props, statementId }: JourneyRendererProps) 
                     <SelectToggle
                       selected={isSelected}
                       label={sample.title ?? sample.excerpt ?? sample.sourceId}
-                      disabled={!sample.active}
+                      disabled={!sample.active || Boolean(sample.revoked) || Boolean(reason)}
                       onToggle={() => toggle(sample)}
                     />
                     <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
@@ -113,7 +113,7 @@ export function VoiceAnalyzeLocal({ props, statementId }: JourneyRendererProps) 
       <GuardedAction
         actionId={literal.data.actionId}
         controlId={statementId}
-        ready={picked.length > 0}
+        ready={picked.length > 0 && picked.length <= MAX_SELECTED_SAMPLES}
         notReadyHint={copy.voice.pickSamples}
         inputs={picked.length ? { sourceIds: picked } : null}
       />
@@ -142,7 +142,7 @@ function Dimensions({ dims }: { dims: { id?: string | null; observation: string;
 
 const reviewProps = z.object({ actionId: z.literal('voice_profile_approve').optional().nullable() });
 
-export function VoiceProfileReview({ props, statementId }: JourneyRendererProps) {
+export function VoiceProfileReview({ props }: JourneyRendererProps) {
   const { copy, locale, timeZone } = useJourneyEnvironment();
   const literal = reviewProps.safeParse(props);
   const actionId = literal.success ? literal.data.actionId ?? undefined : undefined;
@@ -197,7 +197,7 @@ export function VoiceProfileReview({ props, statementId }: JourneyRendererProps)
           ) : null}
           {data.note ? <p className='text-muted-foreground text-xs'>{data.note}</p> : null}
           {actionId && data.proposed ? (
-            <GuardedAction actionId={actionId} controlId={statementId} ready={data.proposed.status === 'proposed'} inputs={{ proposalKey: data.proposed.proposalKey }} />
+            <InAppLink href='/app/workspace/brand?section=teach&step=review'>{copy.common.open} · Brand Brain</InAppLink>
           ) : null}
         </div>
       )}

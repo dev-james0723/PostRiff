@@ -175,7 +175,7 @@ export function AttachmentBar({
   ) : null;
 
   return (
-    <div className='flex min-w-0 items-center gap-2'>
+    <div className={`flex min-w-0 items-center gap-2${part === 'plus' ? ' shrink-0' : ''}`}>
       {part !== 'chips' && (
         <>
           <input

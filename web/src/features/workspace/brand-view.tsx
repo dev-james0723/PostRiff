@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BrandBrain } from './brand/brand-brain';
+import { BRAND_BRAIN_V11 } from './brand/brain-types';
 import { toast } from 'sonner';
 import PageContainer from '@/components/layout/page-container';
 import { ActionSwapIcon } from '@/components/motion/action-swap';
@@ -86,6 +88,10 @@ function ExportPackageButton() {
 }
 
 export function BrandView() {
+  return BRAND_BRAIN_V11 ? <BrandBrain /> : <LegacyBrandView />;
+}
+
+function LegacyBrandView() {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();

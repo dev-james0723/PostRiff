@@ -201,6 +201,8 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             if route.strip() in _CLASS_PREFIXES and grant["purpose"] != "generation":
                 raise AlphaError("AI analysis needs one exact model; only writing may be allowed for every Rafii AI writer model.")
             normalized.append({"purpose": grant["purpose"], "route": route.strip()})
+        if not source.get("active"):
+            raise AlphaError("A revoked sample cannot receive new grants. Retain a new sample with explicit consent.", 409)
         source["useGrants"] = sorted({(item["purpose"], item["route"]) for item in normalized})
         source["useGrants"] = [{"purpose": purpose, "route": route} for purpose, route in source["useGrants"]]
         source["purposeGrants"] = sorted({item["purpose"] for item in source["useGrants"]})
@@ -221,6 +223,7 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             if isinstance(profile.get("profile"), dict):
                 evidence_ids = profile["profile"].get("evidenceSourceIds", evidence_ids)
             if source["id"] in evidence_ids:
+                profile.setdefault("redactions", []).append({"sourceId": source["id"], "at": now, "reason": "supporting_sample_revoked", "priorProfileDigest": digest(profile.get("profile", profile))})
                 profile["stale"] = True
                 profile["staleReason"] = "supporting_sample_revoked"
                 profile['writingExample'] = ''
@@ -234,6 +237,8 @@ def apply_action(state: dict, action: str, payload: dict, actor: str, now: float
             provisional["staleReason"] = "supporting_sample_revoked"
             provisional['writingExample'] = ''
             _remove_evidence_quotes(provisional, source['id'])
+        state.get("speaker", {}).pop("brandBrainPreview", None)
+        state.get("speaker", {}).pop("analysisQuote", None)
         for variant in state.get("variants", []):
             if source["id"] in variant.get("sourceIds", []) or source["id"] in variant.get("voiceSourceIds", []):
                 variant["blockedByRetraction"] = True

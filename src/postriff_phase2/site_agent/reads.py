@@ -605,9 +605,58 @@ def publishing_summary(ctx, start=None, end=None, label=None):
 
 
 # --- attention -------------------------------------------------------------------------------------------------------
+def _youtube_interventions(ctx):
+    """Safe, bounded attention for planner failures that may have no job yet."""
+    data = ctx.state.get('youtubeAgent')
+    if not isinstance(data, dict) or not isinstance(data.get('policies'), list):
+        return []
+    workspace = ctx.state.get('workspace')
+    if (not ctx.membership.allows('read') or not isinstance(workspace, dict)
+            or workspace.get('id') != ctx.workspace_id):
+        raise AlphaError("Your role cannot read this workspace attention.", 403, code='tool_forbidden')
+    from ..youtube.pagination import finite
+    channels = {channel['id']: channel.get('providerAccountId')
+                for channel in _phase2(ctx).get('channels', [])
+                if isinstance(channel, dict) and isinstance(channel.get('id'), str)
+                and channel.get('platform') == 'YouTube' and not channel.get('revoked')
+                and isinstance(channel.get('providerAccountId'), str)
+                and re.fullmatch(r'UC[A-Za-z0-9_-]{22}', channel['providerAccountId'])}
+    job_policies = set()
+    for job in _jobs(ctx):
+        authority, manifest = job.get('youtubeAgent'), job.get('manifest')
+        if (job.get('state') in ('held', 'failed', 'uncertain') and isinstance(authority, dict)
+                and isinstance(manifest, dict) and manifest.get('platform') == 'YouTube'
+                and isinstance(authority.get('policyId'), str) and isinstance(manifest.get('channelId'), str)):
+            job_policies.add((manifest['channelId'], authority['policyId']))
+    facts, seen = [], set()
+    for policy in data['policies']:
+        if not isinstance(policy, dict) or policy.get('status') != 'paused' or policy.get('privacyErased'):
+            continue
+        identifier, connection = policy.get('id'), policy.get('connectionId')
+        intervention = policy.get('intervention')
+        if (not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{32}', identifier)
+                or not isinstance(connection, str) or connection not in channels
+                or policy.get('channelId') != channels[connection]
+                or not isinstance(intervention, dict) or not isinstance(intervention.get('code'), str)
+                or not 1 <= len(intervention['code']) <= 120 or not finite(intervention.get('at'))
+                or intervention['at'] > ctx.now or identifier in seen
+                or (connection, identifier) in job_policies):
+            continue
+        seen.add(identifier)
+        # Error messages/URLs, owner identity, grants and raw policy contents
+        # never leave through global attention; Creator has the detailed cause.
+        facts.append({'kind': 'youtube_agent_intervention', 'source': 'youtube_policy_intervention',
+                      'policyId': identifier,
+                      'text': 'A YouTube Autopilot policy is paused after a planner intervention. Review its recorded cause in Creator before dispatching more plans.',
+                      'href': '/app/youtube'})
+        if len(facts) == 5:
+            break
+    return facts
+
+
 def attention_summary(ctx):
     zone = _zone(ctx)
-    facts, observations = [], []
+    facts, observations = _youtube_interventions(ctx), []
     reviews = reviews_list(ctx)["data"]
     for r in reviews["waitingApproval"]:
         facts.append({"kind": "review_waiting", "text": f"A {r['platform']} post for {r['account']} at {r['when']} is waiting for approval" + (" (its review window closed)" if r["expired"] else ""), "href": r["href"]})

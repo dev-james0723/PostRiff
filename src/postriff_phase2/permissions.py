@@ -44,8 +44,11 @@ ACTION_CLASSES = {
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",
+    "profile_finish": "owner", "import_decide": "owner",
     # This is the durable privacy boundary for analysis/generation routes.
     "voice_sample_grant": "owner",
+    "brand_brain_approve": "owner", "brand_brain_restore": "owner", "brand_brain_quote": "owner",
+    "brand_brain_identity": "owner", "brand_brain_boundaries": "owner",
     "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
     "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
     # Deciding on an automation's drafted post is a publication decision, like approving in Queue; the worker
@@ -61,13 +64,14 @@ ACTION_CLASSES = {
 # fell back to "edit" before classification failed closed; tests/test_r0_hotfixes.py enumerates the dispatcher and keeps
 # this list exact. A new hosted action is added here or to ACTION_CLASSES, or it is refused.
 EDIT_ACTIONS = frozenset({
-    "accept_update", "adapt", "approve_source", "context", "generate", "idea", "import_decide", "import_propose", "language_settings", "mode",
+    "brand_brain_import", "brand_brain_analyze", "brand_brain_review", "brand_brain_preview", "brand_brain_discard", "brand_brain_feedback", "brand_brain_clean_restore", "brand_brain_manual",
+    "accept_update", "adapt", "approve_source", "context", "generate", "idea", "import_propose", "language_settings", "mode",
     "opening", "p2_art_delete", "p2_art_generate", "p2_art_select", "p2_content_context", "p2_content_format", "p2_content_install_pack",
     "p2_content_interview_answer", "p2_content_interview_start", "p2_content_proposal_edit", "p2_content_proposal_save", "p2_content_proposal_test",
     "p2_content_select", "p2_content_suggest", "p2_delete_account", "p2_folder_delete", "p2_folder_move", "p2_folder_save", "p2_link_identity",
     "p2_logout", "p2_media_delete", "p2_media_upload", "p2_revoke_device", "p2_template_archive", "p2_template_create", "p2_template_duplicate",
     "p2_template_edit", "p2_unlink_identity", "p2_variant_feedback", "p2_variant_review", "preview_update", "profile_approve_stated", "profile_back",
-    "profile_field", "profile_finish", "profile_guided", "profile_import", "profile_inspect", "profile_job", "profile_propose",
+    "profile_field", "profile_guided", "profile_import", "profile_inspect", "profile_job", "profile_propose",
     "profile_relationship", "profile_review_open", "profile_scope", "profile_transfer", "profile_use_guided", "raffi_campaign_create",
     "raffi_campaign_link", "raffi_campaign_unlink", "raffi_campaign_update", "raffi_recurrence_preview", "raffi_recurrence_save",
     "raffi_recurrence_seen", "raffi_suggestion_accept", "raffi_suggestion_dismiss", "raffi_suggestion_refresh", "raffi_suggestion_snooze",

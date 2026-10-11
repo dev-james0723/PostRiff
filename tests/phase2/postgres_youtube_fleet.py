@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import patch
 
 if not sys.platform.startswith('linux') or os.environ.get('CI', '').lower() not in ('1', 'true'):
     raise SystemExit('Fleet acceptance requires disposable cloud PostgreSQL; never run on the Mac.')
@@ -25,9 +26,10 @@ from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.youtube.agent import YouTubePublishingAgent, prepare_draft, prepare_policy, activate_policy
 from postriff_phase2.youtube.capacity import CapacityController, CapacityPolicy
-from postriff_phase2.youtube.fleet import claim_planner, release_planner
+from postriff_phase2.youtube.fleet import claim_planner, release_planner, run_lane
 from postriff_phase2.youtube.model import READ, UPLOAD, MANAGE, YouTubeError
 from postriff_phase2.youtube.service import YouTubeCreatorService
+from postriff_phase2.youtube.operations import next_planner_claim_at
 
 DSN = 'host=127.0.0.1 port=55438 dbname=postgres'
 TENANTS, THREADS, CLAIMS_PER_THREAD = 100, 8, 8
@@ -206,6 +208,95 @@ def upload_acceptance(metrics):
     metrics['uploadClaims'] = summary
 
 
+def planner_fairness_acceptance(metrics):
+    """A deferred full batch must rotate across invocations and worker restarts."""
+    zero_state = {'youtubeAgent': {}}
+    first = next_planner_claim_at(zero_state, 0)
+    assert first >= .000001
+    zero_state['youtubeAgent']['lastPlannerClaimAt'] = first
+    assert next_planner_claim_at(zero_state, 0) > first, 'Normalization stalled a fixed zero clock'
+    participants, healthy_tail = WORKSPACES[:26], WORKSPACES[25]
+    with connection() as db:
+        originals = dict(db.execute('SELECT id::text,state FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])',
+                                    (WORKSPACES,)).fetchall())
+    results = {}
+    try:
+        for mode in ('indexed_rotation', 'indexed_legacy_cursor', 'legacy_json_cursor'):
+            with connection() as db:
+                for workspace, original in originals.items():
+                    state = copy.deepcopy(original)
+                    state['youtubeAgent'].pop('fleetLease', None)
+                    state['youtubeAgent'].pop('lastPlannerClaimAt', None)
+                    # Legacy malformed cursors must neither crash selection nor
+                    # monopolize later invocations before being repaired.
+                    invalid_cursors = (True, 'NaN', 10**400, -1, 253402300799)
+                    if workspace in participants[:len(invalid_cursors)]:
+                        state['youtubeAgent']['lastPlannerClaimAt'] = invalid_cursors[participants.index(workspace)]
+                    if workspace not in participants:
+                        for policy in state['youtubeAgent']['policies']:
+                            policy['status'] = 'paused'
+                    db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), workspace))
+            invocations, healthy_selections = [], []
+            # The clock deliberately stays fixed: strictly advancing durable
+            # cursors must rotate even without a newer wall-clock timestamp.
+            for invocation in range(3):
+                selected = []
+                creator = SimpleNamespace(service=SimpleNamespace(connection_factory=connection),
+                    oauth=SimpleNamespace(providers={'youtube': SimpleNamespace(creator_enabled=True)},
+                        reverify_for_worker=lambda *_: {'state': 'verification_unavailable', 'ready': False}),
+                    fleet_schema_ready=lambda: True)
+                agent = YouTubePublishingAgent.__new__(YouTubePublishingAgent)
+                agent.service, agent.clock, agent.creator = creator.service, clock, creator
+                agent._agentic_gate = lambda *_: None  # Synthetic grant; never a provider authorization.
+                deferred_dispatch = agent._dispatch_candidate
+                def dispatch(candidate):
+                    selected.append(candidate[0])
+                    if candidate[0] == healthy_tail:
+                        # Stop at the healthy selection boundary; do not queue
+                        # content or invent a real provider/owner acceptance.
+                        healthy_selections.append(invocation)
+                        return {'dispatched': False, 'providerVerified': False}
+                    receipt = deferred_dispatch(candidate)
+                    assert receipt.get('deferred') is True
+                    return receipt
+                agent._dispatch_candidate = dispatch
+                creator.agent = agent
+                flags = {'POSTRIFF_YOUTUBE_CREATOR_ENABLED': '1', 'POSTRIFF_YOUTUBE_FLEET_ENABLED': '1',
+                         'POSTRIFF_YOUTUBE_AGENTIC_ENABLED': '1', 'POSTRIFF_YOUTUBE_FLEET_PLANNER_MAX_ITEMS': '25',
+                         'POSTRIFF_YOUTUBE_FLEET_PLANNER_MAX_SECONDS': '45'}
+                with patch('postriff_phase2.youtube.operations.planner_rotation_ready', return_value=mode == 'indexed_rotation'), \
+                     patch('postriff_phase2.youtube.operations.schema_ready', return_value=mode != 'legacy_json_cursor'):
+                    receipt = run_lane(SimpleNamespace(youtube=creator), None, 'planner', flags)
+                assert receipt['processed'] == 25 and receipt['plansQueued'] == 0
+                assert len(selected) == len(set(selected)) == 25
+                invocations.append(selected)
+            assert healthy_tail not in invocations[0] and healthy_tail in invocations[1], (mode, invocations)
+            assert 1 in healthy_selections
+            assert len(set(invocations[0] + invocations[1])) == 26
+            repeated = set(invocations[0]) & set(invocations[1])
+            with connection() as db:
+                states = dict(db.execute('SELECT id::text,state FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])',
+                                         (participants,)).fetchall())
+                for workspace, state in states.items():
+                    current, original = state['youtubeAgent'], originals[workspace]['youtubeAgent']
+                    assert 'fleetLease' not in current
+                    assert current['lastPlannerClaimAt'] >= clock()
+                    if workspace in repeated:
+                        assert current['lastPlannerClaimAt'] > clock(), 'A fixed clock reset a repeated claim cursor'
+                    assert current.get('lastDispatchAt') == original.get('lastDispatchAt')
+                    assert current['policies'] == original['policies'] and current['drafts'] == original['drafts']
+            results[mode] = {'tenants': len(participants), 'itemsPerInvocation': 25, 'invocations': len(invocations),
+                'distinctTenantsFirstTwoInvocations': 26, 'healthyTailSelectedOnSecondInvocation': True,
+                'strictCursorProgressWithFixedClock': True, 'workerRestartEachInvocation': True,
+                'releasedLeases': True, 'successfulDispatchAndAuthorityUnchanged': True,
+                'providerCalls': 0, 'queuedJobs': 0}
+    finally:
+        with connection() as db:
+            for workspace, state in originals.items():
+                db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), workspace))
+    metrics['plannerFairness'] = results
+
+
 def planner_acceptance(metrics):
     agent = YouTubePublishingAgent.__new__(YouTubePublishingAgent)
     agent.service, agent.clock = SimpleNamespace(connection_factory=connection), clock
@@ -321,6 +412,7 @@ try:
                 (workspace, json.dumps({'phase2': {'channels': [], 'reviews': [], 'jobs': [upload_job(workspace, index, 'LinkedIn')]}})))
     seeded = True
     upload_acceptance(metrics)
+    planner_fairness_acceptance(metrics)
     planner_acceptance(metrics)
     identity_acceptance(metrics)
     shared_budget_acceptance(metrics)

@@ -22,8 +22,10 @@
     "test:agent-ui": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/agent_ui_validation.sh jcb",
     "ci:agent-ui": "bash ../scripts/cloud-python-bootstrap.sh bash -c \"bash ../scripts/agent_ui_validation.sh unit && bash ../scripts/agent_ui_validation.sh database && bash ../scripts/agent_ui_validation.sh regression\"",
     "ci:youtube:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-validation.sh",
+    "test:youtube:postgres:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-postgres-bootstrap.sh",
     "ci:youtube:proposal:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-proposal-validation.sh",
     "ci:youtube:frontend:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-frontend-validation.sh",
+    "test:youtube:contracts:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-youtube-validation.sh --contracts-only",
     "ci:task-center": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-task-center-validation.sh",
     "ci:universal-entry": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-universal-entry-validation.sh",
     "test:library-metadata:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-library-metadata-validation.sh --core",
@@ -40,7 +42,10 @@
     "test:linkedin:lifecycle:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/linkedin-validation-cloud.sh --lifecycle-only",
     "ci:linkedin:frontend:jcb": "npm run test:jcb && npm run build",
     "e2e:linkedin:browser:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/social-browser-cloud.sh --browser-only",
-    "ci:linkedin:acceptance:jcb": "npm run test:linkedin:sql:jcb && npm run test:linkedin:automation:jcb && npm run test:jcb && npm run build && npm run e2e:linkedin:browser:jcb"
+    "ci:linkedin:acceptance:jcb": "npm run test:linkedin:sql:jcb && npm run test:linkedin:automation:jcb && npm run test:jcb && npm run build && npm run e2e:linkedin:browser:jcb",
+    "ci:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh all",
+    "test:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh backend",
+    "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
