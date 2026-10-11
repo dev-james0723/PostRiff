@@ -1,6 +1,7 @@
 """Credential-free build/runner for the real Founder sign-in browser tests; never targets a hosted service."""
 import os
 from pathlib import Path
+import runpy
 import shutil
 import signal
 import socket
@@ -24,6 +25,7 @@ def main():
         def ignored(directory, names):
             return [name for name in names if name.startswith(('.env', '.next')) or name in ('node_modules', '.git', 'tsconfig.tsbuildinfo')]
         shutil.copytree(ROOT / 'web', DEST, dirs_exist_ok=True, ignore=ignored)
+        runpy.run_path(str(ROOT / 'scripts/consumer_ready_web.py'))['prepare_release_guard'](DEST)
     env = {key: value for key, value in os.environ.items() if key in ('PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PLAYWRIGHT_BROWSERS_PATH', 'RAFII_CHROMIUM_PATH')}
     env.update(NEXT_PUBLIC_APP_URL=f'http://localhost:{PORT}', NEXT_PUBLIC_SUPABASE_URL='https://founder-fixture.supabase.co',
                NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_local_fixture', NEXT_PUBLIC_PASSKEY_SIGN_IN='true',

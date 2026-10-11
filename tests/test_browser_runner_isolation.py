@@ -20,21 +20,22 @@ def load(name):
 
 class BrowserIsolationTests(unittest.TestCase):
     def test_prepared_frontend_keeps_binding_guard_without_private_runtime_state(self):
-        helper = load('consumer_ready_web')
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            destination = root / 'isolated/web'
-            with patch.object(helper,'DEST',destination), patch.object(sys,'argv',['helper','--prepare']):
-                self.assertEqual(helper.main(),0)
-            self.assertTrue((destination.parent/'scripts/check_social_release_binding.py').is_file())
-            self.assertEqual(sorted(p.name for p in (destination.parent/'src/postriff_phase2').iterdir()),
-                             ['__init__.py','social_release.py'])
-            child=helper.subprocess.run([sys.executable,str(destination.parent/'scripts/check_social_release_binding.py')],
-                                       capture_output=True,text=True,env={'PATH':os.environ.get('PATH',''),'CI':'true'})
-            self.assertEqual(child.returncode,0,child.stderr)
-            self.assertFalse(json.loads(child.stdout)['productionBindingVerified'])
-            self.assertFalse((destination.parent/'.vercel').exists())
-            self.assertFalse(any(p.name.startswith('.env') for p in destination.iterdir()))
+        for name in ('consumer_ready_web','founder_signin_web'):
+            helper = load(name)
+            with self.subTest(helper=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                destination = root / 'isolated/web'
+                with patch.object(helper,'DEST',destination), patch.object(sys,'argv',['helper','--prepare']):
+                    self.assertEqual(helper.main(),0)
+                self.assertTrue((destination.parent/'scripts/check_social_release_binding.py').is_file())
+                self.assertEqual(sorted(p.name for p in (destination.parent/'src/postriff_phase2').iterdir()),
+                                 ['__init__.py','social_release.py'])
+                child=helper.subprocess.run([sys.executable,str(destination.parent/'scripts/check_social_release_binding.py')],
+                                           capture_output=True,text=True,env={'PATH':os.environ.get('PATH',''),'CI':'true'})
+                self.assertEqual(child.returncode,0,child.stderr)
+                self.assertFalse(json.loads(child.stdout)['productionBindingVerified'])
+                self.assertFalse((destination.parent/'.vercel').exists())
+                self.assertFalse(any(p.name.startswith('.env') for p in destination.iterdir()))
 
     def test_real_build_child_gets_only_local_binding_and_no_credentials(self):
         helper = load('consumer_ready_web')
