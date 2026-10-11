@@ -12,7 +12,7 @@ mode="${1:-all}"
 case "$mode" in all|backend|frontend) ;; *) exit 64 ;; esac
 if [ "$mode" != frontend ]; then
 python3 scripts/check_social_release_binding.py
-python3 -m unittest test_social_release_binding test_consumer_deployment test_telegram_capabilities test_telegram_login test_telegram_agent test_hosted_wave1_connectors test_postriff_phase2 test_postriff_phase2_hosted test_hosted_wave3_connectors test_wave4_hosted_publish test_agent_permissions_surfaces test_agent_runtime_references test_hosted_storage_library
+python3 -m unittest test_social_release_binding test_consumer_deployment test_browser_runner_isolation test_video_provision test_telegram_capabilities test_telegram_login test_telegram_agent test_hosted_wave1_connectors test_postriff_phase2 test_postriff_phase2_hosted test_hosted_wave3_connectors test_wave4_hosted_publish test_agent_permissions_surfaces test_agent_runtime_references test_hosted_storage_library
 if ! command -v pg_config >/dev/null; then
   sudo -n apt-get -qq update
   sudo -n apt-get -y -qq install postgresql
