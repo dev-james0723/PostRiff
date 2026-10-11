@@ -325,7 +325,9 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
     await asyncio.gather(*(loop.run_in_executor(executor,load_user,pair) for pair in enumerate(users)))
   started=time.monotonic();asyncio.run(concurrent_load());elapsed=time.monotonic()-started
   load={'execution':'cloud_postgresql_synthetic_telegram','realTelegramE2E':False,'simulatedConnectedUsers':1000,'concurrentSubmittedTasks':1000,'maxActiveWorkers':32,'successfulUsers':len(latencies),'durationSeconds':round(elapsed,3),'usersPerSecond':round(1000/elapsed,2),'p95WorkerSeconds':round(sorted(latencies)[949],3),'scope':'tenant routing, encrypted webhook processing and isolation; provider throughput is not measured'}
-  (ROOT/'.jcb-artifacts/telegram/load-tests.json').write_text(json.dumps(load,indent=2)+'\n')
+  evidence_dir = ROOT/'.jcb-artifacts/telegram'
+  evidence_dir.mkdir(parents=True, exist_ok=True)
+  (evidence_dir/'load-tests.json').write_text(json.dumps(load,indent=2)+'\n')
   passed('1,000 simulated connected users and concurrent tasks route only to their tenants with bounded 32 workers')
   event={'update_id':2,'my_chat_member':{'chat':CHAT,'date':TEST_NOW+1,'new_chat_member':{'status':'left'}}}
   ingest(service,bot,event,json.dumps(event).encode())
@@ -363,5 +365,7 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    assert db.execute('SELECT count(*) FROM pr_telegram_identity_owners WHERE member_id=%s',(A2,)).fetchone()[0]==1
   passed('Account erasure removes person-keyed Telegram identity and managed requests without erasing another tenant owner')
  finally:subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-m','fast','-w','stop'],check=True,stdout=subprocess.DEVNULL)
-(Path(os.environ.get('TELEGRAM_EVIDENCE_DIR', str(ROOT/'.jcb-artifacts/telegram')))/'postgres-tests.json').write_text(json.dumps({'execution':'cloud_postgresql_synthetic_telegram','realTelegramE2E':False,'checks':checks},indent=2)+'\n')
+evidence_dir = Path(os.environ.get('TELEGRAM_EVIDENCE_DIR', str(ROOT/'.jcb-artifacts/telegram')))
+evidence_dir.mkdir(parents=True, exist_ok=True)
+(evidence_dir/'postgres-tests.json').write_text(json.dumps({'execution':'cloud_postgresql_synthetic_telegram','realTelegramE2E':False,'checks':checks},indent=2)+'\n')
 print(json.dumps({'passed':len(checks),'realTelegramE2E':False}))
