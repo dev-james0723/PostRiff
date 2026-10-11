@@ -222,40 +222,77 @@ try:
             assert fixture.durable() == expected[0]
             CHECKS.append(('manual' if manual else 'worker') + ' old ' + outcome + ' preserves actual same-token replacement consent')
 
-    # Complete's token transaction has committed, but its separate profile save
-    # has not started. The after-callback must reject and roll back the UPDATE,
-    # even though get() deliberately observes the new canonical revision.
+    # Credential custody, capabilities and profile now commit atomically.
+    # Fail after the real profile UPDATE to prove the entire grant rolls back.
+    fixture = Fixture()
+    fixture.picture(fixture.credential()[0])
+    started = fixture.oauth.start(fixture.workspace, fixture.token, 'youtube', 'publish')
+    consent_state = parse_qs(urlsplit(started['authorizeUrl']).query)['state'][0]
+    before = fixture.durable()
+    fixture.google.title = 'Rolled-back synthetic profile'
+
+    def fail_after_profile(cursor, workspace_id, previous, updated, principal):
+        assert workspace_id == fixture.workspace and principal == fixture.user
+        generation = cursor.execute('SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',
+                                    (workspace_id, fixture.connection)).fetchone()[0]
+        assert generation != before[1][0], 'The failure must follow the new credential write.'
+        assert next(c for c in updated['phase2']['channels'] if c['id'] == fixture.connection)['account'] == fixture.google.title
+        raise AlphaError('Synthetic profile transaction failure.', 503, code='synthetic_profile_failure')
+
+    with patch.object(fixture.oauth.repository, 'effects', [*fixture.oauth.repository.effects, fail_after_profile]):
+        try:
+            fixture.oauth.complete(fixture.workspace, fixture.token, 'youtube', consent_state, 'synthetic-code')
+        except AlphaError as error:
+            assert error.code == 'synthetic_profile_failure'
+        else:
+            raise AssertionError('The injected profile transaction failure was ignored.')
+    assert fixture.durable() == before, 'Rollback must preserve the old custody, profile, capabilities and picture.'
+    with connection() as db:
+        assert db.execute('SELECT consumed_at IS NOT NULL,outcome FROM public.pr_oauth_transactions WHERE id=%s',
+                          (started['transactionId'],)).fetchone() == (True, 'exchange_started')
+    CHECKS.append('failure after actual profile UPDATE rolls back custody/profile/capabilities; OAuth state remains single-use')
+
+    # A competing disconnect or new consent waits for the atomic completion.
+    # Observe the real SQL lock, then confirm the later action wins completely.
     for replacement in (False, True):
         fixture = Fixture()
-        entered, release = threading.Event(), threading.Event()
-        original_get = fixture.oauth.repository.get
+        entered, release, waiting = Queue(), threading.Event(), Queue()
 
-        def pause_before_get(*args, **kwargs):
+        def pause_profile(cursor, workspace_id, previous, updated, principal):
             if getattr(LOCAL, 'pause_profile', False):
                 LOCAL.pause_profile = False
-                entered.set()
-                assert release.wait(6), 'Late profile-save latch was not released.'
-            return original_get(*args, **kwargs)
+                entered.put(cursor.connection.info.backend_pid)
+                assert release.wait(6), 'Atomic profile transaction latch was not released.'
 
-        def late_complete():
+        def first_complete():
             LOCAL.pause_profile = True
+            fixture.google.title = 'First atomic consent'
             return fixture.authorize()
 
-        with patch.object(fixture.oauth.repository, 'get', side_effect=pause_before_get), ThreadPoolExecutor(max_workers=1) as pool:
-            pending = pool.submit(late_complete)
+        def later_action():
+            LOCAL.pids = waiting
+            if replacement:
+                fixture.google.title = 'Replacement profile survives serialized completion'
+                return fixture.authorize()
+            return fixture.disconnect()
+
+        with patch.object(fixture.oauth.repository, 'effects', [*fixture.oauth.repository.effects, pause_profile]), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(first_complete)
+            blocker = entered.get(timeout=6)
+            later = pool.submit(later_action)
             try:
-                assert entered.wait(6), 'Consent did not reach the post-custody profile save.'
-                if replacement:
-                    fixture.google.title = 'Replacement profile survives rollback'
-                    fixture.authorize()
-                else:
-                    fixture.disconnect()
-                expected = fixture.durable()
+                wait_for_lock(waiting, blocker)
             finally:
                 release.set()
-            expect_changed(lambda: pending.result(timeout=8))
-        assert fixture.durable() == expected, 'Rejected profile save must roll back state, revision and side effects.'
-        CHECKS.append('late consent profile save rolls back after ' + ('replacement consent' if replacement else 'real OAuth disconnect'))
+            assert first.result(timeout=8) == fixture.connection
+            later.result(timeout=8)
+        durable = fixture.durable()
+        current = next(c for c in durable[0][1]['phase2']['channels'] if c['id'] == fixture.connection)
+        if replacement:
+            assert durable[1][1] and current['account'] == 'Replacement profile survives serialized completion'
+        else:
+            assert not durable[1][1] and current['revoked']
+        CHECKS.append('atomic consent completion serializes before ' + ('replacement consent' if replacement else 'real OAuth disconnect'))
 
     # Picture fetch starts without a DB lock. Real disconnect/new consent wins
     # while the synthetic fetch is paused; the late bytes must never be inserted.

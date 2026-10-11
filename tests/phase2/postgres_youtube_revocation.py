@@ -134,8 +134,15 @@ class Google:
 
 
 def authorize():
+    # Incremental consent targets an active projected connection. After real
+    # disconnect erases/revokes that projection, the user starts a new connect
+    # flow; its canonical account must still resolve to the same connection ID.
+    with connection() as db:
+        projected = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (WORKSPACE,)).fetchone()[0]
+    active = any(c.get('id') == CONNECTION and not c.get('revoked')
+                 for c in projected.get('phase2', {}).get('channels', []))
     started = service.oauth.start(WORKSPACE, TOKEN, 'youtube', 'publish',
-                                  {'connectionId': CONNECTION} if CONNECTION else {})
+                                  {'connectionId': CONNECTION} if CONNECTION and active else {})
     state = parse_qs(urlsplit(started['authorizeUrl']).query)['state'][0]
     result = service.oauth.complete(WORKSPACE, TOKEN, 'youtube', state, 'synthetic-code')
     assert result['connected'] and result['providerAccountId'] == CHANNEL
