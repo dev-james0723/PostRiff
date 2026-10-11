@@ -271,8 +271,8 @@
   "remainingEngineering": [
     "Provision secure isolated hosted staging when accessible paid organization and verified quote are available; infrastructure cost cap already approved",
     "Verify real app registration, redirect URL/state/PKCE/scopes/callback; present exact owner OAuth URLs",
-    "Execute real A–E with actual post IDs/URLs and provider-side cleanup receipts",
-    "Test migrations 113–115 upgrade/restoration/compatibility on isolated hosted staging",
+    "Execute real A\u2013E with actual post IDs/URLs and provider-side cleanup receipts",
+    "Test migrations 113\u2013115 upgrade/restoration/compatibility on isolated hosted staging",
     "Final repair GitHub CI and independent release review; verify backup and rollback before conditional release",
     "Conditional production migration/gates/merge/deployment and real smoke, including live SHA"
   ],
@@ -612,11 +612,13 @@
     }
   ],
   "githubCI": {
-    "observedAt": "2026-10-11T19:43:16.024087+00:00",
-    "headRevision": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
-    "testedMergeSha": "e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
-    "status": "FAIL",
-    "runId": 38167373961,
+    "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "status": "PASS",
+    "runId": 38169821209,
+    "artifactId": 11714128969,
+    "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
     "checks": [
       {
         "link": "https://vercel.com/github",
@@ -624,77 +626,179 @@
         "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373926/job/114552689386",
-        "name": "founder",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552631775",
-        "name": "agent-ui-browser",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632021",
-        "name": "agent-ui",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627734",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
         "name": "library",
         "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373996/job/114552627535",
-        "name": "scenes",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373961/job/114552627433",
-        "name": "local-gates",
-        "state": "FAILURE"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627566",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
         "name": "document-runtime",
         "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373974/job/114552627494",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
         "name": "native-learning-browser",
         "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373989/job/114552627302",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
+        "name": "scenes",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
+        "name": "local-gates",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
+        "name": "agent-ui",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
         "name": "growth-studio",
         "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632917",
-        "name": "dependency-lock",
-        "state": "SKIPPED"
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
+        "name": "agent-ui-browser",
+        "state": "SUCCESS"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632292",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
+        "name": "founder",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
         "name": "generate-assets",
         "state": "SKIPPED"
       },
       {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552628699",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
         "name": "dependency-lock",
         "state": "SKIPPED"
       },
       {
-        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/9ZTKqN3E5G18TSL5yUjEvxKCj6yw",
-        "name": "Vercel – postriff-phase2-private",
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
+        "name": "Vercel \u2013 postriff-phase2-private",
         "state": "SUCCESS"
       },
       {
-        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/8UbghE1vBToijMBhc8WJipuqHsWG",
-        "name": "Vercel – rafii-consumer-staging",
+        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
+        "name": "Vercel \u2013 rafii-consumer-staging",
         "state": "SUCCESS"
       }
     ],
-    "scope": "Full Python PASS; all Mastodon SQL and disposable migration/restore PASS; YouTube revocation synchronization fixture FAIL. Targeted repair pending; final candidate CI required."
+    "ci-python": {
+      "name": "ci-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:53:57.113252+00:00",
+      "finishedAt": "2026-10-11T19:58:36.235991+00:00",
+      "seconds": 279.12,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-python.log"
+    },
+    "pythonSummary": [
+      "Ran 5126 tests in 270.920s",
+      "OK (skipped=378)"
+    ],
+    "ci-postgres": {
+      "name": "ci-postgres",
+      "command": [
+        "python",
+        "scripts/postriff_pg_suite.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:58:36.540689+00:00",
+      "finishedAt": "2026-10-11T20:10:05.800108+00:00",
+      "seconds": 689.26,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-postgres.log"
+    },
+    "postgresSummary": {
+      "executed": 130,
+      "passed": 130,
+      "failed": 0
+    },
+    "ci-browser": {
+      "name": "ci-browser",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:14:43.481224+00:00",
+      "finishedAt": "2026-10-11T20:15:26.240746+00:00",
+      "seconds": 42.76,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-browser.log"
+    },
+    "ci-performance": {
+      "name": "ci-performance",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--performance"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:15:26.531224+00:00",
+      "finishedAt": "2026-10-11T20:16:32.113430+00:00",
+      "seconds": 65.58,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-performance.log"
+    },
+    "ci-history-import": {
+      "name": "ci-history-import",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--history-import"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:16:32.406327+00:00",
+      "finishedAt": "2026-10-11T20:16:50.078441+00:00",
+      "seconds": 17.67,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-history-import.log"
+    },
+    "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
   },
   "browserArtifact": {
     "provider": "Depot CI",
@@ -1082,6 +1186,91 @@
         }
       ],
       "scope": "All applicable checks passed on prior candidate 7842f874. Repair source is a later revision; its final pushed-head checks remain pending."
+    },
+    {
+      "observedAt": "2026-10-11T19:43:16.024087+00:00",
+      "headRevision": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+      "testedMergeSha": "e437a376a80a5345c7db63cf2bfc6e33fe3bd75d",
+      "status": "FAIL",
+      "runId": 38167373961,
+      "checks": [
+        {
+          "link": "https://vercel.com/github",
+          "name": "Vercel Preview Comments",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373926/job/114552689386",
+          "name": "founder",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552631775",
+          "name": "agent-ui-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632021",
+          "name": "agent-ui",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627734",
+          "name": "library",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373996/job/114552627535",
+          "name": "scenes",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373961/job/114552627433",
+          "name": "local-gates",
+          "state": "FAILURE"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552627566",
+          "name": "document-runtime",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373974/job/114552627494",
+          "name": "native-learning-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373989/job/114552627302",
+          "name": "growth-studio",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632917",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167373950/job/114552632292",
+          "name": "generate-assets",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38167374011/job/114552628699",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/9ZTKqN3E5G18TSL5yUjEvxKCj6yw",
+          "name": "Vercel \u2013 postriff-phase2-private",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/8UbghE1vBToijMBhc8WJipuqHsWG",
+          "name": "Vercel \u2013 rafii-consumer-staging",
+          "state": "SUCCESS"
+        }
+      ],
+      "scope": "Full Python PASS; all Mastodon SQL and disposable migration/restore PASS; YouTube revocation synchronization fixture FAIL. Targeted repair pending; final candidate CI required."
     }
   ],
   "priorBackendValidation": {
@@ -1141,7 +1330,7 @@
       "Pause/cancel/reconnect/health mutations use per-intent checks; already admitted effects can finish",
       "Previously accepted native schedules require explicit provider cancellation"
     ],
-    "releaseReview": "INCOMPLETE; no GitHub approval; real A–E remains required",
+    "releaseReview": "INCOMPLETE; no GitHub approval; real A\u2013E remains required",
     "laterCandidateSourceIdentical": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
     "sourceTreeAtBothRevisions": "15427cc9e4a021d5ecb36998f5a8eeacde03891a"
   },
@@ -1188,7 +1377,7 @@
       "status": "PUBLIC_API_OBSERVED",
       "domain": "mstdn.social",
       "version": "4.7.2",
-      "title": "Mastodon 🐘",
+      "title": "Mastodon \ud83d\udc18",
       "registrations": {
         "enabled": true,
         "approval_required": true,
@@ -1265,7 +1454,7 @@
     "comparableBaseline": "UNKNOWN",
     "note": "No measured provider token counters, attributable billing or comparable baseline available; no invented savings."
   },
-  "engineeringCandidate": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+  "engineeringCandidate": "a5678d0aeb140c7625d8937420f1065756ab878b",
   "preflightReceipt": "release-preflight-receipt.json",
   "targetedDisconnectFixtureValidation": {
     "runId": "sxgrpmll3n",
@@ -1294,9 +1483,76 @@
     }
   },
   "finalCandidateCI": {
-    "status": "PENDING_NEW_COMMITTED_HEAD",
-    "previousHead": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
-    "previousFailedRunId": 38167373961,
-    "scope": "Previous full Python and 129 PostgreSQL scripts passed; single failed fixture repaired and targeted remote test PASS. Final pushed commit still needs protected CI."
+    "statusAtReceiptWrite": "REQUIRED_AFTER_MIGRATION_SOURCE_COMMIT",
+    "priorPassedHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "priorPassedRunId": 38169821209,
+    "priorPassedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "scope": "This receipt is written before committing restored103 and compatibility fixtures. Their targeted JCB snapshot passed; final protected checks must be read against the commit containing this receipt. Immutable GitHub artifacts supply the final commit SHA without a self-referential Git hash."
+  },
+  "migrationPreflight": "migration-preflight-receipt.json",
+  "independentChecklistReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewedRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "srcTree": "15427cc9e4a021d5ecb36998f5a8eeacde03891a",
+    "reviewer": "mastodon_security_review",
+    "realAcceptance": "NOT_RUN",
+    "hostedPoolAndRollback": "NOT_RUN",
+    "githubApproval": "NOT_RECORDED",
+    "checklist": [
+      "OAuth state/PKCE/scopes/redirect",
+      "encrypted credentials/revocation/instance routing",
+      "exact approvals and duplicates",
+      "media custody and validation",
+      "worker recovery",
+      "private context exclusion",
+      "prepared rollback/disable procedures"
+    ]
+  },
+  "targetedMigrationCompatibility": {
+    "status": "PASS",
+    "provider": "Depot/JCB",
+    "runId": "jb1kxc82qm",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/jb1kxc82qm",
+    "exitCode": 0,
+    "elapsedSeconds": 86.747,
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200831893993Z-test.json",
+    "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "snapshot": {
+      "sourceFingerprint": "3dc6b2ffc85c61051e498f774123365216c5a8bd8eefbc8cfe89a2ee149b580d",
+      "patchSha256": "c6dbb9459038b5f518c85334c1034584c9ccb568b9107397c3f42ea53597f448",
+      "patchBytes": 600715,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+      "transportMode": "remote_patch"
+    },
+    "scope": "PG17 disposable: full 85 migrations; populated upgrade boundary113-115; enrollment/workspace preservation; checksum replay/refusal; database dump and separate restore; exact legacy automation assertions with permission state and grants absent.",
+    "realMastodonAcceptance": false,
+    "paidModelCalls": 0,
+    "hostedStaging": "NOT_RUN",
+    "production": "NOT_RUN",
+    "backupBytes": 1230328,
+    "backupSeconds": 0.112,
+    "restoreSeconds": 0.368,
+    "scriptExitCodes": {
+      "postgres_consumer_migrations": 0,
+      "postgres_mastodon_automation_legacy": 0
+    },
+    "sourceFileSha256": {
+      "migrations/postriff/103_feature_enrollments.sql": "b3b8b681bf78100202ec15f0a37e05417d304663d19623e4930a2b02f67cd40c",
+      "scripts/postriff_pg_suite.py": "8984d13f5ff702aece7522e2acd1966cdfd04687b6d38e653a6880f64c6f37e7",
+      "scripts/cloud-mastodon-automation.sh": "3db6b943a90a6c3e9c0cb9fbb2ae18dde094b0b4d533093c2d4e992e55c8c67e",
+      "tests/phase2/postgres_consumer_migrations.py": "e881b09fbb186c51f50bab45c83b23a95a6dd53782dd59b369c563d628185d30",
+      "tests/phase2/postgres_mastodon_automation_legacy.py": "7ec146475bd372ce1abcb891779b31f3a40fc9e4f2b301dbb955422af7664ae8"
+    },
+    "priorAttempt": {
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200603985207Z-test.json",
+      "status": "VALIDATION_UNAVAILABLE",
+      "remoteTests": "NOT_RUN",
+      "reason": "Temporary JCB workflow did not yet match reviewed task mapping; regenerated only that reversible workflow, then restored defaults byte-for-byte after successful run."
+    },
+    "modelTokens": "UNKNOWN",
+    "attributableCost": "UNKNOWN",
+    "tokenPilotComparableBaseline": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN"
   }
 }

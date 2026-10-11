@@ -198,12 +198,12 @@
       },
       {
         "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/9ZTKqN3E5G18TSL5yUjEvxKCj6yw",
-        "name": "Vercel – postriff-phase2-private",
+        "name": "Vercel \u2013 postriff-phase2-private",
         "state": "SUCCESS"
       },
       {
         "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/8UbghE1vBToijMBhc8WJipuqHsWG",
-        "name": "Vercel – rafii-consumer-staging",
+        "name": "Vercel \u2013 rafii-consumer-staging",
         "state": "SUCCESS"
       }
     ],
@@ -241,5 +241,211 @@
     "attributableInfrastructureUsd": "UNKNOWN",
     "tokenPilotBaseline": "UNKNOWN",
     "tokenPilotSavings": "UNKNOWN"
+  },
+  "accountBPublicLookup": {
+    "execution": "READ_ONLY_PUBLIC_PROVIDER_LOOKUP; no OAuth identity or scope proof",
+    "observedAt": "2026-10-11T20:12:46.422678+00:00",
+    "httpStatus": 200,
+    "username": "jamesau0723",
+    "acct": "jamesau0723",
+    "providerAccountId": "117423864221508233",
+    "profileUrl": "https://mastodon.social/@jamesau0723",
+    "instance": "mastodon.social"
+  },
+  "independentSourceChecklistReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "revision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "srcTree": "15427cc9e4a021d5ecb36998f5a8eeacde03891a",
+    "releaseApproval": "INCOMPLETE"
+  },
+  "migrationLedgerAndCompatibilityReceipt": "migration-preflight-receipt.json",
+  "laterCommittedCI": {
+    "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "status": "PASS",
+    "runId": 38169821209,
+    "artifactId": 11714128969,
+    "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
+    "checks": [
+      {
+        "link": "https://vercel.com/github",
+        "name": "Vercel Preview Comments",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
+        "name": "library",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
+        "name": "document-runtime",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
+        "name": "native-learning-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
+        "name": "scenes",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
+        "name": "local-gates",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
+        "name": "agent-ui",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
+        "name": "growth-studio",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
+        "name": "agent-ui-browser",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
+        "name": "founder",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
+        "name": "generate-assets",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
+        "name": "dependency-lock",
+        "state": "SKIPPED"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
+        "name": "Vercel \u2013 postriff-phase2-private",
+        "state": "SUCCESS"
+      },
+      {
+        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
+        "name": "Vercel \u2013 rafii-consumer-staging",
+        "state": "SUCCESS"
+      }
+    ],
+    "ci-python": {
+      "name": "ci-python",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:53:57.113252+00:00",
+      "finishedAt": "2026-10-11T19:58:36.235991+00:00",
+      "seconds": 279.12,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-python.log"
+    },
+    "pythonSummary": [
+      "Ran 5126 tests in 270.920s",
+      "OK (skipped=378)"
+    ],
+    "ci-postgres": {
+      "name": "ci-postgres",
+      "command": [
+        "python",
+        "scripts/postriff_pg_suite.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T19:58:36.540689+00:00",
+      "finishedAt": "2026-10-11T20:10:05.800108+00:00",
+      "seconds": 689.26,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-postgres.log"
+    },
+    "postgresSummary": {
+      "executed": 130,
+      "passed": 130,
+      "failed": 0
+    },
+    "ci-browser": {
+      "name": "ci-browser",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:14:43.481224+00:00",
+      "finishedAt": "2026-10-11T20:15:26.240746+00:00",
+      "seconds": 42.76,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-browser.log"
+    },
+    "ci-performance": {
+      "name": "ci-performance",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--performance"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:15:26.531224+00:00",
+      "finishedAt": "2026-10-11T20:16:32.113430+00:00",
+      "seconds": 65.58,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-performance.log"
+    },
+    "ci-history-import": {
+      "name": "ci-history-import",
+      "command": [
+        "python",
+        "scripts/consumer_ready_browser.py",
+        "--history-import"
+      ],
+      "cwd": "/home/runner/work/PostRiff/PostRiff",
+      "startedAt": "2026-10-11T20:16:32.406327+00:00",
+      "finishedAt": "2026-10-11T20:16:50.078441+00:00",
+      "seconds": 17.67,
+      "exitCode": 0,
+      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "log": "docs/consumer-ready/evidence/ci-history-import.log"
+    },
+    "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
   }
 }

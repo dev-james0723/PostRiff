@@ -1,8 +1,8 @@
 {
   "schema": "rafii.mastodon.staging.action-preview.v1",
   "execution": "REVIEWABLE_CANDIDATE_NOT_EXECUTED",
-  "sourceCandidate": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
-  "securityRepair": "Scoped source review PASS at 27ff4437; same src tree at df7c91b8. Final CI and hosted acceptance pending.",
+  "sourceCandidate": "a5678d0aeb140c7625d8937420f1065756ab878b",
+  "securityRepair": "Independent full source checklist PASS at a5678d0a; app src tree unchanged from27ff4437. Exact restored103 static review PASS, targeted cloud upgrade/legacy compatibility jb1kxc82qm PASS; final commit CI and hosted/real acceptance pending.",
   "vercel": {
     "project": "rafii-consumer-staging",
     "projectId": "prj_4bfvSc0AC6am9FdknFWcwNYgmcnN",
@@ -110,7 +110,7 @@
       "status": "PUBLIC_API_OBSERVED",
       "domain": "mstdn.social",
       "version": "4.7.2",
-      "title": "Mastodon 🐘",
+      "title": "Mastodon \ud83d\udc18",
       "registrations": {
         "enabled": true,
         "approval_required": true,
@@ -144,10 +144,10 @@
     "rights": "Project-owned acceptance asset; owner authorized the scoped temporary media workflow"
   },
   "testContentPreview": {
-    "manual": "Rafii × Mastodon acceptance test — manual media publishing. This temporary owner-authorized test will be deleted after verification.",
-    "nativeScheduled": "Rafii × Mastodon acceptance test — native scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
-    "managedScheduled": "Rafii × Mastodon acceptance test — Rafii-managed scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
-    "automation": "Rafii × Mastodon acceptance test — owner-approved automation. This temporary owner-authorized test will be deleted after verification."
+    "manual": "Rafii \u00d7 Mastodon acceptance test \u2014 manual media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "nativeScheduled": "Rafii \u00d7 Mastodon acceptance test \u2014 native scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "managedScheduled": "Rafii \u00d7 Mastodon acceptance test \u2014 Rafii-managed scheduled media publishing. This temporary owner-authorized test will be deleted after verification.",
+    "automation": "Rafii \u00d7 Mastodon acceptance test \u2014 owner-approved automation. This temporary owner-authorized test will be deleted after verification."
   },
   "productionChanges": false,
   "liveProviderWrites": false,
@@ -174,5 +174,15 @@
     },
     "sameInstanceAcceptanceBlockedByCrossInstance": false
   },
-  "backupPrerequisite": "Verified production backup and isolated restore required before production effects"
+  "backupPrerequisite": "Verified production backup and isolated restore required before production effects",
+  "accountBPublicLookup": {
+    "execution": "READ_ONLY_PUBLIC_PROVIDER_LOOKUP; no OAuth identity or scope proof",
+    "observedAt": "2026-10-11T20:12:46.422678+00:00",
+    "httpStatus": 200,
+    "username": "jamesau0723",
+    "acct": "jamesau0723",
+    "providerAccountId": "117423864221508233",
+    "profileUrl": "https://mastodon.social/@jamesau0723",
+    "instance": "mastodon.social"
+  }
 }

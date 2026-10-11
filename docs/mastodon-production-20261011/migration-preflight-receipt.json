@@ -1,0 +1,110 @@
+{
+  "status": "PASS_SOURCE_MATCHES_RECORDED_PRODUCTION_LEDGER",
+  "execution": "local metadata-only plan against recorded live ledger; no SQL execution",
+  "ledgerEntries": 60,
+  "sourceMigrations": 85,
+  "unknownAppliedMigrations": [],
+  "checksumMismatches": [],
+  "pendingMigrations": [
+    "039_radar.sql",
+    "041_context_navigation.sql",
+    "044_social_provider_webhooks.sql",
+    "046_phone_passkey_identity.sql",
+    "089_youtube_creator.sql",
+    "093_universal_library.sql",
+    "094_universal_library_lifecycle.sql",
+    "095_universal_library_storage.sql",
+    "096_universal_library_duplicate_index.sql",
+    "097_youtube_capacity.sql",
+    "098_youtube_authorization_generation.sql",
+    "099_youtube_policy_acceptance.sql",
+    "100_youtube_api_privacy_erasure.sql",
+    "102_agent_ui_artifacts.sql",
+    "105_youtube_agent_history.sql",
+    "106_youtube_operations_projection.sql",
+    "107_youtube_planner_fairness.sql",
+    "108_agent_tasks.sql",
+    "109_agent_permissions.sql",
+    "110_agent_observability.sql",
+    "111_agent_release_gates.sql",
+    "112_library_metadata_changes.sql",
+    "113_mastodon_management.sql",
+    "114_mastodon_native_metrics.sql",
+    "115_mastodon_connection_health.sql"
+  ],
+  "pendingEntriesAreNotSchemaAbsenceProof": true,
+  "observedProductionProject": "buoyhkbodnhzngaotoel",
+  "receiptBaseRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+  "restoredMigration": {
+    "name": "103_feature_enrollments.sql",
+    "sourceCommit": "5038b16ad4203cec55a47e545bb53c831828bc15",
+    "sha256": "b3b8b681bf78100202ec15f0a37e05417d304663d19623e4930a2b02f67cd40c",
+    "matchesAppliedProductionLedger": true,
+    "independentSourceReview": "PASS",
+    "productionExecution": "NONE"
+  },
+  "productionMetadata": {
+    "permissionState": "ABSENT",
+    "agentGrants": "ABSENT",
+    "agentTasks": "ABSENT",
+    "featureEnrollmentsRlsEnabled": true,
+    "featureEnrollmentsRlsForced": true,
+    "browserCrudPrivileges": false,
+    "serviceRoleCrudPrivileges": true,
+    "mastodonReferencedRelations": "PRESENT; metadata presence alone is not complete schema conformity"
+  },
+  "authorizedReleaseMigrationScope": [
+    "113_mastodon_management.sql",
+    "114_mastodon_native_metrics.sql",
+    "115_mastodon_connection_health.sql"
+  ],
+  "blanketApplyPendingMigrationsAuthorized": false,
+  "hostedUpgradeRestoreCompatibility": "NOT_RUN",
+  "cloudUpgradeLegacyCompatibility": {
+    "status": "PASS",
+    "provider": "Depot/JCB",
+    "runId": "jb1kxc82qm",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/jb1kxc82qm",
+    "exitCode": 0,
+    "elapsedSeconds": 86.747,
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200831893993Z-test.json",
+    "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+    "snapshot": {
+      "sourceFingerprint": "3dc6b2ffc85c61051e498f774123365216c5a8bd8eefbc8cfe89a2ee149b580d",
+      "patchSha256": "c6dbb9459038b5f518c85334c1034584c9ccb568b9107397c3f42ea53597f448",
+      "patchBytes": 600715,
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "sourceHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
+      "transportMode": "remote_patch"
+    },
+    "scope": "PG17 disposable: full 85 migrations; populated upgrade boundary113-115; enrollment/workspace preservation; checksum replay/refusal; database dump and separate restore; exact legacy automation assertions with permission state and grants absent.",
+    "realMastodonAcceptance": false,
+    "paidModelCalls": 0,
+    "hostedStaging": "NOT_RUN",
+    "production": "NOT_RUN",
+    "backupBytes": 1230328,
+    "backupSeconds": 0.112,
+    "restoreSeconds": 0.368,
+    "scriptExitCodes": {
+      "postgres_consumer_migrations": 0,
+      "postgres_mastodon_automation_legacy": 0
+    },
+    "sourceFileSha256": {
+      "migrations/postriff/103_feature_enrollments.sql": "b3b8b681bf78100202ec15f0a37e05417d304663d19623e4930a2b02f67cd40c",
+      "scripts/postriff_pg_suite.py": "8984d13f5ff702aece7522e2acd1966cdfd04687b6d38e653a6880f64c6f37e7",
+      "scripts/cloud-mastodon-automation.sh": "3db6b943a90a6c3e9c0cb9fbb2ae18dde094b0b4d533093c2d4e992e55c8c67e",
+      "tests/phase2/postgres_consumer_migrations.py": "e881b09fbb186c51f50bab45c83b23a95a6dd53782dd59b369c563d628185d30",
+      "tests/phase2/postgres_mastodon_automation_legacy.py": "7ec146475bd372ce1abcb891779b31f3a40fc9e4f2b301dbb955422af7664ae8"
+    },
+    "priorAttempt": {
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T200603985207Z-test.json",
+      "status": "VALIDATION_UNAVAILABLE",
+      "remoteTests": "NOT_RUN",
+      "reason": "Temporary JCB workflow did not yet match reviewed task mapping; regenerated only that reversible workflow, then restored defaults byte-for-byte after successful run."
+    },
+    "modelTokens": "UNKNOWN",
+    "attributableCost": "UNKNOWN",
+    "tokenPilotComparableBaseline": "UNKNOWN",
+    "tokenPilotSavings": "UNKNOWN"
+  }
+}
