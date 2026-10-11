@@ -301,7 +301,23 @@
       "readbackDate": "2026-10-11",
       "evidence": "Vercel get_deployment readback and GitHub compare: PR162 merge commit is ancestor of deployed SHA",
       "liveGoogleEnv": "NOT REVALIDATED: Vercel env-list request returned 403; no environment variables read, changed or disclosed",
-      "newOrExistingGrantBehavior": "Synthetic regression and source custody controls reviewed; NO live Google multi-account consent/refresh or sign-in smoke accepted"
+      "newOrExistingGrantBehavior": "Synthetic regression and source custody controls reviewed; NO live Google multi-account consent/refresh or sign-in smoke accepted",
+      "publicLegalPages": {
+        "https://rafii.io/privacy": {
+          "httpStatus": 200,
+          "source": "Vercel authenticated web fetch of live production 2026-10-11",
+          "pageTitle": "Privacy Policy · Rafii",
+          "legalReviewStatus": "DRAFT / PENDING QUALIFIED LEGAL REVIEW",
+          "placeholdersRemain": true
+        },
+        "https://rafii.io/terms": {
+          "httpStatus": 200,
+          "source": "Vercel authenticated web fetch of live production 2026-10-11",
+          "pageTitle": "Terms of Service · Rafii",
+          "legalReviewStatus": "DRAFT / PENDING QUALIFIED LEGAL REVIEW",
+          "placeholdersRemain": true
+        }
+      }
     },
     "goNoGo": {
       "existingGoogleSignIn": "PRESERVE; live login and callback smoke not newly tested",
@@ -316,7 +332,8 @@
         "verify Vercel production Google/YouTube env key-to-client/project mapping read-only",
         "test existing Google Sign-In and one owner-authorized legacy read-only token refresh in controlled acceptance",
         "provide own disposable review account/asset and independently grant Google OAuth consent",
-        "approve truthful demo-sharing/access and required declarations before submission"
+        "approve truthful demo-sharing/access and required declarations before submission",
+        "Resolve and approve live /privacy and /terms drafts/remaining placeholders before verification claims or legal attestations"
       ],
       "providerSubmissionRules": "ONLY change NOT SUBMITTED after real Google/YouTube submission confirmation with project, exact scopes, timestamp and case/reference; do not claim agent-completed legal attestations",
       "evidenceDocuments": [
@@ -324,7 +341,8 @@
         "YOUTUBE-AUDIT.md",
         "QUOTA-EXTENSION.md",
         "OWNER-FIELDS.md",
-        "REVIEW-DEMO-SHOTLIST.md"
+        "REVIEW-DEMO-SHOTLIST.md",
+        "BRAND-APPROVAL-20261011.md"
       ]
     }
   }
