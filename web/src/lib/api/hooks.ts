@@ -62,6 +62,11 @@ export function useChannels() {
   return useQuery({ queryKey: keys.channels(w), queryFn: () => api.channels(w), enabled });
 }
 
+export function useBlueskyProfile(connectionId: string, open: boolean) {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: ['bluesky-profile', w, connectionId], queryFn: () => api.blueskyProfile(w, connectionId), enabled: enabled && open, retry: false, gcTime: 0 });
+}
+
 /** Connection Health Center: only requested where the Channels response said this workspace may open it. */
 export function useConnectionHealth(options: { enabled?: boolean } = {}) {
   const { api, w, enabled } = useScoped();

@@ -521,3 +521,54 @@ class MaintainedSDKTests(unittest.TestCase):
         self.assertFalse(valid_post({**record, 'text': 'x' * 3001}))
         self.assertFalse(valid_post({**record, 'createdAt': 'not-a-date'}))
         self.assertFalse(valid_post({**record, 'facets': [{'index': {'byteStart': -1, 'byteEnd': 1}, 'features': []}]}))
+
+
+class PublicProfileTests(unittest.TestCase):
+    def data(self):
+        return {'did': DID, 'handle': 'new-handle.bsky.social', 'displayName': 'A test account',
+                'description': '廣東話 🎹', 'followersCount': 4, 'followsCount': 3, 'postsCount': 2,
+                'viewer': {'privateData': 'must not be returned'}, 'avatar': 'https://unsafe.invalid/image'}
+
+    def test_reads_exact_did_without_disclosing_credentials_or_private_fields(self):
+        from postriff_phase2.bluesky_history import fetch_profile
+        adapter = SimpleNamespace(_get_json=Mock(return_value=self.data()))
+        value = fetch_profile(adapter, json.dumps({'did': DID, 'at': 'secret-token'}), DID, 100)
+        self.assertEqual(value['did'], DID)
+        self.assertEqual(value['handle'], 'new-handle.bsky.social', 'Mutable handles do not change account selection.')
+        self.assertEqual(value['description'], '廣東話 🎹')
+        self.assertEqual(value['publicCounts']['followersCount'], 4)
+        self.assertNotIn('viewer', value)
+        self.assertNotIn('avatar', value)
+        self.assertEqual(adapter._get_json.call_count, 1)
+        self.assertNotIn('secret-token', str(adapter._get_json.call_args))
+        self.assertIn('actor=did%3Aplc%3A', adapter._get_json.call_args.args[0])
+
+    def test_rejects_foreign_session_before_read_and_foreign_profile_after_read(self):
+        from postriff_phase2.bluesky_history import fetch_profile
+        adapter = SimpleNamespace(_get_json=Mock(return_value={**self.data(), 'did': 'did:plc:' + 'b' * 24}))
+        with self.assertRaises(AlphaError):fetch_profile(adapter, json.dumps({'did': 'different'}), DID, 100)
+        adapter._get_json.assert_not_called()
+        with self.assertRaises(AlphaError):fetch_profile(adapter, json.dumps({'did': DID}), DID, 100)
+
+    def test_rejects_invalid_profile_strings_and_omits_invalid_counts(self):
+        from postriff_phase2.bluesky_history import fetch_profile
+        for key, value in [('displayName', 'x'*641), ('handle', None), ('description', 'x'*2561)]:
+            with self.subTest(key=key), self.assertRaises(AlphaError):
+                fetch_profile(SimpleNamespace(_get_json=lambda _: {**self.data(), key: value}), json.dumps({'did': DID}), DID, 100)
+        result = fetch_profile(SimpleNamespace(_get_json=lambda _: {**self.data(), 'followersCount': True, 'followsCount': -1, 'postsCount': 2**54}), json.dumps({'did': DID}), DID, 100)
+        self.assertEqual(result['publicCounts'], {})
+
+    def test_profile_response_rechecks_live_connection_and_rejects_other_providers(self):
+        from postriff_phase2.social_history import SocialHistoryService
+        service = SocialHistoryService(SimpleNamespace(repository=None, clock=lambda: 100))
+        binding = {'account': DID, 'provider': 'bluesky'}
+        adapter = SimpleNamespace(id='bluesky', _get_json=Mock(return_value=self.data()))
+        service._access = Mock(return_value=(adapter, {'accessToken': json.dumps({'did': DID})}, binding))
+        service._current = Mock(return_value=binding)
+        self.assertEqual(service.bluesky_profile('w', 'token', 'c')['connectionId'], 'c')
+        service._current.return_value = {**binding, 'account': 'different'}
+        with self.assertRaises(AlphaError):service.bluesky_profile('w', 'token', 'c')
+        adapter.id = 'instagram'
+        adapter._get_json.reset_mock()
+        with self.assertRaises(AlphaError):service.bluesky_profile('w', 'token', 'c')
+        adapter._get_json.assert_not_called()

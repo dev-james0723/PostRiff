@@ -67,3 +67,24 @@ def fetch_owned_page(adapter, token, account_id, cursor=None, limit=25):
                          "from": dates[0] if dates else None, "to": dates[-1] if dates else None,
                          "undatedCount": sum(not post["publishedAt"] for post in posts), "eligibleCount": len(posts)},
             "coverageNote": "Only retrieved original posts by the connected DID. Reposts, replies and empty posts are excluded. Public engagement counts are snapshots; no impressions or private analytics are available."}
+
+
+def fetch_profile(adapter, token, account_id, now):
+    """Public profile snapshot, bound to this connection's stable DID; no retention."""
+    session = json.loads(token)
+    if not isinstance(account_id, str) or session.get('did') != account_id:
+        raise AlphaError('Bluesky profile does not belong to this connection.', 403)
+    body = adapter._get_json('https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?' + urlencode({'actor': account_id}))
+    if not isinstance(body, dict) or body.get('did') != account_id:
+        raise AlphaError('Bluesky returned a profile for another account.', 502)
+    fields = {}
+    for key, maximum in [('handle', 253), ('displayName', 640), ('description', 2560)]:
+        value = body.get(key, '')
+        if not isinstance(value, str) or len(value.encode()) > maximum:
+            raise AlphaError('Bluesky returned an invalid profile field.', 502)
+        fields[key] = value
+    counts = {key: body[key] for key in ('followersCount', 'followsCount', 'postsCount')
+              if type(body.get(key)) is int and 0 <= body[key] <= 2**53 - 1}
+    return {'did': account_id, **fields, 'publicCounts': counts, 'observedAt': now,
+            'permalink': 'https://bsky.app/profile/' + account_id,
+            'coverageNote': 'Public profile counts at the time of retrieval.'}

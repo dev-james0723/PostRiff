@@ -46,6 +46,12 @@ class SyntheticBluesky(BlueskyProvider):
     def identity(self, access_token):
         return {'providerAccountId': DID, 'handle': '@synthetic.bsky.invalid', 'accountType': 'profile'}
 
+    def _get_json(self, url):
+        if url != 'https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=did%3Aplc%3A' + 'a' * 24:
+            raise AssertionError('Unsupported synthetic public profile read.')
+        return {'did': DID, 'handle': 'synthetic.bsky.invalid', 'displayName': 'SYNTHETIC ACCOUNT',
+                'description': 'CLOUD SYNTHETIC profile only.', 'followersCount': 4, 'followsCount': 3, 'postsCount': 0}
+
     def inspect_scopes(self, access_token, provider_account_id=None):
         return json.loads(access_token)['scope']
 

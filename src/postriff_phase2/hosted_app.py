@@ -948,6 +948,8 @@ class HostedApplication:
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, oauth.choose_destination(parts[2], token, parts[4], body.get("destinationId")))
+                if len(parts) == 6 and parts[5] == 'bluesky-profile' and method == 'GET':
+                    return self._json(start_response, 200, oauth.history.bluesky_profile(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == 'posts' and method == 'POST':
                     return self._json(start_response, 200, oauth.history.preview(parts[2], token, parts[4], self._body(environ)))
                 if len(parts) == 7 and parts[5:] == ['posts', 'import'] and method == 'POST':

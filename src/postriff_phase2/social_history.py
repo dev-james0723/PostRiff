@@ -213,6 +213,16 @@ class SocialHistoryService:
             raise AlphaError('The connection changed. Load it again.', 409)
         return adapter, grant, binding
 
+    def bluesky_profile(self, workspace_id, token, connection_id):
+        adapter, grant, binding = self._access(workspace_id, token, connection_id)
+        if adapter.id != 'bluesky':
+            raise AlphaError('Choose a connected Bluesky account.', 400)
+        from .bluesky_history import fetch_profile
+        profile = fetch_profile(adapter, grant['accessToken'], binding['account'], self.clock())
+        if self._current(workspace_id, token, connection_id) != binding:
+            raise AlphaError('The connection changed while reading. Load it again.', 409)
+        return {'connectionId': connection_id, 'profile': profile}
+
     def preview(self, workspace_id, token, connection_id, payload):
         if payload.get('confirmed') is not True:
             raise AlphaError('Confirm reading this connected account for the sample picker.', 400)

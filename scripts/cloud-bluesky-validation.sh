@@ -28,7 +28,7 @@ bash "$bluesky_validation_root/scripts/cloud-bluesky-postgres.sh"
 fi
 cd -- "$bluesky_validation_root/web"
 if [ "$bluesky_browser" -eq 1 ]; then
-  ./node_modules/.bin/oxlint src/features/queue/schedule-dialog.tsx src/features/queue/bluesky-manifest-details.tsx src/features/queue/queue-view.tsx src/features/queue/job-sheet.tsx
+  ./node_modules/.bin/oxlint src/features/queue/schedule-dialog.tsx src/features/queue/bluesky-manifest-details.tsx src/features/queue/queue-view.tsx src/features/queue/job-sheet.tsx src/features/channels/bluesky-profile-sheet.tsx
   POSTRIFF_API_ORIGIN=http://127.0.0.1:4348 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4448 POSTRIFF_DEV_SSR=1 npm run build
   RAFII_BROWSER_SUITE=bluesky bash "$bluesky_validation_root/scripts/cloud-youtube-browser.sh"
 fi
