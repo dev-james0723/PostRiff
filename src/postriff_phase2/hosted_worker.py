@@ -275,7 +275,7 @@ class PostgresWorker:
                         return selected
         return None
 
-    def mastodon_checkpoint(self, claimed, progress, *, before_external=False):
+    def mastodon_checkpoint(self, claimed, progress, *, before_external=False, authorization=None):
         """Commit one provider boundary under the existing Queue fence, outside network calls."""
         from .mastodon_publishing import checked_progress
         with self.connection_factory() as db, db.cursor() as cur:
@@ -290,6 +290,12 @@ class PostgresWorker:
                 raise AlphaError('Mastodon publishing lost its fenced Queue lease.', 409)
             if before_external and (job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job)):
                 raise AlphaError('Approval, cancellation, account or media changed; no further Mastodon write is permitted.', 409)
+            if before_external:
+                guard = getattr(getattr(self.social, 'oauth', None), 'assert_mastodon_dispatch', None)
+                if guard is None or not authorization or authorization.get('providerAccountId') != job['manifest'].get('providerAccountId'):
+                    raise AlphaError('The exact Mastodon credential is required before dispatch.', 409)
+                required = ('write:statuses', 'write:media') if progress.get('stage') == 'media_upload_attempted' else ('write:statuses',)
+                guard(cur, claimed['workspaceId'], job['manifest']['channelId'], authorization, required)
             if before_external and progress.get('stage') in ('media_upload_attempted', 'publish_attempted', 'thread_publish_attempted'):
                 from .hosted import throttle
                 host = str(job['manifest'].get('providerAccountId', '')).rsplit('@', 1)[-1]

@@ -620,12 +620,17 @@ class OAuthService:
         # this workspace save. The same-transaction fence rolls back a stale
         # profile restoration rather than trusting a newly fetched revision.
         def consent_fence(cur, _state, _actor):
-            self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
-        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
+            if provider_id == 'youtube':
+                self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
+            else:
+                self.assert_mastodon_dispatch(cur, workspace_id, connection_id, mastodon_grant)
+        mastodon_grant = {'providerAccountId': identity['providerAccountId'], 'scopes': granted,
+            '_mastodonCredentialBinding': hashlib.sha256((key_id + '\0' + access_ct).encode()).hexdigest()} if provider_id == 'mastodon' else None
+        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id in ('youtube', 'mastodon') else {}))
+        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {'mastodon_grant': mastodon_grant} if provider_id == 'mastodon' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
-    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None):
+    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None, mastodon_grant=None):
         """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
         try:
             outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
@@ -637,6 +642,8 @@ class OAuthService:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
                 if youtube_generation is not None:
                     self._assert_youtube_generation(cur, workspace_id, connection_id, youtube_generation)
+                if mastodon_grant is not None:
+                    self.assert_mastodon_dispatch(cur, workspace_id, connection_id, mastodon_grant)
                 account_pictures.guarded(cur, account_pictures.store, workspace_id, connection_id, outcome)
         except AlphaError:
             pass  # membership ended in between; nothing to decorate
@@ -1190,10 +1197,24 @@ class OAuthService:
                                 generation=authorization_generation, force=youtube_policy_required, cur=cur)
                         cur.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (scopes, workspace_id, connection_id))
                     return {"provider": provider, "accessToken": access_token, "scopes": list(scopes), "expiresAt": expires, 'providerAccountId': account_id,
+                            **({'_mastodonCredentialBinding': hashlib.sha256((key_id + '\0' + access_ct).encode()).hexdigest()} if provider == 'mastodon' else {}),
                             **({'refreshBindingRequired': refresh_binding_required, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
                                 'authorizationGeneration': authorization_generation,
                                 '_youtubePolicyContext': {'workspace': workspace_id, 'connection': connection_id,
                                     'force': youtube_policy_required}} if provider == 'youtube' else {})}
+
+    def assert_mastodon_dispatch(self, cur, workspace_id, connection_id, grant, required=()):
+        """Fence the exact server-only grant at intent admission; never persist it in Queue state."""
+        cur.execute("SELECT provider_account_id,access_ciphertext,key_id,scopes,extract(epoch from access_expires_at)::float8 FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL FOR SHARE", (workspace_id, connection_id))
+        row = cur.fetchone()
+        binding = grant.get('_mastodonCredentialBinding') if isinstance(grant, dict) else None
+        if (not row or not isinstance(binding, str)
+                or not hmac.compare_digest(binding, hashlib.sha256((row[2] + '\0' + row[1]).encode()).hexdigest())
+                or row[0] != grant.get('providerAccountId')
+                or set(row[3]) != set(grant.get('scopes', []))
+                or not set(required).issubset(row[3])
+                or (row[4] is not None and row[4] <= self.clock())):
+            raise AlphaError('Mastodon authorization changed; no further write is permitted.', 409, code='mastodon_dispatch_authorization_changed')
 
     def _assert_youtube_generation(self, cur, workspace_id, connection_id, generation):
         if not isinstance(generation, str) or not generation:
@@ -1536,7 +1557,39 @@ class OAuthService:
         return {"connectionId": connection_id, "state": 'client_binding_missing' if channel.get('refreshBindingRequired') else outcome, "ready": ready,
                 **({'refreshBindingRequired': True} if channel.get('refreshBindingRequired') else {})}
 
+    @contextmanager
+    def mastodon_dispatch_fence(self, workspace_id, connection_id):
+        """Serialize outbound writes with disconnect before either takes workspace locks.
+
+        The dedicated transaction survives checkpoint commits and stays open through HTTP.
+        Contention refuses the operation without changing consent or sending a write.
+        """
+        key = f'mastodon-dispatch:{workspace_id}:{connection_id}'
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT pg_try_advisory_xact_lock(hashtextextended(%s, 0))', (key,))
+            if not cur.fetchone()[0]:
+                raise AlphaError('A Mastodon action is already in progress. Try again shortly.', 409,
+                                 code='mastodon_dispatch_busy')
+            yield
+
     def disconnect(self, workspace_id, token, connection_id):
+        # Authenticate before acquiring the dispatch lock, and release the workspace
+        # lock first. Every Mastodon outbound worker uses the same ordering.
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            from .hosted import _membership
+            require(_membership(row), 'manage_connections')
+            self.repository.assert_fresh(token, principal)
+            cur.execute('SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL',
+                        (workspace_id, connection_id))
+            stored = cur.fetchone()
+            if not stored:
+                raise AlphaError('Connection unavailable.', 404)
+        if stored[0] == 'mastodon':
+            with self.mastodon_dispatch_fence(workspace_id, connection_id):
+                return self._disconnect(workspace_id, token, connection_id)
+        return self._disconnect(workspace_id, token, connection_id)
+
+    def _disconnect(self, workspace_id, token, connection_id):
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
@@ -1565,6 +1618,12 @@ class OAuthService:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
+            if stored[0] == 'mastodon':
+                for channel in state.get('phase2', {}).get('channels', []):
+                    if channel.get('id') == connection_id and channel.get('platform') == 'Mastodon':
+                        state_changed = state_changed or channel.get('revoked') is not True
+                        channel['revoked'] = True
+                self.commands.engine.invalidate(state)
             if stored[0] == 'youtube':
                 from .youtube.agent import revoke_connection_authority
                 state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),
@@ -1599,13 +1658,13 @@ class OAuthService:
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         revision = snapshot["revision"]
-        if stored[0] != 'youtube':
+        if stored[0] not in ('youtube', 'mastodon'):
             try:
                 saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
                 revision = saved["revision"]
             except AlphaError:
                 revision = snapshot["revision"]  # channel absent from state; credentials are already revoked
-        # YouTube state was revoked atomically with its credential. A second
+        # YouTube and Mastodon state were revoked atomically with their credential. A second
         # mutation here could incorrectly revoke a consent completed meanwhile.
         deferred = shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."

@@ -239,7 +239,7 @@ def advance(social, manifest, job, checkpoint, now):
         progress['stage'] = stage
         checked_progress(progress, manifest)
         try:
-            checkpoint(copy.deepcopy(progress), before_external=external)
+            checkpoint(copy.deepcopy(progress), before_external=external, **({'authorization': grant} if external else {}))
         except AlphaError as error:
             if not external or error.status != 429: raise
             # The transaction refused BEFORE dispatch. It is safe to restore this

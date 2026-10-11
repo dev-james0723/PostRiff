@@ -91,6 +91,17 @@ class HostedSocial:
 
     # --- submit -------------------------------------------------------------------
     def submit(self, manifest):
+        if manifest['platform'] == 'Mastodon':
+            try:
+                with self.oauth.mastodon_dispatch_fence(manifest['workspaceId'], manifest['channelId']):
+                    return self._submit(manifest)
+            except AlphaError as error:
+                if error.code != 'mastodon_dispatch_busy':
+                    raise
+                return {'state': 'held', 'confirmed': str(error)}
+        return self._submit(manifest)
+
+    def _submit(self, manifest):
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -265,9 +276,15 @@ class HostedSocial:
     def advance_mastodon(self, manifest, job, checkpoint, clock=time.time):
         from .mastodon_publishing import advance, LocalCooldown
         try:
-            return advance(self, manifest, job, checkpoint, clock)
+            with self.oauth.mastodon_dispatch_fence(manifest['workspaceId'], manifest['channelId']):
+                return advance(self, manifest, job, checkpoint, clock)
         except LocalCooldown as wait:
             return wait.receipt
+        except AlphaError as error:
+            if error.code != 'mastodon_dispatch_busy':
+                raise
+            return {'state': 'held', 'confirmed': str(error),
+                    **({'progress': job['progress']} if job.get('progress') else {})}
 
     def _submit_telegram(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)

@@ -41,6 +41,20 @@ class DurablePublishingTests(unittest.TestCase):
     def checkpoint(self, progress, **kw): self.saved.append((copy.deepcopy(progress), kw))
     def run_step(self, progress=None): return advance(self.social, self.manifest, {'progress': progress}, self.checkpoint, lambda: self.now)
 
+    def test_every_external_checkpoint_carries_the_exact_grant_outside_progress(self):
+        grant = {'accessToken': 'synthetic', 'providerAccountId': '10@mastodon.social',
+            'scopes': ['write:statuses', 'write:media'], '_mastodonCredentialBinding': 'a' * 64}
+        self.social.oauth.token_for_worker = lambda *_: grant
+        self.replies = [response({'id': '21', 'url': 'https://mastodon.social/media/21'}), response({'id': '31'})]
+        result = self.run_step()
+        self.assertEqual(result['state'], 'provider_accepted')
+        external = [(progress, kw) for progress, kw in self.saved if kw.get('before_external')]
+        self.assertEqual([p['stage'] for p, _ in external], ['media_wait', 'media_upload_attempted', 'publish_attempted'])
+        for progress, kw in external:
+            self.assertIs(kw['authorization'], grant)
+            self.assertNotIn('accessToken', progress)
+            self.assertNotIn('_mastodonCredentialBinding', progress)
+
     def test_mastodon_preview_writer_is_local_bilingual_and_bounds_all_openings(self):
         from postriff_alpha.generation import FixtureAdapter
         for language in ('en', 'zh-Hant'):

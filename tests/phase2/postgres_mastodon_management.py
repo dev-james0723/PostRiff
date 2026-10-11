@@ -30,6 +30,12 @@ def connection(): return psycopg.connect(DSN, client_encoding='utf8')
 
 
 class JournalTests(unittest.TestCase):
+    def tearDown(self):
+        # Health maintenance scans all workspaces. Keep each disposable test's
+        # due credentials out of the next test's worker lease assertions.
+        with connection() as db:
+            db.execute('DELETE FROM public.pr_workspaces WHERE id IN (%s,%s)', (self.workspace, self.foreign))
+
     @classmethod
     def setUpClass(cls):
         cls.sql = (ROOT / 'migrations/postriff/113_mastodon_management.sql').read_text()
@@ -289,8 +295,13 @@ class JournalTests(unittest.TestCase):
 
     def test_queue_checkpoint_is_committed_fenced_and_rechecks_write_authority(self):
         from postriff_phase2.hosted_worker import PostgresWorker
-        worker = PostgresWorker(connection, clock=lambda: self.now)
-        job = {'id': uuid.uuid4().hex, 'manifest': {'platform': 'Mastodon', 'media': []}, 'state': 'submitting',
+        worker = PostgresWorker(connection, social=SimpleNamespace(oauth=self.service.oauth), clock=lambda: self.now)
+        scopes = ['read:accounts', 'write:statuses', 'write:media']
+        self.scoped_transport(scopes, lambda *_args, **_kw: None)
+        with connection() as db:
+            db.execute('UPDATE public.pr_encrypted_credentials SET scopes=%s WHERE workspace_id=%s AND connection_id=%s', (scopes, self.workspace, self.connection_id))
+        grant = self.service.oauth.token_for_worker(self.workspace, self.connection_id)
+        job = {'id': uuid.uuid4().hex, 'manifest': {'platform': 'Mastodon', 'media': [], 'channelId': self.connection_id, 'providerAccountId': self.account}, 'state': 'submitting',
                'leaseOwner': worker.worker_id, 'leaseId': uuid.uuid4().hex, 'leaseUntil': self.now + 45}
         with connection() as db:
             state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
@@ -301,7 +312,7 @@ class JournalTests(unittest.TestCase):
         with patch.object(worker, '_approved', return_value=False), self.assertRaises(AlphaError):
             worker.mastodon_checkpoint(claimed, progress, before_external=True)
         with patch.object(worker, '_approved', return_value=True):
-            worker.mastodon_checkpoint(claimed, progress, before_external=True)
+            worker.mastodon_checkpoint(claimed, progress, before_external=True, authorization=grant)
         with connection() as db:
             stored = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][0]
             self.assertEqual(stored['progress']['stage'], 'publish_attempted')
@@ -317,6 +328,92 @@ class JournalTests(unittest.TestCase):
             self.assertEqual(stored['providerReference'], '123')
         self.now += 50
         with self.assertRaises(AlphaError): worker.mastodon_checkpoint(claimed, accepted)
+
+    def test_worker_refuses_revoke_rotation_and_scope_change_before_every_write_intent(self):
+        from postriff_phase2.hosted_worker import PostgresWorker
+        self.health_channel()
+        scopes = ['read:accounts', 'write:statuses', 'write:media']
+        self.scoped_transport(scopes, lambda *_args, **_kw: None)
+        worker = PostgresWorker(connection, social=SimpleNamespace(oauth=self.service.oauth), clock=lambda: self.now)
+        manifest = {'platform': 'Mastodon', 'channelId': self.connection_id, 'providerAccountId': self.account,
+            'payload': {'text': 'Root', 'threadParts': ['Child']}, 'media': [], 'publishOptions': {}}
+        prior = {'version': 3, 'stage': 'thread_wait', 'attachments': [], 'retryCount': 0, 'reference': '123', 'threadReferences': ['123']}
+        job = {'id': uuid.uuid4().hex, 'manifest': manifest, 'progress': prior, 'state': 'processing',
+            'providerReference': '123', 'leaseOwner': worker.worker_id, 'leaseId': uuid.uuid4().hex, 'leaseUntil': self.now + 45}
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['jobs'] = [job]
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+            original = db.execute('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()
+        claimed = {'workspaceId': self.workspace, 'job': job}
+        dispatched = []
+        for stage in ('media_upload_attempted', 'publish_attempted', 'thread_publish_attempted'):
+            for change in ('revoke', 'rotate', 'scopes'):
+                with self.subTest(stage=stage, change=change):
+                    with connection() as db:
+                        db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,scopes=%s,revoked_at=NULL WHERE workspace_id=%s AND connection_id=%s', (*original, scopes, self.workspace, self.connection_id))
+                    grant = self.service.oauth.token_for_worker(self.workspace, self.connection_id)
+                    with connection() as db:
+                        if change == 'revoke':
+                            db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+                        elif change == 'rotate':
+                            rotated, key = self.vault.encrypt(self.vault.decrypt(*original))
+                            db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s WHERE workspace_id=%s AND connection_id=%s', (rotated, key, self.workspace, self.connection_id))
+                        else:
+                            db.execute('UPDATE public.pr_encrypted_credentials SET scopes=%s WHERE workspace_id=%s AND connection_id=%s', (['read:accounts'], self.workspace, self.connection_id))
+                    with patch.object(worker, '_approved', return_value=True), self.assertRaises(AlphaError):
+                        worker.mastodon_checkpoint(claimed, {**prior, 'stage': stage}, before_external=True, authorization=grant)
+                        dispatched.append(stage)
+                    with connection() as db:
+                        saved = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][0]
+                        self.assertEqual(saved['progress'], prior)
+                        self.assertEqual(saved['providerReference'], '123')
+                        self.assertFalse(saved.get('authorization'))
+        self.assertEqual(dispatched, [])
+
+    def test_disconnect_atomically_revokes_state_and_cannot_revoke_a_later_consent(self):
+        self.health_channel()
+        def reconnect_after_commit(*_args):
+            with connection() as db:
+                state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+                channel = next(c for c in state['phase2']['channels'] if c['id'] == self.connection_id)
+                self.assertTrue(channel['revoked'])
+                self.assertTrue(db.execute('SELECT revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()[0])
+                # A new consent commits before the old disconnect finishes its cleanup.
+                channel['revoked'] = False
+                db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=NULL WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+                db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), self.workspace))
+        with patch.object(self.service.repository, 'assert_fresh'), patch('postriff_phase2.growth.history_import.purge_after_disconnect', side_effect=reconnect_after_commit):
+            self.service.oauth.disconnect(self.workspace, self.actor, self.connection_id)
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            self.assertFalse(next(c for c in state['phase2']['channels'] if c['id'] == self.connection_id)['revoked'])
+            self.assertFalse(db.execute('SELECT revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()[0])
+
+    def test_dispatch_gate_refuses_disconnect_in_flight_and_isolates_destinations(self):
+        oauth = self.service.oauth
+        with patch.object(self.service.repository, 'assert_fresh'):
+            with oauth.mastodon_dispatch_fence(self.workspace, self.connection_id):
+                with self.assertRaises(AlphaError) as busy:
+                    oauth.disconnect(self.workspace, self.actor, self.connection_id)
+                self.assertEqual(busy.exception.code, 'mastodon_dispatch_busy')
+                with connection() as db:
+                    self.assertFalse(db.execute('SELECT revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',
+                                               (self.workspace, self.connection_id)).fetchone()[0])
+                # The same channel label in another workspace and a second
+                # destination in this workspace do not share the fence.
+                with oauth.mastodon_dispatch_fence(self.foreign, self.connection_id):
+                    with oauth.mastodon_dispatch_fence(self.workspace, self.connection_id + '-b'):
+                        pass
+            oauth.disconnect(self.workspace, self.actor, self.connection_id)
+        with self.assertRaises(AlphaError):
+            oauth.token_for_worker(self.workspace, self.connection_id)
+        # Both a normal exit and an exception release the dedicated transaction.
+        with self.assertRaises(RuntimeError):
+            with oauth.mastodon_dispatch_fence(self.workspace, self.connection_id):
+                raise RuntimeError('simulated interrupted dispatch')
+        with oauth.mastodon_dispatch_fence(self.workspace, self.connection_id):
+            pass
 
     def test_thread_checkpoint_keeps_accepted_ids_after_cancellation_and_blocks_next_write(self):
         from postriff_phase2.hosted_worker import PostgresWorker

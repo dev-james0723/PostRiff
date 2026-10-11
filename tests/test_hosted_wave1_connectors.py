@@ -336,6 +336,8 @@ class Cursor:
         s, db = " ".join(sql.split()), self.db
         if s.startswith("INSERT INTO public.pr_auth_throttle"):
             self.result = (1,)
+        elif s.startswith('SELECT pg_try_advisory_xact_lock'):
+            self.result = (True,)
         elif s.startswith("INSERT INTO public.pr_oauth_transactions"):
             workspace, member, provider, capability, redirect, scopes, state_hash, ciphertext, key_id, ttl = params
             txn_id = f"txn-{len(db.txns) + 1}"
@@ -371,6 +373,10 @@ class Cursor:
             self.result = ('00000000-0000-0000-0000-000000000098',) if found and not found['revoked'] else None
         elif s.startswith("UPDATE public.pr_encrypted_credentials SET scopes=%s"):
             db.credentials[params[2]]["scopes"] = params[0]
+        elif s.startswith("SELECT provider_account_id,access_ciphertext,key_id,scopes,extract(epoch from access_expires_at)"):
+            found = db.credentials.get(params[1])
+            self.result = ((found['account'], found['access'], found['key_id'], found['scopes'], found.get('expires'))
+                if found and found['provider'] == 'mastodon' and not found['revoked'] and found.get('workspace') == params[0] else None)
         elif s.startswith("SELECT provider_account_id FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = (found["account"],) if found and found.get("workspace", "workspace") == params[0] else None
@@ -425,7 +431,10 @@ class Repository:
 
     def command(self, workspace, token, revision, command, requirement="edit", after=None, **kwargs):
         require(Membership("owner"), requirement)
-        self.state, self.revision = command(copy.deepcopy(self.state), "owner"), self.revision + 1
+        state = command(copy.deepcopy(self.state), "owner")
+        if after:
+            after(self.db.cursor(), state, 'owner')
+        self.state, self.revision = state, self.revision + 1
         return {"state": self.state, "revision": self.revision}
 
     def assert_fresh(self, token, principal):
@@ -467,6 +476,30 @@ class ServiceFlows(unittest.TestCase):
         stored = self.repo.db.credentials[result["connectionId"]]
         self.assertIsNone(stored["expires"])
         self.assertNotIn("csec", stored["access"])  # encrypted at rest
+
+    @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
+    def test_late_mastodon_completion_cannot_restore_revoked_or_replaced_consent(self):
+        for change in ('revoke', 'replace'):
+            with self.subTest(change=change):
+                wire = Wire([ok({'version': '4.3.0'}), ok({}, 404), ok({'client_id': 'cid', 'client_secret': 'csec'}),
+                    ok({'access_token': 'MT', 'scope': 'read:accounts'}), ok({'id': '1099', 'username': 'james'}),
+                    ok({'name': 'Rafii', 'scopes': ['read:accounts']})])
+                service = self.service({'mastodon': MastodonProvider(BASE, transport=wire, resolver=PUBLIC)})
+                service.providers['mastodon'].application_cache = None
+                begun = service.start('workspace', 'session', 'mastodon', 'identity', inputs={'instance': 'mastodon.social'})
+                state = parse_qs(urlparse(begun['authorizeUrl']).query)['state'][0]
+                command = self.repo.command
+                def change_before_save(*args, **kwargs):
+                    stored = next(iter(self.repo.db.credentials.values()))
+                    if change == 'revoke':
+                        stored['revoked'] = True
+                    else:
+                        stored['access'], stored['key_id'] = service.vault.encrypt(service.vault.decrypt(stored['access'], stored['key_id']))
+                    return command(*args, **kwargs)
+                with patch.object(self.repo, 'command', side_effect=change_before_save), self.assertRaises(AlphaError) as refused:
+                    service.complete('workspace', 'session', 'mastodon', state, 'CODE')
+                self.assertEqual(refused.exception.code, 'mastodon_dispatch_authorization_changed')
+                self.assertFalse(any(c.get('platform') == 'Mastodon' for c in self.repo.state['phase2']['channels']))
 
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_telegram_code_is_claimed_by_the_first_channel_post_then_connects(self):
@@ -548,6 +581,10 @@ class Grants:
 
     def token_for_worker(self, workspace_id, connection_id):
         return {"accessToken": self.token, "scopes": self.scopes, "expiresAt": None}
+
+    @contextmanager
+    def mastodon_dispatch_fence(self, workspace_id, connection_id):
+        yield
 
 
 def manifest(platform, account_id, text="Hello from Rafii https://rafii.example/x", account="@james", media=None):
