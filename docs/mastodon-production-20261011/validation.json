@@ -423,7 +423,9 @@
       "bytes": 779,
       "execution": "CLOUD SYNTHETIC",
       "runId": "phxgfwj25s"
-    }
+    },
+    "oauth-discovery-receipt.json",
+    "ci-a827-receipt.json"
   ],
   "localChecks": [
     "Source AST parsing, JSON validation and git diff --check; no local heavy validation",
@@ -612,90 +614,13 @@
     }
   ],
   "githubCI": {
-    "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
-    "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+    "headRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "testedMergeSha": "2189aac03eed1c71365c9836c03410f4aabda45b",
     "status": "PASS",
-    "runId": 38169821209,
-    "artifactId": 11714128969,
-    "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-    "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
-    "checks": [
-      {
-        "link": "https://vercel.com/github",
-        "name": "Vercel Preview Comments",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
-        "name": "library",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
-        "name": "document-runtime",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
-        "name": "native-learning-browser",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
-        "name": "scenes",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
-        "name": "local-gates",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
-        "name": "agent-ui",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
-        "name": "growth-studio",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
-        "name": "agent-ui-browser",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
-        "name": "founder",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
-        "name": "generate-assets",
-        "state": "SKIPPED"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
-        "name": "dependency-lock",
-        "state": "SKIPPED"
-      },
-      {
-        "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
-        "name": "dependency-lock",
-        "state": "SKIPPED"
-      },
-      {
-        "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
-        "name": "Vercel \u2013 postriff-phase2-private",
-        "state": "SUCCESS"
-      },
-      {
-        "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
-        "name": "Vercel \u2013 rafii-consumer-staging",
-        "state": "SUCCESS"
-      }
-    ],
+    "runId": 38171786322,
+    "artifactId": 11714538986,
+    "artifactName": "local-gates-2189aac03eed1c71365c9836c03410f4aabda45b",
+    "artifactLocalPath": "/private/tmp/rafii-mastodon-a827-ci.zip",
     "ci-python": {
       "name": "ci-python",
       "command": [
@@ -709,20 +634,16 @@
         "test_*.py"
       ],
       "cwd": "/home/runner/work/PostRiff/PostRiff",
-      "startedAt": "2026-10-11T19:53:57.113252+00:00",
-      "finishedAt": "2026-10-11T19:58:36.235991+00:00",
-      "seconds": 279.12,
+      "startedAt": "2026-10-11T20:22:20.739572+00:00",
+      "finishedAt": "2026-10-11T20:28:10.818808+00:00",
+      "seconds": 350.08,
       "exitCode": 0,
-      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
       "sourceUnchanged": true,
       "status": "PASS",
       "log": "docs/consumer-ready/evidence/ci-python.log"
     },
-    "pythonSummary": [
-      "Ran 5126 tests in 270.920s",
-      "OK (skipped=378)"
-    ],
     "ci-postgres": {
       "name": "ci-postgres",
       "command": [
@@ -730,20 +651,15 @@
         "scripts/postriff_pg_suite.py"
       ],
       "cwd": "/home/runner/work/PostRiff/PostRiff",
-      "startedAt": "2026-10-11T19:58:36.540689+00:00",
-      "finishedAt": "2026-10-11T20:10:05.800108+00:00",
-      "seconds": 689.26,
+      "startedAt": "2026-10-11T20:28:11.245920+00:00",
+      "finishedAt": "2026-10-11T20:41:46.440304+00:00",
+      "seconds": 815.19,
       "exitCode": 0,
-      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
       "sourceUnchanged": true,
       "status": "PASS",
       "log": "docs/consumer-ready/evidence/ci-postgres.log"
-    },
-    "postgresSummary": {
-      "executed": 130,
-      "passed": 130,
-      "failed": 0
     },
     "ci-browser": {
       "name": "ci-browser",
@@ -752,12 +668,12 @@
         "scripts/consumer_ready_browser.py"
       ],
       "cwd": "/home/runner/work/PostRiff/PostRiff",
-      "startedAt": "2026-10-11T20:14:43.481224+00:00",
-      "finishedAt": "2026-10-11T20:15:26.240746+00:00",
-      "seconds": 42.76,
+      "startedAt": "2026-10-11T20:47:58.136996+00:00",
+      "finishedAt": "2026-10-11T20:48:50.340167+00:00",
+      "seconds": 52.2,
       "exitCode": 0,
-      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
       "sourceUnchanged": true,
       "status": "PASS",
       "log": "docs/consumer-ready/evidence/ci-browser.log"
@@ -770,12 +686,12 @@
         "--performance"
       ],
       "cwd": "/home/runner/work/PostRiff/PostRiff",
-      "startedAt": "2026-10-11T20:15:26.531224+00:00",
-      "finishedAt": "2026-10-11T20:16:32.113430+00:00",
-      "seconds": 65.58,
+      "startedAt": "2026-10-11T20:48:50.745628+00:00",
+      "finishedAt": "2026-10-11T20:50:02.333308+00:00",
+      "seconds": 71.59,
       "exitCode": 0,
-      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
       "sourceUnchanged": true,
       "status": "PASS",
       "log": "docs/consumer-ready/evidence/ci-performance.log"
@@ -788,17 +704,133 @@
         "--history-import"
       ],
       "cwd": "/home/runner/work/PostRiff/PostRiff",
-      "startedAt": "2026-10-11T20:16:32.406327+00:00",
-      "finishedAt": "2026-10-11T20:16:50.078441+00:00",
-      "seconds": 17.67,
+      "startedAt": "2026-10-11T20:50:02.738617+00:00",
+      "finishedAt": "2026-10-11T20:50:24.018605+00:00",
+      "seconds": 21.28,
       "exitCode": 0,
-      "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-      "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+      "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+      "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
       "sourceUnchanged": true,
       "status": "PASS",
       "log": "docs/consumer-ready/evidence/ci-history-import.log"
     },
-    "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
+    "pythonSummary": [
+      "Ran 5126 tests in 340.776s",
+      "OK (skipped=378)"
+    ],
+    "postgresSummary": {
+      "executed": 131,
+      "passed": 131,
+      "failed": 0
+    },
+    "scope": "All applicable protected checks PASS on this PR merge snapshot; synthetic provider tests do not prove real A-E. Later OAuth source repair requires new final CI.",
+    "checks": [
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "dependency-lock",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "founder",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "growth-studio",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "native-learning-browser",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "scenes",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "local-gates",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "library",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "generate-assets",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "document-runtime",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SKIPPED",
+        "context": null,
+        "name": "dependency-lock",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "agent-ui",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "agent-ui-browser",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": "SUCCESS",
+        "context": null,
+        "name": "Vercel Preview Comments",
+        "state": null,
+        "status": "COMPLETED"
+      },
+      {
+        "conclusion": null,
+        "context": "Vercel \u2013 postriff-phase2-private",
+        "name": null,
+        "state": "SUCCESS",
+        "status": null
+      },
+      {
+        "conclusion": null,
+        "context": "Vercel \u2013 rafii-consumer-staging",
+        "name": null,
+        "state": "SUCCESS",
+        "status": null
+      }
+    ]
   },
   "browserArtifact": {
     "provider": "Depot CI",
@@ -1271,6 +1303,195 @@
         }
       ],
       "scope": "Full Python PASS; all Mastodon SQL and disposable migration/restore PASS; YouTube revocation synchronization fixture FAIL. Targeted repair pending; final candidate CI required."
+    },
+    {
+      "headRevision": "a5678d0aeb140c7625d8937420f1065756ab878b",
+      "testedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "status": "PASS",
+      "runId": 38169821209,
+      "artifactId": 11714128969,
+      "artifactName": "local-gates-087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+      "artifactLocalPath": "/private/tmp/rafii-mastodon-a567-ci.zip",
+      "checks": [
+        {
+          "link": "https://vercel.com/github",
+          "name": "Vercel Preview Comments",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890591",
+          "name": "library",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559890379",
+          "name": "document-runtime",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821155/job/114559890195",
+          "name": "native-learning-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821157/job/114559890088",
+          "name": "scenes",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821209/job/114559890202",
+          "name": "local-gates",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890388",
+          "name": "agent-ui",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821211/job/114559890331",
+          "name": "growth-studio",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559890196",
+          "name": "agent-ui-browser",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821149/job/114559889904",
+          "name": "founder",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891407",
+          "name": "generate-assets",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821234/job/114559891190",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://github.com/dev-james0723/PostRiff/actions/runs/38169821232/job/114559891223",
+          "name": "dependency-lock",
+          "state": "SKIPPED"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/postriff-phase2-private/CgdSoW2vWvzJSJ7KFL96KmPafo1c",
+          "name": "Vercel \u2013 postriff-phase2-private",
+          "state": "SUCCESS"
+        },
+        {
+          "link": "https://vercel.com/jamesau0723-6572s-projects/rafii-consumer-staging/ECuyPLmvnzfeZcVUSS6qWwwK1p5u",
+          "name": "Vercel \u2013 rafii-consumer-staging",
+          "state": "SUCCESS"
+        }
+      ],
+      "ci-python": {
+        "name": "ci-python",
+        "command": [
+          "python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests",
+          "-p",
+          "test_*.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T19:53:57.113252+00:00",
+        "finishedAt": "2026-10-11T19:58:36.235991+00:00",
+        "seconds": 279.12,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-python.log"
+      },
+      "pythonSummary": [
+        "Ran 5126 tests in 270.920s",
+        "OK (skipped=378)"
+      ],
+      "ci-postgres": {
+        "name": "ci-postgres",
+        "command": [
+          "python",
+          "scripts/postriff_pg_suite.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T19:58:36.540689+00:00",
+        "finishedAt": "2026-10-11T20:10:05.800108+00:00",
+        "seconds": 689.26,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-postgres.log"
+      },
+      "postgresSummary": {
+        "executed": 130,
+        "passed": 130,
+        "failed": 0
+      },
+      "ci-browser": {
+        "name": "ci-browser",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:14:43.481224+00:00",
+        "finishedAt": "2026-10-11T20:15:26.240746+00:00",
+        "seconds": 42.76,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-browser.log"
+      },
+      "ci-performance": {
+        "name": "ci-performance",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py",
+          "--performance"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:15:26.531224+00:00",
+        "finishedAt": "2026-10-11T20:16:32.113430+00:00",
+        "seconds": 65.58,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-performance.log"
+      },
+      "ci-history-import": {
+        "name": "ci-history-import",
+        "command": [
+          "python",
+          "scripts/consumer_ready_browser.py",
+          "--history-import"
+        ],
+        "cwd": "/home/runner/work/PostRiff/PostRiff",
+        "startedAt": "2026-10-11T20:16:32.406327+00:00",
+        "finishedAt": "2026-10-11T20:16:50.078441+00:00",
+        "seconds": 17.67,
+        "exitCode": 0,
+        "head": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
+        "source": "bbee8134553e39b3c60dd44cb94e4c76771a1d7e6c8c3db33e7d63b775d344cd",
+        "sourceUnchanged": true,
+        "status": "PASS",
+        "log": "docs/consumer-ready/evidence/ci-history-import.log"
+      },
+      "scope": "All applicable protected checks PASS on PR merge snapshot. External provider responses in CI are synthetic; no real A-E or production release."
     }
   ],
   "priorBackendValidation": {
@@ -1454,7 +1675,7 @@
     "comparableBaseline": "UNKNOWN",
     "note": "No measured provider token counters, attributable billing or comparable baseline available; no invented savings."
   },
-  "engineeringCandidate": "a5678d0aeb140c7625d8937420f1065756ab878b",
+  "engineeringCandidate": "Commit containing oauth-discovery-receipt.json; resolve via Git history and immutable CI head, not the prior a827 SHA",
   "preflightReceipt": "release-preflight-receipt.json",
   "targetedDisconnectFixtureValidation": {
     "runId": "sxgrpmll3n",
@@ -1483,11 +1704,11 @@
     }
   },
   "finalCandidateCI": {
-    "statusAtReceiptWrite": "REQUIRED_AFTER_MIGRATION_SOURCE_COMMIT",
-    "priorPassedHead": "a5678d0aeb140c7625d8937420f1065756ab878b",
-    "priorPassedRunId": 38169821209,
-    "priorPassedMergeSha": "087b795c2d04e2b1d9fddb773c2b6bffe88debd5",
-    "scope": "This receipt is written before committing restored103 and compatibility fixtures. Their targeted JCB snapshot passed; final protected checks must be read against the commit containing this receipt. Immutable GitHub artifacts supply the final commit SHA without a self-referential Git hash."
+    "statusAtReceiptWrite": "REQUIRED_AFTER_OAUTH_SOURCE_REPAIR_COMMIT",
+    "priorPassedHead": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "priorPassedRunId": 38171786322,
+    "priorPassedMergeSha": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "scope": "a827 passed all applicable checks and 131 PostgreSQL scripts. The new issuer source change passed targeted dirty-snapshot cloud regression and real public discovery, but final protected CI must run on its committed revision."
   },
   "migrationPreflight": "migration-preflight-receipt.json",
   "independentChecklistReview": {
@@ -1554,5 +1775,13 @@
     "attributableCost": "UNKNOWN",
     "tokenPilotComparableBaseline": "UNKNOWN",
     "tokenPilotSavings": "UNKNOWN"
+  },
+  "oauthDiscoveryPreflight": "oauth-discovery-receipt.json",
+  "independentOAuthIssuerReview": {
+    "status": "PASS_SOURCE_ONLY",
+    "reviewer": "mastodon_security_review",
+    "baseRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+    "twoFileDiffSha256": "44e3f4903c826c8f7297e6b892550787c460ed1cf6b09bddc0aa3959564d65c2",
+    "scope": "Only exact origin or one root slash accepted as issuer; endpoints, S256 and scopes remain strict. No tests or provider calls by reviewer; registration/grants/actual PKCE remain NOT_RUN."
   }
 }

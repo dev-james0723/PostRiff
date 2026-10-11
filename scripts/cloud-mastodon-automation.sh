@@ -5,6 +5,40 @@ case "${CI:-}" in 1|true|TRUE) ;; *) echo 'Use JCB cloud execution.' >&2; exit 6
 if [ "$(uname -s)" != Linux ]; then echo 'Cloud-only validation.' >&2; exit 64; fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests
+if [ "${1:-}" = oauth-discovery-only ]; then
+  "$TREND_VISUAL_TEST_PYTHON" -m unittest test_mastodon_management.ProtocolTests
+  "$TREND_VISUAL_TEST_PYTHON" - <<'PY'
+import json
+from datetime import datetime, timezone
+from postriff_phase2.mastodon_protocol import discover
+from postriff_phase2.social_connectors import MastodonProvider
+
+for host in ('mastodon.social', 'mstdn.social'):
+    origin = 'https://' + host
+    provider = MastodonProvider('https://app.example')
+    transport = provider.transport
+    calls = []
+    metadata = {}
+    allowed = {origin + path for path in ('/api/v2/instance', '/api/v1/instance',
+                                         '/.well-known/oauth-authorization-server')}
+    def public_read(method, url, **kwargs):
+        assert method == 'GET' and url in allowed and not kwargs, 'Unexpected discovery action'
+        response = transport(method, url)
+        calls.append({'method': method, 'url': url, 'status': response.get('status')})
+        if url.endswith('/.well-known/oauth-authorization-server'):
+            metadata.update(response.get('body') or {})
+        return response
+    capabilities = discover(public_read, provider._server(host))
+    assert capabilities['pkce'] and set(provider.SCOPES['publish']) <= set(capabilities['scopesSupported'])
+    print(json.dumps({'event': 'real_public_oauth_discovery', 'observedAt': datetime.now(timezone.utc).isoformat(),
+        'instance': host, 'version': capabilities['version'], 'issuer': metadata['issuer'],
+        'authorizationEndpoint': metadata['authorization_endpoint'], 'tokenEndpoint': metadata['token_endpoint'],
+        's256Advertised': 'S256' in metadata['code_challenge_methods_supported'],
+        'publishScopesAdvertised': True, 'requests': calls, 'oauthClientRegistered': False,
+        'ownerIdentityVerified': False, 'actualGrantedScopes': 'NOT_VERIFIED', 'actualS256Flow': 'NOT_RUN'}))
+PY
+  exit 0
+fi
 pg_major=16
 case "${1:-}" in youtube-disconnect-only|release-preflight-only) pg_major=17 ;; esac
 if [ ! -x "/usr/lib/postgresql/$pg_major/bin/initdb" ]; then

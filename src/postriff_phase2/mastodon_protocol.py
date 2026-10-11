@@ -83,7 +83,9 @@ def discover(transport, host):
         metadata = transport("GET", origin + "/.well-known/oauth-authorization-server")
         document = metadata.get("body")
         if metadata.get("status") == 200 and isinstance(document, dict):
-            for name, path in (("issuer", ""), ("authorization_endpoint", "/oauth/authorize"), ("token_endpoint", "/oauth/token")):
+            if document.get("issuer") not in (origin, origin + "/"):
+                raise AlphaError("This server's OAuth identity does not match its HTTPS origin.", 409)
+            for name, path in (("authorization_endpoint", "/oauth/authorize"), ("token_endpoint", "/oauth/token")):
                 if document.get(name) != origin + path:
                     raise AlphaError("This server's OAuth identity does not match its HTTPS origin.", 409)
             methods = document.get("code_challenge_methods_supported", [])

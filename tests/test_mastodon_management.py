@@ -201,6 +201,39 @@ class ProtocolTests(unittest.TestCase):
             provider.begin(BASE + '/cb', 'S', 'V', 'C', ['read:accounts'], 'mastodon.social')
         self.assertEqual(len([c for c in wire.calls if c['method'] == 'POST']), 1)
 
+    def test_oauth_root_issuer_forms_preserve_exact_endpoints_and_s256(self):
+        for host in ('mastodon.social', 'mstdn.social'):
+            origin = 'https://' + host
+            metadata = {'issuer': origin, 'authorization_endpoint': origin + '/oauth/authorize',
+                        'token_endpoint': origin + '/oauth/token', 'code_challenge_methods_supported': ['S256'],
+                        'scopes_supported': ['read:accounts', 'read:statuses', 'write:statuses', 'write:media']}
+            for issuer in (origin, origin + '/'):
+                with self.subTest(host=host, issuer=issuer):
+                    wire = Wire([ok({'version': '4.5.0'}), ok({**metadata, 'issuer': issuer}),
+                                 ok({'client_id': 'c', 'client_secret': 's'})])
+                    begun = MastodonProvider(BASE, transport=wire, resolver=PUBLIC).begin(
+                        BASE + '/cb', 'STATE', 'VERIFIER', 'CHALLENGE', ['read:accounts'], host)
+                    query = parse_qs(urlsplit(begun['authorizeUrl']).query)
+                    self.assertEqual(query['code_challenge_method'], ['S256'])
+                    self.assertEqual(query['code_challenge'], ['CHALLENGE'])
+                    self.assertEqual(begun['scopes'], ['read:accounts'])
+            invalid = [{'issuer': issuer} for issuer in (None, [], 'https://evil.example.org/',
+                origin + '/oauth', origin + '//', origin + '/?next=evil', origin + '/#fragment',
+                origin + ':443/', 'https://user@' + host + '/', 'http://' + host + '/')]
+            invalid += [{'authorization_endpoint': origin + '/oauth/authorize/'},
+                        {'authorization_endpoint': 'https://evil.example.org/oauth/authorize'},
+                        {'token_endpoint': origin + '/oauth/token?next=evil'},
+                        {'token_endpoint': 'https://evil.example.org/oauth/token'},
+                        {'code_challenge_methods_supported': ['plain']},
+                        {'code_challenge_methods_supported': 'S256'}]
+            for changed in invalid:
+                with self.subTest(host=host, changed=changed):
+                    wire = Wire([ok({'version': '4.5.0'}), ok({**metadata, **changed})])
+                    with self.assertRaises(AlphaError):
+                        MastodonProvider(BASE, transport=wire, resolver=PUBLIC).begin(
+                            BASE + '/cb', 'STATE', 'VERIFIER', 'CHALLENGE', ['read:accounts'], host)
+                    self.assertFalse(any(call['method'] == 'POST' for call in wire.calls))
+
     def test_app_permissions_never_expand_a_token_grant(self):
         provider = MastodonProvider(BASE, transport=Wire([ok({'scopes': ['read:accounts', 'write:statuses']})]), resolver=PUBLIC)
         token = json.dumps({'v': 1, 'at': 'AT', 'instance': 'mastodon.social', 'scope': ['read:accounts']})
