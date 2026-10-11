@@ -43,6 +43,7 @@ interface ScheduleDialogProps {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
+const blueskyImageAllowed = (asset: Asset) => typeof asset.bytes === 'number' && Number.isSafeInteger(asset.bytes) && asset.bytes > 0 && asset.bytes <= 2_000_000;
 
 /** "an Instagram account", "a LinkedIn account". */
 const withArticle = (word: string) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
@@ -176,6 +177,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [chosenChannelId, setChannelId] = useState<string>('');
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
+  const [extraImages, setExtraImages] = useState<{ assetId: string; alt: string }[]>([]);
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
   // TikTok, YouTube and Pinterest need per-post choices; null until every one is made.
@@ -192,6 +194,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const timePassed = chosenAt !== null && chosenAt <= Date.now();
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
+  const blueskyImages = variant?.platform === 'Bluesky';
+  useEffect(() => { setExtraImages([]); }, [variant?.id, assetId]);
   const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
@@ -223,6 +227,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
       (!asset || kindOf(asset) === 'video' || alt.trim()) &&
+      (!blueskyImages || ((!asset || blueskyImageAllowed(asset)) && extraImages.every((image) =>
+        image.alt.trim() && image.assetId !== assetId && assets.some((candidate) => candidate.id === image.assetId && blueskyImageAllowed(candidate)))
+        && new Set(extraImages.map((image) => image.assetId)).size === extraImages.length)) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
       (!needsOptions || publishOptions !== null)
   );
@@ -257,8 +264,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
-          assetId: asset?.id,
-          alt: alt.trim(),
+          ...(blueskyImages && asset ? { images: [{ assetId: asset.id, alt: alt.trim() }, ...extraImages] } : { assetId: asset?.id, alt: alt.trim() }),
           rightsConfirmed: rights,
           localTime,
           timeZone,
@@ -284,7 +290,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
+      <DialogContent className='rafii-elevated max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
           <DialogDescription>Nothing publishes until you approve it.</DialogDescription>
@@ -418,7 +424,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : blueskyImages ? 'First image (optional)' : 'Image (optional)'}</Label>
               <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
             </div>
           </div>
@@ -448,6 +454,25 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-alt'>Alt text</Label>
               <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Hands on piano keys under a warm light' />
+            </div>
+          )}
+
+          {blueskyImages && asset && (
+            <div className='flex flex-col gap-3'>
+              <p className='text-muted-foreground text-xs'>Up to four images, 2 MB each. Add alt text for each image; their order is preserved in the review.</p>
+              {!blueskyImageAllowed(asset) && <Note>Choose an image with a verified size of at most 2 MB.</Note>}
+              {extraImages.map((image, index) => (
+                <div key={index} className='flex flex-col gap-1.5'>
+                  <Label htmlFor={`schedule-image-${index}`}>Image {index + 2}</Label>
+                  <AssetPicker id={`schedule-image-${index}`} assets={assets.filter((candidate) => blueskyImageAllowed(candidate) && candidate.id !== assetId && !extraImages.some((other, otherIndex) => otherIndex !== index && other.assetId === candidate.id))}
+                    value={image.assetId} onValueChange={(value) => setExtraImages((current) => current.map((item, position) => position === index ? { ...item, assetId: value } : item))} kinds={['image']} />
+                  <Label htmlFor={`schedule-image-alt-${index}`}>Alt text for image {index + 2}</Label>
+                  <Input id={`schedule-image-alt-${index}`} value={image.alt} maxLength={1000}
+                    onChange={(event) => setExtraImages((current) => current.map((item, position) => position === index ? { ...item, alt: event.target.value } : item))} />
+                  <Button type='button' variant='quiet' onClick={() => setExtraImages((current) => current.filter((_, position) => position !== index))}>Remove image {index + 2}</Button>
+                </div>
+              ))}
+              {extraImages.length < 3 && <Button type='button' variant='quiet' onClick={() => setExtraImages((current) => [...current, { assetId: '', alt: '' }])}>Add another image</Button>}
             </div>
           )}
 

@@ -158,9 +158,10 @@ class HostedSocial:
         return tid(seconds * 1_000_000 + seed % 1_000_000, (seed >> 20) & 0x3FF)
 
     def _submit_bluesky(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
+        from .bluesky_media import MAX_IMAGES, MAX_IMAGE_BYTES
+        assets = manifest.get('media') or []
+        if len(assets) > MAX_IMAGES or any(not str(asset.get('mime') or '').startswith('image/') for asset in assets):
+            return {'state': 'failed', 'confirmed': 'Bluesky accepts text and up to four images here. Nothing was posted.'}
         session = json.loads(token)
         if session.get("did") != manifest.get("providerAccountId"):
             return {"state": "held", "confirmed": "The approved Bluesky DID does not match this grant. Nothing was posted."}
@@ -171,21 +172,28 @@ class HostedSocial:
         facets = self._bluesky_facets(text)
         if facets:
             record["facets"] = facets
-        image = self._image(manifest)
-        if image:
-            raw, mime, alt = image
-            asset = manifest['media'][0]
-            if (not isinstance(raw, bytes) or not 0 < len(raw) <= 2_000_000
+        prepared = []
+        if assets and self.assets is None:
+            return {'state': 'held', 'confirmed': 'Media storage is unavailable. Nothing was posted.'}
+        # Verify every approved byte sequence before uploading any of them.
+        for asset in assets:
+            raw = self.assets.storage.get(manifest['workspaceId'], 'media', asset.get('objectName') or asset['id'])
+            if (not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_IMAGE_BYTES
                     or len(raw) != asset.get('bytes') or hashlib.sha256(raw).hexdigest() != asset.get('hash')):
                 return {"state": "held", "confirmed": "The approved Bluesky image changed or exceeds its limit. Nothing was posted."}
-            uploaded = provider.xrpc_post(session, "com.atproto.repo.uploadBlob", data=raw, content_type=mime)
+            prepared.append((asset, raw))
+        images = []
+        for asset, raw in prepared:
+            uploaded = provider.xrpc_post(session, "com.atproto.repo.uploadBlob", data=raw, content_type=asset['mime'])
             early = self._classify_status(uploaded.get("status"), uploaded.get("body"), "Bluesky")
             if early:
                 return early
             blob = uploaded.get("body", {}).get("blob") if isinstance(uploaded.get("body"), dict) else None
             if uploaded.get("status") != 200 or not self._bluesky_blob_matches(asset, blob):
                 return {"state": "failed", "confirmed": "Bluesky did not confirm the exact approved image, so no post was created."}
-            record["embed"] = {"$type": "app.bsky.embed.images", "images": [{"image": blob, "alt": alt}]}
+            images.append({'image': blob, 'alt': asset.get('alt') or ''})
+        if images:
+            record['embed'] = {'$type': 'app.bsky.embed.images', 'images': images}
         try:
             response = provider.xrpc_post(session, "com.atproto.repo.createRecord", body={"repo": session["did"], "collection": "app.bsky.feed.post", "rkey": rkey, "record": record})
         except AlphaError:
@@ -235,10 +243,12 @@ class HostedSocial:
             return not value.get('embed')
         embed = value.get('embed')
         images = embed.get('images') if isinstance(embed, dict) else None
-        return bool(len(assets) == 1 and isinstance(embed, dict) and embed.get('$type') == 'app.bsky.embed.images'
-                    and isinstance(images, list) and len(images) == 1 and isinstance(images[0], dict)
-                    and images[0].get('alt') == assets[0].get('alt')
-                    and cls._bluesky_blob_matches(assets[0], images[0].get('image')))
+        return bool(1 <= len(assets) <= 4 and isinstance(embed, dict) and embed.get('$type') == 'app.bsky.embed.images'
+                    and set(embed) <= {'$type', 'images'} and isinstance(images, list) and len(images) == len(assets)
+                    and all(isinstance(image, dict) and set(image) <= {'image', 'alt'}
+                            and image.get('alt') == asset.get('alt')
+                            and cls._bluesky_blob_matches(asset, image.get('image'))
+                            for asset, image in zip(assets, images)))
 
     def _mastodon_media(self, provider, session, image):
         """Upload once, then poll the same media id while the server processes it (never a second upload)."""

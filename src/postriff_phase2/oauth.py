@@ -920,7 +920,13 @@ class OAuthService:
         direct_allowed = bool(adapter.production_reviewed or account_scoped)
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
-        publish_granted = adapter.grants_capability("publish", granted)
+        # Older adapter interfaces expose capability_scopes but do not inherit
+        # OAuthProvider. Keep their strict subset check; Bluesky overrides it
+        # only to recognize already-granted legacy transitional authority.
+        from .provider_base import OAuthProvider
+        grants = getattr(adapter, 'grants_capability', None)
+        grants = grants if callable(grants) else lambda cap, scopes: OAuthProvider.grants_capability(adapter, cap, scopes)
+        publish_granted = grants("publish", granted)
         publisher_ready = not (
             getattr(adapter, "publisher", None) is not None and
             (not getattr(adapter, "publish_live_tested", False) or
@@ -930,7 +936,7 @@ class OAuthService:
         if publish_granted and direct_allowed and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
-            if adapter.grants_capability("schedule", granted):
+            if grants("schedule", granted):
                 if getattr(adapter, "native_schedule", False):
                     set_level(matrix, "schedule", "Direct", f"Scheduled on {adapter.platform}.", now, adapter.capability_version)
                 elif getattr(adapter, "server_schedule", False):

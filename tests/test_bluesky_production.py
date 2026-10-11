@@ -295,6 +295,122 @@ class PublicationEvidence(unittest.TestCase):
         self.assertEqual(social.submit(job)['state'], 'provider_accepted')
         self.assertEqual([c['url'].split('/')[-1] for c in wire.calls], ['com.atproto.repo.uploadBlob', 'com.atproto.repo.createRecord'])
 
+    def multiple(self):
+        pairs = []
+        for number in range(4):
+            raw = f'approved-image-{number}'.encode()
+            asset = {'id': str(number), 'mime': 'image/jpeg', 'bytes': len(raw), 'hash': hashlib.sha256(raw).hexdigest(), 'alt': f'Image {number}'}
+            cid = 'b' + base64.b32encode(b'\x01\x55\x12\x20' + hashlib.sha256(raw).digest()).decode().lower().rstrip('=')
+            pairs.append((asset, raw, {'$type': 'blob', 'ref': {'$link': cid}, 'size': len(raw), 'mimeType': 'image/jpeg'}))
+        return pairs
+
+    def test_four_images_upload_in_approved_order_and_create_one_record(self):
+        pairs = self.multiple()
+        job = manifest('Bluesky', DID, media=[a for a, _, _ in pairs])
+        reference = f'at://{DID}/app.bsky.feed.post/{HostedSocial.bluesky_rkey(job)}'
+        social, wire = self.social([ok({'blob': b}) for _, _, b in pairs] + [ok({'uri': reference})])
+        social.assets.storage.get.side_effect = [raw for _, raw, _ in pairs]
+        self.assertEqual(social.submit(job)['state'], 'provider_accepted')
+        self.assertEqual(len(wire.calls), 5)
+        record = wire.calls[-1]['body']['record']
+        self.assertEqual(record['embed']['images'], [{'image': b, 'alt': a['alt']} for a, _, b in pairs])
+        self.assertTrue(HostedSocial._bluesky_record_matches(job, record))
+        record['embed']['images'].reverse()
+        self.assertFalse(HostedSocial._bluesky_record_matches(job, record))
+
+    def test_changed_last_image_prevents_every_upload(self):
+        pairs = self.multiple()
+        social, wire = self.social([])
+        social.assets.storage.get.side_effect = [raw for _, raw, _ in pairs[:-1]] + [b'changed']
+        self.assertEqual(social.submit(manifest('Bluesky', DID, media=[a for a, _, _ in pairs]))['state'], 'held')
+        self.assertEqual(wire.calls, [])
+
+    def test_second_blob_mismatch_prevents_post_creation(self):
+        pairs = self.multiple()
+        social, wire = self.social([ok({'blob': pairs[0][2]}), ok({'blob': pairs[0][2]})])
+        social.assets.storage.get.side_effect = [raw for _, raw, _ in pairs]
+        self.assertEqual(social.submit(manifest('Bluesky', DID, media=[a for a, _, _ in pairs]))['state'], 'failed')
+        self.assertEqual(len(wire.calls), 2)
+        self.assertTrue(all(c['url'].endswith('uploadBlob') for c in wire.calls))
+
+    def test_five_images_or_mixed_video_are_refused_before_network(self):
+        pairs = self.multiple()
+        for media in ([a for a, _, _ in pairs] + [pairs[0][0]], [pairs[0][0], {'mime': 'video/mp4'}]):
+            social, wire = self.social([])
+            self.assertEqual(social.submit(manifest('Bluesky', DID, media=media))['state'], 'failed')
+            self.assertEqual(wire.calls, [])
+
+
+class ImageApproval(unittest.TestCase):
+    def assets(self):
+        return [{'id': str(n), 'hash': str(n) * 64, 'sourceHash': 'a' * 64, 'mime': 'image/jpeg',
+                 'bytes': 2_000_000, 'width': 640, 'height': 640, 'duration': 0, 'processing': 'decoded', 'deleted': False}
+                for n in range(5)]
+
+    def test_four_private_workspace_assets_and_alts_are_frozen_in_order(self):
+        from postriff_phase2.bluesky_media import approved_images
+        choices = [{'assetId': str(n), 'alt': f'  描述 {n}  '} for n in range(4)]
+        result = approved_images(self.assets(), choices, True)
+        self.assertEqual([a['id'] for a in result], ['0', '1', '2', '3'])
+        self.assertEqual([a['alt'] for a in result], [f'描述 {n}' for n in range(4)])
+        self.assertTrue(all(a['rightsConfirmed'] for a in result))
+
+    def test_bad_selection_missing_rights_or_foreign_asset_is_rejected(self):
+        from postriff_phase2.bluesky_media import approved_images
+        for choices, rights in (([], True), ([{'assetId': str(n), 'alt': 'x'} for n in range(5)], True),
+                                ([{'assetId': '0', 'alt': ''}], True), ([{'assetId': 'foreign', 'alt': 'x'}], True),
+                                ([{'assetId': '0', 'alt': 'x'}] * 2, True), ([{'assetId': '0', 'alt': 'x'}], False),
+                                ([{'assetId': '0', 'alt': 'x'}], 'true')):
+            with self.subTest(choices=choices, rights=rights), self.assertRaises(AlphaError):
+                approved_images(self.assets(), choices, rights)
+
+    def test_deleted_undecoded_or_oversize_images_are_rejected(self):
+        from postriff_phase2.bluesky_media import approved_images
+        for changed in ({'deleted': True}, {'processing': 'queued'}, {'bytes': 2_000_001}, {'bytes': True}, {'mime': 'video/mp4'}):
+            assets = self.assets()
+            assets[0].update(changed)
+            with self.subTest(changed=changed), self.assertRaises(AlphaError):
+                approved_images(assets, [{'assetId': '0', 'alt': 'x'}], True)
+
+    def prepared_state(self):
+        from test_postriff_phase2 import Phase2Acceptance
+        fixture = Phase2Acceptance()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        fixture.draft()
+        fixture.channel()
+        state = copy.deepcopy(fixture.j.state)
+        variant, channel = state['variants'][0], state['phase2']['channels'][0]
+        variant['platform'] = channel['platform'] = 'Bluesky'
+        variant['text'] = 'A short synthetic Bluesky image test.'
+        channel['scopes'] = BlueskyProvider.SCOPES['publish']
+        state['phase2']['assets'] = self.assets()
+        from datetime import datetime, timezone
+        payload = {'variantId': variant['id'], 'channelId': channel['id'], 'rightsConfirmed': True,
+                   'images': [{'assetId': str(n), 'alt': f'Image {n}'} for n in range(4)],
+                   'localTime': datetime.fromtimestamp(fixture.now + 60, timezone.utc).replace(tzinfo=None).isoformat(),
+                   'timeZone': 'UTC', 'acknowledgedWarnings': variant['warnings']}
+        return fixture.store, state, payload
+
+    def test_existing_manifest_freezes_images_and_digest_changes_with_order_or_alt(self):
+        store, state, payload = self.prepared_state()
+        original = store.build_manifest(state, payload, 'synthetic-owner')
+        self.assertEqual([a['id'] for a in original['media']], ['0', '1', '2', '3'])
+        changed = copy.deepcopy(payload)
+        changed['images'][1]['alt'] = 'Changed description'
+        self.assertNotEqual(original['payloadDigest'], store.build_manifest(state, changed, 'synthetic-owner')['payloadDigest'])
+        changed = copy.deepcopy(payload)
+        changed['images'].reverse()
+        self.assertNotEqual(original['payloadDigest'], store.build_manifest(state, changed, 'synthetic-owner')['payloadDigest'])
+
+    def test_manifest_refuses_ambiguous_input_and_other_platforms(self):
+        store, state, payload = self.prepared_state()
+        with self.assertRaises(AlphaError):
+            store.build_manifest(state, {**payload, 'assetId': '0'}, 'synthetic-owner')
+        state['variants'][0]['platform'] = state['phase2']['channels'][0]['platform'] = 'LinkedIn'
+        with self.assertRaises(AlphaError):
+            store.build_manifest(state, payload, 'synthetic-owner')
+
 
 class BlueskyWorker(unittest.TestCase):
     def worker(self):

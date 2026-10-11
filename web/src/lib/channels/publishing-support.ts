@@ -8,7 +8,7 @@ export function publishingSupport(platform: string): string {
     case 'Instagram':
       return 'One image with a caption, on a professional account. Needs publish permission. No Reels, Stories or carousels yet.';
     case 'Bluesky':
-      return 'Text or one image; links stay clickable. Needs publish permission.';
+      return 'Text or up to four images (2 MB each); links stay clickable. Needs publish permission.';
     case 'Mastodon':
       return 'Text or one image on your server. Needs publish permission.';
     case 'Telegram':

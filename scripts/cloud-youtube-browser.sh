@@ -19,6 +19,11 @@ if [ ! -x "$jcb_yb_pg/pg_ctl" ] || [ ! -f "$jcb_yb_root/web/.next/BUILD_ID" ]; t
   echo 'validation_unavailable: reuse installed PostgreSQL and completed Next build.' >&2; exit 3
 fi
 jcb_yb_out="$jcb_yb_root/.jcb-artifacts/youtube-browser"
+case "${RAFII_BROWSER_SUITE:-youtube}" in
+  youtube) jcb_yb_fixture=youtube_browser_fixture.py; jcb_yb_test=youtube-creator-browser.cjs ;;
+  bluesky) jcb_yb_out="$jcb_yb_root/.jcb-artifacts/bluesky-browser"; jcb_yb_fixture=bluesky_browser_fixture.py; jcb_yb_test=bluesky-images-browser.cjs ;;
+  *) echo 'Unsupported browser suite.' >&2; exit 64 ;;
+esac
 mkdir -p -- "$jcb_yb_out"
 jcb_yb_home="$(mktemp -d /tmp/jcb-youtube-browser.XXXXXXXX)"
 jcb_yb_browsers="$jcb_yb_home/browsers"
@@ -55,7 +60,7 @@ cleanup() {
 import base64, hashlib, json, sys
 from pathlib import Path
 root = Path(sys.argv[1])
-names = ['CLOUD-SYNTHETIC-browser.json', 'CLOUD-SYNTHETIC-failure.png'] + [f'CLOUD-SYNTHETIC-{surface}-{w}.png' for surface in ('agent', 'capacity') for w in (1440, 390, 320)]
+names = ['CLOUD-SYNTHETIC-browser.json', 'CLOUD-SYNTHETIC-failure.png'] + [f'CLOUD-SYNTHETIC-{surface}-{w}.png' for surface in ('agent', 'capacity', 'images') for w in (1440, 390, 320)]
 for name in names:
     path = root / name
     if path.is_file() and not path.is_symlink() and path.stat().st_size <= 1024 * 1024:
@@ -94,7 +99,7 @@ env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true LC_ALL=C \
   POSTRIFF_PG_BIN="$jcb_yb_pg" POSTRIFF_RESEARCH=0 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4448 \
   PGUSER=postriff_test PGHOST=127.0.0.1 PGPORT=55448 PGDATABASE=postgres \
   PGCONNECT_TIMEOUT=5 PGPASSFILE=/dev/null PGSERVICEFILE=/dev/null \
-  "$TREND_VISUAL_TEST_PYTHON" "$jcb_yb_root/tests/phase2/youtube_browser_fixture.py" --port 4348 --pg-port 55448 \
+  "$TREND_VISUAL_TEST_PYTHON" "$jcb_yb_root/tests/phase2/$jcb_yb_fixture" --port 4348 --pg-port 55448 \
   >"$jcb_yb_out/fixture.log" 2>&1 &
 jcb_yb_fixture_pid=$!
 env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true NODE_ENV=production \
@@ -129,5 +134,5 @@ PY
 env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true \
   PLAYWRIGHT_BROWSERS_PATH="$jcb_yb_browsers" YOUTUBE_WEB_URL=http://127.0.0.1:4448 \
   YOUTUBE_BROWSER_EVIDENCE_DIR="$jcb_yb_out" \
-  node "$jcb_yb_root/web/tests/youtube-creator-browser.cjs"
+  node "$jcb_yb_root/web/tests/$jcb_yb_test"
 echo "Cloud synthetic browser evidence: $jcb_yb_out"
