@@ -38,11 +38,31 @@ def ingest(service, provider, update, raw):
     if not isinstance(event, dict): raise AlphaError("Invalid Telegram update object.", 400)
     if kind == 'deleted_business_messages' and (not isinstance(event.get('message_ids'),list) or any(type(mid) is not int or mid <= 0 for mid in event['message_ids'])):
         raise AlphaError('Invalid Telegram deleted-message identifiers.',400)
+    from .canary_worker import ingress_scope, accepts_event
+    canary, scope = ingress_scope(provider, service.clock())
+    if canary and (not scope or not accepts_event(scope, kind, event)):
+        return {'ok': True, 'canaryIgnored': True}
     bot = provider.me()["id"]
+    if canary and scope['botId'] != bot:
+        return {'ok': True, 'canaryIgnored': True}
     fingerprint = hashlib.sha256(raw).hexdigest()
     with service.repository.connection_factory() as db:
         with db.cursor() as cur:
             service.ready(cur)
+            if canary:
+                from .canary_worker import owner_active
+                if not owner_active(cur, scope):
+                    return {'ok': True, 'canaryIgnored': True}
+            if canary and kind in ('business_connection', 'managed_bot'):
+                # Only metadata for this verified owner may establish a new
+                # native connection. No message body is persisted by this check.
+                native_user = (event.get('user') or {}).get('id')
+                if type(native_user) is not int or not 0 < native_user < 2**52:
+                    return {'ok': True, 'canaryIgnored': True}
+                cur.execute("SELECT 1 FROM public.pr_telegram_identities WHERE workspace_id=%s AND member_id=%s AND telegram_user_id=%s AND revoked_at IS NULL",
+                            (scope['workspaceId'], scope['actorId'], native_user))
+                if not cur.fetchone():
+                    return {'ok': True, 'canaryIgnored': True}
             cur.execute("INSERT INTO public.pr_telegram_updates(bot_id,update_id,digest,update_type) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING update_id", (bot, uid, fingerprint, kind))
             if not cur.fetchone():
                 cur.execute("SELECT digest FROM public.pr_telegram_updates WHERE bot_id=%s AND update_id=%s", (bot, uid))
@@ -54,11 +74,18 @@ def ingest(service, provider, update, raw):
             chat_id = (event.get("chat") or {}).get("id")
             if kind == "callback_query": chat_id = ((event.get("message") or {}).get("chat") or {}).get("id")
             if kind in ("poll", "poll_answer"):
-                cur.execute("SELECT DISTINCT m.workspace_id::text,m.connection_id,NULL::jsonb FROM public.pr_telegram_messages m JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=m.workspace_id WHERE m.bot_id=%s AND m.poll_id=%s AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL", (bot, event.get("id") if kind == "poll" else event.get("poll_id")))
+                limit = ' AND m.workspace_id=%s AND m.chat_id=ANY(%s::bigint[])' if canary else ''
+                params = (bot, event.get("id") if kind == "poll" else event.get("poll_id"))
+                if canary: params += (scope['workspaceId'], [d['chatId'] for d in scope['destinations']])
+                cur.execute("SELECT DISTINCT m.workspace_id::text,m.connection_id,NULL::jsonb FROM public.pr_telegram_messages m JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=m.workspace_id WHERE m.bot_id=%s AND m.poll_id=%s AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL" + limit, params)
             elif kind == "business_connection":
-                cur.execute("SELECT d.workspace_id::text,d.connection_id,d.snapshot FROM public.pr_telegram_destinations d JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=d.workspace_id WHERE d.bot_id=%s AND d.revoked_at IS NULL AND c.revoked_at IS NULL AND d.snapshot->>'telegramUserId'=%s AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL", (bot, str((event.get("user") or {}).get("id"))))
+                limit = ' AND d.workspace_id=%s' if canary else ''
+                params = (bot, str((event.get("user") or {}).get("id"))) + ((scope['workspaceId'],) if canary else ())
+                cur.execute("SELECT d.workspace_id::text,d.connection_id,d.snapshot FROM public.pr_telegram_destinations d JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=d.workspace_id WHERE d.bot_id=%s AND d.revoked_at IS NULL AND c.revoked_at IS NULL AND d.snapshot->>'telegramUserId'=%s AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL" + limit, params)
             else:
-                cur.execute("SELECT d.workspace_id::text,d.connection_id,d.snapshot FROM public.pr_telegram_destinations d JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=d.workspace_id WHERE d.bot_id=%s AND d.chat_id=%s AND d.revoked_at IS NULL AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL AND (d.snapshot->>'parentConnectionId' IS NULL OR EXISTS(SELECT 1 FROM public.pr_telegram_destinations pd JOIN public.pr_encrypted_credentials pc USING(workspace_id,connection_id) WHERE pd.workspace_id=d.workspace_id AND pd.connection_id=d.snapshot->>'parentConnectionId' AND pd.revoked_at IS NULL AND pc.revoked_at IS NULL))", (bot, chat_id))
+                limit = ' AND d.workspace_id=%s' if canary else ''
+                params = (bot, chat_id) + ((scope['workspaceId'],) if canary else ())
+                cur.execute("SELECT d.workspace_id::text,d.connection_id,d.snapshot FROM public.pr_telegram_destinations d JOIN public.pr_encrypted_credentials c USING(workspace_id,connection_id) JOIN public.pr_workspaces w ON w.id=d.workspace_id WHERE d.bot_id=%s AND d.chat_id=%s AND d.revoked_at IS NULL AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL AND (d.snapshot->>'parentConnectionId' IS NULL OR EXISTS(SELECT 1 FROM public.pr_telegram_destinations pd JOIN public.pr_encrypted_credentials pc USING(workspace_id,connection_id) WHERE pd.workspace_id=d.workspace_id AND pd.connection_id=d.snapshot->>'parentConnectionId' AND pd.revoked_at IS NULL AND pc.revoked_at IS NULL))" + limit, params)
             destinations = cur.fetchall()
             if kind == 'business_connection' and destinations and event.get('is_enabled') is True:
                 # Update delivery may be concurrent/out of order, and update IDs
@@ -73,7 +100,9 @@ def ingest(service, provider, update, raw):
                 dm_chat=provider.call('getChat',{'chat_id':chat_id})
                 parent=(dm_chat.get('parent_chat') or {}) if isinstance(dm_chat,dict) else {}
                 if dm_chat.get('is_direct_messages') is True and dm_chat.get('id')==chat_id and type(parent.get('id')) is int:
-                    cur.execute("SELECT a.workspace_id::text,a.parent_connection_id FROM public.pr_telegram_dm_access a JOIN public.pr_encrypted_credentials c ON(c.workspace_id=a.workspace_id AND c.connection_id=a.parent_connection_id) JOIN public.pr_workspaces w ON w.id=a.workspace_id WHERE a.bot_id=%s AND a.parent_chat_id=%s AND a.enabled=true AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL",(bot,parent['id']))
+                    limit = ' AND a.workspace_id=%s' if canary else ''
+                    params = (bot,parent['id']) + ((scope['workspaceId'],) if canary else ())
+                    cur.execute("SELECT a.workspace_id::text,a.parent_connection_id FROM public.pr_telegram_dm_access a JOIN public.pr_encrypted_credentials c ON(c.workspace_id=a.workspace_id AND c.connection_id=a.parent_connection_id) JOIN public.pr_workspaces w ON w.id=a.workspace_id WHERE a.bot_id=%s AND a.parent_chat_id=%s AND a.enabled=true AND c.revoked_at IS NULL AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL" + limit,params)
                     consented=cur.fetchall()
                     if consented:
                         rights=provider.call('getChatMember',{'chat_id':parent['id'],'user_id':bot})
@@ -83,7 +112,9 @@ def ingest(service, provider, update, raw):
                                 encrypted,key=service.vault.encrypt(json.dumps(event))
                                 cur.execute("INSERT INTO public.pr_telegram_dm_inbox(workspace_id,parent_connection_id,chat_id,topic_id,message_id,date,edit_date,chat_identity,message_ciphertext,key_id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s) ON CONFLICT(workspace_id,parent_connection_id,chat_id,message_id) DO UPDATE SET message_ciphertext=excluded.message_ciphertext,key_id=excluded.key_id,edit_date=excluded.edit_date WHERE coalesce(excluded.edit_date,excluded.date)>=coalesce(pr_telegram_dm_inbox.edit_date,pr_telegram_dm_inbox.date)",(workspace,parent_connection,chat_id,topic,event['message_id'],event['date'],event.get('edit_date'),json.dumps({'id':chat_id,'title':dm_chat.get('title'),'parentChatId':parent['id']}),encrypted,key))
             if kind in ("business_message", "edited_business_message", "deleted_business_messages"):
-                cur.execute("SELECT b.workspace_id::text FROM public.pr_telegram_business_connections b JOIN public.pr_workspaces w ON w.id=b.workspace_id WHERE b.bot_id=%s AND b.business_connection_id=%s AND b.enabled=true AND b.rafii_consented=true AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL", (bot, event.get("business_connection_id")))
+                limit = ' AND b.workspace_id=%s' if canary else ''
+                params = (bot, event.get("business_connection_id")) + ((scope['workspaceId'],) if canary else ())
+                cur.execute("SELECT b.workspace_id::text FROM public.pr_telegram_business_connections b JOIN public.pr_workspaces w ON w.id=b.workspace_id WHERE b.bot_id=%s AND b.business_connection_id=%s AND b.enabled=true AND b.rafii_consented=true AND w.state->'accountDeletion' IS NULL AND w.state->'accountBlock' IS NULL" + limit, params)
                 for (workspace,) in cur.fetchall():
                     if kind == "deleted_business_messages":
                         for mid in event.get("message_ids", []):

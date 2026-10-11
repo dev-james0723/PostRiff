@@ -40,6 +40,8 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    db.execute("create table public.pr_encrypted_credentials(workspace_id uuid references pr_workspaces(id) on delete cascade,connection_id text,access_ciphertext text,key_id text,provider text,revoked_at timestamptz,provider_account_id text,scopes text[],primary key(workspace_id,connection_id));")
    db.execute("create table public.pr_channel_capabilities(workspace_id uuid,connection_id text,capability text,level text,evidence text,updated_at timestamptz);")
    db.execute("create table public.pr_audit_events(id uuid default gen_random_uuid(),workspace_id uuid,actor uuid,kind text,subject text,meta jsonb);")
+   db.execute("create table public.pr_profiles(user_id uuid primary key,deleted_at timestamptz);")
+   db.execute("create table public.pr_memberships(workspace_id uuid,user_id uuid,role text,status text,primary key(workspace_id,user_id));")
   with conn() as db:
    oauth_sql=(ROOT/'migrations/postriff/006_consumer_web_channels.sql').read_text()
    db.execute(oauth_sql[oauth_sql.index('create table public.pr_oauth_transactions'):oauth_sql.index('-- Encrypted provider tokens')])
@@ -92,6 +94,8 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    encrypted,key=vault.encrypt(json.dumps({'v':1,'workspace':w,'chat':CHAT['id']}))
    with conn() as db:
     db.execute('insert into pr_workspaces(id,state) values(%s,%s::jsonb)',(w,json.dumps(state)))
+    db.execute('insert into pr_profiles(user_id) values(%s)',(a,))
+    db.execute("insert into pr_memberships values(%s,%s,'owner','active')",(w,a))
     db.execute("insert into pr_encrypted_credentials(workspace_id,connection_id,access_ciphertext,key_id,provider,revoked_at) values(%s,'telegram-connection',%s,%s,'telegram',NULL)",(w,encrypted,key))
     db.execute("insert into pr_telegram_destinations values(%s,'telegram-connection',999,%s,'bot',%s::jsonb,now(),NULL)",(w,CHAT['id'],json.dumps({'connectionType':'bot','chat':CHAT})))
   with conn() as db:
@@ -329,6 +333,46 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
   evidence_dir.mkdir(parents=True, exist_ok=True)
   (evidence_dir/'load-tests.json').write_text(json.dumps(load,indent=2)+'\n')
   passed('1,000 simulated connected users and concurrent tasks route only to their tenants with bounded 32 workers')
+  # Acceptance flags constrain ingress as well as actions. Even identical bot /
+  # chat routes in another tenant cannot receive the owner canary's event.
+  canary={'workspaceId':W1,'actorId':A1,'botId':999,'expiresAt':TEST_NOW+600,
+          'destinations':[{'chatId':CHAT['id'],'mode':'bot','capabilities':['publish','schedule','text']}]}
+  bot.candidate_mode=True;bot.candidate_scope=canary
+  try:
+   outside={'update_id':901,'business_message':{'message_id':901,'date':TEST_NOW,'chat':{'id':778899},'business_connection_id':'outside','text':'excluded private context'}}
+   with patch.object(repo,'connection_factory',side_effect=AssertionError('No outside-chat database access')):
+    assert ingest(service,bot,outside,json.dumps(outside).encode())['canaryIgnored'] is True
+   event={'update_id':902,'channel_post':{'message_id':902,'date':TEST_NOW,'chat':CHAT,'text':'Synthetic owner canary'}}
+   assert ingest(service,bot,event,json.dumps(event).encode())['ok'] is True
+   with conn() as db:
+    assert db.execute('select count(*) from pr_telegram_messages where workspace_id=%s and message_id=902',(W1,)).fetchone()[0]==1
+    assert db.execute('select count(*) from pr_telegram_messages where workspace_id=%s and message_id=902',(W2,)).fetchone()[0]==0
+   bot.candidate_scope={**canary,'expiresAt':repo.clock()}
+   with patch.object(repo,'connection_factory',side_effect=AssertionError('No expired-grant database access')):
+    assert ingest(service,bot,event,json.dumps(event).encode())['canaryIgnored'] is True
+   bot.candidate_scope=canary
+   with conn() as db:db.execute("update pr_memberships set status='inactive' where workspace_id=%s and user_id=%s",(W1,A1))
+   blocked={'update_id':903,'channel_post':{'message_id':903,'date':TEST_NOW,'chat':CHAT,'text':'Synthetic revoked owner'}}
+   assert ingest(service,bot,blocked,json.dumps(blocked).encode())['canaryIgnored'] is True
+   assert PostgresWorker(conn,clock=repo.clock).claim(telegram_canary=canary) is None
+   with conn() as db:
+    assert db.execute('select count(*) from pr_telegram_updates where update_id=903').fetchone()[0]==0
+    assert db.execute('select count(*) from pr_telegram_messages where message_id=903').fetchone()[0]==0
+    db.execute("update pr_memberships set status='active' where workspace_id=%s and user_id=%s",(W1,A1))
+   passed('Owner ingress rejects outside chats, expired grants and revoked members before persistence; other tenants remain untouched')
+   with conn() as db:
+    native=db.execute('select telegram_user_id from pr_telegram_identities where workspace_id=%s and member_id=%s and revoked_at is null limit 1',(W1,A1)).fetchone()[0]
+    snapshots={w:db.execute("select snapshot from pr_telegram_destinations where workspace_id=%s and connection_id='telegram-connection'",(w,)).fetchone()[0] for w in (W1,W2)}
+    for w,saved in snapshots.items():db.execute("update pr_telegram_destinations set snapshot=%s::jsonb where workspace_id=%s and connection_id='telegram-connection'",(json.dumps({**saved,'telegramUserId':str(native)}),w))
+   metadata={'update_id':904,'business_connection':{'id':'canary-native-only','user':{'id':native},'is_enabled':False}}
+   assert ingest(service,bot,metadata,json.dumps(metadata).encode())['ok'] is True
+   with conn() as db:
+    rows=db.execute("select workspace_id::text from pr_telegram_business_connections where business_connection_id='canary-native-only'").fetchall()
+    assert rows==[(W1,)]
+    for w,saved in snapshots.items():db.execute("update pr_telegram_destinations set snapshot=%s::jsonb where workspace_id=%s and connection_id='telegram-connection'",(json.dumps(saved),w))
+   passed('Native Business metadata requires the verified owner identity and cannot establish a connection in another tenant')
+  finally:
+   bot.candidate_mode=False;bot.candidate_scope={}
   event={'update_id':2,'my_chat_member':{'chat':CHAT,'date':TEST_NOW+1,'new_chat_member':{'status':'left'}}}
   ingest(service,bot,event,json.dumps(event).encode())
   with conn() as db:state=db.execute('select state from pr_workspaces where id=%s',(W1,)).fetchone()[0];assert state['phase2']['channels'][0]['capabilityVerified'] is False

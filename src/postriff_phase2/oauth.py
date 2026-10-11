@@ -754,9 +754,13 @@ class OAuthService:
             update = json.loads(raw)
         except (ValueError, UnicodeDecodeError):
             return {"ok": True}
+        if getattr(adapter, 'candidate_mode', False) and not getattr(self, 'telegram', None):
+            return {'ok': True}
         if getattr(self, "telegram", None):
             from .telegram.updates import ingest
-            ingest(self.telegram, adapter, update, raw)
+            received = ingest(self.telegram, adapter, update, raw)
+            if isinstance(received, dict) and received.get('canaryIgnored') is True:
+                return {'ok': True}
         seen = adapter.observe(update)
         if not seen or not getattr(adapter, "execution_enabled", True):
             return {"ok": True}
@@ -764,7 +768,10 @@ class OAuthService:
         claimed = False
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT id::text,verifier_ciphertext,key_id,extract(epoch from expires_at)::float8,consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND provider='telegram' FOR UPDATE", (hashlib.sha256(code.encode()).hexdigest(),))
+                scope = adapter.candidate_scope if getattr(adapter, 'candidate_mode', False) else None
+                limit = ' AND workspace_id=%s AND member_id=%s' if scope else ''
+                params = (hashlib.sha256(code.encode()).hexdigest(),) + ((scope['workspaceId'],scope['actorId']) if scope else ())
+                cur.execute("SELECT id::text,verifier_ciphertext,key_id,extract(epoch from expires_at)::float8,consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND provider='telegram'" + limit + " FOR UPDATE", params)
                 found = cur.fetchone()
                 if found and not found[4] and found[3] > self.clock():
                     context = json.loads(self.vault.decrypt(found[1], found[2]))

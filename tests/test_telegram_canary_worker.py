@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_worker import PostgresWorker
-from postriff_phase2.telegram.canary_worker import selected, worker_scope
+from postriff_phase2.telegram.canary_worker import accepts_event, ingress_scope, selected, worker_scope
 from test_postriff_phase2_hosted import invoke
 
 NOW = 1800000000
@@ -21,6 +21,46 @@ def grant():
 
 
 class CanaryWorkerTests(unittest.TestCase):
+    def test_invalid_expired_or_outside_chat_ingress_has_zero_database_and_vault_calls(self):
+        from postriff_phase2.telegram.updates import ingest
+        database = Mock(side_effect=AssertionError('No database access'))
+        vault = SimpleNamespace(encrypt=Mock(side_effect=AssertionError('No private context retained')))
+        service = SimpleNamespace(repository=SimpleNamespace(connection_factory=database), vault=vault, clock=lambda: NOW)
+        provider = SimpleNamespace(candidate_mode=True, candidate_scope=grant(), me=Mock(return_value={'id':999}))
+        outside = {'update_id':1,'business_message':{'chat':{'id':825540},'business_connection_id':'outside','text':'excluded private context'}}
+        self.assertTrue(ingest(service,provider,outside,b'synthetic').get('canaryIgnored'))
+        for scope in (None, {}, {**grant(),'expiresAt':NOW}, {**grant(),'expiresAt':float('nan')},
+                      {**grant(),'destinations':[{'chatId':7,'mode':'business','capabilities':['reply']}]}):
+            provider.candidate_scope = scope
+            with self.subTest(scope=scope):
+                event = {'update_id':2,'channel_post':{'chat':{'id':-100123},'text':'synthetic'}}
+                self.assertTrue(ingest(service,provider,event,b'synthetic').get('canaryIgnored'))
+        provider.me.assert_not_called()
+        database.assert_not_called()
+        vault.encrypt.assert_not_called()
+
+    def test_business_ingress_requires_exact_private_chat_and_connection(self):
+        scope = grant()
+        scope['destinations'].append({'chatId':777,'mode':'business','businessConnectionId':'qa-only','capabilities':['reply']})
+        self.assertTrue(accepts_event(scope,'business_message',{'chat':{'id':777},'business_connection_id':'qa-only'}))
+        for event in ({'chat':{'id':778},'business_connection_id':'qa-only'},
+                      {'chat':{'id':777},'business_connection_id':'another'}, {'chat':{'id':True},'business_connection_id':'qa-only'}):
+            self.assertFalse(accepts_event(scope,'business_message',event))
+        provider = SimpleNamespace(candidate_mode=True,candidate_scope=scope)
+        self.assertIsNotNone(ingress_scope(provider,NOW)[1])
+        self.assertIsNone(ingress_scope(provider,NOW+600)[1])
+
+    def test_ignored_update_cannot_reach_legacy_connect_code_claiming(self):
+        from postriff_phase2.oauth import OAuthService
+        oauth = OAuthService.__new__(OAuthService)
+        oauth.telegram = object()
+        oauth.repository = SimpleNamespace(connection_factory=Mock(side_effect=AssertionError('No legacy claim')))
+        adapter = SimpleNamespace(webhook_secret='x'*32,observe=Mock(side_effect=AssertionError('No legacy observation')))
+        with patch('postriff_phase2.telegram.updates.ingest',return_value={'ok':True,'canaryIgnored':True}):
+            self.assertEqual(oauth.telegram_webhook('x'*32,b'{"update_id":1}',adapter),{'ok':True})
+        adapter.observe.assert_not_called()
+        oauth.repository.connection_factory.assert_not_called()
+
     def test_invalid_or_expired_grant_cannot_open_a_worker_database(self):
         database = Mock(side_effect=AssertionError('No database access'))
         worker = PostgresWorker(database, clock=lambda: NOW)
