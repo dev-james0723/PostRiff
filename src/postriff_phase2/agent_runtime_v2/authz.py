@@ -150,7 +150,7 @@ _GROUPS = {
                                      "content_search", "entity_status", "workspace_search", "workspace_summary", "attention_summary",
                                      "attention_summary_v2", "weekly_plan_get", "strategy_context", "creative_plan", "image_analyze",
                                      "image_list"),
-    ("create_edit", ("content", "memory_brand", "connections")): ("telegram_reply_draft",),
+    ("create_edit", ("content", "memory_brand", "connections")): ("telegram_draft_from_message",),
     ("create_edit", ("content", "memory_brand")): ("draft_create", "draft_rewrite"),
     ("create_edit", ("content",)): ("draft_edit", "weekly_plan_prepare", "engagement_draft_create", "source_campaign_create",
                                     "image_generate", "image_edit", "image_variant"),
@@ -290,7 +290,7 @@ def _youtube_requested(text: str, *, analytics=False) -> bool:
 
 
 EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {
-    "tool.telegram_reply_draft": lambda text: bool(re.search(r"telegram|電報", str(text or ""), re.I)),
+    "tool.telegram_draft_from_message": lambda text: bool(re.search(r"telegram|電報", str(text or ""), re.I)),
     "tool.telegram_activity": lambda text: bool(re.search(r"telegram|電報", str(text or ""), re.I)),
     "tool.youtube_plan_context": _youtube_requested,
     "tool.youtube_plan_prepare": _youtube_requested,

@@ -326,6 +326,18 @@
    "en": "Update a step's progress",
    "zh-Hant": "更新步驟進度"
   },
+  "tool.telegram_account_context": {
+   "en": "Check authorized Telegram destinations",
+   "zh-Hant": "查看已授權的 Telegram 目的地"
+  },
+  "tool.telegram_activity": {
+   "en": "Read activity in a selected Telegram destination",
+   "zh-Hant": "查看指定 Telegram 目的地的活動"
+  },
+  "tool.telegram_draft_from_message": {
+   "en": "Draft a reply to a selected Telegram message",
+   "zh-Hant": "為指定 Telegram 訊息撰寫回覆草稿"
+  },
   "tool.trend_calibration": {
    "en": "Read trend calibration",
    "zh-Hant": "查看趨勢校準"

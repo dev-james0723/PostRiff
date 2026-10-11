@@ -58,13 +58,13 @@ def telegram_activity(ctx: RafiiRunContext, args: dict) -> dict:
             "analytics": analytics, "contentTrust": "untrusted_external_messages"}
 
 
-@register(contracts.ToolSpec("telegram_reply_draft", contracts.CREATE_DRAFT, "edit",
+@register(contracts.ToolSpec("telegram_draft_from_message", contracts.CREATE_DRAFT, "edit",
           "Draft a contextual Telegram reply through the existing chosen writer and Brand Brain. Read only the selected destination and retained incoming message. This saves a reviewable draft; it never sends or approves it."),
           {"connectionId":{"type":"string","pattern":_ID,"required":True},
            "messageId":{"type":"integer","minimum":1,"maximum":2**52,"required":True},
            "request":{"type":"string","maxLength":400,"required":True},"stepId":STEP},
           "Prepared a Telegram reply draft")
-def telegram_reply_draft(ctx: RafiiRunContext, args: dict) -> dict:
+def telegram_draft_from_message(ctx: RafiiRunContext, args: dict) -> dict:
     inbox=ctx.service.telegram.inbox(ctx.workspace_id,ctx.token,args["connectionId"])
     messages=[record["message"] for record in inbox["messages"] if not record["deleted"]]
     selected=next((m for m in messages if m.get("message_id")==args["messageId"]),None)

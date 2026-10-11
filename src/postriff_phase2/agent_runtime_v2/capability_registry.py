@@ -120,6 +120,12 @@ TOOL_POLICY: dict[str, dict] = {
     "library_search": _read("library"),
     "library_read": _read("library"),
     "channels_capabilities": _read("connections"),
+    # Telegram additions are outside the frozen legacy grant. Destination grants are also
+    # checked by the executor; identity sign-in alone never permits reading or sending.
+    "telegram_account_context": _read("connections", since=2),
+    "telegram_activity": _read("content", "connections", explicit_request=True, since=2),
+    "telegram_draft_from_message": _write("content", "memory_brand", "connections", cost="text_credits",
+                                           idempotency="native_key", retry_class="manual", explicit_request=True, since=2),
     **{name: _read("content") for name in ("queue_summary", "job_get", "draft_get", "calendar_range", "reviews_list", "publishing_summary",
                                            "content_search", "entity_status", "workspace_summary", "workspace_search", "attention_summary",
                                            "attention_summary_v2")},
