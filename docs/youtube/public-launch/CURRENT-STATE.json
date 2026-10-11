@@ -9,17 +9,30 @@
     "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
     "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
     "oauthClientId": null,
-    "oauthConfiguration": "NOT CONFIGURED",
+    "oauthConfiguration": "TWO SEPARATE WEB OAUTH CLIENTS REGISTERED (2026-10-10 PR162 CONSOLE RECEIPT); PRODUCTION CREDENTIAL SOURCE/CUTOVER NOT REVALIDATED",
     "apisEnabled": [
       "youtube.googleapis.com",
       "youtubeanalytics.googleapis.com"
     ],
-    "oauthAudience": null,
-    "oauthPublishingStatus": null,
+    "oauthAudience": "External",
+    "oauthPublishingStatus": "In production",
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
+    "consoleBlocker": "Superseding 2026-10-10 Console readback verified two clients, scopes, External/In Production and verified rafii.io domain; 2026-10-11 read-only live Console and Vercel production env revalidation remain incomplete (Vercel env API 403). Earlier 2026-10-09 statement that clients were not configured is historical. Provider OAuth scope approval/YouTube audit/quota remain NOT SUBMITTED.",
     "existingReferenceProjectId": "rafii-509720",
-    "domainOwnership": "Google verification TXT is present in live DNS and the canonical Vercel binding is verified (2026-10-09). Google property ownership and OAuth domain approval still require current Console readback; do not infer approval from TXT or resubmit DNS blindly."
+    "domainOwnership": "Verified rafii.io authorized domain and property ownership per 2026-10-10 PR162 Console readback; no inheritance from postriff Brand Verification.",
+    "oauthClients": {
+      "source": "Merged PR162 OAUTH-VERIFICATION.md dated 2026-10-10",
+      "names": [
+        "Standard",
+        "AI-designated Agentic"
+      ],
+      "registeredCallbacks": [
+        "https://rafii.io/api/oauth/youtube/callback"
+      ],
+      "javascriptOrigins": [],
+      "ids": "OMITTED FROM PUBLIC EVIDENCE",
+      "productionSecretSource": "UNVERIFIED"
+    }
   },
   "stagingGoogleProject": {
     "id": "rafii-509720",
@@ -103,6 +116,13 @@
     "note": "Increasing Rafii configuration or using resumable chunks does not override global provider file limits. The 500 MiB media forecast is hypothetical and cannot currently be uploaded to this Free-plan storage configuration."
   },
   "databaseMigrations": {
+    "105": {
+      "status": "CLOUD VERIFIED; APPLICATION PENDING EXPIRED CONNECTOR WRITE SESSION",
+      "purpose": "Additive inert private agent history; no live authority migration or customer asset deletion",
+      "productionTableObserved": false,
+      "stagingTableObserved": false,
+      "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. The authenticated Supabase CLI account has no Rafii projects. Exact Rafii Vercel database variables are Secret and not decrypted; safe direct credential binding cannot be established. Reconnect or exact-target credentials remain required."
+    },
     "production": {
       "089": {
         "version": "20261008190651",
@@ -123,16 +143,9 @@
       }
     },
     "verification": "Three capacity/worker tables enforce FORCE RLS; anon/authenticated SELECT denied; service_role allowed. Production eight creator tables similarly verified after 089.",
-    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls.",
-    "105": {
-      "status": "CLOUD VERIFIED; APPLICATION PENDING EXPIRED CONNECTOR WRITE SESSION",
-      "purpose": "Additive inert private agent history; no live authority migration or customer asset deletion",
-      "productionTableObserved": false,
-      "stagingTableObserved": false,
-      "blocker": "Two apply_migration calls returned INVALID_ARGUMENT/invalid_request_state; live readback confirmed no table/migration. The authenticated Supabase CLI account has no Rafii projects. Exact Rafii Vercel database variables are Secret and not decrypted; safe direct credential binding cannot be established. Reconnect or exact-target credentials remain required."
-    }
+    "execution": "Actual Rafii Supabase projects; reviewed migrations, no provider upload calls."
   },
-  "recordScope": "Dated observations; current production4a0bd786 verified2026-10-09T17:17:09Z. Exact-SHA final receipt supersedes this snapshot. No public launch claim.",
+  "recordScope": "Dated observations; current production4a0bd786 verified2026-10-09T17:17:09Z. Exact-SHA final receipt supersedes this snapshot. No public launch claim. Later Google OAuth corrections are in postSnapshotUpdates (2026-10-11) and SUBMISSION-TRACKER.json; old production/migration/quotas fields remain dated historical evidence.",
   "productionEnvironmentChanges": {
     "execution": "VERIFIED VERCEL CONFIGURATION AND RUNNING READBACK; PUBLIC/AGENTIC FLAGS REMAIN OFF",
     "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
@@ -204,5 +217,55 @@
     "videoContentUnderstanding": "NOT ANALYZED BY THE PLANNER",
     "privateAttribution": "Server provenance retained in storage; scoped Creator and ordinary workspace presentation exclude internal attribution/authority.",
     "calendar": "At most 100 current future unqueued exact-bound plans are projected as awaiting approval. No publishing authority is created."
+  },
+  "postSnapshotUpdates": {
+    "asOf": "2026-10-11",
+    "sourceDocs": [
+      "OAUTH-VERIFICATION.md",
+      "BRAND-APPROVAL-20261011.md",
+      "SUBMISSION-TRACKER.json",
+      "REVIEWER-INSTRUCTIONS-20261011.md"
+    ],
+    "historicalSnapshotRule": "Other fields in this file (e.g. runningProduction, migrations/storage) are dated 2026-10-09 and are not freshly re-audited; refer to this addendum and the 2026-10-11 tracker ledger for newer Google/YouTube findings.",
+    "googleBrandEvent": {
+      "projectId": "postriff",
+      "projectNumber": "692391842023",
+      "type": "Brand Verification",
+      "status": "APPROVED",
+      "notificationReceivedAt": "2026-10-09T07:31:31Z",
+      "transferableToDedicatedYouTubeProject": false,
+      "sensitiveOrRestrictedScopeCoverage": "NOT ESTABLISHED BY BRAND EMAIL",
+      "caseReference": null
+    },
+    "dedicatedYouTubeProduction": {
+      "projectId": "rafii-youtube-production",
+      "projectNumber": "568838253270",
+      "oauthClients": "TWO REGISTERED 2026-10-10",
+      "declaredScopeCount": 4,
+      "oauthVerification": "NOT SUBMITTED",
+      "youtubeComplianceAudit": "NOT SUBMITTED",
+      "quotaExtension": "NOT SUBMITTED",
+      "publicUploadEligibility": "UNVERIFIED"
+    },
+    "liveDeployment": {
+      "verifiedDomain": "https://rafii.io",
+      "project": "postriff-phase2-private",
+      "deploymentId": "dpl_BUZ9hDn7pY8KwWTV2paXjtbuqv9T",
+      "commit": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "includesPR162": true,
+      "observationDate": "2026-10-11",
+      "productionEnv": "403 FORBIDDEN; not independently read"
+    },
+    "legalPages": {
+      "privacy": {
+        "httpStatus": 200,
+        "review": "DRAFT / placeholders"
+      },
+      "terms": {
+        "httpStatus": 200,
+        "review": "DRAFT / placeholders"
+      }
+    },
+    "releaseLimit": "NO CHANGE to existing creator, agentic, fleet or public-publishing gates; no real OAuth grant or new public action."
   }
 }
