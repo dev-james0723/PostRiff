@@ -98,7 +98,7 @@ class Phase2Store(Store):
         A worker must refresh and verify this exact vault grant before applying
         channel_state and the immutable approval checks again.
         """
-        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') == 'YouTube'
+        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') in ('YouTube', 'Bluesky')
                     and c.get('configured') and not c.get('revoked')
                     and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
                     and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))

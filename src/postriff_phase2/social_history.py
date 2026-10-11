@@ -47,6 +47,9 @@ def _response(response):
 
 def fetch_page(adapter, access_token, account_id, cursor=None, limit=PAGE_LIMIT):
     """One bounded page scoped to a server-resolved authenticated account only."""
+    if adapter.id == 'bluesky':
+        from .bluesky_history import fetch_owned_page
+        return fetch_owned_page(adapter, access_token, account_id, cursor, limit)
     if type(limit) is not int or not 1 <= limit <= PAGE_LIMIT:
         raise AlphaError('Read between 1 and 25 posts per page.')
     if cursor is not None and (not isinstance(cursor, str) or not re.fullmatch(r'[A-Za-z0-9_.~=-]{1,2048}', cursor)):
