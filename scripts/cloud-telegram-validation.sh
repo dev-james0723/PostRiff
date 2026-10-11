@@ -7,7 +7,6 @@ fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="$PWD/src:$PWD/tests" PYTHONDONTWRITEBYTECODE=1
 export NEXT_PUBLIC_APP_URL=http://127.0.0.1:4439 POSTRIFF_API_ORIGIN=http://127.0.0.1:4438 POSTRIFF_DEV_SSR=1
-mkdir -p .jcb-artifacts/telegram
 mode="${1:-all}"
 case "$mode" in all|backend|frontend) ;; *) exit 64 ;; esac
 if [ "$mode" != frontend ]; then
@@ -21,6 +20,7 @@ export POSTRIFF_PG_BIN="$(pg_config --bindir)"
 python3 tests/phase2/postgres_telegram.py
 fi
 if [ "$mode" != backend ]; then
+mkdir -p .jcb-artifacts/telegram
 # Isolate generated output from the shared framework cache used by other refs.
 # This stays inside the disposable cloud checkout; no shared cache is deleted.
 export POSTRIFF_DIST_DIR=.next-telegram-ci

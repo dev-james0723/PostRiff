@@ -2,6 +2,8 @@
 import base64
 import json
 import unittest
+from contextlib import contextmanager
+from unittest import mock
 from types import SimpleNamespace
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -60,6 +62,57 @@ class TelegramLoginSecurity(unittest.TestCase):
             telegram = SimpleNamespace(repository=None, vault=None, oauth=SimpleNamespace(public_base_url=base))
             login = TelegramLogin(telegram, {'POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID': '123456', 'POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET': 'test'})
             self.assertFalse(login.configured())
+
+    def test_production_login_returns_to_rafii_without_repointing_bot_webhook(self):
+        webhook_origin = 'https://postriff-phase2-private.vercel.app'
+        telegram = SimpleNamespace(repository=None, vault=None, oauth=SimpleNamespace(public_base_url=webhook_origin))
+        login = TelegramLogin(telegram, {'VERCEL_ENV': 'production', 'POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID': '123456',
+                                       'POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET': 'test'})
+        self.assertTrue(login.configured())
+        self.assertEqual(login.base, 'https://rafii.io')
+        self.assertEqual(telegram.oauth.public_base_url, webhook_origin)
+
+    def test_canary_callback_requires_actual_production_binding_and_active_grant(self):
+        from postriff_phase2.social_release import PRODUCTION_PROJECT, PRODUCTION_REF, PRODUCTION_URL
+        provider = SimpleNamespace(candidate_scope={'expiresAt': 1600, 'workspaceId': 'owner-workspace', 'actorId': 'owner'})
+        telegram = SimpleNamespace(repository=None, vault=None, oauth=SimpleNamespace(public_base_url='https://rafii.io', telegram=provider))
+        values = {'VERCEL_ENV': 'production', 'VERCEL_PROJECT_ID': PRODUCTION_PROJECT,
+                  'POSTRIFF_SUPABASE_URL': PRODUCTION_URL, 'NEXT_PUBLIC_SUPABASE_URL': PRODUCTION_URL,
+                  'POSTRIFF_DATABASE_URL': 'host=db.' + PRODUCTION_REF + '.supabase.co user=postgres sslmode=require',
+                  'VERCEL_URL': 'postriff-phase2-private-owner-acceptance.vercel.app',
+                  'POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID': '123456', 'POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET': 'test',
+                  'POSTRIFF_TELEGRAM_CANARY_ENABLED': 'true', 'POSTRIFF_TELEGRAM_LOGIN_USE_DEPLOYMENT_ORIGIN': 'true'}
+        login = TelegramLogin(telegram, values, clock=lambda: 1500)
+        self.assertTrue(login.configured())
+        self.assertEqual(login.base, 'https://' + values['VERCEL_URL'])
+        self.assertEqual(telegram.oauth.public_base_url, 'https://rafii.io')
+        # Expiry must be checked again on a reused Fluid Compute instance.
+        login.clock = lambda: 1600
+        self.assertFalse(login.configured())
+        @contextmanager
+        def transaction(_token, _workspace):
+            yield mock.Mock(), None, 'owner'
+        telegram.repository = SimpleNamespace(transaction=transaction)
+        with mock.patch('postriff_phase2.hosted._membership', return_value=SimpleNamespace(allows=lambda _action: True)):
+            for workspace, actor in (('foreign-workspace', 'owner'), ('owner-workspace', 'foreign-member')):
+                @contextmanager
+                def wrong_scope_transaction(_token, _workspace):
+                    yield mock.Mock(), None, actor
+                telegram.repository.transaction = wrong_scope_transaction
+                rejected = TelegramLogin(telegram, values, clock=lambda: 1500)
+                with self.subTest(workspace=workspace, actor=actor), self.assertRaises(AlphaError) as error:
+                    rejected.start(workspace, 'owner-session')
+                self.assertEqual(error.exception.status, 403)
+        for patch in ({'VERCEL_ENV': 'preview'}, {'VERCEL_PROJECT_ID': 'unverified'},
+                      {'POSTRIFF_DATABASE_URL': ''}, {'POSTRIFF_TELEGRAM_CANARY_ENABLED': 'false'},
+                      {'VERCEL_URL': 'rafii-consumer-staging-qa.vercel.app'}, {'VERCEL_URL': 'attacker.example'},
+                      {'VERCEL_URL': 'postriff-phase2-private-qa.vercel.app/path'}):
+            with self.subTest(patch=patch):
+                self.assertFalse(TelegramLogin(telegram, {**values, **patch}, clock=lambda: 1500).configured())
+        for scope in (None, {}, {'expiresAt': 1500}, {'expiresAt': True}, {'expiresAt': float('nan')}, {'expiresAt': 88001}):
+            provider.candidate_scope = scope
+            with self.subTest(scope=scope):
+                self.assertFalse(TelegramLogin(telegram, values, clock=lambda: 1500).configured())
 
     def test_automation_default_is_paused_and_requires_approval(self):
         self.assertEqual(present(None), DEFAULT)

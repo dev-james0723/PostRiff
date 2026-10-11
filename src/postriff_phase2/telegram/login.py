@@ -67,21 +67,49 @@ class TelegramLogin:
         self.telegram, self.repository, self.vault = telegram, telegram.repository, telegram.vault
         values = values or {}
         self.client_id, self.client_secret = values.get("POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID"), values.get("POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET")
-        self.base = (telegram.oauth.public_base_url or "").rstrip("/")
         self.transport, self.clock = transport or http_transport, clock
+        self.canary_mode = values.get("POSTRIFF_TELEGRAM_LOGIN_USE_DEPLOYMENT_ORIGIN") == "true"
+        self.canary_scope = None
+        # Identity callbacks must return to the build that started the flow. Keep
+        # their origin separate from the existing bot webhook/public API origin.
+        self.base = "https://rafii.io" if values.get("VERCEL_ENV") == "production" else (telegram.oauth.public_base_url or "").rstrip("/")
+        if self.canary_mode:
+            self.base = ""  # An invalid canary must not silently return to live.
+            try:
+                from ..social_release import require_production_binding
+                require_production_binding(values)
+                scope = getattr(getattr(telegram.oauth, "telegram", None), "candidate_scope", None)
+                expires = scope.get("expiresAt") if isinstance(scope, dict) else None
+                host = values.get("VERCEL_URL", "")
+                if (values.get("VERCEL_ENV") == "production" and values.get("POSTRIFF_TELEGRAM_CANARY_ENABLED") == "true"
+                        and type(expires) in (int, float) and math.isfinite(expires) and self.clock() < expires <= self.clock() + 86400
+                        and isinstance(host, str) and len(host) <= 253
+                        and re.fullmatch(r"postriff-phase2-private-[a-z0-9-]+\.vercel\.app", host)):
+                    self.base = "https://" + host
+                    self.canary_scope = scope
+            except (ValueError, TypeError):
+                pass
         self.keys, self.keys_until = None, 0
 
     def configured(self):
         parsed = urlparse(self.base)
+        if self.canary_mode and (not self.canary_scope or self.canary_scope["expiresAt"] <= self.clock()):
+            return False
         return bool(isinstance(self.client_id, str) and re.fullmatch(r"[0-9]{5,16}", self.client_id)
                     and isinstance(self.client_secret, str) and self.client_secret
                     and parsed.scheme == "https" and parsed.hostname and not parsed.username
                     and not parsed.password and not parsed.path and not parsed.query and not parsed.fragment)
 
+    def _require_canary_actor(self, workspace, actor):
+        if self.canary_mode and (not self.configured() or str(workspace) != self.canary_scope.get("workspaceId")
+                                 or str(actor) != self.canary_scope.get("actorId")):
+            raise AlphaError("This Telegram identity acceptance grant is unavailable for this member or workspace.", 403)
+
     def list(self, workspace, token):
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             from ..hosted import _membership
             require(_membership(row), "manage_connections")
+            self._require_canary_actor(workspace, actor)
             cur.execute("SELECT id::text,identity FROM public.pr_telegram_identities WHERE workspace_id=%s AND member_id=%s AND revoked_at IS NULL ORDER BY linked_at", (workspace, actor))
             return {"configured": self.configured(), "identities": [{"id": r[0], **r[1]} for r in cur.fetchall()],
                     "permissionExplanation": "Telegram Login verifies your identity. Authorize channels, groups and Secretary conversations separately."}
@@ -92,11 +120,12 @@ class TelegramLogin:
         state = secrets.token_urlsafe(32)
         verifier, challenge = pkce_pair()
         redirect = self.base + "/api/telegram/login/callback"
-        ciphertext, key = self.vault.encrypt(json.dumps({"pkce": verifier, "clientId": self.client_id}))
         from ..hosted import _membership, audit, throttle
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            self._require_canary_actor(workspace, actor)
             self.repository.assert_fresh(token, actor)
+            ciphertext, key = self.vault.encrypt(json.dumps({"pkce": verifier, "clientId": self.client_id}))
             throttle(cur, "telegram-login:" + workspace, 20, 600)
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,'telegram_login','identity',%s,%s,%s,%s,%s,now()+interval '10 minutes')", (workspace, actor, redirect, ["openid", "profile"], hashlib.sha256(state.encode()).hexdigest(), ciphertext, key))
             audit(cur, workspace, actor, "telegram.identity.started", "", {})
@@ -113,6 +142,7 @@ class TelegramLogin:
         from ..hosted import _membership, audit
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            self._require_canary_actor(workspace, actor)
             self.repository.assert_fresh(token, actor)
             cur.execute("SELECT id::text,member_id::text,verifier_ciphertext,key_id,redirect_uri,extract(epoch from expires_at),consumed_at FROM public.pr_oauth_transactions WHERE workspace_id=%s AND provider='telegram_login' AND state_hash=%s FOR UPDATE", (workspace, hashlib.sha256(state.encode()).hexdigest()))
             txn = cur.fetchone()
@@ -146,6 +176,7 @@ class TelegramLogin:
             raise AlphaError("Telegram authorization could not be verified. Start a new connection.", 502) from None
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            self._require_canary_actor(workspace, actor)
             self.repository.assert_fresh(token, actor)
             # Global owner fence serializes linking the same Telegram identity across tenants.
             cur.execute("INSERT INTO public.pr_telegram_identity_owners(bot_id,subject,member_id) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING", (self.client_id, identity["subject"], actor))
@@ -162,6 +193,7 @@ class TelegramLogin:
         from ..hosted import _membership, audit
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), "manage_connections")
+            self._require_canary_actor(workspace, actor)
             self.repository.assert_fresh(token, actor)
             cur.execute("UPDATE public.pr_telegram_identities SET revoked_at=now(),identity='{}'::jsonb WHERE workspace_id=%s AND member_id=%s AND id=%s RETURNING id", (workspace, actor, identity_id))
             if not cur.fetchone():
