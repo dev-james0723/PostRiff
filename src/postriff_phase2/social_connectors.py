@@ -409,6 +409,7 @@ class TelegramConnector(OAuthProvider):
         self.execution_enabled = True
         self._me, self._webhook_ready = None, False
         self.acceptance = {}
+        self.candidate_mode = False
         self.candidate_scope = {}
         self.file_check = None
         self.credential_resolver = None
@@ -487,6 +488,7 @@ class TelegramConnector(OAuthProvider):
         # acceptance runs on the verified production service with a default-off,
         # expiring server manifest. It never enables another member or workspace.
         if adapter and values.get('POSTRIFF_TELEGRAM_CANARY_ENABLED') == 'true':
+            adapter.candidate_mode = True
             try:
                 from .telegram.qualification import positive_number
                 from .social_release import require_production_binding

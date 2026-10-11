@@ -49,6 +49,7 @@ class TelegramService:
         child.business_resolver = self.business_context
         child.destination_authorizer=self.check_destination
         child.acceptance = parent.acceptance if parent else {}
+        child.candidate_mode = getattr(parent, 'candidate_mode', False)
         child.candidate_scope = parent.candidate_scope if parent else {}
         return child
 

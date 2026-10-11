@@ -139,6 +139,9 @@ class PostgresWorker:
                 indexed = youtube_only and capacity_ready and schema_ready(cur)
                 connection_ids = []
                 if telegram_canary is not None:
+                    from .telegram.canary_worker import owner_active
+                    if not owner_active(cur, telegram_canary):
+                        return None
                     cur.execute("""SELECT connection_id FROM public.pr_telegram_destinations
                         WHERE workspace_id=%s AND bot_id=%s AND chat_id=ANY(%s::bigint[])
                           AND mode='bot' AND revoked_at IS NULL""",
