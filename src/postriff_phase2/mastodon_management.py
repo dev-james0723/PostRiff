@@ -59,6 +59,26 @@ ACCOUNT_ACTIONS = {"follow": "write:follows", "unfollow": "write:follows", "mute
                    "unmute": "write:mutes", "block": "write:blocks", "unblock": "write:blocks"}
 
 
+def maintain(connection_factory, limit=100):
+    """Bounded service-only cleanup; interrupted effects become uncertain, never retried."""
+    if type(limit) is not int or not 1 <= limit <= 1000:
+        raise ValueError('Mastodon maintenance requires a bound of 1–1000 rows.')
+    with connection_factory() as db, db.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.pr_mastodon_actions') IS NOT NULL")
+        if not cur.fetchone()[0]: return {'state': 'schema_unavailable'}
+        cur.execute("SELECT pg_try_advisory_xact_lock(hashtextextended('mastodon-retention-v1',0))")
+        if not cur.fetchone()[0]: return {'state': 'busy'}
+        cur.execute("UPDATE public.pr_mastodon_actions SET status='uncertain',receipt=%s::jsonb,updated_at=now() WHERE id IN (SELECT id FROM public.pr_mastodon_actions WHERE status='running' AND updated_at < now()-interval '5 minutes' ORDER BY updated_at,id LIMIT %s FOR UPDATE SKIP LOCKED)",
+                    (json.dumps({'state': 'uncertain', 'reason': 'The action worker stopped before a conclusive receipt. Check Mastodon; this action will not be resent.'}), limit))
+        recovered = cur.rowcount
+        cur.execute("DELETE FROM public.pr_mastodon_actions WHERE id IN (SELECT id FROM public.pr_mastodon_actions WHERE created_at < now()-interval '7 days' ORDER BY created_at,id LIMIT %s FOR UPDATE SKIP LOCKED)", (limit,))
+        actions = cur.rowcount
+        cur.execute("DELETE FROM public.pr_metric_observations WHERE id IN (SELECT id FROM public.pr_metric_observations WHERE provider='mastodon' AND observed_at < now()-interval '90 days' ORDER BY observed_at,id LIMIT %s FOR UPDATE SKIP LOCKED)", (limit,))
+        observations = cur.rowcount
+        cur.execute("DELETE FROM public.pr_metric_reads WHERE id IN (SELECT id FROM public.pr_metric_reads WHERE provider='mastodon' AND status IN ('done','cancelled','dead','unavailable') AND updated_at < now()-interval '90 days' ORDER BY updated_at,id LIMIT %s FOR UPDATE SKIP LOCKED)", (limit,))
+        return {'state': 'ok', 'interruptedActions': recovered, 'expiredActions': actions, 'expiredMetrics': observations, 'expiredReads': cur.rowcount}
+
+
 def action_spec(action, payload, capabilities, *, now):
     """No arbitrary URLs/methods; the allowlist defines exact authority and canonical data."""
     if not isinstance(payload, dict):

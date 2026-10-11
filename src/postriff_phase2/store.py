@@ -413,7 +413,12 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
-        if p.get("assetId"):
+        if c['platform'] == 'Mastodon':
+            from .mastodon_media import review_media
+            media = review_media(s, p)
+        elif p.get('attachments'):
+            raise AlphaError('Multiple attachment reviews are available for Mastodon only.', 409)
+        elif p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
                 if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou", "Mastodon"):
@@ -443,11 +448,15 @@ class Phase2Store(Store):
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
         options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
-        if immediate_youtube:
+        native_mastodon = c['platform'] == 'Mastodon' and bool(options.get('scheduled_at'))
+        if immediate_youtube or native_mastodon:
             from datetime import datetime, timezone
             approved_at = int(self.clock() // 60 * 60 + 60)
             timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
             timing['mode'] = 'now'
+            if native_mastodon:
+                timing['nativeProvider'] = 'Mastodon'
+                timing['nativePublicationAt'] = options['scheduled_at']
         else:
             timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
@@ -545,7 +554,9 @@ class Phase2Store(Store):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
+            media_ok = all((m['platform'] == 'Mastodon' and a.get('rightsConfirmed') is True) if a.get('normalizedLibrary') else
+                           not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"]
+                           for a in m["media"] + m.get('youtubeAssets', []))
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).

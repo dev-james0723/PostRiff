@@ -239,7 +239,8 @@ class HostedSocial:
                 return {'state': 'failed', 'confirmed': 'This Mastodon server does not support the approved media format. Nothing was posted.'}
             if not mime.startswith(('image/', 'video/', 'audio/')):
                 return {'state': 'failed', 'confirmed': 'Unsupported Mastodon media. Nothing was posted.'}
-            raw = self.assets.storage.get(manifest['workspaceId'], 'media', asset.get('objectName') or asset['id'])
+            from .mastodon_publishing import approved_bytes
+            raw = approved_bytes(self, manifest, asset)
             if len(raw) != asset.get('bytes') or hashlib.sha256(raw).hexdigest() != asset.get('hash'):
                 return {'state': 'held', 'confirmed': 'The stored media changed after approval. Nothing was uploaded or posted.'}
             limits = capabilities.get('media', {})
@@ -260,6 +261,13 @@ class HostedSocial:
         if early:
             return early
         return _uncertain("No conclusive Mastodon create response; do not resubmit")
+
+    def advance_mastodon(self, manifest, job, checkpoint, clock=time.time):
+        from .mastodon_publishing import advance, LocalCooldown
+        try:
+            return advance(self, manifest, job, checkpoint, clock)
+        except LocalCooldown as wait:
+            return wait.receipt
 
     def _submit_telegram(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
@@ -380,6 +388,9 @@ class HostedSocial:
                         "confirmed": "Bluesky read-back matched the approved text and account", "verification": "provider_lookup"}
             return _uncertain("Bluesky read-back did not match the exact approved post")
         if platform == "Mastodon":
+            if (job or {}).get('progress', {}).get('version') == 3 and job['progress'].get('stage') == 'native_scheduled':
+                from .mastodon_publishing import native_reconcile
+                return native_reconcile(provider, token, manifest, job, self.oauth.clock() if hasattr(self.oauth, 'clock') else time.time())
             from .mastodon_protocol import ID
             if not isinstance(reference, str) or not ID.fullmatch(reference):
                 return _uncertain('Invalid Mastodon post reference; do not resubmit')
@@ -392,7 +403,13 @@ class HostedSocial:
             options = manifest.get('publishOptions') or {}
             visibility_matches = body.get('visibility', 'public') == options.get('visibility', 'public')
             warning_matches = body.get('spoiler_text', '') == options.get('spoiler_text', '')
-            if response.get("status") == 200 and f"{account}@{session['instance']}" == manifest["providerAccountId"] and plain == " ".join(text.split()) and visibility_matches and warning_matches:
+            sensitive_matches = body.get('sensitive', False) == options.get('sensitive', False)
+            reply_matches = not options.get('in_reply_to_id') or str(body.get('in_reply_to_id')) == options['in_reply_to_id']
+            progress = (job or {}).get('progress') or {}
+            media_matches = progress.get('version') != 3 or [str(a.get('id')) for a in body.get('media_attachments') or [] if isinstance(a, dict)] == [a.get('id') for a in progress.get('attachments', [])]
+            if (response.get("status") == 200 and str(body.get('id')) == reference
+                    and f"{account}@{session['instance']}" == manifest["providerAccountId"] and plain == " ".join(text.split())
+                    and visibility_matches and warning_matches and sensitive_matches and reply_matches and media_matches):
                 result = {"state": "verified", "reference": reference, "confirmed": "Mastodon read-back matched the approved text, visibility, warning and account", "verification": "provider_lookup"}
                 url = body.get('url')
                 if isinstance(url, str) and url.startswith('https://' + session['instance'] + '/'):

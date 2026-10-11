@@ -16,7 +16,11 @@ Base: `b7b9b3ee94f89a80b1d80826226584d214b17847` (`origin/consumer-saas`).
 - Persist exact account/target/content digest with actor and ten-minute expiry. Commit claim before external action; concurrent/repeated confirmations do not resend. Recheck current membership and exact unrevoked credential before dispatch. Per-account and per-instance request caps. Treat ambiguous outcomes as uncertain, and distinguish provider acceptance, verified deletion and pending native schedules.
 - Existing unified publish/calendar path gains Mastodon visibility, warning, sensitive media, reply/quote target and polls, verified video selection, fresh instance limits before dispatch, SHA256 idempotency keys and approved media integrity checks. Stop automatic re-upload when processing remains inconclusive.
 - Existing Brand Brain writing pipeline, legacy drafting/automation routing, Agent Chat and Automation builder destination pickers accept Mastodon drafts. Agent SDK tools identify the exact connected account, return explicitly requested public/unlisted numeric engagement observations, or save unapproved action previews linking to Channels. No Agent tool approves or executes external actions, reads private notification bodies, or grants automation authority.
-- Analytics identifies latest-40 coverage, instance-local observations, unknown historical trends and unavailable impressions/reach/demographics. Followers-only/direct bodies are excluded from model-facing analytics. Action bodies purge on disconnect and on later activity after seven days; a scheduled retention sweep remains open.
+- Analytics collects only native public/unlisted favourites, boosts and replies through the existing metric scheduler; private/direct/foreign/reblog rows are excluded. Settled observations/reads retain 90 days and exact action bodies seven days, with bounded worker sweeps and disconnect deletion. The account drawer still needs the historical central-dashboard projection; unavailable impressions/reach/demographics are never invented.
+- Unified approval supports up to four independently described, rights-confirmed images or one verified video/audio. Normalized Library audio freezes tenant-owned hash/object/etag metadata, rechecks approval/worker custody, and blocks deletion during dispatch.
+- Existing worker progress durably checkpoints media intent and accepted IDs, upload processing, Retry-After/reset/exponential cooldown and status acceptance. Known uploads resume by ID; uncertain upload/status writes never resend. Correct bounded private audio/video reads and exact instance-qualified publication URLs are enforced.
+- Unified native scheduling uses the existing queue, commits accepted schedule IDs and verifies scheduled settings/media. Pending native schedules remain processing; absence alone never proves publication. Media schedules reconcile only a unique exact owned post.
+- Agent post-freeze extensions declare explicit-request-only behavior, localized public titles and no mutation retries while preserving frozen baseline contracts.
 
 ## Version matrix (capability detection; live behavior unverified)
 
@@ -43,18 +47,16 @@ E: independent account destinations and revocation isolation.
 
 ## Engineering work still open before production
 
-- Verified audio publication from the normalized Library and multiple attachments in the unified approval/composer path. Current unified path supports one image or one verified video; the provider upload helper accepting multiple MIME types is not complete end-to-end support.
-- Persisted media-upload checkpoint/resume beyond the bounded polling window, rather than a held manual review.
 - Avatar/header uploads and the full supported profile preference surface.
 - Private mention/reply suggestions with explicit per-purpose AI consent and retention safeguards.
 - Complete thread planning/parent-ID chaining with exact approvals and child reconciliation.
-- Historical engagement collection/trends and the existing central Analytics dashboard projection.
+- Project legitimately collected historical engagement/trends into the account-aware Agent and central Analytics dashboard; native numeric collection is implemented, not yet live enabled.
 - Add Mastodon-specific regression evidence for the existing shared owner-authorized automation engine (`automation_plan.activate`, `automation_runs.build_items`/commit and `automation_edit` pause), then mandatory real automation acceptance. Reuse that engine instead of inventing a separate standing-authority system. Full management OAuth scope is not automation consent.
-- Durable rate-reset/backoff scheduling shared by provider reads, writes and workers; current action path never automatically resends ambiguous writes.
+- Extend durable worker cooldowns to periodic health and supported streaming/read scheduling; exact account action previews never automatically resend ambiguous writes.
+- Dedicated application-browser coverage of the new Queue multi-image/audio/native controls and live media/native reconciliation evidence.
 - Streaming events, scheduled-post reconciliation into the unified calendar and periodic connection/instance health monitoring, including account-migration detection and reconnection guidance.
-- Scheduled privacy-retention sweep; recovery of long-running action claims.
 - Real 1,000+ concurrent-connected-user/queue stress validation. The current 1,000-context test uses 16 concurrent synthetic workers; it is not a 1,000-simultaneous-user production capacity claim.
-- Complete release security review and all required live acceptance before changing public execution gates, applying production migration 113, merging or deploying rafii.io. Candidate source review is in `security-review.md`; it records remaining risks and does not certify production.
+- Complete release security review and all required live acceptance before changing public execution gates, applying production migrations 113/114, merging or deploying rafii.io. Candidate source review is in `security-review.md`; it records remaining risks and does not certify production.
 
 ## Cloud validation
 
@@ -62,7 +64,7 @@ All Node/Python suites, PostgreSQL, production builds and browser automation exe
 
 Run scoped validation from the actual worktree with `.james-cloud-build.mastodon.json`. The JCB controller currently uses a single generated workflow path and `setup --force` updates both the root config and workflow. Before setup, back up those two files; restore their original contents after the scoped run. Do not replace the repository’s unrelated default YouTube mapping when committing this candidate. No deployment workflow is used.
 
-Passed scoped cloud run `bj8165qq6b` (JCB exit 0): 267 Python contracts, seven disposable SQL action/isolation tests, migration replay/upgrade/restore checks, 24 selected web contracts, lint, typecheck, production build and application browser journeys at 1440/390/320px. The automation regression exposed and repaired a missing Mastodon entry in the legacy drafting/platform picker; it verifies separate account destinations, pausing and refusal of auto-publish activation without a standing grant. It does not demonstrate live generated content or worker publication. SQL and browser providers are explicitly synthetic. The final run includes unique per-form field IDs and analytics ID/timestamp sanitization. Evidence and exact limitations are recorded in `validation.json`.
+Passed scoped cloud run `5fcpqc7q5r` (JCB exit 0; dirty-source fingerprint recorded): 425 Python contracts, 11 disposable SQL action/isolation/media/retention tests, Library database/lifecycle regressions, migration replay/upgrade/restore checks, 24 selected web contracts, lint, typecheck, production build and application browser journeys at 1440/390/320px. The automation regression exposed and repaired a missing Mastodon entry in the legacy drafting/platform picker; it verifies separate account destinations, pausing and refusal of auto-publish activation without a standing grant. It does not demonstrate live generated content or worker publication. SQL and browser providers are explicitly synthetic. The final run includes unique per-form field IDs and analytics ID/timestamp sanitization. Evidence and exact limitations are recorded in `validation.json`.
 
 ## Official sources checked
 
@@ -71,6 +73,7 @@ Passed scoped cloud run `bj8165qq6b` (JCB exit 0): 267 Python contracts, seven d
 - [Application registration](https://docs.joinmastodon.org/methods/apps/)
 - [OAuth scopes](https://docs.joinmastodon.org/api/oauth-scopes/)
 - [Statuses](https://docs.joinmastodon.org/methods/statuses/)
+- [Media upload and asynchronous processing](https://docs.joinmastodon.org/methods/media/)
 - [Native scheduled statuses](https://docs.joinmastodon.org/methods/scheduled_statuses/)
 - [Rate limits](https://docs.joinmastodon.org/api/rate-limits/)
 

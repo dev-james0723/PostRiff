@@ -118,6 +118,7 @@ def register():
                                       approval=effect == contracts.PREPARE_EXTERNAL,
                                       voice=False, category='manage_connected_services', data_grants=domains,
                                       risk='R0' if effect == contracts.READ else 'R1', explicit_request=True,
+                                      idempotency='read' if effect == contracts.READ else 'none', since=2,
                                       retry_class='never' if effect != contracts.READ else 'manual',
                                       background_eligible=False, autopilot_eligible=False)
             register_tool(spec, schema, 'Checked Mastodon account' if effect == contracts.READ else 'Prepared Mastodon action for review')(executor)

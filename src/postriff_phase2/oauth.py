@@ -1519,6 +1519,8 @@ class OAuthService:
             cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Disconnected by the customer.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
             if stored[0] == 'mastodon':
                 cur.execute('DELETE FROM public.pr_mastodon_actions WHERE workspace_id=%s AND connection_id=%s', (workspace_id, connection_id))
+                cur.execute("DELETE FROM public.pr_metric_observations WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace_id, connection_id))
+                cur.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace_id, connection_id))
             from .social_history import revoke_connection_samples
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())

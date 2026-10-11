@@ -4,17 +4,19 @@
   "allMissionRequirementsMet": false,
   "ci": {
     "provider": "Depot/JCB",
-    "runId": "bj8165qq6b",
+    "runId": "5fcpqc7q5r",
     "exitCode": 0,
-    "elapsedSeconds": 120.841,
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T054714340373Z-ci.json"
+    "sourceHead": "dbbcd85d64b3c9686b1c77077ddb5043ec75d21f",
+    "sourceFingerprint": "7d5d3fc1cdc4939a58884d06eea97ac8712898e7e86ad2f34816f83dd6bc34ee",
+    "patchSha256": "39ee61b67fe1c50ce7649c76b8c23c12f8cba4d317a6a0c62a069dbc6d58d9f5",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T063630761666Z-ci.json"
   },
   "checks": {
     "pythonContracts": {
-      "passed": 267
+      "passed": 425
     },
     "sqlActionIsolation": {
-      "passed": 7,
+      "passed": 11,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
@@ -59,8 +61,12 @@
             "no runtime errors or page overflow"
           ]
         }
-      ]
-    }
+      ],
+      "scope": "Channels/account actions only; new Queue media/native controls still need dedicated UI coverage",
+      "evidenceRunId": "bj8165qq6b",
+      "repeatRunId": "5fcpqc7q5r"
+    },
+    "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only"
   },
   "capacity": {
     "syntheticContexts": 1000,
@@ -81,7 +87,8 @@
     "migration113Applied": false,
     "publicExecutionGatesChanged": false,
     "merged": false,
-    "deployedToRafiiIo": false
+    "deployedToRafiiIo": false,
+    "migration114Applied": false
   },
   "externalInputNeeded": [
     "Two authorized account handles on independently hosted Mastodon instances",
@@ -108,5 +115,14 @@
   },
   "localChecks": [
     "Source AST parsing, JSON validation and git diff --check; no local heavy validation"
+  ],
+  "priorCloudRuns": [
+    {
+      "provider": "Depot/JCB",
+      "runId": "bj8165qq6b",
+      "exitCode": 0,
+      "elapsedSeconds": 120.841,
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T054714340373Z-ci.json"
+    }
   ]
 }
