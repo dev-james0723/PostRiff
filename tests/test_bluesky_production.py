@@ -473,3 +473,51 @@ class BlueskyWorker(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MaintainedSDKTests(unittest.TestCase):
+    def test_sdk_encodes_json_and_binary_without_extra_requests_or_session_login(self):
+        from postriff_phase2.bluesky_sdk import invoke
+        calls = []
+        class Provider:
+            def _dpop_get(self, url, session):
+                calls.append(('GET', url, session))
+                return {'status': 429, 'body': {'error': 'RateLimitExceeded'}, 'headers': {'retry-after': '20'}}
+            def _xrpc_post_bound(self, session, url, **kwargs):
+                calls.append(('POST', url, session, kwargs))
+                return {'status': 200, 'body': {'ok': True}, 'headers': {'dpop-nonce': 'nonce'}}
+        p, session = Provider(), {'pds': 'https://pds.example', 'did': 'did:plc:' + 'a' * 24}
+        body = {'text': '廣東話 🎹', 'flag': False, 'value': 0}
+        invoke(p, session, 'POST', 'com.atproto.repo.createRecord', body=body)
+        self.assertEqual(calls[-1][3]['body'], body)
+        self.assertIsNone(calls[-1][3]['data'])
+        invoke(p, session, 'POST', 'com.atproto.repo.createRecord', body={})
+        self.assertEqual(calls[-1][3]['body'], {})
+        invoke(p, session, 'POST', 'com.atproto.repo.uploadBlob', data=b'image-bytes', content_type='image/jpeg')
+        self.assertEqual(calls[-1][3], {'body': None, 'data': b'image-bytes', 'content_type': 'image/jpeg'})
+        r = invoke(p, session, 'GET', 'app.bsky.actor.getProfiles', params={'actors': ['did:plc:a', 'did:plc:b']})
+        self.assertEqual(r, {'status': 429, 'body': {'error': 'RateLimitExceeded'}, 'headers': {'retry-after': '20'}})
+        self.assertEqual(calls[-1][1], 'https://pds.example/xrpc/app.bsky.actor.getProfiles?actors=did%3Aplc%3Aa&actors=did%3Aplc%3Ab')
+        self.assertEqual(len(calls), 4, 'SDK must not replay writes or retry rate limits.')
+        self.assertTrue(all(call[2] is session for call in calls))
+        with self.assertRaises(AlphaError):
+            invoke(p, session, 'POST', 'com.atproto.repo.createRecord/../../evil')
+        self.assertEqual(len(calls), 4)
+
+    def test_sdk_preserves_unicode_wording_punctuation_and_utf8_link_ranges(self):
+        text = '廣東話 🎹 https://example.com/a. 第二 https://example.com/b?) 最後'
+        facets = HostedSocial._bluesky_facets(text)
+        self.assertEqual(len(facets), 2)
+        for facet, expected in zip(facets, ['https://example.com/a', 'https://example.com/b']):
+            index = facet['index']
+            self.assertEqual(text.encode()[index['byteStart']:index['byteEnd']].decode(), expected)
+            self.assertEqual(facet['features'], [{'$type': 'app.bsky.richtext.facet#link', 'uri': expected}])
+        self.assertEqual(HostedSocial._bluesky_facets('Only 廣東話 🎹'), [])
+
+    def test_sdk_post_lexicon_validation_rejects_invalid_record_fields(self):
+        from postriff_phase2.bluesky_sdk import valid_post
+        record = {'$type': 'app.bsky.feed.post', 'text': 'A small step.', 'createdAt': '2026-10-11T04:00:00.000Z'}
+        self.assertTrue(valid_post(record))
+        self.assertFalse(valid_post({**record, 'text': 'x' * 3001}))
+        self.assertFalse(valid_post({**record, 'createdAt': 'not-a-date'}))
+        self.assertFalse(valid_post({**record, 'facets': [{'index': {'byteStart': -1, 'byteEnd': 1}, 'features': []}]}))

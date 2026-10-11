@@ -194,6 +194,9 @@ class HostedSocial:
             images.append({'image': blob, 'alt': asset.get('alt') or ''})
         if images:
             record['embed'] = {'$type': 'app.bsky.embed.images', 'images': images}
+        from .bluesky_sdk import valid_post
+        if not valid_post(record):
+            return {'state': 'held', 'confirmed': 'The approved Bluesky record does not match its API schema. Nothing was posted.'}
         try:
             response = provider.xrpc_post(session, "com.atproto.repo.createRecord", body={"repo": session["did"], "collection": "app.bsky.feed.post", "rkey": rkey, "record": record})
         except AlphaError:
@@ -216,12 +219,8 @@ class HostedSocial:
 
     @staticmethod
     def _bluesky_facets(text):
-        facets = []
-        for match in _URL.finditer(text):
-            url = match.group(0).rstrip(".,;:!?)")
-            start = len(text[:match.start()].encode())
-            facets.append({"index": {"byteStart": start, "byteEnd": start + len(url.encode())}, "features": [{"$type": "app.bsky.richtext.facet#link", "uri": url}]})
-        return facets
+        from .bluesky_sdk import link_facets
+        return link_facets(text, _URL)
 
     @staticmethod
     def _bluesky_blob_matches(asset, blob):

@@ -452,7 +452,11 @@ class BlueskyProvider(OAuthProvider):
 
     # --- publishing helpers (hosted_social) -------------------------------------------------------------------------
     def xrpc_post(self, session, method, *, body=None, data=None, content_type=None):
-        url = public_https_url(session["pds"] + "/xrpc/" + method, self.resolver)
+        from .bluesky_sdk import invoke
+        return invoke(self, session, 'POST', method, body=body, data=data, content_type=content_type)
+
+    def _xrpc_post_bound(self, session, url, *, body=None, data=None, content_type=None):
+        url = public_https_url(url, self.resolver)
         nonce = session.get("pdsNonce")
         for _ in range(2):
             headers = {"Authorization": "DPoP " + session["at"], "DPoP": dpop_proof(session["jwk"], "POST", url, self.clock(), nonce, session["at"])}
@@ -470,7 +474,8 @@ class BlueskyProvider(OAuthProvider):
         return response
 
     def xrpc_get(self, session, method, params):
-        return self._dpop_get(session["pds"] + "/xrpc/" + method + "?" + urlencode(params), session)
+        from .bluesky_sdk import invoke
+        return invoke(self, session, 'GET', method, params=params)
 
 
 _TID_ALPHABET = "234567" + string.ascii_lowercase  # base32-sortable
