@@ -350,6 +350,49 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    assert j['state']=='verified' and j['telegramReceipt']['messages'][0]['messageId']==40
    assert db.execute('select count(*) from pr_telegram_messages where workspace_id=%s and message_id=40',(W1,)).fetchone()[0]==1
   passed('Worker atomically persists publishing receipt/inbox; repeated completion fails lease fence')
+  # Real SQL and row-lock boundaries: an owner acceptance worker never selects
+  # another tenant, member, platform, bot, revoked target or unapproved job.
+  from postriff_phase2.hosted_worker import due_workspaces_sql
+  from postriff_phase2.telegram.canary_worker import worker_scope
+  scope={'workspaceId':W1,'actorId':A1,'botId':999,'expiresAt':TEST_NOW+600,
+         'destinations':[{'chatId':CHAT['id'],'mode':'bot','capabilities':['publish','schedule','text']}]}
+  allowed={'id':'canary-only','state':'scheduled','approvedBy':A1,'manifest':
+           {'platform':'Telegram','workspaceId':W1,'actor':A1,'channelId':'telegram-connection'}}
+  unrelated=[]
+  for index,change in enumerate(({'platform':'X'},{'actor':A2},{'channelId':'another-connection'},{'workspaceId':W2})):
+   unrelated.append({**allowed,'id':'unrelated-'+str(index),'manifest':{**allowed['manifest'],**change}})
+  unrelated.append({**allowed,'id':'other-approver','approvedBy':A2})
+  unrelated.append({key:value for key,value in {**allowed,'id':'unapproved'}.items() if key!='approvedBy'})
+  with conn() as db:
+   before={w:db.execute('select state from pr_workspaces where id=%s',(w,)).fetchone()[0] for w in (W1,W2)}
+   db.execute("update pr_telegram_destinations set revoked_at=NULL where workspace_id=%s and connection_id='telegram-connection'",(W1,))
+   db.execute("update pr_workspaces set state=jsonb_set(state,'{phase2,jobs}',%s::jsonb) where id=%s",(json.dumps([allowed,*unrelated]),W1))
+   foreign={**allowed,'manifest':{**allowed['manifest'],'workspaceId':W2}}
+   db.execute("update pr_workspaces set state=jsonb_set(state,'{phase2,jobs}',%s::jsonb) where id=%s",(json.dumps([foreign]),W2))
+   parameters=(W1,repo.clock(),repo.clock(),A1,A1,['telegram-connection'])
+   rows=db.execute(due_workspaces_sql(False,telegram_canary=True),parameters).fetchall()
+   assert len(rows)==1 and rows[0][0]==W1
+   for owner in (A2,'00000000-0000-4000-8000-000000000000'):
+    assert not db.execute(due_workspaces_sql(False,telegram_canary=True),(W1,repo.clock(),repo.clock(),owner,owner,['telegram-connection'])).fetchall()
+   assert not db.execute(due_workspaces_sql(False,telegram_canary=True),(W1,repo.clock(),repo.clock(),A1,A1,['unknown-connection'])).fetchall()
+  passed('Owner canary SQL selects only the exact tenant, approving actor and Telegram connection')
+  seen=[]
+  def invalidate_canary(state):
+   seen.extend(item['id'] for item in state['phase2']['jobs'])
+   for item in state['phase2']['jobs']:item['state']='held'
+  isolated=PostgresWorker(conn,clock=repo.clock)
+  isolated.commands=SimpleNamespace(engine=SimpleNamespace(invalidate=invalidate_canary))
+  assert isolated.claim(telegram_canary=scope) is None
+  assert seen==['canary-only']
+  with conn() as db:
+   saved=db.execute('select state from pr_workspaces where id=%s',(W1,)).fetchone()[0]
+   assert saved['phase2']['jobs'][1:]==unrelated
+   assert db.execute('select state from pr_workspaces where id=%s',(W2,)).fetchone()[0]['phase2']['jobs']==[foreign]
+   for w,state in before.items():db.execute('update pr_workspaces set state=%s::jsonb where id=%s',(json.dumps(state),w))
+   db.execute("update pr_telegram_destinations set revoked_at=now() where workspace_id=%s and connection_id='telegram-connection'",(W1,))
+  seen.clear()
+  assert isolated.claim(telegram_canary=scope) is None and not seen
+  passed('Canary invalidation preserves unrelated jobs and tenants; a revoked target causes no claim')
   from postriff_phase2.telegram.privacy import erase_identity
   with conn() as db:
    db.execute("INSERT INTO pr_telegram_identities(workspace_id,member_id,bot_id,subject,telegram_user_id,identity) VALUES(%s,%s,'123456','other-member',999111,'{}')",(W2,A2))

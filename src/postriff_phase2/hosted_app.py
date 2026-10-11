@@ -514,6 +514,10 @@ class HostedApplication:
         path = environ.get("PATH_INFO", "/")
         mutation = method in ("POST", "PUT", "PATCH", "DELETE")
         try:
+            telegram_canary = os.environ.get('POSTRIFF_TELEGRAM_CANARY_ENABLED') == 'true'
+            if telegram_canary and path.startswith('/api/cron/') and path != '/api/cron/worker':
+                raise AlphaError('Other background jobs are disabled during Telegram owner acceptance.', 503,
+                                 code='telegram_canary_jobs_isolated')
             if path.startswith("/api/control/v2/"):
                 # Founder Control answers its own prefix through its cookie + CSRF + capability boundary: the consumer
                 # bearer, application guard and runtime never apply to it. Built once, lazily, from the process
@@ -684,11 +688,16 @@ class HostedApplication:
                 from .agent_runtime_v2.task_engine import cron as task_cron
                 return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
-                service = self._runtime()
-                expected = self.cron_secret or ""
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
+                service = self._runtime()
+                if telegram_canary:
+                    provider = getattr(getattr(service, 'oauth', None), 'telegram', None)
+                    result = self.worker.tick_telegram_canary(getattr(provider, 'candidate_scope', None))
+                    result['acceptanceScope'] = 'telegram_owner_only'
+                    return self._json(start_response, 200, result)
                 result = self.worker.tick()
                 telegram = getattr(getattr(service, 'oauth', None), 'telegram', None)
                 if telegram is not None:
