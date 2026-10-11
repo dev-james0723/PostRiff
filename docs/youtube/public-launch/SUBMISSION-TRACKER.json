@@ -9,20 +9,25 @@
     "id": "rafii-youtube-production",
     "number": "568838253270",
     "name": "Rafii YouTube Production",
-    "status": "VERIFIED PROJECT AND DATA/ANALYTICS API ACTIVATION",
+    "status": "YOUTUBE DATA/ANALYTICS ENABLED; CONSENT AND TWO WEB CLIENTS CONFIGURED 2026-10-10; VERIFICATION NOT SUBMITTED",
     "evidence": "Google Console project identity and both API Enabled states observed during this mission; API terms explicitly approved by owner before activation.",
     "oauthClientId": null,
-    "oauthConfiguration": "NOT CONFIGURED",
+    "oauthConfiguration": "TWO DEDICATED WEB CLIENTS REGISTERED (2026-10-10); ACTUAL PRODUCTION SECRET SOURCE/CUTOVER NOT VERIFIED",
     "apisEnabled": [
       "youtube.googleapis.com",
       "youtubeanalytics.googleapis.com"
     ],
-    "oauthAudience": null,
-    "oauthPublishingStatus": null,
+    "oauthAudience": "External",
+    "oauthPublishingStatus": "In production",
     "verificationStatus": "NOT SUBMITTED",
-    "consoleBlocker": "Browser control unavailable again on2026-10-09. API activation/quota observations from2026-10-08 remain dated verified evidence. Reconnect pending; contacts/legal policy agreement/client configuration/review submissions still incomplete.",
+    "consoleBlocker": "2026-10-10 PR162 dated Console evidence confirms brand/domain, audience, clients and four scope declarations; 2026-10-11 Cloud Console current project selection reachable but detailed Verification Centre/scope approval readback incomplete. Vercel env listing 403. Revalidate before provider submission or credential cutover.",
     "existingReferenceProjectId": "rafii-509720",
-    "domainOwnership": "Google verification TXT is present in live DNS and the canonical Vercel binding is verified (2026-10-09). Google property ownership and OAuth domain approval still require current Console readback; do not infer approval from TXT or resubmit DNS blindly."
+    "domainOwnership": "Independently verified ownership and rafii.io authorized domain per dated 2026-10-10 PR162 Console readback; no claim that other projects inherit this.",
+    "oauthClientNames": [
+      "Standard Web client",
+      "AI-designated Agentic Web client"
+    ],
+    "oauthCallback": "https://rafii.io/api/oauth/youtube/callback"
   },
   "workstreams": [
     {
@@ -112,9 +117,11 @@
     "Static form success text is not submission evidence",
     "Approval requires actual Google decision and scope/project coverage",
     "Record correction request and resubmission as separate dated events",
-    "Do not include secrets, raw customer data or passwords in this tracker"
+    "Do not include secrets, raw customer data or passwords in this tracker",
+    "A postriff Brand Verification email must NEVER be counted as a rafii-youtube-production OAuth, scope, YouTube audit or quota approval.",
+    "Dated code/Console receipt does not prove active production OAuth credential cutover; preserve legacy read grants and sign-in until real E2E acceptance."
   ],
-  "updatedOn": "2026-10-09",
+  "updatedOn": "2026-10-11",
   "stagingProject": {
     "id": "rafii-509720",
     "number": "81579135390",
@@ -172,5 +179,153 @@
     "siteSupportContact": "support@postriff.app",
     "legalReviewStatus": "draft",
     "evidenceLimit": "Configured public source only; no independent legal identity, mailbox monitoring/delivery or qualified legal approval established by this packet."
+  },
+  "googleProjectVerificationLedger": {
+    "recordedOn": "2026-10-11",
+    "evidencePolicy": "Project-specific Google approval only. Google Cloud configuration, OAuth client registration, production credential activation, OAuth scope verification, YouTube audit and quota extension are separate states. Do not infer approvals or write provider case IDs without real receipts.",
+    "projects": [
+      {
+        "id": "postriff",
+        "number": "692391842023",
+        "role": "Existing Google OAuth application; exact Google Sign-In/legacy YouTube/production-client mapping NOT REVALIDATED",
+        "brandVerification": {
+          "status": "APPROVED",
+          "type": "Brand Verification",
+          "notificationReceivedAt": "2026-10-09T07:31:31Z",
+          "source": "Google Third Party Data Safety Team owner Gmail OAuth Verification Response (original private email retained by owner)",
+          "scopeCoverage": "BRAND ONLY; sensitive/restricted scope approval not evidenced",
+          "caseReference": null
+        },
+        "oauthClients": {
+          "status": "NOT REVALIDATED",
+          "names": [],
+          "clientIds": "DO NOT INVENT"
+        },
+        "consentScreen": "Brand approved per Google notification; live scope/publishing snapshot not captured",
+        "requestedScopes": [],
+        "approvedSensitiveScopes": [],
+        "approvedRestrictedScopes": [],
+        "scopeReviewEvidence": "UNKNOWN; none established by the 2026-10-09 brand email",
+        "callbackUrls": {
+          "status": "NOT REVALIDATED",
+          "urls": []
+        },
+        "productionCredentialMapping": "UNKNOWN (Vercel env-list access denied on 2026-10-11); do not rebind Google Sign-In or legacy grants based on this approval"
+      },
+      {
+        "id": "rafii-youtube-production",
+        "number": "568838253270",
+        "role": "Dedicated production YouTube Data/Analytics Google Cloud project",
+        "brandVerification": {
+          "status": "VERIFICATION REQUIRED / NOT APPROVED",
+          "evidence": "2026-10-10 merged PR162 OAuth configuration readback; 2026-10-11 independent new approval not found in owner Gmail search; live project-specific Verification Centre final status not fully read back"
+        },
+        "oauthClients": {
+          "status": "REGISTERED ON 2026-10-10",
+          "names": [
+            "Rafii YouTube Standard web client",
+            "Rafii YouTube AI-designated Agentic web client"
+          ],
+          "clientIds": "Two distinct client IDs documented; values deliberately omitted from public tracker"
+        },
+        "consentScreen": {
+          "audience": "External",
+          "publishingStatus": "In production",
+          "brand": "Rafii",
+          "authorizedDomain": "rafii.io",
+          "domainOwnership": "verified in dated 2026-10-10 Console readback",
+          "source": "docs/youtube/public-launch/OAUTH-VERIFICATION.md (PR162)"
+        },
+        "requestedScopes": [
+          "https://www.googleapis.com/auth/youtube.readonly",
+          "https://www.googleapis.com/auth/youtube.upload",
+          "https://www.googleapis.com/auth/youtube.force-ssl",
+          "https://www.googleapis.com/auth/yt-analytics.readonly"
+        ],
+        "scopeCategoryReadback": "Not independently captured 2026-10-11; confirm per scope in current Data Access UI",
+        "approvedSensitiveScopes": [],
+        "approvedRestrictedScopes": [],
+        "scopeApprovalEvidence": "NONE; not submitted in latest verified packet",
+        "callbackUrls": {
+          "status": "REGISTERED ON BOTH CLIENTS (2026-10-10 evidence)",
+          "urls": [
+            "https://rafii.io/api/oauth/youtube/callback"
+          ],
+          "javascriptOrigins": []
+        },
+        "oauthVerificationSubmission": "NOT SUBMITTED",
+        "youtubeComplianceAudit": "NOT SUBMITTED",
+        "quotaExtension": "NOT SUBMITTED",
+        "publicUploadEligibility": "UNVERIFIED",
+        "productionCredentialCutover": "UNVERIFIED; source contains safe legacy-read adapter, Vercel env listing denied 403 on 2026-10-11. Do not delete or replace old client credentials.",
+        "launchGates": "KEEP CREATOR, AGENTIC AND FLEET ACTIVATION OFF UNTIL INDEPENDENT PROVIDER APPROVAL AND OWNER-GRANTED REAL ACCEPTANCE"
+      },
+      {
+        "id": "rafii-509720",
+        "number": "81579135390",
+        "role": "Separate YouTube staging/reference project per 2026-10-08 staging receipt",
+        "brandVerification": {
+          "status": "UNKNOWN; NO APPROVAL CLAIM"
+        },
+        "oauthClients": {
+          "status": "PRIOR STAGING WEB CLIENT OBSERVED",
+          "names": [
+            "Rafii YouTube Staging acceptance"
+          ],
+          "clientIds": "NOT RETAINED IN TRACKER"
+        },
+        "consentScreen": {
+          "audience": "External",
+          "publishingStatus": "Testing",
+          "source": "Prior 2026-10-08 staging receipt; not independently revalidated 2026-10-11"
+        },
+        "requestedScopes": "Prior creator scopes declared; exact live scope list must be revalidated",
+        "approvedSensitiveScopes": [],
+        "approvedRestrictedScopes": [],
+        "scopeApprovalEvidence": "NONE RECORDED",
+        "callbackUrls": {
+          "status": "PRIOR STAGING EVIDENCE",
+          "urls": [
+            "https://rafii-consumer-staging.vercel.app/api/oauth/youtube/callback"
+          ]
+        },
+        "productionUse": false
+      }
+    ],
+    "remainingProjectInventory": "Other related Google Cloud projects and their exact active OAuth-client assignments have NOT been exhaustively inventoried. Do not assert all Google Sign-In / Gmail / Calendar apps are covered.",
+    "canonicalProduction": {
+      "domain": "https://rafii.io",
+      "vercelProject": "postriff-phase2-private",
+      "deploymentId": "dpl_BUZ9hDn7pY8KwWTV2paXjtbuqv9T",
+      "commit": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "readbackDate": "2026-10-11",
+      "evidence": "Vercel get_deployment readback and GitHub compare: PR162 merge commit is ancestor of deployed SHA",
+      "liveGoogleEnv": "NOT REVALIDATED: Vercel env-list request returned 403; no environment variables read, changed or disclosed",
+      "newOrExistingGrantBehavior": "Synthetic regression and source custody controls reviewed; NO live Google multi-account consent/refresh or sign-in smoke accepted"
+    },
+    "goNoGo": {
+      "existingGoogleSignIn": "PRESERVE; live login and callback smoke not newly tested",
+      "oldYouTubeReadGrants": "PRESERVE OLD CLIENT AND READ-ONLY LEGACY CUSTODY; NO DESTRUCTIVE ROTATION",
+      "productionYouTubeNewConsent": "NOT PUBLICLY AUTHORIZED; review and provider permission pending",
+      "creator": "OFF",
+      "agentic": "OFF",
+      "fleet": "OFF",
+      "publicPublishing": "OFF",
+      "ownerActions": [
+        "confirm true applicant legal/operator/contact facts and final legal privacy/terms",
+        "verify Vercel production Google/YouTube env key-to-client/project mapping read-only",
+        "test existing Google Sign-In and one owner-authorized legacy read-only token refresh in controlled acceptance",
+        "provide own disposable review account/asset and independently grant Google OAuth consent",
+        "approve truthful demo-sharing/access and required declarations before submission"
+      ],
+      "providerSubmissionRules": "ONLY change NOT SUBMITTED after real Google/YouTube submission confirmation with project, exact scopes, timestamp and case/reference; do not claim agent-completed legal attestations",
+      "evidenceDocuments": [
+        "OAUTH-VERIFICATION.md",
+        "YOUTUBE-AUDIT.md",
+        "QUOTA-EXTENSION.md",
+        "OWNER-FIELDS.md",
+        "REVIEW-DEMO-SHOTLIST.md"
+      ]
+    }
   }
 }
