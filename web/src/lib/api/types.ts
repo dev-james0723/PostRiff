@@ -169,7 +169,7 @@ export interface Manifest {
   operation: string;
   variantId: string;
   contentRevision: number;
-  payload: { text: string; language: string };
+  payload: { text: string; language: string; threadParts?: string[] };
   media: (Asset & { alt: string })[];
   timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number; nativeProvider?: string; nativePublicationAt?: string };
   voiceRevision?: number | null;
@@ -198,7 +198,7 @@ export interface Job {
   attempts: { number: number; startedAt: number; endedAt?: number }[];
   container?: string;
   resultSchema?: string;
-  progress?: { version: number; stage: string };
+  progress?: { version: number; stage: string; threadReferences?: string[]; threadVerified?: number };
   providerReference?: string;
   providerConfirmed?: string;
   nextAction?: string;

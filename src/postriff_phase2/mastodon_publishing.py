@@ -15,8 +15,8 @@ from postriff_alpha.domain import AlphaError
 from .mastodon_protocol import discover, validate_status
 from .social_connectors import multipart
 
-SAFE_STAGES = ('media_wait', 'rate_wait')
-STAGES = (*SAFE_STAGES, 'media_upload_attempted', 'publish_attempted', 'provider_accepted', 'native_scheduled')
+SAFE_STAGES = ('media_wait', 'rate_wait', 'thread_wait')
+STAGES = (*SAFE_STAGES, 'media_upload_attempted', 'publish_attempted', 'provider_accepted', 'native_scheduled', 'thread_publish_attempted')
 
 
 class LocalCooldown(Exception):
@@ -116,7 +116,7 @@ def native_reconcile(provider, token, manifest, job, now):
 
 def checked_progress(value, manifest):
     if (not isinstance(value, dict) or value.get('version') != 3 or value.get('stage') not in STAGES
-            or set(value) - {'version', 'stage', 'attachments', 'retryAt', 'retryCount', 'reference', 'scheduledAt'}):
+            or set(value) - {'version', 'stage', 'attachments', 'retryAt', 'retryCount', 'reference', 'scheduledAt', 'threadReferences', 'threadVerified', 'threadRootUrl'}):
         raise AlphaError('Invalid durable Mastodon progress.', 409)
     attachments = value.get('attachments')
     approved = manifest.get('media') or []
@@ -129,6 +129,21 @@ def checked_progress(value, manifest):
                 or (item['state'] in ('uploaded', 'ready') and not re.fullmatch(r'[0-9]{1,40}', str(item['id'])))
                 or (item['state'] in ('pending', 'attempted') and item['id'] is not None)):
             raise AlphaError('Invalid Mastodon media custody progress.', 409)
+    if 'threadReferences' in value:
+        from .mastodon_threads import parts
+        texts = parts(manifest); refs = value['threadReferences']
+        if (len(texts) < 2 or not isinstance(refs, list) or not 1 <= len(refs) <= len(texts)
+                or any(not isinstance(r, str) or not re.fullmatch(r'[0-9]{1,40}', r) for r in refs) or len(set(refs)) != len(refs)
+                or value.get('reference') != refs[0] or type(value.get('threadVerified', 0)) is not int
+                or not 0 <= value.get('threadVerified', 0) <= len(refs)
+                or (value['stage'] == 'provider_accepted' and len(refs) != len(texts))):
+            raise AlphaError('Thread progress does not match the exact approved parts.', 409)
+        if value.get('threadRootUrl'):
+            from .outcomes import valid_receipt_url
+            if not valid_receipt_url(value['threadRootUrl'], 'Mastodon', manifest['providerAccountId']):
+                raise AlphaError('Invalid saved thread receipt URL.', 409)
+    elif value['stage'] in ('thread_wait', 'thread_publish_attempted') or any(k in value for k in ('threadVerified', 'threadRootUrl')):
+        raise AlphaError('Thread progress needs saved parent IDs.', 409)
     retry_at = value.get('retryAt')
     if retry_at is not None and (type(retry_at) not in (int, float) or not math.isfinite(retry_at) or retry_at < 0):
         raise AlphaError('Invalid Mastodon retry time.', 409)
@@ -147,7 +162,7 @@ def checked_progress(value, manifest):
             raise AlphaError('Invalid native Mastodon schedule.', 409)
     if value['stage'] in SAFE_STAGES and any(a['state'] == 'attempted' for a in attachments):
         raise AlphaError('An unresolved media write cannot resume automatically.', 409)
-    if value['stage'] in ('publish_attempted', 'provider_accepted', 'native_scheduled') and any(a['state'] != 'ready' for a in attachments):
+    if value['stage'] in ('publish_attempted', 'provider_accepted', 'native_scheduled', 'thread_wait', 'thread_publish_attempted') and any(a['state'] != 'ready' for a in attachments):
         raise AlphaError('Mastodon publication needs all approved media ready.', 409)
     return copy.deepcopy(value)
 
@@ -178,6 +193,8 @@ def advance(social, manifest, job, checkpoint, now):
     if provider is None:
         return {'state': 'held', 'confirmed': 'Mastodon publishing is unavailable. Nothing was sent.'}
     grant = social.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+    if grant.get('providerAccountId') != manifest.get('providerAccountId'):
+        return {'state': 'held', 'confirmed': 'The connected account changed; prepare a fresh review. Nothing was sent.'}
     required = set(provider.publish_required)
     if not required.issubset(grant.get('scopes', [])):
         return {'state': 'held', 'confirmed': 'Reconnect with the approved publishing permissions.'}
@@ -201,9 +218,10 @@ def advance(social, manifest, job, checkpoint, now):
             # unsent intent and wait; known media IDs remain attached to the job.
             for item in progress['attachments']:
                 if item['state'] == 'attempted': item['state'] = 'pending'
-            progress.update(stage='rate_wait', retryAt=now() + 300, retryCount=min(20, progress.get('retryCount', 0) + 1))
+            progress.update(stage='thread_wait' if progress.get('threadReferences') else 'rate_wait', retryAt=now() + 300, retryCount=min(20, progress.get('retryCount', 0) + 1))
             checkpoint(copy.deepcopy(progress), before_external=False)
             raise LocalCooldown({'state': 'processing', 'progress': copy.deepcopy(progress),
+                                 **({'reference': progress['reference']} if progress.get('reference') else {}),
                                  'confirmed': 'Rafii’s per-account or per-instance safety budget deferred this unsent write for five minutes.'}) from None
 
     def result(state, message):
@@ -220,6 +238,9 @@ def advance(social, manifest, job, checkpoint, now):
             return result('held', 'The instance requires a longer cooldown; automatic writes are stopped. Review after its retry time.')
         return result('processing', message)
 
+    if progress['stage'] == 'thread_wait':
+        from .mastodon_threads import advance as advance_thread
+        return advance_thread(provider, grant, manifest, progress, save, result, now)
     if progress['stage'] in ('provider_accepted', 'native_scheduled'):
         return result('provider_accepted', 'The saved Mastodon resource is awaiting read-back; no new publication was sent.')
     if progress['stage'] not in SAFE_STAGES:
@@ -228,6 +249,9 @@ def advance(social, manifest, job, checkpoint, now):
         return result('processing', 'Waiting for the Mastodon processing or rate-limit retry time; nothing new was sent.')
     caps = discover(provider.transport, session['instance'])
     body = validate_status(manifest['payload']['text'], manifest.get('publishOptions') or {}, manifest.get('media') or [], caps, now=now())
+    from .mastodon_threads import parts, child_options
+    for text in parts(manifest)[1:]:
+        validate_status(text, child_options(manifest, '1'), (), caps, now=now())
     for index, asset in enumerate(manifest.get('media') or []):
         item = progress['attachments'][index]
         if item['state'] == 'ready': continue
@@ -285,7 +309,12 @@ def advance(social, manifest, job, checkpoint, now):
         progress['reference'] = status_id
         if body.get('scheduled_at'):
             progress['scheduledAt'] = body['scheduled_at']; save('native_scheduled')
-        else: save('provider_accepted')
+        else:
+            from .mastodon_threads import parts
+            if len(parts(manifest)) > 1:
+                progress['threadReferences'] = [status_id]; save('thread_wait')
+                return result('processing', 'The thread root ID was saved; approved children await fenced dispatch.')
+            save('provider_accepted')
         return result('provider_accepted', 'Mastodon accepted the exact approved operation; provider read-back is pending.')
     if response.get('status') == 429:
         return wait(response, 'Mastodon rejected publication due to throttling; no status was accepted. Resume after its retry time.')

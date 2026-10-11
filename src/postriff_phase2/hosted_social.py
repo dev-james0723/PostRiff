@@ -372,6 +372,16 @@ class HostedSocial:
             text = text.replace(short, "" if media else str(expanded or short), 1)
         return html.unescape(text).strip()
 
+    def reconcile_mastodon_thread(self, manifest, job, checkpoint, clock=time.time):
+        from .mastodon_publishing import checked_progress
+        from .mastodon_threads import reconcile
+        provider = self._provider(manifest)
+        if provider is None: return {'state': 'held', 'confirmed': 'Mastodon is unavailable; saved thread IDs were retained.'}
+        grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        if grant.get('providerAccountId') != manifest.get('providerAccountId'):
+            return {'state': 'held', 'confirmed': 'The connected thread account changed. Reconnect and inspect saved IDs.'}
+        return reconcile(provider, grant, manifest, checked_progress(job['progress'], manifest), checkpoint, clock)
+
     def _reconcile_wave1(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
         if not reference:

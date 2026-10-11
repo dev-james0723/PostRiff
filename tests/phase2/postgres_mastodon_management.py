@@ -140,6 +140,36 @@ class JournalTests(unittest.TestCase):
         self.now += 50
         with self.assertRaises(AlphaError): worker.mastodon_checkpoint(claimed, accepted)
 
+    def test_thread_checkpoint_keeps_accepted_ids_after_cancellation_and_blocks_next_write(self):
+        from postriff_phase2.hosted_worker import PostgresWorker
+        worker = PostgresWorker(connection, clock=lambda: self.now)
+        manifest = {'platform': 'Mastodon', 'providerAccountId': self.account, 'media': [],
+                    'payload': {'text': 'Root', 'threadParts': ['Child']}, 'publishOptions': {}}
+        job = {'id': uuid.uuid4().hex, 'manifest': manifest, 'state': 'processing',
+               'leaseOwner': worker.worker_id, 'leaseId': uuid.uuid4().hex, 'leaseUntil': self.now + 45}
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['jobs'] = [job]
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+        claimed = {'workspaceId': self.workspace, 'job': job}
+        progress = {'version': 3, 'stage': 'thread_wait', 'attachments': [], 'retryCount': 0,
+                    'reference': '123', 'threadReferences': ['123']}
+        worker.mastodon_checkpoint(claimed, progress)
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['jobs'][0]['cancelRequested'] = True
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+        with self.assertRaises(AlphaError):
+            worker.mastodon_checkpoint(claimed, {**progress, 'stage': 'thread_publish_attempted'}, before_external=True)
+        # Saving an already observed effect does not grant the canceled approval another write.
+        accepted = {**progress, 'stage': 'provider_accepted', 'threadReferences': ['123', '124']}
+        worker.mastodon_checkpoint(claimed, accepted)
+        with connection() as db:
+            persisted = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][0]
+            self.assertTrue(persisted['cancelRequested']); self.assertEqual(persisted['progress']['threadReferences'], ['123', '124'])
+        other = PostgresWorker(connection, clock=lambda: self.now)
+        with self.assertRaises(AlphaError): other.mastodon_checkpoint(claimed, accepted)
+
     def test_crashed_actions_and_retention_cleanup_never_send_again(self):
         from postriff_phase2.mastodon_management import maintain
         preview = self.preview()

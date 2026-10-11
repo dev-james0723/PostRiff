@@ -178,6 +178,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [chosenChannelId, setChannelId] = useState<string>('');
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
+  const threadId = useId();
+  const [threadParts, setThreadParts] = useState<string[]>([]);
   const [extraMedia, setExtraMedia] = useState<{ assetId: string; alt: string }[]>([]);
   const [audioSearch, setAudioSearch] = useState('');
   const [nativeMastodon, setNativeMastodon] = useState(false);
@@ -212,7 +214,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     enabled: open && mastodonMedia && Boolean(assetId) && !(libraryAssets ?? []).some((a) => a.id === assetId)
       && !(audioLibrary.data?.assets ?? []).some((a) => a.id === assetId), staleTime: 30_000
   });
-  useEffect(() => { setExtraMedia([]); setAudioSearch(''); setNativeMastodon(false); }, [variant?.id]);
+  useEffect(() => { setExtraMedia([]); setThreadParts([]); setAudioSearch(''); setNativeMastodon(false); }, [variant?.id]);
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => {
     const candidates = [...(libraryAssets ?? []), ...(mastodonMedia ? audioLibrary.data?.assets ?? [] : [])];
@@ -252,7 +254,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       (!asset || kindOf(asset) !== 'image' || alt.trim()) &&
       (!mastodonMedia || extraMedia.every((item) => Boolean(item.assetId && item.alt.trim() && assets.some((a) => a.id === item.assetId && isPostableImage(a))))) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
-      (!needsOptions || publishOptions !== null)
+      (!needsOptions || publishOptions !== null) && (!mastodonMedia || threadParts.every((text) => text.trim().length > 0))
   );
 
   async function submit() {
@@ -293,6 +295,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
           fold: askFold ? fold : undefined,
+          threadParts: mastodonMedia && threadParts.length ? threadParts : undefined,
           publishOptions: needsOptions ? mastodonMedia && nativeMastodon && chosenAt
             ? { ...publishOptions, scheduled_at: new Date(chosenAt).toISOString() } : publishOptions : undefined
         }
@@ -430,8 +433,14 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
           </div>
 
+          {mastodonMedia && <div className='flex flex-col gap-3 rounded border p-3'>
+            <p className='text-sm'>Create a thread from this draft</p>
+            <p className='text-muted-foreground text-xs'>The draft is the first post. Each additional post replies to the previous one on this account. All parts need exact approval. Threads use Rafii-managed scheduling; attachments and polls stay on the first post.</p>
+            {threadParts.map((text, index) => <div key={index} className='flex flex-col gap-2'><label htmlFor={`${threadId}-${index}`} className='flex flex-col gap-1 text-sm'>Post {index + 2}<textarea id={`${threadId}-${index}`} aria-label={`Thread post ${index + 2}`} maxLength={500} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setThreadParts((parts) => parts.map((value, at) => at === index ? event.target.value : value))} /></label><Button variant='outline' size='sm' onClick={() => setThreadParts((parts) => parts.filter((_value, at) => at !== index))}>Remove post {index + 2}</Button></div>)}
+            <Button variant='outline' size='sm' disabled={threadParts.length >= 9} onClick={() => { setNativeMastodon(false); setThreadParts((parts) => [...parts, '']); }}>Add next thread post</Button>
+          </div>}
           {mastodonMedia && <label htmlFor={nativeMastodonId} className='flex items-start gap-2 text-sm'>
-            <Checkbox id={nativeMastodonId} checked={nativeMastodon} onCheckedChange={(value) => setNativeMastodon(value === true)} />
+            <Checkbox id={nativeMastodonId} disabled={threadParts.length > 0} checked={nativeMastodon} onCheckedChange={(value) => setNativeMastodon(value === true)} />
             <span>Schedule on the Mastodon server after approval
               <span className='text-muted-foreground block text-xs'>Choose a time at least six minutes ahead. Rafii sends the approved schedule to your server first and checks its progress. Leave this off to use Rafii’s publishing calendar.</span>
             </span>

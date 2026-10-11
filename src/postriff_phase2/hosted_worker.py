@@ -184,7 +184,7 @@ class PostgresWorker:
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
                                            and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
-                            self._event(job, "canceled", "Canceled before provider submission")
+                            self._event(job, "canceled", "Remaining thread parts canceled; previously accepted post IDs remain on Mastodon." if (job.get('progress') or {}).get('threadReferences') else "Canceled before provider submission")
                             continue
                         if job['manifest']['platform'] == 'YouTube' and not capacity_ready:
                             # Preserve the operation, approval and journal. Once
@@ -290,7 +290,7 @@ class PostgresWorker:
                 raise AlphaError('Mastodon publishing lost its fenced Queue lease.', 409)
             if before_external and (job.get('cancelRequested') or not self._approved(cur, claimed['workspaceId'], state, job)):
                 raise AlphaError('Approval, cancellation, account or media changed; no further Mastodon write is permitted.', 409)
-            if before_external and progress.get('stage') in ('media_upload_attempted', 'publish_attempted'):
+            if before_external and progress.get('stage') in ('media_upload_attempted', 'publish_attempted', 'thread_publish_attempted'):
                 from .hosted import throttle
                 host = str(job['manifest'].get('providerAccountId', '')).rsplit('@', 1)[-1]
                 throttle(cur, 'mastodon-worker-instance:' + host, 200, 300)
@@ -381,7 +381,7 @@ class PostgresWorker:
                     job['processingChecks'] = job.get('processingChecks', 0) + 1
                     if job['processingChecks'] >= 6 and job.get('progress', {}).get('stage') == 'container_created':
                         self._event(job, 'held', 'Container processing did not finish within bounded checks; review before continuing')
-                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and not youtube_progress and not (mastodon_progress and result['progress']['stage'] == 'native_scheduled'):
+                if job.get("checks", 0) >= 5 and job["state"] in IN_FLIGHT and not youtube_progress and not (mastodon_progress and (result['progress']['stage'] == 'native_scheduled' or result['progress'].get('threadReferences'))):
                     job["nextAt"] = self.clock() + 86400
                     job["nextAction"] = "Manual provider review required; do not resubmit"
                 elif job["state"] == "held":
@@ -492,6 +492,9 @@ class PostgresWorker:
         try:
             if claimed.get('instagramAction'):
                 result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+            elif claimed['reconciliation'] and claimed['job']['manifest']['platform'] == 'Mastodon' and (claimed['job'].get('progress') or {}).get('threadReferences'):
+                result = self.social.reconcile_mastodon_thread(claimed['job']['manifest'], claimed['job'],
+                    lambda progress, **kw: self.mastodon_checkpoint(claimed, progress, **kw), self.clock)
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
             elif claimed['job']['manifest']['platform'] == 'Mastodon' and hasattr(self.social, 'advance_mastodon'):

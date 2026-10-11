@@ -3,25 +3,28 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "runId": "rt29pnr3dm",
+    "runId": "fww642glg2",
     "exitCode": 0,
-    "sourceHead": "c0dd82fb9943dd437558e61125102030a7745a66",
+    "sourceHead": "744b66ec0e0a6f4e604dcf1e691a27162028db84",
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T070015535957Z-ci.json",
-    "sourceFingerprint": "988d6bf81fb98c4db5b7d03170d5c05571e2ac15b17b51faee1453ea64ec95b7",
-    "patchSha256": "ccd9735242dbe0bb4b5775c1e5abd9643b9c90415d92c08c55c7415a5e20e8a9"
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T072609863033Z-ci.json",
+    "sourceFingerprint": "a1ee392cc9676d52ea7b3eeb2b93d7ba98f31ef55c43fb0167ef97833df7bed8",
+    "patchSha256": "ea52c5c938fd3e3c1dc2233d0c5aa1689a33743ab0144e0d9ad158dded7083c5",
+    "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+    "transportMode": "remote_patch",
+    "patchBytes": 367710
   },
   "checks": {
     "pythonContracts": {
-      "passed": 432
+      "passed": 442
     },
     "sqlActionIsolation": {
-      "passed": 14,
+      "passed": 15,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
     "webContracts": {
-      "passed": 33
+      "passed": 34
     },
     "lint": "PASS",
     "typecheck": "PASS",
@@ -65,10 +68,11 @@
           ]
         }
       ],
-      "scope": "Channels/account/profile fields; Queue media/native controls still need dedicated UI coverage",
-      "evidenceRunId": "rt29pnr3dm"
+      "scope": "Channels/profile; dedicated Queue thread/media/native controls browser flow still open",
+      "evidenceRunId": "fww642glg2"
     },
-    "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only"
+    "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
+    "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing"
   },
   "capacity": {
     "syntheticContexts": 1000,
@@ -103,8 +107,8 @@
       "sha256": "26e43d51a1c8da5dd1411ba557c32101e5241fec51410f36966a50507c41f290"
     },
     "CLOUD-SYNTHETIC-channels-1440.png": {
-      "bytes": 389123,
-      "sha256": "0ae48bafaa22fb5255f61e96f922ebf57c2a1f73ce79badde37c88c9857a43df"
+      "bytes": 389311,
+      "sha256": "bbb09de41ee0018ef9f6321c6350b1b9a5f12da423a7d49a7c089b923dd1c765"
     },
     "CLOUD-SYNTHETIC-channels-390.png": {
       "bytes": 144517,
@@ -113,6 +117,18 @@
     "CLOUD-SYNTHETIC-channels-320.png": {
       "bytes": 120973,
       "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013"
+    },
+    "CLOUD-SYNTHETIC-profile-1440.png": {
+      "bytes": 264548,
+      "sha256": "ef2b10ea4447bd6fd2c8da1c4988293ea9788e225e5ee85e5c67f41f16a7ee3e"
+    },
+    "CLOUD-SYNTHETIC-profile-390.png": {
+      "bytes": 127441,
+      "sha256": "02007fbc33a4e22b46162066560484b79e38a5ea544dbde0123f41ae301b895d"
+    },
+    "CLOUD-SYNTHETIC-profile-320.png": {
+      "bytes": 114253,
+      "sha256": "514e911e688bd366405703a2c0aff26e4ee9d239f1e311c37d1b7fc3d43eb3de"
     }
   },
   "localChecks": [
@@ -134,11 +150,20 @@
       "sourceFingerprint": "7d5d3fc1cdc4939a58884d06eea97ac8712898e7e86ad2f34816f83dd6bc34ee",
       "patchSha256": "39ee61b67fe1c50ce7649c76b8c23c12f8cba4d317a6a0c62a069dbc6d58d9f5",
       "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T063630761666Z-ci.json"
+    },
+    {
+      "runId": "rt29pnr3dm",
+      "exitCode": 0,
+      "sourceHead": "c0dd82fb9943dd437558e61125102030a7745a66",
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T070015535957Z-ci.json",
+      "sourceFingerprint": "988d6bf81fb98c4db5b7d03170d5c05571e2ac15b17b51faee1453ea64ec95b7",
+      "patchSha256": "ccd9735242dbe0bb4b5775c1e5abd9643b9c90415d92c08c55c7415a5e20e8a9"
     }
   ],
   "githubCI": {
-    "head": "c0dd82fb9943dd437558e61125102030a7745a66",
+    "head": "744b66ec0e0a6f4e604dcf1e691a27162028db84",
     "allPassed": false,
-    "remaining": "local-gates in progress; agent-ui-browser WebKit native-fallback page closed, 15/16 WebKit scenes passed. Artifact11694474655 recovered; no evidence that this is a Mastodon regression yet."
+    "remaining": "AgentUI browser now PASS; local-gates pending latest observation; document-runtime failed on unreachable download mirror. Bounded checksum-preserving mirror repair candidate is uncommitted/unvalidated."
   }
 }

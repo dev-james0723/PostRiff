@@ -50,6 +50,17 @@ def normalize_result(result, job, reconciliation=False):
     mastodon_pending = bool(isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'Mastodon'
                             and isinstance(result.get('progress'), dict) and result['progress'].get('version') == 3
                             and result['progress'].get('stage') == 'native_scheduled' and result.get('verification') == 'provider_lookup')
+    mastodon_thread = False
+    if isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'Mastodon' and job['manifest'].get('payload', {}).get('threadParts'):
+        try:
+            from .mastodon_publishing import checked_progress
+            progress = checked_progress(result.get('progress'), job['manifest'])
+            mastodon_thread = progress['stage'] == 'provider_accepted' and bool(progress.get('threadReferences'))
+            if result.get('state') == 'verified' and (not mastodon_thread or progress.get('threadVerified') != len(progress['threadReferences'])):
+                return unknown('Every approved thread part needs saved IDs and account read-back before verification')
+        except Exception:
+            if result.get('state') == 'verified':
+                return unknown('Invalid thread publication evidence; manual review required')
     if youtube_progress and job.get('cancelRequested'):
         allowed.add('canceled')
     if (not isinstance(result, dict) or not isinstance(result.get("state"), str) or result["state"] not in allowed
@@ -62,7 +73,7 @@ def normalize_result(result, job, reconciliation=False):
     # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
     # rejected) is proof, not a lookup failure, so it may end the job as failed.
     provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
-    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure and not youtube_progress and not (mastodon_pending and result['state'] == 'processing'):
+    if reconciliation and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure and not youtube_progress and not ((mastodon_pending or mastodon_thread) and result['state'] == 'processing'):
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:
@@ -82,6 +93,8 @@ def normalize_result(result, job, reconciliation=False):
     url = result.get('url', job.get('url'))
     if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform'), job.get('manifest', {}).get('providerAccountId')):
         return unknown('Invalid canonical receipt URL; manual review required')
+    if url and job.get('manifest', {}).get('platform') == 'Mastodon' and urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1] != reference:
+        return unknown('Mastodon receipt URL does not match the saved post ID')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
     progress = result.get('progress')
     if progress is not None:

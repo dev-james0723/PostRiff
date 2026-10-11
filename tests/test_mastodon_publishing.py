@@ -35,7 +35,7 @@ class DurablePublishingTests(unittest.TestCase):
         self.storage_calls = []
         def storage_get(*args): self.storage_calls.append(args); return self.raw
         self.social = SimpleNamespace(_provider=lambda _: provider,
-            oauth=SimpleNamespace(token_for_worker=lambda *_: {'accessToken': 'synthetic', 'scopes': ['write:statuses', 'write:media']}),
+            oauth=SimpleNamespace(token_for_worker=lambda *_: {'accessToken': 'synthetic', 'providerAccountId': '10@mastodon.social', 'scopes': ['write:statuses', 'write:media']}),
             assets=SimpleNamespace(storage=SimpleNamespace(get=storage_get, get_bounded=lambda w, c, n, limit: storage_get(w, c, n))))
 
     def checkpoint(self, progress, **kw): self.saved.append((copy.deepcopy(progress), kw))

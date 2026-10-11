@@ -64,6 +64,8 @@ mkdirSync(out, { recursive: true });
       await controls.getByLabel('Display name', { exact: true }).fill('SYNTHETIC profile');
       await controls.getByLabel('Default post visibility', { exact: true }).click();
       await page.getByRole('option', { name: 'Followers-only', exact: true }).click();
+      await controls.getByLabel('Display name', { exact: true }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: resolve(out, `CLOUD-SYNTHETIC-profile-${width}.png`), fullPage: false });
       await controls.getByRole('button', { name: 'Review action', exact: true }).click();
       await controls.getByRole('button', { name: 'Approve exact action', exact: true }).waitFor();
       assert.match(await controls.textContent(), /SYNTHETIC profile/);

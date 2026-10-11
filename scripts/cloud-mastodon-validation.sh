@@ -8,7 +8,7 @@ if ! command -v libreoffice >/dev/null; then
   sudo -n apt-get -qq update
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq --no-install-recommends install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
 fi
-"$TREND_VISUAL_TEST_PYTHON" -m unittest test_mastodon_insights test_growth_metric_schedule test_native_insights_canary test_mastodon_publishing test_mastodon_media test_mastodon_profile test_agent_capability_registry test_agent_permissions test_postriff_platforms_x test_mastodon_management test_hosted_wave1_connectors test_wave4c_connectors test_wave4_hosted_publish test_postriff_phase2 test_postriff_phase2_hosted test_asset_kinds test_hosted_storage_library test_library_extract test_migration_numbers test_agent_runtime test_agent_runtime_references test_youtube_agent_tools test_postriff_automation_chat
+"$TREND_VISUAL_TEST_PYTHON" -m unittest test_mastodon_insights test_growth_metric_schedule test_native_insights_canary test_mastodon_publishing test_mastodon_threads test_mastodon_media test_mastodon_profile test_agent_capability_registry test_agent_permissions test_postriff_platforms_x test_mastodon_management test_hosted_wave1_connectors test_wave4c_connectors test_wave4_hosted_publish test_postriff_phase2 test_postriff_phase2_hosted test_asset_kinds test_hosted_storage_library test_library_extract test_migration_numbers test_agent_runtime test_agent_runtime_references test_youtube_agent_tools test_postriff_automation_chat
 if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
   sudo -n apt-get -qq update
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq --no-install-recommends install postgresql-16

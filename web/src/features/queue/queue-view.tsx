@@ -200,6 +200,7 @@ function ReviewCard({
             </span>
           </p>
           <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
+          {manifest.payload.threadParts?.map((text, index) => <div key={index} className='rounded border p-3'><p className='text-muted-foreground text-xs'>Thread post {index + 2} · replies to the preceding approved part</p><p className='text-sm whitespace-pre-wrap'>{text}</p></div>)}
           <YouTubeManifestDetails manifest={manifest} />
           {manifest.voiceRevision === null && <JobNote>No voice profile. Check the wording before approving.</JobNote>}
         </div>
