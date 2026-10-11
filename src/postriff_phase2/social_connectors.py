@@ -230,11 +230,21 @@ class MastodonProvider(OAuthProvider):
         headers = {**extra, "Authorization": "Bearer " + session["at"]}
         return self.transport(method, f"https://{host}{path}", headers=headers, **kwargs)
 
+    @staticmethod
+    def _verification_cooldown(response):
+        if response.get('status') in (429, 500, 502, 503, 504):
+            error = AlphaError('Mastodon verification is temporarily unavailable. Retry after its cooldown.', 503,
+                               code='mastodon_verification_unavailable')
+            error.mastodon_retry_headers = {str(k).lower(): str(v)[:80] for k, v in (response.get('headers') or {}).items()
+                                           if str(k).lower() in ('retry-after', 'x-ratelimit-reset')}
+            raise error
+
     def identity(self, access_token):
         session = self.session(access_token)
         response = self.api(session, "GET", "/api/v1/accounts/verify_credentials")
         if response.get('status') == 401:
             raise AlphaError('Mastodon revoked or rejected this access token. Reconnect this exact account.', 409, code='mastodon_authorization_revoked')
+        self._verification_cooldown(response)
         body = self._ok(response, "id")
         if not re.fullmatch(r"\d{1,40}", str(body.get("id", ""))):
             raise AlphaError("This server returned an invalid account identity.", 502)
@@ -254,6 +264,7 @@ class MastodonProvider(OAuthProvider):
             if identity['providerAccountId'] != expected_account_id:
                 return None
         response = self.api(session, "GET", "/api/v1/apps/verify_credentials")
+        self._verification_cooldown(response)
         body = response.get("body")
         if response.get("status") != 200 or not isinstance(body, dict):
             return None

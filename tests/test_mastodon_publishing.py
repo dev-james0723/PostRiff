@@ -41,6 +41,50 @@ class DurablePublishingTests(unittest.TestCase):
     def checkpoint(self, progress, **kw): self.saved.append((copy.deepcopy(progress), kw))
     def run_step(self, progress=None): return advance(self.social, self.manifest, {'progress': progress}, self.checkpoint, lambda: self.now)
 
+    def test_mastodon_preview_writer_is_local_bilingual_and_bounds_all_openings(self):
+        from postriff_alpha.generation import FixtureAdapter
+        for language in ('en', 'zh-Hant'):
+            result = FixtureAdapter().generate({'platform': 'Mastodon', 'language': language,
+                'facts': [], 'idea': 'SYNTHETIC very long topic ' * 120})
+            self.assertLessEqual(len(result['text']), 500)
+            self.assertEqual(len(result['openings']), 3)
+            self.assertTrue(any('No language model' in warning for warning in result['warnings']))
+            for opening in result['openings']:
+                self.assertLessEqual(len(result['text'].replace(result['openings'][0], opening, 1)), 500)
+            self.assertEqual(result['sourceIds'], [])
+
+    def test_unavailable_verification_obeys_saved_cooldown_without_provider_writes(self):
+        from postriff_alpha.domain import AlphaError
+        error = AlphaError('Synthetic server cooldown', 503)
+        error.mastodon_retry_headers = {'retry-after': '300'}
+        checks = []
+        def unavailable(*_args): checks.append('verification'); raise error
+        self.social.oauth.token_for_worker = unavailable
+        result = self.run_step()
+        self.assertEqual(result['state'], 'processing'); self.assertEqual(self.calls, [])
+        self.assertGreaterEqual(result['progress']['retryAt'], self.now + 300)
+        self.assertEqual(self.run_step(result['progress'])['state'], 'processing')
+        self.assertEqual(len(checks), 1); self.assertEqual(self.storage_calls, [])
+        self.now += 310
+        saved = copy.deepcopy(result['progress']); saved['attachments'][0].update(state='ready', id='21')
+        saved.update(stage='provider_accepted', reference='31')
+        result = self.run_step(saved)
+        self.assertEqual(result['state'], 'processing'); self.assertEqual(result['reference'], '31')
+        self.assertEqual(result['progress']['attachments'][0]['id'], '21'); self.assertEqual(self.calls, [])
+        saved['retryCount'] = 20
+        self.assertEqual(self.run_step(saved)['state'], 'held')
+
+    def test_verification_failure_never_retries_an_unknown_external_intent(self):
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.mastodon_publishing import grant_retry
+        progress = {'version': 3, 'stage': 'publish_attempted', 'retryCount': 0,
+            'attachments': [{'hash': self.asset['hash'], 'state': 'ready', 'id': '21'}]}
+        result = grant_retry(self.manifest, {'progress': progress}, self.now, AlphaError('Unavailable', 503))
+        self.assertEqual(result['state'], 'uncertain'); self.assertNotIn('retryAt', result['progress'])
+        progress['stage'] = 'media_wait'
+        result = grant_retry(self.manifest, {'progress': progress}, self.now, AlphaError('Revoked', 409))
+        self.assertEqual(result['state'], 'held'); self.assertNotIn('retryAt', result['progress'])
+
     def test_known_media_id_survives_restart_without_upload_repetition(self):
         self.replies = [response({'id': '21'}, 202)]
         result = self.run_step()
@@ -131,7 +175,7 @@ class DurablePublishingTests(unittest.TestCase):
     def test_native_schedule_absence_requires_a_unique_exact_media_readback(self):
         p = self.native_progress()
         published = {'id': '51', 'account': {'id': '10'}, 'created_at': p['scheduledAt'], 'content': '<p>An approved post</p>',
-            'visibility': 'public', 'spoiler_text': '', 'media_attachments': [{'id': '21'}], 'url': 'https://mastodon.social/@alice/51'}
+            'visibility': 'public', 'sensitive': False, 'spoiler_text': '', 'media_attachments': [{'id': '21'}], 'url': 'https://mastodon.social/@alice/51'}
         self.now += 610
         for rows, expected in [([], 'uncertain'), ([{**published, 'media_attachments': [{'id': '22'}]}], 'uncertain'),
                                ([published, {**published, 'id': '52'}], 'uncertain'), ([published], 'verified')]:
@@ -142,6 +186,34 @@ class DurablePublishingTests(unittest.TestCase):
                 if expected == 'verified':
                     self.assertEqual(normalize_result(result, {'manifest': self.manifest}, True)['state'], 'verified')
                     self.assertEqual(result['reference'], '51')
+        self.assertTrue(all(method == 'GET' for method, _, _ in self.calls))
+
+    def test_single_and_native_readback_reject_every_changed_approved_setting(self):
+        from postriff_phase2.hosted_social import HostedSocial
+        p = self.native_progress()
+        self.manifest['publishOptions'].update(visibility='unlisted', sensitive=True, language='en',
+            spoiler_text='CW', in_reply_to_id='9', poll={'options': ['A', 'B'], 'multiple': False, 'expires_in': 600},
+            quoted_status_id='8')
+        published = {'id': '51', 'account': {'id': '10'}, 'created_at': p['scheduledAt'],
+            'content': '<p>An approved post</p>', 'visibility': 'unlisted', 'sensitive': True, 'language': 'en',
+            'spoiler_text': 'CW', 'in_reply_to_id': '9', 'media_attachments': [{'id': '21'}],
+            'poll': {'options': [{'title': 'A'}, {'title': 'B'}], 'multiple': False},
+            'quote': {'state': 'accepted', 'quoted_status_id': '8'}}
+        self.now += 610
+        provider = self.social._provider(None)
+        hosted = HostedSocial(self.social.oauth, {})
+        for change in ({}, {'language': 'fr'}, {'sensitive': False}, {'in_reply_to_id': None},
+                       {'quote': {'state': 'accepted', 'quoted_status_id': '7'}},
+                       {'poll': {'multiple': True, 'options': [{'title': 'A'}, {'title': 'B'}]}},
+                       {'poll': {'multiple': False, 'options': [{'title': 'A'}, {'title': 'C'}]}}):
+            with self.subTest(change=change):
+                expected = 'verified' if not change else 'uncertain'
+                self.replies = [response(status=404), response([{**published, **change}])]
+                self.assertEqual(native_reconcile(provider, '', self.manifest, {'progress': p}, self.now)['state'], expected)
+                single = copy.deepcopy(self.manifest); single['publishOptions'].pop('scheduled_at')
+                self.replies = [response({**published, **change})]
+                job = {'progress': {**p, 'stage': 'provider_accepted', 'reference': '51'}}
+                self.assertEqual(hosted._reconcile_wave1(single, provider, '', '51', job)['state'], expected)
         self.assertTrue(all(method == 'GET' for method, _, _ in self.calls))
 
     def test_native_lookup_cooldown_keeps_the_known_schedule_without_writes(self):

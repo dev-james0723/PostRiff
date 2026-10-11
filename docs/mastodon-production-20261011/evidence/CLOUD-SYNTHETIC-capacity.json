@@ -6,19 +6,19 @@
   "completedRequests": 1000,
   "admitted": 400,
   "deferred": 600,
-  "requestP95Ms": 740.687,
-  "requestMaxMs": 759.366,
+  "requestP95Ms": 749.815,
+  "requestMaxMs": 773.928,
   "queue": {
     "seededJobs": 2000,
     "fencedClaims": 40,
     "distinctFairTenants": 40,
-    "claimP95Ms": 7.837
+    "claimP95Ms": 8.201
   },
   "execution": "cloud-synthetic-connected-users-and-disposable-sql",
   "providerCalls": 0,
   "realAccountAcceptance": false,
   "productionHttpLoadAcceptance": false,
-  "seedSeconds": 0.095,
-  "elapsedSeconds": 1.208,
+  "seedSeconds": 0.096,
+  "elapsedSeconds": 1.233,
   "sqlConcurrencyBound": 32
 }

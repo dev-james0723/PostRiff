@@ -80,6 +80,21 @@ class JournalTests(unittest.TestCase):
     def preview(self):
         return self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'favourite', 'targetId': '123'})
 
+    def test_exhausted_account_read_budget_blocks_all_remote_oauth_calls(self):
+        from postriff_phase2.hosted import bucket
+        with connection() as db:
+            db.execute("INSERT INTO public.pr_auth_throttle(bucket,window_start,count) VALUES(%s,now(),60)",
+                (bucket('mastodon-read-account:' + self.workspace + self.connection_id),))
+        self.calls.clear()
+        with self.assertRaises(AlphaError) as caught:
+            self.manager._grant(self.workspace, self.actor, self.connection_id)
+        self.assertEqual(caught.exception.status, 429)
+        self.assertEqual(self.calls, [])
+        with connection() as db:
+            row = db.execute('SELECT count FROM public.pr_auth_throttle WHERE bucket=%s',
+                (bucket('mastodon-read-account:' + self.workspace + self.connection_id),)).fetchone()
+            self.assertEqual(row[0], 60)  # The rejected transaction rolled back.
+
     def test_verified_receipt_survives_actual_sql_failure_in_optional_hook(self):
         from postriff_phase2.hosted_worker import PostgresWorker
         calls = []

@@ -90,17 +90,14 @@ def native_reconcile(provider, token, manifest, job, now):
     matched = []
     for row in rows[:40]:
         if not isinstance(row, dict): continue
-        plain = ' '.join(html.unescape(re.sub(r'<[^>]+>', '', re.sub(r'<br\s*/?>|</p>\s*<p>', ' ', str(row.get('content', ''))))).split())
         try:
             created = datetime.fromisoformat(str(row.get('created_at')).replace('Z', '+00:00')).timestamp()
             due = datetime.fromisoformat(progress['scheduledAt'].replace('Z', '+00:00')).timestamp()
         except (ValueError, TypeError): continue
-        if (str((row.get('account') or {}).get('id')) == account_id and due - 60 <= created <= now + 60
-                and plain == ' '.join(manifest['payload']['text'].split())
-                and row.get('visibility') == expected.get('visibility', 'public')
-                and row.get('spoiler_text', '') == expected.get('spoiler_text', '')
-                and [str(a.get('id')) for a in row.get('media_attachments') or [] if isinstance(a, dict)] == [a['id'] for a in progress['attachments']]
-                and re.fullmatch(r'[0-9]{1,40}', str(row.get('id', '')))):
+        identifier = str(row.get('id', ''))
+        from .mastodon_threads import matches
+        if (re.fullmatch(r'[0-9]{1,40}', identifier) and due - 60 <= created <= now + 60
+                and matches(row, manifest, [identifier], 0, host, progress['attachments'])):
             matched.append(row)
     if len(matched) == 1:
         row = matched[0]
@@ -188,11 +185,46 @@ def backoff(response, now, count, key):
     return now + min(604800, max(1, max(waits)) + jitter)
 
 
+def grant_retry(manifest, job, now, error):
+    """Transient account/scope reads never turn into an unknown external write."""
+    progress = copy.deepcopy(job.get('progress') or {})
+    reference = progress.get('reference') or job.get('providerReference')
+    result = {'state': 'held', 'confirmed': 'Mastodon account verification is unavailable. Existing IDs remain saved; nothing was resent.',
+              **({'reference': reference} if reference else {})}
+    if progress.get('version') != 3:
+        return result
+    checked_progress(progress, manifest)
+    result['progress'] = progress
+    if progress['stage'] not in (*SAFE_STAGES, 'provider_accepted', 'native_scheduled'):
+        result.update(state='uncertain', confirmed='An earlier external intent has an unknown outcome. Inspect Mastodon; do not resubmit.')
+        return result
+    count = progress.get('retryCount', 0)
+    if error.status not in (429, 500, 502, 503, 504) or count >= 20:
+        return result
+    progress.update(retryCount=count + 1, retryAt=backoff({'headers': getattr(error, 'mastodon_retry_headers', {})}, now, count, manifest['idempotencyKey']))
+    result.update(state='processing', confirmed='Mastodon account verification is waiting for the bounded server cooldown; no media or post was sent.')
+    return result
+
+
 def advance(social, manifest, job, checkpoint, now):
     provider = social._provider(manifest)
     if provider is None:
         return {'state': 'held', 'confirmed': 'Mastodon publishing is unavailable. Nothing was sent.'}
-    grant = social.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+    progress = job.get('progress')
+    progress = checked_progress(progress, manifest) if progress else {
+        'version': 3, 'stage': 'media_wait', 'attachments': [
+            {'hash': a['hash'], 'state': 'pending', 'id': None} for a in manifest.get('media', [])], 'retryCount': 0}
+
+    if progress.get('retryAt', 0) > now():
+        return {'state': 'processing', 'progress': progress,
+                **({'reference': progress['reference']} if progress.get('reference') else {}),
+                'confirmed': 'Waiting for the saved Mastodon cooldown. Nothing was resent.'}
+    try:
+        grant = social.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+    except AlphaError as error:
+        deferred = grant_retry(manifest, {**job, 'progress': progress}, now(), error)
+        if deferred.get('progress'): checkpoint(copy.deepcopy(deferred['progress']), before_external=False)
+        return deferred
     if grant.get('providerAccountId') != manifest.get('providerAccountId'):
         return {'state': 'held', 'confirmed': 'The connected account changed; prepare a fresh review. Nothing was sent.'}
     required = set(provider.publish_required)
@@ -202,10 +234,6 @@ def advance(social, manifest, job, checkpoint, now):
     expected_host = str(manifest.get('providerAccountId', '')).rsplit('@', 1)[-1]
     if session['instance'] != expected_host:
         return {'state': 'held', 'confirmed': 'The connected Mastodon instance changed; prepare a fresh review.'}
-    progress = job.get('progress')
-    progress = checked_progress(progress, manifest) if progress else {
-        'version': 3, 'stage': 'media_wait', 'attachments': [
-            {'hash': a['hash'], 'state': 'pending', 'id': None} for a in manifest.get('media', [])], 'retryCount': 0}
 
     def save(stage, external=False):
         progress['stage'] = stage

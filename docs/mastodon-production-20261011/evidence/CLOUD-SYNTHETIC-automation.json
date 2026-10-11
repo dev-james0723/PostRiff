@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "execution": "CLOUD SYNTHETIC writer/provider; actual Automation/Queue/SQL",
+  "checks": [
+    "current account/instance and Brand Brain draft routing",
+    "review default has no provider writes",
+    "exact human approval through existing Queue and real worker",
+    "explicit definition-bound owner authority",
+    "persisted verified native status readback and restart no duplicate",
+    "pause after queuing fences external dispatch"
+  ],
+  "syntheticWrites": 2,
+  "realMastodonAcceptance": false,
+  "paidModelCalls": 0,
+  "cloudRunId": "5f2p9bncg9",
+  "cloudExitCode": 0,
+  "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093338659739Z-test.json",
+  "scope": "One exact connected account; disposable SQL; synthetic writer and provider. No live A\u2013E acceptance."
+}

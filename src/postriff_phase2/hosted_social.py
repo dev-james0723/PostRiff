@@ -377,7 +377,13 @@ class HostedSocial:
         from .mastodon_threads import reconcile
         provider = self._provider(manifest)
         if provider is None: return {'state': 'held', 'confirmed': 'Mastodon is unavailable; saved thread IDs were retained.'}
-        grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        try:
+            grant = self.oauth.token_for_worker(manifest['workspaceId'], manifest['channelId'])
+        except AlphaError as error:
+            from .mastodon_publishing import grant_retry
+            result = grant_retry(manifest, job, clock(), error)
+            if result.get('progress'): checkpoint(result['progress'], before_external=False)
+            return result
         if grant.get('providerAccountId') != manifest.get('providerAccountId'):
             return {'state': 'held', 'confirmed': 'The connected thread account changed. Reconnect and inspect saved IDs.'}
         return reconcile(provider, grant, manifest, checked_progress(job['progress'], manifest), checkpoint, clock)
@@ -417,9 +423,14 @@ class HostedSocial:
             reply_matches = not options.get('in_reply_to_id') or str(body.get('in_reply_to_id')) == options['in_reply_to_id']
             progress = (job or {}).get('progress') or {}
             media_matches = progress.get('version') != 3 or [str(a.get('id')) for a in body.get('media_attachments') or [] if isinstance(a, dict)] == [a.get('id') for a in progress.get('attachments', [])]
-            if (response.get("status") == 200 and str(body.get('id')) == reference
-                    and f"{account}@{session['instance']}" == manifest["providerAccountId"] and plain == " ".join(text.split())
-                    and visibility_matches and warning_matches and sensitive_matches and reply_matches and media_matches):
+            exact_matches = (str(body.get('id')) == reference
+                    and f"{account}@{session['instance']}" == manifest['providerAccountId']
+                    and plain == ' '.join(text.split())
+                    and visibility_matches and warning_matches and sensitive_matches and reply_matches and media_matches)
+            if progress.get('version') == 3:
+                from .mastodon_threads import matches
+                exact_matches = matches(body, manifest, [reference], 0, session['instance'], progress.get('attachments', []))
+            if response.get('status') == 200 and exact_matches:
                 result = {"state": "verified", "reference": reference, "confirmed": "Mastodon read-back matched the approved text, visibility, warning and account", "verification": "provider_lookup"}
                 url = body.get('url')
                 if isinstance(url, str) and url.startswith('https://' + session['instance'] + '/'):
@@ -800,6 +811,9 @@ class HostedSocial:
         try:
             grant = self.oauth.token_for_worker(manifest["workspaceId"], manifest["channelId"])
         except AlphaError as error:
+            if manifest['platform'] == 'Mastodon':
+                from .mastodon_publishing import grant_retry
+                return grant_retry(manifest, job, self.oauth.clock() if hasattr(self.oauth, 'clock') else time.time(), error)
             return _uncertain(f"Cannot reconcile without a valid grant: {error}")
         token, reference = grant["accessToken"], job.get("providerReference")
         try:

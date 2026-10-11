@@ -16,6 +16,14 @@ CAPS = {'maxCharacters': 500, 'maxMediaAttachments': 4, 'edit': True, 'schedule'
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_automation_advance_error_is_reported_instead_of_idle(self):
+        from postriff_phase2.campaign_worker import CampaignWorker
+        worker = CampaignWorker(SimpleNamespace(connection_factory=None, clock=lambda: 1791676800))
+        with patch.object(worker, 'scan_triggers'), patch.object(worker, 'tick', return_value={'idle': True}), \
+                patch('postriff_phase2.automation_runs.advance', side_effect=AttributeError('synthetic')):
+            outcome = worker.tick_many(max_runs=1, max_seconds=1)
+        self.assertEqual(outcome, {'runs': [], 'advance': {'error': 'AttributeError'}})
+
     def test_agent_registration_and_current_turn_analytics_authority(self):
         from postriff_phase2.mastodon_agent_tools import register, requested
         from postriff_phase2.agent_runtime_v2.tool_adapter import REGISTRY

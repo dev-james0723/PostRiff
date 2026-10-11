@@ -19,7 +19,7 @@ function png(color) {
   const chunk = (name, data) => { const type = Buffer.from(name), length = Buffer.alloc(4); length.writeUInt32BE(data.length); return Buffer.concat([length, type, data, crc32(Buffer.concat([type, data]))]); };
   const header = Buffer.alloc(13); header.writeUInt32BE(320); header.writeUInt32BE(320, 4); header[8] = 8; header[9] = 2;
   const row = Buffer.from([0, ...Array.from({ length: 320 }, () => color).flat()]);
-  return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(Array(320).fill(row)))), chunk('IEND', Buffer.alloc(0))]);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(Array(320).fill(row)))), chunk('IEND', Buffer.alloc(0))]);
 }
 function wav() {
   const raw = Buffer.alloc(16044); raw.write('RIFF'); raw.writeUInt32LE(raw.length - 8, 4); raw.write('WAVEfmt ', 8);

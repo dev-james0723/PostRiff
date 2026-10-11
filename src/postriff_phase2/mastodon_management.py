@@ -4,6 +4,7 @@ Every mutation is a persisted exact-action preview followed by human approval. U
 outcomes are never resubmitted. Read responses stay ephemeral and out of AI/history.
 """
 import json
+import re
 
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
@@ -137,17 +138,27 @@ class MastodonManagement:
         self.repository, self.clock = service.repository, service.oauth.clock
 
     def _grant(self, workspace, token, connection, requirement="read"):
-        provider, grant = self.oauth._member_grant(workspace, token, connection, requirement)
-        if provider.id != "mastodon":
-            raise AlphaError("Choose a Mastodon connection.", 404)
-        session = provider.session(grant["accessToken"])
-        from .hosted import throttle
-        with self.repository.transaction(token, workspace) as (cur, _row, _actor):
-            throttle(cur, 'mastodon-read-instance:' + session['instance'], 250, 300)
+        # Admission precedes token re-verification, which itself contacts the
+        # instance. An exhausted local read budget must cause zero remote calls.
+        from .hosted import throttle, _membership
+        with self.repository.transaction(token, workspace) as (cur, row, _actor):
+            require(_membership(row), requirement)
+            cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL", (workspace, connection))
+            stored = cur.fetchone()
+            if not stored or not isinstance(stored[0], str):
+                raise AlphaError('Choose a Mastodon connection.', 404)
+            account, separator, host = stored[0].partition('@')
+            if (not separator or not re.fullmatch(r'[0-9]{1,40}', account)
+                    or not re.fullmatch(r'[a-z0-9.-]{1,253}', host)):
+                raise AlphaError('The connected Mastodon account binding is invalid. Reconnect.', 409)
+            throttle(cur, 'mastodon-read-instance:' + host, 250, 300)
             throttle(cur, 'mastodon-read-account:' + workspace + connection, 60, 300)
-        identity = provider.identity(grant["accessToken"])
-        if identity["providerAccountId"] != grant["providerAccountId"]:
-            raise AlphaError("The Mastodon account changed. Reconnect before continuing.", 409)
+        provider, grant = self.oauth._member_grant(workspace, token, connection, requirement)
+        if provider.id != 'mastodon' or grant['providerAccountId'] != stored[0]:
+            raise AlphaError('The connected account changed. Prepare a fresh request.', 409)
+        session = provider.session(grant['accessToken'])
+        if session['instance'] != host:
+            raise AlphaError('The connected Mastodon instance changed. Reconnect.', 409)
         return provider, grant, session
 
     @staticmethod

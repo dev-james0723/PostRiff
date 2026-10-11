@@ -3,24 +3,24 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "sourceHead": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
-    "sourceFingerprint": "bcce579d08dc38c9a0516b2b14be3687f84ec458335a16c360d19d8925282d14",
-    "patchSha256": "55c6c455ba8b4dd35d4c8018cbd7b6f5b50c3327b048e92c49f64351e9b0907e",
+    "sourceHead": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+    "sourceFingerprint": "0a7e83a60cf47d3e0a775871d6d62d6d7d9c846ede7c9a528502200f5651e880",
+    "patchSha256": "6c66f183a15d3fcb827e4e78f183cda52b5f20f2e8f86a419855ea11e87687d3",
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 481759,
-    "runId": "blvhrhvvwn",
+    "patchBytes": 515708,
+    "runId": "bh9k9crx4c",
     "exitCode": 0,
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T085648508351Z-ci.json",
-    "elapsedSeconds": 177.438
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093700221976Z-ci.json",
+    "elapsedSeconds": 177.984
   },
   "checks": {
     "pythonContracts": {
-      "passed": 467
+      "passed": 482
     },
     "sqlActionIsolation": {
-      "passed": 22,
+      "passed": 23,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
@@ -72,8 +72,6 @@
           ]
         }
       ],
-      "scope": "Channels/profile and actual Queue approval/SQL/shared worker for thread, two images, normalized WAV, native accepted then uniquely reconciled publication; synthetic providers and advanced fixture clock",
-      "evidenceRunId": "blvhrhvvwn",
       "queueChecks": [
         {
           "width": 1440,
@@ -114,7 +112,8 @@
           "execution": "synthetic provider; explicitly advanced fixture clock",
           "realMastodonAcceptance": false
         }
-      ]
+      ],
+      "scope": "Channels/profile and actual Queue approval/SQL/shared worker for thread, images, normalized WAV, accepted native schedule and exact publication readback; synthetic providers only."
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
     "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
@@ -147,7 +146,14 @@
     },
     "connectionHealth": "PASS: exact credential fencing, bounded due lease/jitter/backoff, migrated/suspended/revoked identity guards; absolute request deadline includes bounded DNS admission.",
     "optionalVerifiedHook": "PASS: actual PostgreSQL failed SQL callback rolls back to savepoint; conclusive receipt persists and repeat completion runs no callback.",
-    "nativeQueueReview": "PASS: exact canonical native time frozen into Queue approval using service clock; no provider effect before approval."
+    "nativeQueueReview": "PASS: exact canonical native time frozen into Queue approval using service clock; no provider effect before approval.",
+    "automationSqlWorker": {
+      "status": "PASS",
+      "realMastodonAcceptance": false,
+      "syntheticWrites": 2,
+      "paidModelCalls": 0,
+      "evidence": "evidence/CLOUD-SYNTHETIC-automation.json"
+    }
   },
   "capacity": {
     "simulatedConnectedUsers": 1000,
@@ -157,22 +163,21 @@
     "completedRequests": 1000,
     "admitted": 400,
     "deferred": 600,
-    "requestP95Ms": 740.687,
-    "requestMaxMs": 759.366,
+    "requestP95Ms": 749.815,
+    "requestMaxMs": 773.928,
     "queue": {
       "seededJobs": 2000,
       "fencedClaims": 40,
       "distinctFairTenants": 40,
-      "claimP95Ms": 7.837
+      "claimP95Ms": 8.201
     },
     "execution": "cloud-synthetic-connected-users-and-disposable-sql",
     "providerCalls": 0,
     "realAccountAcceptance": false,
     "productionHttpLoadAcceptance": false,
-    "seedSeconds": 0.095,
-    "elapsedSeconds": 1.208,
-    "sqlConcurrencyBound": 32,
-    "evidenceRunId": "blvhrhvvwn"
+    "seedSeconds": 0.096,
+    "elapsedSeconds": 1.233,
+    "sqlConcurrencyBound": 32
   },
   "securityReview": "candidate source review; security-review.md; release review incomplete",
   "liveAcceptance": {
@@ -202,133 +207,147 @@
       "sha256": "0051ded991ab7c6c566aacbb5dd983dbdd08201bfba9260084ba60fdb3f7e66e",
       "bytes": 3214,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-1440.png",
-      "sha256": "e65fcfe334848646758b82596820f2ecdfb79b25907531466e2559b0e79071e8",
-      "bytes": 386773,
+      "sha256": "e9c693f8966b80389f04c015ff3f30c5e918ec774f0a24801d7dec424b5090a5",
+      "bytes": 386491,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-390.png",
       "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895",
       "bytes": 144517,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-320.png",
       "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013",
       "bytes": 120973,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-1440.png",
-      "sha256": "de91849b199cbc1ae3018ed73c05a1c43bcf4614e8bc84f67909ef0d7e6cda55",
-      "bytes": 253591,
+      "sha256": "4312ee410be084a1abd8f19daa1bba57c2b9451cd9a28b10e2d697d6a5e43fa4",
+      "bytes": 253338,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-390.png",
-      "sha256": "c3485dde02f0307ee2c806a143d328b568f69b8843aaa9078add7af8ecac1073",
-      "bytes": 127885,
+      "sha256": "305e97b2691d5447d7afbc6c80e24552fe2e196713a0deaee59c6dbf81cef1f8",
+      "bytes": 127921,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-320.png",
       "sha256": "7d94f00c20cebad532e3b0f620957ae4c4d5f418622e93518cc62553b15c8620",
       "bytes": 116245,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-1440.png",
-      "sha256": "bde68d99e9b10ee8919d9d79cfd0793e74956ceed2439ff9885a3d0f4a1e561b",
-      "bytes": 269384,
+      "sha256": "a61061a56d2c5cfb4ade200052ec1d6b603dbd40db2ad6e2b3bc13238f400b68",
+      "bytes": 269570,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-390.png",
-      "sha256": "660eed5354ad71db4027619a8c0e11a63234feeed4736c3726dc66b145ae64f7",
-      "bytes": 109257,
+      "sha256": "ca48e8ac2ceca78c4e47db8369ec159940e687c8f9e4cb365fe0e207549d615d",
+      "bytes": 109729,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-320.png",
       "sha256": "dcaef83c403f59fc687d50cd8d25acb1cbe4bee061d1fc41b7902cb05118771f",
       "bytes": 100147,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-1440.png",
-      "sha256": "82058c667ced726a76533dfb7f6ff469d1628b4fd03cd6e61d79f6a92ab4f8c3",
-      "bytes": 282737,
+      "sha256": "e4aafd8f8e36f8162a05298a2f45ec923836f3416e9bcaceba3ebdc71ea4f079",
+      "bytes": 282853,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-390.png",
       "sha256": "fe8fb648791069afa2febe120853c973ae0c27c0a088252d7b3c4e536edd3b3b",
       "bytes": 104193,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-320.png",
-      "sha256": "3d56f6b0cc5f38df4d8cd9dd1aabc2f276c103f4282fd5a55e48984ef94d972a",
-      "bytes": 95528,
+      "sha256": "9a1e0b16ef9a84fbf94d48290c1a31f56d6f2838e9f91974c1a49fb9fe43d7b1",
+      "bytes": 95374,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-1440.png",
-      "sha256": "77f01656a765bf7e567e2cd2bcfe960fe01c9654e0dd1d2349748c1b41a4eb7c",
-      "bytes": 297635,
+      "sha256": "29e79f7c78a57955e4ee22b52d3d4c982a853a5d61d2139c14ccf74f1f520c68",
+      "bytes": 297754,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-390.png",
-      "sha256": "2c42db9d78fdd15928577c8d78096f0bb70d449e1725f5f9d3897bcedebe8344",
-      "bytes": 113250,
+      "sha256": "c776ac9462b9aee47d21b465be5f659dc839430b8a3982c904c700b9793ead92",
+      "bytes": 113251,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-320.png",
-      "sha256": "968c3a1d82a15fc7b5adc9ccd6b9dd0f582e9b83c33fbb5712c083eb19bf2cb0",
-      "bytes": 103229,
+      "sha256": "dfc5cf218f171ade281d9e653ab4a2b6f255c9419d88c1c59ab076db0489d170",
+      "bytes": 103298,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-1440.png",
-      "sha256": "eca0509ec3707fe00796ddb7da0b9ac751144bf529b0ff8d9a1dbd0ccdc9f043",
-      "bytes": 304697,
+      "sha256": "bed1219c150d9003d2eb4600a5efcad7786a58bc7a0b07224ff0b01a2ee73de1",
+      "bytes": 304822,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-390.png",
-      "sha256": "efe8283a31e2a300e0ae82f6e9b66783ea8f447cefc047b9fa21f4afef440e99",
-      "bytes": 113843,
+      "sha256": "9979a7cf58b57129ad0b5d880a199309211c6a5fd0aaaed385313392cd220e62",
+      "bytes": 113578,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-320.png",
-      "sha256": "42de44bada8733d8b0f3b329d222f359782e457ccc9cd937fffaf2cf36354ba1",
-      "bytes": 103862,
+      "sha256": "b7753e9f4a0752d7db27b49c11b6a6393876390d85eff4d9375818944809cd0a",
+      "bytes": 103957,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "blvhrhvvwn"
+      "runId": "bh9k9crx4c"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-capacity.json",
+      "sha256": "96850c1d1ecbe4fbd2253461d18fc3f42d9900427aa05ce8ae723d5198082abe",
+      "bytes": 635,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "bh9k9crx4c"
+    },
+    {
+      "path": "evidence/CLOUD-SYNTHETIC-automation.json",
+      "sha256": "2a7ac401ab19ea31bd3fd0c087d264911584f093b5193590ec54428cac203b40",
+      "bytes": 835,
+      "execution": "CLOUD SYNTHETIC",
+      "runId": "5f2p9bncg9"
     }
   ],
   "localChecks": [
@@ -359,89 +378,102 @@
       "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T070015535957Z-ci.json",
       "sourceFingerprint": "988d6bf81fb98c4db5b7d03170d5c05571e2ac15b17b51faee1453ea64ec95b7",
       "patchSha256": "ccd9735242dbe0bb4b5775c1e5abd9643b9c90415d92c08c55c7415a5e20e8a9"
+    },
+    {
+      "sourceHead": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+      "sourceFingerprint": "bcce579d08dc38c9a0516b2b14be3687f84ec458335a16c360d19d8925282d14",
+      "patchSha256": "55c6c455ba8b4dd35d4c8018cbd7b6f5b50c3327b048e92c49f64351e9b0907e",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 481759,
+      "runId": "blvhrhvvwn",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T085648508351Z-ci.json",
+      "elapsedSeconds": 177.438
     }
   ],
   "githubCI": {
-    "observedAt": "2026-10-11T08:26:00Z",
-    "headRevision": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+    "observedAt": "2026-10-11T09:17:00Z",
+    "headRevision": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
     "checks": [
       {
         "name": "Vercel Preview Comments",
         "status": "completed",
         "conclusion": "success",
-        "id": 114422461323
-      },
-      {
-        "name": "local-gates",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422110056
+        "id": 114433049524
       },
       {
         "name": "dependency-lock",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114422060703
+        "id": 114432607475
       },
       {
         "name": "generate-assets",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114422060558
+        "id": 114432607388
       },
       {
         "name": "dependency-lock",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114422060538
-      },
-      {
-        "name": "agent-ui-browser",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422059968
+        "id": 114432607093
       },
       {
         "name": "native-learning-browser",
         "status": "completed",
         "conclusion": "success",
-        "id": 114422059861
-      },
-      {
-        "name": "agent-ui",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422059859
-      },
-      {
-        "name": "growth-studio",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422059825
+        "id": 114432606780
       },
       {
         "name": "scenes",
         "status": "completed",
         "conclusion": "success",
-        "id": 114422059781
-      },
-      {
-        "name": "document-runtime",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422059749
-      },
-      {
-        "name": "library",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114422059581
+        "id": 114432606736
       },
       {
         "name": "founder",
         "status": "completed",
         "conclusion": "success",
-        "id": 114422059562
+        "id": 114432606732
+      },
+      {
+        "name": "document-runtime",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114432606705
+      },
+      {
+        "name": "growth-studio",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114432606648
+      },
+      {
+        "name": "agent-ui-browser",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114432606602
+      },
+      {
+        "name": "local-gates",
+        "status": "completed",
+        "conclusion": "failure",
+        "id": 114432606584
+      },
+      {
+        "name": "agent-ui",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114432606488
+      },
+      {
+        "name": "library",
+        "status": "completed",
+        "conclusion": "failure",
+        "id": 114432606339
       }
     ],
     "statuses": [
@@ -450,14 +482,14 @@
         "state": "success"
       }
     ],
-    "scope": "GitHub CI and Vercel Preview; no production deployment"
+    "scope": "GitHub CI on phase7 head: local-gates and library failed; exact fixes included in phase8 candidate, new commit CI pending. Vercel Preview only."
   },
   "browserArtifact": {
     "provider": "Depot CI",
-    "runId": "blvhrhvvwn",
-    "artifactId": "01a12a2d-85ba-79ea-9170-046aa68d2739",
+    "runId": "bh9k9crx4c",
+    "artifactId": "01a12a52-4c14-7dc9-931e-f14f67f63b32",
     "name": "rafii-mastodon-synthetic-browser",
-    "zipBytes": 3157518,
+    "zipBytes": 3157783,
     "files": 20,
     "manifest": "evidence/CLOUD-SYNTHETIC-manifest.json",
     "sha256Verified": true
@@ -472,6 +504,99 @@
       "runId": "vcd1n5pwck",
       "exitCode": 0,
       "reason": "terminal Queue logs and browser artifacts absent; superseded by retained blvhrhvvwn artifact"
+    }
+  ],
+  "priorGithubCI": [
+    {
+      "observedAt": "2026-10-11T08:26:00Z",
+      "headRevision": "9f4690ab24d8296ecaefad75ff1b39ff8ae9281b",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422461323
+        },
+        {
+          "name": "local-gates",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422110056
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060703
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060558
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114422060538
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059968
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059861
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059859
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059825
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059781
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059749
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059581
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114422059562
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "GitHub CI and Vercel Preview; no production deployment"
     }
   ]
 }

@@ -13,6 +13,17 @@ from test_hosted_wave1_connectors import Wire, ok, PUBLIC, BASE
 
 
 class HealthTests(unittest.TestCase):
+    def test_verification_cooldown_preserves_bounded_retry_headers(self):
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.social_connectors import MastodonProvider
+        with self.assertRaises(AlphaError) as caught:
+            MastodonProvider._verification_cooldown({'status': 429, 'headers': {
+                'Retry-After': '120', 'X-RateLimit-Reset': '2026-10-11T10:00:00Z', 'Authorization': 'do-not-retain'}})
+        self.assertEqual(caught.exception.status, 503)
+        self.assertEqual(caught.exception.mastodon_retry_headers,
+            {'retry-after': '120', 'x-ratelimit-reset': '2026-10-11T10:00:00Z'})
+        MastodonProvider._verification_cooldown({'status': 200})
+
     def test_migration_suspension_and_memorial_never_switch_account_or_call_another_instance(self):
         for restriction, body in [('account_moved', {'moved': {'id': '222', 'url': 'http://127.0.0.1'}}),
                                   ('account_suspended', {'suspended': True}), ('account_memorialized', {'memorial': True})]:
