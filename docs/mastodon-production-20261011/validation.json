@@ -1,0 +1,112 @@
+{
+  "schema": "rafii.mastodon.candidate.validation.v1",
+  "execution": "cloud synthetic external services; disposable SQL; actual application browser",
+  "allMissionRequirementsMet": false,
+  "ci": {
+    "provider": "Depot/JCB",
+    "runId": "bj8165qq6b",
+    "exitCode": 0,
+    "elapsedSeconds": 120.841,
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T054714340373Z-ci.json"
+  },
+  "checks": {
+    "pythonContracts": {
+      "passed": 267
+    },
+    "sqlActionIsolation": {
+      "passed": 7,
+      "postgresVersion": 16
+    },
+    "migrationReplayUpgradeRestore": "PASS; disposable database only",
+    "webContracts": {
+      "passed": 24
+    },
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "productionBuild": "PASS",
+    "browser": {
+      "status": "PASS",
+      "realMastodonAcceptance": false,
+      "productionAcceptance": false,
+      "checks": [
+        {
+          "width": 1440,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "no runtime errors or page overflow"
+          ]
+        },
+        {
+          "width": 390,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "no runtime errors or page overflow"
+          ]
+        },
+        {
+          "width": 320,
+          "checks": [
+            "two synthetic instance-qualified OAuth accounts",
+            "bounded native analytics excludes private content",
+            "exact action preview and receipt",
+            "Agent preview link hydration",
+            "no runtime errors or page overflow"
+          ]
+        }
+      ]
+    }
+  },
+  "capacity": {
+    "syntheticContexts": 1000,
+    "maxConcurrentWorkers": 16,
+    "thousandSimultaneousUsersTested": false,
+    "realQueueCapacityValidated": false
+  },
+  "securityReview": "candidate source review; security-review.md; release review incomplete",
+  "liveAcceptance": {
+    "A": "NOT_RUN",
+    "B": "NOT_RUN",
+    "C": "NOT_RUN",
+    "D": "NOT_RUN",
+    "E": "NOT_RUN",
+    "actualPostUrls": []
+  },
+  "production": {
+    "migration113Applied": false,
+    "publicExecutionGatesChanged": false,
+    "merged": false,
+    "deployedToRafiiIo": false
+  },
+  "externalInputNeeded": [
+    "Two authorized account handles on independently hosted Mastodon instances",
+    "Owner OAuth authorization and permission for clearly labelled test publication/edit/deletion"
+  ],
+  "remainingEngineering": "README.md: Engineering work still open before production",
+  "evidence": {
+    "CLOUD-SYNTHETIC-browser.json": {
+      "bytes": 1033,
+      "sha256": "589e56c7af22e808bf0f4dd272f36ca89a7101adcd55694b3861bc4969e1ca36"
+    },
+    "CLOUD-SYNTHETIC-channels-1440.png": {
+      "bytes": 388833,
+      "sha256": "66d7f5ebd452cc5324a7ae163429949888f7dac98688a08139ec3d7d60f67dac"
+    },
+    "CLOUD-SYNTHETIC-channels-390.png": {
+      "bytes": 144517,
+      "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895"
+    },
+    "CLOUD-SYNTHETIC-channels-320.png": {
+      "bytes": 120973,
+      "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013"
+    }
+  },
+  "localChecks": [
+    "Source AST parsing, JSON validation and git diff --check; no local heavy validation"
+  ]
+}

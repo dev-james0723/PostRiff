@@ -416,7 +416,7 @@ class Phase2Store(Store):
         if p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
-                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
+                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou", "Mastodon"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
                 if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)

@@ -193,10 +193,11 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
   const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
+  const mastodonMedia = variant?.platform === 'Mastodon';
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
     (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (mastodonMedia && isPostableVideo(candidate, 'Mastodon')))), [libraryAssets, needsVideo, mastodonMedia, variant?.platform]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
@@ -418,8 +419,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : mastodonMedia ? 'Image or video (optional)' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : mastodonMedia ? ['image', 'video'] : ['image']} />
             </div>
           </div>
 

@@ -51,6 +51,7 @@ import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
+import { MastodonAccountControls } from './mastodon-account-controls';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
@@ -328,12 +329,12 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       className='flex h-full scroll-mt-24 flex-col gap-4'
     >
       <header className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='flex min-w-0 items-center gap-3'>
+        <div className='flex min-w-0 max-w-full items-center gap-3'>
           <ChannelIcon platform={channel.platform} name={channel.platform} size='md' />
           <div className='min-w-0'>
-            <p className='text-foreground truncate text-base font-medium'>{channel.account}</p>
-            <p className='text-muted-foreground truncate text-sm'>
-              {channel.platform} · {channel.accountType || 'account'}
+            <p title={channel.account} className='text-foreground truncate text-base font-medium'>{channel.account}</p>
+            <p className={cn('text-muted-foreground text-sm', channel.platform === 'Mastodon' ? 'break-all' : 'truncate')}>
+              {channel.platform} · {channel.platform === 'Mastodon' ? channel.account.split('@').at(-1) : channel.accountType || 'account'}
             </p>
           </div>
           {highlight && <SuccessCheck className='text-foreground size-5 shrink-0' />}
@@ -431,6 +432,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         </Link>
       )}
 
+      {channel.platform === 'Mastodon' && canManage && !disconnected && <MastodonAccountControls connectionId={channel.id} account={channel.account} />}
       <div className='mt-auto flex flex-wrap gap-2 pt-1' data-tour={tour ? 'channel-actions' : undefined}>
         {canManage && channel.platform === 'Instagram' && channel.capabilities.analytics?.level === 'Direct' && (
           <StatefulButton

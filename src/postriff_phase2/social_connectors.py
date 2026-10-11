@@ -15,7 +15,8 @@ import socket
 import string
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
-from .net_guard import assert_public, public_host
+from .net_guard import assert_public, public_host, pinned_public_json_transport
+from .mastodon_protocol import discover, instance_host
 from .provider_base import OAuthProvider, _credential_shape, default_transport
 
 
@@ -119,10 +120,22 @@ class XProvider(OAuthProvider):
 
 # --- Mastodon ---------------------------------------------------------------------------------------------------
 class MastodonProvider(OAuthProvider):
-    id, platform, capability_version = "mastodon", "Mastodon", 1
+    id, platform, capability_version = "mastodon", "Mastodon", 2
     SCOPES = {"identity": ["read:accounts"],
               "publish": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
-              "schedule": ["read:accounts", "read:statuses", "write:statuses", "write:media"]}
+              "schedule": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
+              "posts_read": ["read:accounts", "read:statuses"],
+              "analytics": ["read:accounts", "read:statuses"],
+              "comments_read": ["read:accounts", "read:statuses", "read:notifications"],
+              "reply": ["read:accounts", "read:statuses", "write:statuses"],
+              "moderate": ["read:accounts", "write:mutes", "write:blocks"],
+              "profile": ["read:accounts", "write:accounts"],
+              "interactions": ["read:accounts", "read:statuses", "read:follows", "read:lists", "read:bookmarks",
+                               "write:follows", "write:lists", "write:bookmarks", "write:favourites", "write:statuses"],
+              "management": ["read:accounts", "read:statuses", "read:notifications", "read:follows",
+                             "read:lists", "read:bookmarks", "read:favourites", "read:mutes", "read:blocks",
+                             "write:statuses", "write:media", "write:accounts", "write:follows", "write:lists",
+                             "write:bookmarks", "write:favourites", "write:mutes", "write:blocks"]}
     EXPLAIN = {"identity": "Connect your Mastodon account. Rafii registers itself on your server and reads only your profile.",
                "publish": "Rafii will post to this Mastodon account only when you approve each exact post."}
     account_requirement = "An account on any Mastodon server."
@@ -130,14 +143,18 @@ class MastodonProvider(OAuthProvider):
     publish_required = frozenset({"write:statuses"})
     start_input = {"name": "instance", "label": "Mastodon server", "placeholder": "mastodon.social"}
     non_expiring = True
+    server_schedule = True
+    read_scope = "read:statuses"
 
     def __init__(self, website, transport=None, production_reviewed=False, resolver=socket.getaddrinfo):
         self.client_id = self.client_secret = None
         self.website = website.rstrip("/")
-        self.transport = transport or default_transport()
+        self.transport = transport or (lambda method, url, **kw: pinned_public_json_transport(
+            method, url, resolver=self.resolver, **kw))
         self.production_reviewed = bool(production_reviewed)
         self.execution_enabled = True
         self.resolver = resolver
+        self.application_cache = None
 
     @classmethod
     def mount(cls, values, transport=None):
@@ -150,17 +167,33 @@ class MastodonProvider(OAuthProvider):
         return (cls(base, transport=transport) if state == "configured" else None), diagnostic
 
     def _server(self, value):
-        return assert_public(public_host(value), self.resolver)
+        return assert_public(instance_host(value), self.resolver)
 
     def begin(self, redirect, state, verifier, challenge, scopes, instance):
         host = self._server(instance)
-        response = self.transport("POST", f"https://{host}/api/v1/apps", form={"client_name": "Rafii", "redirect_uris": redirect, "scopes": " ".join(scopes), "website": self.website})
-        body = response.get("body") if isinstance(response.get("body"), dict) else {}
-        if response.get("status") != 200 or not isinstance(body.get("client_id"), str) or not isinstance(body.get("client_secret"), str):
+        # Pixelfed has its own compatibility probe and authorization contract.
+        capabilities = discover(self.transport, host) if self.id == "mastodon" else None
+        supported = (capabilities or {}).get("scopesSupported")
+        if supported is not None and set(scopes) == set(self.SCOPES.get('management', [])):
+            scopes = [s for s in scopes if s in supported]
+        if supported is not None and not set(scopes) <= set(supported):
+            raise AlphaError("This server does not support the requested permissions. Choose a narrower connection.", 409)
+        body = self.application_cache(host, redirect, scopes) if self.application_cache else None
+        if body is None:
+            response = self.transport("POST", f"https://{host}/api/v1/apps", form={"client_name": "Rafii", "redirect_uris": redirect, "scopes": " ".join(scopes), "website": self.website})
+            body = response.get("body") if isinstance(response.get("body"), dict) else {}
+            if response.get("status") != 200:
+                raise AlphaError("That server didn't accept Rafii. Check the server name or choose fewer permissions.", 502)
+        if not _credential_shape(body.get("client_id")) or not _credential_shape(body.get("client_secret")):
             raise AlphaError("That Mastodon server didn't accept Rafii. Check the server name.", 502)
-        authorize = f"https://{host}/oauth/authorize?" + urlencode({"response_type": "code", "client_id": body["client_id"], "redirect_uri": redirect, "scope": " ".join(scopes),
-                                                                    "state": state, "code_challenge": challenge, "code_challenge_method": "S256"})
-        return {"authorizeUrl": authorize, "context": {"instance": host, "clientId": body["client_id"], "clientSecret": body["client_secret"]}}
+        pkce = capabilities.get("pkce", False) if capabilities else True
+        parameters = {"response_type": "code", "client_id": body["client_id"], "redirect_uri": redirect,
+                      "scope": " ".join(scopes), "state": state, "force_login": "true"}
+        if pkce:
+            parameters.update({"code_challenge": challenge, "code_challenge_method": "S256"})
+        authorize = f"https://{host}/oauth/authorize?" + urlencode(parameters)
+        return {"authorizeUrl": authorize, "scopes": scopes, "context": {"instance": host, "clientId": body["client_id"],
+                "clientSecret": body["client_secret"], "pkce": pkce, "redirect": redirect, "capabilities": capabilities}}
 
     def exchange(self, code, verifier, redirect):
         try:
@@ -170,11 +203,17 @@ class MastodonProvider(OAuthProvider):
         if not isinstance(context, dict) or not all(isinstance(context.get(k), str) for k in ("verifier", "instance", "clientId", "clientSecret")):
             raise AlphaError("Connection request unavailable.", 404)
         host = self._server(context["instance"])
-        body = self._ok(self.transport("POST", f"https://{host}/oauth/token", form={"grant_type": "authorization_code", "code": code, "client_id": context["clientId"],
-                                                                                 "client_secret": context["clientSecret"], "redirect_uri": redirect, "code_verifier": context["verifier"]}), "access_token")
+        if context.get("redirect", redirect) != redirect:
+            raise AlphaError("This authorization callback does not match the connection request.", 409)
+        form = {"grant_type": "authorization_code", "code": code, "client_id": context["clientId"],
+                "client_secret": context["clientSecret"], "redirect_uri": redirect}
+        if context.get("pkce", True):
+            form["code_verifier"] = context["verifier"]
+        body = self._ok(self.transport("POST", f"https://{host}/oauth/token", form=form), "access_token")
         scopes = body["scope"].split() if isinstance(body.get("scope"), str) else []
-        session = {"v": 1, "at": body["access_token"], "instance": host, "clientId": context["clientId"], "clientSecret": context["clientSecret"], "scope": scopes}
-        return {"accessToken": json.dumps(session), "refreshToken": None, "expiresIn": None, "scopes": scopes}
+        session = {"v": 1, "at": body["access_token"], "instance": host, "clientId": context["clientId"], "clientSecret": context["clientSecret"], "scope": scopes,
+                   "capabilities": context.get("capabilities")}
+        return {"accessToken": json.dumps(session), "refreshToken": None, "expiresIn": body.get("expires_in"), "scopes": scopes}
 
     def session(self, access_token):
         session = _load(access_token)
@@ -182,24 +221,37 @@ class MastodonProvider(OAuthProvider):
         return session
 
     def api(self, session, method, path, **kwargs):
-        headers = {"Authorization": "Bearer " + session["at"], **kwargs.pop("headers", {})}
-        return self.transport(method, f"https://{session['instance']}{path}", headers=headers, **kwargs)
+        if not isinstance(path, str) or not path.startswith("/api/") or "\\" in path or "#" in path or any(ord(c) < 32 for c in path):
+            raise AlphaError("Unsupported Mastodon API path.", 400)
+        host = self._server(session.get("instance"))
+        extra = kwargs.pop("headers", {})
+        if any(k.lower() in ("authorization", "host") for k in extra):
+            raise AlphaError("Provider request headers cannot override account identity.", 400)
+        headers = {**extra, "Authorization": "Bearer " + session["at"]}
+        return self.transport(method, f"https://{host}{path}", headers=headers, **kwargs)
 
     def identity(self, access_token):
         session = self.session(access_token)
         body = self._ok(self.api(session, "GET", "/api/v1/accounts/verify_credentials"), "id")
+        if not re.fullmatch(r"\d{1,40}", str(body.get("id", ""))):
+            raise AlphaError("This server returned an invalid account identity.", 502)
         username = body.get("username") if isinstance(body.get("username"), str) else str(body["id"])
         return {"providerAccountId": f"{body['id']}@{session['instance']}", "handle": f"@{username}@{session['instance']}", "accountType": "profile"}
 
     def inspect_scopes(self, access_token, expected_account_id=None):
         session = self.session(access_token)
+        if expected_account_id is not None and self.identity(access_token)["providerAccountId"] != expected_account_id:
+            return None
         response = self.api(session, "GET", "/api/v1/apps/verify_credentials")
         body = response.get("body")
         if response.get("status") != 200 or not isinstance(body, dict):
             return None
         live = body.get("scopes")
         if isinstance(live, list) and all(isinstance(s, str) for s in live):
-            return sorted(set(live))
+            # The endpoint describes the registered APP, not the access token's grant.
+            # Intersection can narrow a token; an app scope must never widen it.
+            from .mastodon_protocol import has_scopes
+            return sorted(s for s in set(session.get("scope") or []) if has_scopes(live, (s,)))
         # Servers before Mastodon 4.3 do not echo scopes; the token just worked for the app that was granted them.
         return sorted(set(session.get("scope") or []))
 

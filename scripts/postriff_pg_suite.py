@@ -27,7 +27,7 @@ def main():
             subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)
             server_log=Path(tmp)/'postgres.log'
             try:
-                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o',f'-h 127.0.0.1 -p 55438 -k {tmp}','-w','start'],check=True,stdout=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 # TemporaryDirectory otherwise removes the only startup diagnostic.
                 # This cluster has no application credentials or customer records.

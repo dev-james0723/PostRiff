@@ -1,0 +1,16 @@
+# Candidate source security review — 2026-10-11
+
+Execution: source review and injected-provider/disposable-SQL contracts. This is not an independent penetration test or production authorization.
+
+Reviewed boundaries:
+
+- Instance inputs accept public HTTPS domains/account handles; reject URL credentials, non-default ports, paths, queries, fragments, private/literal IPs and local domains. Every DNS answer must be public. The default network transport pins the validated address while preserving TLS hostname verification, disables redirects and bounds timeouts/response size. Arbitrary API paths and caller overrides of Authorization/Host are rejected.
+- Modern OAuth metadata must match the instance origin/issuer. Callback redirect binding, one-time committed OAuth-state consumption, conditional S256 PKCE and effective granted-scope intersection prevent replay/binding/scope expansion. Tokens and cached application secrets use the existing vault, never browser storage. Application registration is serialized per instance/redirect/scopes binding.
+- Exact-action previews bind workspace, current actor, instance-qualified provider account, target, body, required scopes and digest; ten-minute expiry. Current membership, ownership where applicable and the unchanged unrevoked credential are checked before execution. Claim commits before an external effect. Duplicate/concurrent confirmations cannot dispatch again; uncertain/crashed operations require reconciliation rather than blind retry.
+- Both new tables force service-only RLS. Disposable SQL verified tenant isolation, browser-role denial, encrypted app storage/cache reuse, confirmation/expiry/digest protection, revocation and one external effect under concurrent confirmations. Shared OAuth and publishing regressions remain in the cloud suite.
+- Approved media bytes must match frozen size and SHA256 before upload. Capability/version/format/character/poll/scheduling limits are checked before publication. Provider-returned post URLs must match the connected instance during reconciliation.
+- Private/followers-only/direct bodies stay outside broader analytics and model-facing tools. Agent analytics requires an explicit current human request and returns numeric public/unlisted observations with numeric IDs and parsed UTC dates, discarding server-supplied instruction strings; previews cannot approve, execute or grant automation authority. React escapes untrusted text. Screenshots and browser providers are synthetic, with no live credentials.
+
+Unresolved release risks are tracked in README.md: complete durable media/backoff recovery and native calendar reconciliation; periodic health/retention/claim recovery; private-content AI consent; complete media/thread/profile/history UX; actual concurrent workload validation; all live flows on two independently hosted instances. Request-count caps and a 1,000-context/16-worker test do not establish production capacity. Broader account-data deletion/backup retention must be reviewed before enabling production management.
+
+Production migration 113 is not applied. Provider public execution gates, production environment and rafii.io deployment are unchanged. Review this candidate and complete the required implementation and live evidence before enabling those gates.

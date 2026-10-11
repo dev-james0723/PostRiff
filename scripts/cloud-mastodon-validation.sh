@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${CI:-}" != "true" ] && [ "${CI:-}" != "1" ]; then echo 'Use JCB cloud execution.' >&2; exit 64; fi
+if [ "$(uname -s)" != 'Linux' ]; then echo 'Cloud-only validation.' >&2; exit 64; fi
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests
+"$TREND_VISUAL_TEST_PYTHON" -m unittest test_mastodon_management test_hosted_wave1_connectors test_wave4c_connectors test_wave4_hosted_publish test_postriff_phase2 test_postriff_phase2_hosted test_asset_kinds test_migration_numbers test_agent_runtime test_agent_runtime_references test_youtube_agent_tools test_postriff_automation_chat
+if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+  sudo -n apt-get -qq update
+  sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq --no-install-recommends install postgresql-16
+fi
+export POSTRIFF_PG_BIN=/usr/lib/postgresql/16/bin
+"$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_mastodon_management postgres_consumer_migrations
+cd web
+node --test tests/channel-list.test.cjs tests/channels-connect-deeplink.test.cjs tests/publishing-status.test.mjs tests/publishing-support.test.mjs
+npm run lint -- --format=unix
+npm run typecheck
+POSTRIFF_API_ORIGIN=http://127.0.0.1:4348 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4448 POSTRIFF_DEV_SSR=1 npm run build
+bash ../scripts/cloud-mastodon-browser.sh

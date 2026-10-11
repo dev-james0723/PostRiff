@@ -26,9 +26,10 @@ import {
 } from '@/lib/channels/tiktok-rules';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { YouTubeOptions } from '@/features/youtube/youtube-options';
+import { MastodonFields } from './mastodon-fields';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
-export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile']);
+export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile', 'Mastodon']);
 
 export type PublishOptionsValue = Record<string, unknown> | null;
 
@@ -51,6 +52,7 @@ function Caution({ children }: { children: ReactNode }) {
 }
 
 export function PublishOptions(props: Props) {
+  if (props.platform === 'Mastodon') return <MastodonFields onChange={props.onChange} />;
   if (props.platform === 'TikTok') return <TikTokFields {...props} />;
   if (props.platform === 'YouTube') return <YouTubeOptions {...props} />;
   if (props.platform === 'Pinterest') return <PinterestFields {...props} />;

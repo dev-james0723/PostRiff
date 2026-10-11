@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "realMastodonAcceptance": false,
+  "productionAcceptance": false,
+  "checks": [
+    {
+      "width": 1440,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "no runtime errors or page overflow"
+      ]
+    },
+    {
+      "width": 390,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "no runtime errors or page overflow"
+      ]
+    },
+    {
+      "width": 320,
+      "checks": [
+        "two synthetic instance-qualified OAuth accounts",
+        "bounded native analytics excludes private content",
+        "exact action preview and receipt",
+        "Agent preview link hydration",
+        "no runtime errors or page overflow"
+      ]
+    }
+  ]
+}
