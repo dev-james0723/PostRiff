@@ -3,28 +3,28 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "runId": "fww642glg2",
-    "exitCode": 0,
-    "sourceHead": "744b66ec0e0a6f4e604dcf1e691a27162028db84",
-    "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T072609863033Z-ci.json",
-    "sourceFingerprint": "a1ee392cc9676d52ea7b3eeb2b93d7ba98f31ef55c43fb0167ef97833df7bed8",
-    "patchSha256": "ea52c5c938fd3e3c1dc2233d0c5aa1689a33743ab0144e0d9ad158dded7083c5",
+    "sourceHead": "64f699f278d5887174b268b5dabdc92327132d4b",
+    "sourceFingerprint": "4919b89858e29d4bb772e2030e6fa6208894d10c24b5a8cded5f9c103eecc21f",
+    "patchSha256": "a21655fac04b2f7dcf52506270621d819b7a9d5806e7eb5dadb94dddd73b04f5",
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 367710
+    "patchBytes": 401522,
+    "runId": "rmn14j4fcw",
+    "exitCode": 0,
+    "provider": "Depot/JCB",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T074313790195Z-ci.json"
   },
   "checks": {
     "pythonContracts": {
-      "passed": 442
+      "passed": 457
     },
     "sqlActionIsolation": {
-      "passed": 15,
+      "passed": 17,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
     "webContracts": {
-      "passed": 34
+      "passed": 35
     },
     "lint": "PASS",
     "typecheck": "PASS",
@@ -39,6 +39,7 @@
           "checks": [
             "two synthetic instance-qualified OAuth accounts",
             "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
             "selected profile fields and default privacy exact approval",
@@ -50,6 +51,7 @@
           "checks": [
             "two synthetic instance-qualified OAuth accounts",
             "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
             "selected profile fields and default privacy exact approval",
@@ -61,6 +63,7 @@
           "checks": [
             "two synthetic instance-qualified OAuth accounts",
             "bounded native analytics excludes private content",
+            "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
             "selected profile fields and default privacy exact approval",
@@ -72,7 +75,9 @@
       "evidenceRunId": "fww642glg2"
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
-    "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing"
+    "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
+    "nativeScheduleSynchronization": "PASS: exact approved time, preserved manifest, canceled schedule and old-worker fencing in disposable SQL",
+    "foregroundStreaming": "PASS: bounded SSE, current tenant/credential recheck; private excerpt absent from workspace persistence"
   },
   "capacity": {
     "syntheticContexts": 1000,

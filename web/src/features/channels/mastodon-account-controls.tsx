@@ -33,9 +33,10 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
     <div className='max-h-64 overflow-auto rounded border p-3 text-xs'>
       {['followers', 'following', 'postCount'].filter((key) => value[key] != null).map((key) => <p key={key}><span className='font-medium'>{key}: </span>{readable(value[key])}</p>)}
       {Boolean(value.coverage) && <p className='mb-2'>{String(value.coverage)}</p>}
+      {value.resource === 'live_events' && <p role='status' className='mb-2'>Live updates: {String(value.state ?? 'unavailable')}. {typeof value.reason === 'string' ? value.reason : 'Only this foreground window was read; use notifications for missed events.'}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
+        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>
@@ -110,10 +111,10 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
     <details ref={detailsRef} className='rounded-[var(--rafii-radius-control)] border p-3'>
       <summary className='rafii-focus cursor-pointer text-sm'>Mastodon account controls</summary>
       <div className='mt-3 flex flex-col gap-3'>
-        <p className='text-muted-foreground text-xs'>All requests use {account}. Private content stays within this workspace. Server scheduling is separate from the Rafii publishing calendar.</p>
+        <p className='text-muted-foreground text-xs'>All requests use {account}. Private content stays within this workspace. Server schedules publish on your instance; Rafii-managed schedules send at your approved calendar time.</p>
         <div className='flex flex-wrap gap-2'>
-          {['capabilities', 'analytics', 'posts', 'notifications', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'trending_tags', 'trending_statuses'].map((resource) => (
-            <Button key={resource} variant='outline' size='sm' disabled={busy} onClick={() => void read(resource)}>{resource.replace('_', ' ')}</Button>
+          {['capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'trending_tags', 'trending_statuses'].map((resource) => (
+            <Button key={resource} variant='outline' size='sm' disabled={busy} onClick={() => void read(resource)}>{resource === 'live_events' ? 'Read live updates' : resource.replace('_', ' ')}</Button>
           ))}
         </div>
         {details && <AccountData value={details} />}

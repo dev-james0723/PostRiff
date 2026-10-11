@@ -168,6 +168,22 @@ class MastodonManagement:
 
     def read(self, workspace, token, connection, resource):
         provider, grant, session = self._grant(workspace, token, connection)
+        if resource == 'live_events':
+            self._scopes(grant, ('read:statuses', 'read:notifications'))
+            from .mastodon_streaming import read_window
+            window = read_window(provider, session)
+            # Recheck current membership/credential after the window before returning
+            # private excerpts; revocation during the read must not leak its result.
+            with self.repository.transaction(token, workspace) as (cur, _row, _actor):
+                from .hosted import _membership
+                require(_membership(_row), 'read')
+                cur.execute("SELECT access_ciphertext,key_id,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL", (workspace, connection))
+                current = cur.fetchone()
+                if (not current or current[2] != grant['providerAccountId']
+                        or self.oauth.vault.decrypt(current[0], current[1]) != grant['accessToken']):
+                    raise AlphaError('The connection changed during this window. Read again after reconnecting.', 409)
+            return {'connectionId': connection, 'instance': session['instance'], 'resource': resource,
+                    **{k: v for k, v in window.items() if k != 'events'}, 'data': window['events']}
         if resource == "capabilities":
             capabilities = discover(provider.transport, session["instance"])
             return {"connectionId": connection, "accountId": grant["providerAccountId"], "permissions": grant["scopes"], "capabilities": capabilities,
@@ -288,6 +304,14 @@ class MastodonManagement:
                     response = provider.api(session, preview["method"], preview["path"], body=preview["body"],
                                             headers={"Idempotency-Key": action_id})
                 result = self._receipt(provider, session, preview, response)
+                if preview['action'] in ('native_cancel', 'native_reschedule'):
+                    from .mastodon_native import synchronize
+                    state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                    synced = synchronize(state, connection, preview, result, actor=actor, action_id=action_id,
+                                         fingerprint=fingerprint, now=self.clock())
+                    if synced:
+                        cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace))
+                        result['syncedJobIds'] = synced
                 cur.execute("UPDATE public.pr_mastodon_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id::text=%s AND status='running'", (result["state"], json.dumps(result), workspace, action_id))
                 audit(cur, workspace, actor, "mastodon.action_result", action_id, {"action": preview["action"], "state": result["state"]})
         except AlphaError:
@@ -320,10 +344,20 @@ class MastodonManagement:
                 result.update(state="verified", verification="provider_lookup_absent")
         elif action in ("native_schedule", "native_reschedule"):
             reference = result.get("reference")
+            if action == 'native_reschedule' and reference != preview['path'].rsplit('/', 1)[-1]:
+                return {'state': 'uncertain', 'reason': 'The reschedule response identified another schedule. Do not resend.'}
             if reference and ID.fullmatch(reference):
                 checked = provider.api(session, "GET", "/api/v1/scheduled_statuses/" + reference)
                 value = checked.get("body")
-                if checked.get("status") == 200 and isinstance(value, dict) and str(value.get("id")) == reference:
+                from .mastodon_native import same_instant
+                params = value.get('params') if isinstance(value, dict) and isinstance(value.get('params'), dict) else {}
+                content_matches = action == 'native_reschedule' or (
+                    params.get('text') == preview['body'].get('status')
+                    and params.get('visibility') == preview['body'].get('visibility', 'public')
+                    and (params.get('spoiler_text') or '') == preview['body'].get('spoiler_text', '')
+                    and params.get('sensitive', False) is preview['body'].get('sensitive', False))
+                if (checked.get("status") == 200 and isinstance(value, dict) and str(value.get("id")) == reference
+                        and same_instant(value.get('scheduled_at'), preview['body'].get('scheduled_at')) and content_matches):
                     result.update(state="verified", verification="native_schedule_lookup", scheduledAt=value.get("scheduled_at"),
                                   publication="pending; scheduling is not publication")
         return result

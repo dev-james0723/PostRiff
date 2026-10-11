@@ -193,6 +193,8 @@ export interface Job {
   nextAt?: number;
   checks?: number;
   scheduleId?: string | null;
+  nativeScheduleChange?: { scheduleId: string; scheduledAt: string; verification: string; accountId: string; connectionId: string; approvalDigest: string };
+  nativeScheduleReceipt?: { state: string; verification?: string; reference?: string; scheduledAt?: string };
   url?: string;
   events: { at: number; state: string; message: string; execution?: string }[];
   attempts: { number: number; startedAt: number; endedAt?: number }[];

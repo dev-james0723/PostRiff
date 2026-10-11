@@ -94,7 +94,14 @@ export function jobNeedsLiveRefresh(job: Job, nowSeconds: number) {
 }
 
 /** The calendar shows approved publication time; native server submission can happen earlier. */
-export function calendarPublicationTime(manifest: Manifest) {
+export function calendarPublicationTime(manifest: Manifest, job?: Job) {
+  const change = job?.nativeScheduleChange;
+  const receipt = job?.nativeScheduleReceipt;
+  if (manifest.platform === 'Mastodon' && change?.verification === 'native_schedule_lookup'
+      && change.accountId === manifest.providerAccountId && change.connectionId === manifest.channelId
+      && receipt?.state === 'verified' && receipt.reference === change.scheduleId
+      && receipt.verification === change.verification && receipt.scheduledAt === change.scheduledAt
+      && manifestSeconds(change.scheduledAt) !== null) return change.scheduledAt;
   if (manifest.platform === 'Mastodon' && manifest.timing.nativeProvider === 'Mastodon'
       && manifest.timing.nativePublicationAt && manifestSeconds(manifest.timing.nativePublicationAt) !== null) return manifest.timing.nativePublicationAt;
   return manifest.timing.utc;

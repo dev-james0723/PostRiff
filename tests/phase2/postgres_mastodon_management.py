@@ -8,6 +8,7 @@ import sys
 import time
 import unittest
 import uuid
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
@@ -75,6 +76,62 @@ class JournalTests(unittest.TestCase):
 
     def preview(self):
         return self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'favourite', 'targetId': '123'})
+
+    def scoped_transport(self, scopes, custom):
+        with connection() as db:
+            encrypted = db.execute('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()
+            envelope = json.loads(self.vault.decrypt(*encrypted)); envelope['scope'] = scopes
+            envelope['capabilities'] = {'streamingUrl': 'https://mastodon.social'}
+            cipher, key = self.vault.encrypt(json.dumps(envelope))
+            db.execute('UPDATE public.pr_encrypted_credentials SET scopes=%s,access_ciphertext=%s,key_id=%s WHERE workspace_id=%s AND connection_id=%s', (scopes, cipher, key, self.workspace, self.connection_id))
+        original = self.provider.transport
+        def transport(method, url, **kw):
+            if '/api/v1/apps/verify_credentials' in url: return ok({'scopes': scopes})
+            handled = custom(method, url, **kw)
+            return handled if handled is not None else original(method, url, **kw)
+        self.provider.transport = transport
+
+    def test_exact_native_reschedule_and_cancellation_sync_existing_queue_atomically(self):
+        native = {'at': datetime.fromtimestamp(self.now + 600, timezone.utc).isoformat(), 'gone': False}
+        writes = []
+        def transport(method, url, **kw):
+            if '/api/v1/scheduled_statuses/41' not in url: return None
+            if method == 'PUT': native['at'] = kw['body']['scheduled_at']; writes.append(method)
+            if method == 'DELETE': native['gone'] = True; writes.append(method); return ok({})
+            return ok({}, 404) if native['gone'] else ok({'id': '41', 'scheduled_at': native['at']})
+        self.scoped_transport(['read:accounts', 'read:statuses', 'write:statuses'], transport)
+        manifest = {'platform': 'Mastodon', 'providerAccountId': self.account, 'channelId': self.connection_id,
+                    'payload': {'text': 'Preserve the approved post'}, 'publishOptions': {'scheduled_at': native['at']}}
+        job = {'id': 'existing-native-job', 'manifest': manifest, 'state': 'processing', 'approvalDigest': 'original-approval',
+               'progress': {'stage': 'native_scheduled', 'reference': '41', 'scheduledAt': native['at']},
+               'leaseOwner': 'old-worker', 'leaseId': 'old-fence', 'leaseUntil': self.now + 45}
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['jobs'] = [job]
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+        new_at = datetime.fromtimestamp(self.now + 1200, timezone.utc).isoformat()
+        preview = self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'native_reschedule', 'targetId': '41', 'scheduled_at': new_at})
+        result = self.execute(preview); self.assertEqual(result['state'], 'verified'); self.assertEqual(result['syncedJobIds'], ['existing-native-job'])
+        with connection() as db:
+            persisted = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][0]
+            self.assertEqual(persisted['manifest'], manifest); self.assertEqual(persisted['approvalDigest'], 'original-approval')
+            self.assertEqual(persisted['progress']['scheduledAt'], new_at); self.assertIsNone(persisted['leaseOwner'])
+        self.assertTrue(self.execute(preview)['replayed']); self.assertEqual(writes, ['PUT'])
+        cancel = self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'native_cancel', 'targetId': '41'})
+        self.assertEqual(self.execute(cancel)['state'], 'verified')
+        with connection() as db:
+            persisted = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['jobs'][0]
+            self.assertEqual(persisted['state'], 'canceled'); self.assertTrue(persisted['cancelRequested'])
+
+    def test_stream_rechecks_tenant_and_revocation_before_private_result(self):
+        self.scoped_transport(['read:accounts', 'read:statuses', 'read:notifications'], lambda *_a, **_kw: None)
+        def window(_origin, _token):
+            with connection() as db:
+                db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+            return {'status': 200, 'events': [{'id': '22', 'excerpt': 'PRIVATE_NOT_RETURNED_AFTER_REVOKE'}]}
+        self.provider.streaming_transport = window
+        with self.assertRaises(AlphaError): self.manager.read(self.foreign, self.other, self.connection_id, 'live_events')
+        with self.assertRaises(AlphaError): self.manager.read(self.workspace, self.actor, self.connection_id, 'live_events')
 
     def audio(self, cur):
         asset_id = uuid.uuid4().hex

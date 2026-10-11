@@ -26,7 +26,8 @@ class SyntheticMastodon:
         path = parsed.path
         value, status = {}, 200
         if path == '/api/v2/instance':
-            value = {'version': '4.3.7' if parsed.hostname == 'mastodon.social' else '4.2.9'}
+            value = {'version': '4.3.7' if parsed.hostname == 'mastodon.social' else '4.2.9',
+                     'configuration': {'urls': {'streaming': 'wss://' + parsed.hostname}}}
         elif path == '/.well-known/oauth-authorization-server':
             status = 404
         elif path == '/api/v1/apps':
@@ -63,6 +64,13 @@ def service(*args, **kwargs):
         db.execute((ROOT / 'migrations/postriff/113_mastodon_management.sql').read_text())
     provider = MastodonProvider('http://127.0.0.1:4448', transport=SyntheticMastodon(), production_reviewed=True,
                                resolver=lambda *_args, **_kwargs: [(2, 1, 6, '', ('93.184.216.34', 443))])
+    from postriff_phase2.mastodon_streaming import parse_events
+    def stream(origin, token):
+        if origin not in ('https://mastodon.social', 'https://mastodon.online') or token != 'synthetic-token':
+            raise AssertionError('Synthetic stream binding changed.')
+        raw = b'event: notification\ndata: {"id":"22","type":"mention","status":{"id":"31","visibility":"direct","content":"<p>PRIVATE_EPHEMERAL_STREAM</p>"}}\n\n'
+        return {'status': 200, 'events': parse_events(raw)}
+    provider.streaming_transport = stream
     kwargs['providers']['mastodon'] = provider
     return disposable.original(*args, **kwargs)
 

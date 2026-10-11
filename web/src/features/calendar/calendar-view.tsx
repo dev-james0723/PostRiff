@@ -270,7 +270,7 @@ export function CalendarView() {
     const expired = new Set(expiredKey.split(','));
     const out: CalendarEvent<Post>[] = [];
     const add = (id: string, kind: Kind, manifest: Manifest, job?: Job) => {
-      const at = new Date(calendarPublicationTime(manifest));
+      const at = new Date(calendarPublicationTime(manifest, job));
       if (Number.isNaN(at.getTime())) return;
       const firstLine = manifest.payload.text.split('\n').find((line) => line.trim())?.trim();
       const channel =

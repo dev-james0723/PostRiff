@@ -8,6 +8,7 @@
       "checks": [
         "two synthetic instance-qualified OAuth accounts",
         "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
         "exact action preview and receipt",
         "Agent preview link hydration",
         "selected profile fields and default privacy exact approval",
@@ -19,6 +20,7 @@
       "checks": [
         "two synthetic instance-qualified OAuth accounts",
         "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
         "exact action preview and receipt",
         "Agent preview link hydration",
         "selected profile fields and default privacy exact approval",
@@ -30,6 +32,7 @@
       "checks": [
         "two synthetic instance-qualified OAuth accounts",
         "bounded native analytics excludes private content",
+        "foreground live window private excerpt not persisted to workspace",
         "exact action preview and receipt",
         "Agent preview link hydration",
         "selected profile fields and default privacy exact approval",

@@ -62,6 +62,10 @@ def discover(transport, host):
         "scopesSupported": None, "streamingUrl": None,
         "dataScope": "instance-local; federation delivery and completeness are not guaranteed",
     }
+    from .mastodon_streaming import bound_origin
+    urls = config.get('urls') if isinstance(config.get('urls'), dict) else {}
+    legacy_urls = body.get('urls') if isinstance(body.get('urls'), dict) else {}
+    capabilities['streamingUrl'] = bound_origin(host, urls.get('streaming') or legacy_urls.get('streaming_api'))
     for key, maximum in (("maxCharacters", 100000), ("maxMediaAttachments", 16), ("charactersReservedPerUrl", 1000)):
         if type(capabilities[key]) is not int or not 0 < capabilities[key] <= maximum:
             raise AlphaError("This server returned invalid posting limits.", 502)
