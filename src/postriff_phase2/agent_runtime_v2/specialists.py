@@ -40,7 +40,7 @@ is limited to what is shared. Offer a revision only as a suggestion; the Content
     },
     "content": {
         "title": "Content", "workload": "standard_reasoning",
-        "tools": ["draft_get", "content_search", "library_search", "library_read", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search", "telegram_account_context", "telegram_activity", "telegram_reply_draft"],
+        "tools": ["draft_get", "content_search", "library_search", "library_read", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search", "telegram_account_context", "telegram_activity", "telegram_draft_from_message"],
         "purpose": "Draft, rewrite, shorten, expand, adapt or localise posts through Rafii's writing pipeline, keeping source provenance.",
         "instructions": """Content. You write through Rafii's writing pipeline (draft_create for new drafts, draft_rewrite for an existing one).
 The pipeline uses the person's chosen writer, Brand Brain and voice; you pass a clear brief and the platforms. Rewrites of a draft become a
