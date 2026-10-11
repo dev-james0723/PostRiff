@@ -263,6 +263,35 @@ export function createApi(getToken: TokenSource) {
     portal: (w: string, returnPath?: string) =>
       send<{ url: string }>('POST', `${ws(w)}/billing/portal`, { returnPath }),
 
+    telegramManagedStatus: (w:string) => get<{available:boolean;requests:{username:string;name:string;expiresAt:string}[];bots:{botId:string;username:string}[];requiresVerifiedIdentity:boolean}>(`${ws(w)}/telegram/managed-bots`),
+    telegramManagedAccess: (w:string,id:string) => get<import('@/features/telegram/types').TelegramBotAccess & {botId:string;username:string;ownerAlwaysHasAccess:boolean}>(`${ws(w)}/telegram/managed-bots/${encodeURIComponent(id)}/access`),
+    telegramManagedAccessPrepare: (w:string,id:string,body:import('@/features/telegram/types').TelegramBotAccess) => send<import('@/features/telegram/types').TelegramBotAccessPreview>('POST',`${ws(w)}/telegram/managed-bots/${encodeURIComponent(id)}/access/prepare`,body),
+    telegramManagedAccessExecute: (w:string,id:string,body:{proof:string;keyId:string;confirmed:boolean}) => send<{state:string;settings:import('@/features/telegram/types').TelegramBotAccess}>('POST',`${ws(w)}/telegram/managed-bots/${encodeURIComponent(id)}/access/execute`,body),
+    telegramManagedStart: (w:string,body:{username:string;name:string;identityId:string;confirmed:boolean}) => send<{creationUrl:string;username:string;status:string;botCreated:boolean}>('POST',`${ws(w)}/telegram/managed-bots/start`,body),
+    telegramManagedConnect: (w:string,body:{username:string;confirmed:boolean}) => send<{botRef:string;status:string}>('POST',`${ws(w)}/telegram/managed-bots/connect`,body),
+    telegramBots: (w:string) => get<{bots:{botRef:string;botId:string;username:string}[]}>(`${ws(w)}/telegram/bots`),
+    telegramDisconnectBot: (w:string, ref:string) => send<{disconnected:boolean;remoteWebhookState:string}>('POST', `${ws(w)}/telegram/bots/${encodeURIComponent(ref)}/disconnect`, {confirmed:true}),
+    telegramIdentities: (w: string) => get<{ configured: boolean; identities: { id: string; telegramUserId: string; name: string; username: string }[] }>(`${ws(w)}/telegram/identities`),
+    telegramLoginStart: (w: string) => send<{ authorizeUrl: string }>('POST', `${ws(w)}/telegram/login/start`, {}),
+    telegramLoginComplete: (w: string, body: { state: string; code?: string; error?: string }) => send<{ status: string }>('POST', `${ws(w)}/telegram/login/complete`, body),
+    telegramIdentityDisconnect: (w: string, id: string) => send<{ disconnected: boolean }>('DELETE', `${ws(w)}/telegram/identities/${encodeURIComponent(id)}`),
+    telegramControls: (w: string) => get<import('@/features/telegram/types').TelegramControls>(`${ws(w)}/telegram/controls`),
+    telegramSetControls: (w: string, body: import('@/features/telegram/types').TelegramControls & { confirmed?: boolean }) => send<import('@/features/telegram/types').TelegramControls>('POST', `${ws(w)}/telegram/controls`, body),
+    telegramDestinations: (w: string) => get<{ destinations: import('@/features/telegram/types').TelegramDestination[]; productionReady: boolean }>(`${ws(w)}/telegram`),
+    telegramInspect: (w: string, c: string, verify = false) => verify
+      ? send<import('@/features/telegram/types').TelegramDestination>('POST', `${ws(w)}/telegram/connections/${encodeURIComponent(c)}/verify`, {})
+      : get<import('@/features/telegram/types').TelegramDestination>(`${ws(w)}/telegram/connections/${encodeURIComponent(c)}/inspect`),
+    telegramInbox: (w: string, c: string) => get<import('@/features/telegram/types').TelegramInbox>(`${ws(w)}/telegram/connections/${encodeURIComponent(c)}/inbox`),
+    telegramFiles: (w: string, c: string) => get<{ files: import('@/features/telegram/types').TelegramFile[] }>(`${ws(w)}/telegram/connections/${encodeURIComponent(c)}/files`),
+    telegramAnalytics: (w: string, c: string) => get<{ deliveryReceipts: { value: number; source: string }; observedReplies: { value: number; source: string }; nativeViews: { value: null; source: string }; metrics: { messageId: string; metric: string; value: unknown; source: string }[] }>(`${ws(w)}/telegram/connections/${encodeURIComponent(c)}/analytics`),
+    telegramPrepare: (w: string, c: string, body: Record<string, unknown>) => send<import('@/features/telegram/types').TelegramOperation>('POST', `${ws(w)}/telegram/connections/${encodeURIComponent(c)}/prepare`, body),
+    telegramExecute: (w: string, c: string, body: Record<string, unknown>) => send<{ state: string; messageId?: number; reason?: string }>('POST', `${ws(w)}/telegram/connections/${encodeURIComponent(c)}/execute`, body),
+    telegramBot: (w: string, body: Record<string, unknown>, preview = true) => send<{ botRef?: string; botId?: number; username?: string; identity?: { id: number; username: string }; effect?: string; webhookState?: string }>('POST', `${ws(w)}/telegram/bots/${preview ? 'preview' : 'connect'}`, body),
+    telegramBusiness: (w: string, c: string, action: 'business-authorize' | 'business-select', body: Record<string, unknown>) => send<Record<string, unknown>>('POST', `${ws(w)}/telegram/connections/${encodeURIComponent(c)}/${action}`, body),
+    telegramBusinessConnections: (w:string)=>get<{connections:{businessConnectionId:string;identity:{first_name?:string;username?:string};enabled:boolean;rafiiConsented:boolean;ownerConnectionId:string}[]}>(`${ws(w)}/telegram/business-connections`),
+    telegramBusinessInbox: (w:string)=>get<{conversations:{businessConnectionId:string;enabled:boolean;deleted:boolean;message:{chat:{id:number;first_name?:string};message_id:number;text?:string;caption?:string}|null}[]}>(`${ws(w)}/telegram/business-inbox`),
+    telegramChannelDm: (w: string) => get<{conversations:{parentConnectionId:string;chatId:string;topicId:number;title:string|null;lastIncomingAt:number}[];coverage:string;unreadState:string}>(`${ws(w)}/telegram/channel-dm`),
+    telegramChannelDmAction: (w: string,c: string,action:'authorize'|'select',body:Record<string,unknown>) => send<Record<string,unknown>>('POST',`${ws(w)}/telegram/connections/${encodeURIComponent(c)}/channel-dm-${action}`,body),
     /* channels */
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),

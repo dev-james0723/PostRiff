@@ -44,6 +44,7 @@ import {
 import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
+import { TelegramDestinationPanel } from '@/features/telegram/destination-panel';
 import { CapabilityChips } from './capability-chips';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
@@ -360,7 +361,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         />
       )}
 
-      {!disconnected && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
+      {!disconnected && channel.platform === 'Telegram' && <><Link href='/app/telegram' className='text-sm underline'>Telegram connections and articles</Link><TelegramDestinationPanel connectionId={channel.id} /></>}
+      {!disconnected && channel.platform !== 'Telegram' && <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />}
       {!disconnected && channel.socialReadiness && (
         <ul className='text-muted-foreground flex flex-col gap-1 text-[13px] leading-relaxed' aria-label='Permissions for this account'>
           <li>

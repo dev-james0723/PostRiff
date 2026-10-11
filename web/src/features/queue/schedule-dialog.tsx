@@ -1,5 +1,7 @@
 'use client';
 
+import { TelegramComposerFields } from '@/features/telegram/composer-fields';
+
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -58,7 +60,7 @@ function Note({ children, role, className }: { children: ReactNode; role?: 'stat
 }
 
 /** The next whole hour on the wall clock of the zone the review is prepared in (the person's zone, not the browser's). */
-function defaultLocalTime(timeZone: string) {
+export function defaultLocalTime(timeZone: string) {
   try {
     const next = zonedNow(timeZone).add({ hours: 1 }).set({ minute: 0, second: 0, millisecond: 0 });
     return `${next.year}-${pad(next.month)}-${pad(next.day)}T${pad(next.hour)}:${pad(next.minute)}`;
@@ -78,7 +80,7 @@ type WallTime =
   | { kind: 'ambiguous'; first: number; second: number };
 
 /** Where a `datetime-local` value lands in an IANA zone, read the way `contracts.resolve_time` reads it. */
-function resolveWallTime(local: string, timeZone: string): WallTime {
+export function resolveWallTime(local: string, timeZone: string): WallTime {
   try {
     const wall = parseDateTime(local);
     const earlier = toZoned(wall, timeZone, 'earlier');
@@ -175,6 +177,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   useActiveWorkTimer({ workflowKey: workflowKey('variant', variantId || preselected), taskKind: 'draft', enabled: open });
   const [chosenChannelId, setChannelId] = useState<string>('');
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
+  const [telegramAssets, setTelegramAssets] = useState<string[]>([]);
+  const [telegramNow, setTelegramNow] = useState(false);
   const [alt, setAlt] = useState('');
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
@@ -194,9 +198,10 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const variant: SnapshotVariant | undefined = drafts.find((v) => v.id === (variantId || preselected));
   const needsVideo = ['YouTube', 'TikTok', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '');
   const needsImage = variant?.platform === 'Pixelfed';
+  const isTelegram = variant?.platform === 'Telegram';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
-    (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, variant?.platform]);
+    (isTelegram ? isPostableImage(candidate) || isPostableVideo(candidate) : needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate))), [libraryAssets, needsVideo, isTelegram, variant?.platform]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
@@ -209,7 +214,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     if (defaultAsset) setAssetId(defaultAsset);
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
-  const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
+  const needsOptions = Boolean(channel && (NEEDS_OPTIONS.has(channel.platform) || isTelegram));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
@@ -222,7 +227,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       (!needsImage || Boolean(asset)) &&
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
-      (!asset || kindOf(asset) === 'video' || alt.trim()) &&
+      (isTelegram || !asset || kindOf(asset) === 'video' || alt.trim()) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
       (!needsOptions || publishOptions !== null)
   );
@@ -257,7 +262,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
-          assetId: asset?.id,
+          assetId: isTelegram ? undefined : asset?.id,
+          assetIds: isTelegram ? telegramAssets : undefined,
+          publishNow: isTelegram ? telegramNow : undefined,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
@@ -284,7 +291,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
+      <DialogContent className='rafii-elevated max-h-[90dvh] overflow-y-auto rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
           <DialogDescription>Nothing publishes until you approve it.</DialogDescription>
@@ -402,10 +409,12 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
           <div className='grid gap-4 sm:grid-cols-2'>
             {!youtubeNow && <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
+              {isTelegram && <Label className='flex items-center gap-2 text-xs'><Checkbox checked={telegramNow} onCheckedChange={v=>setTelegramNow(v===true)} />Publish as soon as I approve the review</Label>}
               <Label htmlFor='schedule-time'>Publish at</Label>
               <Input
                 id='schedule-time'
                 type='datetime-local'
+                disabled={isTelegram && telegramNow}
                 className='text-base md:text-sm'
                 value={localTime}
                 onChange={(e) => {
@@ -414,16 +423,16 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 }}
               />
               <span className='text-muted-foreground text-xs'>{timeZone}</span>
-              {timePassed && <Note>Pick a future time.</Note>}
-              {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
+              {timePassed && !(isTelegram && telegramNow) && <Note>Pick a future time.</Note>}
+              {wallTime.kind === 'gap' && !(isTelegram && telegramNow) && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} />
+              {!isTelegram && <><Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : ['image']} /></>}
             </div>
           </div>
 
-          {!youtubeNow && askFold && (
+          {!youtubeNow && askFold && !(isTelegram && telegramNow) && (
             <div className='flex flex-col gap-1.5'>
               <Label id='schedule-fold-label'>This time happens twice that day</Label>
               <RadioGroup aria-labelledby='schedule-fold-label' value={String(fold)} onValueChange={(value) => setFold(value === '1' ? 1 : 0)}>
@@ -451,7 +460,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </div>
           )}
 
-          {channel && needsOptions && (
+          {channel && isTelegram && <TelegramComposerFields key={channel.id} channelId={channel.id} assets={assets} selectedIds={telegramAssets} onSelect={setTelegramAssets} text={variant?.text ?? ''} onChange={setPublishOptions} />}
+          {channel && needsOptions && !isTelegram && (
             // Keyed by account: switching accounts starts the choices again instead of carrying them over.
             <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
           )}

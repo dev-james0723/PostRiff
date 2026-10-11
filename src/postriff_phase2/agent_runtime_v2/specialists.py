@@ -40,7 +40,7 @@ is limited to what is shared. Offer a revision only as a suggestion; the Content
     },
     "content": {
         "title": "Content", "workload": "standard_reasoning",
-        "tools": ["draft_get", "content_search", "library_search", "library_read", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search"],
+        "tools": ["draft_get", "content_search", "library_search", "library_read", "draft_create", "draft_rewrite", "voice_profile", "memory_context", "campaign_get", "workspace_search", "telegram_account_context", "telegram_activity", "telegram_reply_draft"],
         "purpose": "Draft, rewrite, shorten, expand, adapt or localise posts through Rafii's writing pipeline, keeping source provenance.",
         "instructions": """Content. You write through Rafii's writing pipeline (draft_create for new drafts, draft_rewrite for an existing one).
 The pipeline uses the person's chosen writer, Brand Brain and voice; you pass a clear brief and the platforms. Rewrites of a draft become a
@@ -59,7 +59,7 @@ missing facts, no upcoming run); label them as observations. Report link results
     "publishing_ops": {
         "title": "Publishing Operations", "workload": "fast_language",
         "tools": ["queue_summary", "job_get", "calendar_range", "reviews_list", "publishing_summary", "channels_capabilities", "automation_list", "automation_get",
-                  "automation_explain", "schedule_propose", "automation_change_propose", "pending_approvals"],
+                  "automation_explain", "schedule_propose", "automation_change_propose", "pending_approvals", "telegram_account_context", "telegram_activity"],
         "purpose": "Calendar, queue, reviews, scheduling and automation proposals, publishing-state diagnosis and provider capabilities.",
         "instructions": """Publishing Operations. Scheduling a draft or changing an automation is always a proposal (schedule_propose,
 automation_change_propose): nothing changes until the person applies it, and a post still needs approval of that exact post before it can

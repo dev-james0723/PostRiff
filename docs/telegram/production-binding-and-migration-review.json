@@ -1,0 +1,30 @@
+{
+  "execution": "production_read_only_metadata_and_local_source_review",
+  "ownerIssue": 179,
+  "productionChanges": "NONE",
+  "liveSha": "7e993563be9841f7f98758fb0c8c52f158ea7252",
+  "productionAuthStorageRef": "buoyhkbodnhzngaotoel",
+  "serverDsnBinding": "UNKNOWN_WRITE_ONLY",
+  "telegramTables": "ABSENT",
+  "sourceLedgerMismatchesBeforeRecovery": [
+    "103_feature_enrollments.sql SOURCE_MISSING"
+  ],
+  "recoveredMigration": {
+    "name": "103_feature_enrollments.sql",
+    "sourceCommit": "5038b16ad4203cec55a47e545bb53c831828bc15",
+    "sha256": "b3b8b681bf78100202ec15f0a37e05417d304663d19623e4930a2b02f67cd40c",
+    "matchesRecordedProductionChecksum": true
+  },
+  "candidateMigrations": [
+    {
+      "name": "116_telegram_identity_controls.sql",
+      "sha256": "7605d51c0d15e8366d4f23519fd94c6feb91268214fbddd6750cc7041e542ade"
+    },
+    {
+      "name": "117_telegram_capabilities.sql",
+      "sha256": "08fd08c26583af2d8a848e463f1c29a7417bb0dcf114cf5c9b3b088b1aa6157a"
+    }
+  ],
+  "releaseQualification": "INCOMPLETE_A_B_C_D",
+  "stagingAccess": "STOPPED"
+}

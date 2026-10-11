@@ -140,16 +140,17 @@ _GROUPS = {
     ("read_analyze", ("memory_brand",)): ("memory_context", "memory_summary", "voice_check", "overlay_context", "brand_summary", "voice_profile"),
     ("read_analyze", ("web",)): ("web_research", "research_search", "research_fetch", "source_normalize", "weather_now"),
     ("read_analyze", ("library",)): ("library_search", "library_read", "library_browse"),
-    ("read_analyze", ("connections",)): ("channels_capabilities",),
+    ("read_analyze", ("connections",)): ("channels_capabilities", "telegram_account_context"),
     ("read_analyze", ("members",)): ("member_activity",),
     ("read_analyze", ("notifications",)): ("notification_list",),
     ("read_analyze", ("usage_billing",)): ("entitlements_summary",),
-    ("read_analyze", ("content", "connections")): ("engagement_triage", "youtube_plan_context", "youtube_recommendations"),
+    ("read_analyze", ("content", "connections")): ("engagement_triage", "youtube_plan_context", "youtube_recommendations", "telegram_activity"),
     ("read_analyze", ("analytics", "connections")): ("youtube_analytics_summary",),
     ("read_analyze", ("content",)): ("queue_summary", "job_get", "draft_get", "calendar_range", "reviews_list", "publishing_summary",
                                      "content_search", "entity_status", "workspace_search", "workspace_summary", "attention_summary",
                                      "attention_summary_v2", "weekly_plan_get", "strategy_context", "creative_plan", "image_analyze",
                                      "image_list"),
+    ("create_edit", ("content", "memory_brand", "connections")): ("telegram_reply_draft",),
     ("create_edit", ("content", "memory_brand")): ("draft_create", "draft_rewrite"),
     ("create_edit", ("content",)): ("draft_edit", "weekly_plan_prepare", "engagement_draft_create", "source_campaign_create",
                                     "image_generate", "image_edit", "image_variant"),
@@ -289,6 +290,8 @@ def _youtube_requested(text: str, *, analytics=False) -> bool:
 
 
 EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {
+    "tool.telegram_reply_draft": lambda text: bool(re.search(r"telegram|電報", str(text or ""), re.I)),
+    "tool.telegram_activity": lambda text: bool(re.search(r"telegram|電報", str(text or ""), re.I)),
     "tool.youtube_plan_context": _youtube_requested,
     "tool.youtube_plan_prepare": _youtube_requested,
     "tool.youtube_recommendations": _youtube_requested,
