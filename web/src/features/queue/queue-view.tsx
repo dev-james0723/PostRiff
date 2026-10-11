@@ -51,6 +51,7 @@ import { StatusChip } from './status-chip';
 import { useElementWidth, useWide } from './use-wide';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 import { isPostableImage, isPostableVideo } from '@/lib/media/asset-kinds';
+import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 
 /** How often the snapshot refreshes while a job is with the provider or about to be picked up. */
 const LIVE_REFRESH_MS = 15_000;
@@ -191,7 +192,7 @@ function ReviewCard({
           </div>
           {/* When first; language and media are secondary and stay off phones. The zone and digest sit in the tooltip. */}
           <p className='text-muted-foreground text-xs' title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone}) · ${review.digest.slice(0, 12)}`}>
-            {formatDateTime(at)}
+            {manifest.platform === 'YouTube' && manifest.publishOptions?.publicationMode === 'now' ? 'Publishes after upload and verified processing' : formatDateTime(at)}
             <span className='hidden md:inline'>
               {' '}
               · {languageLabel(manifest.payload.language)}
@@ -199,6 +200,7 @@ function ReviewCard({
             </span>
           </p>
           <p className='line-clamp-[12] text-sm whitespace-pre-wrap'>{manifest.payload.text}</p>
+          <YouTubeManifestDetails manifest={manifest} />
           {manifest.voiceRevision === null && <JobNote>No voice profile. Check the wording before approving.</JobNote>}
         </div>
         <div data-tour={tour ? 'queue-review-phone' : undefined} className='md:pl-2'>
@@ -488,13 +490,13 @@ function Queue() {
   useEffect(() => {
     if (!params.asset || !snapshot.data || !access.hasWorkspace) return;
     const assetId = params.asset;
-    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && (isPostableImage(asset) || isPostableVideo(asset)))) {
+    if (canSchedule && snapshot.data.state.phase2?.assets.some((asset) => asset.id === assetId && (isPostableImage(asset) || isPostableVideo(asset, params.channel ? snapshot.data.state.phase2?.channels.find(c => c.id === params.channel)?.platform : undefined)))) {
       setScheduling((previous) => ({ open: true, variantId: null, assetId, key: previous.key + 1 }));
     } else {
       toast.error(canSchedule ? 'This media is unavailable for a post.' : 'Only approvers can prepare posts.');
     }
     void setParams({ asset: null });
-  }, [params.asset, snapshot.data, access.hasWorkspace, canSchedule, setParams]);
+  }, [params.asset, params.channel, snapshot.data, access.hasWorkspace, canSchedule, setParams]);
   // The batch is frozen when the dialog opens: the confirmation lists exactly what will be sent.
   const [batch, setBatch] = useState<{ open: boolean; reviews: QueueReview[] }>({ open: false, reviews: [] });
   // A hold button goes disabled mid-press while its cancel is pending, so its release can go unheard. After a failed

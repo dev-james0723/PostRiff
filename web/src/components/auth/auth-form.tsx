@@ -76,7 +76,9 @@ export function AuthForm({ intent }: { intent: 'sign-in' | 'sign-up' }) {
     const { createClient } = await import('@/lib/supabase/client');
     const { error: oauthError } = await createClient().auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` }
+      // Always show Google's account chooser: after signing out of Rafii the browser is often still signed in to Google,
+      // and without it Google silently reuses that account, so a person with two Google accounts cannot switch.
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`, queryParams: { prompt: 'select_account' } }
     });
     if (oauthError) throw oauthError;
   }

@@ -24,6 +24,7 @@ from .hosted_identity import (
     SupabaseIdentityAdmin,
     verified_aal,
     verified_auth_time,
+    verified_method_time,
     verified_passkey_time,
     verified_session_id,
 )
@@ -31,7 +32,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import tools
+from . import agent_observability, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -96,6 +97,8 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     # bearer.  This lets TOTP-enforced accounts use a separate, ephemeral passkey session as proof.
     verify.proof = lambda access_token: validate(access_token, enforce_mfa=False)
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
+    # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
+    verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
     return verify
 
 
@@ -199,7 +202,7 @@ def runtime_from_environment(environ=None):
     verify = supabase_verifier(project_url, publishable, database)
     storage = PrivateAssetService(SupabaseStorage(project_url, secret, video_bucket=values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video", file_bucket=values.get("POSTRIFF_LIBRARY_BUCKET") or "postriff-library"))
     identity = SupabaseIdentityAdmin(project_url, publishable, secret)
-    from .oauth import CredentialVault
+    from .oauth import CredentialVault, OAuthService
     from .providers import registry_from_environment, http_transport
     from .productivity_connectors import flags_from_environment as productivity_flags, providers_from_environment as productivity_providers
     from .hosted_social import HostedSocial
@@ -209,7 +212,7 @@ def runtime_from_environment(environ=None):
     providers = registry_from_environment(values)
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
-    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", worker_binding=worker_binding)
+    service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values), worker_binding=worker_binding)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -218,9 +221,11 @@ def runtime_from_environment(environ=None):
     # Preference learning C2: the person's CLI where the host has one, else the gateway key; consent is checked per workspace.
     service.learning.extractor = extractor_from_environment(values)
     social = HostedSocial(service.oauth, providers, storage) if any(
-        p.production_reviewed or getattr(p, "account_scoped_direct", False)
+        p.production_reviewed or getattr(p, "account_scoped_direct", False) or getattr(p, 'creator_enabled', False)
         or (getattr(p, 'id', None) == 'linkedin' and getattr(p, 'member_publishing_approved', lambda: False)()) for p in providers.values()
     ) else None
+    if social is not None:
+        social.youtube = service.youtube
     # Automations promise publishing only where live transport exists (capabilities.publish_route).
     service.publishing_live = social is not None
     # A verified publication fans out to comment ingestion and then Time Back; neither can unverify it.
@@ -240,7 +245,7 @@ def runtime_from_environment(environ=None):
     from .growth.performance import then_capture
     service.growth=GrowthService(service,env=values)
     on_verified=then_capture(on_verified,service.growth.enabled('check'))
-    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), worker_binding=worker_binding)
+    worker = PostgresWorker(database, social=social, on_verified=with_time_back(on_verified, service.time_savings), youtube_maintenance=service.youtube, worker_binding=worker_binding)
     # Rafii coworker (notifications, weekly operator, research, overlays…): every feature is off unless its RAFII_* flag is on.
     from .coworker import runtime as coworker_runtime
     coworker_runtime.attach(service, values)
@@ -255,6 +260,24 @@ _ID_SEGMENT = re.compile(r"^(?:[0-9a-fA-F-]{16,}|\d+|[A-Za-z0-9_-]{24,})$")
 def route_pattern(path):
     """The request path with identifiers masked, for correlating failures without logging who or what."""
     return "/".join(":id" if _ID_SEGMENT.match(part) else part for part in (path or "/").split("/"))[:160]
+
+
+def genui_cron_summary(result):
+    """Generative UI recovery for the cron.completed line: integer counts and statuses, plus the error class name when a
+    reaper is unavailable, never text. Returns (summary, failed) so a failing reaper raises the line to a warning."""
+    summary, failed = {}, False
+    for key in ('uiRecovery', 'uiHolds'):
+        value = result.get(key)
+        if not isinstance(value, dict):
+            continue
+        clean = {name: item for name, item in value.items() if type(item) is int}
+        if value.get('status') == 'unavailable':
+            failed = True
+            clean['status'] = 'unavailable'
+            error = value.get('error')
+            clean['error'] = error if isinstance(error, str) and error.isidentifier() else 'error'
+        summary[key] = clean
+    return summary, failed
 
 
 class HostedApplication:
@@ -455,6 +478,8 @@ class HostedApplication:
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
+        # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
+        correlation = agent_observability.bind_request(request_id)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -474,7 +499,7 @@ class HostedApplication:
                 'event':'request.completed', 'requestId':request_id,
                 'method':method if method in ('GET','POST','PUT','PATCH','DELETE','OPTIONS','HEAD') else 'OTHER',
                 'status':status_code, 'durationMs':round((time.monotonic()-started)*1000,2),
-                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
+                'route':'cron' if environ.get('PATH_INFO')=='/api/cron/worker' or environ.get('PATH_INFO','').startswith(('/api/cron/youtube/', '/api/cron/linkedin/')) else 'billing_webhook' if environ.get('PATH_INFO')=='/api/billing/webhook' else 'api',
             **environ.get('postriff.failure', {})
             }))
             # Founder reliability metrics (CONTRACTS §8.D): one in-memory count per minute x route pattern x status class,
@@ -484,6 +509,7 @@ class HostedApplication:
                 observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
             except Exception:
                 pass
+            agent_observability.release_request(correlation)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -499,13 +525,31 @@ class HostedApplication:
                     from rafii_control.hosted import embedded_app
                     control = self.control_app = embedded_app(os.environ, self._runtime)
                 return control(environ, start_response)
+            if path.startswith('/api/cron/youtube/'):
+                lanes = {'uploads': 'upload', 'identity': 'identity', 'planner': 'planner'}
+                suffix = path.removeprefix('/api/cron/youtube/')
+                if method != 'GET' or suffix not in lanes:
+                    raise AlphaError('This hosted route is unavailable.', 404)
+                # Authenticate before initializing database, storage or provider clients.
+                # User bearer tokens and request-supplied budgets never select fleet authority.
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                supplied = environ.get('HTTP_AUTHORIZATION', '')
+                if (not isinstance(expected, str) or len(expected) < 16 or not expected.isascii()
+                        or not isinstance(supplied, str) or not supplied.isascii()
+                        or not hmac.compare_digest(supplied, 'Bearer ' + expected)):
+                    raise AlphaError('Cron authorization failed.', 401)
+                service = self._runtime()
+                from .youtube.fleet import run_lane
+                return self._json(start_response, 200, run_lane(service, self.worker, lanes[suffix]))
             bearer = environ.get("HTTP_AUTHORIZATION", "")
             api_bearer = bearer.startswith("Bearer prt_")
             if api_bearer:
                 self._runtime().repository.api_tokens.authorize(self._token(environ), method, path.strip("/").split("/"), client_label(environ))
             if path == "/api/health" and method == "GET":
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
-                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False})
+                revision = os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
+                revision = revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None
+                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision})
             if path == "/api/catalog" and method == "GET":
                 provider = (self.public_auth or {}).get("provider", "supabase")
                 return self._json(start_response, 200, {"templates": catalog(), "routes": routes(), "profileMetadata": metadata(), "phase2": True, "authMode": "dev" if provider == "dev" else "supabase", "execution": (self.public_auth or {}).get("execution", "hosted")})
@@ -513,6 +557,9 @@ class HostedApplication:
                 from . import privacy
                 return self._json(start_response, 200, privacy.notice())
             # Email-provider webhook and one-click unsubscribe authenticate by signature/token, before the origin guard.
+            if path.startswith('/api/youtube/notifications/') and method in ('GET', 'POST'):
+                from .youtube.http import notification_callback
+                return notification_callback(self, environ, start_response, self._runtime(), method, path.rsplit('/', 1)[-1])
             from .phone import http as phone_http
             if (routed := phone_http.public(self, environ, start_response, method, path)) is not None:
                 return routed
@@ -607,11 +654,29 @@ class HostedApplication:
                         raise AlphaError("A fixed public HTTPS app origin, without a path or query, is required for OAuth.", 503)
                     location = ProductivityConnectorService.callback_redirect(callback_config.public_base_url, provider_id, query)
                 else:
-                    callback_config = OAuthService(None, None, None, {}, configured_base)
-                    callback_config.callback_uri(provider_id)  # fixed HTTPS origin validation; no provider call
-                    location = OAuthService.callback_redirect(callback_config.public_base_url, provider_id, query)
+                    youtube_base = None
+                    if provider_id == 'youtube':
+                        youtube_base = (getattr(configured_service, 'youtube_public_base_url', None) if configured_service is not None
+                            else OAuthService.youtube_origin_from_environment(os.environ))
+                    callback_config = OAuthService(None, None, None, {}, configured_base, youtube_public_base_url=youtube_base)
+                    callback_base = callback_config.callback_base_url(provider_id)  # fixed HTTPS origin; no provider call
+                    location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
+            if path == "/api/cron/agent-tasks" and method == "GET":
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Cron authorization failed.", 401)
+                from .agent_runtime_v2.task_engine import cron as task_cron
+                return self._json(start_response, 200, task_cron.tick(self._runtime()))
+            if path == '/api/cron/linkedin/worker' and method == 'GET':
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get('CRON_SECRET', '')
+                if len(expected) < 16 or not hmac.compare_digest(environ.get('HTTP_AUTHORIZATION', ''), 'Bearer ' + expected):
+                    raise AlphaError('Cron authorization failed.', 401)
+                self._runtime()
+                from .linkedin_fleet import tick as linkedin_tick
+                return self._json(start_response, 200, linkedin_tick(self.worker))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -637,6 +702,23 @@ class HostedApplication:
                     if site_agent is not None:
                         result['siteAgentRecovery'] = site_agent.recover_stalled()
                     result['writingRecovery'] = ideas.recover_stalled()
+                    if repository is not None:
+                        # Generative UI attempts whose producer died: interrupted, reservation kept as unknown, zero provider requests.
+                        try:
+                            from .agent_runtime_v2 import ui_store
+                            result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
+                        except Exception as exc:
+                            result['uiRecovery'] = {'status': 'unavailable', 'error': type(exc).__name__}
+                        from .agent_runtime_v2.task_engine import cron as task_cron
+                        task_recovery = task_cron.recover_for_worker(service)
+                        if task_recovery is not None:
+                            result['agentTaskRecovery'] = task_recovery
+                        # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
+                        try:
+                            from .agent_runtime_v2 import ui_metering
+                            result['uiHolds'] = ui_metering.sweep_orphans(repository.connection_factory, ledger=getattr(service, 'ledger', None))
+                        except Exception as exc:
+                            result['uiHolds'] = {'status': 'unavailable', 'error': type(exc).__name__}
                     from .campaign_worker import CampaignWorker
                     result['campaignPreparation'] = CampaignWorker(service).tick_many()
                 result["reminders"] = service.run_reminders()
@@ -699,8 +781,10 @@ class HostedApplication:
                     coworker_steps = coworker_runtime.summary(result.get('coworker'))
                 except Exception:
                     coworker_steps = {'status': 'unavailable'}
-                logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' else logging.WARNING,
-                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone']}))
+                genui, genui_failed = genui_cron_summary(result)
+                logging.getLogger('postriff.request').log(logging.INFO if result['operations']['status']=='ok' and not genui_failed else logging.WARNING,
+                    json.dumps({'event':'cron.completed', 'requestId':environ.get('postriff.request_id'), **result['operations'], 'coworker': coworker_steps, 'phone': result['phone'],
+                                **({'genui': genui} if genui else {})}))
                 return self._json(start_response, 200, result)
             if not api_bearer:
                 self._origin(environ, mutation)
@@ -851,10 +935,25 @@ class HostedApplication:
                 if len(parts) == 7 and parts[4] == "reply-drafts" and parts[6] == "reply" and method == "POST":
                     body = self._body(environ)
                     return self._json(start_response, 200, audience.approve_reply(parts[2], token, parts[5], body.get("digest"), body.get("confirmed")))
+            if len(parts) == 4 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube-policy':
+                if method == 'GET':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.status(parts[2], token))
+                if method == 'POST':
+                    return self._json(start_response, 200, service.oauth.youtube_policy.accept(parts[2], token, self._body(environ)))
+            if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
+                from .youtube.http import handle as youtube_handle
+                return youtube_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connection-health" and method == "GET":
+                # Connection Health Center (connection_health.py). With RAFII_CONNECTION_HEALTH_ENABLED off this branch is
+                # never taken, so the request reaches the same 404 as any unknown route.
+                from . import connection_health
+                if connection_health.deployment_enabled(connection_health.environment(service)):
+                    return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
-                    return self._json(start_response, 200, oauth.channels(parts[2], token))
+                    from .connection_health import annotate_channels, environment
+                    return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
                     extra = {"inputs": body["input"]} if body.get("input") is not None else {}
@@ -871,7 +970,7 @@ class HostedApplication:
                     return self._json(start_response, 201, oauth.native_social.preview(parts[2], token, parts[4], body.get('action'), body.get('target'), body.get('payload')))
                 if len(parts) == 8 and parts[5] == 'native-action' and parts[7] == 'approve' and method == 'POST':
                     body = self._body(environ)
-                    return self._json(start_response, 200, oauth.native_social.approve(parts[2], token, parts[6], body.get('digest'), body.get('confirmed')))
+                    return self._json(start_response, 200, oauth.native_social.approve(parts[2], token, parts[6], body.get('digest'), body.get('confirmed'), connection_id=parts[4]))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
                     return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
@@ -917,6 +1016,14 @@ class HostedApplication:
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
                     return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) in (6, 7) and parts[4:6] == ["metadata", "changes"] and method == "GET":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, changes.history(workspace_id, token) if len(parts) == 6 else changes.read(workspace_id, token, parts[6]))
+                if len(parts) == 6 and parts[4] == "metadata" and parts[5] in ("preview", "apply", "undo") and method == "POST":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, getattr(changes, parts[5])(workspace_id, token, self._body(environ)))
                 if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
                     return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
                 if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":
@@ -947,6 +1054,12 @@ class HostedApplication:
                     if verb == "commit" and method == "POST":
                         self._body(environ)
                         return self._json(start_response, 200, library.commit(workspace_id, token, asset_id))
+                    if verb == "viewer" and method == "GET":
+                        from urllib.parse import parse_qs
+                        try: page = int(parse_qs(environ.get("QUERY_STRING", "")).get("page", ["1"])[0])
+                        except ValueError: raise AlphaError("Choose a valid document page.",422) from None
+                        return self._json(start_response, 200, library.viewer_page(workspace_id, token, asset_id, page))
+                    if verb == "preview" and method == "GET": return self._json(start_response, 200, library.preview(workspace_id, token, asset_id))
                     if verb == "url" and method == "GET": return self._json(start_response, 200, library.url(workspace_id, token, asset_id, "download=1" in environ.get("QUERY_STRING", "")))
                 raise AlphaError("This hosted route is unavailable.", 404)
             if len(parts) in (5, 6, 7) and parts[:2] == ["api", "workspaces"] and parts[3] == "media" and parts[4] == "videos":
@@ -954,6 +1067,8 @@ class HostedApplication:
                 uploads = service.video_uploads
                 if len(parts) == 5 and method == "POST":
                     return self._json(start_response, 201, uploads.begin(parts[2], token, self._body(environ)))
+                if len(parts) == 7 and parts[6] == "resume" and method == "POST":
+                    return self._json(start_response, 200, uploads.resume(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 7 and parts[6] == "commit" and method == "POST":
                     return self._json(start_response, 200, uploads.commit(parts[2], token, parts[5], self._body(environ)))
                 if len(parts) == 6 and method == "DELETE":
@@ -1050,7 +1165,7 @@ class HostedApplication:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker":
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith(('/api/cron/youtube/', '/api/cron/linkedin/')):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

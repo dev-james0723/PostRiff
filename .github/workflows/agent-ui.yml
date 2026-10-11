@@ -1,0 +1,189 @@
+name: Rafii Generative UI
+# rafii-genui/1 validation (docs/design/openui-production-2026-10-08/04-ACCEPTANCE.md). Heavy work runs here or on JCB/Depot,
+# never on a developer Mac. `dependency-lock` regenerates web/package-lock.json in the cloud (the lockfile is A-owned) and
+# uploads it as an artifact for the release owner to review and commit; it never pushes.
+on:
+  pull_request:
+    branches: [consumer-saas]
+    paths:
+      - 'web/**'
+      - 'src/postriff_phase2/**'
+      - 'src/rafii_control/**'
+      - 'migrations/postriff/**'
+      - 'tests/**'
+      - 'scripts/agent_ui_*'
+      - '.github/workflows/agent-ui.yml'
+  push:
+    branches: ['claude/rafii-openui-*']
+  workflow_dispatch:
+    inputs:
+      prepare_dependency_lock:
+        description: Regenerate web/package-lock.json (package-lock-only, scripts ignored) and upload it
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: agent-ui-${{ github.ref }}
+  cancel-in-progress: true
+# Lane branches (claude/rafii-openui-<lane>-*) push here for cloud typecheck/lint/unit/PG; only A merges.
+env:
+  OPENUI_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+  NEXT_PUBLIC_SENTRY_DISABLED: '1'
+jobs:
+  dependency-lock:
+    if: ${{ inputs.prepare_dependency_lock == true || (github.event_name == 'push' && contains(github.event.head_commit.message, '[agent-ui-lock]')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - working-directory: web
+        run: |
+          npm install -g npm@11.12.1
+          npm install --package-lock-only --ignore-scripts --no-fund
+          npm ls @openuidev/react-lang @openuidev/lang-core --package-lock-only || true
+          npm audit --audit-level=high --package-lock-only || true
+          git diff --stat -- package.json package-lock.json
+          sha256sum package-lock.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: agent-ui-lock-${{ github.sha }}
+          path: |
+            web/package.json
+            web/package-lock.json
+          retention-days: 3
+
+  generate-assets:
+    # Lane C: regenerate prompt/schema/hash assets from component-specs in the cloud; the lane reviews and commits them.
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[agent-ui-assets]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: |
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+          node web/scripts/generate-openui-assets.mjs --write
+          git status --short
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: agent-ui-assets-${{ github.sha }}
+          path: |
+            src/postriff_phase2/agent_runtime_v2/generated
+            web/src/features/agent/generative-ui/generated
+          retention-days: 3
+
+  agent-ui:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-ui-lock]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      AGENT_UI_EVIDENCE_DIR: ${{ github.workspace }}/agent-ui-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and validation tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+          test ! -e "$HOME/.config/openui/telemetry.json"
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Types
+        if: ${{ !cancelled() }}
+        run: npm --prefix web run typecheck
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm --prefix web run lint
+      - name: Generated OpenUI assets match the component specs (drift check)
+        if: ${{ !cancelled() && hashFiles('web/scripts/generate-openui-assets.mjs') != '' }}
+        run: node web/scripts/generate-openui-assets.mjs --check
+      - name: Contract, unit and parser tests
+        if: ${{ !cancelled() }}
+        env:
+          CI: 'true'
+        run: bash scripts/agent_ui_validation.sh unit
+      - name: Real PostgreSQL scenarios (roles, tenants, idempotency, CAS)
+        if: ${{ !cancelled() }}
+        env:
+          CI: 'true'
+        run: |
+          if compgen -G 'tests/phase2/postgres_agent_ui_*.py' >/dev/null; then bash scripts/agent_ui_validation.sh database; else echo 'no agent-ui PG scenarios yet'; fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: agent-ui-evidence-${{ github.sha }}
+          path: agent-ui-evidence
+          retention-days: 14
+
+  # Browser acceptance (lane G) runs in its own job and budget so a long browser stack never cancels the unit/PG gates.
+  agent-ui-browser:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-ui-lock]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: src:tests
+      POSTRIFF_RESEARCH: '0'
+      POSTRIFF_LOCAL_CLI: '0'
+      POSTRIFF_PG_BIN: /usr/lib/postgresql/17/bin
+      AGENT_UI_EVIDENCE_DIR: ${{ github.workspace }}/agent-ui-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned application and validation tools
+        run: |
+          python -m pip install -r requirements-dev.txt
+          npm install -g npm@11.12.1
+          npm --prefix web ci
+          test ! -e "$HOME/.config/openui/telemetry.json"
+      - name: Install PostgreSQL 17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          sudo mkdir -p /var/run/postgresql && sudo chmod 1777 /var/run/postgresql
+      - name: Browser acceptance (lane G)
+        env:
+          CI: 'true'
+        run: bash scripts/agent_ui_validation.sh browser
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: agent-ui-browser-evidence-${{ github.sha }}
+          path: agent-ui-evidence
+          retention-days: 14

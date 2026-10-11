@@ -1,14 +1,14 @@
 """Chat video uploads straight to private storage (chat-context SPEC §5.7, §7.2–7.4, §14.2).
 
-The browser PUTs the file to a signed, single-object URL; video bytes never pass through a function. `begin` checks
+The browser uploads to a signed, single-object URL or signed TUS session; video bytes never pass through a function. `begin` checks
 role, caps and the declared size and length, records a pending row and mints the URL (the token is never stored).
 `commit` believes only what storage reports: HEAD size/type/ETag, bounded range reads for the `ftyp` brand and
 `moov` (duration, frame size, location tags), then decodes the browser's frames through the Pillow path and adds the
 asset in one command. Anything wrong deletes the object (400); storage trouble keeps the row pending (503, retryable).
 `sweep` removes objects of uploads that were never finished, 24 h after their token expired.
 
-Phase 1 caps are locked: at most 100 MB and 3 minutes, whatever the environment asks for (the Free-plan bucket
-uses POSTRIFF_VIDEO_MAX_BYTES=50000000). Everything is off unless RAFII_VIDEO_UPLOADS_ENABLED is set.
+Legacy limits remain 100 MB/3 minutes. YouTube creator limits are separately configured and constrained by the
+actual private bucket's limit and workspace quotas. Everything is off unless RAFII_VIDEO_UPLOADS_ENABLED is set.
 """
 from __future__ import annotations
 
@@ -80,11 +80,12 @@ class VideoPolicy:
     @classmethod
     def from_environment(cls, values):
         values = values or {}
+        youtube_creator = _flag(values.get('POSTRIFF_YOUTUBE_CREATOR_ENABLED'))
         return cls(
             enabled=_flag(values.get("RAFII_VIDEO_UPLOADS_ENABLED")),
             bucket=str(values.get("POSTRIFF_VIDEO_BUCKET") or "postriff-video"),
-            max_bytes=_int(values, "POSTRIFF_VIDEO_MAX_BYTES", PHASE1_MAX_BYTES, 1, PHASE1_MAX_BYTES),
-            max_seconds=_int(values, "POSTRIFF_VIDEO_MAX_SECONDS", PHASE1_MAX_SECONDS, 1, PHASE1_MAX_SECONDS),
+            max_bytes=_int(values, 'POSTRIFF_YOUTUBE_VIDEO_MAX_BYTES', PHASE1_MAX_BYTES, 1, 256 * 1024**3) if youtube_creator else _int(values, "POSTRIFF_VIDEO_MAX_BYTES", PHASE1_MAX_BYTES, 1, PHASE1_MAX_BYTES),
+            max_seconds=_int(values, 'POSTRIFF_YOUTUBE_VIDEO_MAX_SECONDS', 43200, 1, 43200) if youtube_creator else _int(values, "POSTRIFF_VIDEO_MAX_SECONDS", PHASE1_MAX_SECONDS, 1, PHASE1_MAX_SECONDS),
             frames=_int(values, "POSTRIFF_VIDEO_FRAMES", 4, 1, 4),
             daily_bytes=_int(values, "POSTRIFF_VIDEO_DAILY_BYTES", 1_000_000_000, 1, 10**12),
             workspace_max_bytes=_int(values, "POSTRIFF_VIDEO_WORKSPACE_MAX_BYTES", 2_000_000_000, 1, 10**13),
@@ -127,6 +128,15 @@ class UploadRows:
     def get(self, cur, workspace_id, upload_id, lock=True):
         cur.execute(f"SELECT {self.COLUMNS} FROM public.pr_media_uploads WHERE workspace_id=%s AND id=%s" + (" FOR UPDATE" if lock else ""), (workspace_id, upload_id))
         return self._dict(cur.fetchone())
+
+    def renew(self, cur, workspace_id, upload_id):
+        cur.execute("UPDATE public.pr_media_uploads SET token_expires_at=now()+make_interval(secs=>%s),updated_at=now() "
+                    "WHERE workspace_id=%s AND id=%s AND status='pending' AND created_at>now()-interval '24 hours' "
+                    "RETURNING extract(epoch from token_expires_at)::float8", (TOKEN_SECONDS, workspace_id, upload_id))
+        row = cur.fetchone()
+        if not row:
+            raise AlphaError('This pending upload expired. Remove it and begin a new upload explicitly.', 409, code='video_resume_expired')
+        return float(row[0])
 
     def set_status(self, cur, workspace_id, upload_id, status, error=None):
         cur.execute("UPDATE public.pr_media_uploads SET status=%s, last_error=%s, updated_at=now() WHERE workspace_id=%s AND id=%s", (status, (error or None) and str(error)[:300], workspace_id, upload_id))
@@ -220,8 +230,10 @@ class VideoUploads:
         from .permissions import require
         self._session_only(token)
         max_bytes = self._ready()
-        if not isinstance(body, dict) or not set(body) <= {"mime", "bytes", "duration", "width", "height"}:
+        if not isinstance(body, dict) or not set(body) <= {"mime", "bytes", "duration", "width", "height", "transport"}:
             raise AlphaError(MSG["format"], 400)
+        if body.get('transport', 'put') not in ('put', 'tus'):
+            raise AlphaError('Choose a supported video upload transport.', 400)
         mime = body.get("mime")
         if mime not in MIMES:
             raise AlphaError(MSG["format"], 400)
@@ -256,12 +268,65 @@ class VideoUploads:
             expires = self.rows.insert(cur, {"id": upload_id, "workspaceId": workspace_id, "createdBy": principal, "bucket": self.policy.bucket,
                                              "objectName": object_name, "mime": mime, "declaredBytes": size})
         try:
-            url = self.storage.signed_upload_url(workspace_id, "video", object_name)
+            resumable = self.storage.signed_resumable_upload(workspace_id, object_name, mime) if body.get('transport') == 'tus' else None
+            url = resumable['endpoint'] if resumable else self.storage.signed_upload_url(workspace_id, "video", object_name)
         except AlphaError:
             with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
                 self.rows.set_status(cur, workspace_id, upload_id, "aborted", "could not mint the upload URL")
             raise AlphaError(MSG["off"], 503, code="video_uploads_off") from None
-        return {"upload": {"assetId": upload_id, "method": "PUT", "uploadUrl": url, "headers": {"Content-Type": mime}, "expiresAt": expires, "maxBytes": max_bytes}}
+        return {"upload": {"assetId": upload_id, "method": "TUS" if resumable else "PUT", "uploadUrl": url,
+                           "headers": {} if resumable else {"Content-Type": mime}, "expiresAt": expires, "maxBytes": max_bytes,
+                           **({'resumable': resumable} if resumable else {})}}
+
+    def resume(self, workspace_id, token, upload_id, body):
+        """Regrant the original creator's pending immutable object; reconcile completed PUT/PATCH first."""
+        from .permissions import require
+        self._session_only(token)
+        max_bytes = self._ready()
+        if (not isinstance(upload_id, str) or not ASSET_ID.fullmatch(upload_id) or not isinstance(body, dict)
+                or set(body) != {'mime', 'bytes'}):
+            raise AlphaError('Choose the same pending video.', 400)
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_member(row), 'edit')
+            if _state(row).get('workspace', {}).get('sample'):
+                raise AlphaError('Hosted sample workspaces are read-only.', 403, code='sample_read_only')
+            upload = self.rows.get(cur, workspace_id, upload_id)
+            if not upload or upload.get('createdBy') != principal:
+                raise AlphaError('This pending upload is unavailable.', 404)
+            if (type(body.get('bytes')) is not int or body['bytes'] != upload['declaredBytes']
+                    or body.get('mime') != upload['mime'] or upload['bucket'] != self.policy.bucket
+                    or upload['declaredBytes'] > max_bytes):
+                raise AlphaError('The selected video or upload policy changed. Start a new upload explicitly.', 409)
+            if upload['status'] == 'committed':
+                existing = next((a for a in _state(row).get('phase2', {}).get('assets', []) if a.get('id') == upload_id
+                    and a.get('objectName') == upload['objectName'] and not a.get('deleted')), None)
+                if existing:
+                    return {'assetId': upload_id, 'objectComplete': True}
+            if upload['status'] != 'pending':
+                raise AlphaError(MSG['not_pending'], 409)
+        # Provider I/O stays outside the workspace row lock. Recheck membership/intent before renewing.
+        try:
+            info = self.storage.object_info(workspace_id, 'video', upload['objectName'])
+        except AlphaError as error:
+            if error.status != 404:
+                raise
+            info = None
+        with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_member(row), 'edit')
+            current = self.rows.get(cur, workspace_id, upload_id)
+            if not current or current.get('createdBy') != principal or current['status'] != 'pending' or current['objectName'] != upload['objectName']:
+                raise AlphaError(MSG['not_pending'], 409)
+            if info:
+                if info['bytes'] != upload['declaredBytes'] or info['mime'] != upload['mime']:
+                    raise AlphaError('Storage reports a different object. Reconcile this upload before proceeding.', 409)
+                return {'assetId': upload_id, 'objectComplete': True}
+            expires = self.rows.renew(cur, workspace_id, upload_id)
+            if self.audit:
+                self.audit(cur, workspace_id, principal, 'media.video_upload_resumed', upload_id, {'declaredBytes': upload['declaredBytes']})
+        resumable = self.storage.signed_resumable_upload(workspace_id, upload['objectName'], upload['mime'])
+        return {'assetId': upload_id, 'objectComplete': False,
+                'upload': {'assetId': upload_id, 'method': 'TUS', 'uploadUrl': resumable['endpoint'], 'headers': {},
+                           'expiresAt': expires, 'maxBytes': max_bytes, 'resumable': resumable}}
 
     # --- commit -----------------------------------------------------------------------------------------------------
     def _reject(self, workspace_id, token, upload, message):

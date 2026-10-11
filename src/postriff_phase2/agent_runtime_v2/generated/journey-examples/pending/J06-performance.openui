@@ -1,0 +1,11 @@
+root = RafiiRoot([coverage, table, compare])
+$period = "last_30_days"
+$platform = "all"
+$zone = "Asia/Hong_Kong"
+$selectedPosts = []
+posts = Query("analytics_posts", {period: $period, zone: $zone, platform: $platform}, null)
+cov = Query("analytics_coverage", {period: $period, zone: $zone}, null)
+like = Query("analytics_compare", {metric: "views", platform: "threads", period: $period, zone: $zone}, null)
+coverage = CoverageNote(cov)
+table = MetricTable(posts, ["views", "likes", "replies"], $period, $platform, $selectedPosts)
+compare = ComparisonSummary(like)

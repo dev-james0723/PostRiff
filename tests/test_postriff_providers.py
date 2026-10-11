@@ -89,10 +89,15 @@ class Adapters(unittest.TestCase):
             self.assertEqual(provider.inspect_scopes('SYNTHETIC','1789'),expected)
 
     def test_linkedin_introspection_binds_active_token_and_client(self):
-        for body, expected in [({'active': True, 'client_id': 'cid', 'scope': 'openid,profile,w_member_social'}, ['openid','profile','w_member_social']), ({'active': True, 'client_id': 'other', 'scope': 'w_member_social'}, None), ({'active': False, 'client_id': 'cid', 'scope': 'w_member_social'}, None), ({'active': True, 'client_id': 'cid'}, None)]:
+        for body, expected in [({'active': True, 'client_id': 'cid', 'scope': 'openid,profile,w_member_social'}, ['openid','profile','w_member_social']), ({'active': True, 'client_id': 'other', 'scope': 'w_member_social'}, 'reauthorization_required'), ({'active': False, 'client_id': 'cid', 'scope': 'w_member_social'}, 'reauthorization_required'), ({'active': True, 'client_id': 'cid'}, None)]:
             transport = Recorder([{'status':200, 'body':body}])
             adapter = LinkedInProvider('cid','synthetic',transport=transport)
-            self.assertEqual(adapter.inspect_scopes('synthetic-access','urn:li:person:abc'), expected)
+            if expected == 'reauthorization_required':
+                with self.assertRaises(AlphaError) as raised:
+                    adapter.inspect_scopes('synthetic-access','urn:li:person:abc')
+                self.assertEqual(raised.exception.code, expected)
+            else:
+                self.assertEqual(adapter.inspect_scopes('synthetic-access','urn:li:person:abc'), expected)
             self.assertEqual(transport.calls[0]['url'], 'https://www.linkedin.com/oauth/v2/introspectToken')
             self.assertNotIn('synthetic', transport.calls[0]['url'])
 
@@ -239,4 +244,3 @@ class HostedPlatformsHaveLimits(unittest.TestCase):
         for platform in platforms:
             self.assertGreater(LIMITS[platform]["characters"], 0)
             self.assertTrue(LIMITS[platform]["operation"])
-

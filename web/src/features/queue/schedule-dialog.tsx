@@ -203,8 +203,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const needsVideo = ['YouTube', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || (variant?.platform === 'TikTok' && !tiktokPhoto);
   const needsImage = variant?.platform === 'Pixelfed';
   const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
-    (needsVideo ? isPostableVideo(candidate) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (flexibleMedia && isPostableVideo(candidate)) || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated'))), [libraryAssets, needsVideo, variant?.platform, flexibleMedia]);
+    (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
+      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (flexibleMedia && isPostableVideo(candidate, variant?.platform)) || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated'))), [libraryAssets, needsVideo, variant?.platform, flexibleMedia]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
@@ -222,11 +222,12 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
+  const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
-      localTime &&
+      (youtubeNow || localTime) &&
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
@@ -415,7 +416,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           </div>
 
           <div className='grid gap-4 sm:grid-cols-2'>
-            <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
+            {!youtubeNow && <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
               <Label htmlFor='schedule-time'>Publish at</Label>
               <Input
                 id='schedule-time'
@@ -430,7 +431,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               <span className='text-muted-foreground text-xs'>{timeZone}</span>
               {timePassed && <Note>Pick a future time.</Note>}
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
-            </div>
+            </div>}
             <div className='flex flex-col gap-1.5'>
               <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : flexibleMedia ? 'Media' : 'Image (optional)'}</Label>
               <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : flexibleMedia ? variant?.platform === 'LinkedIn' ? ['image', 'video', 'document'] : ['image', 'video'] : ['image']} />
@@ -442,9 +443,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             {extraIds.map((id, index) => <div key={id} className='flex flex-col gap-1.5 rounded-lg border p-2'><span className='text-sm'>Media {index+2} · {assets.find((item) => item.id === id)?.hash.slice(0,8)}</span>{kindOf(assets.find((item) => item.id === id)) === 'image' && <Input aria-label={`Alt text for media ${index+2}`} placeholder='Describe this image' value={mediaAlt[id] ?? ''} onChange={(event) => setMediaAlt((old) => ({ ...old, [id]: event.target.value }))} />}<div className='flex gap-3'><button type='button' disabled={index === 0} className='rafii-focus text-xs underline disabled:opacity-40' onClick={() => setExtraIds((old) => { const next = [...old]; [next[index-1], next[index]] = [next[index], next[index-1]]; return next; })}>Move earlier</button><button type='button' className='rafii-focus text-xs underline' onClick={() => setExtraIds((old) => old.filter((item) => item !== id))}>Remove</button></div></div>)}
             {selectedMedia.length < multiLimit && <><AssetPicker assets={assets.filter((item) => !selectedMedia.some((selected) => selected.id === item.id) && (['Threads','Instagram'].includes(variant?.platform ?? '') || kindOf(item) === 'image'))} value={extraCandidate} onValueChange={setExtraCandidate} kinds={['image','video']} noneLabel='Choose another media item' /><button type='button' className='rafii-focus self-start text-sm underline disabled:opacity-40' disabled={!extraCandidate} onClick={() => { setExtraIds((old) => [...old, extraCandidate]); setExtraCandidate(''); }}>Add in this order</button></>}
           </section>}
-          {channel && ['YouTube','Facebook'].includes(channel.platform) && <Label className='flex items-center gap-2'><Checkbox checked={nativeSchedule} onCheckedChange={(value) => setNativeSchedule(value === true)} />Use platform scheduling {channel.platform === 'Facebook' ? '(feed text/photos only)' : '(initially private)'}</Label>}
+          {channel && channel.platform === 'Facebook' && <Label className='flex items-center gap-2'><Checkbox checked={nativeSchedule} onCheckedChange={(value) => setNativeSchedule(value === true)} />Use platform scheduling {channel.platform === 'Facebook' ? '(feed text/photos only)' : '(initially private)'}</Label>}
 
-          {askFold && (
+          {!youtubeNow && askFold && (
             <div className='flex flex-col gap-1.5'>
               <Label id='schedule-fold-label'>This time happens twice that day</Label>
               <RadioGroup aria-labelledby='schedule-fold-label' value={String(fold)} onValueChange={(value) => setFold(value === '1' ? 1 : 0)}>

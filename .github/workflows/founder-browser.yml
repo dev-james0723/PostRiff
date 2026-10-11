@@ -22,6 +22,9 @@ permissions:
 concurrency:
   group: founder-browser-${{ github.ref }}
   cancel-in-progress: true
+env:
+  # @openuidev/lang-core sends install telemetry from postinstall unless disabled (rafii-genui/1, G14).
+  OPENUI_TELEMETRY_DISABLED: '1'
 jobs:
   founder:
     runs-on: ubuntu-24.04

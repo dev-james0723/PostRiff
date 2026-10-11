@@ -57,6 +57,14 @@ class FakeRows:
         row = self.items.get(upload_id)
         return dict(row) if row and row["workspaceId"] == ws else None
 
+    def renew(self, cur, ws, upload_id):
+        row = self.items[upload_id]
+        if row.get('originalExpiry', row['tokenExpiresAt']) + 22 * 3600 <= self.clock[0]:
+            raise AlphaError('Expired pending upload.', 409, code='video_resume_expired')
+        row.setdefault('originalExpiry', row['tokenExpiresAt'])
+        row['tokenExpiresAt'] = self.clock[0] + vu.TOKEN_SECONDS
+        return row['tokenExpiresAt']
+
     def set_status(self, cur, ws, upload_id, status, error=None):
         self.items[upload_id]["status"] = status
 
@@ -88,6 +96,12 @@ class FakeStorage:
 
     def signed_upload_url(self, ws, category, name):
         return f"https://abcd.supabase.co/storage/v1/object/upload/sign/postriff-video/{ws}/video/{name}?token=t"
+
+    def signed_resumable_upload(self, ws, name, mime):
+        self.calls.append(('signed_resumable', ws, name, mime))
+        return {'protocol': 'tus', 'endpoint': 'https://abcd.storage.supabase.co/storage/v1/upload/resumable',
+                'headers': {'x-signature': 'one-object-only'}, 'chunkBytes': 6 * 1024 * 1024,
+                'metadata': {'bucketName': 'postriff-video', 'objectName': f'{ws}/video/{name}', 'contentType': mime, 'cacheControl': '3600'}}
 
     def put(self, name, data, mime="video/mp4", etag='"e1"'):
         self.objects[name] = (data, mime, etag)
@@ -214,6 +228,15 @@ class PolicyTests(unittest.TestCase):
 
 
 class BeginTests(unittest.TestCase):
+    def test_resumable_ticket_keeps_original_intent_and_service_key_out_of_browser(self):
+        service, rows, uploads, _ = make()
+        ticket = begin(uploads, transport='tus')['upload']
+        self.assertEqual(ticket['method'], 'TUS')
+        self.assertEqual(ticket['resumable']['headers'], {'x-signature': 'one-object-only'})
+        self.assertEqual(ticket['resumable']['metadata']['objectName'], f"{WS}/video/{ticket['assetId']}.mp4")
+        self.assertNotIn('one-object-only', str(rows.items))
+        self.assertEqual(service.repository.revision, 5)
+
     def test_ticket_and_no_state_change(self):
         service, rows, uploads, _ = make()
         ticket = begin(uploads)["upload"]
@@ -445,6 +468,54 @@ class AbortUrlSweepTests(unittest.TestCase):
         self.assertIn(("video", rows.items.get(upload_id, {}).get("objectName") or f"{upload_id}.mp4"), service.storage.deleted)
         self.assertIn(("video", "stray" + "0" * 27 + ".mp4"), service.storage.deleted)
         self.assertEqual(rows.all_for(None, WS), [])
+
+
+
+
+class ResumableGrantTests(unittest.TestCase):
+    def test_resume_regrants_same_object_after_expired_signature(self):
+        service, rows, uploads, audits = make()
+        ticket = begin(uploads, transport='tus')['upload']; identifier = ticket['assetId']
+        rows.clock[0] += vu.TOKEN_SECONDS + 10
+        result = uploads.resume(WS, 'session', identifier, {'mime': 'video/mp4', 'bytes': len(mp4())})
+        self.assertFalse(result['objectComplete'])
+        self.assertEqual(result['upload']['assetId'], identifier)
+        self.assertEqual(result['upload']['resumable']['metadata']['objectName'], f'{WS}/video/{identifier}.mp4')
+        self.assertGreater(result['upload']['expiresAt'], ticket['expiresAt'])
+        self.assertEqual(len(rows.items), 1)
+        self.assertEqual(audits[-1][0], 'media.video_upload_resumed')
+
+    def test_accepted_final_chunk_is_reconciled_without_another_signed_upload(self):
+        service, rows, uploads, _ = make()
+        ticket = begin(uploads, transport='tus')['upload']; identifier = ticket['assetId']
+        service.storage.put(identifier + '.mp4', mp4())
+        before = len([x for x in service.storage.calls if isinstance(x, tuple) and x[0] == 'signed_resumable'])
+        result = uploads.resume(WS, 'session', identifier, {'mime': 'video/mp4', 'bytes': len(mp4())})
+        self.assertEqual(result, {'assetId': identifier, 'objectComplete': True})
+        self.assertEqual(len([x for x in service.storage.calls if isinstance(x, tuple) and x[0] == 'signed_resumable']), before)
+
+    def test_foreign_creator_tenant_changed_file_or_committed_intent_cannot_regrant(self):
+        for condition in ('creator', 'tenant', 'bytes', 'mime', 'committed', 'expired'):
+            with self.subTest(condition=condition):
+                service, rows, uploads, _ = make()
+                identifier = begin(uploads, transport='tus')['upload']['assetId']
+                target = rows.items[identifier]; payload = {'mime': 'video/mp4', 'bytes': len(mp4())}; workspace = WS
+                if condition == 'creator': target['createdBy'] = 'foreign-user'
+                if condition == 'tenant': workspace = '5b2e7c1a-0000-4000-8000-000000000099'
+                if condition == 'bytes': payload['bytes'] += 1
+                if condition == 'mime': payload['mime'] = 'video/quicktime'
+                if condition == 'committed': target['status'] = 'committed'
+                if condition == 'expired': rows.clock[0] += 25 * 3600
+                with self.assertRaises(AlphaError): uploads.resume(workspace, 'session', identifier, payload)
+                self.assertEqual(len(rows.items), 1)
+
+    def test_storage_uncertainty_never_restarts_or_replaces_the_object(self):
+        service, rows, uploads, _ = make()
+        identifier = begin(uploads, transport='tus')['upload']['assetId']
+        service.storage.down = True
+        with self.assertRaises(AlphaError): uploads.resume(WS, 'session', identifier, {'mime': 'video/mp4', 'bytes': len(mp4())})
+        self.assertEqual(rows.items[identifier]['status'], 'pending')
+        self.assertEqual(len(service.storage.deleted), 0)
 
 
 if __name__ == "__main__":

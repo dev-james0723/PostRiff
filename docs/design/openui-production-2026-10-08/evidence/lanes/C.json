@@ -1,0 +1,77 @@
+{
+ "role": "C",
+ "branch": "claude/rafii-openui-c-renderer",
+ "base_sha": "31cbee09",
+ "head_sha": "34db344d",
+ "owned_paths": [
+  "web/src/features/agent/generative-ui/core/**",
+  "web/src/features/agent/generative-ui/components/primitives/**",
+  "web/src/features/agent/generative-ui/component-specs.ts",
+  "web/src/features/agent/generative-ui/library-registry.ts",
+  "web/src/features/agent/generative-ui/library.tsx",
+  "web/src/features/agent/generative-ui/founder-library.tsx",
+  "web/src/features/agent/generative-ui/renderer.tsx",
+  "web/src/lib/agent-runtime/ui-parser/**",
+  "web/scripts/generate-openui-assets.mjs",
+  "src/postriff_phase2/agent_runtime_v2/generated/** (except journey-examples/)",
+  "web/src/features/agent/generative-ui/generated/**",
+  "web/tests/agent-ui-parser|library|renderer|state*.test.cjs, web/tests/agent-ui-library-loader.cjs"
+ ],
+ "completed_tasks": [
+  "Trusted validator validateAndMergeUi (D-A11 + D-A42 stateNames/formNames): root RafiiRoot, zero Mutation, literal read-binding Query names with null defaults and refresh >= 30 s, literal/$var args, component/action allowlists, 128/32/24 KiB + 512 statements + depth 24 + bracket pre-scan, duplicate ids, prop rules (query/bound/safe-href/action-id), unexplained-deletion guard, stale base hash conflict, stable error codes without source text",
+  "Component specs (28 primitives) + registry: consumer/founder libraries, per-journey groups, library hash sha256(stableJson(toSpec())+contractVersion), lane E seams (journey-module, journey-renderers, founder-journey-renderers)",
+  "Cloud asset generator: openui-assets.json (journeys->groups->components, hashes, field hosts, rules, prompt index), JSON schemas, 22 generate/patch prompts; every core and journey example and edit validated by the trusted validator; anchored rewrites of upstream prompt lines that contradict grounding; patch prompts carry patch examples only",
+  "core/openui.ts facade with devtools opt-out first (D-A3), publishObservability={false} enforced by test",
+  "Primitives on Rafii tokens: runtime safeProps, statement-id keys, genuine-result-only bound data (WeakSet brand; unknown never zero), local sort/paging via reserved cursor arg, accessible chart table alternative with lazy recharts, AssetPreviewView through authenticated same-workspace preview routes only, guarded ActionButton through D's bridge",
+  "RafiiGenerativeMessage: native layer outside the generated subtree, accepted-only reads/actions, streaming preview without data or writes, swap rule (initialState = F initial + latest snapshot) with dirty-field warning [data-rafii-dirty-conflict], F view-state context, library-version fallback, watchdog, error boundary, inert bridges until D's exist (no remount), G evidence hooks and performance marks",
+  "Native confirmation sheet [data-rafii-genui-confirmation] (modal only while confirming) and receipts that never show prepared as applied",
+  "GenUiLocale context (en / zh-Hant / zh-Hans labels, Intl formatting, unknown -> Not available)"
+ ],
+ "interfaces_produced": [
+  "validateAndMergeUi(request) -> UiValidationResult {accepted, canonicalSource, sourceHash, statementCount, queryNames, actionIds, componentNames, stateNames, formNames, errors, libraryHash, libraryVersion, removedStatementIds?, replacedStatementIds?}",
+  "generated/openui-assets.json (D-A30 shape) + prompts/<library>-<J0x|all>-<generate|patch>.txt + <library>.schema.json",
+  "RafiiGenerativeMessage({artifact, nativeResult?, onContinue, surface, transport, manifest?, render?, status?, historical?, active?, onNavigate?, onRetry?, onExpand?, className?}); supportedLibraryHashes(name)",
+  "core/component-types.ts RafiiComponentRenderer/JourneyRenderers; core/locale.tsx useGenUiLocale/GenUiLocaleProvider/createGenUiLocale; core/props.ts safeProps; core/query-data.ts readQuery/rowsOf/getPath/numberAt/rowId/refParts/showsData; core/runtime-context.tsx useGenUiRuntime; components/primitives AssetPreviewView, QueryStateNote, SourceMeta, StatusBadge, Children",
+  "DOM hooks: [data-rafii-generated][data-artifact-id][data-generation-state], data-genui=<Name> + data-statement-id, [data-genui-control], [data-genui-action-receipt], [data-rafii-genui-status-line], [data-rafii-dirty-conflict]; marks rafii-genui:first-component / rafii-genui:ready {artifactId, revision}"
+ ],
+ "tests": [
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37858969410 (agent-ui: Types)",
+   "conclusion": "success",
+   "test_counts": "tsc --noEmit",
+   "sha": "34db344d"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37858969410 (agent-ui: Lint)",
+   "conclusion": "success",
+   "test_counts": "oxlint src",
+   "sha": "34db344d"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37858969410 (agent-ui: drift check)",
+   "conclusion": "success",
+   "test_counts": "generate-openui-assets.mjs --check",
+   "sha": "34db344d"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37858969410 (agent-ui: unit + parser)",
+   "conclusion": "success",
+   "test_counts": "python + node --test web/tests/agent-ui-* (C: parser 22, library 8, state 11, renderer 9)",
+   "sha": "34db344d"
+  },
+  {
+   "command_or_ci_run_url": "https://github.com/dev-james0723/PostRiff/actions/runs/37858969410 (agent-ui: PostgreSQL)",
+   "conclusion": "success",
+   "test_counts": "postgres_agent_ui_*",
+   "sha": "34db344d"
+  }
+ ],
+ "blockers": [],
+ "shared_patches": [],
+ "remaining": [
+  "Browser-level proof (G15/G16/G10) of focus/selection kept across stream chunks and patches, keyboard order in WebKit, axe on every primitive: C's tests are SSR + pure (no DOM); G's Playwright scenes are the evidence",
+  "Real-model generation validity (G03) and timing (G17) measured by B/G on the canary; C provides the marks",
+  "Library compatibility list COMPATIBLE_LIBRARY_HASHES is empty: any spec change makes earlier artifacts show their native fallback (no regeneration) until a verified hash is listed"
+ ],
+ "next_action": "A integrates 34db344d; G re-runs keyboard-only with the rewritten scene"
+}

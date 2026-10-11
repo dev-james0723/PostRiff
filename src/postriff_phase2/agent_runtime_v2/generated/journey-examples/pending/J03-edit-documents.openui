@@ -1,0 +1,2 @@
+$kind = "document"
+browser = LibraryBrowser(results, $selectedAssets, $q, $kind, "Recital documents")

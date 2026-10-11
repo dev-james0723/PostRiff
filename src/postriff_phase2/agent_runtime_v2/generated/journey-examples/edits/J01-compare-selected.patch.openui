@@ -1,0 +1,2 @@
+root = RafiiRoot([list, compare], "Unscheduled drafts")
+compare = DraftCompare(picks, $selectedDrafts, "The two you picked")

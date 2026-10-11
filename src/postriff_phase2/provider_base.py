@@ -25,9 +25,26 @@ def _credential_shape(value):
             and value.lower() not in {'change-me', 'changeme', 'replace-me', 'placeholder', 'todo'})
 
 
+def fixed_https_origin(value):
+    """`https://host[:port]` from trusted configuration, or None. Never derived from a request's Host header."""
+    from urllib.parse import urlsplit
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        origin = urlsplit(value.strip().rstrip("/"))
+        origin.port
+    except ValueError:
+        return None
+    if origin.scheme != "https" or not origin.hostname or origin.username or origin.password or origin.path or origin.query or origin.fragment:
+        return None
+    return f"https://{origin.netloc.lower()}"
+
+
 class OAuthProvider:
     id = ""
     platform = ""
+    # Trusted per-provider callback origin (configuration only); None follows POSTRIFF_PUBLIC_BASE_URL.
+    callback_origin = None
     capability_version = 1
     native_schedule = False
     assisted_fallback = True

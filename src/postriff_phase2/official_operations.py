@@ -433,6 +433,12 @@ class OfficialAPI:
         else: raise AlphaError("No official creator-management write for this provider.", 409)
         result = self.envelope(response, action)
         result["executionState"] = "submitted" if response.get("status") in (200, 201, 204) else "held" if response.get("status") in (401, 403) else "uncertain"
+        if pid == 'linkedin' and action == 'edit':
+            result['httpStatus'] = response.get('status')
+            result['executionState'] = ('submitted' if response.get('status') == 204 else 'held'
+                                        if response.get('status') in (400, 401, 403, 404, 422) else 'uncertain')
+            result['message'] = ('LinkedIn accepted this edit. Open the post to confirm the displayed text.'
+                                 if response.get('status') == 204 else 'LinkedIn did not confirm this edit. Check its receipt before another action.')
         return result
 
 
@@ -467,6 +473,31 @@ class SocialActionsService:
     """
     def __init__(self, oauth): self.oauth, self.repository = oauth, oauth.repository
 
+    @staticmethod
+    def _linkedin_post(state, connection, account, target, *, excluding=None):
+        """A write grant is not authority over another workspace's post receipt."""
+        if not re.fullmatch(r'urn:li:(share|ugcPost):\d+', str(target)):
+            raise AlphaError('Choose the exact LinkedIn post receipt.', 409)
+        data = state.get('phase2', {})
+        job = next((job for job in data.get('jobs', [])
+                    if job.get('providerReference') == target and job.get('state') in ('provider_accepted', 'verified')
+                    and job.get('manifest', {}).get('platform') == 'LinkedIn'
+                    and job['manifest'].get('channelId') == connection
+                    and job['manifest'].get('providerAccountId') == account), None)
+        if not job:
+            raise AlphaError('This workspace has no accepted receipt for that LinkedIn post.', 409, code='linkedin_post_scope')
+        if any(item.get('id') != excluding and item.get('state') in ('submitting', 'uncertain')
+               and item.get('manifest', {}).get('connectionId') == connection
+               and item['manifest'].get('target') == target
+               and item['manifest'].get('action') in ('edit', 'delete')
+               for item in data.get('nativeSocialActions', [])):
+            raise AlphaError('Reconcile the pending LinkedIn action before another edit.', 409, code='linkedin_action_unresolved')
+        destination = (job['manifest'].get('publishOptions') or {}).get('selectedDestination') or {}
+        actor = destination.get('id') or account
+        proof = {'jobId': job['id'], 'reference': target, 'connectionId': connection, 'actor': actor,
+                 'lastEditId': (job.get('publishedEdit') or {}).get('actionId')}
+        return job, proof
+
     def read(self, workspace, token, connection, feature, target=None, options=None):
         adapter, grant = self.oauth._member_grant(workspace, token, connection, "read")
         return OfficialAPI(adapter, grant).read(feature, target, options)
@@ -491,6 +522,12 @@ class SocialActionsService:
             manifest = {"schema": "rafii.native-social-action.v1", "workspaceId": workspace, "connectionId": connection,
                         "providerAccountId": channel["providerAccountId"], "platform": channel["platform"], "actor": principal,
                         "action": action, "target": target, "payload": payload, "createdAt": self.oauth.clock()}
+            if provider_id == 'linkedin' and action in ('edit', 'delete'):
+                _, proof = self._linkedin_post(state, connection, channel['providerAccountId'], target)
+                if payload.get('actor') and payload['actor'] != proof['actor']:
+                    raise AlphaError('The action actor must match the accepted post.', 409)
+                manifest['payload']['actor'] = proof['actor']
+                manifest['postProof'] = proof
             if action in ('thumbnail', 'playlist_image'):
                 from .asset_kinds import is_postable_image
                 image = next((a for a in state['phase2'].get('assets',[]) if a.get('id') == payload.get('assetId')), None)
@@ -504,7 +541,7 @@ class SocialActionsService:
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace))
             return copy.deepcopy(item)
 
-    def approve(self, workspace, token, action_id, approval_digest, confirmed):
+    def approve(self, workspace, token, action_id, approval_digest, confirmed, *, connection_id=None):
         if confirmed is not True: raise AlphaError("Confirm the exact native action.", 400)
         with self.repository.transaction(token, workspace) as (cur, row, principal):
             from .hosted import _membership, audit
@@ -515,10 +552,17 @@ class SocialActionsService:
             if not item or item["state"] != "preview" or item["digest"] != approval_digest or digest(item["manifest"]) != approval_digest:
                 raise AlphaError("Action changed or was already attempted. Reconcile its receipt before a new approval.", 409)
             manifest = copy.deepcopy(item["manifest"])
+            if connection_id is not None and manifest['connectionId'] != connection_id:
+                raise AlphaError('The reviewed action belongs to a different connection.', 409)
+            if manifest['platform'] == 'LinkedIn' and manifest['action'] in ('edit', 'delete'):
+                _, proof = self._linkedin_post(state, manifest['connectionId'], manifest['providerAccountId'], manifest['target'], excluding=action_id)
+                if manifest.get('postProof') != proof:
+                    raise AlphaError('The LinkedIn post changed. Review the edit again.', 409)
             if self.oauth.clock()-manifest["createdAt"] > 600: raise AlphaError("Action preview expired. Review it again.", 409)
             item.update(state="submitting", approvedBy=principal, attemptedAt=self.oauth.clock())
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace))
             audit(cur, workspace, principal, "social.native_action_attempted", action_id, {"action": manifest["action"]})
+        write_started = False
         try:
             adapter, grant = self.oauth._member_grant(workspace, token, manifest["connectionId"], "approve")
             if adapter.identity(grant["accessToken"])["providerAccountId"] != manifest["providerAccountId"]:
@@ -534,14 +578,25 @@ class SocialActionsService:
                 raw = self.assets.storage.get(workspace,'media',proof['objectName'])
                 if len(raw) != proof['bytes'] or hashlib.sha256(raw).hexdigest() != proof['hash']: raise AlphaError('Approved image bytes changed.',409)
                 payload['_media'] = {'raw':raw,**proof}
+            write_started = True
             result = OfficialAPI(adapter, grant).write(manifest["action"], manifest["target"], payload)
         except AlphaError as error:
-            result = {"executionState": "uncertain", "message": str(error)}
+            result = {"executionState": "uncertain" if write_started else "held", "message": str(error)}
         except Exception:
-            result = {'executionState':'uncertain','message':'Provider outcome unknown. The durable intent cannot be repeated; reconcile its receipt first.'}
+            result = {'executionState':'uncertain' if write_started else 'held',
+                      'message':'Provider outcome unknown. The durable intent cannot be repeated; reconcile its receipt first.'
+                                if write_started else 'Account verification is unavailable. No native post action was sent.'}
         with self.repository.transaction(token, workspace) as (cur, row, _):
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             item = next(a for a in state["phase2"]["nativeSocialActions"] if a["id"] == action_id)
             item.update(state=result["executionState"], receipt=result, completedAt=self.oauth.clock())
+            if result['executionState'] == 'submitted' and manifest['platform'] == 'LinkedIn' and manifest['action'] == 'edit':
+                job = next((job for job in state['phase2'].get('jobs', [])
+                            if job['id'] == manifest['postProof']['jobId'] and job.get('providerReference') == manifest['target']), None)
+                if job:
+                    # Keep the original create approval immutable; this separate
+                    # receipt records only the provider-accepted commentary edit.
+                    job['publishedEdit'] = {'text': manifest['payload']['text'], 'actionId': action_id,
+                                            'editedAt': self.oauth.clock(), 'verification': 'provider_accepted'}
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace))
         return result

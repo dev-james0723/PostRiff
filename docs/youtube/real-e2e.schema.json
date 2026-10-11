@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "updatedAt",
+    "execution",
+    "ordinaryCreatorChannelId",
+    "googleProjectId",
+    "readyCapabilities",
+    "realPassCount",
+    "cases"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "updatedAt": {
+      "type": "string"
+    },
+    "execution": {
+      "type": "string"
+    },
+    "ordinaryCreatorChannelId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "googleProjectId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "readyCapabilities": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "realPassCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 100,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "family",
+          "expectedEvidence",
+          "officialMethods",
+          "state",
+          "execution",
+          "realE2ERequired",
+          "realE2ETested",
+          "blocker",
+          "channelId",
+          "resourceIds",
+          "startedAt",
+          "verifiedAt",
+          "redactedReceipt",
+          "screenshots",
+          "links"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "expectedEvidence": {
+            "type": "string"
+          },
+          "officialMethods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "enum": [
+              "BLOCKED — CREDENTIALS",
+              "BLOCKED — GOOGLE APPROVAL",
+              "BLOCKED — ACCOUNT ELIGIBILITY",
+              "NOT AUTHORIZED",
+              "UNSUPPORTED BY OFFICIAL API",
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "execution": {
+            "enum": [
+              "NOT RUN",
+              "real"
+            ]
+          },
+          "realE2ERequired": {
+            "type": "boolean"
+          },
+          "realE2ETested": {
+            "type": "boolean"
+          },
+          "blocker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "channelId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceIds": {
+            "type": "object"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redactedReceipt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "screenshots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

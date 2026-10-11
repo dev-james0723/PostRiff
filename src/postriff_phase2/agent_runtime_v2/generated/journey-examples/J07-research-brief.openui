@@ -1,0 +1,6 @@
+root = RafiiRoot([status, brief])
+$selectedPages = []
+state = Query("research_state", {}, null)
+results = Query("research_results", {}, null)
+status = ResearchStatus(state)
+brief = ResearchBrief(results, $selectedPages, "research_save_sources", "What the sources say")

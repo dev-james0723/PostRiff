@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
 import { CONTROL_COOKIE, FOUNDER_SIGN_IN_PATH } from '@/lib/founder/errors';
+import { legacyHostRedirect } from '@/lib/legacy-host';
 
 /** Set by the sign-in page when the API runs in dev-harness mode (no Supabase). */
 const DEV_COOKIE = 'postriff_dev';
@@ -46,8 +47,14 @@ function founderGate(request: NextRequest, refreshed: NextResponse): NextRespons
  * /api is served by the Python service and never reaches this file.
  */
 export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
   const { pathname, search } = request.nextUrl;
+  const moved = legacyHostRedirect(
+    { method: request.method, host: request.headers.get('host'), pathname, search },
+    { mode: process.env.RAFII_LEGACY_HOST_REDIRECT, hosts: process.env.RAFII_LEGACY_HOSTS, canonical: process.env.NEXT_PUBLIC_APP_URL }
+  );
+  if (moved) return NextResponse.redirect(moved.location, moved.status);
+
+  const { response, user } = await updateSession(request);
 
   if (isFounderRoute(pathname)) return founderGate(request, response);
 
@@ -66,7 +73,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals, the Sentry tunnel, the Python API and static files.
-    '/((?!_next/static|_next/image|api/|monitoring|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest|woff2?|ttf|css|js)$).*)'
+    // Skip Next.js internals, the Sentry tunnel, the Python API, the internal server-to-server routes and static files.
+    '/((?!_next/static|_next/image|api/|internal/|monitoring|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest|woff2?|ttf|css|js)$).*)'
   ]
 };

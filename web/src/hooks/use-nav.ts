@@ -11,16 +11,20 @@
 import { useMemo } from 'react';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import type { NavGroup, NavItem } from '@/types';
+import { useAgentPermissions } from '@/features/account/agent/use-agent-permissions';
+import { permissionsUiEnabled } from '@/lib/agent-permissions/model';
 
 /**
  * Filter navigation items (and their children) against the current workspace access.
  */
 export function useFilteredNavItems(items: NavItem[]) {
   const access = useWorkspaceAccess();
+  const permissionQuery = useAgentPermissions({ enabled: permissionsUiEnabled() });
+  const permissionsVisible = permissionsUiEnabled() && Boolean(permissionQuery.data);
 
   return useMemo(() => {
     return items
-      .filter((item) => checkAccess(access, item.access))
+      .filter((item) => checkAccess(access, item.access) && (item.url !== '/app/account/agent' || permissionsVisible))
       .map((item) => {
         if (item.items && item.items.length > 0) {
           return {
@@ -30,7 +34,7 @@ export function useFilteredNavItems(items: NavItem[]) {
         }
         return item;
       });
-  }, [items, access]);
+  }, [items, access, permissionsVisible]);
 }
 
 /**

@@ -1,0 +1,6 @@
+root = RafiiRoot([preview, evidence, editor])
+draft = Query("draft_read", {draftRef: "draft:7f3c2a91"}, null)
+basis = Query("draft_evidence", {draftRef: "draft:7f3c2a91"}, null)
+preview = PlatformPreviewCard(draft)
+evidence = DraftEvidence(basis)
+editor = DraftEditor(draft, "draft_edit")

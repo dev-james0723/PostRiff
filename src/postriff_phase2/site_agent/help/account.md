@@ -33,3 +33,9 @@ On [Privacy & data](/app/account/privacy), an export is a zip of drafts, sources
 ## Deleting the account
 
 Only the workspace owner can delete the account, from Privacy & data. Rafii never deletes anything from a chat message. Publications already handed to a platform must have an outcome first.
+
+## Rafii Agent permissions
+
+When available, open Settings → Rafii Agent to choose what Rafii may do for you in this workspace. Until you choose, or if you select Not now, Rafii keeps its current behavior. Recommended allows reading, navigation and content editing; other areas ask first. Full requires a fresh sign-in and still keeps publishing approvals and spending limits. Custom lets you narrow categories and data types. Your workspace role always applies.
+
+Preview mode saves your choices without enforcing them yet. The history shows saved changes. Turn off access in the same page; anything already sent to a provider cannot be recalled. Permission reminders are optional and appear at most once every seven days.

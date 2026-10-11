@@ -36,6 +36,9 @@ class TaskPlan:
         self.created_by = created_by
         self.trace_ids = list(trace_ids or [])
         self.changes: list[dict] = []    # step changes made this turn, emitted as events on save
+        # Steps the durable task engine runs itself (artifact flag `engine: true`, only when the engine is on for the workspace):
+        # the plan never changes them; they follow the engine's own rows (task_engine.bridge re-projects them on every save).
+        self.engine_steps: set[str] = set()
 
     # --- construction ------------------------------------------------------------------------------------------------
     @classmethod
@@ -45,8 +48,10 @@ class TaskPlan:
                                 entities=list(s.get("entities") or []), outputs=list(s.get("outputs") or []), approvals=list(s.get("approvals") or []),
                                 reason=s.get("reason"), verified=bool(s.get("verified")), started_at=s.get("startedAt"), updated_at=s.get("updatedAt"))
                  for s in body.get("steps") or [] if isinstance(s, dict) and s.get("id") and s.get("label")]
-        return cls(task_id, body.get("title") or "Task", steps, int(body.get("version") or 0), "running" if status == "running" else status,
+        plan = cls(task_id, body.get("title") or "Task", steps, int(body.get("version") or 0), "running" if status == "running" else status,
                    body.get("createdBy"), body.get("traceIds"))
+        plan.engine_steps = {s["id"] for s in body.get("steps") or [] if isinstance(s, dict) and s.get("engine") is True and s.get("id")}
+        return plan
 
     def artifact(self) -> dict:
         return {"task": {"title": self.title, "version": self.version, "createdBy": self.created_by, "traceIds": self.trace_ids[-20:],
@@ -79,6 +84,8 @@ class TaskPlan:
     def _set(self, step: contracts.Step, state: str, now: float, *, reason=None, verified=None) -> contracts.Step:
         if state not in contracts.STEP_STATES:
             raise AlphaError("Unknown step state.", 400, code="step_state")
+        if step.id in self.engine_steps:
+            return step                      # the engine runs and records this step (see engine_steps)
         if step.state in contracts.TERMINAL_STEP_STATES and state != step.state:
             # A finished step is not reopened; a new request becomes a new step (and a rejected proposal is never retried).
             raise AlphaError(f"That step is already {step.state}.", 409, code="step_closed")
@@ -100,6 +107,8 @@ class TaskPlan:
             raise AlphaError("A step is marked done or failed only by the tool that did it.", 400, code="step_state_forbidden")
         if state in ("blocked", "needs_user", "canceled") and not reason:
             raise AlphaError("Say why.", 400, code="step_reason")
+        if step_id in self.engine_steps:
+            raise AlphaError("Rafii's task engine runs that step and records its state itself.", 409, code="step_closed")
         return self._set(self.step(step_id), state, now, reason=reason)
 
     def start(self, step_id: str | None, now: float) -> contracts.Step | None:
@@ -190,31 +199,48 @@ def create(cur, ideas, workspace_id: str, conversation_id: str, principal: str, 
                  json.dumps({"task": {"title": title, "version": 0, "createdBy": principal, "traceIds": [trace_id], "steps": []}})))
     task_id = cur.fetchone()[0]
     ideas._insert_event(cur, workspace_id, task_id, safe_event("run.started", agent="task", model=TASK_MODEL, reasoning="standard", traceId=trace_id))
+    _engine(cur, "on_create", workspace_id, ideas, workspace_id, conversation_id, principal, task_id, task_key, title, trace_id)
     return TaskPlan(task_id, title, [], 0, "running", principal, [trace_id])
 
 
-def load(cur, workspace_id: str, task_id: str, *, lock: bool = False) -> TaskPlan:
+def load(cur, workspace_id: str, task_id: str, *, lock: bool = False, ideas=None) -> TaskPlan:
     cur.execute("SELECT status,artifact,idempotency_key FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s" + (" FOR UPDATE" if lock else ""), (task_id, workspace_id))
     row = cur.fetchone()
     if not row or not str(row[2]).startswith(KEY_PREFIX):
         raise AlphaError("Task unavailable.", 404)
-    return TaskPlan.from_artifact(task_id, row[1] or {}, row[0])
+    artifact = dict(row[1] or {})
+    from .task_engine import flags, store, bridge
+    if flags.store_for(workspace_id):
+        task = store.load_task(cur, workspace_id, task_id)
+        if task is None and ideas is not None:
+            _engine(cur, "adopt", workspace_id, ideas, workspace_id, task_id)
+            task = store.load_task(cur, workspace_id, task_id)
+        if task is not None and flags.enabled_for(workspace_id):
+            artifact["task"] = store.private_projection(cur, task, store.load_steps(cur, workspace_id, task_id), artifact.get("task"))
+            row = (store._ANCHOR_STATUS.get(task["state"], "running"), *row[1:])
+    plan = TaskPlan.from_artifact(task_id, artifact, row[0])
+    cur.execute("SELECT conversation_id::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (task_id, workspace_id))
+    plan.conversation_id = cur.fetchone()[0]
+    return plan
 
 
-def active(cur, workspace_id: str, conversation_id: str) -> TaskPlan | None:
-    """The conversation's newest open task (text continues what voice started, and back)."""
+def active(cur, workspace_id: str, conversation_id: str, actor: str | None = None, *, ideas=None) -> TaskPlan | None:
+    """The conversation's newest open task (text continues what voice started, and back). With `actor` (passed when the task
+    engine is on for the workspace, CF-3 correction 1), only that person's own task: another member's request never extends,
+    advances or executes it."""
     cur.execute("SELECT id::text,status,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
-                "AND status='running' ORDER BY created_at DESC LIMIT 1", (workspace_id, conversation_id))
+                "AND status='running'" + (" AND actor=%s" if actor else "") + " ORDER BY created_at DESC LIMIT 1",
+                (workspace_id, conversation_id, *([actor] if actor else [])))
     row = cur.fetchone()
-    return TaskPlan.from_artifact(row[0], row[2] or {}, row[1]) if row else None
+    return load(cur, workspace_id, row[0], ideas=ideas) if row else None
 
 
-def latest(cur, workspace_id: str, conversation_id: str) -> TaskPlan | None:
+def latest(cur, workspace_id: str, conversation_id: str, actor: str | None = None, *, ideas=None) -> TaskPlan | None:
     """The conversation's most recent task, finished or not ("what's left?" after the last step closed it)."""
     cur.execute("SELECT id::text,status,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
-                "ORDER BY created_at DESC LIMIT 1", (workspace_id, conversation_id))
+                + ("AND actor=%s " if actor else "") + "ORDER BY created_at DESC LIMIT 1", (workspace_id, conversation_id, *([actor] if actor else [])))
     row = cur.fetchone()
-    return TaskPlan.from_artifact(row[0], row[2] or {}, row[1]) if row else None
+    return load(cur, workspace_id, row[0], ideas=ideas) if row else None
 
 
 def save(cur, ideas, workspace_id: str, plan: TaskPlan, *, trace_id: str | None = None) -> TaskPlan:
@@ -234,7 +260,9 @@ def save(cur, ideas, workspace_id: str, plan: TaskPlan, *, trace_id: str | None 
         plan.trace_ids.append(trace_id)
     status = plan.refresh_status()
     for change in plan.changes:
-        ideas._insert_event(cur, workspace_id, plan.task_id, safe_event("progress.updated", stage="task_step", taskId=plan.task_id, **change))
+        from .task_engine import flags as engine_flags
+        event_change = {k: v for k, v in change.items() if k in ("stepId", "state", "label", "at")} if engine_flags.enabled_for(workspace_id) else change
+        ideas._insert_event(cur, workspace_id, plan.task_id, safe_event("progress.updated", stage="task_step", taskId=plan.task_id, **event_change))
     if status != "running":
         ideas._insert_event(cur, workspace_id, plan.task_id, safe_event("run.completed", usage={"provenance": "task", "steps": len(plan.steps)}))
     # The plan owns its own keys; anything else on the row (a paused Manager run waiting for an approval) is kept while the
@@ -246,7 +274,28 @@ def save(cur, ideas, workspace_id: str, plan: TaskPlan, *, trace_id: str | None 
     cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb,status=%s,updated_at=now() WHERE id::text=%s",
                 (json.dumps(merged, ensure_ascii=False, default=str), status, plan.task_id))
     plan.changes = []
+    _engine(cur, "on_save", workspace_id, ideas, workspace_id, plan)
     return plan
+
+
+def _engine(cur, hook: str, workspace_id: str, *args) -> None:
+    """The durable task engine's seam (CF-3): a no-op unless the engine is on for this workspace. Engine bookkeeping runs under
+    a savepoint, so an engine failure never loses the legacy write it follows (shadow mode: legacy stays authoritative)."""
+    from .task_engine import flags as engine_flags
+    if not engine_flags.store_for(workspace_id):
+        return
+    from .task_engine import bridge
+    cur.execute("SAVEPOINT agent_task_bridge")
+    try:
+        getattr(bridge, hook)(cur, *args)
+    except Exception as error:  # noqa: BLE001
+        cur.execute("ROLLBACK TO SAVEPOINT agent_task_bridge")
+        if engine_flags.enabled_for(workspace_id):
+            raise
+        import logging
+        logging.getLogger("postriff.agent_tasks").error(json.dumps({"event": "agent_task.bridge_failed", "hook": hook, "errorClass": type(error).__name__}))
+    finally:
+        cur.execute("RELEASE SAVEPOINT agent_task_bridge")
 
 
 def now() -> float:

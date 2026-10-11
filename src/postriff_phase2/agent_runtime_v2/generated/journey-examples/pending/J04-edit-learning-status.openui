@@ -1,0 +1,3 @@
+root = RafiiRoot([note, picker, review, prefs, status])
+learning = Query("voice_learning_status", {}, null)
+status = VoiceLearningStatus(learning)

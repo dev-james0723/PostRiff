@@ -1,0 +1,6 @@
+root = RafiiRoot([agenda, queue], "This week")
+$selectedJob = null
+cal = Query("calendar_agenda", {start: "2026-10-05", end: "2026-10-11", zone: "Asia/Hong_Kong"}, null, 60)
+queueNow = Query("queue_status", {}, null, 60)
+agenda = CalendarAgenda(cal, $selectedJob)
+queue = QueueStatus(queueNow)

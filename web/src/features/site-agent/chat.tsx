@@ -37,20 +37,29 @@ import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { commandPayload, parseSlash, type SlashCommand } from '@/lib/agent-runtime/commands';
 import { panelActions, registerPanelActions } from '@/lib/agent-runtime/panel-actions';
 import type { AgentStylePatch } from '@/lib/agent-runtime/style';
-import type { AgentResult, AgentTurnResponse } from '@/lib/agent-runtime/types';
-import { useAgent } from '@/lib/agent-runtime/use-agent';
+import type { AgentResult, AgentStatus, AgentTurnResponse } from '@/lib/agent-runtime/types';
+import { agentStatusQuery, useAgent } from '@/lib/agent-runtime/use-agent';
 import { thinkingOrbsEnabled } from '@/lib/agent-runtime/thinking-state';
 import { useThinkingState } from '@/lib/agent-runtime/use-thinking-state';
 import { useVoice, voiceSession } from '@/lib/agent-runtime/voice-session';
 import { useTimeZone } from '@/lib/preferences';
+import { timeDefaults } from '@/lib/time';
 import { useMotionPreference } from '@/lib/rafii/motion';
 import manifestJson from '@/lib/site-agent/route-manifest.json';
 import { activityRows, isSiteAgentBody, suggestionsFor } from '@/lib/site-agent/panel-logic';
 import { matchRoute, safeHref, type RouteManifest } from '@/lib/site-agent/routes';
 import type { SiteAgentBlock, SiteAgentMessageBody, SiteAgentPageContext, SiteAgentTurnResult } from '@/lib/site-agent/types';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import type { UiSurface, UiTurnContextV1 } from '@/lib/agent-runtime/ui-contracts';
+import type { ContinueRequest } from '@/features/agent/generative-ui/bridges/types';
+import { currentUiContext, markFresh } from '@/features/agent/generative-ui/state/registry';
+import { GeneratedAnswerSlot } from '@/features/agent/generative-ui/surfaces/generated-slot';
+import { flushConversation } from '@/features/agent/generative-ui/surfaces/session';
+import { useConsumerUiTransport } from '@/features/agent/generative-ui/surfaces/transport';
 import { cn } from '@/lib/utils';
 import { SiteAgentAnswer } from './answer';
+import { ContextLens, useContextLensPreview } from './context-lens/context-lens';
+import { exclusionsFor, lensLanguage, type LensItem } from './context-lens/model';
 import { DelegatedMessage } from './delegated';
 import { RafiiAvatar } from './rafii-avatar';
 import { panelStore, usePanel } from './store';
@@ -83,7 +92,7 @@ async function runClientCommand(command: SlashCommand, args: string): Promise<st
   }
 }
 
-export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean }) {
+export function SiteAgentChat({ onClose, onNavigate, autoFocus = true, surface = 'panel' }: { onClose: () => void; onNavigate?: () => void; autoFocus?: boolean; surface?: UiSurface }) {
   const { api, workspaceId } = useWorkspaceApi();
   const client = useQueryClient();
   const router = useRouter();
@@ -101,6 +110,9 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   // The Rafii Agent Runtime answers text turns when this deployment enables it; the site agent stays the fallback.
   const agent = useAgent();
   const agentOn = Boolean(agent.status?.manager.available);
+  // Generated views (rafii-genui/1): this scope's transport; its key separates every principal/workspace's views and selections.
+  const uiTransport = useConsumerUiTransport();
+  const uiScope = uiTransport?.scopeKey ?? null;
   const [images, setImages] = useState<{ assetId: string; index: number | null }[]>([]);
 
   useEffect(() => {
@@ -115,6 +127,25 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }, [workspaceId, conversationId]);
   const live = usePanel((s) => s.live);
   const page = usePanel((s) => s.page);
+  // Context Lens (only when the server reports it on for this workspace): what the next typed message will use, and what the
+  // person removed from it. Removals apply to the next message only and never follow a switch of workspace or conversation.
+  const lensOn = Boolean(agentOn && agent.status?.contextLens?.enabled);
+  const [lensRemoved, setLensRemoved] = useState<ReadonlySet<string>>(() => new Set());
+  const lens = useContextLensPreview({ enabled: lensOn, api: agent.api, workspaceId, conversationId, pathname, page, images,
+                                       uiScope: agent.status?.genui?.enabled ? uiScope : null,
+                                       ttlSeconds: agent.status?.contextLens?.previewTtlSeconds ?? 120 });
+  const lensPreview = lensOn ? (lens.data ?? null) : null;
+  useEffect(() => {
+    setLensRemoved(new Set());
+  }, [workspaceId, conversationId]);
+  const toggleLens = useCallback((item: LensItem) => {
+    setLensRemoved((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }, []);
   const thread = useMessages(conversationId);
   const messages = useMemo(() => thread.data?.messages ?? [], [thread.data]);
 
@@ -136,9 +167,18 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   const end = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
+  // Identity changes even after A → B → A: an old response must not clear a new conversation's exclusions or uploads.
+  const composerScope = useRef({ workspaceId, conversationId });
+  if (composerScope.current.workspaceId !== workspaceId || composerScope.current.conversationId !== conversationId) {
+    composerScope.current = { workspaceId, conversationId };
+  }
 
   useEffect(() => {
     setNotes([]);
+    // An explicit selected passage is composer text. It must not follow a switch to another workspace.
+    setText('');
+    setFailure(null);
+    setOptimistic(null);
   }, [workspaceId]);
 
   // A conversation that no longer exists here (another workspace's id, or removed) starts a new one.
@@ -147,11 +187,12 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }, [thread.error, workspaceId]);
 
   // "Ask Rafii about this" links hand in a question; the person still sends it.
+  const pendingPrefill = usePanel((state) => state.prefill);
   useEffect(() => {
-    const prefill = panelStore.takePrefill();
-    if (prefill) setText(prefill);
+    const prefill = panelStore.takePrefill(workspaceId);
+    if (prefill) setText((current) => current.trim() ? `${current}\n\n${prefill}` : prefill);
     if (autoFocus) input.current?.focus({ preventScroll: true });
-  }, [autoFocus]);
+  }, [autoFocus, pendingPrefill, workspaceId]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end', behavior: reduced ? 'auto' : 'smooth' });
@@ -211,7 +252,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   }, []);
 
   const send = useCallback(
-    async (raw: string) => {
+    async (raw: string, extra?: { uiContext?: UiTurnContextV1 }) => {
       const message = raw.trim();
       const w = workspaceId;
       if (!message || !w || panelStore.get().busy[w]) return;
@@ -230,12 +271,25 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       panelStore.setBusy(w, true);
       const ticket = AUTO.begin();
       const current = panelStore.get();
+      const sentScope = composerScope.current;
       try {
         const pageContext = currentPageContext(pathname);
         let result: SiteAgentTurnResult;
         let blocks: readonly SiteAgentBlock[] | undefined;
         let answerId: string | null;
+        // Which runtime answers is decided by the deployment status. A turn sent before it loaded must not silently fall back
+        // to the site agent (no generated view, no agent features): wait for it here, bounded (the turn is already busy).
+        const status = agent.status ?? (await loadStatus(client, agent.api, w));
+        const agentOn = Boolean(status?.manager.available);
+        const genuiOn = Boolean(status?.genui?.enabled);
         if (agentOn) {
+          // The view the person is using (and its stored selection) travels as uiContext; its unsaved state is saved first so
+          // "the second one" means what they just picked. Text and voice read the same registry.
+          const conversation = current.conversations[w] ?? null;
+          if (genuiOn) await flushConversation(uiScope, conversation);
+          const uiContext = genuiOn ? (extra?.uiContext ?? currentUiContext(uiScope, conversation)) : undefined;
+          // Context Lens: the chips the person removed go with the message; the server leaves them out of this turn.
+          const exclude = status?.contextLens?.enabled ? exclusionsFor(lensPreview, lensRemoved) : [];
           // The Agent Runtime answers (same conversation; it falls back to the site agent by itself when it must).
           const response = await agent.api.turn(w, {
             message,
@@ -247,9 +301,18 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             attachments: images.map((image) => ({ assetId: image.assetId, role: 'reference' as const })),
             timeZone,
             model: choice.model,
-            ...(command ? { command } : {})
+            ...(command ? { command } : {}),
+            ...(uiContext ? { uiContext } : {}),
+            ...(exclude.length ? { contextLens: { exclude } } : {})
           });
+          if (composerScope.current !== sentScope) return;
           setImages([]);
+          if (status?.contextLens?.enabled) {
+            setLensRemoved((pending) => pending === lensRemoved ? new Set() : pending);
+            void client.invalidateQueries({ queryKey: ['agent-runtime', 'context-lens', w] });
+          }
+          // A turn answered here may build its one interactive view (the slot starts it; history never does).
+          if (genuiOn && uiScope && response.runId && response.result?.ui?.eligible) markFresh(uiScope, response.runId);
           voiceSession.typedExchange(message, response.result);
           result = response.siteAgent ?? { conversationId: response.conversationId, runId: response.runId, status: response.status, messageId: response.messageId };
           blocks = response.result?.blocks ?? response.siteAgent?.message?.siteAgent?.blocks;
@@ -267,7 +330,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
           blocks = result.message?.siteAgent?.blocks;
           answerId = result.messageId ?? null;
         }
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         panelStore.setConversation(w, result.conversationId);
         if (result.runId && !result.delegated) panelStore.setLive(result.runId, { events: result.events ?? [], composing: Boolean(result.needsCompose) });
         await client.invalidateQueries({ queryKey: keys.messages(w, result.conversationId) });
@@ -285,7 +348,7 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         // "Take me to …" or "show me how": the answer's own link or guide, once, and only for the newest request.
         if (AUTO.claim(answerId ?? result.runId ?? `turn:${ticket}`, ticket)) runAuto(autoActionsOf(blocks, 'text'));
       } catch (error) {
-        if (workspaceRef.current !== w) return;
+        if (composerScope.current !== sentScope) return;
         setOptimistic(null);
         // No reply means the request may still have run (a link, a saved draft); only the server's own error says what happened.
         setFailure({ text: message, message: error instanceof ApiError ? error.message : "Rafii's answer didn't arrive. If you asked for a change, check before asking again: it may already have been made." });
@@ -295,8 +358,11 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
         panelStore.setBusy(w, false);
       }
     },
-    [agent.api, agentOn, api, choice.model, client, images, pathname, runAuto, runCommand, timeZone, workspaceId]
+    [agent.api, agent.status, api, choice.model, client, images, lensPreview, lensRemoved, pathname, runAuto, runCommand, timeZone, uiScope, workspaceId]
   );
+  const continueFromView = useCallback((request: ContinueRequest) => {
+    void send(request.message, { uiContext: { artifactId: request.artifactId, artifactRevision: request.artifactRevision, stateRevision: request.stateRevision } });
+  }, [send]);
 
   // Voice Mode reads the page when a spoken request is delegated (the call outlives this component's render).
   const voicePageContext = useCallback((): SiteAgentPageContext => currentPageContext(window.location.pathname, { voice: true }), []);
@@ -412,7 +478,8 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
             {thread.isLoading && <li className='text-muted-foreground text-xs'>Loading the conversation…</li>}
             {messages.map((message) => (
               <ThreadItem key={message.messageId} message={message} conversationId={conversationId} latest={message.messageId === lastAssistant} liveEvents={message.runId ? live[message.runId] : undefined}
-                          onAsk={(value) => void send(value)} onNavigate={onNavigate} onStop={message.runId ? () => void api.siteAgentCancel(workspaceId as string, message.runId as string) : undefined} />
+                          onAsk={(value) => void send(value)} onNavigate={onNavigate} onStop={message.runId ? () => void api.siteAgentCancel(workspaceId as string, message.runId as string) : undefined}
+                          surface={surface} onContinue={continueFromView} onOpenPath={(path) => { router.push(path); onNavigate?.(); }} />
             ))}
             {optimistic && (
               <li className='flex flex-col items-end gap-1'>
@@ -450,6 +517,18 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
       </div>
 
       <form onSubmit={onSubmit} className='rafii-chat-form relative shrink-0 px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]'>
+        {!agent.status && agent.statusError ? (
+          // The agent runtime's status could not be read after its retries: say what still works instead of quietly answering
+          // with the basic assistant (no interactive views, no agent tools) — and let the person check again.
+          <div role='status' data-rafii-agent-status='unavailable' className='text-muted-foreground mb-2 flex flex-wrap items-center gap-2 px-2 text-xs'>
+            <span>Rafii’s full assistant isn’t reachable right now. Answers still work; interactive views are off until it’s back.</span>
+            <Button type='button' variant='quiet' size='xs' onClick={() => void agent.refetchStatus()}>Check again</Button>
+          </div>
+        ) : null}
+        {lensOn && (
+          <ContextLens preview={lensPreview} loading={lens.isLoading} failed={lens.isError} onRetry={() => void lens.refetch()} removed={lensRemoved}
+            onToggle={toggleLens} text={text} lang={lensLanguage(timeDefaults().locale)} timeZone={timeZone} onNewConversation={startOver} />
+        )}
         <SlashCommandMenu value={text} caret={caret} anchorRef={composer} onPick={pickCommand} onDismiss={noop} />
         <div ref={composer} className='rafii-composer flex items-end gap-2 rounded-[var(--rafii-radius-composer)] p-2'>
           <Button type='button' variant='quiet' size='icon-control' aria-label='Add or create' aria-haspopup='dialog' onClick={() => setCapabilitiesOpen(true)}><Icons.add className='size-5' /></Button>
@@ -502,7 +581,25 @@ export function SiteAgentChat({ onClose, onNavigate, autoFocus = true }: { onClo
   );
 }
 
-function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavigate, onStop }: {
+/** The agent runtime status for a workspace when the panel's own query hasn't answered yet (shared cache, at most 8 s). */
+async function loadStatus(client: ReturnType<typeof useQueryClient>, api: ReturnType<typeof useAgent>['api'], workspaceId: string): Promise<AgentStatus | null> {
+  const query = agentStatusQuery(api, workspaceId);
+  const cached = client.getQueryData<AgentStatus>(query.queryKey);
+  if (cached) return cached;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      client.fetchQuery(query),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 8000); })
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavigate, onStop, surface, onContinue, onOpenPath }: {
   message: Message;
   conversationId: string | null;
   latest: boolean;
@@ -510,6 +607,9 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
   onAsk: (text: string) => void;
   onNavigate?: () => void;
   onStop?: () => void;
+  surface: UiSurface;
+  onContinue: (request: ContinueRequest) => void;
+  onOpenPath: (path: string) => void;
 }) {
   const body = message.body as SiteAgentMessageBody;
   const agentBody = (body as { agent?: AgentResult & { modality?: string } }).agent;
@@ -552,7 +652,9 @@ function ThreadItem({ message, conversationId, latest, liveEvents, onAsk, onNavi
       <li className='flex gap-2.5'>
         <RafiiAvatar size={24} className='mt-0.5' />
         <article className='min-w-0 flex-1' aria-label={`${siteConfig.name}'s answer`}>
-          <SiteAgentAnswer body={body.siteAgent} actions={{ onAsk, onNavigate, messageId: message.messageId, conversationId, latest }} />
+          <SiteAgentAnswer body={body.siteAgent} actions={{ onAsk, onNavigate, messageId: message.messageId, conversationId, latest }}
+            generated={agentBody ? <GeneratedAnswerSlot message={message} conversationId={conversationId} surface={surface} latest={latest} onContinue={onContinue}
+              onNavigate={onOpenPath} /> : undefined} />
           {agentBody && agentBody.traceId && <AgentExtras result={agentBody} conversationId={conversationId} />}
         </article>
       </li>

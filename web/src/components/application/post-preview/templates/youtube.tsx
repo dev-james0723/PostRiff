@@ -13,18 +13,16 @@ const MUTED = '#606060';
 const LOGO_RED = '#ff0000';
 const RED = '#ff0033';
 
-/** YouTube: a vertical video plays as a Short; anything else is a Home feed item with its 16:9 thumbnail. */
+/** The composer selects presentation. YouTube's Analytics content type proves eventual Shorts classification. */
 export default function YouTubeTemplate(props: TemplateProps) {
-  const video = props.post.media.find((item) => item.kind !== 'file');
-  const vertical = Boolean(video?.width && video?.height && video.height > video.width);
-  return vertical ? <ShortTemplate {...props} /> : <HomeTemplate {...props} />;
+  return props.post.youtubeMode === 'short' ? <ShortTemplate {...props} /> : <HomeTemplate {...props} />;
 }
 
 /** Home feed (2026): logo with cast / bell / search, topic chips, edge-to-edge thumbnail, 40pt avatar beside a two-line title. */
 function HomeTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
-  const video = post.media.find((item) => item.kind !== 'file');
-  const title = firstLine(post.text) || 'Untitled video';
+  const video = post.media.find((item) => item.kind === 'video');
+  const title = post.videoTitle || firstLine(post.text) || 'Video title preview';
 
   return (
     <PhoneFrame scale={scale} background='#ffffff' tone='dark' label={`YouTube preview of the video by ${names.display}`} clock={formatClock(post)}>
@@ -84,8 +82,8 @@ function HomeTemplate({ post, scale }: TemplateProps) {
 /** Shorts player (heart version, rolling out since June 2026): heart / comments / Share / Remix and the sound tile, @handle with Subscribe. */
 function ShortTemplate({ post, scale }: TemplateProps) {
   const names = accountNames(post.account);
-  const video = post.media.find((item) => item.kind !== 'file');
-  const title = firstLine(post.text);
+  const video = post.media.find((item) => item.kind === 'video');
+  const title = post.videoTitle || firstLine(post.text);
   useCoverLegend();
 
   return (

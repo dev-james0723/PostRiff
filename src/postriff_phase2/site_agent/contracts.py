@@ -141,6 +141,13 @@ def iso(epoch: float) -> str:
     return dt.datetime.fromtimestamp(epoch, dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def cloud_withheld(body) -> bool:
+    """An answer Rafii built for the member from memory or sources the workspace keeps out of cloud models (reads.cloud_may_read
+    was False; the stored message says so in siteAgent.cloudWithheld). It is never conversation history for a cloud model."""
+    site = body.get("siteAgent") if isinstance(body, dict) else None
+    return isinstance(site, dict) and site.get("cloudWithheld") is True
+
+
 def result(data, *, now: float, ok: bool = True, verified: bool = True, source: str = "server", warnings=(), next_actions=()) -> dict:
     """The envelope every site-agent tool returns (§9.6). ok is not verified: a read that could not confirm its
     answer says verified=False and the answer must treat it as unconfirmed."""

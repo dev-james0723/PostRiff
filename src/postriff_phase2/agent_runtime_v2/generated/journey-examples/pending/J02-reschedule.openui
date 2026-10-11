@@ -1,0 +1,10 @@
+root = RafiiRoot([agenda, form, check])
+$period = "this_week"
+$zone = "Asia/Hong_Kong"
+$selectedEntry = "job:3b9f0c21"
+$when = ""
+cal = Query("calendar_agenda", {period: $period, zone: $zone}, null)
+slot = Query("schedule_slot_check", {targetRef: $selectedEntry, local: $when, zone: $zone}, null)
+agenda = CalendarAgenda(cal, $period, $selectedEntry, "This week")
+form = RescheduleForm("schedule_prepare", $selectedEntry, $when, $zone, slot)
+check = SlotCheck(slot)

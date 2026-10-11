@@ -1,0 +1,20 @@
+{
+ "note": "Context Lens: requests that point at an item without naming it. Shared by tests/test_context_lens.py (server DEICTIC) and web/tests/context-lens.test.cjs (panel isDeictic) so both agree.",
+ "cases": [
+  ["Shorten this", true],
+  ["Can you fix this one?", true],
+  ["Make these shorter", true],
+  ["Use that one instead", true],
+  ["Shorten this draft", true],
+  ["幫我改短呢個", true],
+  ["把这个改短", true],
+  ["這篇可以再短一點嗎", true],
+  ["What's on this week?", false],
+  ["Plan this month's posts", false],
+  ["呢個星期有咩", false],
+  ["这个月的计划", false],
+  ["Write a post about spring", false],
+  ["thistle and thesis", false],
+  ["Is it ready?", false]
+ ]
+}

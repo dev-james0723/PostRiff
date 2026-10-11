@@ -69,12 +69,17 @@ class Storage:
             raise AlphaError("too large", 413)
         return raw
 
+    def put_immutable(self, ws, category, name, raw, content_type='image/jpeg'):
+        assert category == 'media'
+        if (ws,name) in self.objects: raise AlphaError('Immutable object exists.',409)
+        self.put(ws,name,raw,content_type)
+
     def signed_url(self, ws, category, name, expires_in=300):
-        assert (ws, name) in self.objects and category == "file"
+        assert (ws, name) in self.objects and category in ('file','media')
         return f"https://download.invalid/{ws}/{name}?token=fake"
 
     def delete(self, ws, category, name):
-        assert category == "file"
+        assert category in ("file","media")
         if self.fail_delete:
             raise AlphaError("storage unavailable", 503)
         self.objects.pop((ws, name), None)
@@ -121,6 +126,14 @@ detail = library.detail(wid, "one", ticket["assetId"])
 check("commit: extracted text persisted", "Brahms rehearsal" in detail["extractedText"], detail)
 hits = library.list(wid, "one", "Brahms fingering")["assets"]
 check("search: extracted text hit", [a["id"] for a in hits] == [ticket["assetId"]], hits)
+digest = hashlib.sha256(raw).hexdigest()
+hash_prefix = digest[:16]
+check("search: fixture prefix exercises letter casing", hash_prefix.upper() != hash_prefix)
+for query in (hash_prefix, hash_prefix.upper(), digest):
+    hits = library.list(wid, "one", query)["assets"]
+    check("search: normalized SHA prefix or full hash hit " + query, [a["id"] for a in hits] == [ticket["assetId"]], hits)
+missing_hash_prefix = ("0" if digest[0] != "0" else "1") + digest[1:16]
+check("search: nonmatching SHA prefix empty", not library.list(wid, "one", missing_hash_prefix)["assets"])
 renamed = library.rename(wid, "one", ticket["assetId"], "Brahms lesson notes")["asset"]
 check("rename: user title wins", renamed["displayTitle"] == "Brahms lesson notes" and renamed["titleSource"] == "user")
 
@@ -134,6 +147,15 @@ check("generic: metadata-only asset", generic["status"] == "unsupported" and gen
 with connection() as db:
     db.execute("INSERT INTO auth.users VALUES(%s) ON CONFLICT DO NOTHING", (VIEWER,))
 viewer_workspace = service.bootstrap("viewer", "studio")["workspaceId"]
+check("search isolation: foreign workspace cannot find original SHA", not library.list(viewer_workspace, "viewer", hash_prefix)["assets"])
+# Identical bytes in two workspaces produce the same fingerprint without sharing rows.
+foreign = library.begin(viewer_workspace, "viewer", {"filename": "foreign.md", "mime": "text/markdown", "bytes": len(raw)})["upload"]
+storage.put(viewer_workspace, foreign["assetId"] + ".md", raw, "text/markdown")
+foreign_result = library.commit(viewer_workspace, "viewer", foreign["assetId"])
+check("search isolation: same SHA stored independently", foreign_result["status"] == "ready" and foreign_result["asset"]["sha256"] == digest)
+for workspace, token, expected in ((wid, "one", ticket["assetId"]), (viewer_workspace, "viewer", foreign["assetId"])):
+    hits = library.list(workspace, token, hash_prefix.upper())["assets"]
+    check("search isolation: same SHA returns only own workspace " + token, [a["id"] for a in hits] == [expected], hits)
 try:
     library.detail(viewer_workspace, "viewer", ticket["assetId"])
     check("isolation: foreign workspace cannot resolve asset", False)

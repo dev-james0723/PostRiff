@@ -122,6 +122,7 @@ export function useUploadQueue() {
           update(next.key, { status: 'sending' });
           try {
             await send(data, preserve ? next.file.type : undefined);
+            await client.invalidateQueries({ queryKey: ['library-assets', workspaceId] });
             tally.current.done += 1;
             update(next.key, { status: 'done', message: undefined });
             setBlocker(null);
@@ -151,7 +152,7 @@ export function useUploadQueue() {
       setResult({ tone: 'error', label: done === 0 ? (total === 1 ? 'Upload failed' : 'None uploaded') : `${done} of ${total} uploaded` });
       flashOutcome('error');
     }
-  }, [flashOutcome, send, update]);
+  }, [client, flashOutcome, send, update, workspaceId]);
 
   const enqueue = useCallback(
     (files: File[]) => {

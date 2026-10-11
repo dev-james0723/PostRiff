@@ -73,7 +73,7 @@ def http_transport(method, url, headers=None, form=None, body=None, data=None, r
     return {"status": status, "headers": {k.lower(): v for k, v in response_headers.items()}, "body": parsed}
 
 
-from .provider_base import OAuthProvider, _credential_shape  # noqa: E402,F401  (re-exported)
+from .provider_base import OAuthProvider, _credential_shape, fixed_https_origin  # noqa: E402,F401  (re-exported)
 
 
 class LinkedInProvider(OAuthProvider):
@@ -265,7 +265,13 @@ class LinkedInProvider(OAuthProvider):
     def inspect_scopes(self, access_token, expected_account_id):
         # Identity is independently checked by the caller. Introspection binds token to this app.
         body = self._ok(self.transport("POST", "https://www.linkedin.com/oauth/v2/introspectToken", form={"client_id": self.client_id, "client_secret": self.client_secret, "token": access_token}))
-        if body.get("active") is not True or body.get("client_id") != self.client_id or not isinstance(body.get("scope"), str):
+        if body.get('active') is False:
+            raise AlphaError('LinkedIn access expired or was revoked. Reconnect before publishing.',
+                             409, code='reauthorization_required')
+        if body.get('active') is True and body.get('client_id') != self.client_id:
+            raise AlphaError('This LinkedIn connection belongs to a different app. Reconnect after the app configuration is verified.',
+                             409, code='reauthorization_required')
+        if body.get("active") is not True or not isinstance(body.get("scope"), str):
             return None
         return list(dict.fromkeys(scope for scope in re.split(r"[,\s]+", body["scope"].strip()) if scope))
 
@@ -434,6 +440,10 @@ def registry_from_environment(values, transport=None):
         registry.diagnostics[provider_id] = diagnostic
         if adapter is None:
             continue
+        if adapter.callback_origin is None and provider_id != "bluesky" and values.get(prefix + "CALLBACK_ORIGIN"):
+            # Only a fixed HTTPS origin; a malformed value leaves the default rather than guessing.
+            adapter.callback_origin = fixed_https_origin(values.get(prefix + "CALLBACK_ORIGIN"))
+            registry.diagnostics[provider_id]["callbackOriginPinned"] = adapter.callback_origin is not None
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
         adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
         adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"

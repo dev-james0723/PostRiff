@@ -66,6 +66,12 @@ class Phase2Store(Store):
 
     def _present(self, state, revision):
         result = super()._present(state, revision)
+        # Creator uses scoped bounded endpoints. Internal authority/leases and
+        # model attribution must not escape through ordinary workspace payloads.
+        result["state"].pop("youtubeAgent", None)
+        for variant in result["state"].get("variants", []):
+            if isinstance(variant, dict) and variant.get("platform") == "YouTube":
+                variant.pop("metadataProvenance", None)
         ensure_content_state(result["state"])
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
@@ -85,6 +91,17 @@ class Phase2Store(Store):
         if not c["identityVerified"] or not c["capabilityVerified"] or c["verifiedAt"]+3600 < self.clock():
             return "Finish setup"
         return "Ready for posting"
+
+    def channel_reverification_due(self, c):
+        """Hosted YouTube and LinkedIn age checks defer a job; they never authorize dispatch.
+
+        A worker must refresh and verify this exact vault grant before applying
+        channel_state and the immutable approval checks again.
+        """
+        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') in ('YouTube', 'LinkedIn')
+                    and c.get('configured') and not c.get('revoked')
+                    and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
+                    and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
 
     def mutate(self, wid, token, expected_revision, action, payload):
         if wid in self.samples:
@@ -286,7 +303,12 @@ class Phase2Store(Store):
                 raise AlphaError("Choose a supported fixture outcome.")
             c.update({"identityVerified": scenario != "denied", "capabilityVerified": scenario not in ("denied", "capability_loss"), "scopes": ["w_member_social"] if c["platform"] == "LinkedIn" else ["instagram_business_basic", "instagram_business_content_publish"], "expiresAt": now-1 if scenario == "expired" else now+86400, "verifiedAt": now, "revoked": False, "capabilityVersion": c["capabilityVersion"]+1, "scenario": scenario})
         elif action == "channel_disconnect":
-            find(data["channels"], p.get("channelId"))["revoked"] = True
+            channel = find(data["channels"], p.get("channelId"))
+            channel["revoked"] = True
+            if channel.get('platform') == 'YouTube':
+                from .youtube.agent import revoke_connection_authority
+                revoke_connection_authority(s, channel['id'], device['user_id'], now,
+                                            reason='connection_disconnected')
         elif action == "variant_review":
             v = self._variant(s, p.get("variantId"))
             if p.get("variantRevision") != v["revision"] or p.get("confirmed") is not True:
@@ -302,6 +324,8 @@ class Phase2Store(Store):
             data["reviews"] = data["reviews"][-19:]+[{"id": uid(), "manifest": manifest, "digest": digest(manifest), "status": "needs_review", "createdAt": now}]
         elif action == "approve":
             review = find(data["reviews"], p.get("reviewId"))
+            if review.get('privacyErased') or review.get('manifest', {}).get('privacyErased'):
+                raise AlphaError('This YouTube review was erased and cannot be approved again.', 409, code='youtube_data_removed')
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
@@ -312,6 +336,8 @@ class Phase2Store(Store):
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
             if existing:
+                if existing.get('privacyErased') or existing.get('youtubeProviderDataRemoved'):
+                    raise AlphaError('This YouTube operation was erased and cannot be resumed.', 409, code='youtube_data_removed')
                 if existing["state"] in ("failed", "canceled") and review["status"] != "approved":
                     raise AlphaError("This review belongs to an ended job. Prepare a new review to try again.", 409, code="review_consumed")
                 review.update({"status": "approved", "jobId": existing["id"]})
@@ -322,7 +348,8 @@ class Phase2Store(Store):
             if limit and len(recent) >= limit:
                 raise AlphaError(f"Rafii's local safety cap for {channel['platform']} is {limit} approvals per 24 hours. Provider quotas may be lower.", 409)
             review["status"] = "approved"
-            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
+            youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
+            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early or manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
             self.event(job, "approved", "Exact local fixture approval recorded")
             if getattr(self, 'worker_binding', None) is not None:
                 # Older workers sharing staging storage skip held jobs. Only an authenticated,
@@ -416,7 +443,7 @@ class Phase2Store(Store):
             if asset_kinds.kind_of(a) == "video":
                 if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
-                if not asset_kinds.is_postable_video(a) or p.get("rightsConfirmed") is not True:
+                if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
                 if c["platform"] in ("Douyin", "Kuaishou") and a["mime"] != "video/mp4":
                     raise AlphaError("This channel needs an approved MP4 video.", 409)
@@ -440,9 +467,22 @@ class Phase2Store(Store):
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
         options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
-        timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
+        immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
+        if immediate_youtube:
+            from datetime import datetime, timezone
+            approved_at = int(self.clock() // 60 * 60 + 60)
+            timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
+            timing['mode'] = 'now'
+        else:
+            timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
-            self._youtube_day_open(data, timing["timestamp"])
+            if options['privacyStatus'] == 'public' and options.get('publicationMode') != 'now':
+                from datetime import datetime, timezone
+                native_time = datetime.fromtimestamp(timing['timestamp'], timezone.utc).isoformat().replace('+00:00', 'Z')
+                if options.get('publishAt') and options['publishAt'] != native_time:
+                    raise AlphaError('The composer and queue publication times must match.', 400)
+                options['publishAt'] = native_time
+                timing['nativeProvider'] = 'YouTube'
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
@@ -467,6 +507,11 @@ class Phase2Store(Store):
             if native_at is not None:
                 if abs(native_at-timing['timestamp']) > 1: raise AlphaError('Native publication time must match the time in this exact review.', 409)
                 manifest['nativeScheduleAt'] = native_at
+        if c['platform'] == 'YouTube' and options.get('thumbnailAssetId'):
+            image = find(data['assets'], options['thumbnailAssetId'])
+            if image.get('deleted') or image.get('processing') != 'decoded' or not str(image.get('mime', '')).startswith('image/') or p.get('rightsConfirmed') is not True:
+                raise AlphaError('Choose an immutable workspace thumbnail and confirm its rights.', 400)
+            manifest['youtubeAssets'] = [{k: image[k] for k in ('id', 'hash', 'mime', 'bytes', 'width', 'height', 'objectName') if k in image}]
         if v.get("trendLineage") or v.get("scoutLineage"):
             from .growth.trends.opportunities import freeze_manifest
             freeze_manifest(s, v, manifest, self.clock())
@@ -478,29 +523,23 @@ class Phase2Store(Store):
             manifest["postDoctor"] = copy.deepcopy(advice)
         if getattr(self, 'worker_binding', None) is not None:
             manifest['workerBinding'] = copy.deepcopy(self.worker_binding)
-        root_key = digest(manifest)
+        root_key = digest({**manifest, 'timing': {'mode': 'now'}, 'expiresAt': None}) if immediate_youtube else digest(manifest)
+        if immediate_youtube:
+            manifest['retryRoot'] = root_key
         # A fresh review may retry a definitively ended job. Keep old manifests immutable and
         # key all duplicate reviews for this retry to the same preceding job, never a random nonce.
         ended = [j for j in data["jobs"] if j["state"] in ("failed", "canceled")
                  and j["manifest"].get("retryRoot", j["manifest"]["idempotencyKey"]) == root_key]
         if ended:
+            if c['platform'] == 'YouTube' and (ended[-1].get('reference') or (ended[-1].get('progress') or {}).get('videoId')):
+                raise AlphaError('YouTube already accepted a Video ID for this operation. Manage or reconcile that video; a retry must not upload it again.', 409, code='youtube_existing_video')
             manifest.update({"retryRoot": root_key, "retryOf": ended[-1]["id"]})
-        manifest["idempotencyKey"] = digest(manifest)
+        manifest["idempotencyKey"] = digest({'root': root_key, 'retryOf': manifest.get('retryOf')}) if immediate_youtube else digest(manifest)
+        if immediate_youtube:
+            # A video may take hours to upload/process. Review expiry still guards
+            # initial approval; this is the reviewed operation's dispatch window.
+            manifest['expiresAt'] = timing['timestamp'] + 36 * 3600
         return manifest
-
-    YOUTUBE_DAILY_UPLOADS = 100  # videos.insert calls per day for Rafii's Google Cloud project (default quota)
-
-    def _youtube_day_open(self, data, timestamp):
-        """Refuse gracefully when this workspace already plans a full day of uploads. The quota resets at midnight
-        Pacific time and is shared by every workspace, so the publisher also holds a job when YouTube reports it used up."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        pacific = ZoneInfo("America/Los_Angeles")
-        day = datetime.fromtimestamp(timestamp, pacific).date()
-        booked = sum(1 for j in data["jobs"] if j["manifest"].get("platform") == "YouTube" and j["state"] not in ("failed", "canceled")
-                     and datetime.fromtimestamp(j["manifest"]["timing"]["timestamp"], pacific).date() == day)
-        if booked >= self.YOUTUBE_DAILY_UPLOADS:
-            raise AlphaError(f"YouTube lets Rafii upload {self.YOUTUBE_DAILY_UPLOADS} videos a day, and this workspace already plans that many for {day.isoformat()} (Pacific time). Choose another day.", 409)
 
     def source_digest(self, s, variant):
         # Policy and use-approval are part of the digest: changing either invalidates approvals.
@@ -531,7 +570,7 @@ class Phase2Store(Store):
 
     def current(self, s, m):
         try:
-            if 'workerBinding' in m and m['workerBinding'] != getattr(self, 'worker_binding', None):
+            if m.get('privacyErased') or ('workerBinding' in m and m['workerBinding'] != getattr(self, 'worker_binding', None)):
                 return False
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
             if c['platform'] == 'Facebook' and (not c.get('destinationId') or m.get('destinationId') != c['destinationId']):
@@ -550,7 +589,7 @@ class Phase2Store(Store):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"])
+            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
             media_ok = media_ok and all(not a.get('poster') or all(find(s['phase2']['assets'],a['id']).get('poster',{}).get(k) == v for k,v in a['poster'].items()) for a in m['media'])
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
@@ -572,7 +611,8 @@ class Phase2Store(Store):
             if j["state"] not in ("scheduled", "approved", "claimed"):
                 continue
             c = find(data["channels"], j["manifest"]["channelId"])
-            if not self.current(s, j["manifest"]) or self.channel_state(c) != "Ready for posting" or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
+            unavailable = self.channel_state(c) != "Ready for posting" and not self.channel_reverification_due(c)
+            if not self.current(s, j["manifest"]) or unavailable or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
                 self.event(j, "held", "Approval, capability or entitlement changed. Review timing and approve a new job; reconnection does not release this one.")
 
     def export(self, wid, token):

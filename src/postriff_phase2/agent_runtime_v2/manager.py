@@ -27,6 +27,10 @@ class ModelNotDispatched(RuntimeError):
     """A local admission guard refused before the provider was called; no attempt or spend is implied."""
 
 
+class StreamEndedWithoutUsage(RuntimeError):
+    """A streamed provider call ended without its final response event: the provider's usage (and cost) is unknown."""
+
+
 MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
                  "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
@@ -168,8 +172,20 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
     from . import thinking_state
     ledger = ctx.ledger
 
+    async def authorize_context():
+        if ledger.youtube_provider_context:
+            from ..youtube.agent_context import assert_current
+            try:
+                # A short read fence, released before network dispatch. A local
+                # revocation cannot recall an already in-flight model request.
+                await asyncio.to_thread(assert_current, ctx.service.youtube, ctx.workspace_id,
+                                        list(ledger.youtube_provider_context), now=ctx.now())
+            except Exception as error:
+                raise ModelNotDispatched('This YouTube context is no longer authorized for an AI request.') from error
+
     class MeteredModel(Model):
         async def get_response(self, *args, **kwargs):
+            await authorize_context()
             op, reason = thinking_state.model_op(agent, ledger.tool_activity)
             ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
             started, wall = time.monotonic(), time.time()
@@ -188,11 +204,39 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
                                  "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(response, usage, route, wall)})
             return response
 
-        def stream_response(self, *args, **kwargs):
+        async def stream_response(self, *args, **kwargs):
+            await authorize_context()
+            # A streamed call is metered exactly like get_response: one span from the final event's usage, or one failed /
+            # unknown call when the stream raised, was abandoned or ended without a final response (never assumed zero).
             op, reason = thinking_state.model_op(agent, ledger.tool_activity)
             ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
-            ledger.model_requests += 1
-            return model.stream_response(*args, **kwargs)
+            started, wall = time.monotonic(), time.time()
+            completed = None
+            counted = False
+            try:
+                async for event in model.stream_response(*args, **kwargs):
+                    if not counted:
+                        ledger.model_requests += 1
+                        counted = True
+                    if getattr(event, "type", None) == "response.completed":
+                        completed = getattr(event, "response", None)
+                    yield event
+            except BaseException as error:
+                if isinstance(error, ModelNotDispatched):
+                    raise
+                if not counted:
+                    ledger.model_requests += 1
+                _note_failure(ledger, error, workload=workload, route=route, started=started, wall=wall)
+                raise
+            if not counted:
+                ledger.model_requests += 1
+            if completed is None:
+                _note_failure(ledger, StreamEndedWithoutUsage(), workload=workload, route=route, started=started, wall=wall)
+                return
+            usage = getattr(completed, "usage", None)
+            ledger.spans.append({"span": "generation", "agent": agent, "workload": workload, "model": (route or {}).get("model"),
+                                 "inputTokens": getattr(usage, "input_tokens", 0) or 0, "outputTokens": getattr(usage, "output_tokens", 0) or 0,
+                                 "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(completed, usage, route, wall)})
 
         async def close(self):
             closer = getattr(model, "close", None)
@@ -333,10 +377,33 @@ def record_span(cur, cfg, span, *, workspace_id, user_id, run_id, reservation=No
         return 0
 
 
+def _library_browse(ctx: RafiiRunContext) -> bool:
+    """The Manager browses the Library itself only where RAFII_AGENT_LIBRARY_BROWSE_ENABLED is on for this workspace (D-A51),
+    and never in a voice turn: phase 1 sends Library metadata to the Manager's provider only, not to the voice front end."""
+    from . import library_browse
+    if getattr(ctx, "modality", "text") == "voice":
+        return False
+    return library_browse.enabled_for(getattr(ctx, "config", None), getattr(ctx, "workspace_id", None))
+
+
+def tool_names(ctx: RafiiRunContext) -> list[str]:
+    """The Manager's own tools for this turn: MANAGER_TOOLS, extension scopes, and library_browse only when the Library flag
+    is on for this workspace in a typed turn (never library_read, never on specialists)."""
+    names = MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])
+    if _library_browse(ctx):
+        from . import library_browse
+        names = names + list(library_browse.MANAGER_SCOPE)
+    return specialists.available(names)
+
+
 def instructions(ctx: RafiiRunContext) -> str:
-    """The Manager's instructions for this turn: the fixed text (plus extension hooks), then how this person wants Rafii
-    to talk (fixed sentences chosen by their style's enum values; never their own words)."""
-    return specialists.instructions_for("rafii_manager", INSTRUCTIONS) + "\n\n" + agent_style.text_block(getattr(ctx, "style", None))
+    """The Manager's instructions for this turn: the fixed text (plus extension hooks; the Library rules only when its tool is
+    on), then how this person wants Rafii to talk (fixed sentences chosen by their style's enum values; never their own words)."""
+    base = INSTRUCTIONS
+    if _library_browse(ctx):
+        from . import library_browse
+        base = base + "\n\n" + library_browse.MANAGER_INSTRUCTIONS
+    return specialists.instructions_for("rafii_manager", base) + "\n\n" + agent_style.text_block(getattr(ctx, "style", None))
 
 
 def build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standard_reasoning"):
@@ -374,8 +441,10 @@ def _build(ctx: RafiiRunContext, *, model_factory=None, workload: str = "standar
     def model_settings(load):
         return None if model_factory is not None else settings_for(cfg, load)
 
-    specialist_tools = specialists.build(model_for, settings_for=(model_settings if model_factory is None else None)) if cfg.enabled("RAFII_SPECIALISTS_ENABLED") or model_factory is not None else {}
-    tools = sdk_tools(specialists.available(MANAGER_TOOLS + specialists.EXTRA_SCOPES.get("rafii_manager", [])), scope_name=None) + list(specialist_tools.values())
+    specialist_tools = specialists.build(model_for, settings_for=(model_settings if model_factory is None else None), ctx=ctx) if cfg.enabled("RAFII_SPECIALISTS_ENABLED") or model_factory is not None else {}
+    from . import authz
+    names = authz.filter_tools(ctx, tool_names(ctx))
+    tools = sdk_tools(names, scope_name=None) + list(specialist_tools.values())
     manager = Agent(name="rafii_manager", instructions=instructions(ctx), tools=tools, handoffs=[], model=model_for(workload, "rafii_manager"),
                     output_type=answer_policy.reply_type(), output_guardrails=[answer_policy.output_guardrail()],
                     input_guardrails=[answer_policy.input_guardrail()],

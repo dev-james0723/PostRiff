@@ -151,6 +151,10 @@ def _delete(service, workspace_id, principal):
         cost, entries = cur.fetchone()
         cur.execute("UPDATE public.pr_data_requests SET receipt=receipt||%s::jsonb WHERE id=%s", (json.dumps({'knownCostUsdMicro':int(cost), 'ledgerEntries':entries}),receipt_id))
         cur.execute('DELETE FROM public.pr_trials WHERE user_id=%s', (principal,))
+        # Rafii agent permission history references the memberships ON DELETE RESTRICT (migration 109): erase it first, here,
+        # in the deletion transaction (CF-2 §6). Before 109 is applied this reads nothing and erases nothing.
+        from .agent_runtime_v2 import agent_permissions
+        agent_permissions.erase_workspace(cur, workspace_id)
         cur.execute('DELETE FROM public.pr_memberships WHERE workspace_id=%s', (workspace_id,))
         # Person-keyed notification data (migration 024) has no FK to pr_profiles by design; remove it explicitly.
         cur.execute('DELETE FROM public.pr_push_subscriptions WHERE user_id=%s', (principal,))

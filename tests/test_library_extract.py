@@ -1,6 +1,6 @@
 import io,json,unittest,zipfile
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.library_extract import MAX_TEXT,chunks,extract_text
+from postriff_phase2.library_extract import MAX_TEXT,chunks,extract_text,extract_isolated
 
 def archive(files):
  out=io.BytesIO()
@@ -9,6 +9,11 @@ def archive(files):
  return out.getvalue()
 
 class LibraryExtractTests(unittest.TestCase):
+ def test_isolated_pdf_reads_actual_source_with_runtime_dependency_paths(self):
+  from library_samples import pdf
+  status,text=extract_isolated(pdf(),"pdf")
+  self.assertEqual(status,"ready")
+  self.assertIn("Brahms rehearsal",text)
  def test_text_markdown_json_csv(self):
   self.assertEqual(extract_text(b"hello\nworld","txt")[1],"hello\nworld")
   self.assertIn('"a": 1',extract_text(json.dumps({"a":1}).encode(),"json")[1])

@@ -137,7 +137,13 @@ function Provenance({ source }: { source: IdeaSource }) {
 
   return (
     <Section title={source.kind === 'idea' ? 'The idea' : 'Where it came from'}>
-      {isWeb(source) && origin ? (
+      {origin?.kind === 'library' ? (
+        <div className='flex min-w-0 flex-col gap-2 text-sm'>
+          <p>Library file <span className='font-medium break-words'>{origin.filename || source.title}</span> <span className='text-muted-foreground'>· {formatBytes(bytes)} of extracted text</span></p>
+          {origin.sha256 && /^[a-f0-9]{64}$/.test(origin.sha256) ? <p className='text-muted-foreground text-xs'>Source fingerprint <code className='mt-1 block break-all'>{origin.sha256}</code></p> : null}
+          {origin.clipped ? <p className='text-muted-foreground text-xs'>This source contains an excerpt of up to 19,000 characters. The full original stays in your Library.</p> : null}
+        </div>
+      ) : isWeb(source) && origin ? (
         <div className='flex flex-col gap-1 text-sm'>
           {origin.url && LINK_PATTERN.test(origin.url) ? (
             <a href={origin.url} target='_blank' rel='noreferrer' className={TEXT_LINK}>

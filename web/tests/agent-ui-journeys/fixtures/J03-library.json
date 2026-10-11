@@ -1,0 +1,285 @@
+{
+ "library_search": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "items": [
+     {
+      "ref": "library_file:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "store": "file",
+      "kind": "document",
+      "title": "Autumn recital programme.pdf",
+      "mime": "application/pdf",
+      "extension": "pdf",
+      "bytes": 482133,
+      "createdAt": "2026-09-30T08:00:00Z",
+      "tags": [
+       "recital",
+       "programme"
+      ],
+      "collections": [],
+      "processing": "ready",
+      "indexingStatus": "indexed",
+      "transcriptionStatus": null,
+      "hasSource": false,
+      "sourceId": null,
+      "duplicateOf": null,
+      "extractionProblem": null,
+      "width": null,
+      "height": null,
+      "duration": null,
+      "alt": null,
+      "href": "/app/library?asset=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previewKind": "pdf_page",
+      "previewRoute": "/api/workspaces/w1/library/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/url"
+     },
+     {
+      "ref": "media:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "assetId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "store": "media",
+      "kind": "image",
+      "title": "Backstage City Hall",
+      "mime": "image/jpeg",
+      "extension": null,
+      "bytes": 482133,
+      "createdAt": "2026-09-30T08:00:00Z",
+      "tags": [],
+      "collections": [],
+      "processing": null,
+      "indexingStatus": null,
+      "transcriptionStatus": null,
+      "hasSource": false,
+      "sourceId": null,
+      "duplicateOf": null,
+      "extractionProblem": null,
+      "width": 3024,
+      "height": 4032,
+      "duration": null,
+      "alt": "Piano backstage",
+      "href": "/app/library?asset=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "previewKind": "image",
+      "previewRoute": "/api/workspaces/w1/media/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     },
+     {
+      "ref": "library_file:cccccccccccccccccccccccccccccccc",
+      "assetId": "cccccccccccccccccccccccccccccccc",
+      "store": "file",
+      "kind": "document",
+      "title": "Chopin notes.docx",
+      "mime": "application/pdf",
+      "extension": "docx",
+      "bytes": 482133,
+      "createdAt": "2026-09-30T08:00:00Z",
+      "tags": [
+       "recital",
+       "programme"
+      ],
+      "collections": [],
+      "processing": "processing",
+      "indexingStatus": "pending",
+      "transcriptionStatus": null,
+      "hasSource": true,
+      "sourceId": "s_77",
+      "duplicateOf": null,
+      "extractionProblem": null,
+      "width": null,
+      "height": null,
+      "duration": null,
+      "alt": null,
+      "href": "/app/library?asset=cccccccccccccccccccccccccccccccc",
+      "previewKind": "server_page",
+      "previewRoute": "/api/workspaces/w1/library/files/cccccccccccccccccccccccccccccccc/url"
+     }
+    ],
+    "offset": 0,
+    "storage": {
+     "usedBytes": 1,
+     "limitBytes": 10
+    },
+    "capabilities": {},
+    "legacyMedia": 1
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": "cur_1",
+   "coverage": {
+    "known": 3,
+    "total": null,
+    "note": "The Library does not report a total; more pages follow while a cursor is returned."
+   },
+   "warnings": []
+  },
+  "empty": {
+   "state": "empty",
+   "data": {
+    "items": [],
+    "offset": 0,
+    "storage": {},
+    "capabilities": {},
+    "legacyMedia": 0
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 0,
+    "total": null,
+    "note": null
+   },
+   "warnings": []
+  },
+  "denied": {
+   "state": "denied",
+   "data": null,
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": null,
+    "total": null,
+    "note": null
+   },
+   "warnings": [
+    "tool_forbidden"
+   ]
+  }
+ },
+ "library_item": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "ref": "library_file:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "store": "file",
+    "kind": "document",
+    "title": "Autumn recital programme.pdf",
+    "mime": "application/pdf",
+    "extension": "pdf",
+    "bytes": 482133,
+    "createdAt": "2026-09-30T08:00:00Z",
+    "tags": [
+     "recital",
+     "programme"
+    ],
+    "collections": [],
+    "processing": "ready",
+    "indexingStatus": "indexed",
+    "transcriptionStatus": null,
+    "hasSource": false,
+    "sourceId": null,
+    "duplicateOf": null,
+    "extractionProblem": null,
+    "width": null,
+    "height": null,
+    "duration": null,
+    "alt": null,
+    "href": "/app/library?asset=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "previewKind": "pdf_page",
+    "previewRoute": "/api/workspaces/w1/library/files/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/url",
+    "excerpt": "Programme: Chopin Ballade No. 1 in G minor, Op. 23 …",
+    "excerptTruncated": true,
+    "chunkCount": 6,
+    "summary": "Programme for the 12 October recital.",
+    "lineage": null,
+    "mediaConsent": {
+     "modelMayView": false
+    }
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 1,
+    "total": 1,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "library_lineage": {
+  "normal": {
+   "state": "available",
+   "data": {
+    "assetId": "cccccccccccccccccccccccccccccccc",
+    "store": "file",
+    "edges": [
+     {
+      "relation": "imported_as",
+      "type": "source",
+      "id": "s_77",
+      "via": "pr_library_assets.source_id"
+     },
+     {
+      "edge": "used_in",
+      "type": "draft",
+      "id": "v_1",
+      "via": "draft.sourceIds"
+     }
+    ]
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 2,
+    "note": null
+   },
+   "warnings": []
+  }
+ },
+ "library_selection": {
+  "partial": {
+   "state": "available",
+   "data": {
+    "attachments": [
+     {
+      "assetId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "role": "reference"
+     }
+    ],
+    "references": [
+     {
+      "kind": "source",
+      "id": "s_77"
+     }
+    ],
+    "refused": [
+     {
+      "assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "needs_source_import"
+     }
+    ],
+    "note": "Send these with your next message."
+   },
+   "asOf": "2026-10-08T14:00:00Z",
+   "sourceRefs": [],
+   "revision": "41",
+   "nextCursor": null,
+   "coverage": {
+    "known": 2,
+    "total": 3,
+    "note": null
+   },
+   "warnings": [
+    "1 item(s) can't be used yet."
+   ]
+  }
+ },
+ "actions": [
+  {
+   "actionId": "library_use_as_source",
+   "label": "Use as source",
+   "effect": "MUTATE_REVERSIBLE",
+   "requiresConfirmation": true,
+   "inputSchema": {},
+   "summary": "Imports this document's text as a reviewable draft source."
+  }
+ ]
+}

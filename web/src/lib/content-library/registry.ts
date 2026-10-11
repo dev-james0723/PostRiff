@@ -74,8 +74,8 @@ export const BACKEND_CONTENT_TYPES: BackendContentType[] = [
   {
     id: 'pack.creator:youtube_derivative',
     label: 'YouTube extension',
-    description: 'Extend a long video into native entry points and follow-up discussion.',
-    recommendedFormatIds: ['community_post', 'short_video', 'quote_card', 'short_text']
+    description: 'Adapt a source video into Shorts and scripts; quote cards and text require another supported destination. YouTube Community publishing has no official public API.',
+    recommendedFormatIds: ['short_video', 'long_video', 'quote_card', 'short_text']
   },
   {
     id: 'pack.creator:community_q_and_a',

@@ -32,6 +32,8 @@ import type { AgentResult, AgentTurnResponse } from './types';
 import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
 import { latestThinkingOp } from './thinking-state';
 import { applyTranscript, hangUpDue, lastUserLine, takeRequest, UTTERANCE_GAP_MS, type HangUp, type TranscriptEvent, type TranscriptLine } from './voice-transcript';
+import type { UiTurnContextV1 } from './ui-contracts';
+import { currentUiContextForWorkspace } from '@/features/agent/generative-ui/state/registry';
 
 export type { TranscriptLine } from './voice-transcript';
 
@@ -85,8 +87,26 @@ export interface VoiceHost {
   timeZone?: string;
   model?: string;
   pageContext: () => SiteAgentPageContext;
+  /**
+   * rafii-genui/1: the generated view the person is using in this conversation (same field as a text turn's `uiContext`), so
+   * "this one" or "the second draft" resolves to the same stored selection by voice and by text. Left out, the tab's registry
+   * of views in use is read for this workspace and conversation.
+   */
+  uiContext?: () => UiTurnContextV1 | null | undefined;
   onConversation: (conversationId: string) => void;
   onAnswer: (response: AgentTurnResponse) => void;
+}
+
+/**
+ * What voice may say about a result: the server's `speakableSummary` only (never answer text, generated-view source, record ids
+ * or chart data). A summary that looks like presentation source is not spoken at all; record ids are left out of speech.
+ */
+const SOURCE_LIKE = /(^|\n)\s*[A-Za-z_$][\w$]*\s*=\s*[A-Z][A-Za-z0-9]*\(|\b(Query|Mutation)\(|@(Run|Set|Reset|ToAssistant)\b|```/;
+const RECORD_ID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{32}\b/gi;
+export function speakableText(result: Pick<AgentResult, 'speakableSummary'> | null | undefined): string {
+  const raw = result?.speakableSummary?.trim() ?? '';
+  if (!raw || SOURCE_LIKE.test(raw)) return '';
+  return raw.replace(RECORD_ID, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
 }
 
 const IDLE: VoiceSnapshot = {
@@ -396,12 +416,14 @@ async function onDelegation(id: string) {
   const page = current.pageContext();
   // This session carries out `voice_command` blocks, so the agent may answer with them.
   const pageContext: SiteAgentPageContext = { ...page, uiCapabilities: [...new Set([...(page.uiCapabilities ?? []), 'voice'])] };
+  // The view in use travels like a text turn's; approval binding stays the server's (a "yes" is never resolved here).
+  const uiContext = (current.uiContext ? current.uiContext() : currentUiContextForWorkspace(current.workspaceId, sentIn)) ?? undefined;
   try {
     const response = await current.api.turn(current.workspaceId, {
       // One key per delegation: a repeated event or a retried request is the same turn on the server.
       message: request, idempotencyKey: `voice:${sessionId ?? 'none'}:${id}`.slice(0, 100), conversationId: sentIn, modality: 'voice', pageContext,
       attachments: images.map((image) => ({ assetId: image.assetId })), timeZone: current.timeZone, locale, model: current.model,
-      traceId: newTraceId(), delegationId: id, voiceSessionId: sessionId ?? undefined
+      traceId: newTraceId(), delegationId: id, voiceSessionId: sessionId ?? undefined, ...(uiContext ? { uiContext } : {})
     });
     progress.stop();
     if (!canDelegate(owner)) return;
@@ -415,7 +437,7 @@ async function onDelegation(id: string) {
     updateDelegation(id, { status: 'done', runId: response.runId, result, finishedAt: Date.now() });
     if (snapshot.error && snapshot.error.code !== 'connection_lost') set({ error: null }); // the service is answering again
     // Only what the server returned is said; with no spoken summary, nothing is claimed beyond "it's in the panel".
-    const spoken = result?.speakableSummary?.trim() || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
+    const spoken = speakableText(result) || (result?.errors?.length ? 'That didn’t fully work. The details are in the panel.' : 'I’ve put the answer in the panel.');
     // Commands in the answer run only while this call is still the one that asked.
     const quiet = await runVoiceCommands(voiceCommandsIn(response), owner);
     if (!canDelegate(owner)) return;
@@ -779,7 +801,7 @@ export const voiceSession = {
   /** A typed message during the call: the text turn already ran; GPT-Live gets it as context so the voice stays in step. */
   typedExchange(question: string, answer: AgentResult | null) {
     if (snapshot.state !== 'live') return;
-    think(`The user typed: "${question.slice(0, 400)}". Rafii answered in the panel: ${(answer?.speakableSummary || answer?.answerText || '').slice(0, 800)}`);
+    think(`The user typed: "${question.slice(0, 400)}". Rafii answered in the panel: ${(speakableText(answer) || answer?.answerText || '').slice(0, 800)}`);
   },
 
   /** An image added during the call belongs to the next request; GPT-Live can't see it, the backend can. */

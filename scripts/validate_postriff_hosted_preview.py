@@ -23,7 +23,7 @@ class PreviewValidation:
     def __init__(self, project_ref, deployment, team):
         self.ref = project_ref
         self.deployment = deployment
-        self.deployment_target = "production" if deployment.rstrip("/") == "https://postriff-phase2-private.vercel.app" else "preview"
+        self.deployment_target = "production" if deployment.rstrip("/") in ("https://rafii.io", "https://postriff-phase2-private.vercel.app") else "preview"
         self.team = team
         self.project_url = f"https://{project_ref}.supabase.co"
         result = command(["supabase", "projects", "api-keys", "--project-ref", project_ref, "--output", "json"], text=True, check=True)

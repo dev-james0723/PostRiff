@@ -1,0 +1,3 @@
+root = RafiiRoot([note, list, compare])
+pair = Query("drafts_compare", {draftRefs: $selectedDrafts}, null)
+compare = DraftCompare(pair, "Selected drafts side by side")

@@ -1,0 +1,7 @@
+root = RafiiRoot([plan, progress])
+$campaign = "campaign:c51a7e"
+$selectedItems = []
+detail = Query("campaign_detail", {campaignRef: $campaign}, null)
+task = Query("task_progress", {}, null)
+plan = CampaignPlanTable(detail, $selectedItems)
+progress = CampaignProgress(task)

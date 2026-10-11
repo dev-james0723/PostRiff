@@ -7,12 +7,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { useWorkspace } from '@/lib/workspace/provider';
+import { ApiError } from './client';
 import type { ActiveTimeBeat, Snapshot, TimeSavingsCalibrationInput, TimeSavingsRange } from './types';
 
 export const keys = {
   snapshot: (w: string) => ['snapshot', w] as const,
   usage: (w: string) => ['usage', w] as const,
   channels: (w: string) => ['channels', w] as const,
+  connectionHealth: (w: string) => ['channels', w, 'health'] as const,
   analytics: (w: string) => ['analytics', w] as const,
   timeSavings: (w: string, range: string) => ['time-savings', w, range] as const,
   audience: (w: string) => ['audience', w] as const,
@@ -58,6 +60,12 @@ export function useUsage() {
 export function useChannels() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.channels(w), queryFn: () => api.channels(w), enabled });
+}
+
+/** Connection Health Center: only requested where the Channels response said this workspace may open it. */
+export function useConnectionHealth(options: { enabled?: boolean } = {}) {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.connectionHealth(w), queryFn: () => api.connectionHealth(w), enabled: enabled && options.enabled !== false, retry: false });
 }
 
 export function useAnalytics() {
@@ -191,6 +199,14 @@ export function useAct() {
   return useMutation({
     mutationFn: (input: { revision: number; action: string; payload?: Record<string, unknown> }) =>
       api.act(w, input.revision, input.action, input.payload ?? {}),
+    onError: (error: unknown) => {
+      if (error instanceof ApiError && error.status === 409 &&
+          (error.code === 'youtube_connection_refreshed' || error.code === 'youtube_connection_changed')) {
+        // Read the new authority/revision only. The person must review and submit again.
+        void client.invalidateQueries({ queryKey: keys.snapshot(w) });
+        void client.invalidateQueries({ queryKey: keys.channels(w) });
+      }
+    },
     onSuccess: (snapshot: Snapshot) => {
       client.setQueryData(keys.snapshot(w), snapshot);
       void client.invalidateQueries({ queryKey: keys.usage(w) });

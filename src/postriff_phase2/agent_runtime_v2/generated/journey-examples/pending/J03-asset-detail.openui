@@ -1,0 +1,5 @@
+root = RafiiRoot([card, lineage])
+item = Query("library_item", {assetRef: "library_file:0c7d9e2a-4b1f-4c3a-9d2e-5f6a7b8c9d0e"}, null)
+line = Query("library_lineage", {assetRef: "library_file:0c7d9e2a-4b1f-4c3a-9d2e-5f6a7b8c9d0e"}, null)
+card = LibraryAssetCard(item, "library_use_as_source")
+lineage = LibraryLineage(line)

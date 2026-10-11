@@ -247,9 +247,8 @@ class FrontierSQL(unittest.TestCase):
     def test_source_deletion_cancels_query_and_purges_dependent_audit(self):
         produced = self.produce([self.proposal()])
         d = self.admitted(produced)
-        sample = self.admitted(produced, 'keyword_independent_sample')
-        # A full valid page sorts before the request under test even when this
-        # workspace is first. The default worker page must not reach it yet.
+        unrelated = {identifier: self.job(identifier)['state'] for identifier in produced['jobs']
+                     if identifier != d['job_id']}
         with self.connect() as db:
             for i in range(100):
                 db.execute('''INSERT INTO pr_trend_outbox(scope_key,event_id,event_key,event_type,node_id,payload)
@@ -258,31 +257,46 @@ class FrontierSQL(unittest.TestCase):
                     (str(uuid.uuid4()), 'frontier-allocation:'+format(i, '064x'), self.scope))
             db.execute("UPDATE pr_trend_nodes SET validity='revoked' WHERE scope_key=%s AND node_id=%s",(self.scope,self.sources[0]))
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        first_page = self.engine.maintenance()
-        self.assertIsNotNone(first_page['next_key'])
-        self.assertEqual(self.job(d['job_id'])['state'], 'queued')
-        self.assertGreaterEqual(self.maintenance_pass(after=first_page['next_key']), 1)
-        self.assertEqual(self.job(d['job_id'])['state'], 'cancelled')
+        self.assertGreaterEqual(self.maintain_until_cancelled([d['job_id']]), 1)
         self.assertEqual(self.job(d['job_id'])['payload'],{})
-        self.assertEqual(self.job(sample['job_id'])['state'], 'queued')
-        self.assertTrue(self.job(sample['job_id'])['payload'])
-        # The suite intentionally shares an isolated database and earlier tests
-        # leave many independently purgeable nodes. This assertion is about the
-        # revoked dependency cascade, not the worker's 100-row page boundary.
+        for identifier, state in unrelated.items():
+            self.assertEqual(self.job(identifier)['state'], state)
+        # Then ensure the canonical sweep erases the dependent audit event;
+        # the cancellation assertion above stays real, not a mock or bypass.
         retention.sweep(self.store,limit=1000)
         self.assertEqual(self.fetch('SELECT payload FROM pr_trend_outbox WHERE scope_key=%s AND event_key=%s',(self.scope,'frontier-request:'+d['request_id']))[0],{})
 
     def test_revoked_policy_cannot_read_dispatch_or_retain_query(self):
         produced = self.produce([self.proposal()])
+        self.assertEqual(len(produced['jobs']),2)
         d = self.admitted(produced)
         with self.connect() as db:
             db.execute('UPDATE pr_trend_source_policies SET revoked_at=clock_timestamp() WHERE scope_key=%s AND provider_id=%s',(self.scope,self.provider))
         with self.assertRaises(C.ContractError): self.engine.report(self.scope,self.provider,self.version)
         with self.assertRaises(C.ContractError): self.engine.dispatch_context(self.job(d['job_id']))
-        self.assertGreaterEqual(self.maintenance_pass(), 2)
-        for job_id in produced['jobs']:
-            self.assertEqual(self.job(job_id)['state'], 'cancelled')
-            self.assertEqual(self.job(job_id)['payload'], {})
+        self.assertGreaterEqual(self.maintain_until_cancelled(produced['jobs']), 2)
+        for identifier in produced['jobs']:
+            self.assertEqual(self.job(identifier)['payload'],{})
+
+    def maintain_until_cancelled(self, identifiers):
+        # The suite shares a disposable database across scenarios; canonical
+        # maintenance visits global event pages of at most 100 entries. A newly
+        # revoked source can be beyond the first page, so exercise the real
+        # stable-key pagination instead of assuming a single tick visits it.
+        after = None
+        traversed = set()
+        total_cancelled = 0
+        for _ in range(100):
+            receipt = self.engine.maintenance(limit=100, after=after)
+            self.assertEqual(receipt['status'], 'ok')
+            total_cancelled += receipt['cancelled']
+            if all(self.job(identifier)['state'] == 'cancelled' for identifier in identifiers):
+                return total_cancelled
+            self.assertIsNotNone(receipt['next_key'], 'Maintenance exhausted all pages without cancelling the target jobs.')
+            self.assertNotIn(receipt['next_key'], traversed, 'Maintenance cursor did not advance')
+            traversed.add(receipt['next_key'])
+            after = receipt['next_key']
+        self.fail('Target jobs were not cancelled within 100 bounded maintenance pages.')
 
     def test_private_evidence_never_becomes_a_cross_scope_parent(self):
         first = self.admitted(self.produce([self.proposal()]))

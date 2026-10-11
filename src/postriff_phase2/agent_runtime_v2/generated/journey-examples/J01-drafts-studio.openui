@@ -1,0 +1,7 @@
+root = RafiiRoot([note, list, compare], "Unscheduled drafts")
+$selectedDrafts = []
+drafts = Query("drafts_list", {status: "unscheduled"}, null)
+picks = Query("drafts_list", {ids: $selectedDrafts}, null)
+note = Commentary("Pick two drafts to see them side by side. Picking only selects them.")
+list = DraftList(drafts, $selectedDrafts)
+compare = DraftCompare(picks, $selectedDrafts)

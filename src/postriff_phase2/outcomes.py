@@ -17,10 +17,13 @@ def valid_receipt_url(url, platform):
             'Discord': ({'discord.com'}, r'/channels/[0-9]{5,25}/[0-9]{5,25}/[0-9]{5,25}/?'),
             'Telegram': ({'t.me'}, r'/[A-Za-z0-9_]{4,32}/[0-9]{1,15}/?'),
             'Facebook': ({'www.facebook.com', 'facebook.com'}, r'/[A-Za-z0-9.]{1,100}/posts/[A-Za-z0-9_]{1,100}/?'),
-            'YouTube': ({'youtu.be'}, r'/[A-Za-z0-9_-]{11}'),
+            'YouTube': ({'youtu.be', 'www.youtube.com'}, r'/[A-Za-z0-9_-]{11}|/watch'),
             'TikTok': ({'www.tiktok.com'}, r'/@[A-Za-z0-9_.]{1,24}/video/[0-9]{5,25}/?'),
             'Pinterest': ({'www.pinterest.com'}, r'/pin/[0-9]{5,30}/?'),
         }.get(platform, (set(), r'(?!)'))
+        if platform == 'YouTube' and parsed.hostname == 'www.youtube.com':
+            return bool(parsed.scheme == 'https' and parsed.port is None and not parsed.username and not parsed.password
+                        and parsed.path == '/watch' and re.fullmatch(r'v=[A-Za-z0-9_-]{11}', parsed.query) and not parsed.fragment)
         return bool(parsed.scheme == 'https' and parsed.hostname in hosts and parsed.port is None
                     and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
                     and re.fullmatch(path, parsed.path))
@@ -34,6 +37,10 @@ def unknown(message="Provider outcome is unknown; reconcile before retry"):
 
 def normalize_result(result, job, reconciliation=False):
     allowed = {"native_scheduled", "canceled", "uncertain", "processing", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
+    youtube_progress = bool(isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'YouTube'
+                            and isinstance(result.get('progress'), dict) and result['progress'].get('version') == 2)
+    if youtube_progress and job.get('cancelRequested'):
+        allowed.add('canceled')
     if (not isinstance(result, dict) or not isinstance(result.get("state"), str) or result["state"] not in allowed
             or not isinstance(result.get("confirmed"), str)
             or not 1 <= len(result["confirmed"]) <= 2000):
@@ -46,7 +53,7 @@ def normalize_result(result, job, reconciliation=False):
     # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
     # rejected) is proof, not a lookup failure, so it may end the job as failed.
     provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
-    if reconciliation and result.get('verification') not in ('resumable_upload_status', 'thread_lookup') and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure:
+    if reconciliation and result.get('verification') not in ('resumable_upload_status', 'thread_lookup') and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure and not youtube_progress:
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:
@@ -67,13 +74,31 @@ def normalize_result(result, job, reconciliation=False):
     if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform')):
         return unknown('Invalid canonical receipt URL; manual review required')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
+    if 'retryAfterSeconds' in result:
+        delay = result['retryAfterSeconds']
+        if (job.get('manifest', {}).get('platform') != 'LinkedIn' or result['state'] != 'scheduled'
+                or type(delay) is not int or not 1 <= delay <= 86400):
+            return unknown('Invalid LinkedIn retry delay; reconcile before retry')
+        normalized['retryAfterSeconds'] = delay
     progress = result.get('progress')
     if progress is not None:
-        if (not isinstance(progress, dict) or progress.get('version') != 1
+        if youtube_progress:
+            from .youtube.model import resource_id
+            from .youtube.uploads import upload_view
+            stages = ('validating', 'session_open_attempted', 'uploading', 'uploaded_private', 'processing', 'processed_private',
+                      'native_scheduled', 'published', 'failed', 'held', 'canceled', 'session_expired', 'outcome_unknown')
+            if (progress.get('stage') not in stages or type(progress.get('bytesSent')) is not int
+                    or type(progress.get('totalBytes')) is not int or not 0 <= progress['bytesSent'] <= progress['totalBytes'] <= 256 * 1024**3):
+                return unknown('Invalid YouTube resumable progress; reconcile without resubmitting')
+            if progress.get('videoId') and progress['videoId'] != reference:
+                return unknown('YouTube progress and receipt resource IDs disagree')
+            normalized['progress'] = {'version': 2, **upload_view(progress)}
+        else:
+            if (not isinstance(progress, dict) or progress.get('version') != 1
                 or progress.get('stage') not in ('assets_uploaded', 'children_created', 'children_ready', 'container_created', 'container_ready', 'upload_session', 'upload_finalizable', 'next_asset', 'metadata_pending', 'provider_accepted', 'thread_ready')
                 or not container):
-            return unknown('Invalid publishing progress; manual review required')
-        normalized['progress'] = {'version': 1, 'stage': progress['stage']}
+                return unknown('Invalid publishing progress; manual review required')
+            normalized['progress'] = {'version': 1, 'stage': progress['stage']}
     upload = result.get('providerUpload')
     if upload is not None:
         if (not isinstance(upload, dict) or set(upload) != {'ciphertext', 'keyId'}

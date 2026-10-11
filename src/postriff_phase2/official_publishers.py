@@ -6,6 +6,7 @@ are reconciled, never retried as creates. Network transports are injected for te
 import hashlib
 import json
 import re
+from email.utils import parsedate_to_datetime
 from urllib.parse import quote, urlencode
 from postriff_alpha.domain import AlphaError
 from .official_social import LINKEDIN_VERSION, THREADS_VERSION
@@ -182,6 +183,28 @@ class OfficialPublishers:
             payload["content"] = {"article": {"source": options["link"], "title": options.get("title") or "", "description": options.get("description") or ""}}
         if options.get("poll"): payload["content"] = {"poll": options["poll"]}
         response = self.transport("POST", "https://api.linkedin.com/rest/posts", headers=headers, body=payload)
+        status = response.get('status')
+        if status in (400, 422):
+            return {'state': 'failed', 'confirmed': 'LinkedIn rejected the post before acceptance. Correct it and review again.', 'providerAssets': assets}
+        if status in (401, 403):
+            return {'state': 'held', 'confirmed': 'LinkedIn rejected this session or permission. Reconnect and review before publishing.', 'providerAssets': assets}
+        if status == 429:
+            # A definite rejection permits a bounded retry of this exact job.
+            # Lost responses, timeouts and 5xx remain uncertain and never create again.
+            attempt = max(1, len(job.get('attempts') or []))
+            delay = min(3600, 60 * 2 ** min(attempt - 1, 6))
+            delay += int(hashlib.sha256(manifest.get('idempotencyKey', '').encode()).hexdigest()[:4], 16) % 30
+            raw = next((v for k, v in (response.get('headers') or {}).items() if k.lower() == 'retry-after'), None)
+            try:
+                provider_delay = int(raw) if str(raw).isdigit() else int(parsedate_to_datetime(str(raw)).timestamp() - self.host.oauth.clock())
+                delay = max(delay, min(86400, provider_delay))
+            except (ValueError, TypeError, OverflowError, AttributeError):
+                pass
+            result = {'state': 'scheduled', 'confirmed': 'LinkedIn rate limited this request before acceptance. The same approved job will retry after backoff.',
+                      'retryAfterSeconds': delay, 'providerAssets': assets}
+            if action == 'publish' and job.get('container'):
+                result.update(container=job['container'], progress={'version': 1, 'stage': 'container_ready'})
+            return result
         reference = response.get("headers", {}).get("x-restli-id")
         if response.get("status") == 201 and isinstance(reference, str) and reference.startswith(("urn:li:share:", "urn:li:ugcPost:")):
             result = {"state": "provider_accepted", "reference": reference, "providerAssets": assets,

@@ -98,6 +98,12 @@ export const navGroups: NavGroup[] = [
         items: []
       },
       {
+        title: 'YouTube creator',
+        url: '/app/youtube',
+        icon: 'video',
+        items: []
+      },
+      {
         title: 'Inbox',
         url: '/app/inbox',
         icon: 'inbox',
@@ -178,6 +184,12 @@ export const navGroups: NavGroup[] = [
       {
         title: 'Privacy & data',
         url: '/app/account/privacy',
+        icon: 'shieldCheck',
+        items: []
+      },
+      {
+        title: 'Rafii Agent',
+        url: '/app/account/agent',
         icon: 'shieldCheck',
         items: []
       },

@@ -1,0 +1,9 @@
+root = RafiiRoot([revenue, costs, reliability])
+$period = "this_month"
+$selectedMetric = null
+rev = Query("founder_metric_query", {metricIds: ["mrr", "cash_collected", "logo_churn"], period: $period, grain: "week"}, null)
+cost = Query("founder_cost_breakdown", {dimension: "feature", period: $period}, null)
+rel = Query("founder_reliability", {period: $period}, null)
+revenue = FounderRevenueSummary(rev, $selectedMetric, "Revenue")
+costs = FounderCostBreakdown(cost, "AI cost by feature")
+reliability = FounderReliabilityPanel(rel)

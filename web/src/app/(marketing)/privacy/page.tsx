@@ -37,12 +37,25 @@ export default function PrivacyPage() {
     >
       <h2 id='who'>1. Who we are</h2>
       <p>
-        Rafii (“we”, “us”) operates the service at {siteConfig.url}. [Legal entity name, registered address and registration number — to be confirmed by counsel.] We are the controller of the account and workspace data described below.
+        Rafii is operated by Au Hin Sing (“we”, “us”) at {siteConfig.url}. Au Hin Sing is the controller of the account and workspace data described below. Contact us at <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className='underline'>{LEGAL_CONTACT_EMAIL}</a> for privacy questions and requests.
       </p>
 
       <h2 id='collect'>2. What we collect</h2>
       <h3>Account data</h3>
-      <p>Your email address and, if you sign in with Google, the name and profile image your provider shares. Authentication is handled by Supabase Auth. We do not store passwords.</p>
+      <p>Your email address and the profile details you provide. Authentication is handled by Supabase Auth.</p>
+      <h3 id='google-sign-in'>Google sign-in data</h3>
+      <p>
+        When you choose Sign in with Google, Rafii requests the email and profile permissions shown on Google’s authorization screen. Google provides your account identifier, email address, email verification status, and available profile details such as your name and profile image. Rafii uses these details to create or identify your account, verify your sign-in, and display your profile. Google does not provide your Google password to Rafii.
+      </p>
+      <p>
+        These sign-in permissions do not allow Rafii to read your Gmail messages, Drive files, Calendar events, contacts or YouTube content. YouTube creator features require a separate connection and authorization, described in the Connected platforms section below.
+      </p>
+      <p>
+        Google processes the authorization step. Supabase Auth stores the identity and account profile used for authentication. Rafii’s application, hosted on Vercel, processes your authenticated account and session. Session cookies keep you signed in and are refreshed by Supabase Auth. These services process the data needed to provide sign-in and your Rafii account, as described in the Subprocessors section. The data is not sold or used for advertising.
+      </p>
+      <p>
+        Your sign-in identity and profile are retained while your Rafii account exists. You can request account deletion from Account → Privacy &amp; data or through the contact details below. Deletion removes the account identity after workspace deletion; the data-deletion page describes pending deletion retries and records that remain. You can also remove Rafii’s Google authorization in <a href='https://myaccount.google.com/connections' className='underline'>your Google Account connections</a>. Removing that authorization prevents future use of that grant; it does not itself delete your Rafii account or content you published elsewhere. To end your current Rafii session, also sign out of Rafii.
+      </p>
       <h3>Workspace content</h3>
       <p>Sources you paste or upload, the drafts generated from them, your edits, approvals, scheduling times, media you upload, and the receipts produced when a post is published. This content belongs to you.</p>
       <h3>Connected-account data</h3>
@@ -73,10 +86,33 @@ export default function PrivacyPage() {
 
       <h2 id='platforms'>5. Connected platforms</h2>
       <p>
-        Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold, shared with third parties, or combined across customers. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
+        Rafii connects to LinkedIn, Threads, Instagram and other platforms only through your own authorisation, requesting the minimum permissions for the capability you enable. Data received from a platform (account identity, post ids, metrics, comments) is used solely to provide the service to you — showing your results, letting you reply, and reconciling publications. It is not sold or combined across customers. Service providers process data needed to deliver enabled features, as described in the AI processing and Subprocessors sections. When you disconnect an account, the stored token is wiped and revoked with the platform where supported, and platform data for that account stops being collected. Your use of each platform remains subject to that platform’s own terms and privacy policy.
+      </p>
+
+      <h3 id='youtube'>YouTube</h3>
+      <p>
+        Rafii uses YouTube API Services for the creator features you enable. Connect through Google's authorization screen and select the intended channel. Rafii manages the application's Google configuration; you do not need your own Google Cloud project or OAuth client credentials. Read-only connection does not enable publishing.
+      </p>
+      <p>
+        Google supplies the selected channel identity, authorization tokens and permissions returned for the application, which may include permissions you previously granted to the same Rafii application. Access and refresh credentials are encrypted on the server in workspace-scoped connection records. When the relevant features are enabled and authorized, Rafii processes channel and video metadata, selected upload media and publication settings, caption tracks, playlists, comments and supported creator reports to perform the actions you review and approve, check their results and show enabled reports or Inbox information. Hosting, database and model processing are described in the AI processing and Subprocessors sections.
+      </p>
+      <p>
+        When the YouTube chat analytics feature and a configured writer are enabled, a separately authorized agentic Google connection and your explicit request in the current chat turn are required before reading your channel reports. Selected native nonmonetary metric values, their original names and dates, and channel/source/date context may then be sent to that turn's configured writer. This workflow does not send viewer identities, comment or video text, revenue data or credentials, and does not calculate independent scores, averages, rankings or predictions from those reports. Processor contracts, training and data-use terms, retention and processing regions remain subject to release review; this draft does not assert those approvals.
+      </p>
+      <p>
+        Manual publication requires approval of the exact video, channel, metadata, visibility and time. Where authorized Autopilot is enabled, a workspace owner must separately review and activate finite standing authority covering exact plans, Library videos, the destination channel, scheduled times, a time zone, daily limits and an expiry. Changes require new approval. That authority does not permit arbitrary content, deletion or account-setting changes. You can pause or revoke future execution. A native publication schedule already accepted by YouTube may still publish until you separately cancel it in YouTube Studio or through an authorized, reviewed Creator cancellation; pausing automation or removing a Rafii connection does not cancel that schedule.
+      </p>
+      <p>
+        Remove a connection from Channels or manage data requests through Account → Privacy &amp; data and our <Link href={siteConfig.links.dataDeletion} className='underline'>data-deletion page</Link>. Removing Rafii's access does not delete content already on YouTube. Google-wide revocation may affect other channels or Google integrations using that account and project; Rafii may defer that remote step to protect other active connections and reports whether it was confirmed. You can review or remove access in <a href='https://security.google.com/settings/security/permissions' className='underline'>Google's permissions settings</a>.
+      </p>
+      <p>
+        Your use of YouTube is subject to the <a href='https://www.youtube.com/t/terms' className='underline'>YouTube Terms of Service</a>. Google's information practices are explained in the <a href='https://policies.google.com/privacy' className='underline'>Google Privacy Policy</a>.
       </p>
 
       <h2 id='retention'>6. Retention</h2>
+      <p>
+        For YouTube, the general table below has these exceptions: Inbox comment copies expire 30 days after their last fetch, and cached creator data, including analytics responses, expires at its configured time, no later than 30 days after refresh. Maintenance removes expired comment copies and caches, and downloaded reporting datasets ingested more than 30 days ago. These periods apply to Rafii's working copies; they do not delete the original content on YouTube.
+      </p>
       <table>
         <thead>
           <tr>

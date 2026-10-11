@@ -7,6 +7,9 @@ permissions:
 concurrency:
   group: growth-studio-${{ github.ref }}
   cancel-in-progress: true
+env:
+  # @openuidev/lang-core sends install telemetry from postinstall unless disabled (rafii-genui/1, G14).
+  OPENUI_TELEMETRY_DISABLED: '1'
 jobs:
   growth-studio:
     runs-on: ubuntu-24.04
@@ -54,7 +57,8 @@ jobs:
           mkdir -p "$POSTRIFF_GROWTH_EVIDENCE_DIR"
           python scripts/postriff_dev_hosted.py --port 4396 --pg-port 55796 --growth-phase2-fixture > "$POSTRIFF_GROWTH_EVIDENCE_DIR/api.log" 2>&1 &
           api_pid=$!
-          (cd web && node node_modules/next/dist/bin/next dev --port 3296) > "$POSTRIFF_GROWTH_EVIDENCE_DIR/web.log" 2>&1 &
+          # Avoid the recorded Turbopack task-restore abort in this cloud harness.
+          (cd web && node node_modules/next/dist/bin/next dev --webpack --port 3296) > "$POSTRIFF_GROWTH_EVIDENCE_DIR/web.log" 2>&1 &
           web_pid=$!
           cleanup() { kill "$web_pid" "$api_pid" 2>/dev/null || true; wait "$web_pid" "$api_pid" 2>/dev/null || true; }
           trap cleanup EXIT

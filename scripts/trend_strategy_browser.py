@@ -11,6 +11,15 @@ from wsgiref.simple_server import WSGIServer, WSGIRequestHandler, make_server
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def _retryable_google_font_loader_failure(log: str) -> bool:
+    """Only the witnessed upstream Next Google CSS parser transient qualifies."""
+    return all(signature in log for signature in (
+        'An error occurred in `next/font`',
+        'next/dist/compiled/@next/font/dist/google/loader.js',
+        "Cannot read properties of null (reading '1')",
+    ))
+
+
 def seed_history(service, connect, row):
     from postriff_phase2.growth.trends import contracts, learning, opportunities
     from postriff_phase2.coworker import performance
@@ -106,7 +115,21 @@ def main():
             manifest=json.loads((ROOT/'web'/dist/'routes-manifest.json').read_text())
             assert any(r['destination']==env['POSTRIFF_API_ORIGIN']+'/api/:path*' for r in manifest['rewrites']['afterFiles'])
         else:
-            with (out/'build.log').open('w') as log:subprocess.run(['npm','run','build','--','--webpack'],cwd=ROOT/'web',env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=600)
+            # Next.js 16.3.8 Google font CSS metadata occasionally returns an
+            # incomplete response. This is a narrow one-time network recovery,
+            # not a generic CI retry or an acceptance/test bypass.
+            build_command = ['npm', 'run', 'build', '--', '--webpack']
+            build_log = out/'build.log'
+            with build_log.open('w') as log:
+                build = subprocess.run(build_command, cwd=ROOT/'web', env=env,
+                    stdout=log, stderr=subprocess.STDOUT, check=False, timeout=600)
+            if build.returncode and _retryable_google_font_loader_failure(build_log.read_text()):
+                with build_log.open('a') as log:
+                    log.write('\\n[ci] Retry 1/1: exact transient next/font Google metadata parser signature\\n')
+                    build = subprocess.run(build_command, cwd=ROOT/'web', env=env,
+                        stdout=log, stderr=subprocess.STDOUT, check=False, timeout=600)
+            if build.returncode:
+                raise subprocess.CalledProcessError(build.returncode, build_command)
         receipt['build_id']=(ROOT/'web'/dist/'BUILD_ID').read_text().strip()
         with (out/'web.log').open('w') as log:
             proc=subprocess.Popen(['node','node_modules/next/dist/bin/next','start','-p',str(args.web_port),'--hostname','127.0.0.1'],cwd=ROOT/'web',env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)

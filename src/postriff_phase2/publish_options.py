@@ -86,31 +86,8 @@ def _tiktok(options, media):
 
 
 def _youtube(options, media, text):
-    _video(media, "YouTube")
-    title = options.get("title")
-    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 100 or "<" in title or ">" in title:
-        raise AlphaError("Give the video a title of up to 100 characters, without < or >.", 400)
-    if options.get("privacyStatus") not in YOUTUBE_PRIVACY:
-        raise AlphaError("Choose private, unlisted or public for this video.", 400)
-    made_for_kids = _flag(options, "madeForKids", "YouTube")
-    if len(text.encode()) > 5000:
-        raise AlphaError("A YouTube description allows 5,000 bytes. Shorten the text.", 409)
-    result = {"title": title.strip(), "privacyStatus": options["privacyStatus"], "madeForKids": made_for_kids}
-    for key in ('containsSyntheticMedia', 'notifySubscribers'):
-        if key in options: result[key] = _flag(options, key, 'YouTube')
-    if options.get('publishAt'):
-        from datetime import datetime, timezone
-        try: at = datetime.fromisoformat(options['publishAt'].replace('Z', '+00:00'))
-        except (ValueError, TypeError, AttributeError): raise AlphaError('Choose a valid future YouTube publication time.', 400)
-        if at.tzinfo is None or at <= datetime.now(timezone.utc): raise AlphaError('YouTube publishAt must be in the future with a timezone.', 400)
-        if result['privacyStatus'] != 'private': raise AlphaError('Native scheduled uploads must initially be private.', 400)
-        result['publishAt'] = at.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-    if options.get('localizations'):
-        localized = options['localizations']
-        if not isinstance(localized, dict) or len(localized) > 50 or any(not re.fullmatch(r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', lang) or not isinstance(value, dict) or set(value)-{'title', 'description'} or not isinstance(value.get('title'), str) or not 1 <= len(value['title']) <= 100 or not isinstance(value.get('description', ''), str) or len(value.get('description', '').encode()) > 5000 for lang, value in localized.items()):
-            raise AlphaError('Review valid YouTube title/description localizations.', 400)
-        result['localizations'] = localized
-    return result
+    from .youtube.model import validate_video
+    return validate_video(options, media, text)
 
 
 def _pinterest(options, media):

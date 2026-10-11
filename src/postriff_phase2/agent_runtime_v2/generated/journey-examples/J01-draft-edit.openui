@@ -1,0 +1,7 @@
+root = RafiiRoot([detail, evidence, editor, rewrite])
+draft = Query("draft_read", {draftId: "v_7f3c2a91"}, null)
+basis = Query("draft_evidence", {draftId: "v_7f3c2a91"}, null)
+detail = DraftDetail(draft)
+evidence = DraftEvidence(basis)
+editor = DraftEditor(draft, "draft_edit", "draftText")
+rewrite = Button("Ask Rafii for a shorter version", Action([@ToAssistant("Rewrite this draft shorter, keeping my voice.")]), "secondary")

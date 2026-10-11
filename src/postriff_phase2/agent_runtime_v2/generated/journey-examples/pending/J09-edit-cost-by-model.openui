@@ -1,0 +1,2 @@
+cost = Query("founder_cost_breakdown", {dimension: "model", period: $period}, null)
+costs = FounderCostBreakdown(cost, "AI cost by model")

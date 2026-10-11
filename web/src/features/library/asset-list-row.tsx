@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import type { AssetUse, LibraryAsset } from './use-library';
 import { badgeClass, copyHash, dimensionsOf, formatDuration, useAssetImage, usageLabel } from './asset-card';
 import { AssetFileThumbnail } from './asset-thumbnail';
+import { GalleryMediaPreview } from './gallery-media-preview';
 
 export interface AssetListRowProps {
   asset: LibraryAsset;
@@ -105,7 +106,7 @@ export function AssetListRow({
           >
             <span data-library-thumbnail={video ? 'video' : assetKind === 'image' ? 'image' : undefined} data-thumbnail-preview={video ? 'video-poster' : assetKind === 'image' ? 'image' : undefined} className='rafii-quiet relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--rafii-radius-control)]'>
               {!mediaAsset ? (
-                <AssetFileThumbnail asset={asset} size='row' loadPreview={false} />
+                <AssetFileThumbnail asset={asset} size='row' loadPreview={nearView} />
               ) : preview.data ? (
                 <Image src={preview.data} alt='' fill unoptimized sizes='56px' className='object-cover' />
               ) : preview.isError ? (
@@ -131,11 +132,7 @@ export function AssetListRow({
               {publishing ? 'Publishing' : usageLabel(count)}
             </AnimatedBadge>
           </button>
-          {pdfAsset && nearView ? (
-            <div className='pointer-events-none absolute top-2.5 left-3 z-10 size-14 overflow-hidden rounded-[var(--rafii-radius-control)]'>
-              <AssetFileThumbnail asset={asset} size='row' loadPreview />
-            </div>
-          ) : null}
+          {assetKind === 'audio' || video ? <div className='px-3 pb-3'><GalleryMediaPreview key={asset.id} asset={asset} video={video} posterUrl={preview.data} compact enabled={nearView} /></div> : null}
         </motion.div>
       </ContextMenuTrigger>
       <ContextMenuContent ariaLabel={`${kindLabel} actions`}>

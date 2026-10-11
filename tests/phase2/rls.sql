@@ -53,6 +53,7 @@ grant all on storage.objects,storage.buckets to service_role;
 \ir ../../migrations/postriff/044_social_provider_webhooks.sql
 \ir ../../migrations/postriff/045_phone_caller_identity.sql
 \ir ../../migrations/postriff/046_phone_passkey_identity.sql
+\ir ../../migrations/postriff/089_youtube_creator.sql
 \ir ../../migrations/postriff/093_universal_library.sql
 insert into auth.users values('00000000-0000-0000-0000-000000000001'),('00000000-0000-0000-0000-000000000002');
 select public.pr_bootstrap('00000000-0000-0000-0000-000000000001','studio') as one \gset
@@ -144,6 +145,13 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 \ir ../../migrations/postriff/096_universal_library_duplicate_index.sql
 \ir ../../migrations/postriff/100_social_cost_reservations.sql
 \ir ../../migrations/postriff/101_x_oauth_provider.sql
+\ir ../../migrations/postriff/097_youtube_capacity.sql
+\ir ../../migrations/postriff/098_youtube_authorization_generation.sql
+\ir ../../migrations/postriff/099_youtube_policy_acceptance.sql
+\ir ../../migrations/postriff/100_youtube_api_privacy_erasure.sql
+\ir ../../migrations/postriff/105_youtube_agent_history.sql
+\ir ../../migrations/postriff/106_youtube_operations_projection.sql
+\ir ../../migrations/postriff/109_agent_permissions.sql
 do $$ begin
  if not exists (
   select 1 from pg_indexes

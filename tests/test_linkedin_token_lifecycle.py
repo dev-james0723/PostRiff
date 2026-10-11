@@ -92,6 +92,18 @@ class LinkedInTokenLifecycle(unittest.TestCase):
                 provider.refresh(token)
             self.assertEqual(calls, [])
 
+    def test_inactive_and_foreign_app_introspection_require_reconnection(self):
+        for body in ({'active': False}, {'active': True, 'client_id': 'other-app', 'scope': 'w_member_social'}):
+            provider, _ = self.adapter(body)
+            with self.subTest(body=body), self.assertRaises(AlphaError) as raised:
+                provider.inspect_scopes('synthetic-token', 'urn:li:person:synthetic')
+            self.assertEqual(raised.exception.code, 'reauthorization_required')
+
+    def test_unavailable_introspection_is_not_revocation_or_empty_grant(self):
+        for body in ({}, {'active': True, 'client_id': 'synthetic-client'}, {'active': 'true'}):
+            provider, _ = self.adapter(body)
+            self.assertIsNone(provider.inspect_scopes('synthetic-token', 'urn:li:person:synthetic'))
+
 
 if __name__ == "__main__":
     unittest.main()

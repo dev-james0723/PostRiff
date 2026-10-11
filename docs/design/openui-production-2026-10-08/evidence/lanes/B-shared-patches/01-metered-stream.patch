@@ -1,0 +1,144 @@
+diff --git a/src/postriff_phase2/agent_runtime_v2/manager.py b/src/postriff_phase2/agent_runtime_v2/manager.py
+index 51100ca..e32e977 100644
+--- a/src/postriff_phase2/agent_runtime_v2/manager.py
++++ b/src/postriff_phase2/agent_runtime_v2/manager.py
+@@ -27,6 +27,10 @@ class ModelNotDispatched(RuntimeError):
+     """A local admission guard refused before the provider was called; no attempt or spend is implied."""
+ 
+ 
++class StreamEndedWithoutUsage(RuntimeError):
++    """A streamed provider call ended without its final response event: the provider's usage (and cost) is unknown."""
++
++
+ MANAGER_TOOLS = ["task_plan", "task_update", "pending_approvals", "proposal_apply", "entity_status", "workspace_summary", "route_describe", "help_search",
+                  "ui_navigate", "calendar_range", "campaign_list", "campaign_get", "campaign_items", "draft_get", "attention_summary", "image_list",
+                  "memory_context", "relationships", "queue_summary", "schedule_propose", "automation_change_propose", "draft_edit",
+@@ -188,11 +192,38 @@ def metered(model, ctx: RafiiRunContext, *, agent: str, workload: str, route: di
+                                  "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(response, usage, route, wall)})
+             return response
+ 
+-        def stream_response(self, *args, **kwargs):
++        async def stream_response(self, *args, **kwargs):
++            # A streamed call is metered exactly like get_response: one span from the final event's usage, or one failed /
++            # unknown call when the stream raised, was abandoned or ended without a final response (never assumed zero).
+             op, reason = thinking_state.model_op(agent, ledger.tool_activity)
+             ctx.thinking(op, "model" if agent == "rafii_manager" else "specialist", reason)
+-            ledger.model_requests += 1
+-            return model.stream_response(*args, **kwargs)
++            started, wall = time.monotonic(), time.time()
++            completed = None
++            counted = False
++            try:
++                async for event in model.stream_response(*args, **kwargs):
++                    if not counted:
++                        ledger.model_requests += 1
++                        counted = True
++                    if getattr(event, "type", None) == "response.completed":
++                        completed = getattr(event, "response", None)
++                    yield event
++            except BaseException as error:
++                if isinstance(error, ModelNotDispatched):
++                    raise
++                if not counted:
++                    ledger.model_requests += 1
++                _note_failure(ledger, error, workload=workload, route=route, started=started, wall=wall)
++                raise
++            if not counted:
++                ledger.model_requests += 1
++            if completed is None:
++                _note_failure(ledger, StreamEndedWithoutUsage(), workload=workload, route=route, started=started, wall=wall)
++                return
++            usage = getattr(completed, "usage", None)
++            ledger.spans.append({"span": "generation", "agent": agent, "workload": workload, "model": (route or {}).get("model"),
++                                 "inputTokens": getattr(usage, "input_tokens", 0) or 0, "outputTokens": getattr(usage, "output_tokens", 0) or 0,
++                                 "latencyMs": round((time.monotonic() - started) * 1000), **_attempt_detail(completed, usage, route, wall)})
+ 
+         async def close(self):
+             closer = getattr(model, "close", None)
+diff --git a/tests/test_agent_runtime_metered_stream.py b/tests/test_agent_runtime_metered_stream.py
+new file mode 100644
+index 0000000..ce3e544
+--- /dev/null
++++ b/tests/test_agent_runtime_metered_stream.py
+@@ -0,0 +1,81 @@
++"""manager.MeteredModel.stream_response meters streamed calls exactly like get_response (runtime-core D4, A-DECISIONS D-A23):
++one span from the final `response.completed` usage; a raised, abandoned or usage-less stream is one failed/unknown call in
++`ledger.calls` (never zero spend). Requires openai-agents (cloud CI)."""
++import asyncio
++import unittest
++from types import SimpleNamespace
++
++from agents.models.interface import Model
++
++from postriff_phase2.agent_runtime_v2 import manager
++from postriff_phase2.agent_runtime_v2.context import EffectLedger
++
++
++class _Inner(Model):
++    def __init__(self, events, error=None):
++        self.events, self.error = events, error
++
++    async def get_response(self, *args, **kwargs):  # pragma: no cover - not used here
++        raise AssertionError("streaming only")
++
++    async def stream_response(self, *args, **kwargs):
++        for event in self.events:
++            yield event
++        if self.error is not None:
++            raise self.error
++
++
++def _wrap(inner):
++    ctx = SimpleNamespace(ledger=EffectLedger(), thinking=lambda *a, **k: None)
++    return ctx, manager.metered(inner, ctx, agent="rafii_presenter", workload="fast_language", route={"model": "gpt-6-luna", "provider": "openai"})
++
++
++async def _drain(model, stop_after=None):
++    seen = []
++    stream = model.stream_response(None, "hi", None, [], None, [], None, previous_response_id=None, conversation_id=None, prompt=None)
++    async for event in stream:
++        seen.append(event)
++        if stop_after is not None and len(seen) >= stop_after:
++            await stream.aclose()
++            break
++    return seen
++
++
++def _completed(inp, out):
++    usage = SimpleNamespace(input_tokens=inp, output_tokens=out, input_tokens_details=SimpleNamespace(cached_tokens=0),
++                            output_tokens_details=SimpleNamespace(reasoning_tokens=0))
++    return SimpleNamespace(type="response.completed", response=SimpleNamespace(usage=usage, response_id="resp_s"))
++
++
++class MeteredStream(unittest.TestCase):
++    def test_final_usage_becomes_one_span(self):
++        ctx, model = _wrap(_Inner([SimpleNamespace(type="response.output_text.delta", delta="a"), _completed(1200, 80)]))
++        asyncio.run(_drain(model))
++        self.assertEqual(ctx.ledger.model_requests, 1)
++        self.assertEqual(len(ctx.ledger.spans), 1)
++        self.assertEqual((ctx.ledger.spans[0]["inputTokens"], ctx.ledger.spans[0]["outputTokens"]), (1200, 80))
++        self.assertEqual(ctx.ledger.calls, [])
++
++    def test_failed_stream_is_one_unknown_call(self):
++        ctx, model = _wrap(_Inner([SimpleNamespace(type="response.output_text.delta", delta="a")], error=ConnectionResetError()))
++        with self.assertRaises(ConnectionResetError):
++            asyncio.run(_drain(model))
++        self.assertEqual(ctx.ledger.spans, [])
++        self.assertEqual([c["status"] for c in ctx.ledger.calls], ["unknown"])
++        self.assertNotIn("cost_usd_micro", ctx.ledger.calls[0])
++
++    def test_stream_without_final_usage_is_unknown(self):
++        ctx, model = _wrap(_Inner([SimpleNamespace(type="response.output_text.delta", delta="a")]))
++        asyncio.run(_drain(model))
++        self.assertEqual([c["status"] for c in ctx.ledger.calls], ["unknown"])
++
++    def test_abandoned_stream_is_unknown(self):
++        ctx, model = _wrap(_Inner([SimpleNamespace(type="response.output_text.delta", delta="a"), SimpleNamespace(type="response.output_text.delta", delta="b"),
++                                   _completed(10, 10)]))
++        asyncio.run(_drain(model, stop_after=1))
++        self.assertEqual(ctx.ledger.spans, [])
++        self.assertEqual(len(ctx.ledger.calls), 1)
++
++
++if __name__ == "__main__":
++    unittest.main()

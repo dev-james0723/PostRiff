@@ -16,8 +16,35 @@ export interface VideoPolicy {
   maxSeconds: number;
 }
 
-/** Phase 1 caps (SPEC §7.2). The catalog may lower `maxBytes` to the bucket's limit. */
+/** Legacy caller defaults. Interactive upload paths should use the server's enabled catalog policy. */
 export const VIDEO_POLICY: VideoPolicy = { maxBytes: 100_000_000, maxSeconds: 180 };
+
+/** Missing, disabled or malformed server limits never become an unlimited client-side allowance. */
+export function videoPolicyFromCatalog(
+  video: { enabled?: unknown; maxBytes?: unknown; maxSeconds?: unknown } | null | undefined
+): VideoPolicy | null {
+  if (
+    video?.enabled !== true ||
+    typeof video.maxBytes !== 'number' || !Number.isSafeInteger(video.maxBytes) || video.maxBytes <= 0 ||
+    typeof video.maxSeconds !== 'number' || !Number.isFinite(video.maxSeconds) || video.maxSeconds <= 0
+  ) return null;
+  return { maxBytes: video.maxBytes, maxSeconds: video.maxSeconds };
+}
+
+/** Keep non-minute limits exact: a 90-second policy must not be described as one minute. */
+export function videoDurationLimit(seconds: number): string {
+  if (seconds % 3600 === 0) return `${seconds / 3600} ${seconds === 3600 ? 'hour' : 'hours'}`;
+  if (seconds % 60 === 0) return `${seconds / 60} ${seconds === 60 ? 'minute' : 'minutes'}`;
+  return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+}
+
+export function videoSizeLimit(bytes: number): string {
+  if (bytes < 1_000_000) return `${bytes.toLocaleString()} bytes`;
+  // Decimal units match the server's MB validation messages; no rounded-up upload allowance.
+  const divisor = bytes >= 1_000_000_000 ? 1_000_000_000 : 1_000_000;
+  const unit = divisor === 1_000_000_000 ? 'GB' : 'MB';
+  return `${(bytes / divisor).toLocaleString(undefined, { maximumFractionDigits: divisor === 1_000_000_000 ? 9 : 6 })} ${unit}`;
+}
 
 export const VIDEO_MIMES = ['video/mp4', 'video/quicktime'] as const;
 export const VIDEO_BRANDS = [
@@ -108,7 +135,7 @@ export function checkDuration(
 ): string | null {
   if (seconds === null || !Number.isFinite(seconds)) return null;
   return seconds > policy.maxSeconds
-    ? VIDEO_MESSAGES.tooLong(Math.floor(policy.maxSeconds / 60))
+    ? `This video is longer than ${videoDurationLimit(policy.maxSeconds)}.`
     : null;
 }
 

@@ -1,8 +1,10 @@
 'use client';
+import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 
 import { PublicationReceipt } from './publication-receipt';
 import { canPublishApprovedJob, recoverablePreviewHold } from './job-dispatch';
 import { PublishApprovedPostButton } from './publish-approved-post-button';
+import { LinkedInPostEdit } from './linkedin-post-edit';
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { toast } from 'sonner';
@@ -103,9 +105,10 @@ function Approved({ job, jobs }: { job: QueueJob; jobs: QueueJob[] }) {
       <Heading>Approved post</Heading>
       <div className='flex flex-col gap-4'>
         <ManifestPreview manifest={manifest} scale={0.6} />
+        <YouTubeManifestDetails manifest={manifest} />
         <dl className='flex flex-col'>
           <Row label='Time'>
-            <span title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone})`}>{formatDateTime(epochOf(manifest.timing.utc))}</span>
+            <span title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone})`}>{manifest.platform === 'YouTube' && manifest.publishOptions?.publicationMode === 'now' ? 'After upload and verified processing' : formatDateTime(epochOf(manifest.timing.utc))}</span>
           </Row>
           <Row label='Language'>{manifest.payload.language}</Row>
           <Row label='Media'>{manifest.media.length === 0 ? 'Text only' : `${manifest.media.length} attached`}</Row>
@@ -302,6 +305,7 @@ export function JobSheet(props: JobSheetProps) {
       <Timeline job={job} />
       <Attempts job={job} />
       <Platform job={job} nowSeconds={nowSeconds} />
+      <LinkedInPostEdit key={job.id} job={job} />
     </div>
   ) : null;
   const footer = job ? (

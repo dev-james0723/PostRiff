@@ -1,4 +1,5 @@
 import type { ThinkingOp } from '@/components/agents/thinking/thinking-op';
+import type { UiArtifactRefV1, UiTurnContextV1, UiTurnHandoffV1 } from '@/lib/agent-runtime/ui-contracts';
 
 /**
  * Contract with `/api/workspaces/{id}/agent/*` (Rafii Agent Runtime, docs/design/site-agent/agent-runtime/ARCHITECTURE_LOCK.md).
@@ -90,6 +91,10 @@ export interface AgentResult {
   blocks: SiteAgentBlock[];
   composedBy: 'manager' | 'deterministic' | 'site_agent' | 'grounded';
   language?: string | null;
+  /** rafii-genui/1: whether this answer may get a generated view (absent on legacy answers → native only). */
+  ui?: UiTurnHandoffV1;
+  /** rafii-genui/1: generated views attached to this answer's message. */
+  uiArtifacts?: UiArtifactRefV1[];
 }
 
 export interface AgentActiveRun {
@@ -150,6 +155,13 @@ export interface AgentTurnRequest {
   supersede?: boolean;
   /** Typed `/name args`: the text above is still the message; the server maps the name to one fixed instruction. */
   command?: TurnCommand;
+  /** rafii-genui/1: the generated view the person is looking at; the server re-resolves its stored selection. */
+  uiContext?: UiTurnContextV1;
+  /** The writer voice the person chose (ids only); the server never swaps it. */
+  voiceMode?: string;
+  voiceSourceIds?: string[];
+  /** Context Lens: what the person removed from this message's context (item ids from the preview); honoured by the server. */
+  contextLens?: { exclude: string[] };
 }
 
 export interface AgentStatus {
@@ -162,6 +174,12 @@ export interface AgentStatus {
   canUseModel: boolean;
   voice: { available: boolean; blocker: string | null };
   manager: { available: boolean; blocker: string | null };
+  /** rafii-genui/1 eligibility for this workspace (deployment flags narrowed by the canary allowlist). */
+  genui?: { enabled: boolean; actions: boolean; edits: boolean; canary: boolean };
+  /** Current workspace eligibility; the server still authorizes every task read and action. */
+  tasks?: { enabled: boolean };
+  /** Context Lens (only present when it is on for this workspace). */
+  contextLens?: { enabled: boolean; version: string; visibleState: boolean; previewTtlSeconds: number };
 }
 
 export interface ConversationImage {

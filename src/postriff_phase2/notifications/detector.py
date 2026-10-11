@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import time
 
-RECONNECT_STATES = ("token_expired", "reauthorization_required", "scope_missing")
+from ..channels import ATTENTION_STATES, connection_state
+
+# The computed connection states that need a reconnect (channels.connection_state; a stored record has no state field).
+RECONNECT_STATES = ATTENTION_STATES
 QUEUE_HREF = "/app/queue"
 TIMELY_APPROVAL_WINDOW = 24 * 3600
 
@@ -30,6 +33,14 @@ def approval_timing(deadline, now):
 
 def _channel(state, channel_id):
     return next((c for c in ((state.get("phase2") or {}).get("channels") or []) if c.get("id") == channel_id), {}) or {}
+
+
+def _connection(channel, now):
+    """The channel's computed connection state, or None for a record too malformed to judge (the scan never stops)."""
+    try:
+        return connection_state(channel, now)
+    except (TypeError, ValueError):
+        return None
 
 
 def _last_message(job):
@@ -67,10 +78,15 @@ def from_state(workspace_id, state, now=None):
             out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_required:{review['id']}{suffix}", "entity_type": "review", **timing,
                         "entity_id": review["id"], "payload": {"platform": channel.get("platform"), "account": channel.get("account"), "href": QUEUE_HREF}})
     for channel in phase2.get("channels") or []:
-        connection = channel.get("connectionState")
-        expired = channel.get("configured") and not channel.get("revoked") and isinstance(channel.get("expiresAt"), (int, float)) and 0 < channel["expiresAt"] < now
+        if not isinstance(channel, dict) or not channel.get("configured") or channel.get("revoked"):
+            # Never connected, or disconnected: a deliberate disconnect and a provider revocation look the same in
+            # state, and neither is announced as "reconnect required" from here.
+            continue
+        connection = _connection(channel, now)
+        expired = isinstance(channel.get("expiresAt"), (int, float)) and 0 < channel["expiresAt"] < now
         if connection in RECONNECT_STATES or expired:
-            marker = connection or f"expired:{int(channel['expiresAt'])}"
+            # An expiry keeps its dedupe key (expired:<time>), so a notice already sent is not sent again.
+            marker = f"expired:{int(channel['expiresAt'])}" if expired else connection
             out.append({"event_type": "channel.reconnect_required", "dedupe_key": f"reconnect:{channel.get('id')}:{marker}", "entity_type": "channel",
                         "entity_id": channel.get("id"), "payload": {"platform": channel.get("platform"), "account": channel.get("account"), "href": "/app/channels"}})
     planning = ((state.get("raffi") or {}).get("campaignPlanning") or {})

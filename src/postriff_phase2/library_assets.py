@@ -13,7 +13,8 @@ from urllib.parse import urlencode
 
 from postriff_alpha.domain import AlphaError
 from .permissions import require
-from .library_extract import MIMES, MAX_FILE_BYTES, MAX_TEXT, chunks, extract_text, extract_isolated, normalize, AUDIO_MIMES
+from . import recovery
+from .library_extract import MIMES, MAX_FILE_BYTES, MAX_TEXT, chunks, extract_text, extract_isolated, normalize, AUDIO_MIMES, LEGACY
 
 TOKEN_SECONDS = 7200
 SWEEP_MARGIN = 86400
@@ -52,6 +53,9 @@ def _tags(value):
 
 
 def _asset(a):
+    provenance = {**a['provenance']}
+    if isinstance(provenance.get('thumbnail'),dict):
+        provenance['thumbnail'] = {k:v for k,v in provenance['thumbnail'].items() if k not in {'pages','claim'}}
     result = {
         'id': str(a['id']).replace('-', ''), 'createdBy': str(a['created_by']),
         'uploadedBy': str(a['created_by']), 'originalFilename': a['original_filename'],
@@ -61,8 +65,9 @@ def _asset(a):
         'bytes': a['bytes'], 'hash': a['sha256'] or '', 'sha256': a['sha256'],
         'processing': a['processing_status'], 'processingStatus': a['processing_status'],
         'analysisStatus': a['analysis_status'], 'indexingStatus': a['indexing_status'],
-        'createdAt': float(a['epoch']), 'provenance': a['provenance'], 'deleted': False,
+        'createdAt': float(a['epoch']), 'provenance': provenance, 'deleted': False,
         'extractionError': a['extraction_error'], 'attempts': a.get('attempts', 0),
+        'canRetryProcessing': a['processing_status'] in ('failed','queued') or (a['processing_status']=='unsupported' and a['extension'] in LEGACY) or (a['processing_status']=='ready' and a['indexing_status']=='failed'),
         'transcriptionStatus': a.get('transcription_status', 'not_applicable'), 'sourceId': a.get('source_id'),
         'duplicateOf': str(a['duplicate_of']).replace('-', '') if a.get('duplicate_of') else None,
     }
@@ -112,7 +117,7 @@ class UniversalLibrary:
         cur.execute("SELECT to_regclass('public.pr_library_assets')")
         if not cur.fetchone()[0]:
             return  # Backward compatible before the Library migration is deployed.
-        cur.execute("SELECT coalesce(sum(bytes),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
+        cur.execute("SELECT coalesce(sum(bytes + coalesce((provenance->'thumbnail'->>'bytes')::bigint,0)),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
         used=int(cur.fetchone()[0])+sum(int(a.get('bytes') or 0) for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted'))
         cur.execute("SELECT coalesce(sum(declared_bytes),0) FROM public.pr_media_uploads WHERE workspace_id=%s AND status='pending'",(w,))
         used+=int(cur.fetchone()[0])
@@ -130,7 +135,7 @@ class UniversalLibrary:
         s = self._store()
         with self.service.repository.transaction(t, w) as (cur, row, p):
             self._edit(row)
-            cur.execute("SELECT count(*) FILTER (WHERE processing_status='pending'),coalesce(sum(bytes),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')", (w,))
+            cur.execute("SELECT count(*) FILTER (WHERE processing_status='pending'),coalesce(sum(bytes + coalesce((provenance->'thumbnail'->>'bytes')::bigint,0)),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')", (w,))
             pending, used = cur.fetchone()
             legacy = self.service.ideas._state(row).get('phase2', {}).get('assets', [])
             used += sum(int(a.get('bytes') or 0) for a in legacy if not a.get('deleted'))
@@ -166,7 +171,7 @@ class UniversalLibrary:
                 cur.execute("UPDATE public.pr_library_assets SET etag=%s,processing_status='queued',next_attempt_at=now(),updated_at=now() WHERE workspace_id=%s AND id=%s", (info['etag'],w,i))
             a = self._row(cur, w, i)
         # Bounded small plain text/generic files can finish immediately. Complex parsers run on the cron worker.
-        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or a['kind'] == 'file'):
+        if a['processing_status'] == 'queued' and a['bytes'] <= 262144 and (a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES)):
             self.process(self.service.repository.connection_factory, w, i)
             with self.service.repository.transaction(t, w) as (cur, row, p):
                 a = self._row(cur, w, i)
@@ -196,7 +201,7 @@ class UniversalLibrary:
                 validate_audio(raw, a['extension'])
                 status, text = 'unsupported', ''
             else:
-                status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or a['kind'] == 'file' else extract_isolated(raw,a['extension']))
+                status, text = (extract_text(raw,a['extension']) if a['extension'] in INLINE or (a['kind'] == 'file' and a['extension'] not in MIMES) else extract_isolated(raw,a['extension']))
             parts = chunks(text)
             with connect() as db, db.cursor() as cur:
                 # Serializes digest admission with other files in this workspace, without a network call under lock.
@@ -205,7 +210,9 @@ class UniversalLibrary:
                 if not workspace or workspace[0].get('accountBlock') or workspace[0].get('accountDeletion'):
                     return 'workspace_frozen'
                 current = self._row(cur,w,i,True)
-                if str(current.get('lease_token')) != lease or current['processing_status'] != 'processing':
+                cur.execute('SELECT lease_expires_at > clock_timestamp() FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s', (w,i))
+                lease_live = cur.fetchone()
+                if str(current.get('lease_token')) != lease or current['processing_status'] != 'processing' or not lease_live or not lease_live[0]:
                     return 'lease_lost'
                 cur.execute("SELECT id FROM public.pr_library_assets WHERE workspace_id=%s AND sha256=%s AND id<>%s AND processing_status IN ('ready','unsupported') ORDER BY created_at,id LIMIT 1", (w,digest,i))
                 duplicate = cur.fetchone()
@@ -215,23 +222,34 @@ class UniversalLibrary:
                 cur.execute('DELETE FROM public.pr_library_chunks WHERE workspace_id=%s AND asset_id=%s',(w,i))
                 for n, part in enumerate(parts):
                     cur.execute('INSERT INTO public.pr_library_chunks(asset_id,workspace_id,ordinal,text) VALUES(%s,%s,%s,%s)',(i,w,n,part))
-                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
+                cur.execute("UPDATE public.pr_library_assets SET sha256=%s,processing_status=%s,analysis_status='not_applicable',indexing_status=%s,summary=%s,extraction_error=null,provenance=provenance-'recovery',token_expires_at=null,lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(digest,status,'ready' if status == 'ready' else 'not_applicable',normalize(text)[:360] or None,w,i))
             return status
         except Exception as e:
-            transient = not isinstance(e,AlphaError) or e.status >= 500
-            error = 'Private storage is temporarily unavailable.' if transient else str(e)[:300]
+            kind = recovery.category(e)
+            info = recovery.record(kind, a['attempts'], now=time.time(), retry_after=getattr(e,'retry_after',None))
+            transient = info['automaticRetry']
+            error = ('Private storage is temporarily unavailable.' if kind == 'retryable' else
+                     'Access to the file could not be verified. Review it before retrying.' if kind == 'permission' else str(e)[:300])
+            delay = max(0, (info['retryAt'] or time.time()) - time.time())
             with connect() as db, db.cursor() as cur:
-                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s AND attempts<3 THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s AND attempts<3 THEN 'pending' ELSE 'failed' END,extraction_error=%s,lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>least(300,30*attempts)),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND processing_status='processing'",(transient,transient,error,w,i,lease))
-            return 'retrying' if transient and a['attempts'] < 3 else 'failed'
+                cur.execute("UPDATE public.pr_library_assets SET processing_status=CASE WHEN %s THEN 'queued' ELSE 'failed' END,indexing_status=CASE WHEN %s THEN 'pending' ELSE 'failed' END,extraction_error=%s,provenance=jsonb_set(provenance,'{recovery}',%s::jsonb),lease_token=null,lease_expires_at=null,next_attempt_at=now()+make_interval(secs=>%s),updated_at=now() WHERE workspace_id=%s AND id=%s AND lease_token=%s AND lease_expires_at>clock_timestamp() AND processing_status='processing'",
+                            (transient,transient,error,json.dumps(info),delay,w,i,lease))
+                if cur.rowcount != 1:
+                    return 'lease_lost'
+            return 'retrying' if transient else 'failed'
 
     def retry(self,w,t,i):
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             a = self._row(cur,w,i,True)
-            if a['processing_status'] not in ('failed','queued'):
+            if a['processing_status'] not in ('failed','queued') and not (a['processing_status']=='unsupported' and a['extension'] in LEGACY) and not (a['processing_status']=='ready' and a['indexing_status']=='failed'):
                 raise AlphaError('This file is not waiting for a retry.',409)
-            cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
-        return {'status':'queued','assetId':i}
+            cur.execute("UPDATE public.pr_library_assets SET processing_status='queued',attempts=0,indexing_status='pending',extraction_error=null,provenance=provenance-'recovery',next_attempt_at=now(),lease_token=null,lease_expires_at=null WHERE workspace_id=%s AND id=%s",(w,i))
+        # An explicit retry can complete a bounded small file without waiting
+        # for cron (preview deployments do not run production cron schedules).
+        # Larger files retain their durable background queue and lease.
+        status = self.process(self.service.repository.connection_factory,w,i) if a['bytes']<=262144 else 'queued'
+        return {'status':status,'assetId':i}
 
     def detail(self,w,t,i):
         with self.service.repository.transaction(t,w) as (cur,row,p):
@@ -247,35 +265,33 @@ class UniversalLibrary:
         return self.metadata(w,t,i,{'title':title})
 
     def metadata(self,w,t,i,body):
-        if not isinstance(body,dict) or not body or not set(body) <= {'title','tags','collections'}:
-            raise AlphaError('Choose a title, tags or collections to update.')
-        title = body.get('title')
-        if 'title' in body and (not isinstance(title,str) or not 1<=len(title.strip())<=160 or '\x00' in title):
-            raise AlphaError('Use a title from 1 to 160 characters.')
-        tags = _tags(body['tags']) if 'tags' in body else None
-        collections = body.get('collections')
-        if collections is not None and (not isinstance(collections,list) or len(collections)>30 or any(not isinstance(c,str) or not ASSET_ID.fullmatch(c.replace('-','')) for c in collections)):
-            raise AlphaError('Choose valid collections.')
+        from .library_metadata import validate_metadata
+        body = validate_metadata(body)
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             self._exists(cur,row,w,i)
-            cur.execute('INSERT INTO public.pr_library_labels(workspace_id,asset_key) VALUES(%s,%s) ON CONFLICT DO NOTHING',(w,i))
-            if title is not None:
-                cur.execute('UPDATE public.pr_library_labels SET display_title=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(title.strip(),w,i))
-                cur.execute("UPDATE public.pr_library_assets SET display_title=%s,title_source='user',updated_at=now() WHERE workspace_id=%s AND id=%s",(title.strip(),w,i))
-            if tags is not None:
-                cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(tags,w,i))
-                cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(tags,w,i))
-            if collections is not None:
-                cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
-                if len(cur.fetchall()) != len(set(collections)):
-                    raise AlphaError('Collection unavailable.',404)
-                cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
-                for c in set(collections):
-                    cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
+            self._write_metadata(cur,w,i,body)
             cur.execute('SELECT 1 FROM public.pr_library_assets WHERE workspace_id=%s AND id=%s',(w,i))
             normalized = bool(cur.fetchone())
         return {'asset':self.detail(w,t,i)['asset']} if normalized else {'assetId':i,'status':'updated'}
+
+    def _write_metadata(self,cur,w,i,body):
+        """Already-authorized, validated metadata write on the caller's workspace transaction."""
+        cur.execute('INSERT INTO public.pr_library_labels(workspace_id,asset_key) VALUES(%s,%s) ON CONFLICT DO NOTHING',(w,i))
+        if 'title' in body:
+            cur.execute('UPDATE public.pr_library_labels SET display_title=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(body['title'],w,i))
+            cur.execute("UPDATE public.pr_library_assets SET display_title=%s,title_source='user',updated_at=now() WHERE workspace_id=%s AND id=%s",(body['title'],w,i))
+        if 'tags' in body:
+            cur.execute('UPDATE public.pr_library_labels SET tags=%s,updated_at=now() WHERE workspace_id=%s AND asset_key=%s',(body['tags'],w,i))
+            cur.execute('UPDATE public.pr_library_assets SET tags=%s,updated_at=now() WHERE workspace_id=%s AND id=%s',(body['tags'],w,i))
+        if 'collections' in body:
+            collections=body['collections']
+            cur.execute('SELECT id::text FROM public.pr_library_collections WHERE workspace_id=%s AND id=ANY(%s::uuid[])',(w,collections))
+            if len(cur.fetchall()) != len(collections):
+                raise AlphaError('Collection unavailable.',404)
+            cur.execute('DELETE FROM public.pr_library_collection_items WHERE workspace_id=%s AND asset_key=%s',(w,i))
+            for c in collections:
+                cur.execute('INSERT INTO public.pr_library_collection_items(workspace_id,collection_id,asset_key) VALUES(%s,%s,%s)',(w,c,i))
 
     def collections(self,w,t,body=None,collection_id=None,delete=False):
         with self.service.repository.transaction(t,w) as (cur,row,p):
@@ -313,6 +329,94 @@ class UniversalLibrary:
             cur.execute("UPDATE public.pr_library_assets SET transcription_status='ready',indexing_status='ready',summary=%s,provenance=provenance||%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id=%s",(normalize(text)[:360],json.dumps({'transcriptSource':'user_supplied','transcriptBy':p}),w,i))
         return self.detail(w,t,i)
 
+    @staticmethod
+    def _preview_object(a, page=1):
+        from .library_preview import VERSION
+        digest = hashlib.sha256((str(a['sha256']) + VERSION + ('' if page==1 else ':page:'+str(page))).encode()).hexdigest()
+        return str(a['id']).replace('-', '')+'-'+digest+'.jpg'
+
+    @classmethod
+    def _preview_objects(cls,a):
+        thumbnail = (a.get('provenance') or {}).get('thumbnail') or {}
+        numbers = {1,int(thumbnail.get('page',1)),*[int(n) for n in thumbnail.get('pages',{})]}
+        return [cls._preview_object(a,n) for n in numbers]
+
+    def preview(self,w,t,i):
+        result = self.viewer_page(w,t,i,1)
+        return {'url':result['url'],'mime':'image/jpeg','page':1}
+
+    def viewer_page(self,w,t,i,page=1):
+        from .library_preview import SUPPORTED, VERSION, render_isolated
+        if type(page) is not int or not 1<=page<=2147483647:
+            raise AlphaError('Choose a valid document page.',422)
+        store = self._store()
+        claim = uuid.uuid4().hex
+        now = self.clock()
+        with self.service.repository.transaction(t,w) as (cur,row,p):
+            require(_member(row),'read')
+            a = self._row(cur,w,i,True)
+            if a['extension'] not in SUPPORTED or a['processing_status'] not in READY or not a['sha256']:
+                raise AlphaError('Document preview unavailable for this file.',422)
+            name = self._preview_object(a,page)
+            previous = (a.get('provenance') or {}).get('thumbnail') or {}
+            pages = previous.get('pages',{}) if previous.get('version')==VERSION else {}
+            cached_page = pages.get(str(page))
+            if not cached_page:
+                if previous.get('pageCount') and page>previous['pageCount']:
+                    raise AlphaError('This page is outside the document.',422)
+                if previous.get('state') == 'processing' and previous.get('until',0)>now:
+                    raise AlphaError('Preparing document page. Try again shortly.',409)
+                if previous.get('attempts',0)>=3 and previous.get('until',0)>now-600:
+                    raise AlphaError('Document rendering failed. Try again in a few minutes.',422)
+                cur.execute("SELECT count(*) FROM public.pr_library_assets WHERE workspace_id=%s AND provenance->'thumbnail'->>'state'='processing' AND (provenance->'thumbnail'->>'until')::numeric>%s",(w,now))
+                if cur.fetchone()[0]>=2:
+                    raise AlphaError('Preparing other document pages. Try again shortly.',429)
+                pending = {**previous,'pages':pages,'bytes':previous.get('bytes',0),'page':page,'state':'processing','version':VERSION,'claim':claim,'until':now+90,'attempts':previous.get('attempts',0)+1 if previous.get('state')=='failed' and previous.get('until',0)>now-600 else 1}
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
+        if cached_page:
+            return {**cached_page,'pageCount':previous['pageCount'],'page':page,'url':store.signed_url(w,'media',name)}
+        stored = published = False
+        try:
+            info = store.object_info(w,'file',a['object_name'])
+            if (info.get('bytes'),info.get('mime'),info.get('etag')) != (a['bytes'],a['mime'],a['etag']):
+                raise AlphaError('The source file changed before rendering.',409)
+            raw = store.get_bounded(w,'file',a['object_name'],a['bytes'])
+            if len(raw)!=a['bytes'] or hashlib.sha256(raw).hexdigest()!=a['sha256'] or store.object_info(w,'file',a['object_name'])!=info:
+                raise AlphaError('The source file changed during rendering.',409)
+            rendered = render_isolated(raw,a['extension'],page)
+            image = rendered.pop('image')
+            # Reserve derived bytes under the same workspace lock as uploads.
+            with self.service.repository.transaction(t,w) as (cur,row,p):
+                current = self._row(cur,w,i,True)
+                if current['processing_status'] not in READY or (current.get('provenance') or {}).get('thumbnail',{}).get('claim')!=claim:
+                    raise AlphaError('This file is no longer available.',404)
+                self.assert_capacity(cur,self.service.ideas._state(row),w,len(image))
+                pending['bytes'] = previous.get('bytes',0)+len(image)
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
+            try:
+                store.put_immutable(w,'media',name,image,'image/jpeg')
+                stored = True
+            except AlphaError as error:
+                if error.status!=409: raise
+            with self.service.repository.transaction(t,w) as (cur,row,p):
+                current = self._row(cur,w,i,True)
+                if current['processing_status'] not in READY or (current.get('provenance') or {}).get('thumbnail',{}).get('claim')!=claim:
+                    raise AlphaError('This file is no longer available.',404)
+                page_data = {k:rendered[k] for k in ('width','height','text')}
+                pages[str(page)] = page_data
+                pending.update(state='ready',pageCount=rendered['pageCount'],pages=pages,attempts=0,objectName=self._preview_object(a))
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s",(json.dumps(pending),w,i))
+            published = True
+            return {**rendered,'url':store.signed_url(w,'media',name)}
+        except Exception as error:
+            if stored and not published:
+                store.delete(w,'media',name)
+            with self.service.repository.transaction(t,w) as (cur,row,p):
+                pending.update(state='failed',bytes=previous.get('bytes',0))
+                cur.execute("UPDATE public.pr_library_assets SET provenance=jsonb_set(provenance,'{thumbnail}',%s::jsonb) WHERE workspace_id=%s AND id=%s AND provenance->'thumbnail'->>'claim'=%s",(json.dumps(pending),w,i,claim))
+            if isinstance(error,AlphaError): raise
+            raise AlphaError('Document page could not be rendered. The original file is still available.',422) from None
+
     def url(self,w,t,i,download=False):
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
@@ -333,6 +437,8 @@ class UniversalLibrary:
             cur.execute("UPDATE public.pr_library_assets SET processing_status='deleting',lease_token=null,lease_expires_at=null,updated_at=now() WHERE workspace_id=%s AND id=%s",(w,i))
             self._retract_source(cur,row,w,p,a)
         s.delete(w,'file',a['object_name'])
+        for preview_name in self._preview_objects(a):
+            s.delete(w,'media',preview_name)
         with self.service.repository.transaction(t,w) as (cur,row,p):
             self._edit(row)
             self._forget(cur,w,i)
@@ -365,13 +471,14 @@ class UniversalLibrary:
         except (ValueError,TypeError):
             raise AlphaError('Use a valid Library page size.') from None
         query=str(query or '').strip()[:120]
+        hash_prefix=query.lower()+'%' if re.fullmatch(r'[0-9a-fA-F]{1,64}',query) else None
         if kind not in ('all','image','video','audio','document','file') or sort not in ('newest','stored','largest') or (collection and not ASSET_ID.fullmatch(collection.replace('-',''))):
             raise AlphaError('Choose valid Library filters.')
         tag=str(tag or '')[:40]
         order='a.bytes DESC,a.created_at DESC,a.id' if sort=='largest' else 'a.created_at DESC,a.id'
         with self.service.repository.transaction(t,w) as (cur,row,p):
             require(_member(row),'read')
-            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s)) ORDER BY "+order+" LIMIT %s OFFSET %s",(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,query,query,'%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%',limit+1,offset))
+            cur.execute("SELECT to_jsonb(a)||jsonb_build_object('epoch',extract(epoch from a.created_at)) FROM public.pr_library_assets a WHERE workspace_id=%s AND processing_status NOT IN ('deleting','duplicate') AND (%s='all' OR a.kind=%s) AND (%s='' OR %s=ANY(a.tags)) AND (%s='' OR EXISTS(SELECT 1 FROM public.pr_library_collection_items i WHERE i.workspace_id=a.workspace_id AND i.asset_key=replace(a.id::text,'-','') AND replace(i.collection_id::text,'-','')=%s)) AND (%s='' OR a.sha256 LIKE %s OR to_tsvector('simple',coalesce(a.display_title,'')||' '||a.original_filename||' '||coalesce(a.summary,'')||' '||array_to_string(a.tags,' '))@@plainto_tsquery('simple',%s) OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.search_vector@@plainto_tsquery('simple',%s)) OR a.original_filename ILIKE %s OR a.display_title ILIKE %s OR EXISTS(SELECT 1 FROM public.pr_library_chunks c WHERE c.workspace_id=a.workspace_id AND c.asset_id=a.id AND c.text ILIKE %s)) ORDER BY "+order+" LIMIT %s OFFSET %s",(w,kind,kind,tag,tag,collection,collection.replace('-',''),query,hash_prefix,query,query,'%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%','%'+query.replace('%','\\%').replace('_','\\_')+'%',limit+1,offset))
             rows=cur.fetchall();more=len(rows)>limit
             assets=[_asset(r[0]) for r in rows[:limit]]
             state=self.service.ideas._state(row)
@@ -381,14 +488,14 @@ class UniversalLibrary:
             if query:
                 words=query.casefold().split()
                 legacy=[a for a in legacy if all(word in ' '.join(str(x) for x in [a.get('displayTitle',''),a.get('originalFilename',''),a.get('hash',''),*a.get('tags',[])]).casefold() for word in words)]
-            cur.execute("SELECT coalesce(sum(bytes),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
+            cur.execute("SELECT coalesce(sum(bytes + coalesce((provenance->'thumbnail'->>'bytes')::bigint,0)),0) FROM public.pr_library_assets WHERE workspace_id=%s AND processing_status NOT IN ('duplicate','deleting')",(w,))
             used=int(cur.fetchone()[0])+sum(int(a.get('bytes') or 0) for a in state.get('phase2',{}).get('assets',[]) if not a.get('deleted'))
         return {'assets':legacy+assets,'query':query,'nextOffset':offset+limit if more else None,'storage':{'usedBytes':used,'limitBytes':self.storage_limit},'capabilities':{'automaticTranscription':False,'transcriptImport':True}}
 
     def sweep(self,connect,limit=100):
         s=self._store();removed=failed=processed=0
         with connect() as db,db.cursor() as cur:
-            cur.execute("UPDATE public.pr_library_assets SET processing_status='failed',indexing_status='failed',extraction_error='Processing timed out. Retry this file.',lease_token=null,lease_expires_at=null WHERE processing_status='processing' AND lease_expires_at<now() AND attempts>=3")
+            cur.execute("UPDATE public.pr_library_assets SET processing_status='failed',indexing_status='failed',extraction_error='Processing timed out. Retry this file.',provenance=jsonb_set(provenance,'{recovery}',jsonb_build_object('category','timeout','automaticRetry',false,'attempts',3,'maxAttempts',3,'retryAt',null)),lease_token=null,lease_expires_at=null,updated_at=now() WHERE processing_status='processing' AND lease_expires_at<now() AND attempts>=3")
             cur.execute("SELECT workspace_id::text,id::text FROM public.pr_library_assets WHERE attempts<3 AND next_attempt_at<=now() AND (processing_status='queued' OR (processing_status='processing' AND lease_expires_at<now())) ORDER BY created_at LIMIT 3")
             jobs=cur.fetchall()
         for w,i in jobs:
@@ -399,6 +506,10 @@ class UniversalLibrary:
         for w,i,o in due:
             try:
                 s.delete(w,'file',o)
+                with connect() as db,db.cursor() as cur:
+                    a = self._row(cur,w,i.replace('-',''))
+                for preview_name in self._preview_objects(a):
+                    s.delete(w,'media',preview_name)
                 with connect() as db,db.cursor() as cur:
                     self._forget(cur,w,i.replace('-',''))
                 removed+=1
@@ -447,7 +558,7 @@ class UniversalLibrary:
             self.service.commands.engine._apply(state,'source',{'kind':'text','title':a['displayTitle'] or a['originalFilename'],'text':text})
             source=state['sources'][-1]
             source_id_value=source['id']
-            source.update(origin={'kind':'library','assetId':i,'sha256':a['sha256'],'locator':'extracted text','clipped':len(detail['extractedText'])>19000},sourcePolicy='rewrite_approval',egressConsent=['local'])
+            source.update(origin={'kind':'library','assetId':i,'sha256':a['sha256'],'filename':a['originalFilename'],'locator':'extracted text','clipped':len(detail['extractedText'])>19000},sourcePolicy='rewrite_approval',egressConsent=['local'])
             selected['id']=source_id_value
             return state
         selected={}

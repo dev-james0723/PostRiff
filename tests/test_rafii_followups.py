@@ -119,6 +119,9 @@ class FakeLedger:
 
 class FakeService:
     def __init__(self, refuse=False):
+        # task_state now receives the service's Ideas API even when the fixture
+        # substitutes its own open-work projection.
+        self.ideas = object()
         self.ledger = FakeLedger(refuse)
 
         @contextmanager

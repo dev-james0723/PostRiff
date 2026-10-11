@@ -1,0 +1,6 @@
+root = RafiiRoot([consent, status, sample])
+allowed = Query("voice_consent", {}, null)
+learning = Query("voice_learning_status", {}, null)
+consent = VoiceConsentPanel(allowed)
+status = VoiceLearningStatus(learning)
+sample = VoiceSampleImport("voice_samples_import", "pastedSample")

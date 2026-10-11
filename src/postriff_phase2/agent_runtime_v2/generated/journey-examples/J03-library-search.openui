@@ -1,0 +1,4 @@
+root = RafiiRoot([browser], "Recital files")
+$selectedAssets = []
+results = Query("library_search", {q: "recital", kind: "all"}, null)
+browser = LibraryBrowser(results, $selectedAssets)

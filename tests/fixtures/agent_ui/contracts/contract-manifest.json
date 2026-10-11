@@ -1,0 +1,223 @@
+{
+  "actionOutcomes": [
+    "prepared",
+    "applied",
+    "rejected",
+    "conflict",
+    "pending",
+    "failed"
+  ],
+  "attemptKinds": [
+    "generate",
+    "repair",
+    "edit",
+    "retry"
+  ],
+  "bounds": {
+    "activationSeconds": 60,
+    "checkpointBytes": 4096,
+    "checkpointMs": 1000,
+    "founderPatchBytes": 24576,
+    "generationTimeoutSeconds": 60,
+    "heartbeatSeconds": 10,
+    "inputBytes": 16384,
+    "inputDepth": 8,
+    "patchBytes": 32768,
+    "providerAttempts": 2,
+    "queryConcurrentPerArtifact": 4,
+    "queryPageDefault": 50,
+    "queryPageMax": 100,
+    "queryPerMinute": 60,
+    "queryWindowDays": 366,
+    "refreshMinSeconds": 30,
+    "replayPageEvents": 500,
+    "replayTailSeconds": 30,
+    "requestBodyBytes": 163840,
+    "searchDebounceMs": 300,
+    "sourceBytes": 131072,
+    "stateBytes": 16384,
+    "stateDebounceMs": 500,
+    "statements": 512,
+    "treeDepth": 24,
+    "validatorTimeoutSeconds": 8
+  },
+  "canaryEnv": "RAFII_GENUI_WORKSPACES",
+  "contractVersion": "rafii-genui/1",
+  "dataStates": [
+    "loading",
+    "available",
+    "empty",
+    "partial",
+    "unavailable",
+    "denied",
+    "stale"
+  ],
+  "eventKinds": [
+    "ui.started",
+    "ui.delta",
+    "ui.checkpoint",
+    "ui.ready",
+    "ui.failed",
+    "ui.canceled",
+    "ui.interrupted",
+    "ui.state_changed",
+    "ui.binding_changed",
+    "ui.heartbeat"
+  ],
+  "flags": [
+    "RAFII_GENUI_ENABLED",
+    "RAFII_GENUI_ACTIONS_ENABLED",
+    "RAFII_GENUI_EDITS_ENABLED",
+    "RAFII_GENUI_FOUNDER_ENABLED"
+  ],
+  "generationStates": [
+    "queued",
+    "streaming",
+    "validating",
+    "ready",
+    "failed",
+    "canceled",
+    "interrupted"
+  ],
+  "journeys": [
+    "J01",
+    "J02",
+    "J03",
+    "J04",
+    "J05",
+    "J06",
+    "J07",
+    "J08",
+    "J09"
+  ],
+  "language": "openui-lang",
+  "publicArtifactKeys": [
+    "contractVersion",
+    "artifactId",
+    "conversationId",
+    "messageId",
+    "runId",
+    "revision",
+    "generationAttemptId",
+    "generationState",
+    "validationState",
+    "language",
+    "languageVersion",
+    "libraryVersion",
+    "libraryHash",
+    "promptHash",
+    "sourceHash",
+    "canonicalSource",
+    "fallbackText",
+    "manifestId",
+    "bindingVersion",
+    "safeState",
+    "stateRevision",
+    "createdAt",
+    "updatedAt",
+    "asOf"
+  ],
+  "reasonCodes": [
+    "not_eligible",
+    "disabled",
+    "budget",
+    "price_unknown",
+    "no_model_route",
+    "egress_denied",
+    "provider_error",
+    "provider_timeout",
+    "parse_rejected",
+    "validation_unavailable",
+    "source_too_large",
+    "repair_exhausted",
+    "canceled_by_user",
+    "client_gone",
+    "lease_expired",
+    "superseded",
+    "library_unsupported",
+    "revision_conflict",
+    "internal_error"
+  ],
+  "revisionKinds": [
+    "generate",
+    "repair",
+    "edit"
+  ],
+  "routes": {
+    "actions": "POST {base}/actions",
+    "activate": "POST {base}/actions/activate",
+    "byMessage": "GET {base}/messages/{messageId}",
+    "cancel": "POST {base}/presentations/{artifactId}/cancel",
+    "consumerBase": "/api/workspaces/{workspaceId}/agent/ui",
+    "edits": "POST {base}/presentations/{artifactId}/edits",
+    "events": "GET {base}/presentations/{artifactId}/events?after={seq}",
+    "founderBase": "/api/control/v2/agent/ui",
+    "presentations": "POST {base}/presentations",
+    "probe": "GET {base}/diagnostics/stream",
+    "queries": "POST {base}/queries",
+    "snapshot": "GET {base}/presentations/{artifactId}",
+    "state": "POST {base}/presentations/{artifactId}/state",
+    "validator": "POST /internal/agent-ui/validate"
+  },
+  "scopes": [
+    "workspace",
+    "founder"
+  ],
+  "slots": [
+    "main"
+  ],
+  "surfaces": [
+    "chat",
+    "panel",
+    "expanded",
+    "mobile",
+    "browser_voice",
+    "founder"
+  ],
+  "terminalEventKinds": [
+    "ui.ready",
+    "ui.failed",
+    "ui.canceled",
+    "ui.interrupted"
+  ],
+  "terminalGenerationStates": [
+    "ready",
+    "failed",
+    "canceled",
+    "interrupted"
+  ],
+  "transitions": {
+    "canceled": [],
+    "failed": [],
+    "interrupted": [],
+    "queued": [
+      "streaming",
+      "failed",
+      "canceled",
+      "interrupted"
+    ],
+    "ready": [],
+    "streaming": [
+      "validating",
+      "failed",
+      "canceled",
+      "interrupted"
+    ],
+    "validating": [
+      "ready",
+      "failed",
+      "canceled",
+      "interrupted"
+    ]
+  },
+  "uiActionEffects": [
+    "CREATE_DRAFT",
+    "MUTATE_REVERSIBLE",
+    "PREPARE_EXTERNAL"
+  ],
+  "validationStates": [
+    "pending",
+    "accepted",
+    "rejected"
+  ]
+}

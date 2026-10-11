@@ -72,6 +72,8 @@ class ChosenWriterTest(unittest.TestCase):
 
         cur = Cursor()
         runtime = AgentRuntimeService.__new__(AgentRuntimeService)
+        from postriff_phase2.agent_runtime_v2.config import RuntimeConfig
+        runtime.cfg = RuntimeConfig.from_environment({})
         runtime.clock = lambda: 1_790_000_000
         runtime._store_pending_run(cur, "ws", "task-1", {"s": 1}, [], writer_model="deterministic-preview")
         import json

@@ -17,10 +17,12 @@ test('the Library accepts HEIC and lists only Library assets', () => {
   assert.match(library, /\.filter\(isLibraryAsset\)/);
 });
 
-test('the Library copy tells the truth about current photo and video upload paths', () => {
+test('the Library copy explains the private universal upload path', () => {
   const view = read('features', 'library', 'library-view.tsx');
-  assert.match(view, /Upload a photo here\./);
-  assert.match(view, /Videos added from Rafii chat also appear in this Library\./);
+  assert.match(view, /Add photos, videos, audio, documents or files to your Library\./);
+  assert.match(view, /Choose assets/);
+  assert.match(view, /onClick=\{\(\) => filePicker\.current\?\.click\(\)\}/);
+  assert.match(view, /All files remain private to this workspace\./);
   assert.doesNotMatch(view, /video is not accepted/i);
 });
 

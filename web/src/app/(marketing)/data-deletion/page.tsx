@@ -42,12 +42,16 @@ export default function DataDeletionPage() {
       <h2 id='platform'>2. Disconnect one platform</h2>
       <ul>
         <li>
-          Open <strong>Channels</strong> and choose <strong>Disconnect</strong> on the account.
+          Open <strong>Channels</strong> and choose <strong>Disconnect</strong> on the account, or <strong>Remove from Rafii</strong> for YouTube.
         </li>
         <li>The stored access token is wiped immediately and revoked with the platform where the platform supports it.</li>
-        <li>Metrics and comments for that account stop being collected. Approved jobs for it are held, not published.</li>
+        <li>Metrics and comments for that account stop being collected. Pending Rafii jobs for it are held at the next worker claim. Actions already accepted by a platform require separate reconciliation.</li>
         <li>You can also revoke Rafii from the platform’s own settings (for example LinkedIn → Settings → Permitted services, or Meta → Apps and websites); the next Rafii request will then fail and the connection will be shown as needing re-authorisation.</li>
       </ul>
+
+      <p>
+        For YouTube, removing a connection in Rafii and removing Google's authorization are separate controls. Google-wide revocation can also affect other connected channels or Google integrations using the same account and project. Rafii may defer that remote step to protect other active connections and shows whether it was confirmed. You can remove Google's authorization from <a href='https://security.google.com/settings/security/permissions' className='underline'>Google's permissions settings</a>. Local removal does not cancel a publication schedule already accepted by YouTube: that video may still publish until you separately cancel its schedule in YouTube Studio or through an authorized, reviewed Creator cancellation. Local removal does not delete the original videos or other content on YouTube.
+      </p>
 
       <h2 id='source'>3. Remove a single source</h2>
       <p>

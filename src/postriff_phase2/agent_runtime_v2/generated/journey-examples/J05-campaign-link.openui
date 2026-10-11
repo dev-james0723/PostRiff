@@ -1,0 +1,10 @@
+root = RafiiRoot([plan, link, form, waiting])
+$draft = "v_7f3c2a91"
+$when = null
+$zone = "Asia/Hong_Kong"
+detail = Query("campaign_detail", {campaignId: "c_51a7e"}, null)
+open = Query("open_proposals", {}, null, 30)
+plan = CampaignPlan(detail)
+link = CampaignLinkDrafts(detail, "campaign_link", ["v_7f3c2a91"])
+form = RescheduleForm("schedule_prepare", "draft", $draft, $when, $zone)
+waiting = ProposalList(open)

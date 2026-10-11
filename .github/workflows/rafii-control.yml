@@ -8,6 +8,9 @@ permissions:
 concurrency:
   group: rafii-control-${{ github.ref }}
   cancel-in-progress: true
+env:
+  # @openuidev/lang-core sends install telemetry from postinstall unless disabled (rafii-genui/1, G14).
+  OPENUI_TELEMETRY_DISABLED: '1'
 jobs:
   local-foundation:
     runs-on: ubuntu-24.04

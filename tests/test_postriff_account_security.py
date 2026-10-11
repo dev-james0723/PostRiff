@@ -359,7 +359,9 @@ class SessionsAndProfile(unittest.TestCase):
         cursor = FakeCursor([(editor_row, 1), (None, 1), (None, 1)])
         self.assertEqual(service(cursor, verifier()).leave_workspace(WORKSPACE, "t"), {"workspaceId": WORKSPACE, "status": "left"})
         self.assertIn("SET status='revoked'", cursor.executed[1][0])
-        self.assertEqual(cursor.executed[2][1][:3], (WORKSPACE, PRINCIPAL, "member.left"))
+        audits = [params for sql, params in cursor.executed if 'INSERT INTO public.pr_audit_events' in sql]
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(audits[0][:3], (WORKSPACE, PRINCIPAL, "member.left"))
 
 
 class UnmigratedCursor(FakeCursor):

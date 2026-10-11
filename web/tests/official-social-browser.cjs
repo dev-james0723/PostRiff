@@ -23,15 +23,33 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
   let ready=false;for(let i=0;i<120;i++){if(await fetch(base).then(r=>r.status<500).catch(()=>false)){ready=true;break;}await new Promise(r=>setTimeout(r,500));}
   assert.ok(ready,'Cloud Next server started');browser=await chromium.launch({headless:true});
   for(const width of [1280,390]){
-   const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
+   const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce',serviceWorkers:'block'});
    await context.addCookies([{name:'postriff_dev',value:'1',url:base}]);
    await context.addInitScript(()=>{localStorage.setItem('postriff-dev-principal','00000000-0000-0000-0000-000000000001');localStorage.setItem('postriff-onboarding:00000000-0000-0000-0000-000000000001',JSON.stringify({completed:{},dismissed:{welcome:1},nudged:{}}));});
-   let sends=0,reads=0,dispatches=0,completionWorkspace=null,activeChannel=channel,activeProvider=provider,activeSnapshot=fixture.snapshot;const page=await context.newPage();page.setDefaultTimeout(30000);
+   let sends=0,reads=0,dispatches=0,edits=0,editOutcome='submitted',editPreview=null,completionWorkspace=null,activeChannel=channel,activeProvider=provider,activeSnapshot=fixture.snapshot;const page=await context.newPage();page.setDefaultTimeout(30000);
    await context.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url()),p=url.pathname;
     if(url.origin!==base)return route.abort();if(!p.startsWith('/api/'))return route.continue();
     const send=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
     if(p.endsWith('/native-read')){reads++;return send({provider:'instagram',feature:'comments_read',availability:'available',data:{data:[{id:'comment-7',text:'Question from reader',username:'Reader',parent_id:'post-1'}]},provenance:{kind:'provider_native',provider:'instagram',reportingPeriod:{}},rate:{}});}
+    if(p.endsWith('/native-action') && request.postDataJSON().action==='edit'){
+     const body=request.postDataJSON(),job=activeSnapshot.state.phase2.jobs[0];
+     assert.equal(p,`/api/workspaces/${wid}/channels/${job.manifest.channelId}/native-action`);
+     assert.equal(body.target,job.providerReference);assert.deepEqual(Object.keys(body.payload),['text']);
+     editPreview={id:'edit-'+(edits+1),state:'preview',digest:'exact-edit-digest-'+(edits+1),manifest:{action:'edit',target:body.target,platform:'LinkedIn',providerAccountId:job.manifest.providerAccountId,payload:body.payload}};
+     return send(editPreview,201);
+    }
+    if(p.includes('/native-action/edit-') && p.endsWith('/approve')){
+     const job=activeSnapshot.state.phase2.jobs[0];
+     assert.equal(p,`/api/workspaces/${wid}/channels/${job.manifest.channelId}/native-action/${editPreview.id}/approve`);
+     assert.deepEqual(request.postDataJSON(),{digest:editPreview.digest,confirmed:true});edits++;
+     if(editOutcome==='submitted'){
+      const edited={...job,publishedEdit:{text:editPreview.manifest.payload.text,actionId:editPreview.id,editedAt:Date.now()/1000,verification:'provider_accepted'}};
+      activeSnapshot={...activeSnapshot,revision:activeSnapshot.revision+1,state:{...activeSnapshot.state,phase2:{...activeSnapshot.state.phase2,jobs:[edited]}}};
+      return send({executionState:'submitted',httpStatus:204,message:'LinkedIn accepted this edit. Open the post to confirm the displayed text.'});
+     }
+     return send({executionState:'uncertain',message:'LinkedIn did not confirm this edit. Check its receipt before another action.'});
+    }
     if(p.endsWith('/native-action'))return send({id:'action-1',state:'preview',digest:'immutable-digest',manifest:{action:'reply',target:'comment-7',platform:'Instagram',providerAccountId:'1789',payload:{text:request.postDataJSON().payload.text}}},201);
     if(p.endsWith('/approve')){sends++;return send({executionState:'uncertain',message:'Synthetic timeout: reconcile before any new approval.'});}
     if(p==='/api/oauth/instagram/context')return send({workspaceId:wid});
@@ -51,6 +69,7 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
     if(p==='/api/me')return send({userId:'00000000-0000-0000-0000-000000000001',displayName:'Fixture',preferences:{timeZone:'UTC',locale:'en'},mfa:{}});
     if(p===`/api/workspaces/${otherWid}`)return send({...fixture.snapshot,state:{...fixture.snapshot.state,workspace:{...fixture.snapshot.state.workspace,id:otherWid}}});
     if(p===`/api/workspaces/${wid}`)return send(activeSnapshot);
+    if(p===`/api/workspaces/${wid}/channels/${fixture.snapshot.state.phase2.channels[0].id}/destinations`)return send({connectionId:fixture.snapshot.state.phase2.channels[0].id,scope:'post',destinations:[{id:'urn:li:person:fixture-member',name:'LinkedIn fixture member',kind:'member'}]});
     if(p.endsWith('/channels'))return send({channels:[activeChannel],providers:[activeProvider]});
     if(p.endsWith('/usage'))return send({entitlement:{planTermsId:'synthetic-studio',writingBatchesRemaining:1,mediaCreditsRemaining:0,connectedAccounts:10,members:1,storageMb:100,resetsAt:null,source:'fixture',version:1},subscription:null,budget:null,overage:'disabled',ledger:[],planTerms:[],note:'Synthetic browser acceptance',lifecycle:{status:'active',canPublish:false},membership:fixture.snapshot.membership});
     if(p.endsWith('/memory'))return send(fixture.memory);
@@ -145,14 +164,50 @@ const provider={id:'instagram',platform:'Instagram',configured:true,connectReady
    assert.equal(await receiptDialog.getByRole('button',{name:'Publish approved post',exact:true}).count(),0);
    assert.equal(dispatches,1);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1),false);
+   const originalCreate=structuredClone(activeSnapshot.state.phase2.jobs[0].manifest);
+   await receiptDialog.getByRole('button',{name:'Edit published text',exact:true}).click();
+   await receiptDialog.getByLabel('Updated post text',{exact:true}).fill('Updated synthetic LinkedIn commentary');
+   await receiptDialog.getByRole('button',{name:'Review text edit',exact:true}).click();
+   await receiptDialog.getByRole('region',{name:'Review LinkedIn text edit'}).getByText('Updated synthetic LinkedIn commentary',{exact:true}).waitFor();
+   assert.equal(edits,0,'Preparing an edit never writes to the provider');
+   await receiptDialog.getByRole('button',{name:'Approve this text edit',exact:true}).click();
+   await receiptDialog.getByText('LinkedIn accepted this edit. Open the post to confirm the displayed text.',{exact:true}).waitFor();
+   assert.equal(edits,1);assert.equal(dispatches,1,'An edit never creates another post');
+   assert.deepEqual(activeSnapshot.state.phase2.jobs[0].manifest,originalCreate,'The create approval stays immutable');
+   await receiptDialog.getByText('Updated synthetic LinkedIn commentary',{exact:true}).waitFor();
+   editOutcome='uncertain';
+   await receiptDialog.getByRole('button',{name:'Edit published text',exact:true}).click();
+   await receiptDialog.getByLabel('Updated post text',{exact:true}).fill('Another explicitly reviewed synthetic edit');
+   await receiptDialog.getByRole('button',{name:'Review text edit',exact:true}).click();
+   await receiptDialog.getByRole('button',{name:'Approve this text edit',exact:true}).click();
+   await receiptDialog.getByText('LinkedIn did not confirm this edit. Check its receipt before another action.',{exact:true}).waitFor();
+   assert.equal(edits,2);assert.equal(await receiptDialog.getByRole('button',{name:'Approve this text edit',exact:true}).count(),0);
+   assert.equal(await receiptDialog.getByRole('button',{name:'Review text edit',exact:true}).isDisabled(),true);
+   await receiptDialog.getByRole('button',{name:'Close edit',exact:true}).click();
+   assert.equal(await receiptDialog.getByRole('button',{name:'Edit published text',exact:true}).isDisabled(),true,'An unknown edit cannot be automatically repeated');
    console.log('RAFII_BROWSER_IMAGE linkedin-receipt-'+width+' '+(await page.screenshot({path:join(out,'linkedin-receipt-'+width+'.png'),fullPage:true})).toString('base64'));
+   // Selecting the verified personal destination keeps a readable account label.
+   // No schedule/approval is created by this synthetic UI check.
+   await page.goto(base+'/app/queue',{waitUntil:'domcontentloaded'});
+   await page.getByRole('button',{name:'Schedule a draft',exact:true}).click();
+   const composer=page.getByRole('dialog');
+   await composer.getByRole('combobox',{name:'Draft',exact:true}).click();
+   await page.getByRole('option').filter({hasText:'A small idea worth a closer look.'}).click();
+   await composer.getByRole('combobox',{name:'Account',exact:true}).click();
+   await page.getByRole('option').filter({hasText:fixture.snapshot.state.phase2.channels[0].account}).click();
+   await composer.getByRole('combobox',{name:'Publish as',exact:true}).click();
+   await page.getByRole('option',{name:'LinkedIn fixture member · member',exact:true}).click();
+   assert.match(await composer.getByRole('combobox',{name:'Publish as',exact:true}).innerText(),/LinkedIn fixture member · member/);
+   assert.doesNotMatch(await composer.getByRole('combobox',{name:'Publish as',exact:true}).innerText(),/urn:li:/);
+   assert.equal(await page.getByRole('option',{name:/organization/i}).count(),0);
+   await composer.getByRole('button',{name:'Cancel',exact:true}).click();
    activeSnapshot=fixture.snapshot;
    activeChannel=channel;activeProvider=provider;
    await page.evaluate(id=>localStorage.setItem('postriff-workspace',id),otherWid);
    await page.goto(base+'/channels/connect?provider=instagram&state=synthetic-state-0123456789012345&code=synthetic-code');
    await page.waitForURL('**/app/channels?connected=fixture-ig');
    assert.equal(completionWorkspace,wid);
-   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,sharePermissionSeparatedFromLiveQualification:true,restrictedOrganizationRemainsBlocked:true,approvedJobScopedDispatchOnce:true,futureJobNotDispatched:true,heldRecoveryKeepsOriginalJob:true,expiredNoSubmitApprovalCanPrepareAgain:true,acceptedLinkedInReceiptVisibleWithoutPrivateRead:true,ownerCheckNeverApiVerified:true,noAcceptedPostResubmission:true,minimumIdentitySelected:true,latestIdentityVerificationShown:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
+   checks.push({callbackThroughNormalUI:true,restoresOriginatingWorkspaceFromOtherSelection:true,width,granularCapabilities:true,savedIdentitySeparatedFromRelease:true,sharePermissionSeparatedFromLiveQualification:true,restrictedOrganizationRemainsBlocked:true,readableVerifiedPersonalDestination:true,approvedJobScopedDispatchOnce:true,futureJobNotDispatched:true,heldRecoveryKeepsOriginalJob:true,expiredNoSubmitApprovalCanPrepareAgain:true,acceptedLinkedInReceiptVisibleWithoutPrivateRead:true,ownerCheckNeverApiVerified:true,noAcceptedPostResubmission:true,reviewedPublishedCommentaryEdit:true,createApprovalImmutableAfterEdit:true,noEditRetryAfterUnknown:true,minimumIdentitySelected:true,latestIdentityVerificationShown:true,noReadyFromIdentity:true,readHierarchy:true,immutableApproval:true,noDuplicateAfterUnknown:true,horizontalOverflow:false});await context.close();
   }
   const receipt={execution:'cloud Next/Playwright; synthetic provider responses; no live qualification',checks};writeFileSync(join(out,'receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt));
  }finally{if(browser)await browser.close();app.kill('SIGTERM');}

@@ -59,7 +59,7 @@ export function sortSources(sources: IdeaSource[]) {
 export const KIND_LABEL: Record<string, string> = { idea: 'Idea', text: 'Text', document: 'File', link: 'Link', sample: 'Sample' };
 
 export function kindLabel(source: IdeaSource) {
-  return isWeb(source) ? 'Web page' : (KIND_LABEL[source.kind] ?? source.kind);
+  return source.origin?.kind === 'library' ? 'Library file' : isWeb(source) ? 'Web page' : (KIND_LABEL[source.kind] ?? source.kind);
 }
 
 export const POLICIES: { id: SourcePolicy; label: string; badge: string; note: string }[] = [
@@ -192,6 +192,7 @@ export function hostOf(url: string) {
 export type KindIconName = 'bolt' | 'text' | 'page' | 'link' | 'sparkles' | 'externalLink';
 
 export function kindIcon(source: IdeaSource): KindIconName {
+  if (source.origin?.kind === 'library') return 'page';
   if (isWeb(source)) return 'externalLink';
   switch (source.kind) {
     case 'idea':

@@ -170,8 +170,9 @@ class Route(unittest.TestCase):
 
 
 class Notice(unittest.TestCase):
-    def test_privacy_notice_names_the_stored_picture(self):
-        self.assertEqual(notice()["retention"]["account_pictures"]["retention"], "until disconnect")
+    def test_privacy_notice_covers_disconnect_and_youtube_genuine_fetch_expiry(self):
+        self.assertEqual(notice()["retention"]["account_pictures"]["retention"],
+                         "until disconnect; YouTube pictures expire within 30 days of the genuine fetch")
 
 
 if __name__ == "__main__":

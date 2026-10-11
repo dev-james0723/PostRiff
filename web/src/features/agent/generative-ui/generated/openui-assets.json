@@ -1,0 +1,1758 @@
+{
+  "contractVersion": "rafii-genui/1",
+  "language": "openui-lang",
+  "languageVersion": "0.3.2",
+  "libraryVersion": "rafii-components/1.0.0",
+  "packages": {
+    "@openuidev/lang-core": "0.3.2",
+    "@openuidev/react-lang": "0.3.2"
+  },
+  "libraryHashAlgorithm": "sha256(stableJson(library.toSpec()) + \"\\n\" + contractVersion)",
+  "promptHashAlgorithm": "sha256(prompt file text); B records sha256(final prompt) after appending the Rafii bindings section",
+  "libraries": {
+    "consumer": {
+      "id": "rafii-consumer",
+      "libraryHash": "bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48",
+      "compatibleLibraryHashes": [],
+      "root": "RafiiRoot",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceConsentPanel",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "AutomationList",
+        "AutomationDetail",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "AutomationChangeForm"
+      ],
+      "groups": {
+        "layout": [
+          "RafiiRoot",
+          "Stack",
+          "Grid",
+          "Section",
+          "Card",
+          "Tabs",
+          "TabItem",
+          "Accordion",
+          "AccordionItem",
+          "Text"
+        ],
+        "states": [
+          "EmptyState",
+          "LoadingState",
+          "ErrorState"
+        ],
+        "data": [
+          "ToolBoundTable",
+          "ToolBoundChart",
+          "Metric",
+          "Timeline",
+          "Comparison",
+          "TaskStatus",
+          "EvidenceLink"
+        ],
+        "selection": [
+          "SelectionList",
+          "AssetPreview"
+        ],
+        "inputs": [
+          "Form",
+          "TextField",
+          "Select",
+          "DateRange",
+          "Button"
+        ],
+        "actions": [
+          "ActionButton"
+        ],
+        "journey_common": [
+          "Commentary"
+        ],
+        "tasks": [
+          "TaskProgress"
+        ],
+        "drafts": [
+          "DraftList",
+          "DraftCompare",
+          "DraftDetail",
+          "DraftEvidence",
+          "DraftEditor"
+        ],
+        "calendar": [
+          "CalendarAgenda",
+          "RescheduleForm"
+        ],
+        "schedule_check": [
+          "SlotCheck"
+        ],
+        "queue": [
+          "QueueStatus"
+        ],
+        "proposals": [
+          "ProposalList"
+        ],
+        "library": [
+          "LibraryBrowser",
+          "LibraryAssetCard",
+          "LibraryLineage"
+        ],
+        "library_selection": [
+          "LibrarySelectionCheck"
+        ],
+        "voice": [
+          "VoiceSourcePicker",
+          "VoiceAnalyzeLocal",
+          "VoiceProfileReview",
+          "VoicePreferenceList",
+          "VoiceLearningStatus",
+          "VoiceSampleImport"
+        ],
+        "consent": [
+          "VoiceConsentPanel"
+        ],
+        "campaigns": [
+          "CampaignList",
+          "CampaignPlan",
+          "CampaignItems",
+          "CampaignTimeline",
+          "CampaignBriefForm",
+          "CampaignBriefEditor",
+          "CampaignLinkDrafts"
+        ],
+        "automations": [
+          "AutomationList",
+          "AutomationDetail",
+          "AutomationChangeForm"
+        ],
+        "automation_history": [
+          "RunHistory"
+        ],
+        "recovery": [
+          "ConnectionHealth",
+          "RecoveryGuides"
+        ],
+        "analytics": [
+          "MetricTable",
+          "MetricChart",
+          "ComparisonSummary",
+          "CoverageNote",
+          "PostFeedback"
+        ],
+        "research": [
+          "ResearchStatus",
+          "ResearchBrief",
+          "ComparisonMatrix"
+        ],
+        "research_sources": [
+          "SavedSources"
+        ]
+      },
+      "fieldHosts": {
+        "TextField": "name",
+        "Select": "name",
+        "DateRange": "name",
+        "DraftEditor": "name",
+        "VoiceSampleImport": "name",
+        "CampaignBriefForm": "name",
+        "CampaignBriefEditor": "name",
+        "AutomationChangeForm": "name"
+      },
+      "rules": {
+        "ToolBoundTable": {
+          "source": "query"
+        },
+        "ToolBoundChart": {
+          "source": "query"
+        },
+        "Metric": {
+          "source": "query"
+        },
+        "Timeline": {
+          "source": "query"
+        },
+        "Comparison": {
+          "source": "query"
+        },
+        "TaskStatus": {
+          "source": "query"
+        },
+        "EvidenceLink": {
+          "href": "safe-href"
+        },
+        "SelectionList": {
+          "source": "query"
+        },
+        "AssetPreview": {
+          "item": "bound"
+        },
+        "ActionButton": {
+          "actionId": "action-id"
+        },
+        "TaskProgress": {
+          "data": "query"
+        },
+        "DraftList": {
+          "data": "query"
+        },
+        "DraftCompare": {
+          "data": "query"
+        },
+        "DraftDetail": {
+          "data": "query"
+        },
+        "DraftEvidence": {
+          "data": "query"
+        },
+        "DraftEditor": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "CalendarAgenda": {
+          "data": "query"
+        },
+        "RescheduleForm": {
+          "actionId": "action-id"
+        },
+        "SlotCheck": {
+          "data": "query"
+        },
+        "QueueStatus": {
+          "data": "query"
+        },
+        "ProposalList": {
+          "data": "query"
+        },
+        "LibraryBrowser": {
+          "data": "query"
+        },
+        "LibraryAssetCard": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "LibraryLineage": {
+          "data": "query"
+        },
+        "LibrarySelectionCheck": {
+          "data": "query"
+        },
+        "VoiceSourcePicker": {
+          "data": "query"
+        },
+        "VoiceAnalyzeLocal": {
+          "actionId": "action-id"
+        },
+        "VoiceProfileReview": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "VoicePreferenceList": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "VoiceConsentPanel": {
+          "data": "query"
+        },
+        "VoiceLearningStatus": {
+          "data": "query"
+        },
+        "VoiceSampleImport": {
+          "actionId": "action-id"
+        },
+        "CampaignList": {
+          "data": "query"
+        },
+        "CampaignPlan": {
+          "data": "query"
+        },
+        "CampaignItems": {
+          "data": "query"
+        },
+        "CampaignTimeline": {
+          "data": "query"
+        },
+        "CampaignBriefForm": {
+          "actionId": "action-id"
+        },
+        "CampaignBriefEditor": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "CampaignLinkDrafts": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "MetricTable": {
+          "data": "query"
+        },
+        "MetricChart": {
+          "data": "query"
+        },
+        "ComparisonSummary": {
+          "data": "query"
+        },
+        "CoverageNote": {
+          "data": "query"
+        },
+        "PostFeedback": {
+          "data": "query"
+        },
+        "ResearchStatus": {
+          "data": "query"
+        },
+        "ResearchBrief": {
+          "data": "query",
+          "actionId": "action-id"
+        },
+        "ComparisonMatrix": {
+          "data": "query"
+        },
+        "SavedSources": {
+          "data": "query"
+        },
+        "AutomationList": {
+          "data": "query"
+        },
+        "AutomationDetail": {
+          "data": "query"
+        },
+        "RunHistory": {
+          "data": "query"
+        },
+        "ConnectionHealth": {
+          "data": "query"
+        },
+        "RecoveryGuides": {
+          "data": "query"
+        },
+        "AutomationChangeForm": {
+          "actionId": "action-id"
+        }
+      },
+      "schemaFile": "consumer.schema.json",
+      "references": {
+        "RafiiRoot": [],
+        "Stack": [],
+        "Grid": [],
+        "Section": [],
+        "Card": [],
+        "Tabs": [
+          "TabItem"
+        ],
+        "TabItem": [],
+        "Accordion": [
+          "AccordionItem"
+        ],
+        "AccordionItem": [],
+        "Text": [],
+        "EmptyState": [],
+        "LoadingState": [],
+        "ErrorState": [],
+        "ToolBoundTable": [],
+        "ToolBoundChart": [],
+        "Metric": [],
+        "Timeline": [],
+        "Comparison": [],
+        "TaskStatus": [],
+        "EvidenceLink": [],
+        "SelectionList": [],
+        "AssetPreview": [],
+        "Form": [],
+        "TextField": [],
+        "Select": [],
+        "DateRange": [],
+        "Button": [],
+        "ActionButton": [],
+        "Commentary": [],
+        "TaskProgress": [],
+        "DraftList": [],
+        "DraftCompare": [],
+        "DraftDetail": [],
+        "DraftEvidence": [],
+        "DraftEditor": [],
+        "CalendarAgenda": [],
+        "RescheduleForm": [],
+        "SlotCheck": [],
+        "QueueStatus": [],
+        "ProposalList": [],
+        "LibraryBrowser": [],
+        "LibraryAssetCard": [],
+        "LibraryLineage": [],
+        "LibrarySelectionCheck": [],
+        "VoiceSourcePicker": [],
+        "VoiceAnalyzeLocal": [],
+        "VoiceProfileReview": [],
+        "VoicePreferenceList": [],
+        "VoiceConsentPanel": [],
+        "VoiceLearningStatus": [],
+        "VoiceSampleImport": [],
+        "CampaignList": [],
+        "CampaignPlan": [],
+        "CampaignItems": [],
+        "CampaignTimeline": [],
+        "CampaignBriefForm": [],
+        "CampaignBriefEditor": [],
+        "CampaignLinkDrafts": [],
+        "MetricTable": [],
+        "MetricChart": [],
+        "ComparisonSummary": [],
+        "CoverageNote": [],
+        "PostFeedback": [],
+        "ResearchStatus": [],
+        "ResearchBrief": [],
+        "ComparisonMatrix": [],
+        "SavedSources": [],
+        "AutomationList": [],
+        "AutomationDetail": [],
+        "RunHistory": [],
+        "ConnectionHealth": [],
+        "RecoveryGuides": [],
+        "AutomationChangeForm": []
+      }
+    },
+    "founder": {
+      "id": "rafii-founder",
+      "libraryHash": "a8a343425ee77dfec88b2b3d7c0118550433fc8a3c41ccc1613d1bfbd61b1847",
+      "compatibleLibraryHashes": [],
+      "root": "RafiiRoot",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
+      ],
+      "groups": {
+        "layout": [
+          "RafiiRoot",
+          "Stack",
+          "Grid",
+          "Section",
+          "Card",
+          "Tabs",
+          "TabItem",
+          "Accordion",
+          "AccordionItem",
+          "Text"
+        ],
+        "states": [
+          "EmptyState",
+          "LoadingState",
+          "ErrorState"
+        ],
+        "data": [
+          "ToolBoundTable",
+          "ToolBoundChart",
+          "Metric",
+          "Timeline",
+          "Comparison",
+          "TaskStatus",
+          "EvidenceLink"
+        ],
+        "selection": [
+          "SelectionList"
+        ],
+        "inputs": [
+          "TextField",
+          "Select",
+          "DateRange",
+          "Button"
+        ],
+        "founder": [
+          "FounderNote",
+          "FounderMetricsTable",
+          "FounderCostBreakdown",
+          "FounderAttentionList",
+          "FounderSourceHealth"
+        ]
+      },
+      "fieldHosts": {
+        "TextField": "name",
+        "Select": "name",
+        "DateRange": "name"
+      },
+      "rules": {
+        "ToolBoundTable": {
+          "source": "query"
+        },
+        "ToolBoundChart": {
+          "source": "query"
+        },
+        "Metric": {
+          "source": "query"
+        },
+        "Timeline": {
+          "source": "query"
+        },
+        "Comparison": {
+          "source": "query"
+        },
+        "TaskStatus": {
+          "source": "query"
+        },
+        "EvidenceLink": {
+          "href": "safe-href"
+        },
+        "SelectionList": {
+          "source": "query"
+        },
+        "FounderMetricsTable": {
+          "data": "query"
+        },
+        "FounderCostBreakdown": {
+          "data": "query"
+        },
+        "FounderAttentionList": {
+          "data": "query"
+        },
+        "FounderSourceHealth": {
+          "data": "query"
+        }
+      },
+      "schemaFile": "founder.schema.json",
+      "references": {
+        "RafiiRoot": [],
+        "Stack": [],
+        "Grid": [],
+        "Section": [],
+        "Card": [],
+        "Tabs": [
+          "TabItem"
+        ],
+        "TabItem": [],
+        "Accordion": [
+          "AccordionItem"
+        ],
+        "AccordionItem": [],
+        "Text": [],
+        "EmptyState": [],
+        "LoadingState": [],
+        "ErrorState": [],
+        "ToolBoundTable": [],
+        "ToolBoundChart": [],
+        "Metric": [],
+        "Timeline": [],
+        "Comparison": [],
+        "TaskStatus": [],
+        "EvidenceLink": [],
+        "SelectionList": [],
+        "TextField": [],
+        "Select": [],
+        "DateRange": [],
+        "Button": [],
+        "FounderNote": [],
+        "FounderMetricsTable": [],
+        "FounderCostBreakdown": [],
+        "FounderAttentionList": [],
+        "FounderSourceHealth": []
+      }
+    }
+  },
+  "journeys": {
+    "J01": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "drafts",
+        "library_selection",
+        "research_sources",
+        "tasks"
+      ]
+    },
+    "J02": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "calendar",
+        "schedule_check",
+        "queue",
+        "proposals",
+        "tasks"
+      ]
+    },
+    "J03": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "library",
+        "library_selection"
+      ]
+    },
+    "J04": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "voice",
+        "consent"
+      ]
+    },
+    "J05": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "campaigns",
+        "calendar",
+        "proposals",
+        "automations",
+        "tasks"
+      ]
+    },
+    "J06": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "analytics"
+      ]
+    },
+    "J07": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "research",
+        "research_sources",
+        "consent"
+      ]
+    },
+    "J08": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "actions",
+        "journey_common",
+        "automations",
+        "automation_history",
+        "recovery",
+        "queue",
+        "proposals",
+        "tasks"
+      ]
+    },
+    "J09": {
+      "library": "founder",
+      "groups": [
+        "layout",
+        "states",
+        "data",
+        "selection",
+        "inputs",
+        "founder"
+      ]
+    }
+  },
+  "prompts": {
+    "consumer:all:generate": {
+      "file": "prompts/consumer-all-generate.txt",
+      "promptHash": "4f9267ceff3817a1971f8b98d61950bf0a2fea5422ea869604c12efc2edfcd9d",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources"
+      ]
+    },
+    "consumer:all:patch": {
+      "file": "prompts/consumer-all-patch.txt",
+      "promptHash": "5c9063a8d5b7d41a82604901f8b1c4f447e282df8d3594b0ac45a830d8c1150b",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "TaskProgress",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources"
+      ]
+    },
+    "consumer:J01:generate": {
+      "file": "prompts/consumer-J01-generate.txt",
+      "promptHash": "2179913375c2744a414314d739cb7c145335eb10fcc1715e6614a1f36c32d651",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "LibrarySelectionCheck",
+        "SavedSources",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J01:patch": {
+      "file": "prompts/consumer-J01-patch.txt",
+      "promptHash": "4d2fc0aec7e424ab72d9af49fce6300fdb4b1a18ad12e82ce337b5d3f2f53d82",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "DraftList",
+        "DraftCompare",
+        "DraftDetail",
+        "DraftEvidence",
+        "DraftEditor",
+        "LibrarySelectionCheck",
+        "SavedSources",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J02:generate": {
+      "file": "prompts/consumer-J02-generate.txt",
+      "promptHash": "d9652436355ddde2c02cefe848a0f8770427af7f2ad1b4a0d01778056ab70c9c",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J02:patch": {
+      "file": "prompts/consumer-J02-patch.txt",
+      "promptHash": "13ab2504267ba5683896cf94e8734514a21bc8faefe76f69b6013ce6607811ba",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "SlotCheck",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J03:generate": {
+      "file": "prompts/consumer-J03-generate.txt",
+      "promptHash": "0af2fa390b0bddfce5f539bb8cae1c6b691076ce4b83a5923b1a6fe1a9ea083d",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck"
+      ]
+    },
+    "consumer:J03:patch": {
+      "file": "prompts/consumer-J03-patch.txt",
+      "promptHash": "90899e10675c8e4d7c77ac60237d647709519750a9b0440f322b6ac095eba519",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "LibraryBrowser",
+        "LibraryAssetCard",
+        "LibraryLineage",
+        "LibrarySelectionCheck"
+      ]
+    },
+    "consumer:J04:generate": {
+      "file": "prompts/consumer-J04-generate.txt",
+      "promptHash": "06279efeed1eb72a7347392bab11bdb7e043c949418a99c703d69e098bc8106b",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel"
+      ]
+    },
+    "consumer:J04:patch": {
+      "file": "prompts/consumer-J04-patch.txt",
+      "promptHash": "d02eeb7573a944d6943660e251656314ce3109211db86a608bb18e1a3ccb73ee",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "VoiceSourcePicker",
+        "VoiceAnalyzeLocal",
+        "VoiceProfileReview",
+        "VoicePreferenceList",
+        "VoiceLearningStatus",
+        "VoiceSampleImport",
+        "VoiceConsentPanel"
+      ]
+    },
+    "consumer:J05:generate": {
+      "file": "prompts/consumer-J05-generate.txt",
+      "promptHash": "4a4b763d6e91a9f80297e155d8b5f1591282001722debd4d268d06019a0c63ac",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "ProposalList",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J05:patch": {
+      "file": "prompts/consumer-J05-patch.txt",
+      "promptHash": "15d594a85ee6cae01b5131fee2f0d41f8708f5e2e4bcb2c3b69bd57a0714cc1e",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "CampaignList",
+        "CampaignPlan",
+        "CampaignItems",
+        "CampaignTimeline",
+        "CampaignBriefForm",
+        "CampaignBriefEditor",
+        "CampaignLinkDrafts",
+        "CalendarAgenda",
+        "RescheduleForm",
+        "ProposalList",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J06:generate": {
+      "file": "prompts/consumer-J06-generate.txt",
+      "promptHash": "dbc66f470fddf248069e106b8452f80436f71b608c7dc8f640b1be3a3bfef6b1",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback"
+      ]
+    },
+    "consumer:J06:patch": {
+      "file": "prompts/consumer-J06-patch.txt",
+      "promptHash": "9152373e363029efcb37bb2fe11a7f814a9f506e5b16f5dc4698b71271f8cad4",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "MetricTable",
+        "MetricChart",
+        "ComparisonSummary",
+        "CoverageNote",
+        "PostFeedback"
+      ]
+    },
+    "consumer:J07:generate": {
+      "file": "prompts/consumer-J07-generate.txt",
+      "promptHash": "cd964cf0ab54d7b07866b7af9443bf08ea04b6d14a533fa286bdcc881190a52c",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "VoiceConsentPanel"
+      ]
+    },
+    "consumer:J07:patch": {
+      "file": "prompts/consumer-J07-patch.txt",
+      "promptHash": "c04f9d1cc79645c40a7c0f3626a7b35c12d6f52ee8155eb9f57325398128979d",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "ResearchStatus",
+        "ResearchBrief",
+        "ComparisonMatrix",
+        "SavedSources",
+        "VoiceConsentPanel"
+      ]
+    },
+    "consumer:J08:generate": {
+      "file": "prompts/consumer-J08-generate.txt",
+      "promptHash": "5002642c7ba8c8ee261b18abfbba73b2239f1bcbff3664ee7fd9eae30260b649",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
+      ]
+    },
+    "consumer:J08:patch": {
+      "file": "prompts/consumer-J08-patch.txt",
+      "promptHash": "6077ea88ed38a98223881e7c987b8a00c9d5d211697d8ad2e0572e471022b9f5",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "AssetPreview",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "ActionButton",
+        "Commentary",
+        "AutomationList",
+        "AutomationDetail",
+        "AutomationChangeForm",
+        "RunHistory",
+        "ConnectionHealth",
+        "RecoveryGuides",
+        "QueueStatus",
+        "ProposalList",
+        "TaskProgress"
+      ]
+    },
+    "founder:all:generate": {
+      "file": "prompts/founder-all-generate.txt",
+      "promptHash": "80e45d83d6981883c9554c38bfb59b3852293f981b2ce0cee0ed0691762d9320",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
+      ]
+    },
+    "founder:all:patch": {
+      "file": "prompts/founder-all-patch.txt",
+      "promptHash": "fb4a45cc7f5c83d2be430801d4fa4f0d344b64422352f0e2c851fbbe1cdc77fb",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
+      ]
+    },
+    "founder:J09:generate": {
+      "file": "prompts/founder-J09-generate.txt",
+      "promptHash": "80e45d83d6981883c9554c38bfb59b3852293f981b2ce0cee0ed0691762d9320",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
+      ]
+    },
+    "founder:J09:patch": {
+      "file": "prompts/founder-J09-patch.txt",
+      "promptHash": "fb4a45cc7f5c83d2be430801d4fa4f0d344b64422352f0e2c851fbbe1cdc77fb",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "ToolBoundTable",
+        "ToolBoundChart",
+        "Metric",
+        "Timeline",
+        "Comparison",
+        "TaskStatus",
+        "EvidenceLink",
+        "SelectionList",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "FounderNote",
+        "FounderMetricsTable",
+        "FounderCostBreakdown",
+        "FounderAttentionList",
+        "FounderSourceHealth"
+      ]
+    }
+  }
+}

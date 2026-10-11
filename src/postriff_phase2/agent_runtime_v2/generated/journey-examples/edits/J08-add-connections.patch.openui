@@ -1,0 +1,5 @@
+root = RafiiRoot([list, detail, history, change, accounts, guides])
+conn = Query("connections_status", {}, null)
+help = Query("recovery_guides", {}, null)
+accounts = ConnectionHealth(conn)
+guides = RecoveryGuides(help)

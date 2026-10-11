@@ -1,62 +1,59 @@
 {
-  "provider": "depot",
-  "checkoutPersistCredentials": true,
-  "orgId": "jf34f85hr0",
-  "baseRef": "refs/remotes/origin/consumer-saas",
   "packageRoot": "web",
-  "nodeVersion": "24.15.0",
+  "provider": "depot",
   "packageManager": "npm",
-  "packageManagerVersion": "11.12.1",
-  "runner": {
-    "validation": "depot-ubuntu-24.04-8",
-    "build": "depot-ubuntu-24.04-16"
-  },
+  "nodeVersion": "24.15.0",
+  "installCommand": "npm ci",
   "tasks": {
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:jcb",
-    "ci": "ci:jcb",
-    "e2e": "e2e:social"
+    "test": "test:linkedin:jcb",
+    "ci": "ci:linkedin:jcb",
+    "e2e": "e2e:linkedin:jcb"
   },
-  "environment": {
-    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
-    "NEXT_PUBLIC_SUPABASE_URL": "",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
-    "NEXT_PUBLIC_SENTRY_DISABLED": "1",
-    "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
-    "POSTRIFF_DEV_SSR": "1",
-    "LC_ALL": "C"
+  "runner": {
+    "validation": "depot-ubuntu-24.04-8",
+    "build": "depot-ubuntu-24.04-16"
   },
+  "outputs": [],
   "envAllowlist": [],
   "localFallback": false,
-  "outputs": [],
+  "environment": {
+    "DO_NOT_TRACK": "1",
+    "LC_ALL": "C",
+    "NEXT_PUBLIC_APP_URL": "http://127.0.0.1:4439",
+    "NEXT_PUBLIC_SENTRY_DISABLED": "1",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "",
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "OPENUI_TELEMETRY_DISABLED": "1",
+    "POSTRIFF_API_ORIGIN": "http://127.0.0.1:4438",
+    "POSTRIFF_DEV_SSR": "1"
+  },
+  "taskArgs": {},
   "inputExcludes": [
     "docs/**",
-    "downloads/**",
-    "motion/**",
-    "artifacts/**",
+    "desktop/**",
     "vendor/**",
+    "studio/**",
+    "motion/**",
+    "downloads/**",
+    "artifacts/**",
+    "*.zip",
+    ".claude/**",
+    ".agents/**",
+    ".token-pilot/**",
     ".preview/**",
     "audio-reactive-fix/**",
-    "PostRiff_Research_2026-09-18/**",
-    "*.zip",
-    "desktop/**",
-    "studio/**"
+    "PostRiff_Research_2026-09-18/**"
   ],
-  "installCommand": "npm ci",
-  "taskArgs": {
-    "test": [
-      "--backend-only"
-    ],
-    "lint": [
-      "--format",
-      "json"
-    ]
-  },
+  "checkoutPersistCredentials": true,
   "framework": "next",
+  "transportMode": "remote_patch",
   "cacheScope": "e408bbcd8242",
+  "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
-  "lockfileSha256": "9460a6ea4d9a6bb7dd1d9a15dbef03028ce10fed3bee61f75d362e0f609c15f4",
-  "transportMode": "remote_patch"
+  "lockfileSha256": "1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5",
+  "orgId": "jf34f85hr0",
+  "baseRef": "refs/remotes/origin/consumer-saas"
 }

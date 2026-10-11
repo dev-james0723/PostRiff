@@ -1,0 +1,1031 @@
+{
+ "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+ "generatedAt": "2026-10-09T00:52:55Z",
+ "counts": {
+  "pass": 27,
+  "fail": 0,
+  "blocked": 0,
+  "unverified": 0
+ },
+ "records": [
+  {
+   "gate": "G02",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Faults.test_at_most_one_repair",
+    "api_corpus.Faults.test_provider_failure_and_truncation_keep_native_answer"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G02",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:native-fallback"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G04",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "3/3 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "test_agent_ui_acceptance_contract.Framing.test_fragmented_utf8_frames",
+    "api_corpus.Streaming.test_probe_frames_and_utf8_split",
+    "api_corpus.Streaming.test_presentation_is_progressive"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G04",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:progressive-render"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G05",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Queries.test_filter_change_is_bounded_and_model_free",
+    "api_corpus.Bounds.test_query_admission_rate_limit"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G06",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "8/8 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Isolation.test_foreign_workspace_path_reveals_nothing",
+    "api_corpus.Isolation.test_random_and_foreign_artifact_ids",
+    "api_corpus.Isolation.test_forged_binding_and_action_ids",
+    "test_agent_ui_acceptance_contract.Requests.test_privilege_keys_refused_everywhere",
+    "api_corpus.NoAutomaticWrites.test_query_with_write_name_is_denied_without_writes",
+    "validator_corpus.Validator.test_query_write_name_rejected",
+    "validator_corpus.Validator.test_mutation_and_top_level_run_rejected",
+    "validator_corpus.Validator.test_markup_and_script_urls_never_accepted_as_executable"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G06",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:no-auto-writes",
+    "e2e:xss"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G07",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "10/10 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Isolation.test_foreign_workspace_path_reveals_nothing",
+    "api_corpus.Isolation.test_random_and_foreign_artifact_ids",
+    "api_corpus.Isolation.test_forged_binding_and_action_ids",
+    "test_agent_ui_acceptance_contract.Requests.test_privilege_keys_refused_everywhere",
+    "api_corpus.Roles.test_viewer_cannot_activate_or_execute",
+    "api_corpus.Isolation.test_founder_scope_injection",
+    "api_corpus.Founder.test_consumer_and_founder_artifacts_do_not_cross",
+    "api_corpus.Revocation.test_revoked_member_loses_snapshot_replay_query",
+    "api_corpus.Revocation.test_deleted_source_is_reauthorized_on_reopen",
+    "api_corpus.Revocation.test_expired_login_stops_replay_and_queries"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G08",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "5/5 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Actions.test_stale_artifact_revision_refused",
+    "api_corpus.Approvals.test_stale_digest_and_expired_proposal_refused",
+    "api_corpus.Edits.test_stale_base_hash_conflicts_before_spend",
+    "api_corpus.Approvals.test_prepared_is_not_applied",
+    "test_agent_ui_acceptance_contract.Results.test_prepared_never_verified"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G09",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "7/7 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Idempotency.test_same_key_different_inputs_conflicts",
+    "api_corpus.Idempotency.test_aborted_response_after_commit_reconciles",
+    "api_corpus.Idempotency.test_two_tabs_one_effect",
+    "api_corpus.State.test_state_cas_conflict_keeps_other_tab",
+    "api_corpus.Durability.test_duplicate_create_reuses_attempt",
+    "api_corpus.Idempotency.test_two_keys_same_intent_one_effect",
+    "api_corpus.Durability.test_presentation_key_reused_for_another_run_conflicts"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G10",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "6/6 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Actions.test_stale_artifact_revision_refused",
+    "api_corpus.Approvals.test_stale_digest_and_expired_proposal_refused",
+    "api_corpus.Edits.test_stale_base_hash_conflicts_before_spend",
+    "api_corpus.State.test_state_cas_conflict_keeps_other_tab",
+    "api_corpus.Idempotency.test_two_tabs_one_effect",
+    "api_corpus.Durability.test_duplicate_create_reuses_attempt"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G10",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:typing-during-patch"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G11",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "5/5 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Revocation.test_revoked_member_loses_snapshot_replay_query",
+    "api_corpus.Revocation.test_deleted_source_is_reauthorized_on_reopen",
+    "api_corpus.Durability.test_old_library_version_falls_back_without_model",
+    "api_corpus.Durability.test_duplicate_create_reuses_attempt",
+    "api_corpus.NoAutomaticWrites.test_mount_replay_and_snapshot_never_write"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G11",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:history-reload-zero-attempts"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G12",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "6/6 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "validator_corpus.Validator.test_unknown_component_and_root",
+    "test_agent_ui_acceptance_contract.Framing.test_fragmented_utf8_frames",
+    "api_corpus.Streaming.test_probe_frames_and_utf8_split",
+    "api_corpus.Faults.test_at_most_one_repair",
+    "api_corpus.Faults.test_provider_failure_and_truncation_keep_native_answer",
+    "api_corpus.Faults.test_library_skew_is_terminal_without_repair"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G12",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:native-fallback"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G13",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "5/5 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Accounting.test_ready_only_after_settlement",
+    "api_corpus.Accounting.test_client_gone_settles_once",
+    "api_corpus.Accounting.test_unknown_cost_keeps_hold",
+    "api_corpus.Faults.test_at_most_one_repair",
+    "api_corpus.Faults.test_library_skew_is_terminal_without_repair"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G13",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:native-fallback"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G14",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "3/3 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "validator_corpus.Validator.test_markup_and_script_urls_never_accepted_as_executable",
+    "api_corpus.Privacy.test_untrusted_source_text_is_data",
+    "test_agent_ui_acceptance_contract.Privacy.test_redaction_scanner"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G14",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:xss",
+    "e2e:devtools-not-shipped"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G15",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:viewports"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G16",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "4/4 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:axe",
+    "e2e:keyboard-only",
+    "e2e:locales",
+    "e2e:reduced-motion"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G17",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:local-interaction-p95",
+    "e2e:progressive-render"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G18",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "6/6 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "validator_corpus.Validator.test_bounds",
+    "api_corpus.Bounds.test_request_and_query_bounds",
+    "test_agent_ui_acceptance_contract.Requests.test_bounds_before_parsing",
+    "validator_corpus.Validator.test_refresh_and_defaults_rejected",
+    "api_corpus.Bounds.test_query_admission_rate_limit",
+    "api_corpus.Bounds.test_query_page_cap"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G18",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-browser-emulation",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "2/2 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "e2e:hidden-no-polling",
+    "e2e:scope-switch-aborts"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G19",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "1/1 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Voice.test_ui_context_turn_keeps_selection_and_speakable_has_no_dsl"
+   ],
+   "missingChecks": []
+  },
+  {
+   "gate": "G21",
+   "status": "pass",
+   "candidateSha": "8e8da8a798fe6fa64c122675a5e727ea90903b17",
+   "environment": {
+    "kind": "ci-harness",
+    "origin": null,
+    "runner": "github-actions",
+    "runId": "37865089349",
+    "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37865089349"
+   },
+   "recordedAt": "2026-10-09T00:52:55Z",
+   "timezone": "UTC",
+   "command": "scripts/agent_ui_acceptance.sh browser",
+   "actor": "G",
+   "dataScope": "synthetic disposable workspaces on the CI acceptance stack (harness Manager, fixture provider)",
+   "expected": "every mapped lane-G check passes on this SHA",
+   "actual": "4/4 checks pass",
+   "evidencePaths": [],
+   "checks": [
+    "api_corpus.Accounting.test_unknown_cost_keeps_hold",
+    "api_corpus.Approvals.test_prepared_is_not_applied",
+    "test_agent_ui_acceptance_contract.Results.test_prepared_never_verified",
+    "api_corpus.Truthful.test_unknown_metrics_are_not_zero"
+   ],
+   "missingChecks": []
+  }
+ ],
+ "checks": {
+  "api_corpus.Accounting.test_client_gone_settles_once": [
+   "pass"
+  ],
+  "api_corpus.Accounting.test_ready_only_after_settlement": [
+   "pass"
+  ],
+  "api_corpus.Accounting.test_unknown_cost_keeps_hold": [
+   "pass"
+  ],
+  "api_corpus.Actions.test_stale_artifact_revision_refused": [
+   "pass"
+  ],
+  "api_corpus.Approvals.test_prepared_is_not_applied": [
+   "pass"
+  ],
+  "api_corpus.Approvals.test_stale_digest_and_expired_proposal_refused": [
+   "pass"
+  ],
+  "api_corpus.Bounds.test_query_admission_rate_limit": [
+   "pass"
+  ],
+  "api_corpus.Bounds.test_query_page_cap": [
+   "pass"
+  ],
+  "api_corpus.Bounds.test_request_and_query_bounds": [
+   "pass"
+  ],
+  "api_corpus.Durability.test_duplicate_create_reuses_attempt": [
+   "pass"
+  ],
+  "api_corpus.Durability.test_old_library_version_falls_back_without_model": [
+   "pass"
+  ],
+  "api_corpus.Durability.test_presentation_key_reused_for_another_run_conflicts": [
+   "pass"
+  ],
+  "api_corpus.Edits.test_stale_base_hash_conflicts_before_spend": [
+   "pass"
+  ],
+  "api_corpus.Faults.test_at_most_one_repair": [
+   "pass"
+  ],
+  "api_corpus.Faults.test_library_skew_is_terminal_without_repair": [
+   "pass"
+  ],
+  "api_corpus.Faults.test_provider_failure_and_truncation_keep_native_answer": [
+   "pass"
+  ],
+  "api_corpus.Founder.test_consumer_and_founder_artifacts_do_not_cross": [
+   "pass"
+  ],
+  "api_corpus.Idempotency.test_aborted_response_after_commit_reconciles": [
+   "pass"
+  ],
+  "api_corpus.Idempotency.test_same_key_different_inputs_conflicts": [
+   "pass"
+  ],
+  "api_corpus.Idempotency.test_two_keys_same_intent_one_effect": [
+   "pass"
+  ],
+  "api_corpus.Idempotency.test_two_tabs_one_effect": [
+   "pass"
+  ],
+  "api_corpus.Isolation.test_foreign_workspace_path_reveals_nothing": [
+   "pass"
+  ],
+  "api_corpus.Isolation.test_forged_binding_and_action_ids": [
+   "pass"
+  ],
+  "api_corpus.Isolation.test_founder_scope_injection": [
+   "pass"
+  ],
+  "api_corpus.Isolation.test_random_and_foreign_artifact_ids": [
+   "pass"
+  ],
+  "api_corpus.NoAutomaticWrites.test_mount_replay_and_snapshot_never_write": [
+   "pass"
+  ],
+  "api_corpus.NoAutomaticWrites.test_query_with_write_name_is_denied_without_writes": [
+   "pass"
+  ],
+  "api_corpus.Privacy.test_untrusted_source_text_is_data": [
+   "pass"
+  ],
+  "api_corpus.Queries.test_filter_change_is_bounded_and_model_free": [
+   "pass"
+  ],
+  "api_corpus.Revocation.test_deleted_source_is_reauthorized_on_reopen": [
+   "pass"
+  ],
+  "api_corpus.Revocation.test_expired_login_stops_replay_and_queries": [
+   "pass"
+  ],
+  "api_corpus.Revocation.test_revoked_member_loses_snapshot_replay_query": [
+   "pass"
+  ],
+  "api_corpus.Roles.test_viewer_cannot_activate_or_execute": [
+   "pass"
+  ],
+  "api_corpus.State.test_state_cas_conflict_keeps_other_tab": [
+   "pass"
+  ],
+  "api_corpus.Streaming.test_presentation_is_progressive": [
+   "pass"
+  ],
+  "api_corpus.Streaming.test_probe_frames_and_utf8_split": [
+   "pass"
+  ],
+  "api_corpus.Truthful.test_unknown_metrics_are_not_zero": [
+   "pass"
+  ],
+  "api_corpus.Voice.test_ui_context_turn_keeps_selection_and_speakable_has_no_dsl": [
+   "pass"
+  ],
+  "e2e:axe": [
+   "pass",
+   "pass"
+  ],
+  "e2e:devtools-not-shipped": [
+   "pass",
+   "pass"
+  ],
+  "e2e:hidden-no-polling": [
+   "pass",
+   "pass"
+  ],
+  "e2e:history-reload-zero-attempts": [
+   "pass",
+   "pass"
+  ],
+  "e2e:keyboard-only": [
+   "pass",
+   "pass"
+  ],
+  "e2e:local-interaction-p95": [
+   "pass",
+   "pass"
+  ],
+  "e2e:locales": [
+   "pass",
+   "pass"
+  ],
+  "e2e:native-fallback": [
+   "pass",
+   "pass"
+  ],
+  "e2e:no-auto-writes": [
+   "pass",
+   "pass"
+  ],
+  "e2e:progressive-render": [
+   "pass",
+   "pass"
+  ],
+  "e2e:reduced-motion": [
+   "pass",
+   "pass"
+  ],
+  "e2e:scope-switch-aborts": [
+   "pass",
+   "pass"
+  ],
+  "e2e:typing-during-patch": [
+   "pass",
+   "pass"
+  ],
+  "e2e:typing-during-stream": [
+   "pass",
+   "pass"
+  ],
+  "e2e:viewports": [
+   "pass",
+   "pass"
+  ],
+  "e2e:xss": [
+   "pass",
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Coverage.test_every_check_exists": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Coverage.test_every_gate_and_corpus_item_is_mapped": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Framing.test_fragmented_utf8_frames": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Framing.test_frame_shape": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Framing.test_unknown_event_kinds_cannot_be_framed": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.KillSwitch.test_actions_and_edits_have_their_own_switches": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.KillSwitch.test_disabled_refuses_generation_queries_and_actions_before_parsing": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.KillSwitch.test_disabled_still_serves_persisted_artifacts_read_only": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.KillSwitch.test_outer_body_cap_fires_before_json_parsing": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.KillSwitch.test_unknown_routes_and_methods_are_404": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Migration.test_additive_only": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Migration.test_checks_match_the_contract": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Migration.test_service_only_rls_on_every_table": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Migration.test_uniqueness_lives_in_the_database": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Privacy.test_redaction_scanner": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_baselines_are_accepted": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_bounds_before_parsing": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_founder_surface_is_not_a_consumer_choice": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_ids_are_opaque_server_identifiers": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_input_digest_binds_exact_inputs": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Requests.test_privilege_keys_refused_everywhere": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Results.test_prepared_never_verified": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Results.test_public_artifact_hides_server_only_and_untrusted_source": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Results.test_state_machine": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.Results.test_unknown_is_never_zero": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_accepts_only_a_self_consistent_answer": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_forged_hash_or_library_skew_is_rejected": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_refusals_before_any_network": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_rejections_are_bounded_codes": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_signature_binds_timestamp_and_body": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_target_precedence_and_bypass_header": [
+   "pass"
+  ],
+  "test_agent_ui_acceptance_contract.ValidatorSeam.test_unavailable_seam_is_never_accepted_and_never_retried": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_bounds": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_library_skew_rejected": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_markup_and_script_urls_never_accepted_as_executable": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_mutation_and_top_level_run_rejected": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_positive_control": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_query_write_name_rejected": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_refresh_and_defaults_rejected": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_signed_route_refuses_unsigned_skewed_or_foreign_requests": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_unexplained_deletion_in_patch_rejected": [
+   "pass"
+  ],
+  "validator_corpus.Validator.test_unknown_component_and_root": [
+   "pass"
+  ]
+ }
+}

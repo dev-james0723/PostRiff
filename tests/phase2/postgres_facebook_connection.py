@@ -9,6 +9,7 @@ import postgres_repository as fixture
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.oauth import CredentialVault, OAuthService
 from postriff_phase2.wave3_connectors import FacebookPagesProvider
+from postriff_phase2.billing import Ledger
 from test_hosted_wave1_connectors import Wire, ok
 
 
@@ -16,6 +17,17 @@ class FacebookConnectionSQL(unittest.TestCase):
     def setUp(self):
         self.now = time.time()
         self.before = copy.deepcopy(fixture.service.repository.get(fixture.wid, 'fixture-one')['state'])
+        # This suite tests Page consent, not subscription capacity. Other suites
+        # can leave a valid credential in the disposable shared workspace.
+        with fixture.connection() as db:
+            Ledger().ensure_entitlement(db.cursor(), fixture.wid, None)
+            slots = db.execute('SELECT connected_accounts FROM public.pr_entitlements WHERE workspace_id=%s', (fixture.wid,)).fetchone()[0]
+            used = db.execute('SELECT count(*) FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND revoked_at IS NULL', (fixture.wid,)).fetchone()[0]
+            db.execute('UPDATE public.pr_entitlements SET connected_accounts=%s WHERE workspace_id=%s', (max(slots, used + 1), fixture.wid))
+        def restore_slots():
+            with fixture.connection() as db:
+                db.execute('UPDATE public.pr_entitlements SET connected_accounts=%s WHERE workspace_id=%s', (slots, fixture.wid))
+        self.addCleanup(restore_slots)
         self.adapter = FacebookPagesProvider('synthetic-app', 'synthetic-secret')
         self.blob = json.dumps({'v': 1, 'user': '777', 'ut': 'SYNTHETIC', 'scope': ['pages_show_list'], 'page': None})
         self.adapter.exchange = Mock(return_value={'accessToken': self.blob, 'scopes': ['pages_show_list'], 'expiresIn': 3600})

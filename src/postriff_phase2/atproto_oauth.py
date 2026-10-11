@@ -16,7 +16,7 @@ import time
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import public_host, public_https_url
-from .provider_base import OAuthProvider, _credential_shape, default_transport
+from .provider_base import OAuthProvider, _credential_shape, default_transport, fixed_https_origin
 
 ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 _HANDLE = re.compile(r"^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$")
@@ -123,11 +123,15 @@ class BlueskyProvider(OAuthProvider):
     RESOLVE_HANDLE = "https://bsky.social/xrpc/com.atproto.identity.resolveHandle"
     PLC_DIRECTORY = "https://plc.directory/"
 
-    def __init__(self, client_jwk, public_base_url, transport=None, production_reviewed=False, clock=time.time, resolver=socket.getaddrinfo):
+    def __init__(self, client_jwk, public_base_url, transport=None, production_reviewed=False, clock=time.time, resolver=socket.getaddrinfo,
+                 client_origin=None):
         if not isinstance(client_jwk, dict) or not client_jwk.get("kid"):
             raise AlphaError("Bluesky client key is required.", 503)
         self.client_jwk = client_jwk
-        self.public_base_url = (public_base_url or "").rstrip("/")
+        # client_id is bound into every grant and refresh assertion, so it stays on its own pinned origin when the
+        # app's public origin moves; the callback for this client is served on that same origin.
+        self.public_base_url = (client_origin or public_base_url or "").rstrip("/")
+        self.callback_origin = self.public_base_url if client_origin else None
         self.client_id = self.public_base_url + self.METADATA_PATH
         self.client_secret = None
         self.transport = transport or default_transport()
@@ -138,16 +142,21 @@ class BlueskyProvider(OAuthProvider):
     @classmethod
     def mount(cls, values, transport=None):
         raw, base = values.get("POSTRIFF_BLUESKY_CLIENT_JWK"), values.get("POSTRIFF_PUBLIC_BASE_URL")
+        pinned = values.get("POSTRIFF_BLUESKY_CLIENT_ORIGIN")
         presence = {"clientId": bool(base), "clientSecret": raw is not None}
         missing = [name for name, present in (("POSTRIFF_PUBLIC_BASE_URL", bool(base)), ("POSTRIFF_BLUESKY_CLIENT_JWK", raw is not None)) if not present]
         jwk = parse_client_jwk(raw) if raw is not None else None
         origin = urlsplit(base or "")
         base_ok = origin.scheme == "https" and bool(origin.hostname) and not origin.path.strip("/") and not origin.query
         state = "not_configured" if raw is None else "partial_configuration" if missing else "configured" if jwk and base_ok else "invalid_configuration"
-        diagnostic = {"configurationState": state, "credentialPresence": presence, "missingVariables": missing}
+        client_origin = fixed_https_origin(pinned) if pinned else None
+        if pinned and client_origin is None and state == "configured":
+            state = "invalid_configuration"
+        diagnostic = {"configurationState": state, "credentialPresence": presence, "missingVariables": missing,
+                      "clientOriginPinned": client_origin is not None}
         if state != "configured":
             return None, diagnostic
-        return cls(jwk, base, transport=transport), diagnostic
+        return cls(jwk, base, transport=transport, client_origin=client_origin), diagnostic
 
     # --- public documents -------------------------------------------------------------------------------------
     def client_metadata(self):

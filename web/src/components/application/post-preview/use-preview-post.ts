@@ -27,6 +27,11 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
       staleTime: Infinity
     }))
   });
+  const players = useQueries({ queries: assets.map(asset => ({
+    queryKey: ['media-url', workspaceId, asset.id],
+    queryFn: async () => (await api.mediaUrl(workspaceId, asset.id)).url,
+    enabled: asset.mime.startsWith('video/'), staleTime: 5 * 60 * 1000
+  })) });
   const channel = channelByPlatform(manifest.platform);
   const avatarUrl = useAccountPicture(manifest.channelId);
 
@@ -35,17 +40,20 @@ export function usePreviewPost(manifest: Manifest, timeZone: string): PreviewPos
     channelName: channel?.name ?? manifest.platform,
     account: manifest.account,
     avatarUrl,
-    text: manifest.payload.text,
+    text: manifest.platform === 'YouTube' && typeof manifest.publishOptions?.description === 'string' ? manifest.publishOptions.description : manifest.payload.text,
+    ...(manifest.platform === 'YouTube' ? { videoTitle: typeof manifest.publishOptions?.title === 'string' ? manifest.publishOptions.title : undefined,
+      youtubeMode: manifest.publishOptions?.mode === 'short' ? 'short' as const : 'video' as const } : {}),
     media: assets.map((asset, index) => {
       const result = loaded[index];
       return {
         id: asset.id,
         kind: mediaKind(asset.mime),
-        url: result?.data,
+        url: asset.mime.startsWith('video/') ? players[index]?.data : result?.data,
+        poster: asset.mime.startsWith('video/') ? result?.data : undefined,
         alt: asset.alt,
         width: asset.width,
         height: asset.height,
-        status: result?.isError ? 'error' : result?.data ? 'ready' : 'loading'
+        status: result?.isError || players[index]?.isError ? 'error' : (asset.mime.startsWith('video/') ? players[index]?.data : result?.data) ? 'ready' : 'loading'
       };
     }),
     publishAt: new Date(manifest.timing.utc),

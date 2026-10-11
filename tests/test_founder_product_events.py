@@ -484,7 +484,7 @@ class WorkerCallSiteTests(unittest.TestCase):
         from postriff_phase2.hosted_worker import PostgresWorker
         job = self.job(state="scheduled", attempts=[{"number": 1}, {"number": 2}, {"number": 3}], leaseOwner=None, leaseUntil=0, nextAt=0)
         state = {"phase2": {"jobs": [job], "channels": []}}
-        script = Script(answers=[("pg_try_advisory_xact_lock", [(True,)]), ("SELECT id::text,revision,state FROM public.pr_workspaces", [(WS, 1, json.dumps(state))]),
+        script = Script(answers=[("pg_try_advisory_xact_lock", [(True,)]), ("SELECT to_regclass", [('pr_worker_tenants',)]), ("SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces", [(WS, 1, json.dumps(state))]),
                                  ("SELECT m.role,m.can_publish", [("owner", True)])])
         worker = PostgresWorker(lambda: script, clock=lambda: NOW, worker_id="w1")
         worker.commands.engine.invalidate = lambda state: None   # the engine's approval invalidation is not under test here

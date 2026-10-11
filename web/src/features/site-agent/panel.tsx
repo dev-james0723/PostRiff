@@ -18,6 +18,7 @@ import { siteConfig } from '@/config/site';
 import { useWide } from '@/features/queue/use-wide';
 import { VoiceIndicator } from '@/features/rafii-voice/voice-indicator';
 import { useRegisterStyleAction } from '@/lib/agent-runtime/use-agent-style';
+import { ESCAPE_SKIP_SELECTORS } from '@/features/agent/generative-ui/surfaces/selectors';
 import { SiteAgentChat } from './chat';
 import { panelStore, usePanel } from './store';
 
@@ -76,7 +77,7 @@ function useEscapeClosesOnlyRafii(active: boolean, close: () => void) {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || document.getElementById(PANEL_ID)?.contains(document.activeElement)
-        || document.activeElement?.closest(`${STYLE_SHEET}, [data-rafii-capabilities]`)) return;
+        || document.activeElement?.closest(`${STYLE_SHEET}, [data-rafii-capabilities], ${ESCAPE_SKIP_SELECTORS.join(', ')}`)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       close();
@@ -141,7 +142,7 @@ export function SiteAgentDock() {
       aria-label={siteConfig.name}
       className='rafii-panel sticky top-0 z-20 flex h-dvh w-[29rem] shrink-0 flex-col border-l border-[color-mix(in_oklch,var(--foreground)_8%,transparent)] xl:w-[33rem]'
     >
-      <SiteAgentChat onClose={close} />
+      <SiteAgentChat onClose={close} surface='panel' />
     </aside>
   );
 }
@@ -173,7 +174,7 @@ export function SiteAgentAbove() {
         className='rafii-elevated gap-0 p-0 shadow-none data-[side=right]:w-full data-[side=right]:rounded-l-[var(--rafii-radius-dialog)] data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md'
       >
         <SheetTitle className='sr-only'>{siteConfig.name}</SheetTitle>
-        <SiteAgentChat onClose={closeAbove} />
+        <SiteAgentChat onClose={closeAbove} surface='panel' />
       </SheetContent>
     </Sheet>
   );
@@ -222,7 +223,7 @@ export function SiteAgentOverlay() {
           : 'rafii-elevated rafii-mobile-chat fixed inset-0 h-dvh max-h-dvh w-screen max-w-none gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none'}
       >
         <SheetTitle className='sr-only'>{siteConfig.name}</SheetTitle>
-        <SiteAgentChat onClose={close} onNavigate={close} autoFocus={wide} />
+        <SiteAgentChat onClose={close} onNavigate={close} autoFocus={wide} surface={wide ? 'panel' : 'mobile'} />
       </SheetContent>
     </Sheet>
   );

@@ -754,7 +754,9 @@ def _():
     def add_expired_channel(channel_id):
         with connection() as db:
             db.execute("""UPDATE pr_workspaces SET state = jsonb_set(state, '{phase2,channels}', coalesce(state->'phase2'->'channels', '[]'::jsonb) || %s::jsonb), revision = revision + 1
-                          WHERE id=%s""", (json.dumps([{"id": channel_id, "platform": "LinkedIn", "account": "Old page", "connectionState": "token_expired"}]), other_wid))
+                          WHERE id=%s""", (json.dumps([{"id": channel_id, "platform": "LinkedIn", "account": "Old page", "configured": True, "revoked": False,
+                                                         "identityVerified": True, "capabilityVerified": False, "verifiedAt": 1, "expiresAt": 1,
+                                                         "scopes": ["w_member_social"], "evidenceSource": "synthetic"}]), other_wid))
 
     def event_rows(prefix):
         with connection() as db:
