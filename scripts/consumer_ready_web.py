@@ -23,6 +23,15 @@ def main():
         def ignored(directory,names):
             return [n for n in names if n.startswith(('.env','.next')) or n in ('node_modules','.git','tsconfig.tsbuildinfo')]
         shutil.copytree(ROOT/'web',DEST,dirs_exist_ok=True,ignore=ignored)
+        # npm's build script checks infrastructure before Next runs. Preserve
+        # that check in the isolated copy, with only its three public sources;
+        # no project bindings, environment files or other runtime modules.
+        for name in ('scripts/check_social_release_binding.py',
+                     'src/postriff_phase2/__init__.py',
+                     'src/postriff_phase2/social_release.py'):
+            target=DEST.parent/name
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(ROOT/name,target)
     if not args: return 0
     env={k:v for k,v in os.environ.items() if k in ('PATH','HOME','TMPDIR','LANG','LC_ALL','TERM','CI')}
     env.update(NEXT_PUBLIC_APP_URL=f"http://127.0.0.1:{ports['--web-port']}",NEXT_PUBLIC_SUPABASE_URL='',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='',NEXT_PUBLIC_SENTRY_DISABLED='1',NEXT_TELEMETRY_DISABLED='1',POSTRIFF_API_ORIGIN=f"http://127.0.0.1:{ports['--api-port']}",POSTRIFF_DEV_SSR='1',LC_ALL='C')

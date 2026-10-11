@@ -1,5 +1,7 @@
 """Offline binding regressions. Never contact a production or staging database."""
 import unittest
+import runpy
+from pathlib import Path
 from postriff_phase2.social_release import (PRODUCTION_PROJECT, PRODUCTION_REF, PRODUCTION_URL,
                                           FORBIDDEN_PROJECT, FORBIDDEN_REF,
                                           reject_forbidden_bindings, require_production_binding)
@@ -16,6 +18,24 @@ class SocialReleaseBinding(unittest.TestCase):
         values = self.values()
         self.assertEqual(require_production_binding(values)['databaseRef'], PRODUCTION_REF)
         self.assertEqual(isolated_environment(values), values)
+
+    def test_runtime_alias_and_unknown_production_reject_before_backend_access(self):
+        values = self.values()
+        values['POSTRIFF_VERCEL_PROJECT_ID'] = values.pop('VERCEL_PROJECT_ID')
+        self.assertEqual(isolated_environment(values), values)
+        for patch in ({'POSTRIFF_DATABASE_URL': '[SENSITIVE]'},
+                      {'POSTRIFF_VERCEL_PROJECT_ID': 'unknown'}):
+            with self.subTest(patch=list(patch)), self.assertRaises(ValueError):
+                isolated_environment({**values, **patch})
+        with self.assertRaises(ValueError):
+            isolated_environment({'VERCEL_ENV': 'production'})
+
+    def test_standalone_storage_guard_preserves_release_validation(self):
+        path = Path(__file__).resolve().parents[1] / 'src/postriff_phase2/deployment.py'
+        guard = runpy.run_path(str(path))['isolated_environment']
+        self.assertEqual(guard(self.values()), self.values())
+        with self.assertRaises(ValueError):
+            guard({**self.values(), 'VERCEL_PROJECT_ID': FORBIDDEN_PROJECT})
 
     def test_forbidden_project_urls_encoded_or_keyword_dsn_fail_closed(self):
         for name, value in (

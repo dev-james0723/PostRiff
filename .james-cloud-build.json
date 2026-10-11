@@ -8,7 +8,7 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:telegram:upgrade:jcb",
+    "test": "test:telegram:jcb",
     "ci": "ci:telegram:jcb",
     "e2e": "e2e:telegram:jcb"
   },
