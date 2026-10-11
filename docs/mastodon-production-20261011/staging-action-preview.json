@@ -1,8 +1,8 @@
 {
   "schema": "rafii.mastodon.staging.action-preview.v1",
   "execution": "REVIEWABLE_CANDIDATE_NOT_EXECUTED",
-  "sourceCandidate": "7842f874f9100a98eaef98f68c2839a9368b27e3",
-  "securityRepair": "Credential admission, atomic disconnect/completion fences and shared outbound/disconnect advisory transaction; remote validation in progress.",
+  "sourceCandidate": "df7c91b89e118d065581b3198e4fd8c3a2fcb091",
+  "securityRepair": "Scoped source review PASS at 27ff4437; same src tree at df7c91b8. Final CI and hosted acceptance pending.",
   "vercel": {
     "project": "rafii-consumer-staging",
     "projectId": "prj_4bfvSc0AC6am9FdknFWcwNYgmcnN",
@@ -13,13 +13,13 @@
     "keepDeploymentProtection": true
   },
   "database": {
-    "parentStagingProject": "oxacvkhpfgytkepxcaqh",
+    "parentStagingProject": "PRIOR_PROPOSAL_ONLY: oxacvkhpfgytkepxcaqh is in Free org; cannot create proposed branch there",
     "proposedBranch": "rafii-mastodon-pr176-20261011",
     "branchRef": "PENDING_PROVISIONING",
     "copyProductionData": false,
     "sharedStagingDestructiveTests": false,
     "productionRef": "buoyhkbodnhzngaotoel",
-    "isolatedBranchCostAuthorization": "REQUIRED",
+    "isolatedBranchCostAuthorization": "APPROVED_UP_TO_USD_1_TOTAL_24_HOURS",
     "accountSpecificCostQuote": "UNAVAILABLE: get_cost endpoint not returned by tools/list",
     "documentedMicroComputeStartingUSDPerHour": 0.01344,
     "pricingSource": "https://supabase.com/docs/guides/platform/manage-your-usage/branching",
@@ -37,7 +37,11 @@
         "path": "migrations/postriff/115_mastodon_connection_health.sql",
         "sha256": "eeae6a4f48fb7616ce168f672c05d6ba7e169aa91951c17fc1c4c187fb437905"
       }
-    ]
+    ],
+    "ownerOrganizationChoice": "existing paid organization",
+    "paidOrganizationTarget": "UNKNOWN_OWNER_INPUT_PENDING",
+    "subscriptionUpgradeAuthorized": false,
+    "status": "BLOCKED_PAID_ORGANIZATION_TARGET_OR_ACCESS"
   },
   "callback": "https://rafii-mastodon-acceptance-jamesau0723-6572s-projects.vercel.app/api/oauth/mastodon/callback",
   "configuration": {
@@ -58,7 +62,10 @@
     "otherProviderExecution": "disabled for acceptance branch",
     "notificationsPhoneResearchGrowthEgress": "disabled per isolated_environment"
   },
-  "ownerAccounts": "PENDING exact two authorized independent-instance handles",
+  "ownerAccounts": [
+    "@jamesaucreates@mastodon.social",
+    "@jamesau0723@mastodon.social"
+  ],
   "authorizationUrls": "NOT_CREATED: requires authenticated staging owner, encrypted application cache and one-use state/PKCE transaction",
   "candidatePublicInstancePreflight": [
     {
@@ -80,7 +87,7 @@
         "acct": "Mastodon",
         "url": "https://mastodon.social/@Mastodon"
       },
-      "ownerAccountAuthorized": false,
+      "ownerAccountAuthorized": true,
       "independentHostingVerified": true,
       "independenceEvidence": {
         "source": "https://mastodon.social/about",
@@ -89,9 +96,13 @@
         "basis": "Different publicly identified server operators, separate origins and running versions. Physical infrastructure and cloud vendors are not attested.",
         "recordedAt": "2026-10-11T19:02:17.210765+00:00"
       },
-      "browserOwnerSignIn": "NOT_SIGNED_IN in inspected Chrome window; Create account and Login visible",
+      "browserOwnerSignIn": "Both known accounts observed signed in on 2026-10-11; Rafii identity/scopes NOT_RUN",
       "signupUrl": "https://mastodon.social/auth/sign_up",
-      "signInUrl": "https://mastodon.social/auth/sign_in"
+      "signInUrl": "https://mastodon.social/auth/sign_in",
+      "authorizedHandles": [
+        "@jamesaucreates@mastodon.social",
+        "@jamesau0723@mastodon.social"
+      ]
     },
     {
       "origin": "https://mstdn.social",
@@ -130,7 +141,7 @@
     "path": "web/public/raffi/avatar-256.png",
     "sha256": "6ac56752cb008d6dc27640cc53567fd724a4cd9068123289e8705683b88d792f",
     "alt": "Rafii application avatar used for an owner-authorized Mastodon acceptance test",
-    "rights": "project-owned asset; final owner approval pending"
+    "rights": "Project-owned acceptance asset; owner authorized the scoped temporary media workflow"
   },
   "testContentPreview": {
     "manual": "Rafii × Mastodon acceptance test — manual media publishing. This temporary owner-authorized test will be deleted after verification.",
@@ -141,5 +152,27 @@
   "productionChanges": false,
   "liveProviderWrites": false,
   "modelCalls": false,
-  "cleanup": "only recorded owned acceptance post IDs; delete branch only after retaining redacted receipts and owner-authorized cleanup"
+  "cleanup": "only recorded owned acceptance post IDs; delete branch only after retaining redacted receipts and owner-authorized cleanup",
+  "requestedOAuthScopes": [
+    "read:accounts",
+    "read:statuses",
+    "write:statuses",
+    "write:media"
+  ],
+  "requestedOAuthCapability": "publish; covers required media/status/schedule actions without management scopes",
+  "crossInstance": {
+    "status": "BLOCKED_NO_VERIFIED_SECOND_INSTANCE_ACCOUNT",
+    "mailboxSearches": {
+      "connectedMailboxes": 2,
+      "queries": [
+        "in:anywhere {from:mastodon from:mstdn subject:mastodon subject:mstdn}",
+        "in:anywhere {mastodon mstdn}"
+      ],
+      "matchingMessages": 0,
+      "paginationComplete": true,
+      "coverageLimit": "Only two connected mailboxes; absence does not prove no independent-server account exists."
+    },
+    "sameInstanceAcceptanceBlockedByCrossInstance": false
+  },
+  "backupPrerequisite": "Verified production backup and isolated restore required before production effects"
 }
