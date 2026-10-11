@@ -3,25 +3,31 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "sourceHead": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
-    "sourceFingerprint": "0a7e83a60cf47d3e0a775871d6d62d6d7d9c846ede7c9a528502200f5651e880",
-    "patchSha256": "6c66f183a15d3fcb827e4e78f183cda52b5f20f2e8f86a419855ea11e87687d3",
+    "sourceHead": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
+    "sourceFingerprint": "714d8d28ff76bdf98744a4190122e9a9338a23abe8d623d18e4d755cb997c31b",
+    "patchSha256": "fbb058ce176cbe901b07cd8cfbc55b7b91a2a5acfcac874bd29d8bb8dd651af3",
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 515708,
-    "runId": "bh9k9crx4c",
+    "patchBytes": 536074,
+    "task": "e2e",
+    "scope": "frontend: lint/typecheck/build and actual browser; unchanged backend checks reused below. Phone contrast utility candidate awaits GitHub axe.",
+    "runId": "s1wnp53m8z",
     "exitCode": 0,
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093700221976Z-ci.json",
-    "elapsedSeconds": 177.984
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T100353059196Z-e2e.json",
+    "elapsedSeconds": 127.997
   },
   "checks": {
     "pythonContracts": {
-      "passed": 482
+      "passed": 485,
+      "runId": "b6kfs31dn5",
+      "reusedUnchangedSource": true
     },
     "sqlActionIsolation": {
       "passed": 23,
-      "postgresVersion": 16
+      "postgresVersion": 16,
+      "runId": "b6kfs31dn5",
+      "reusedUnchangedSource": true
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
     "webContracts": {
@@ -43,7 +49,7 @@
             "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
-            "selected profile fields and default privacy exact approval",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
             "no runtime errors or page overflow"
           ]
         },
@@ -55,7 +61,7 @@
             "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
-            "selected profile fields and default privacy exact approval",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
             "no runtime errors or page overflow"
           ]
         },
@@ -67,7 +73,7 @@
             "foreground live window private excerpt not persisted to workspace",
             "exact action preview and receipt",
             "Agent preview link hydration",
-            "selected profile fields and default privacy exact approval",
+            "4.6.1 descriptions, advertised limits, explicit language clear, metadata and website attribution exact approval",
             "no runtime errors or page overflow"
           ]
         }
@@ -113,7 +119,7 @@
           "realMastodonAcceptance": false
         }
       ],
-      "scope": "Channels/profile and actual Queue approval/SQL/shared worker for thread, images, normalized WAV, accepted native schedule and exact publication readback; synthetic providers only."
+      "scope": "4.6.1 profile descriptions/limits, explicit language clear, metadata and website attribution approval, old4.2.9 unsupported controls disabled; actual Queue 4journeys, all3widths; synthetic providers."
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
     "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
@@ -153,6 +159,11 @@
       "syntheticWrites": 2,
       "paidModelCalls": 0,
       "evidence": "evidence/CLOUD-SYNTHETIC-automation.json"
+    },
+    "phoneAccessibility": {
+      "status": "PENDING_GITHUB_CI",
+      "priorFailedCheck": 114439837707,
+      "candidate": "Revoke/delete number quiet button now uses existing foreground text utility; axe remains enabled."
     }
   },
   "capacity": {
@@ -204,136 +215,136 @@
   "evidence": [
     {
       "path": "evidence/CLOUD-SYNTHETIC-browser.json",
-      "sha256": "0051ded991ab7c6c566aacbb5dd983dbdd08201bfba9260084ba60fdb3f7e66e",
-      "bytes": 3214,
+      "sha256": "3d874d4724936f6c36c6aa7f7b196ab95b915cc61515a20a8b23c699a106e236",
+      "bytes": 3373,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-1440.png",
-      "sha256": "e9c693f8966b80389f04c015ff3f30c5e918ec774f0a24801d7dec424b5090a5",
-      "bytes": 386491,
+      "sha256": "1db9f30be6ca3a31ddb94a8035ba5dd0884bc964d90b904cba8e9414313c3359",
+      "bytes": 386750,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-390.png",
       "sha256": "51872367ee01c8d99a93caeafad27e00f1cb1dca57d40601ff98341c4aba6895",
       "bytes": 144517,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-channels-320.png",
       "sha256": "8426513b1231f000c7f26846bf1f45bf4c735339916958e4a7b83d777f942013",
       "bytes": 120973,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-1440.png",
-      "sha256": "4312ee410be084a1abd8f19daa1bba57c2b9451cd9a28b10e2d697d6a5e43fa4",
-      "bytes": 253338,
+      "sha256": "89f44b71e335f28cceb5aafd50ec8bfb64a95751739116b88604b4f031cba726",
+      "bytes": 248569,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-390.png",
-      "sha256": "305e97b2691d5447d7afbc6c80e24552fe2e196713a0deaee59c6dbf81cef1f8",
-      "bytes": 127921,
+      "sha256": "5e5a8b9447ae25577216ec7bf917fea1fdf36cb74f3cc7387dc7a5d4dbc16a19",
+      "bytes": 120262,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-profile-320.png",
-      "sha256": "7d94f00c20cebad532e3b0f620957ae4c4d5f418622e93518cc62553b15c8620",
-      "bytes": 116245,
+      "sha256": "7ac1cc2ae2df4fabae0e572ffaf685a8ba4907de0b92f32a92e40127152c9edb",
+      "bytes": 108443,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-1440.png",
-      "sha256": "a61061a56d2c5cfb4ade200052ec1d6b603dbd40db2ad6e2b3bc13238f400b68",
-      "bytes": 269570,
+      "sha256": "37960fa151f8f4272946825b0703957a99cca039864a369188d8197da3100c71",
+      "bytes": 269262,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-390.png",
-      "sha256": "ca48e8ac2ceca78c4e47db8369ec159940e687c8f9e4cb365fe0e207549d615d",
-      "bytes": 109729,
+      "sha256": "23c55088497ca4a3601ff176c8695f303b1adfb8317f9fc5e6c659ddc0117a79",
+      "bytes": 109321,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-thread-320.png",
-      "sha256": "dcaef83c403f59fc687d50cd8d25acb1cbe4bee061d1fc41b7902cb05118771f",
-      "bytes": 100147,
+      "sha256": "ffc87268c48b6178dd12970e7d2d895f4e41d47d7b49f86abb8fc9ac95c22d31",
+      "bytes": 100066,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-1440.png",
-      "sha256": "e4aafd8f8e36f8162a05298a2f45ec923836f3416e9bcaceba3ebdc71ea4f079",
-      "bytes": 282853,
+      "sha256": "d1bb01e05023f4b9b25ab979cb801ede64126daaa1a1acbb383432e661a0e589",
+      "bytes": 282999,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-390.png",
-      "sha256": "fe8fb648791069afa2febe120853c973ae0c27c0a088252d7b3c4e536edd3b3b",
-      "bytes": 104193,
+      "sha256": "c2b4a44c234812c862cb96fe7fbac239518d882a299628b8581693ae76ac25b4",
+      "bytes": 104379,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-images-320.png",
-      "sha256": "9a1e0b16ef9a84fbf94d48290c1a31f56d6f2838e9f91974c1a49fb9fe43d7b1",
-      "bytes": 95374,
+      "sha256": "fffc656ea3563c292ff9944f342a26910c26503a6f1d886d9445628cc76a5540",
+      "bytes": 95406,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-1440.png",
-      "sha256": "29e79f7c78a57955e4ee22b52d3d4c982a853a5d61d2139c14ccf74f1f520c68",
-      "bytes": 297754,
+      "sha256": "ead6245496bda62c5ef1e3af73ba52151cf232bf7b30f974acf07444ceade6d5",
+      "bytes": 297811,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-390.png",
-      "sha256": "c776ac9462b9aee47d21b465be5f659dc839430b8a3982c904c700b9793ead92",
-      "bytes": 113251,
+      "sha256": "2a47c9e6fa35aca235caf690b8c7eb9d768d88701f51bf8bd45a7fc3b32ae441",
+      "bytes": 113276,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-audio-320.png",
       "sha256": "dfc5cf218f171ade281d9e653ab4a2b6f255c9419d88c1c59ab076db0489d170",
       "bytes": 103298,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-1440.png",
-      "sha256": "bed1219c150d9003d2eb4600a5efcad7786a58bc7a0b07224ff0b01a2ee73de1",
-      "bytes": 304822,
+      "sha256": "ebfede8441774b174cf366c7af711f1421607b303ed898a0e6aa038b76912682",
+      "bytes": 304969,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-390.png",
-      "sha256": "9979a7cf58b57129ad0b5d880a199309211c6a5fd0aaaed385313392cd220e62",
-      "bytes": 113578,
+      "sha256": "e154a2029dccc088cda4ece548974e4fafbaa7a16f4ec3c2686b06c86622ef01",
+      "bytes": 113673,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-queue-native-320.png",
-      "sha256": "b7753e9f4a0752d7db27b49c11b6a6393876390d85eff4d9375818944809cd0a",
-      "bytes": 103957,
+      "sha256": "e2ff1d2b5726824184e1e37cc662971a69c4edc9f47020527fac04927187552e",
+      "bytes": 103924,
       "execution": "CLOUD SYNTHETIC",
-      "runId": "bh9k9crx4c"
+      "runId": "s1wnp53m8z"
     },
     {
       "path": "evidence/CLOUD-SYNTHETIC-capacity.json",
@@ -351,7 +362,12 @@
     }
   ],
   "localChecks": [
-    "Source AST parsing, JSON validation and git diff --check; no local heavy validation"
+    "Source AST parsing, JSON validation and git diff --check; no local heavy validation",
+    {
+      "check": "Phase9 Python AST, cloud-script bash syntax and source diff whitespace",
+      "status": "PASS",
+      "scope": "Lightweight local only; all Node/TS/build/browser/SQL ran remotely."
+    }
   ],
   "priorCloudRuns": [
     {
@@ -391,89 +407,102 @@
       "provider": "Depot/JCB",
       "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T085648508351Z-ci.json",
       "elapsedSeconds": 177.438
+    },
+    {
+      "sourceHead": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+      "sourceFingerprint": "0a7e83a60cf47d3e0a775871d6d62d6d7d9c846ede7c9a528502200f5651e880",
+      "patchSha256": "6c66f183a15d3fcb827e4e78f183cda52b5f20f2e8f86a419855ea11e87687d3",
+      "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
+      "transportMode": "remote_patch",
+      "patchBytes": 515708,
+      "runId": "bh9k9crx4c",
+      "exitCode": 0,
+      "provider": "Depot/JCB",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T093700221976Z-ci.json",
+      "elapsedSeconds": 177.984
     }
   ],
   "githubCI": {
-    "observedAt": "2026-10-11T09:17:00Z",
-    "headRevision": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+    "observedAt": "2026-10-11T10:06:00Z",
+    "headRevision": "65eb45707d63784c1dafeafdb2d51475dd37aa15",
     "checks": [
       {
         "name": "Vercel Preview Comments",
         "status": "completed",
         "conclusion": "success",
-        "id": 114433049524
+        "id": 114440219824
       },
       {
         "name": "dependency-lock",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114432607475
+        "id": 114439838963
       },
       {
         "name": "generate-assets",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114432607388
+        "id": 114439838937
       },
       {
         "name": "dependency-lock",
         "status": "completed",
         "conclusion": "skipped",
-        "id": 114432607093
-      },
-      {
-        "name": "native-learning-browser",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114432606780
-      },
-      {
-        "name": "scenes",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114432606736
+        "id": 114439838622
       },
       {
         "name": "founder",
         "status": "completed",
         "conclusion": "success",
-        "id": 114432606732
-      },
-      {
-        "name": "document-runtime",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114432606705
-      },
-      {
-        "name": "growth-studio",
-        "status": "completed",
-        "conclusion": "success",
-        "id": 114432606648
+        "id": 114439838450
       },
       {
         "name": "agent-ui-browser",
         "status": "completed",
         "conclusion": "success",
-        "id": 114432606602
+        "id": 114439838264
       },
       {
         "name": "local-gates",
+        "status": "in_progress",
+        "conclusion": null,
+        "id": 114439838160
+      },
+      {
+        "name": "document-runtime",
         "status": "completed",
-        "conclusion": "failure",
-        "id": 114432606584
+        "conclusion": "success",
+        "id": 114439838130
       },
       {
         "name": "agent-ui",
         "status": "completed",
         "conclusion": "success",
-        "id": 114432606488
+        "id": 114439838028
       },
       {
         "name": "library",
         "status": "completed",
+        "conclusion": "success",
+        "id": 114439837938
+      },
+      {
+        "name": "growth-studio",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114439837853
+      },
+      {
+        "name": "native-learning-browser",
+        "status": "completed",
+        "conclusion": "success",
+        "id": 114439837810
+      },
+      {
+        "name": "scenes",
+        "status": "completed",
         "conclusion": "failure",
-        "id": 114432606339
+        "id": 114439837707
       }
     ],
     "statuses": [
@@ -482,14 +511,14 @@
         "state": "success"
       }
     ],
-    "scope": "GitHub CI on phase7 head: local-gates and library failed; exact fixes included in phase8 candidate, new commit CI pending. Vercel Preview only."
+    "scope": "Phase8 GitHub CI: library regression fixed; scenes fails phone revoke button contrast, with scoped foreground-text repair in phase9 candidate. local-gates pending. Vercel Preview only."
   },
   "browserArtifact": {
     "provider": "Depot CI",
-    "runId": "bh9k9crx4c",
-    "artifactId": "01a12a52-4c14-7dc9-931e-f14f67f63b32",
+    "runId": "s1wnp53m8z",
+    "artifactId": "01a12a6a-f9ab-70e7-bd64-b327d5ffebc2",
     "name": "rafii-mastodon-synthetic-browser",
-    "zipBytes": 3157783,
+    "zipBytes": 3137829,
     "files": 20,
     "manifest": "evidence/CLOUD-SYNTHETIC-manifest.json",
     "sha256Verified": true
@@ -597,6 +626,110 @@
         }
       ],
       "scope": "GitHub CI and Vercel Preview; no production deployment"
+    },
+    {
+      "observedAt": "2026-10-11T09:17:00Z",
+      "headRevision": "662d0888f3927d7127fce7e42f08ebbdc6a4d7c8",
+      "checks": [
+        {
+          "name": "Vercel Preview Comments",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114433049524
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607475
+        },
+        {
+          "name": "generate-assets",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607388
+        },
+        {
+          "name": "dependency-lock",
+          "status": "completed",
+          "conclusion": "skipped",
+          "id": 114432607093
+        },
+        {
+          "name": "native-learning-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606780
+        },
+        {
+          "name": "scenes",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606736
+        },
+        {
+          "name": "founder",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606732
+        },
+        {
+          "name": "document-runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606705
+        },
+        {
+          "name": "growth-studio",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606648
+        },
+        {
+          "name": "agent-ui-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606602
+        },
+        {
+          "name": "local-gates",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114432606584
+        },
+        {
+          "name": "agent-ui",
+          "status": "completed",
+          "conclusion": "success",
+          "id": 114432606488
+        },
+        {
+          "name": "library",
+          "status": "completed",
+          "conclusion": "failure",
+          "id": 114432606339
+        }
+      ],
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success"
+        }
+      ],
+      "scope": "GitHub CI on phase7 head: local-gates and library failed; exact fixes included in phase8 candidate, new commit CI pending. Vercel Preview only."
     }
-  ]
+  ],
+  "backendValidation": {
+    "runId": "b6kfs31dn5",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T094956180705Z-ci.json",
+    "runExitCode": 1,
+    "stageResults": {
+      "pythonContracts": 485,
+      "mastodonSql": 23,
+      "automationSqlWorker": "PASS",
+      "LibraryAndMigrations": "PASS",
+      "webContracts": 35
+    },
+    "whyRunFailed": "Frontend browser assumed account display order; fixed to exact instance-qualified selectors. Backend files unchanged since these passed stages."
+  }
 }

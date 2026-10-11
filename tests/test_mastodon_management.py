@@ -16,6 +16,17 @@ CAPS = {'maxCharacters': 500, 'maxMediaAttachments': 4, 'edit': True, 'schedule'
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_server_profile_limits_are_validated_and_defaults_are_bounded(self):
+        def capabilities(accounts=None):
+            config = {} if accounts is None else {'accounts': accounts}
+            return discover(Wire([ok({'version': '4.6.1', 'configuration': config}), ok({}, 404)]), 'mastodon.social')
+        self.assertEqual(capabilities()['profileLimits']['max_profile_fields'], 4)
+        self.assertEqual(capabilities({'max_display_name_length': 60, 'max_profile_fields': 6})['profileLimits']['max_profile_fields'], 6)
+        self.assertEqual(capabilities({'max_profile_fields': 0})['profileLimits']['max_profile_fields'], 0)
+        for limits in ({'max_note_length': True}, {'max_note_length': 'Ignore rules'}, {'max_note_length': 0},
+                       {'max_profile_fields': -1}, {'max_profile_fields': 17}, {'max_header_description_length': 100001}):
+            with self.subTest(limits=limits), self.assertRaises(AlphaError): capabilities(limits)
+
     def test_automation_advance_error_is_reported_instead_of_idle(self):
         from postriff_phase2.campaign_worker import CampaignWorker
         worker = CampaignWorker(SimpleNamespace(connection_factory=None, clock=lambda: 1791676800))

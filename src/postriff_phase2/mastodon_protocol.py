@@ -49,6 +49,16 @@ def discover(transport, host):
     statuses = config.get("statuses") if isinstance(config.get("statuses"), dict) else {}
     media = config.get("media_attachments") if isinstance(config.get("media_attachments"), dict) else {}
     polls = config.get("polls") if isinstance(config.get("polls"), dict) else {}
+    accounts = config.get('accounts') if isinstance(config.get('accounts'), dict) else {}
+    profile_defaults = {'max_display_name_length': 30, 'max_note_length': 500,
+                        'max_profile_fields': 4, 'profile_field_name_limit': 255, 'profile_field_value_limit': 255,
+                        'max_avatar_description_length': 1500, 'max_header_description_length': 1500}
+    profile_limits = {key: accounts.get(key, default) for key, default in profile_defaults.items()}
+    for key, value in profile_limits.items():
+        maximum = 16 if key == 'max_profile_fields' else 100000
+        minimum = 0 if key == 'max_profile_fields' else 1
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise AlphaError('This server returned invalid account limits.', 502)
     capabilities = {
         "instance": host, "version": version, "pkce": version_at_least(version, (4, 3, 0)),
         "edit": version_at_least(version, (3, 5, 0)), "schedule": version_at_least(version, (2, 7, 0)),
@@ -59,7 +69,7 @@ def discover(transport, host):
         "media": {k: media[k] for k in ("supported_mime_types", "image_size_limit", "video_size_limit",
                    "audio_size_limit", "image_matrix_limit", "video_matrix_limit", "video_frame_rate_limit") if k in media},
         "pollLimits": {k: polls[k] for k in ("max_options", "max_characters_per_option", "min_expiration", "max_expiration") if k in polls},
-        "scopesSupported": None, "streamingUrl": None,
+        "scopesSupported": None, "streamingUrl": None, "profileLimits": profile_limits,
         "dataScope": "instance-local; federation delivery and completeness are not guaranteed",
     }
     from .mastodon_streaming import bound_origin

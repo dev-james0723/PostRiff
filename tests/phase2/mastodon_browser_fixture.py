@@ -26,8 +26,12 @@ class SyntheticMastodon:
         path = parsed.path
         value, status = {}, 200
         if path == '/api/v2/instance':
-            value = {'version': '4.3.7' if parsed.hostname == 'mastodon.social' else '4.2.9',
-                     'configuration': {'urls': {'streaming': 'wss://' + parsed.hostname}}}
+            value = {'version': '4.6.1' if parsed.hostname == 'mastodon.social' else '4.2.9',
+                     'configuration': {'urls': {'streaming': 'wss://' + parsed.hostname},
+                         **({'accounts': {'max_display_name_length': 60, 'max_note_length': 600,
+                             'max_profile_fields': 6, 'profile_field_name_limit': 64, 'profile_field_value_limit': 255,
+                             'max_avatar_description_length': 120, 'max_header_description_length': 120}}
+                            if parsed.hostname == 'mastodon.social' else {})}}
         elif path == '/.well-known/oauth-authorization-server':
             status = 404
         elif path == '/api/v1/apps':

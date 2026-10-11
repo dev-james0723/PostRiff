@@ -10,7 +10,7 @@
     "build": "build",
     "test": "test:jcb",
     "ci": "ci:mastodon:jcb",
-    "e2e": "ci:mastodon:jcb"
+    "e2e": "e2e:mastodon:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",

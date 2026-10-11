@@ -15,13 +15,18 @@ IMAGE_FIELDS = ('id', 'hash', 'mime', 'bytes', 'objectName')
 def profile_fields(payload, capabilities):
     fields, media = payload.get('profile', {}), payload.get('profileMedia', {})
     if (not isinstance(fields, dict) or not isinstance(media, dict) or not (fields or media)
-            or set(fields) - {'display_name', 'note', 'source', 'fields_attributes', 'attribution_domains', *BOOLEAN_VERSION}
+            or set(fields) - {'display_name', 'note', 'avatar_description', 'header_description', 'source', 'fields_attributes', 'attribution_domains', *BOOLEAN_VERSION}
             or set(media) - {'avatar', 'header'}):
         raise AlphaError('Choose supported profile fields or Library images.', 400)
     version = capabilities.get('version', '')
+    limits = capabilities.get('profileLimits') or {}
     for key, value in fields.items():
-        if key in ('display_name', 'note'):
-            if not isinstance(value, str) or len(value) > (30 if key == 'display_name' else 500):
+        if key in ('display_name', 'note', 'avatar_description', 'header_description'):
+            limit_key = 'max_' + key + '_length'
+            fallback = 30 if key == 'display_name' else 500 if key == 'note' else 1500
+            if key.endswith('_description') and not version_at_least(version, (4, 6, 1)):
+                raise AlphaError('Profile image descriptions require Mastodon 4.6.1 or later.', 409)
+            if not isinstance(value, str) or len(value) > limits.get(limit_key, fallback):
                 raise AlphaError('The profile text exceeds supported limits.', 400)
         elif key in BOOLEAN_VERSION:
             if type(value) is not bool:
@@ -32,7 +37,7 @@ def profile_fields(payload, capabilities):
             if not isinstance(value, dict) or not value or set(value) - {'privacy', 'sensitive', 'language', 'quote_policy'}:
                 raise AlphaError('Choose supported default post preferences.', 400)
             for name, entry in value.items():
-                if not version_at_least(version, (4, 5, 0) if name == 'quote_policy' else (2, 4, 2)):
+                if not version_at_least(version, (4, 5, 0) if name == 'quote_policy' else (2, 4, 2) if name == 'language' else (2, 4, 0)):
                     raise AlphaError('This default post preference is unavailable on this server version.', 409)
                 if ((name == 'privacy' and entry not in ('public', 'unlisted', 'private'))
                         or (name == 'sensitive' and type(entry) is not bool)
@@ -40,12 +45,14 @@ def profile_fields(payload, capabilities):
                         or (name == 'quote_policy' and entry not in ('public', 'followers', 'nobody'))):
                     raise AlphaError('Choose valid default post preferences.', 400)
         elif key == 'fields_attributes':
-            if not isinstance(value, list) or len(value) > 4:
-                raise AlphaError('Choose up to four supported profile metadata fields.', 400)
+            if not version_at_least(version, (2, 4, 0)):
+                raise AlphaError('Profile metadata is unavailable on this server version.', 409)
+            if not isinstance(value, list) or len(value) > limits.get('max_profile_fields', 4):
+                raise AlphaError(f"Choose up to {limits.get('max_profile_fields', 4)} profile metadata fields.", 400)
             for item in value:
                 if (not isinstance(item, dict) or set(item) != {'name', 'value'}
-                        or any(not isinstance(v, str) or len(v) > 255 for v in item.values())):
-                    raise AlphaError('Profile metadata fields require a name and value of at most 255 characters.', 400)
+                        or any(not isinstance(v, str) or len(v) > limits.get('profile_field_' + k + '_limit', 255) for k, v in item.items())):
+                    raise AlphaError('Profile metadata exceeds this server’s name or value limits.', 400)
         elif key == 'attribution_domains':
             if not version_at_least(version, (4, 4, 0)):
                 raise AlphaError('Website attribution is unavailable on this server version.', 409)
