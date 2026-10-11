@@ -113,7 +113,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       <div className='mt-3 flex flex-col gap-3'>
         <p className='text-muted-foreground text-xs'>All requests use {account}. Private content stays within this workspace. Server schedules publish on your instance; Rafii-managed schedules send at your approved calendar time.</p>
         <div className='flex flex-wrap gap-2'>
-          {['capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'trending_tags', 'trending_statuses'].map((resource) => (
+          {['health', 'capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'trending_tags', 'trending_statuses'].map((resource) => (
             <Button key={resource} variant='outline' size='sm' disabled={busy} onClick={() => void read(resource)}>{resource === 'live_events' ? 'Read live updates' : resource.replace('_', ' ')}</Button>
           ))}
         </div>

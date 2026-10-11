@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import threading
 import unittest
 import uuid
 from datetime import datetime, timezone
@@ -37,6 +38,8 @@ class JournalTests(unittest.TestCase):
             db.execute(cls.sql)
             metrics = (ROOT / 'migrations/postriff/114_mastodon_native_metrics.sql').read_text()
             db.execute(metrics); db.execute(metrics)
+            health = (ROOT / 'migrations/postriff/115_mastodon_connection_health.sql').read_text()
+            db.execute(health); db.execute(health)
 
     def setUp(self):
         self.actor = str(uuid.uuid4())
@@ -76,6 +79,71 @@ class JournalTests(unittest.TestCase):
 
     def preview(self):
         return self.manager.preview(self.workspace, self.actor, self.connection_id, {'action': 'favourite', 'targetId': '123'})
+
+    def health_channel(self):
+        with connection() as db:
+            state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            state['phase2']['channels'].append({'id': self.connection_id, 'platform': 'Mastodon', 'account': '@fixture@mastodon.social',
+                'providerAccountId': self.account, 'configured': True, 'revoked': False, 'identityVerified': True,
+                'capabilityVerified': True, 'scopes': ['read:accounts', 'write:favourites'], 'verifiedAt': self.now,
+                'capabilityVersion': self.provider.capability_version, 'evidenceSource': 'oauth', 'expiresAt': 0})
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(state), self.workspace))
+            db.execute("INSERT INTO public.pr_mastodon_health(workspace_id,connection_id,next_at) VALUES(%s,%s,now()-interval '1 minute') ON CONFLICT(workspace_id,connection_id) DO UPDATE SET next_at=excluded.next_at", (self.workspace, self.connection_id))
+
+    def test_health_records_actual_proof_and_cannot_be_read_by_browser_role(self):
+        from postriff_phase2.mastodon_health import maintain
+        self.health_channel()
+        result = maintain(self.service.oauth)
+        self.assertEqual(result['state'], 'read_verified'); self.assertEqual(result['checked'], 1)
+        self.assertEqual(self.manager.read(self.workspace, self.actor, self.connection_id, 'health')['data']['state'], 'read_verified')
+        with self.assertRaises(AlphaError): self.manager.read(self.foreign, self.other, self.connection_id, 'health')
+        with connection() as db:
+            row = db.execute('SELECT state,failures,lease_id,next_at>now(),checked_at IS NOT NULL FROM public.pr_mastodon_health WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()
+            self.assertEqual(row, ('read_verified', 0, None, True, True))
+        with connection() as db, self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            db.execute('SET LOCAL ROLE authenticated'); db.execute('SELECT * FROM public.pr_mastodon_health')
+
+    def test_migrated_origin_downgrades_authority_without_following_destination(self):
+        from postriff_phase2.mastodon_health import maintain
+        self.health_channel()
+        self.scoped_transport(['read:accounts', 'write:favourites'],
+            lambda _method, url, **_kw: ok({'id': '100', 'moved': {'id': '999', 'url': 'http://127.0.0.1/private'}}) if '/accounts/verify_credentials' in url else None)
+        result = maintain(self.service.oauth)
+        self.assertEqual(result['state'], 'reauthorization_required')
+        with connection() as db:
+            channel = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]['phase2']['channels'][-1]
+            self.assertTrue(channel['revoked']); self.assertFalse(channel['identityVerified']); self.assertEqual(channel['providerAccountId'], self.account)
+            self.assertEqual(channel['scopes'], []); self.assertEqual(channel['mastodonHealth']['reason'], 'account_moved')
+
+    def test_health_lease_blocks_duplicate_checks_and_reconnect_wins_over_old_outcome(self):
+        from postriff_phase2.mastodon_health import maintain
+        self.health_channel(); started, release = threading.Event(), threading.Event()
+        def reverify(*_args):
+            started.set(); self.assertTrue(release.wait(5))
+            with connection() as db:
+                db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s WHERE workspace_id=%s AND connection_id=%s', ('new-encrypted-consent', self.workspace, self.connection_id))
+            return {'state': 'scope_changed', 'ready': False}
+        with patch.object(self.service.oauth, 'reverify_for_worker', side_effect=reverify), ThreadPoolExecutor(max_workers=2) as workers:
+            first = workers.submit(maintain, self.service.oauth); self.assertTrue(started.wait(5))
+            second = maintain(self.service.oauth); self.assertEqual(second['checked'], 0)
+            release.set(); self.assertEqual(first.result()['state'], 'connection_changed')
+        with connection() as db:
+            self.assertEqual(db.execute('SELECT state,failures,lease_id FROM public.pr_mastodon_health WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone(), ('pending', 0, None))
+
+    def test_401_removes_only_observed_credential_and_old_revoke_cannot_erase_reconnect(self):
+        self.health_channel()
+        with connection() as db:
+            old = db.execute('SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()[0]
+            db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s WHERE workspace_id=%s AND connection_id=%s', ('new-consent', self.workspace, self.connection_id))
+        self.assertFalse(self.service.oauth.mark_mastodon_revoked(self.workspace, self.connection_id, expected_ciphertext=old))
+        with connection() as db:
+            db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s WHERE workspace_id=%s AND connection_id=%s', (old, self.workspace, self.connection_id))
+        self.provider.transport = lambda *_args, **_kwargs: ok({}, 401)
+        with self.assertRaises(AlphaError) as caught: self.service.oauth.token_for_worker(self.workspace, self.connection_id)
+        self.assertEqual(caught.exception.code, 'mastodon_authorization_revoked')
+        with connection() as db:
+            row = db.execute('SELECT revoked_at IS NOT NULL,access_ciphertext,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()
+            self.assertEqual(row, (True, '', []))
 
     def scoped_transport(self, scopes, custom):
         with connection() as db:

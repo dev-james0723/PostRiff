@@ -232,16 +232,27 @@ class MastodonProvider(OAuthProvider):
 
     def identity(self, access_token):
         session = self.session(access_token)
-        body = self._ok(self.api(session, "GET", "/api/v1/accounts/verify_credentials"), "id")
+        response = self.api(session, "GET", "/api/v1/accounts/verify_credentials")
+        if response.get('status') == 401:
+            raise AlphaError('Mastodon revoked or rejected this access token. Reconnect this exact account.', 409, code='mastodon_authorization_revoked')
+        body = self._ok(response, "id")
         if not re.fullmatch(r"\d{1,40}", str(body.get("id", ""))):
             raise AlphaError("This server returned an invalid account identity.", 502)
         username = body.get("username") if isinstance(body.get("username"), str) else str(body["id"])
-        return {"providerAccountId": f"{body['id']}@{session['instance']}", "handle": f"@{username}@{session['instance']}", "accountType": "profile"}
+        restricted = ('account_suspended' if body.get('suspended') is True else
+                      'account_moved' if body.get('moved') is not None else
+                      'account_memorialized' if body.get('memorial') is True else None)
+        return {"providerAccountId": f"{body['id']}@{session['instance']}", "handle": f"@{username}@{session['instance']}", "accountType": "profile",
+                **({'restriction': restricted} if restricted else {})}
 
     def inspect_scopes(self, access_token, expected_account_id=None):
         session = self.session(access_token)
-        if expected_account_id is not None and self.identity(access_token)["providerAccountId"] != expected_account_id:
-            return None
+        if expected_account_id is not None:
+            identity = self.identity(access_token)
+            if identity.get('restriction'):
+                return []  # Inactive origin accounts cannot retain write authority.
+            if identity['providerAccountId'] != expected_account_id:
+                return None
         response = self.api(session, "GET", "/api/v1/apps/verify_credentials")
         body = response.get("body")
         if response.get("status") != 200 or not isinstance(body, dict):

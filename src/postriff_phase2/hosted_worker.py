@@ -534,6 +534,10 @@ class PostgresWorker:
         if not youtube_only and getattr(self.social, 'providers', {}).get('mastodon'):
             from .mastodon_management import maintain
             mastodon_maintenance = maintain(self.connection_factory)
+            if max_seconds >= 4 and getattr(self.social, 'oauth', None):
+                from .mastodon_health import maintain as check_health
+                mastodon_maintenance['connectionHealth'] = check_health(self.social.oauth,
+                    seconds=min(8, max_seconds / 4))
         def step():
             return (self.step(youtube_only=youtube_only, exclude_youtube=exclude_youtube)
                     if youtube_only or exclude_youtube else self.step())

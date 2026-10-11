@@ -1,0 +1,24 @@
+{
+  "simulatedConnectedUsers": 1000,
+  "concurrentPendingRequestsPeak": 1000,
+  "pendingSqlOperationsPeak": 32,
+  "actualSqlConnectionsPeak": 31,
+  "completedRequests": 1000,
+  "admitted": 400,
+  "deferred": 600,
+  "requestP95Ms": 775.662,
+  "requestMaxMs": 795.005,
+  "queue": {
+    "seededJobs": 2000,
+    "fencedClaims": 40,
+    "distinctFairTenants": 40,
+    "claimP95Ms": 8.299
+  },
+  "execution": "cloud-synthetic-connected-users-and-disposable-sql",
+  "providerCalls": 0,
+  "realAccountAcceptance": false,
+  "productionHttpLoadAcceptance": false,
+  "seedSeconds": 0.097,
+  "elapsedSeconds": 1.264,
+  "sqlConcurrencyBound": 32
+}

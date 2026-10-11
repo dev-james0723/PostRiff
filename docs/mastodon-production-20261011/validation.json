@@ -3,23 +3,23 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "sourceHead": "64f699f278d5887174b268b5dabdc92327132d4b",
-    "sourceFingerprint": "4919b89858e29d4bb772e2030e6fa6208894d10c24b5a8cded5f9c103eecc21f",
-    "patchSha256": "a21655fac04b2f7dcf52506270621d819b7a9d5806e7eb5dadb94dddd73b04f5",
+    "sourceHead": "e0696729314c8c1fac14966d855891b1bf08627b",
+    "sourceFingerprint": "d3e03488ab62a7b7fdd5f6883cb877023febd8e4176335ad4f380782c2d25d92",
+    "patchSha256": "fdda3ce24750ea60ff0fa0f1ea6fb9362d5d14378eba4d7a64b715448cdb0ee6",
     "baseSha": "b7b9b3ee94f89a80b1d80826226584d214b17847",
     "transportMode": "remote_patch",
-    "patchBytes": 401522,
-    "runId": "rmn14j4fcw",
+    "patchBytes": 445478,
+    "runId": "d3c05ncb96",
     "exitCode": 0,
     "provider": "Depot/JCB",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T074313790195Z-ci.json"
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T075727741681Z-ci.json"
   },
   "checks": {
     "pythonContracts": {
-      "passed": 457
+      "passed": 463
     },
     "sqlActionIsolation": {
-      "passed": 17,
+      "passed": 21,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
@@ -77,7 +77,32 @@
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only",
     "threadContracts": "PASS: committed child intents, exact parent/identity/settings, throttle, cancel/revocation fence, no unknown-child resend, all-part readback, Agent review-only routing",
     "nativeScheduleSynchronization": "PASS: exact approved time, preserved manifest, canceled schedule and old-worker fencing in disposable SQL",
-    "foregroundStreaming": "PASS: bounded SSE, current tenant/credential recheck; private excerpt absent from workspace persistence"
+    "foregroundStreaming": "PASS: bounded SSE, current tenant/credential recheck; private excerpt absent from workspace persistence",
+    "simulatedConcurrentConnectedUsers": {
+      "simulatedConnectedUsers": 1000,
+      "concurrentPendingRequestsPeak": 1000,
+      "pendingSqlOperationsPeak": 32,
+      "actualSqlConnectionsPeak": 31,
+      "completedRequests": 1000,
+      "admitted": 400,
+      "deferred": 600,
+      "requestP95Ms": 775.662,
+      "requestMaxMs": 795.005,
+      "queue": {
+        "seededJobs": 2000,
+        "fencedClaims": 40,
+        "distinctFairTenants": 40,
+        "claimP95Ms": 8.299
+      },
+      "execution": "cloud-synthetic-connected-users-and-disposable-sql",
+      "providerCalls": 0,
+      "realAccountAcceptance": false,
+      "productionHttpLoadAcceptance": false,
+      "seedSeconds": 0.097,
+      "elapsedSeconds": 1.264,
+      "sqlConcurrencyBound": 32
+    },
+    "connectionHealth": "PASS: current credential fencing, one due lease, migrated/suspended identity downgrade, definitive401 reconnect, service-only SQL and bounded jitter/backoff. Socket budget excludes OS resolver deadline."
   },
   "capacity": {
     "syntheticContexts": 1000,

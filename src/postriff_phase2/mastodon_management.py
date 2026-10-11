@@ -167,6 +167,24 @@ class MastodonManagement:
         return response["body"]
 
     def read(self, workspace, token, connection, resource):
+        if resource == 'health':
+            from .hosted import _membership
+            with self.repository.transaction(token, workspace) as (cur, row, _actor):
+                require(_membership(row), 'read')
+                cur.execute("SELECT revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace, connection))
+                credential = cur.fetchone()
+                if not credential:
+                    raise AlphaError('Choose a Mastodon connection in this workspace.', 404)
+                if credential[0]:
+                    return {'connectionId': connection, 'resource': resource, 'data': {'state': 'reauthorization_required', 'reason': 'Reconnect this account; its token is no longer active.'}}
+                cur.execute("SELECT to_regclass('public.pr_mastodon_health') IS NOT NULL")
+                if not cur.fetchone()[0]:
+                    return {'connectionId': connection, 'resource': resource, 'data': {'state': 'schema_unavailable'}}
+                cur.execute("SELECT state,extract(epoch from checked_at),extract(epoch from next_at),failures FROM public.pr_mastodon_health WHERE workspace_id=%s AND connection_id=%s", (workspace, connection))
+                observed = cur.fetchone()
+                data = ({'state': observed[0], 'checkedAt': float(observed[1]) if observed[1] is not None else None,
+                         'nextCheckAt': float(observed[2]), 'failedChecks': observed[3]} if observed else {'state': 'pending', 'checkedAt': None})
+            return {'connectionId': connection, 'resource': resource, 'data': data}
         provider, grant, session = self._grant(workspace, token, connection)
         if resource == 'live_events':
             self._scopes(grant, ('read:statuses', 'read:notifications'))

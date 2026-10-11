@@ -562,6 +562,8 @@ class OAuthService:
                     adapter, returned_scopes, youtube_context)
             identity = adapter.identity(grant["accessToken"])
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
+            if provider_id == 'mastodon' and identity.get('restriction'):
+                raise AlphaError('This Mastodon account is inactive or moved. Connect the active account separately; approved posts are not transferred.', 409, code='mastodon_account_restricted')
             reported = grant.get('scopes')
             if (reported is None or (provider_id == 'youtube' and not reported)) and hasattr(adapter, 'inspect_scopes'):
                 reported = adapter.inspect_scopes(grant['accessToken'], identity['providerAccountId'])
@@ -975,7 +977,10 @@ class OAuthService:
         try:
             return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required)
         except AlphaError as error:
-            if error.code == 'youtube_revoked_oauth':
+            if error.code == 'mastodon_authorization_revoked':
+                self.mark_mastodon_revoked(workspace_id, connection_id,
+                    expected_ciphertext=getattr(error, 'mastodon_observed_ciphertext', None))
+            elif error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
                                          expected_ciphertext=getattr(error, 'credential_revocation_ciphertext', None),
                                          expected_generation=getattr(error, 'credential_revocation_generation', None))
@@ -989,6 +994,35 @@ class OAuthService:
                     with self.repository.connection_factory() as db, db.cursor() as cur:
                         cur.execute("UPDATE public.pr_encrypted_credentials SET refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL AND access_ciphertext=%s AND authorization_generation::text=%s", (workspace_id, connection_id, expected, expected_generation))
             raise
+
+    def mark_mastodon_revoked(self, workspace_id, connection_id, *, expected_ciphertext):
+        """Only a definitive 401 on the exact observed credential removes authority."""
+        if not expected_ciphertext:
+            return False
+        from .hosted import audit
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            locked = cur.fetchone()
+            if not locked:
+                return False
+            cur.execute("SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            current = cur.fetchone()
+            if not current or current[0] != expected_ciphertext:
+                return False  # Fresh reconnect wins over the old response.
+            cur.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=now(),access_ciphertext='',refresh_ciphertext=NULL,scopes='{}',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Mastodon access was rejected. Reconnect this account.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s", (workspace_id, connection_id))
+            state = json.loads(locked[0]) if isinstance(locked[0], str) else locked[0]
+            for channel in state.get('phase2', {}).get('channels', []):
+                if channel.get('id') == connection_id and channel.get('platform') == 'Mastodon':
+                    channel.update(revoked=True, identityVerified=False, capabilityVerified=False, scopes=[],
+                        mastodonHealth={'state': 'reauthorization_required', 'reason': 'token_rejected', 'checkedAt': self.clock()})
+            self.commands.engine.invalidate(state)
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
+            cur.execute('DELETE FROM public.pr_mastodon_actions WHERE workspace_id=%s AND connection_id=%s', (workspace_id, connection_id))
+            cur.execute("DELETE FROM public.pr_metric_observations WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace_id, connection_id))
+            cur.execute("DELETE FROM public.pr_metric_reads WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace_id, connection_id))
+            audit(cur, workspace_id, None, 'mastodon.authorization_revoked', connection_id, {'reason': 'token_rejected'})
+        return True
 
     def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None, expected_generation=None):
         from .hosted import audit
@@ -1137,14 +1171,17 @@ class OAuthService:
                         try:
                             reported = binding_scopes if binding_scopes is not None else inspector(access_token, account_id)
                         except AlphaError as error:
+                            if provider == 'mastodon' and error.code == 'mastodon_authorization_revoked':
+                                error.mastodon_observed_ciphertext = access_ct
                             if provider != 'youtube' or error.code == 'youtube_revoked_oauth':
                                 raise
                             raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable') from error
                         authoritative = isinstance(reported, list) and all(isinstance(s, str) for s in reported)
-                        if provider == 'youtube' and not authoritative:
+                        if provider in ('youtube', 'mastodon') and not authoritative:
                             # An unavailable tokeninfo observation is not an empty grant.
                             # Block this request without erasing the last verified scope set.
-                            raise AlphaError('YouTube permissions could not be verified. Try again when provider verification is available.', 503, code='youtube_verification_unavailable')
+                            raise AlphaError('Provider permissions could not be verified. Try again when verification is available.', 503,
+                                             code=provider + '_verification_unavailable')
                         scopes = reported if authoritative else []
                         if getattr(adapter, 'legacy_refresh_only', False):
                             adapter.assert_read_scopes(scopes)
@@ -1204,7 +1241,7 @@ class OAuthService:
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
             identity = adapter.identity(grant["accessToken"])
-            drift = identity["providerAccountId"] != account_id
+            drift = identity["providerAccountId"] != account_id or (provider_id == 'mastodon' and bool(identity.get('restriction')))
             inspected = hasattr(adapter, "inspect_scopes")
             reported = grant["scopes"] if inspected and not drift else []
             if not drift and not inspected and hasattr(adapter, 'verify_read_access'):
@@ -1430,7 +1467,7 @@ class OAuthService:
             adapter = self.provider_for_grant(grant)
             self._admit_identity(workspace_id, adapter)
             identity = adapter.identity(grant["accessToken"])
-            drift = identity["providerAccountId"] != account_id
+            drift = identity["providerAccountId"] != account_id or (provider_id == 'mastodon' and bool(identity.get('restriction')))
             inspected = hasattr(adapter, "inspect_scopes")
             reported = grant["scopes"] if inspected and not drift else []
             if not drift and not inspected and hasattr(adapter, "verify_read_access"):
@@ -1469,6 +1506,9 @@ class OAuthService:
             if observed != existing:
                 channel["scopes"] = sorted(observed)
             channel.update(identityVerified=not drift, verifiedAt=self.clock())
+            if provider_id == 'mastodon':
+                channel['mastodonHealth'] = {'state': outcome, 'checkedAt': self.clock(),
+                    **({'reason': identity['restriction']} if identity.get('restriction') else {})}
             if provider_id == 'youtube':
                 channel['refreshBindingRequired'] = grant.get('refreshBindingRequired') is True
                 channel['authorizationLane'] = grant.get('authorizationLane', 'standard')
