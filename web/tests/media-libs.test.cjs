@@ -158,7 +158,9 @@ test('asset kinds mirror the server predicates', () => {
   assert.equal(KINDS.kindOf(video), 'video');
   assert.equal(KINDS.kindOf({ mime: 'VIDEO/MP4' }), 'video');
   assert.equal(KINDS.kindOf({ mime: 'image/jpeg', kind: 'video' }), 'image');
-  assert.equal(KINDS.kindOf({ mime: 'application/pdf' }), null);
+  assert.equal(KINDS.kindOf({ mime: 'application/pdf' }), 'document');
+  assert.equal(KINDS.isReady({ mime: 'application/pdf', processing: 'validated', deleted: false }), true);
+  assert.equal(KINDS.isReady({ mime: 'application/pdf', processing: 'pending', deleted: false }), false);
   assert.equal(KINDS.kindOf(null), null);
   assert.equal(KINDS.kindOf({ processing: 'decoded' }), 'image', 'legacy records have no mime');
   assert.equal(KINDS.category(image), 'media');

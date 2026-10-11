@@ -1,0 +1,60 @@
+{
+  "asOf": "2026-10-05",
+  "execution": "local source candidate with JCB/Depot validation; no live provider qualification",
+  "implementationCommit": "6037ff7c594b3f580ed6d13ab6f20e9b0b1590c3",
+  "implementationRevision": "fbbf0a93a4ff8cedf2a60fe4b5e4101dd5c8eabb54e8b65ef046b26e0a74550e",
+  "baseCommit": "d91660b7936a5158b820914107306ad4a1e51c2d",
+  "branch": "consumer-saas",
+  "push": "NOT_PERFORMED",
+  "pullRequest": "NOT_CREATED; read-only GitHub query found no open PR headed by consumer-saas",
+  "merge": "NOT_PERFORMED",
+  "githubCIForCandidate": "NOT_RUN; no push",
+  "depotValidation": {
+    "fullCI": "gp922n7frg PASS exit 0",
+    "syntheticBrowser": "4kxl4rpwqh PASS exit 0",
+    "finalBackend": "nd84zg5dg1 PASS exit 0"
+  },
+  "deployment": "NOT_PERFORMED",
+  "productionVerification": "NOT_RUN",
+  "existingVercelPreview": {
+    "state": "READY",
+    "target": null,
+    "commit": "2bd8917bd47bf2683d8c5d1c01b949db4fb4c952",
+    "branch": "codex/jcb-cloud-validation-20261005",
+    "qualifiesCandidate": false
+  },
+  "actualNewScopesRequested": [],
+  "actualGrantedScopes": "UNOBSERVED; no new OAuth executed",
+  "liveProviderE2EPassed": 0,
+  "liveCasesNotRun": 196,
+  "capabilityRows": 205,
+  "readyCapabilities": 0,
+  "productionVerdict": "NOT PRODUCTION READY",
+  "toolingBlockers": [
+    "Live browser request-header policy could not load.",
+    "Current Instagram Login Insights/edit/delete primary contract audit unavailable.",
+    "Token Pilot checkpoint unavailable: shared 256-entry registry rejects state loading even with entries=[]; no other-session records deleted."
+  ],
+  "providerExternalBlockers": [
+    "App/product review and restricted scopes unverified.",
+    "Actual OAuth grants and destination eligibility require approved ordinary accounts and manual consent.",
+    "Google public-upload compliance and TikTok public-posting audit unverified.",
+    "Threads/Pinterest production credential names absent; other credential validity unverified.",
+    "X actual access/credits and explicit spending authorization unavailable.",
+    "Exact live test destination/content/assets/visibility and cleanup approval missing."
+  ],
+  "implementationLimits": [
+    "Advanced operations have reviewed API contracts; complete consumer editors not supplied.",
+    "TikTok file chunk continuation requires reconciliation; codec/frame-rate preflight deferred to native provider failure.",
+    "YouTube CSV report download bounded to 512 KiB/500 displayed rows; large export and gRPC live-chat transport not implemented."
+  ],
+  "nextAction": "Complete the secure operator manifest and manual provider approval/OAuth gates in OPERATIONS.md; execute only explicitly approved live cases, then deploy only an approved candidate and verify production independently.",
+  "tokenPilotCheckpoint": "ATTEMPTED \u2014 UNAVAILABLE: memory registry full",
+  "durableRecovery": "docs/official-social-20261005/HANDOFF.md",
+  "connectionFirstRecovery": {
+    "receipt": "../official-social-20261007/HANDOFF.md",
+    "acceptance": "../official-social-20261007/CONNECTION-ACCEPTANCE.json",
+    "verifiedExternalProviders": 0,
+    "historicalEvidenceRetained": true
+  }
+}

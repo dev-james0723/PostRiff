@@ -268,11 +268,21 @@ assert oauth.reverify_for_worker(wid, cid) == {"connectionId": cid, "state": "sc
 assert channel_of(stored()[1], cid)["scopes"] == ["openid", "w_member_social"]  # a changed set is stored sorted
 assert oauth.reverify_for_worker(wid, cid) == {"connectionId": cid, "state": "read_verified", "ready": False}
 assert channel_of(stored()[1], cid)["capabilityVerified"] is False and levels(cid)["publish"] == "Unsupported"
-linkedin.granted = None  # introspection returned nothing: fail closed
+# Unknown introspection blocks worker readiness without erasing the stored grant or extending trust.
+before_unavailable, before_levels = stored(), levels(cid)
+before_scopes = credential_scopes(cid)
+linkedin.granted = None
+assert oauth.reverify_for_worker(wid, cid) == {"connectionId": cid, "state": "verification_unavailable", "ready": False}
+assert stored() == before_unavailable and levels(cid) == before_levels
+assert credential_scopes(cid) == before_scopes
+assert set(before_scopes) == {"openid", "w_member_social"}
+# An observed empty grant is distinct: remove authority and hold the job.
+linkedin.granted = []
 assert oauth.reverify_for_worker(wid, cid) == {"connectionId": cid, "state": "scope_missing", "ready": False}
 assert channel_of(stored()[1], cid)["scopes"] == [] and credential_scopes(cid) == []
+assert stored()[1]["phase2"]["jobs"][0]["state"] == 'held'
 linkedin.granted = ["w_member_social", "openid"]
-checks.append("scope loss downgrades (scope_changed / scope_missing), holds the approved job, and the worker never upgrades authority")
+checks.append("observed scope loss downgrades and holds the approved job; unknown scopes preserve grants without readiness or a trust extension; the worker never upgrades authority")
 
 # 4. Identity drift: reauthorization_required, channel revoked.
 linkedin.account = "urn:li:person:someone-else"

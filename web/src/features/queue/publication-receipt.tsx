@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import type { Job } from '@/lib/api/types';
 
 function receiptUrl(job: Job) {
-  if (job.state !== 'verified' || job.verification?.method !== 'provider_lookup' || !job.url) return null;
+  const verified = job.state === 'verified' && job.verification?.method === 'provider_lookup';
+  const acceptedLinkedIn = job.manifest.platform === 'LinkedIn' && job.state === 'provider_accepted'
+    && job.url === `https://www.linkedin.com/feed/update/${job.providerReference}/`;
+  if ((!verified && !acceptedLinkedIn) || !job.url) return null;
   try {
     const url = new URL(job.url);
     const routes: Record<string, [string[], RegExp]> = {
@@ -23,7 +26,8 @@ function receiptUrl(job: Job) {
  */
 export function PublicationReceipt({ job, referenceAction }: { job: Job; referenceAction?: ReactNode }) {
   const url = receiptUrl(job);
-  const verifiedAt = job.verification ? new Date(job.verification.at * 1000) : null;
+  const ownerCheck = job.manifest.platform === 'LinkedIn' && job.state === 'provider_accepted';
+  const verifiedAt = job.state === 'verified' && job.verification ? new Date(job.verification.at * 1000) : null;
   return (
     <div className='flex min-w-0 flex-col gap-2 text-sm' aria-label='Publication receipt'>
       {job.container && <p className='break-all'>Upload: {job.container} · not yet published</p>}
@@ -40,10 +44,10 @@ export function PublicationReceipt({ job, referenceAction }: { job: Job; referen
             Verified · {job.verification.method.replace(/_/g, ' ')} · {verifiedAt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
           </time>
         ) : (
-          'Not verified yet'
+          ownerCheck ? 'Accepted by LinkedIn. Publication is not API verified; confirm it on LinkedIn. Do not resubmit.' : 'Not verified yet'
         )}
       </p>
-      {url && <a href={url} target='_blank' rel='noreferrer' className='text-primary rounded underline underline-offset-4 outline-none focus-visible:ring-2'>Open verified post</a>}
+      {url && <a href={url} target='_blank' rel='noreferrer' className='text-primary rounded underline underline-offset-4 outline-none focus-visible:ring-2'>{ownerCheck ? 'Open post to confirm' : 'Open verified post'}</a>}
     </div>
   );
 }

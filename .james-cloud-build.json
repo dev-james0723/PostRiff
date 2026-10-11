@@ -8,9 +8,9 @@
     "lint": "lint",
     "typecheck": "typecheck",
     "build": "build",
-    "test": "test:jcb",
-    "ci": "ci:youtube:jcb",
-    "e2e": "ci:youtube:frontend:jcb"
+    "test": "test:linkedin:jcb",
+    "ci": "ci:linkedin:jcb",
+    "e2e": "e2e:linkedin:jcb"
   },
   "runner": {
     "validation": "depot-ubuntu-24.04-8",
@@ -42,7 +42,10 @@
     "*.zip",
     ".claude/**",
     ".agents/**",
-    ".token-pilot/**"
+    ".token-pilot/**",
+    ".preview/**",
+    "audio-reactive-fix/**",
+    "PostRiff_Research_2026-09-18/**"
   ],
   "checkoutPersistCredentials": true,
   "framework": "next",

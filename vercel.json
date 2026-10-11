@@ -103,6 +103,10 @@
     {
       "path": "/api/cron/worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/linkedin/worker",
+      "schedule": "* * * * *"
     }
   ],
   "git": {
