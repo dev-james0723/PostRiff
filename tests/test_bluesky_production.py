@@ -125,6 +125,20 @@ class OAuthSecurity(unittest.TestCase):
         from test_hosted_wave1_connectors import jwt
         self.assertEqual(jwt(self.wire.calls[-1]['headers']['DPoP'])[1]['nonce'], 'n1')
 
+    def test_resource_nonce_challenge_is_recognized_without_oauth_json_error(self):
+        headers = {'dpop-nonce': 'resource-nonce', 'www-authenticate': 'DPoP error="use_dpop_nonce"'}
+        for method in ('GET', 'POST'):
+            provider = self.provider([ok({'error': 'XrpcUnauthorized'}, 401, headers), ok({})])
+            session = json.loads(self.grant(provider)['accessToken'])
+            if method == 'GET': provider.xrpc_get(session, 'com.atproto.server.getSession', {})
+            else: provider.xrpc_post(session, 'com.atproto.repo.createRecord', body={})
+            self.assertEqual(len(self.wire.calls), 2)
+            self.assertEqual(session['pdsNonce'], 'resource-nonce')
+        for challenge in ('Bearer error="use_dpop_nonce"', 'DPoP realm="x", Bearer error="use_dpop_nonce"'):
+            provider = self.provider([ok({'error': 'invalid_token'}, 401, {**headers, 'www-authenticate': challenge})])
+            provider.xrpc_post(json.loads(self.grant(provider)['accessToken']), 'com.atproto.repo.createRecord', body={})
+            self.assertEqual(len(self.wire.calls), 1)
+
     def test_refresh_rate_limit_and_outage_are_not_revocation(self):
         for status in (429, 500, 503):
             provider = self.provider([fixtures.BlueskyAdapter().resolution()[1], ok({'error': 'temporarily_unavailable'}, status)])

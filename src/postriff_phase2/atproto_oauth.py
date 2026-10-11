@@ -261,6 +261,25 @@ class BlueskyProvider(OAuthProvider):
         return issuer, metadata
 
     # --- DPoP requests --------------------------------------------------------------------------------------------
+    @staticmethod
+    def _nonce_required(response):
+        if response.get('status') not in (400, 401):
+            return False
+        body = response.get('body')
+        if isinstance(body, dict) and body.get('error') == 'use_dpop_nonce':
+            return True
+        # RFC 9449 resource-server challenges need not use an OAuth JSON error.
+        header = response.get('headers', {}).get('www-authenticate', '')
+        if not isinstance(header, str) or '\r' in header or '\n' in header:
+            return False
+        challenges = re.split(r',\s*(?=[A-Za-z][A-Za-z0-9_-]*\s+[^=])', header)
+        for challenge in challenges:
+            pieces = re.split(r'\s+', challenge.strip(), maxsplit=1)
+            if len(pieces) == 2 and pieces[0].lower() == 'dpop' and re.search(
+                    r'(?:^|,)\s*error\s*=\s*(?:"use_dpop_nonce"|use_dpop_nonce)(?:\s*,|\s*$)', pieces[1]):
+                return True
+        return False
+
     def _dpop_post(self, url, form, jwk, nonce=None, audience=None):
         """POST with DPoP; one retry when the server asks for a nonce. Returns (response, latest nonce).
 
@@ -274,8 +293,7 @@ class BlueskyProvider(OAuthProvider):
                               client_assertion=client_assertion(self.client_jwk, self.client_id, audience, self.clock()))
             response = self.transport("POST", url, headers={"DPoP": dpop_proof(jwk, "POST", url, self.clock(), nonce)}, form=fields)
             offered = response.get("headers", {}).get("dpop-nonce")
-            body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") in (400, 401) and body.get("error") == "use_dpop_nonce" and offered and offered != nonce:
+            if self._nonce_required(response) and offered and offered != nonce:
                 nonce = offered
                 continue
             return response, offered or nonce
@@ -288,8 +306,7 @@ class BlueskyProvider(OAuthProvider):
             response = self.transport("GET", url, headers={"Authorization": "DPoP " + session["at"],
                                                            "DPoP": dpop_proof(session["jwk"], "GET", url, self.clock(), nonce, session["at"])})
             offered = response.get("headers", {}).get("dpop-nonce")
-            body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") in (400, 401) and body.get("error") == "use_dpop_nonce" and offered and offered != nonce:
+            if self._nonce_required(response) and offered and offered != nonce:
                 nonce = offered
                 continue
             session["pdsNonce"] = offered or nonce
@@ -444,8 +461,7 @@ class BlueskyProvider(OAuthProvider):
             else:
                 response = self.transport("POST", url, headers=headers, body=body)
             offered = response.get("headers", {}).get("dpop-nonce")
-            result = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") in (400, 401) and result.get("error") == "use_dpop_nonce" and offered and offered != nonce:
+            if self._nonce_required(response) and offered and offered != nonce:
                 nonce = offered
                 continue
             session["pdsNonce"] = offered or nonce
