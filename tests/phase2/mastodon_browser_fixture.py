@@ -39,6 +39,8 @@ class SyntheticMastodon:
             value = {'scopes': SCOPES}
         elif path == '/api/v1/accounts/verify_credentials':
             value = {'id': '100', 'username': 'SYNTHETIC', 'acct': 'SYNTHETIC', 'followers_count': 12, 'following_count': 3, 'statuses_count': 2}
+        elif path == '/api/v1/accounts/update_credentials' and method == 'PATCH':
+            value = {'id': '100'}
         elif path == '/api/v1/accounts/100/statuses':
             value = [{'id': '123', 'account': {'id': '100'}, 'visibility': 'public', 'created_at': '2026-10-01T00:00:00Z',
                       'favourites_count': 2, 'reblogs_count': 1, 'replies_count': 0, 'content': '<p>SYNTHETIC public post</p>'},

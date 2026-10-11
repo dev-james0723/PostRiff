@@ -1,5 +1,7 @@
 """Real disposable PostgreSQL isolation and action journal. All Mastodon responses synthetic."""
 import json
+import hashlib
+from types import SimpleNamespace
 import os
 from pathlib import Path
 import sys
@@ -160,6 +162,73 @@ class JournalTests(unittest.TestCase):
     def execute(self, preview, **changes):
         return self.manager.execute(self.workspace, self.actor, self.connection_id, preview['actionId'],
                                     {'confirmed': True, 'digest': preview['digest'], **changes})
+
+    def profile_image(self):
+        raw = b'synthetic-decoded-image'
+        asset = {'id': uuid.uuid4().hex, 'mime': 'image/png', 'processing': 'decoded', 'bytes': len(raw), 'hash': hashlib.sha256(raw).hexdigest()}
+        asset['objectName'] = asset['id'] + '.png'
+        with connection() as db:
+            stored = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (self.workspace,)).fetchone()[0]
+            stored['phase2']['assets'].append(asset)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb WHERE id=%s', (json.dumps(stored), self.workspace))
+            stored_grant = db.execute('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone()
+            envelope = json.loads(self.vault.decrypt(*stored_grant)); envelope['scope'] = ['read:accounts', 'write:accounts']
+            cipher, key = self.vault.encrypt(json.dumps(envelope))
+            db.execute("UPDATE public.pr_encrypted_credentials SET scopes=%s,access_ciphertext=%s,key_id=%s WHERE workspace_id=%s AND connection_id=%s", (envelope['scope'], cipher, key, self.workspace, self.connection_id))
+        self.service.assets = SimpleNamespace(storage=SimpleNamespace(get=lambda w, category, name: raw if w == self.workspace and category == 'media' and name == asset['objectName'] else b''))
+        original = self.provider.transport
+        self.profile_writes = []
+        def transport(method, url, **kw):
+            if '/api/v1/apps/verify_credentials' in url: return ok({'scopes': ['read:accounts', 'write:accounts']})
+            if method == 'PATCH':
+                self.profile_writes.append((url, kw))
+                return ok({'id': '100'})
+            return original(method, url, **kw)
+        self.provider.transport = transport
+        return asset
+
+    def test_profile_image_exact_approval_uses_private_bytes_once(self):
+        asset = self.profile_image()
+        prepared = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'profile_update', 'profile': {'source': {'privacy': 'private'}}, 'profileMedia': {'avatar': {'assetId': asset['id'], 'rightsConfirmed': True}}})
+        self.assertEqual(prepared['preview']['media']['avatar']['hash'], asset['hash'])
+        self.assertNotIn('note', prepared['preview']['body'])
+        approval = {'confirmed': True, 'digest': prepared['digest']}
+        self.assertEqual(self.manager.execute(self.workspace, self.actor, self.connection_id, prepared['actionId'], approval)['state'], 'accepted')
+        self.assertTrue(self.manager.execute(self.workspace, self.actor, self.connection_id, prepared['actionId'], approval)['replayed'])
+        self.assertEqual(len(self.profile_writes), 1)
+        self.assertIn(b'name="avatar"', self.profile_writes[0][1]['data'])
+        self.assertIn(b'synthetic-decoded-image', self.profile_writes[0][1]['data'])
+        self.assertIn(b'name="source[privacy]"', self.profile_writes[0][1]['data'])
+
+    def test_changed_profile_image_approval_cannot_dispatch(self):
+        asset = self.profile_image()
+        prepared = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'profile_update', 'profileMedia': {'header': {'assetId': asset['id'], 'rightsConfirmed': True}}})
+        self.service.assets.storage.get = lambda *_: b'replaced-image'
+        result = self.manager.execute(self.workspace, self.actor, self.connection_id, prepared['actionId'], {'confirmed': True, 'digest': prepared['digest']})
+        self.assertEqual(result['state'], 'uncertain'); self.assertEqual(self.profile_writes, [])
+
+    def test_legitimate_history_and_central_analytics_preserve_instance_and_tenant(self):
+        from postriff_phase2.mastodon_analytics import history
+        from postriff_phase2.insights import record_observations
+        with connection() as db, db.cursor() as cur:
+            for workspace, connection_id, endpoint, value in (
+                    (self.workspace, self.connection_id, 'https://mastodon.social/api/v1/statuses/123', 3),
+                    (self.workspace, self.connection_id, 'https://mastodon.social/api/v1/statuses/123', 5),
+                    (self.foreign, self.connection_id, 'https://mastodon.social/api/v1/statuses/123', 900),
+                    (self.workspace, self.connection_id, 'https://mastodon.online/api/v1/statuses/123', 800)):
+                record_observations(cur, workspace, connection_id, 'mastodon', '123', None,
+                                    {'likes': value, 'reposts': 1, 'replies': 0}, endpoint, self.now - (60 if value == 3 else 0), read_offset='24h')
+            report = history(cur, self.workspace, self.connection_id, 'mastodon.social', ['123'])
+            self.assertEqual([r['value'] for r in report['readings'] if r['metric'] == 'likes'], [3, 5])
+            self.assertEqual(next(r['change'] for r in report['trends'] if r['metric'] == 'likes'), 2)
+            self.assertEqual(history(cur, self.workspace, self.connection_id, 'mastodon.social', [])['readings'], [])
+        central = self.service.analytics(self.workspace, self.actor)
+        # The shared summary shows legitimate stored Mastodon counts with unavailable reach/rates.
+        post = next(p for p in central['posts'] if p['provider'] == 'mastodon')
+        self.assertEqual(post['metrics']['likes']['value'], 5); self.assertEqual(post['metrics']['likes']['nativeName'], 'favourites_count')
+        self.assertNotIn('reach', post['metrics']); self.assertEqual(post['rates']['likesPerView']['value'], None)
 
     def test_cross_tenant_denial_sends_no_provider_request(self):
         before = len(self.calls)

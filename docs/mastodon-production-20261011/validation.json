@@ -3,25 +3,25 @@
   "execution": "cloud synthetic external services; disposable SQL; actual application browser",
   "allMissionRequirementsMet": false,
   "ci": {
-    "provider": "Depot/JCB",
-    "runId": "5fcpqc7q5r",
+    "runId": "rt29pnr3dm",
     "exitCode": 0,
-    "sourceHead": "dbbcd85d64b3c9686b1c77077ddb5043ec75d21f",
-    "sourceFingerprint": "7d5d3fc1cdc4939a58884d06eea97ac8712898e7e86ad2f34816f83dd6bc34ee",
-    "patchSha256": "39ee61b67fe1c50ce7649c76b8c23c12f8cba4d317a6a0c62a069dbc6d58d9f5",
-    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T063630761666Z-ci.json"
+    "sourceHead": "c0dd82fb9943dd437558e61125102030a7745a66",
+    "provider": "Depot/JCB",
+    "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T070015535957Z-ci.json",
+    "sourceFingerprint": "988d6bf81fb98c4db5b7d03170d5c05571e2ac15b17b51faee1453ea64ec95b7",
+    "patchSha256": "ccd9735242dbe0bb4b5775c1e5abd9643b9c90415d92c08c55c7415a5e20e8a9"
   },
   "checks": {
     "pythonContracts": {
-      "passed": 425
+      "passed": 432
     },
     "sqlActionIsolation": {
-      "passed": 11,
+      "passed": 14,
       "postgresVersion": 16
     },
     "migrationReplayUpgradeRestore": "PASS; disposable database only",
     "webContracts": {
-      "passed": 24
+      "passed": 33
     },
     "lint": "PASS",
     "typecheck": "PASS",
@@ -38,6 +38,7 @@
             "bounded native analytics excludes private content",
             "exact action preview and receipt",
             "Agent preview link hydration",
+            "selected profile fields and default privacy exact approval",
             "no runtime errors or page overflow"
           ]
         },
@@ -48,6 +49,7 @@
             "bounded native analytics excludes private content",
             "exact action preview and receipt",
             "Agent preview link hydration",
+            "selected profile fields and default privacy exact approval",
             "no runtime errors or page overflow"
           ]
         },
@@ -58,13 +60,13 @@
             "bounded native analytics excludes private content",
             "exact action preview and receipt",
             "Agent preview link hydration",
+            "selected profile fields and default privacy exact approval",
             "no runtime errors or page overflow"
           ]
         }
       ],
-      "scope": "Channels/account actions only; new Queue media/native controls still need dedicated UI coverage",
-      "evidenceRunId": "bj8165qq6b",
-      "repeatRunId": "5fcpqc7q5r"
+      "scope": "Channels/account/profile fields; Queue media/native controls still need dedicated UI coverage",
+      "evidenceRunId": "rt29pnr3dm"
     },
     "libraryDatabaseRegressions": "PASS; lifecycle and tenant isolation, disposable PostgreSQL only"
   },
@@ -97,12 +99,12 @@
   "remainingEngineering": "README.md: Engineering work still open before production",
   "evidence": {
     "CLOUD-SYNTHETIC-browser.json": {
-      "bytes": 1033,
-      "sha256": "589e56c7af22e808bf0f4dd272f36ca89a7101adcd55694b3861bc4969e1ca36"
+      "bytes": 1243,
+      "sha256": "26e43d51a1c8da5dd1411ba557c32101e5241fec51410f36966a50507c41f290"
     },
     "CLOUD-SYNTHETIC-channels-1440.png": {
-      "bytes": 388833,
-      "sha256": "66d7f5ebd452cc5324a7ae163429949888f7dac98688a08139ec3d7d60f67dac"
+      "bytes": 389123,
+      "sha256": "0ae48bafaa22fb5255f61e96f922ebf57c2a1f73ce79badde37c88c9857a43df"
     },
     "CLOUD-SYNTHETIC-channels-390.png": {
       "bytes": 144517,
@@ -123,6 +125,20 @@
       "exitCode": 0,
       "elapsedSeconds": 120.841,
       "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T054714340373Z-ci.json"
+    },
+    {
+      "provider": "Depot/JCB",
+      "runId": "5fcpqc7q5r",
+      "exitCode": 0,
+      "sourceHead": "dbbcd85d64b3c9686b1c77077ddb5043ec75d21f",
+      "sourceFingerprint": "7d5d3fc1cdc4939a58884d06eea97ac8712898e7e86ad2f34816f83dd6bc34ee",
+      "patchSha256": "39ee61b67fe1c50ce7649c76b8c23c12f8cba4d317a6a0c62a069dbc6d58d9f5",
+      "receiptLocalPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261011T063630761666Z-ci.json"
     }
-  ]
+  ],
+  "githubCI": {
+    "head": "c0dd82fb9943dd437558e61125102030a7745a66",
+    "allPassed": false,
+    "remaining": "local-gates in progress; agent-ui-browser WebKit native-fallback page closed, 15/16 WebKit scenes passed. Artifact11694474655 recovered; no evidence that this is a Mastodon regression yet."
+  }
 }

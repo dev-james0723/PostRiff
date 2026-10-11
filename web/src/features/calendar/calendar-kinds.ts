@@ -1,6 +1,6 @@
 import type { CalendarEventTone } from '@/components/application/calendar/config';
 import type { StatusTone } from '@/features/queue/status-chip';
-import type { Job, Review } from '@/lib/api/types';
+import type { Job, Review, Manifest } from '@/lib/api/types';
 
 /**
  * What a calendar entry is, read straight from the snapshot. Reviews: `review` waits for approval, `expired`
@@ -91,4 +91,11 @@ export function jobNeedsLiveRefresh(job: Job, nowSeconds: number) {
   const at = manifestSeconds(job.manifest.timing.utc);
   if (at === null) return false;
   return at - nowSeconds <= LIVE_AHEAD_SECONDS && nowSeconds - at <= LIVE_OVERDUE_SECONDS;
+}
+
+/** The calendar shows approved publication time; native server submission can happen earlier. */
+export function calendarPublicationTime(manifest: Manifest) {
+  if (manifest.platform === 'Mastodon' && manifest.timing.nativeProvider === 'Mastodon'
+      && manifest.timing.nativePublicationAt && manifestSeconds(manifest.timing.nativePublicationAt) !== null) return manifest.timing.nativePublicationAt;
+  return manifest.timing.utc;
 }

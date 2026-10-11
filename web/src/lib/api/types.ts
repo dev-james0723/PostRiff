@@ -171,7 +171,7 @@ export interface Manifest {
   contentRevision: number;
   payload: { text: string; language: string };
   media: (Asset & { alt: string })[];
-  timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number };
+  timing: { local: string; timeZone: string; utc: string; timestamp?: number; fold?: number; nativeProvider?: string; nativePublicationAt?: string };
   voiceRevision?: number | null;
   styleRevision?: number;
   payloadDigest?: string;

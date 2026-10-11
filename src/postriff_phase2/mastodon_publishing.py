@@ -53,14 +53,28 @@ def native_reconcile(provider, token, manifest, job, now):
     response = provider.api(session, 'GET', '/api/v1/scheduled_statuses/' + reference)
     data = response.get('body') if isinstance(response.get('body'), dict) else {}
     params = data.get('params') if isinstance(data.get('params'), dict) else {}
+    if response.get('status') in (429, 500, 502, 503, 504):
+        count = progress.get('retryCount', 0)
+        if count >= 20:
+            return {'state': 'held', 'reference': reference, 'progress': progress, 'confirmed': 'Native schedule read retries exhausted. Check the existing schedule; no post was resubmitted.'}
+        progress.update(retryCount=count + 1, retryAt=backoff(response, now, count, manifest['idempotencyKey']))
+        return {'state': 'processing', 'reference': reference, 'progress': progress, 'verification': 'provider_lookup',
+                'confirmed': 'The accepted native schedule remains pending verification. Waiting for the instance cooldown; no write was resent.'}
     if response.get('status') == 200:
         try:
-            same_time = abs(datetime.fromisoformat(str(data.get('scheduled_at')).replace('Z', '+00:00')).timestamp()
+            parsed_time = datetime.fromisoformat(str(data.get('scheduled_at')).replace('Z', '+00:00'))
+            if parsed_time.tzinfo is None: raise ValueError('Schedule time needs a timezone.')
+            same_time = abs(parsed_time.timestamp()
                 - datetime.fromisoformat(progress['scheduledAt'].replace('Z', '+00:00')).timestamp()) < 1
         except (ValueError, TypeError, KeyError): same_time = False
         if (str(data.get('id')) == reference and same_time and params.get('text') == manifest['payload']['text']
                 and params.get('visibility') == expected.get('visibility', 'public')
                 and (params.get('spoiler_text') or '') == expected.get('spoiler_text', '')
+                and bool(params.get('sensitive', False)) == expected.get('sensitive', False)
+                and str(params.get('in_reply_to_id') or '') == str(expected.get('in_reply_to_id') or '')
+                and str(params.get('quoted_status_id') or '') == str(expected.get('quoted_status_id') or '')
+                and (not expected.get('language') or params.get('language') == expected['language'])
+                and (not expected.get('poll') or params.get('poll') == expected['poll'])
                 and [str(i) for i in params.get('media_ids') or []] == [a['id'] for a in progress['attachments']]):
             progress['retryAt'] = now + 60
             return {'state': 'processing', 'reference': reference, 'progress': progress, 'verification': 'provider_lookup',

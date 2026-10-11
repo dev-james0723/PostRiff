@@ -144,6 +144,13 @@ class DurablePublishingTests(unittest.TestCase):
                     self.assertEqual(result['reference'], '51')
         self.assertTrue(all(method == 'GET' for method, _, _ in self.calls))
 
+    def test_native_lookup_cooldown_keeps_the_known_schedule_without_writes(self):
+        p = self.native_progress(); self.replies = [response({}, 429, {'retry-after': '120'})]
+        result = native_reconcile(self.social._provider(None), '', self.manifest, {'progress': p}, self.now)
+        self.assertEqual(result['state'], 'processing'); self.assertEqual(result['reference'], '41')
+        self.assertGreaterEqual(result['progress']['retryAt'], self.now + 120)
+        self.assertEqual([method for method, _path, _kwargs in self.calls], ['GET'])
+
     def test_text_only_native_absence_never_claims_publication(self):
         p = self.native_progress(); p['attachments'] = []; self.manifest['media'] = []
         self.replies = [response(status=404)]

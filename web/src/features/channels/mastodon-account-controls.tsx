@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MastodonProfileFields, type ProfileEdit } from './mastodon-profile-fields';
 import { MastodonFields } from '@/features/queue/mastodon-fields';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 
@@ -17,7 +18,7 @@ const actions = [
   ['list_create', 'Create list'], ['list_update', 'Rename list'], ['list_delete', 'Delete list'],
   ['list_add', 'Add accounts to list'], ['list_remove', 'Remove accounts from list']
 ] as const;
-type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown> } };
+type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; media?: Record<string, { id: string; hash: string; bytes: number }> } };
 
 function readable(value: unknown): string {
   if (Array.isArray(value)) return value.map(readable).join(', ');
@@ -34,7 +35,7 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
       {Boolean(value.coverage) && <p className='mb-2'>{String(value.coverage)}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'type'];
+        const fields = ['id', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>
@@ -48,6 +49,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
   const [action, setAction] = useState('favourite');
   const [target, setTarget] = useState('');
   const [text, setText] = useState('');
+  const [profileEdit, setProfileEdit] = useState<ProfileEdit>({ profile: {}, profileMedia: {} });
   const [scheduledAt, setScheduledAt] = useState('');
   const [title, setTitle] = useState('');
   const [accountIds, setAccountIds] = useState('');
@@ -57,7 +59,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
   const [details, setDetails] = useState<Record<string, unknown> | null>(null);
   const [options, setOptions] = useState<Record<string, unknown> | null>({});
   const [url, setUrl] = useState<string | null>(null);
-  const needsText = ['edit', 'profile_update', 'native_schedule'].includes(action);
+  const needsText = ['edit', 'native_schedule'].includes(action);
   const needsTime = ['native_schedule', 'native_reschedule'].includes(action);
   const needsTarget = !['profile_update', 'native_schedule', 'list_create'].includes(action);
   useEffect(() => {
@@ -83,7 +85,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
     try {
       const payload: Record<string, unknown> = { action, targetId: target, text, title, options };
       if (['edit', 'native_schedule'].includes(action) && options === null) throw new Error('Check the Mastodon post settings.');
-      if (action === 'profile_update') payload.profile = { note: text };
+      if (action === 'profile_update') Object.assign(payload, profileEdit);
       if (action === 'list_add' || action === 'list_remove') payload.account_ids = accountIds.split(',').map((id) => id.trim()).filter(Boolean);
       if (needsTime) {
         const at = new Date(scheduledAt);
@@ -115,20 +117,23 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
           ))}
         </div>
         {details && <AccountData value={details} />}
+        {details?.historicalTrends && typeof details.historicalTrends === 'object' ? <AccountData value={{ data: (details.historicalTrends as Record<string, unknown>).readings, coverage: (details.historicalTrends as Record<string, unknown>).coverage }} /> : null}
         {preview ? (
           <div className='flex flex-col gap-2 rounded border p-3'>
             <p className='text-sm'>Approve {preview.preview.action.replaceAll('_', ' ')} for {preview.preview.accountId} on {preview.preview.instance}</p>
             {preview.preview.targetId && <p className='text-sm'>Target ID: {preview.preview.targetId}</p>}
             <div className='max-h-40 overflow-auto text-sm'>{Object.entries(preview.preview.body).map(([key, value]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(value)}</p>)}</div>
+            {preview.preview.media && Object.entries(preview.preview.media).map(([role, image]) => <p key={role} className='break-all text-xs'>{role}: Library image {image.id} · {image.bytes} bytes · SHA256 {image.hash}</p>)}
             <div className='flex gap-2'><Button disabled={busy} onClick={() => void approve()}>Approve exact action</Button><Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>Back</Button></div>
           </div>
         ) : (
           <>
             <Label htmlFor={fieldId + '-action'}>Account action</Label>
-            <Select value={action} onValueChange={(value) => { setAction(String(value)); setText(''); setTarget(''); setMessage(''); }}>
+            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); }}>
               <SelectTrigger id={fieldId + '-action'} aria-label='Mastodon account action'><SelectValue /></SelectTrigger>
               <SelectContent>{actions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
             </Select>
+            {action === 'profile_update' && <MastodonProfileFields connectionId={connectionId} onChange={setProfileEdit} />}
             {needsTarget && <label htmlFor={fieldId + '-target'} className='flex flex-col gap-1 text-sm'>Post, account, list or schedule ID<Input id={fieldId + '-target'} value={target} inputMode='numeric' onChange={(event) => setTarget(event.target.value)} /></label>}
             {needsText && <label htmlFor={fieldId + '-text'} className='flex flex-col gap-1 text-sm'>{action === 'profile_update' ? 'Profile description' : 'Post text'}<textarea aria-label={action === 'profile_update' ? 'Profile description' : 'Post text'} id={fieldId + '-text'} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setText(event.target.value)} /></label>}
             {['edit', 'native_schedule'].includes(action) && <MastodonFields onChange={setOptions} />}

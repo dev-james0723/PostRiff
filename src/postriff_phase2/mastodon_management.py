@@ -111,15 +111,8 @@ def action_spec(action, payload, capabilities, *, now):
         body = validate_status(payload.get("text"), options, (), capabilities, now=now)
         return "POST", "/api/v1/statuses", body, ("write:statuses",), "approve"
     if action == "profile_update":
-        fields = payload.get("profile")
-        if not isinstance(fields, dict) or not fields or set(fields) - {"display_name", "note", "locked", "bot", "discoverable", "hide_collections"}:
-            raise AlphaError("Choose supported profile fields.", 400)
-        for key, value in fields.items():
-            if key in ("display_name", "note"):
-                if not isinstance(value, str) or len(value) > (30 if key == "display_name" else 500):
-                    raise AlphaError("The profile text exceeds supported limits.", 400)
-            elif type(value) is not bool:
-                raise AlphaError("Choose valid profile preferences.", 400)
+        from .mastodon_profile import profile_fields
+        fields = profile_fields(payload, capabilities)
         return "PATCH", "/api/v1/accounts/update_credentials", fields, ("write:accounts",), "manage_connections"
     if action in ("list_create", "list_update", "list_delete", "list_add", "list_remove"):
         path = "/api/v1/lists" + ("" if action == "list_create" else "/" + target)
@@ -191,12 +184,15 @@ class MastodonManagement:
             metrics = [{"id": r["id"], "url": r.get("url"), "createdAt": r.get("created_at"),
                         "favourites": r.get("favourites_count"), "boosts": r.get("reblogs_count"), "replies": r.get("replies_count")}
                        for r in rows if isinstance(r, dict) and r.get("id") and r.get("visibility") in ("public", "unlisted")
-                       and str((r.get("account") or {}).get("id")) == account_id]
+                       and not r.get("reblog") and str((r.get("account") or {}).get("id")) == account_id]
             profile = self._result(provider.api(session, "GET", "/api/v1/accounts/verify_credentials"))
+            from .mastodon_analytics import history
+            with self.repository.transaction(token, workspace) as (cur, _row, _actor):
+                collected = history(cur, workspace, connection, session['instance'], [r['id'] for r in metrics])
             return {"connectionId": connection, "instance": session["instance"], "followers": profile.get("followers_count"),
                     "following": profile.get("following_count"), "postCount": profile.get("statuses_count"), "posts": metrics,
                     "coverage": "latest 40 public/unlisted posts; counts observed by this instance",
-                    "unavailableMetrics": ["impressions", "reach", "demographics"], "historicalTrends": "not collected"}
+                    "unavailableMetrics": ["impressions", "reach", "demographics"], "historicalTrends": collected}
         spec = READS.get(resource)
         if not spec:
             raise AlphaError("This Mastodon resource is unavailable.", 404)
@@ -215,9 +211,14 @@ class MastodonManagement:
         from .hosted import _membership, audit, throttle
         preview = {"connectionId": connection, "accountId": grant["providerAccountId"], "instance": session["instance"],
                    "action": action, "targetId": payload.get('targetId'), "method": method, "path": path, "body": body, "scopes": list(scopes), "permission": permission}
-        fingerprint = digest(preview)
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), permission)
+            if action == 'profile_update' and payload.get('profileMedia'):
+                from .mastodon_profile import freeze_images
+                if self.service.assets is None:
+                    raise AlphaError('Private profile image storage is unavailable.', 503)
+                preview['media'] = freeze_images(row[1], payload['profileMedia'])
+            fingerprint = digest(preview)
             throttle(cur, "mastodon-preview:" + workspace, 30, 600)
             cur.execute("DELETE FROM public.pr_mastodon_actions WHERE workspace_id=%s AND created_at < now()-interval '7 days' AND status != 'running'", (workspace,))
             cur.execute("INSERT INTO public.pr_mastodon_actions(workspace_id,connection_id,actor_id,action,preview,digest) VALUES(%s,%s,%s,%s,%s::jsonb,%s) RETURNING id::text", (workspace, connection, actor, action, json.dumps(preview), fingerprint))
@@ -276,8 +277,16 @@ class MastodonManagement:
                     original = self._result(provider.api(session, "GET", preview["path"]))
                     if str((original.get("account") or {}).get("id")) + "@" + session["instance"] != preview["accountId"]:
                         raise AlphaError("This post does not belong to the approved account. No action was sent.", 403)
-                response = provider.api(session, preview["method"], preview["path"], body=preview["body"],
-                                        headers={"Idempotency-Key": action_id})
+                if preview['action'] == 'profile_update':
+                    from .mastodon_profile import approved_images, form_fields
+                    from .social_connectors import multipart
+                    files = approved_images(self.service, workspace, row[1], preview.get('media', {}))
+                    data, content_type = multipart(form_fields(preview['body']), files)
+                    response = provider.api(session, preview['method'], preview['path'], data=data,
+                                            headers={'Content-Type': content_type, 'Idempotency-Key': action_id})
+                else:
+                    response = provider.api(session, preview["method"], preview["path"], body=preview["body"],
+                                            headers={"Idempotency-Key": action_id})
                 result = self._receipt(provider, session, preview, response)
                 cur.execute("UPDATE public.pr_mastodon_actions SET status=%s,receipt=%s::jsonb,updated_at=now() WHERE workspace_id=%s AND id::text=%s AND status='running'", (result["state"], json.dumps(result), workspace, action_id))
                 audit(cur, workspace, actor, "mastodon.action_result", action_id, {"action": preview["action"], "state": result["state"]})
@@ -297,6 +306,8 @@ class MastodonManagement:
             return {"state": "uncertain", "reason": "No conclusive server acceptance. Do not resend."}
         action = preview["action"]
         result = {"state": "accepted", "httpStatus": status, "instance": session["instance"], "action": action}
+        if action == 'profile_update' and (not isinstance(body, dict) or str(body.get('id')) + '@' + session['instance'] != preview['accountId']):
+            return {'state': 'uncertain', 'reason': 'The profile response did not identify the approved account. Do not resend.'}
         if isinstance(body, dict):
             result["reference"] = str(body.get("id", ""))
             # URLs are evidence only when this instance returned them, never synthesized publication claims.

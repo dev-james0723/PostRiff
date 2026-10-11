@@ -68,3 +68,11 @@ test('the calendar component exposes navigation only and no mutation controls', 
   assert.match(source, /Open Calendar/);
   assert.match(source, /Read-only snapshot/);
 });
+
+test('Mastodon calendar shows native publication time, while worker submission stays separate', () => {
+  const K = load('src/features/calendar/calendar-kinds.ts');
+  const manifest = {platform:'Mastodon',timing:{utc:'2026-10-11T01:00:00Z',nativeProvider:'Mastodon',nativePublicationAt:'2026-10-12T10:00:00Z'}};
+  assert.equal(K.calendarPublicationTime(manifest), '2026-10-12T10:00:00Z');
+  assert.equal(K.calendarPublicationTime({...manifest,platform:'Instagram'}), manifest.timing.utc);
+  assert.equal(K.calendarPublicationTime({...manifest,timing:{...manifest.timing,nativePublicationAt:'invalid'}}), manifest.timing.utc);
+});

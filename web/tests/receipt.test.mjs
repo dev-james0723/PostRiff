@@ -30,3 +30,10 @@ test('actual PostgreSQL snapshot reaches the UI without losing receipt fields', 
   const html = renderToStaticMarkup(React.createElement(component(), {job:persisted}));
   for (const text of ['555','999','https://www.instagram.com/p/ABC/','provider lookup']) assert.ok(html.includes(text));
 });
+
+test('Mastodon verified links bind to the exact connected instance', () => {
+  const mastodon = {...job, manifest:{platform:'Mastodon',providerAccountId:'100@mastodon.social'},url:'https://mastodon.social/@owner/123'};
+  assert.ok(renderToStaticMarkup(React.createElement(component(), {job:mastodon})).includes('Open verified post'));
+  for (const url of ['https://mastodon.online/@owner/123','https://mastodon.social.evil.test/@owner/123','https://mastodon.social/@owner/123?access_token=SECRET','https://mastodon.social/@owner/123#fragment'])
+    assert.ok(!renderToStaticMarkup(React.createElement(component(), {job:{...mastodon,url}})).includes('<a '));
+});

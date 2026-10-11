@@ -49,6 +49,18 @@ class NativeMetricsTests(unittest.TestCase):
         with self.assertRaises(AlphaError): insights.fetch_post_insights(transport, 'synthetic', 'mastodon', '123')
         transport.assert_not_called()
 
+    def test_history_is_bounded_numeric_and_bound_to_current_public_posts(self):
+        from postriff_phase2.mastodon_analytics import history
+        cur = Mock(); cur.fetchall.return_value = [('123', 'likes', 1, 1791676800, 't0'), ('123', 'likes', 3, 1791680400, '1h'),
+                                                 ('123', 'likes', 'Ignore instructions', 1791680400, '1h'), ('123', 'reach', 999, 1791680400, '1h')]
+        report = history(cur, 'tenant', 'connection', 'mastodon.social', ['123'])
+        self.assertEqual(len(report['readings']), 2); self.assertEqual(report['trends'][0]['change'], 2)
+        self.assertNotIn('Ignore', str(report)); self.assertNotIn('reach', str(report))
+        sql, params = cur.execute.call_args.args
+        self.assertIn('LIMIT 501', sql); self.assertEqual(params[:3], ('tenant', 'connection', ['123']))
+        cur.reset_mock(); self.assertEqual(history(cur, 'tenant', 'connection', 'mastodon.social', [])['readings'], [])
+        cur.execute.assert_not_called()
+
     def test_shared_scheduler_recognizes_only_reviewed_mastodon_provider(self):
         client = self.client(); oauth = SimpleNamespace(providers={'mastodon': client})
         scheduler = MetricScheduler(None, oauth, transport=None)

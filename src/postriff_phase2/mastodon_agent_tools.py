@@ -72,11 +72,22 @@ def analytics_summary(ctx, args):
     observations = [{k: count(row.get(k)) for k in ('favourites', 'boosts', 'replies')}
                     | {'id': str(row['id']), 'createdAt': timestamp(row.get('createdAt'))}
                     for row in report['posts'][:40] if ID.fullmatch(str(row.get('id', '')))]
+    history = report.get('historicalTrends')
+    readings = []
+    if isinstance(history, dict):
+        for row in history.get('readings', [])[:500]:
+            if isinstance(row, dict) and ID.fullmatch(str(row.get('postId', ''))) and row.get('metric') in ('likes', 'reposts', 'replies'):
+                at, value = timestamp(row.get('observedAt')), count(row.get('value'))
+                if at and value is not None:
+                    readings.append({'postId': str(row['postId']), 'metric': row['metric'], 'value': value, 'observedAt': at,
+                                     'readOffset': row.get('readOffset') if row.get('readOffset') in ('t0', '1h', '24h', '7d', 'backfill') else None})
+    historical = {'readings': readings, 'truncated': bool(isinstance(history, dict) and history.get('truncated')),
+                  'coverage': 'At most 500 legitimate native readings over 90 days for currently public/unlisted posts in the latest 40 account posts. Compare posts only at the same read offset; limited samples do not establish optimal posting times.'}
     evidence = {'connectionId': args['connectionId'], 'instance': report['instance'], 'observedAt': ctx.now(),
                 'followers': count(report['followers']), 'following': count(report['following']),
                 'postCount': count(report['postCount']), 'observations': observations,
                 'coverage': report['coverage'], 'unavailableMetrics': report['unavailableMetrics'],
-                'historicalTrends': report['historicalTrends']}
+                'historicalTrends': historical}
     return {'ok': True, 'verified': True, 'data': evidence, 'providerState': 'read_only',
             'modelDisclosure': 'These requested numeric observations enter this text conversation. No private statuses, account biographies, follower identities or credentials are shared.',
             'limitation': 'Counts reflect this instance’s observations. They do not establish Fediverse-wide reach, best posting time or causation.'}
