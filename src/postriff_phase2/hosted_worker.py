@@ -42,7 +42,11 @@ def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtu
     platform_filter = (" AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
                        " AND coalesce(j#>>'{manifest,platform}','')<>'YouTube'" if exclude_youtube else '')
     workspace_filter = " AND w.id=%s::uuid" if telegram_canary else ''
+    due_time = "j->>'nextAt'"
+    acceptance_filter = " AND NOT (j ? 'telegramCanary')"
     if telegram_canary:
+        due_time = "j#>>'{telegramCanary,nextAt}'"
+        acceptance_filter = " AND j ? 'telegramCanary'"
         platform_filter = """ AND j#>>'{manifest,platform}'='Telegram'
               AND j->>'approvedBy'=%s AND j#>>'{manifest,actor}'=%s
               AND j#>>'{manifest,workspaceId}'=w.id::text
@@ -53,7 +57,7 @@ def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtu
           AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) j
             WHERE coalesce(j->>'state','') NOT IN ('verified','failed','canceled','held')
               AND coalesce((j->>'leaseUntil')::double precision,0)<=%s
-              AND coalesce((j->>'nextAt')::double precision,0)<=%s""" + platform_filter + """)
+              AND coalesce((""" + due_time + """)::double precision,0)<=%s""" + acceptance_filter + platform_filter + """)
         ORDER BY """ + dispatch_order + """ LIMIT 100 FOR UPDATE OF w SKIP LOCKED"""
 
 
@@ -175,18 +179,22 @@ class PostgresWorker:
                     if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
                         continue
                     original = json.dumps(state, sort_keys=True)
-                    if youtube_only or exclude_youtube or telegram_canary is not None:
+                    if youtube_only or exclude_youtube or telegram_canary is not None or any('telegramCanary' in j for j in state['phase2']['jobs']):
                         # Invalidation can hold jobs too; the isolated lane must
                         # not change another platform's review or queued job.
                         data = state['phase2']
                         jobs, reviews = data['jobs'], data['reviews']
-                        def selected_platform(item):
+                        def selected_platform(item, *, job=False):
                             if telegram_canary is not None:
                                 from .telegram.canary_worker import selected
-                                return selected(item, telegram_canary, connection_ids)
+                                return selected(item, telegram_canary, connection_ids, require_fence=job)
+                            if job and 'telegramCanary' in item:
+                                return False
+                            if not youtube_only and not exclude_youtube:
+                                return True
                             match = item.get('manifest', {}).get('platform') == 'YouTube'
                             return match if youtube_only else not match
-                        data['jobs'] = [job for job in jobs if selected_platform(job)]
+                        data['jobs'] = [job for job in jobs if selected_platform(job, job=True)]
                         data['reviews'] = [review for review in reviews if selected_platform(review)]
                         try:
                             self.commands.engine.invalidate(state)
@@ -198,13 +206,16 @@ class PostgresWorker:
                     for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
                         if telegram_canary is not None:
                             from .telegram.canary_worker import selected as in_canary
-                            if not in_canary(job, telegram_canary, connection_ids):
+                            if not in_canary(job, telegram_canary, connection_ids, require_fence=True):
                                 continue
+                        elif 'telegramCanary' in job:
+                            continue
                         is_youtube = job.get('manifest', {}).get('platform') == 'YouTube'
                         if (youtube_only and not is_youtube) or (exclude_youtube and is_youtube):
                             continue
                         now = self.clock()
-                        if job.get("leaseUntil", 0) > now or job.get("nextAt", 0) > now or job.get("state") in (*TERMINAL, "held"):
+                        from .telegram.canary_worker import dispatch_at
+                        if job.get("leaseUntil", 0) > now or dispatch_at(job, telegram_canary=telegram_canary is not None) > now or job.get("state") in (*TERMINAL, "held"):
                             continue
                         stage = job.get('progress', {}).get('stage')
                         instagram = job['manifest']['platform'] == 'Instagram' and hasattr(self.social, 'advance_instagram')
@@ -405,6 +416,8 @@ class PostgresWorker:
                     job["nextAction"] = "Await container processing; not published" if job['state'] == 'processing' else "Await provider reconciliation; do not resubmit"
                 if youtube_progress and progress.get('stage') == 'quota_delayed':
                     job['nextAction'] = 'Publishing delayed by capacity controls; the same approved upload resumes after retryAt. Review the time if approval or publication time expires.'
+                from .telegram.canary_worker import preserve_fence
+                preserve_fence(job)
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), claimed["workspaceId"], revision))
                 return cur.rowcount == 1
 

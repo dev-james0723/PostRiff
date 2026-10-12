@@ -2,12 +2,12 @@
 import copy
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_worker import PostgresWorker
-from postriff_phase2.telegram.canary_worker import accepts_event, ingress_scope, selected, worker_scope
+from postriff_phase2.telegram.canary_worker import LEGACY_FENCE_AT, accepts_event, dispatch_at, fence_job, ingress_scope, preserve_fence, selected, worker_scope
 from test_postriff_phase2_hosted import invoke
 
 NOW = 1800000000
@@ -20,7 +20,155 @@ def grant():
             'destinations': [{'chatId': -100123, 'mode': 'bot', 'capabilities': ['publish', 'schedule', 'text']}]}
 
 
+def approved_job():
+    return {'id': 'qa-job', 'state': 'approved', 'approvedBy': ACTOR, 'approvalDigest': 'reviewed',
+            'nextAt': NOW, 'manifest': {'platform': 'Telegram', 'workspaceId': WORKSPACE,
+                'actor': ACTOR, 'channelId': 'qa', 'expiresAt': NOW + 300}}
+
+
 class CanaryWorkerTests(unittest.TestCase):
+    def test_fence_preserves_approval_and_never_releases_to_legacy_reconciliation(self):
+        job = approved_job()
+        original = copy.deepcopy(job)
+        fence_job(job, grant())
+        self.assertEqual(job['manifest'], original['manifest'])
+        self.assertEqual(job['approvalDigest'], original['approvalDigest'])
+        self.assertEqual(dispatch_at(job, telegram_canary=True), NOW)
+        self.assertEqual(dispatch_at(job), LEGACY_FENCE_AT)
+        self.assertTrue(selected(job, grant(), ['qa'], require_fence=True))
+        self.assertFalse(selected(original, grant(), ['qa'], require_fence=True))
+        self.assertFalse(selected(job, {**grant(), 'expiresAt': NOW + 601}, ['qa'], require_fence=True))
+        # An old worker skips nextAt before both forward and reconciliation paths.
+        for state in ('approved', 'submitting', 'uncertain', 'processing'):
+            job['state'] = state
+            self.assertGreater(job['nextAt'], NOW + 10 * 86400)
+
+    def test_retry_reschedule_and_cancellation_preserve_the_server_fence(self):
+        job = approved_job()
+        fence_job(job, grant())
+        original = copy.deepcopy(job)
+        job.pop('telegramCanary')
+        job.update(state='scheduled', nextAt=NOW + 120)
+        preserve_fence(job, original)
+        self.assertEqual(job['nextAt'], LEGACY_FENCE_AT)
+        self.assertEqual(dispatch_at(job, telegram_canary=True), NOW + 120)
+        job['state'] = 'canceled'
+        preserve_fence(job)
+        self.assertEqual(job['nextAt'], LEGACY_FENCE_AT)
+        plain = approved_job()
+        preserve_fence(plain)
+        self.assertEqual(plain, approved_job())
+
+    def test_queue_fence_uses_active_owner_and_exact_unrevoked_destination(self):
+        from postriff_phase2.telegram.service import TelegramService
+        service = TelegramService.__new__(TelegramService)
+        provider = SimpleNamespace(candidate_mode=True, candidate_scope=grant())
+        service.oauth = SimpleNamespace(providers={'telegram': provider})
+        service.clock = lambda: NOW
+        cur = Mock()
+        cur.fetchone.return_value = (1,)
+        cur.fetchall.return_value = [('qa',)]
+        job = approved_job()
+        state = {'phase2': {'jobs': [job]}}
+        service.fence_jobs(cur, WORKSPACE, {'phase2': {'jobs': []}}, state, ACTOR)
+        self.assertEqual(job['nextAt'], LEGACY_FENCE_AT)
+        self.assertIn('revoked_at IS NULL', cur.execute.call_args.args[0])
+        self.assertEqual(cur.execute.call_args.args[1], (WORKSPACE, 999, [-100123]))
+        for change in ({'channelId': 'outside'}, {'actor': 'outside'}, {'workspaceId': 'outside'}):
+            bad = approved_job()
+            bad['manifest'].update(change)
+            with self.subTest(change=change), self.assertRaises(AlphaError):
+                service.fence_jobs(cur, WORKSPACE, {}, {'phase2': {'jobs': [bad]}}, ACTOR)
+        provider.candidate_scope = {**grant(), 'expiresAt': NOW}
+        cur.reset_mock()
+        with self.assertRaises(AlphaError):
+            service.fence_jobs(cur, WORKSPACE, {}, {'phase2': {'jobs': [approved_job()]}}, ACTOR)
+        cur.execute.assert_not_called()
+        provider.candidate_mode = False
+        untouched = approved_job()
+        service.fence_jobs(cur, WORKSPACE, {}, {'phase2': {'jobs': [untouched]}}, ACTOR)
+        self.assertEqual(untouched, approved_job())
+        cur.execute.assert_not_called()
+
+    def test_fence_runs_before_the_first_workspace_write(self):
+        from contextlib import contextmanager
+        from postriff_phase2.hosted import PostgresWorkspaceRepository
+        repository = PostgresWorkspaceRepository(Mock(), Mock(), clock=lambda: NOW)
+        cur = Mock()
+        row = (1, {'phase2': {'jobs': []}}, 'owner', True, True, True, True)
+        @contextmanager
+        def transaction(*_args, **_kwargs):
+            yield cur, row, ACTOR
+        repository.transaction = transaction
+        repository.before_save.append(lambda _cur, _wid, _before, after, _actor: fence_job(after['phase2']['jobs'][0], grant()))
+        repository.command(WORKSPACE, None, 1, lambda state, _actor: {'phase2': {'jobs': [approved_job()]}})
+        import json
+        saved = json.loads(cur.execute.call_args_list[0].args[1][0])
+        self.assertEqual(saved['phase2']['jobs'][0]['nextAt'], LEGACY_FENCE_AT)
+
+    def test_completion_retry_does_not_expose_a_canary_job_to_the_old_worker(self):
+        worker = PostgresWorker(Mock(), clock=lambda: NOW, worker_id='qa-worker')
+        job = approved_job()
+        fence_job(job, grant())
+        job.update(state='submitting', leaseOwner='qa-worker', leaseId='lease', leaseUntil=NOW + 45, attempts=[])
+        claimed = {'workspaceId': WORKSPACE, 'job': copy.deepcopy(job), 'reconciliation': False}
+        cur = Mock()
+        cur.fetchone.return_value = (1, {'phase2': {'jobs': [job]}})
+        cur.rowcount = 1
+        database = Mock()
+        database.__enter__ = Mock(return_value=database)
+        database.__exit__ = Mock(return_value=False)
+        database.cursor.return_value.__enter__ = Mock(return_value=cur)
+        database.cursor.return_value.__exit__ = Mock(return_value=False)
+        worker.connection_factory.return_value = database
+        result = {'state': 'scheduled', 'confirmed': 'Synthetic rate limit before acceptance', 'retryAfter': 120}
+        with patch('postriff_phase2.hosted_worker.normalize_result', return_value=result):
+            self.assertTrue(worker.complete(claimed, result))
+        import json
+        saved = json.loads(cur.execute.call_args.args[1][0])['phase2']['jobs'][0]
+        self.assertEqual(saved['nextAt'], LEGACY_FENCE_AT)
+        self.assertEqual(dispatch_at(saved, telegram_canary=True), NOW + 120)
+
+    def test_workspace_projection_shows_actual_schedule_and_hides_internal_fence(self):
+        from postriff_phase2.hosted import HostedPhase2Commands
+        commands = HostedPhase2Commands(clock=lambda: NOW)
+        job = approved_job()
+        fence_job(job, grant())
+        state = {'phase2': {'jobs': [job]}}
+        commands.engine = SimpleNamespace(_present=lambda original, revision: {'state': copy.deepcopy(original), 'revision': revision})
+        with patch('postriff_phase2.hosted.brand_brain.projection', return_value={}):
+            shown = commands.present(state, 1)
+        self.assertEqual(shown['state']['phase2']['jobs'][0]['nextAt'], NOW)
+        self.assertNotIn('telegramCanary', shown['state']['phase2']['jobs'][0])
+        self.assertEqual(state['phase2']['jobs'][0]['nextAt'], LEGACY_FENCE_AT)
+
+    def test_public_invalidation_keeps_youtube_and_other_jobs_but_preserves_canary(self):
+        protected = approved_job()
+        fence_job(protected, grant())
+        ordinary = []
+        for platform in ('YouTube', 'Telegram', 'X'):
+            job = approved_job()
+            job['id'], job['manifest']['platform'] = platform, platform
+            ordinary.append(job)
+        state = {'phase2': {'jobs': [copy.deepcopy(protected), *ordinary], 'reviews': []}}
+        cur = Mock()
+        cur.fetchone.side_effect = [(True,), (None,)]
+        cur.fetchall.return_value = [(WORKSPACE, 1, state)]
+        cur.rowcount = 1
+        database = MagicMock()
+        database.__enter__.return_value = database
+        database.cursor.return_value.__enter__.return_value = cur
+        seen = []
+        def invalidate(selected_state):
+            for item in selected_state['phase2']['jobs']:
+                seen.append(item['id'])
+                item['state'] = 'held'
+        worker = PostgresWorker(lambda: database, clock=lambda: NOW)
+        worker.commands = SimpleNamespace(engine=SimpleNamespace(invalidate=invalidate))
+        self.assertIsNone(worker.claim())
+        self.assertEqual(seen, ['YouTube', 'Telegram', 'X'])
+        self.assertEqual(state['phase2']['jobs'][0], protected)
+
     def test_invalid_expired_or_outside_chat_ingress_has_zero_database_and_vault_calls(self):
         from postriff_phase2.telegram.updates import ingest
         database = Mock(side_effect=AssertionError('No database access'))

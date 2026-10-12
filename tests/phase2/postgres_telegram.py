@@ -53,6 +53,7 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
   class Repo:
    connection_factory=staticmethod(conn)
    clock=staticmethod(lambda:TEST_NOW+50)
+   def __init__(self):self.before_save=[]
    @contextmanager
    def transaction(self,token,workspace):
     if (workspace,token) not in ((W1,A1),(W2,A2)):raise AlphaError('Connection unavailable',404)
@@ -66,7 +67,8 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
    def command(self,workspace,token,revision,fn,requirement=None,after=None):
     with self.transaction(token,workspace) as (cur,row,_):
      assert row[0]==revision
-     state=row[1];fn(state,token)
+     state=row[1];source=copy.deepcopy(state);fn(state,token)
+     for guard in self.before_save:guard(cur,workspace,source,state,token)
      if after:after(cur,state,token)
      cur.execute('update pr_workspaces set state=%s::jsonb,revision=revision+1 where id=%s',(json.dumps(state),workspace))
      return {'revision':revision+1,'state':state}
@@ -397,19 +399,47 @@ with tempfile.TemporaryDirectory(prefix='rafii-telegram-pg-') as tmp:
   # Real SQL and row-lock boundaries: an owner acceptance worker never selects
   # another tenant, member, platform, bot, revoked target or unapproved job.
   from postriff_phase2.hosted_worker import due_workspaces_sql
-  from postriff_phase2.telegram.canary_worker import worker_scope
+  from postriff_phase2.telegram.canary_worker import LEGACY_FENCE_AT,fence_job,worker_scope
   scope={'workspaceId':W1,'actorId':A1,'botId':999,'expiresAt':TEST_NOW+600,
          'destinations':[{'chatId':CHAT['id'],'mode':'bot','capabilities':['publish','schedule','text']}]}
-  allowed={'id':'canary-only','state':'scheduled','approvedBy':A1,'manifest':
-           {'platform':'Telegram','workspaceId':W1,'actor':A1,'channelId':'telegram-connection'}}
+  allowed={'id':'canary-only','state':'scheduled','approvedBy':A1,'nextAt':repo.clock(),'approvalDigest':'reviewed',
+           'manifest':{'platform':'Telegram','workspaceId':W1,'actor':A1,'channelId':'telegram-connection','expiresAt':TEST_NOW+300}}
   unrelated=[]
   for index,change in enumerate(({'platform':'X'},{'actor':A2},{'channelId':'another-connection'},{'workspaceId':W2})):
    unrelated.append({**allowed,'id':'unrelated-'+str(index),'manifest':{**allowed['manifest'],**change}})
   unrelated.append({**allowed,'id':'other-approver','approvedBy':A2})
   unrelated.append({key:value for key,value in {**allowed,'id':'unapproved'}.items() if key!='approvedBy'})
+  fence_job(allowed,scope)
   with conn() as db:
    before={w:db.execute('select state from pr_workspaces where id=%s',(w,)).fetchone()[0] for w in (W1,W2)}
    db.execute("update pr_telegram_destinations set revoked_at=NULL where workspace_id=%s and connection_id='telegram-connection'",(W1,))
+   db.execute("update pr_workspaces set state=jsonb_set(state,'{phase2,jobs}',%s::jsonb) where id=%s",(json.dumps([allowed]),W1))
+   legacy_sql=(ROOT/'tests/phase2/fixtures/telegram_live_worker_selector.sql').read_text()
+   for at in (repo.clock(),TEST_NOW+7*86400):
+    assert W1 not in [row[0] for row in db.execute(legacy_sql,(at,at)).fetchall()]
+   assert W1 not in [row[0] for row in db.execute(due_workspaces_sql(False),(repo.clock(),repo.clock())).fetchall()]
+  passed('Pinned live-worker SQL cannot select owner acceptance jobs, even after approval/grant expiry')
+  bot.candidate_mode=True;bot.candidate_scope=scope
+  queued=copy.deepcopy(allowed);queued['id']='atomic-canary';queued.pop('telegramCanary');queued['nextAt']=repo.clock()
+  saved=repo.get(W1,A1)
+  repo.command(W1,A1,saved['revision'],lambda state,actor:state['phase2'].update(jobs=[queued]))
+  with conn() as db:
+   durable=db.execute('select revision,state from pr_workspaces where id=%s',(W1,)).fetchone()
+   assert durable[1]['phase2']['jobs'][0]['nextAt']==LEGACY_FENCE_AT
+   assert durable[1]['phase2']['jobs'][0]['telegramCanary']['nextAt']==repo.clock()
+   assert W1 not in [row[0] for row in db.execute(legacy_sql,(repo.clock(),repo.clock())).fetchall()]
+   db.execute("update pr_telegram_destinations set revoked_at=now() where workspace_id=%s and connection_id='telegram-connection'",(W1,))
+  denied=copy.deepcopy(queued);denied['id']='revoked-canary';denied.pop('telegramCanary',None);denied['nextAt']=repo.clock()
+  try:
+   repo.command(W1,A1,durable[0],lambda state,actor:state['phase2'].update(jobs=[denied]))
+   raise AssertionError('Revoked target must not queue a canary job')
+  except AlphaError as error:assert error.status==403
+  with conn() as db:
+   assert db.execute('select revision from pr_workspaces where id=%s',(W1,)).fetchone()[0]==durable[0]
+   db.execute("update pr_telegram_destinations set revoked_at=NULL where workspace_id=%s and connection_id='telegram-connection'",(W1,))
+  bot.candidate_mode=False
+  passed('Owner queue fence is durable before dispatch; revoked-target approval rolls back its entire transaction')
+  with conn() as db:
    db.execute("update pr_workspaces set state=jsonb_set(state,'{phase2,jobs}',%s::jsonb) where id=%s",(json.dumps([allowed,*unrelated]),W1))
    foreign={**allowed,'manifest':{**allowed['manifest'],'workspaceId':W2}}
    db.execute("update pr_workspaces set state=jsonb_set(state,'{phase2,jobs}',%s::jsonb) where id=%s",(json.dumps([foreign]),W2))

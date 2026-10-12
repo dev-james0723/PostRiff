@@ -33,6 +33,38 @@ class TelegramService:
         self.channel_dms=ChannelDirectMessages(self)
         from .managed import ManagedBots
         self.managed=ManagedBots(self)
+        if hasattr(self.repository, 'before_save'):
+            self.repository.before_save.append(self.fence_jobs)
+
+    def fence_jobs(self, cur, workspace, before, after, actor):
+        """Keep private acceptance jobs invisible to a concurrently running old worker."""
+        from .canary_worker import fence_job, owner_active, preserve_fence, selected, worker_scope
+        previous = {job['id']: job for job in before.get('phase2', {}).get('jobs', [])}
+        jobs = after.get('phase2', {}).get('jobs', [])
+        for job in jobs:
+            preserve_fence(job, previous.get(job['id']))
+        provider = self.oauth.providers.get('telegram')
+        if not getattr(provider, 'candidate_mode', False):
+            return
+        changed = [job for job in jobs if job.get('manifest', {}).get('platform') == 'Telegram'
+                   and job.get('state') not in ('verified', 'failed', 'canceled', 'held')
+                   and (job['id'] not in previous
+                        or job.get('approvalDigest') != previous[job['id']].get('approvalDigest')
+                        or job.get('approvedBy') != previous[job['id']].get('approvedBy')
+                        or previous[job['id']].get('state') == 'held')]
+        if not changed:
+            return
+        scope = worker_scope(getattr(provider, 'candidate_scope', None), self.clock())
+        if (workspace, actor) != (scope['workspaceId'], scope['actorId']) or not owner_active(cur, scope):
+            raise AlphaError('This Telegram acceptance approval is unavailable.', 403, code='telegram_canary_actor')
+        cur.execute("""SELECT connection_id FROM public.pr_telegram_destinations WHERE workspace_id=%s
+            AND bot_id=%s AND chat_id=ANY(%s::bigint[]) AND mode='bot' AND revoked_at IS NULL""",
+                    (workspace, scope['botId'], scope['chatIds']))
+        connection_ids = [row[0] for row in cur.fetchall()]
+        for job in changed:
+            if not selected(job, scope, connection_ids):
+                raise AlphaError('This Telegram destination is outside owner acceptance.', 403, code='telegram_canary_destination')
+            fence_job(job, scope)
 
     def resolve_bot(self, workspace, bot_ref):
         if not isinstance(bot_ref, str) or not re.fullmatch(r"[0-9a-f-]{36}", bot_ref): raise AlphaError("Bot credential unavailable.", 404)

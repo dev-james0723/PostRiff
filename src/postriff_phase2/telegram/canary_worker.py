@@ -5,6 +5,14 @@ from uuid import UUID
 from postriff_alpha.domain import AlphaError
 from .qualification import positive_number
 
+# Finite JSON/SQL-safe sentinel (9999-12-31 UTC). Legacy reconciliation skips
+# expired approval checks, so acceptance jobs must never automatically unfreeze.
+LEGACY_FENCE_AT = 253402300799
+
+
+def due_number(value):
+    return type(value) in (int, float) and (value == 0 or positive_number(value))
+
 
 def ingress_scope(provider, now):
     """Invalid acceptance configuration never restores ordinary ingestion."""
@@ -77,9 +85,56 @@ def worker_scope(scope, now):
     return result
 
 
-def selected(item, scope, connection_ids):
+def selected(item, scope, connection_ids, *, require_fence=False):
     """Do not invalidate or claim other approvals in the owner's workspace."""
     manifest = item.get('manifest', {})
-    return (manifest.get('platform') == 'Telegram' and manifest.get('workspaceId') == scope['workspaceId']
+    match = (manifest.get('platform') == 'Telegram' and manifest.get('workspaceId') == scope['workspaceId']
             and manifest.get('actor') == scope['actorId'] and manifest.get('channelId') in connection_ids
             and item.get('approvedBy') == scope['actorId'])
+    if not match or not require_fence:
+        return match
+    marker = item.get('telegramCanary')
+    return (isinstance(marker, dict) and type(marker.get('version')) is int and marker['version'] == 1
+            and all(marker.get(key) == scope[key] for key in ('workspaceId', 'actorId', 'botId', 'expiresAt'))
+            and positive_number(manifest.get('expiresAt'))
+            and marker.get('fenceUntil') == LEGACY_FENCE_AT and due_number(marker.get('nextAt'))
+            and marker['fenceUntil'] > max(scope['expiresAt'], manifest.get('expiresAt', 0))
+            and item.get('nextAt') == marker['fenceUntil'])
+
+
+def preserve_fence(job, original=None):
+    """Older workers understand nextAt, so keep it beyond the immutable approval."""
+    marker = (original or job).get('telegramCanary')
+    if marker is None:
+        return
+    if (not isinstance(marker, dict) or type(marker.get('version')) is not int or marker['version'] != 1
+            or not positive_number(marker.get('expiresAt')) or marker.get('fenceUntil') != LEGACY_FENCE_AT
+            or not due_number(marker.get('nextAt'))):
+        raise AlphaError('The Telegram acceptance job fence is invalid.', 503, code='telegram_canary_job_fence')
+    marker = copy.deepcopy(marker)
+    next_at = job.get('nextAt', marker['nextAt'])
+    if next_at != marker['fenceUntil']:
+        if not due_number(next_at):
+            raise AlphaError('The Telegram acceptance retry time is invalid.', 503, code='telegram_canary_job_fence')
+        marker['nextAt'] = next_at
+    expires = job.get('manifest', {}).get('expiresAt')
+    if positive_number(expires) and expires >= LEGACY_FENCE_AT:
+        raise AlphaError('The Telegram acceptance approval expiry is invalid.', 503, code='telegram_canary_job_fence')
+    job['telegramCanary'], job['nextAt'] = marker, marker['fenceUntil']
+
+
+def fence_job(job, scope):
+    """Stamp only a newly approved owner job; approval content/digest stay intact."""
+    expires = job.get('manifest', {}).get('expiresAt')
+    next_at = (job.get('telegramCanary') or {}).get('nextAt', job.get('nextAt', 0))
+    if not positive_number(expires) or expires >= LEGACY_FENCE_AT or not due_number(next_at):
+        raise AlphaError('The Telegram acceptance schedule is invalid.', 503, code='telegram_canary_job_fence')
+    job['telegramCanary'] = {key: scope[key] for key in ('workspaceId', 'actorId', 'botId', 'expiresAt')}
+    job['telegramCanary'].update(version=1, nextAt=next_at, fenceUntil=LEGACY_FENCE_AT)
+    job['nextAt'] = job['telegramCanary']['fenceUntil']
+
+
+def dispatch_at(job, *, telegram_canary=False):
+    if telegram_canary:
+        return (job.get('telegramCanary') or {}).get('nextAt', float('inf'))
+    return job.get('nextAt', 0)
