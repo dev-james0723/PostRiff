@@ -106,6 +106,8 @@ class PostgresWorkspaceRepository:
         self.clock = clock
         # (cur, workspace_id, before, after, principal) hooks run inside command(), after the state is saved.
         self.effects = []
+        # Server-owned dispatch fences must be part of the first durable write.
+        self.before_save = []
         from .api_tokens import ApiTokens
         self.api_tokens = ApiTokens(self)
 
@@ -163,6 +165,8 @@ class PostgresWorkspaceRepository:
             state = trusted_command(copy.deepcopy(source), principal)
             if not isinstance(state, dict):
                 raise AlphaError("The hosted command returned invalid state.", 500)
+            for guard in getattr(self, 'before_save', ()):
+                guard(cur, workspace_id, source, state, principal)
             cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s", (json.dumps(state), workspace_id))
             if audit_event:
                 audit(cur, workspace_id, principal, *audit_event(state))
@@ -231,6 +235,10 @@ class HostedPhase2Commands:
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
         shown['state']['brandBrain'] = brand_brain.projection(state)
+        for job in shown['state'].get('phase2', {}).get('jobs', []):
+            marker = job.pop('telegramCanary', None)
+            if isinstance(marker, dict):
+                job['nextAt'] = marker.get('nextAt', job.get('nextAt', 0))
         return shown
 
     def __call__(self, state, principal, action, payload):
@@ -412,6 +420,13 @@ class HostedWorkspaceService:
         from .audience import AudienceService
         credential_vault = vault or CredentialVault(None)
         self.oauth = OAuthService(self.repository, self.commands, credential_vault, providers or {}, public_base_url, clock, youtube_public_base_url=youtube_public_base_url)
+        from .telegram.service import TelegramService
+        self.telegram = TelegramService(self.oauth, assets=assets, clock=clock)
+        self.oauth.telegram = self.telegram
+        from .telegram.login import TelegramLogin
+        from .telegram.controls import TelegramControls
+        self.telegram_login = TelegramLogin(self.telegram, clock=clock)
+        self.telegram.controls = TelegramControls(self.telegram)
         self.productivity_connectors = productivity_connectors.ProductivityConnectorService(
             self.repository, credential_vault, productivity_providers or {}, public_base_url,
             flags=productivity_flags or {}, clock=clock,

@@ -12,7 +12,7 @@ from postriff_alpha.domain import AlphaError
 
 TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
 YOUTUBE_PRIVACY = ("private", "unlisted", "public")
-PLATFORMS = ("TikTok", "YouTube", "Pinterest", "Google Business Profile")
+PLATFORMS = ("TikTok", "YouTube", "Pinterest", "Google Business Profile", "Telegram")
 
 
 def tiktok_consent_text(branded):
@@ -138,6 +138,9 @@ def normalize(platform, options, media, text):
     """The canonical options for the manifest, or None for platforms that need none (their manifests stay unchanged)."""
     if platform not in PLATFORMS:
         return None
+    if platform == "Telegram":
+        from .telegram.content import normalize as telegram_options
+        return telegram_options(options, media, text)
     if not isinstance(options, dict):
         raise AlphaError(f"Choose the {platform} publishing options first.", 400)
     if platform == "TikTok":

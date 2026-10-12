@@ -54,6 +54,7 @@ export interface JobSheetProps {
   onClose: () => void;
   onCancel: (job: QueueJob) => void;
   onPrepareAgain: (variantId: string) => void;
+  onReschedule?: (job: QueueJob) => void;
   /** False when the job's draft was deleted or blocked by a retraction. */
   draftAvailable: (variantId: string) => boolean;
 }
@@ -229,14 +230,16 @@ function ApprovedBy({ job }: { job: QueueJob }) {
   );
 }
 
-function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, draftAvailable }: JobSheetProps & { job: QueueJob }) {
+function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, onReschedule, draftAvailable }: JobSheetProps & { job: QueueJob }) {
   const failed = job.state === 'failed';
   const prepare = canSchedule && (HELD.has(job.state) || failed);
   const cancel = canApprove && canCancel(job);
-  if (!prepare && !cancel) return null;
+  const reschedule = canSchedule && onReschedule && job.manifest.platform === 'Telegram' && ['scheduled', 'approved'].includes(job.state);
+  if (!prepare && !cancel && !reschedule) return null;
   const available = draftAvailable(job.manifest.variantId);
   return (
     <div className='flex flex-wrap items-center gap-2 [&_button]:min-h-11'>
+      {reschedule && <Button variant='glass' size='control' disabled={!available || cancelPending} onClick={() => onReschedule(job)}>Reschedule</Button>}
       {prepare && (
         <Button
           variant={failed ? 'action' : 'glass'}

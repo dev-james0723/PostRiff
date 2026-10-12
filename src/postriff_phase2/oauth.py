@@ -127,6 +127,8 @@ class OAuthService:
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            if pid == 'telegram':
+                legacy.update(identity=bool(adapter), publish=bool(adapter), schedule=bool(adapter))
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
@@ -329,7 +331,7 @@ class OAuthService:
         if capability not in (*CAPABILITIES, 'posts_read', *youtube_features) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
-        if not scopes:
+        if not scopes and not (provider_id == "telegram" and capability in ("identity", "publish", "schedule")):
             raise AlphaError(f"{adapter.platform} does not offer '{capability}' through its official API for this app.", 409)
         redirect = self.callback_uri(provider_id)
         # Class attributes, so a mocked adapter keeps the plain redirect path.
@@ -377,8 +379,13 @@ class OAuthService:
         verifier, challenge = pkce_pair()
         extra, authorize_url = {}, None
         if adapter.connect_kind == "bot_code":
+            bot_ref = (inputs or {}).get("botRef") if isinstance(inputs, dict) else None
+            if provider_id == "telegram" and bot_ref:
+                if not getattr(self, "telegram", None): raise AlphaError("Telegram bot management is unavailable.", 503)
+                adapter = self.telegram.resolve_bot(workspace_id, bot_ref)
             state = adapter.new_code()
             context = {"kind": adapter.connect_kind}
+            if bot_ref: context.update(botRef=bot_ref, workspace=workspace_id)
             extra = {**adapter.connect_instructions(), "code": state}
         elif adapter.connect_kind == "device_code":
             state = secrets.token_urlsafe(32)
@@ -481,6 +488,8 @@ class OAuthService:
                     raise AlphaError("Connection request unavailable.", 404) from exc
                 if not isinstance(context.get("chat"), dict):
                     return {"connected": False, "reason": "waiting", "pending": True}
+                if context.get("botRef"):
+                    adapter = adapter.for_session(context)
             elif device_code and not error:
                 try:
                     context = json.loads(self.vault.decrypt(verifier_ct, key_id))
@@ -576,7 +585,7 @@ class OAuthService:
                 consent_generation = cur.fetchone()[0]
                 self.youtube_policy.bind(cur, workspace_id, connection_id, policy_acceptance)
             now = self.clock()
-            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"])
+            matrix = self._capabilities(adapter, capability, granted, missing, now, grant["accessToken"], workspace_id=workspace_id, actor_id=principal)
             for name, value in matrix.items():
                 cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace_id, connection_id, name, value["level"], value["evidence"], value["capabilityVersion"], value["verifiedAt"]))
             audit(cur, workspace_id, principal, "channel.connected", connection_id, {"provider": provider_id, "capability": capability, "missingScopes": missing, "publishLevel": matrix["publish"]["level"]})
@@ -598,6 +607,9 @@ class OAuthService:
             self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
         saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
         self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
+        if provider_id == "telegram" and getattr(self, "telegram", None):
+            self.telegram.inspect(workspace_id, token, connection_id)
+            saved = self.repository.get(workspace_id, token)
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
     def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None):
@@ -731,9 +743,9 @@ class OAuthService:
         return {key: info[key] for key in ("nickname", "username", "avatarUrl", "privacyLevelOptions", "commentDisabled", "duetDisabled", "stitchDisabled", "maxVideoPostDurationSec")}
 
     # --- Telegram: Rafii's bot sees a connect code in a channel -------------------------
-    def telegram_webhook(self, secret, raw):
+    def telegram_webhook(self, secret, raw, adapter=None):
         """Public route, authenticated by the secret token Telegram echoes. Always answers ok to Telegram."""
-        adapter = self.providers.get("telegram")
+        adapter = adapter or self.providers.get("telegram")
         if adapter is None:
             raise AlphaError("This hosted route is unavailable.", 404)
         if not isinstance(secret, str) or not hmac.compare_digest(secret.encode(), adapter.webhook_secret.encode()):
@@ -742,6 +754,13 @@ class OAuthService:
             update = json.loads(raw)
         except (ValueError, UnicodeDecodeError):
             return {"ok": True}
+        if getattr(adapter, 'candidate_mode', False) and not getattr(self, 'telegram', None):
+            return {'ok': True}
+        if getattr(self, "telegram", None):
+            from .telegram.updates import ingest
+            received = ingest(self.telegram, adapter, update, raw)
+            if isinstance(received, dict) and received.get('canaryIgnored') is True:
+                return {'ok': True}
         seen = adapter.observe(update)
         if not seen or not getattr(adapter, "execution_enabled", True):
             return {"ok": True}
@@ -749,10 +768,15 @@ class OAuthService:
         claimed = False
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT id::text,verifier_ciphertext,key_id,extract(epoch from expires_at)::float8,consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND provider='telegram' FOR UPDATE", (hashlib.sha256(code.encode()).hexdigest(),))
+                scope = adapter.candidate_scope if getattr(adapter, 'candidate_mode', False) else None
+                limit = ' AND workspace_id=%s AND member_id=%s' if scope else ''
+                params = (hashlib.sha256(code.encode()).hexdigest(),) + ((scope['workspaceId'],scope['actorId']) if scope else ())
+                cur.execute("SELECT id::text,verifier_ciphertext,key_id,extract(epoch from expires_at)::float8,consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND provider='telegram'" + limit + " FOR UPDATE", params)
                 found = cur.fetchone()
                 if found and not found[4] and found[3] > self.clock():
                     context = json.loads(self.vault.decrypt(found[1], found[2]))
+                    if context.get("botRef") != adapter.bot_ref:
+                        return {"ok": True}
                     # The first channel that shows the code claims it; a copy posted elsewhere later changes nothing.
                     if not isinstance(context.get("chat"), dict):
                         context["chat"] = chat
@@ -866,7 +890,7 @@ class OAuthService:
         return adapter.client_metadata() if name == "client-metadata.json" else adapter.jwks()
 
     @staticmethod
-    def _capabilities(adapter, requested, granted, missing, now, access_token=None):
+    def _capabilities(adapter, requested, granted, missing, now, access_token=None, *, workspace_id=None, actor_id=None):
         """Build the whole matrix from the live grant, not only the last requested slice.
 
         Incremental Meta OAuth can return a token containing permissions granted in earlier
@@ -888,6 +912,19 @@ class OAuthService:
                     set_level(matrix, 'schedule', 'Direct', 'YouTube-native scheduling; public-upload gates verified, real acceptance remains separate.', now, adapter.capability_version)
             return matrix
         matrix = assisted_matrix() if adapter.assisted_fallback else unsupported_matrix()
+        if getattr(adapter, "id", None) == "telegram" and access_token:
+            from .telegram.capabilities import compute, provider_capabilities
+            from .telegram.publishing import snapshot
+            session = adapter.session(access_token)
+            adapter = adapter.for_session(session)
+            chat, member = snapshot(adapter, session)
+            actual = compute(chat, member, **provider_capabilities(adapter, chat["id"], workspace_id=workspace_id, actor_id=actor_id), now=now)
+            matrix = unsupported_matrix()
+            set_level(matrix, "identity", "Direct", "Telegram returned this destination and bot membership.", now, adapter.capability_version)
+            for generic, specific in (("publish", "publish"), ("schedule", "schedule"), ("comments_read", "comments_read"), ("reply", "reply"), ("analytics", "engagement")):
+                if actual[specific]["enabled"]:
+                    set_level(matrix, generic, "Direct", actual[specific]["limitation"] or "Destination-specific rights and real acceptance evidence.", now, adapter.capability_version)
+            return matrix
         granted_set = set(granted or [])
         account_scoped = bool(getattr(adapter, "account_scoped_direct", False))
         direct_allowed = bool(adapter.production_reviewed or account_scoped)

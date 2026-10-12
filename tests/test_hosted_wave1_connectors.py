@@ -53,6 +53,21 @@ class Wire:
         return self.responses.pop(0)
 
 
+class TelegramWire(Wire):
+    """Offline permission observations; write receipts remain explicit ordered fixtures."""
+    def __call__(self, method, url, **kwargs):
+        name = url.rsplit('/',1)[-1]
+        results = {'getMe': {'id':999,'username':'RafiiBot'}, 'getChat': {'id':-100123,'type':'channel','title':'James','username':'jamesau'}, 'getChatMember': {'status':'administrator','can_post_messages':True}}
+        if name in results:
+            self.calls.append({'method':method,'url':url,**kwargs})
+            return ok({'ok':True,'result':results[name]})
+        return super().__call__(method,url,**kwargs)
+
+def qualify_telegram(adapter):
+    adapter.acceptance = {'-100123': {'source':'telegram_real_e2e','qualificationVersion':adapter.ACCEPTANCE_VERSION,'botId':999,'cases':[{'capability':c,'passed':True,'messageId':9,'timestamp':1791000000,'evidenceRef':'synthetic-fixture-only'} for c in ('publish','text')]}}
+    return adapter
+
+
 def jwt(token):
     header, payload, signature = token.split(".")
     return json.loads(b64u_decode(header)), json.loads(b64u_decode(payload)), signature
@@ -232,6 +247,7 @@ class TelegramAdapter(unittest.TestCase):
     def test_code_shape_webhook_setup_observation_and_rights(self):
         wire = Wire([ok({"ok": True, "result": {"url": ""}}), ok({"ok": True, "result": True}),
                      ok({"ok": True, "result": {"id": 999, "username": "RafiiBot"}}),
+                     ok({"ok": True, "result": {"id": -100123, "type": "channel", "username": "jamesau"}}),
                      ok({"ok": True, "result": {"status": "administrator", "can_post_messages": True}}),
                      ok({"ok": True, "result": {"id": -100123, "type": "channel", "username": "jamesau"}})])
         telegram = TelegramConnector(BOT, HOOK, BASE, transport=wire)
@@ -469,7 +485,7 @@ class ServiceFlows(unittest.TestCase):
 
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_telegram_code_is_claimed_by_the_first_channel_post_then_connects(self):
-        wire = Wire([ok({"ok": True, "result": {"url": BASE + "/api/telegram/webhook"}}), ok({"ok": True, "result": {"id": 999, "username": "RafiiBot"}})])
+        wire = TelegramWire([ok({"ok": True, "result": {"url": BASE + "/api/telegram/webhook", "allowed_updates": TelegramConnector.ALLOWED_UPDATES}})])
         telegram = TelegramConnector(BOT, HOOK, BASE, transport=wire)
         service = self.service({"telegram": telegram})
         started = service.start("workspace", "session", "telegram", "publish")
@@ -484,12 +500,12 @@ class ServiceFlows(unittest.TestCase):
         self.assertEqual(service.telegram_webhook(HOOK, post(-100123, 7)), {"ok": True})
         self.assertEqual(wire.calls[-1]["body"], {"chat_id": -100123, "message_id": 7})  # the code message is deleted
         self.assertEqual(service.telegram_webhook(HOOK, post(-100999, 8)), {"ok": True})  # a later copy elsewhere changes nothing
-        wire.responses = [ok({"ok": True, "result": {"status": "administrator", "can_post_messages": True}}),
-                          ok({"ok": True, "result": {"id": -100123, "type": "channel", "title": "James"}})]
+        wire.responses = []
         result = service.complete("workspace", "session", "telegram", code, None)
         self.assertTrue(result["connected"])
         self.assertEqual(result["missingScopes"], [])
         self.assertEqual(self.repo.state["phase2"]["channels"][-1]["providerAccountId"], "-100123")
+        self.assertFalse(self.repo.state["phase2"]["channels"][-1]['capabilityVerified'])
 
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_device_code_stays_encrypted_while_pending_then_connects_once(self):
@@ -604,9 +620,9 @@ class Publishing(unittest.TestCase):
 
     def test_telegram_receipt_is_verified_only_for_the_exact_text_and_channel(self):
         text = manifest("Telegram", "-100123")["payload"]["text"]
-        wire = Wire([ok({"ok": True, "result": {"message_id": 9, "chat": {"id": -100123, "type": "channel", "username": "jamesau"}, "text": text}}),
-                     ok({"ok": True, "result": {"message_id": 10, "chat": {"id": -100123, "type": "channel"}, "text": "edited"}})])
-        telegram = self.reviewed(TelegramConnector(BOT, HOOK, BASE, transport=wire))
+        wire = TelegramWire([ok({"ok": True, "result": {"message_id": 9, "date": 1791000000, "chat": {"id": -100123, "type": "channel", "username": "jamesau"}, "text": text}}),
+                     ok({"ok": True, "result": {"message_id": 10, "date": 1791000000, "chat": {"id": -100123, "type": "channel"}, "text": "edited"}})])
+        telegram = qualify_telegram(self.reviewed(TelegramConnector(BOT, HOOK, BASE, transport=wire)))
         social = HostedSocial(Grants(json.dumps({"v": 1, "chat": -100123}), ["can_post_messages"]), {"telegram": telegram})
         receipt = social.submit(manifest("Telegram", "-100123"))
         self.assertEqual(normalize_result(receipt, {"manifest": {"platform": "Telegram"}})["state"], "verified")
@@ -661,17 +677,17 @@ class DefiniteRejections(unittest.TestCase):
 
     def test_telegram_error_codes(self):
         cases = ((400, {"ok": False, "error_code": 400, "description": "Bad Request: message text is empty"}, "failed"),
-                 (403, {"ok": False, "error_code": 403, "description": "Forbidden: bot is not a member of the channel chat"}, "failed"),
+                 (403, {"ok": False, "error_code": 403, "description": "Forbidden: bot is not a member of the channel chat"}, "held"),
                  (429, {"ok": False, "error_code": 429, "description": "Too Many Requests", "parameters": {"retry_after": 5}}, "scheduled"),
                  (502, {"raw": "Bad Gateway"}, "uncertain"))
         for status, body, state in cases:
             with self.subTest(status=status):
-                telegram = TelegramConnector(BOT, HOOK, BASE, transport=Wire([ok(body, status)]))
+                telegram = qualify_telegram(TelegramConnector(BOT, HOOK, BASE, transport=TelegramWire([ok(body, status)])))
                 telegram.production_reviewed = True
                 result = HostedSocial(Grants(json.dumps({"v": 1, "chat": -100123}), ["can_post_messages"]), {"telegram": telegram}).submit(manifest("Telegram", "-100123"))
                 self.assertEqual(result["state"], state)
                 if state == "failed":
-                    self.assertIn(body["description"], result["confirmed"])
+                    self.assertNotIn(BOT, result["confirmed"])
 
     def test_discord_and_bluesky_bad_requests(self):
         discord = DiscordProvider("1234567", "secret", "bot.token", BASE, transport=Wire([ok({"message": "Invalid Form Body", "code": 50035}, 400)]))

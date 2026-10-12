@@ -315,6 +315,15 @@ class Phase2Store(Store):
         elif action == "review":
             manifest = self.build_manifest(s, p, device["user_id"])
             data["reviews"] = data["reviews"][-19:]+[{"id": uid(), "manifest": manifest, "digest": digest(manifest), "status": "needs_review", "createdAt": now}]
+        elif action == 'telegram_reschedule':
+            job=find(data['jobs'],p.get('jobId'));old=job['manifest']
+            if old.get('platform')!='Telegram' or job['state'] not in ('scheduled','approved') or job.get('leaseUntil',0)>now:raise AlphaError('Only an unstarted Telegram schedule can be rescheduled. Reconcile publishing jobs first.',409)
+            choices={'channelId':old['channelId'],'variantId':old['variantId'],'localTime':p.get('localTime'),'timeZone':p.get('timeZone'),'fold':p.get('fold'),'acknowledgedWarnings':old['acknowledgedWarnings'],'assetIds':[m['id'] for m in old['media']],'alt':old['media'][0].get('alt','') if old['media'] else '', 'rightsConfirmed':all(m.get('rightsConfirmed') is True for m in old['media']),'publishOptions':old.get('publishOptions')}
+            manifest=self.build_manifest(s,choices,device['user_id'])
+            if manifest['payload']!=old['payload'] or manifest['media']!=old['media'] or manifest.get('publishOptions')!=old.get('publishOptions') or manifest.get('sourceDigest')!=old.get('sourceDigest'):raise AlphaError('The approved content changed. Cancel the old job and prepare an updated draft instead.',409)
+            manifest.pop('idempotencyKey');manifest.update(replacesJobId=job['id'],replacesIdempotencyKey=old['idempotencyKey'])
+            manifest['idempotencyKey']=digest(manifest)
+            data['reviews']=data['reviews'][-19:]+[{'id':uid(),'manifest':manifest,'digest':digest(manifest),'status':'needs_review','createdAt':now}]
         elif action == "approve":
             review = find(data["reviews"], p.get("reviewId"))
             if review.get('privacyErased') or review.get('manifest', {}).get('privacyErased'):
@@ -333,15 +342,23 @@ class Phase2Store(Store):
                 review.update({"status": "approved", "jobId": existing["id"]})
                 return
             channel = find(data["channels"], manifest["channelId"])
+            replacement=None
+            if manifest.get('replacesJobId'):
+                replacement=find(data['jobs'],manifest['replacesJobId'])
+                if replacement['state'] not in ('scheduled','approved') or replacement.get('leaseUntil',0)>now or replacement['manifest']['idempotencyKey']!=manifest.get('replacesIdempotencyKey'):raise AlphaError('The original schedule already started or changed. Reconcile it before replacing it.',409)
             limit = DAILY_LIMITS.get(channel["platform"])
-            recent = [j for j in data["jobs"] if j["manifest"]["channelId"] == manifest["channelId"] and j.get("approvedAt", 0) > now - 86400 and j["state"] not in ("canceled", "failed")]
+            recent = [j for j in data["jobs"] if j["manifest"]["channelId"] == manifest["channelId"] and j.get("approvedAt", 0) > now - 86400 and j["state"] not in ("canceled", "failed") and j is not replacement]
             if limit and len(recent) >= limit:
                 raise AlphaError(f"{channel['platform']} allows {limit} posts per 24 hours for this account; this approval would exceed it.", 409)
             review["status"] = "approved"
             youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
             job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
-            self.event(job, "approved", "Exact local fixture approval recorded")
-            self.event(job, "scheduled", "Waiting for the local durable worker")
+            if replacement:
+                replacement.update(cancelRequested=True,replacedByJobId=job['id'])
+                self.event(replacement,'canceled','Replaced by the exact approved Telegram reschedule review')
+            hosted = manifest.get('execution') == 'hosted-live'
+            self.event(job, "approved", "Exact destination approval recorded" if hosted else "Exact local fixture approval recorded")
+            self.event(job, "scheduled", "Waiting for the hosted durable worker" if hosted else "Waiting for the local durable worker")
             data["jobs"].append(job)
             review["jobId"] = job["id"]
         elif action == "approve_many":
@@ -404,7 +421,7 @@ class Phase2Store(Store):
             raise AlphaError("The variant and current speaker must match this destination.")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
-        if not text.strip() or measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]:
+        if not text.strip() or (c["platform"] != "Telegram" and measure(c["platform"], text)["used"] > LIMITS[c["platform"]]["characters"]):
             raise AlphaError("The content exceeds this destination's versioned text limit.")
         # Threads rejects a post with more than 5 links (official posts guide, from 2025-12-22).
         if c["platform"] == "Threads" and len(re.findall(r"https?://", text)) > 5:
@@ -413,7 +430,7 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
-        if p.get("assetId"):
+        if p.get("assetId") and c["platform"] != "Telegram":
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
                 if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
@@ -438,6 +455,18 @@ class Phase2Store(Store):
                 media = [{key: a[key] for key in ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration")}
                          | ({"objectName": a["objectName"]} if isinstance(a.get("objectName"), str) else {})
                          | {"alt": clean(p["alt"], 1000), "rightsConfirmed": True}]
+        if c["platform"] == "Telegram":
+            selected_ids = p.get("assetIds", [p["assetId"]] if p.get("assetId") else [])
+            if not isinstance(selected_ids, list) or any(not isinstance(i, str) for i in selected_ids) or len(selected_ids) > 20 or len(set(selected_ids)) != len(selected_ids):
+                raise AlphaError("Select at most twenty distinct Telegram media dependencies for ten album items.", 400)
+            if selected_ids and p.get("rightsConfirmed") is not True:
+                raise AlphaError("Confirm rights for every selected Telegram media file.", 409)
+            for asset_id in selected_ids:
+                a = find(data["assets"], asset_id)
+                if not (asset_kinds.is_postable_image(a) or asset_kinds.is_postable_video(a)):
+                    raise AlphaError("Telegram media must be verified and available in this workspace.", 409)
+                keys = ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration", "durationSource", "bucket", "objectName", "etag", "verified", "poster")
+                media.append({k: a[k] for k in keys if k in a} | {"alt": clean(p.get("alt", ""), 1000), "rightsConfirmed": True})
         if c["platform"] in ("Instagram", "Pixelfed") and not media:
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
@@ -448,6 +477,11 @@ class Phase2Store(Store):
             approved_at = int(self.clock() // 60 * 60 + 60)
             timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
             timing['mode'] = 'now'
+        elif c['platform']=='Telegram' and p.get('publishNow') is True:
+            from datetime import datetime, timezone
+            now=self.clock()
+            timing=resolve_time(datetime.fromtimestamp(now+1,timezone.utc).replace(tzinfo=None).isoformat(),'UTC',0,now)
+            timing.update(timestamp=now,utc=datetime.fromtimestamp(now,timezone.utc).isoformat(),local=datetime.fromtimestamp(now,timezone.utc).replace(tzinfo=None).isoformat(),mode='publish_after_approval')
         else:
             timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":

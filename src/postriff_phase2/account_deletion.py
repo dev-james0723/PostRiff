@@ -167,6 +167,9 @@ def _delete(service, workspace_id, principal):
         # Person-keyed growth data (migration 025): events carry a user id without an FK; assignments are keyed by subject.
         cur.execute('DELETE FROM public.pr_product_events WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_experiment_assignments WHERE subject_key IN (%s, %s)', (str(principal), str(workspace_id)))
+        # Telegram's global identity ownership fence has no workspace cascade.
+        from .telegram.privacy import erase_identity
+        erase_identity(cur, principal)
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.
