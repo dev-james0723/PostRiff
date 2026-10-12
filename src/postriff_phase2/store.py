@@ -76,7 +76,11 @@ class Phase2Store(Store):
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
         if p:
-            p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
+            # Hosted billing is authoritative. Internal and paid workspaces can
+            # have no legacy trial; presenting them must not invent one.
+            trial = p.get("trial")
+            if isinstance(trial, dict) and isinstance(trial.get("expiresAt"), (int, float)):
+                trial["status"] = "active" if self.clock() < trial["expiresAt"] else "expired"
             p["art"]["providerBrief"] = self.art_brief(state)
             p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
             p["plans"] = [{"id": key, **value} for key, value in PLANS.items()]
