@@ -3,9 +3,67 @@ import re
 from urllib.parse import parse_qs, unquote, urlparse
 
 
+PRODUCTION_PROJECT_ID = 'prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L'
+PRODUCTION_DATABASE_REF = 'buoyhkbodnhzngaotoel'
+FORBIDDEN_PROJECT_ID = 'prj_4bfvSc0AC6am9FdknFWcwNYgmcnN'
+FORBIDDEN_DATABASE_REF = 'oxacvkhpfgytkepxcaqh'
+
+
+def production_binding_proof(values):
+    """Inspect bindings without opening a database or exposing a connection string."""
+    urls = ('POSTRIFF_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL')
+    try:
+        dsn = urlparse(values.get('POSTRIFF_DATABASE_URL', ''))
+    except ValueError:
+        raise ValueError('Invalid database binding; no database connection was made.') from None
+    username = unquote(dsn.username or '')
+    direct = dsn.hostname == 'db.' + PRODUCTION_DATABASE_REF + '.supabase.co' and username == 'postgres'
+    pooled = bool(re.fullmatch(r'[a-z0-9.-]+\.pooler\.supabase\.com', dsn.hostname or '')) and username == 'postgres.' + PRODUCTION_DATABASE_REF
+    forbidden = (values.get('VERCEL_PROJECT_ID') == FORBIDDEN_PROJECT_ID
+        or values.get('POSTRIFF_CONNECTION_TARGET') in (FORBIDDEN_PROJECT_ID, FORBIDDEN_DATABASE_REF)
+        or any(FORBIDDEN_DATABASE_REF in str(values.get(key, '')) for key in urls)
+        or FORBIDDEN_DATABASE_REF in (dsn.hostname or '') or FORBIDDEN_DATABASE_REF in username)
+    if forbidden:
+        raise ValueError('Owner directive #179: Rafii X/Mastodon/Telegram cannot use the forbidden staging project or database.')
+    bound = (dsn.scheme in ('postgres', 'postgresql') and (direct or pooled)
+        and parse_qs(dsn.query).get('sslmode') in (['require'], ['verify-full']))
+    expected = 'https://' + PRODUCTION_DATABASE_REF + '.supabase.co'
+    identity = all(str(values.get(key, '')).rstrip('/') == expected for key in urls[:2])
+    return {'projectId': values.get('VERCEL_PROJECT_ID'),
+        'supabaseProjectRef': PRODUCTION_DATABASE_REF if identity else None,
+        'databaseProjectRef': PRODUCTION_DATABASE_REF if bound else None,
+        'databaseBindingVerified': bool(bound and identity and values.get('VERCEL_PROJECT_ID') == PRODUCTION_PROJECT_ID),
+        'databaseConnectionMode': ('transaction_pooler' if pooled and dsn.port == 6543 else 'session_pooler' if pooled else 'direct') if bound else None,
+        'databasePort': dsn.port if bound else None,
+        'databaseTLS': parse_qs(dsn.query).get('sslmode', [None])[0] if bound else None}
+
+
+def assert_production_candidate(values):
+    proof = production_binding_proof(values)
+    if values.get('POSTRIFF_ENVIRONMENT') == 'production-canary' and values.get('POSTRIFF_X_RELEASE_MODE', 'off') not in ('off', 'canary'):
+        raise ValueError('Production canary must keep X off or confined to authorized owner workspaces.')
+    if str(values.get('CI', '')).lower() in ('true', '1') and not values.get('VERCEL_ENV') and (proof['databaseProjectRef'] or proof['supabaseProjectRef']):
+        raise ValueError('Synthetic CI must use a disposable database, never the persistent production service.')
+    cloud = values.get('VERCEL_ENV') in ('preview', 'production')
+    canary = values.get('POSTRIFF_ENVIRONMENT') == 'production-canary'
+    if cloud and (values.get('VERCEL_ENV') == 'production' or canary):
+        if not proof['databaseBindingVerified']:
+            raise ValueError('Owner directive #179: production candidate requires the canonical Vercel project, production Supabase identity and TLS database binding before connecting.')
+        if values.get('POSTRIFF_PRODUCTION_PROJECT_REF') != PRODUCTION_DATABASE_REF:
+            raise ValueError('Owner directive #179: pin the canonical production Supabase reference.')
+        if values.get('POSTRIFF_API_ORIGIN'):
+            raise ValueError('Production candidate API must use this deployment, not a cross-service rewrite.')
+    return proof
+
+
 def isolated_environment(values):
     result = dict(values)
+    assert_production_candidate(result)
     if result.get('VERCEL_ENV') != 'preview':
+        return result
+    if result.get('POSTRIFF_ENVIRONMENT') == 'production-canary':
+        if result.get('POSTRIFF_X_RELEASE_MODE', 'off') not in ('off', 'canary'):
+            raise ValueError('Production canary must keep X off or confined to authorized owner workspaces.')
         return result
     if result.get('POSTRIFF_ENVIRONMENT') != 'staging':
         raise ValueError('Preview requires the explicit staging environment.')

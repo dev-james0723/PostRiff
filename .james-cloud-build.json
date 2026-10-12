@@ -9,7 +9,7 @@
     "typecheck": "typecheck",
     "build": "build",
     "test": "test:linkedin:jcb",
-    "ci": "ci:linkedin:jcb",
+    "ci": "ci:linkedin:release:jcb",
     "e2e": "e2e:linkedin:jcb"
   },
   "runner": {
@@ -50,7 +50,7 @@
   "checkoutPersistCredentials": true,
   "framework": "next",
   "transportMode": "remote_patch",
-  "cacheScope": "e408bbcd8242",
+  "cacheScope": "rafii-linkedin-production-release-20261012",
   "packageManagerVersion": "11.12.1",
   "lockfile": "package-lock.json",
   "lockfileSha256": "1b300aacc1220cf05699ea08bd92986ebff7c4068fad447be9a0866084f3f0c5",

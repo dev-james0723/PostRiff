@@ -47,7 +47,8 @@
     "test:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh backend",
     "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend",
     "ci:founder-access:jcb": "npm run lint && npm run typecheck && npm run test:jcb && npm run build && node node_modules/playwright/cli.js install --with-deps chromium && node tests/founder-access-browser.cjs",
-    "ci:founder-access:browser:jcb": "npm run build && node node_modules/playwright/cli.js install --with-deps chromium && node tests/founder-access-browser.cjs"
+    "ci:founder-access:browser:jcb": "npm run build && node node_modules/playwright/cli.js install --with-deps chromium && node tests/founder-access-browser.cjs",
+    "ci:linkedin:release:jcb": "npm run lint && npm run typecheck && npm run test:linkedin:jcb && npm run test:linkedin:automation:jcb && npm run test:jcb && npm run build && npm run e2e:linkedin:browser:jcb && node tests/founder-access-browser.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

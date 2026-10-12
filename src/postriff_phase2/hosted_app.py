@@ -549,7 +549,12 @@ class HostedApplication:
                 configured = self.service is not None or all(os.environ.get(key) for key in ("POSTRIFF_DATABASE_URL", "POSTRIFF_SUPABASE_URL", "POSTRIFF_SUPABASE_PUBLISHABLE_KEY", "POSTRIFF_SUPABASE_SECRET_KEY"))
                 revision = os.environ.get('VERCEL_GIT_COMMIT_SHA', '')
                 revision = revision if re.fullmatch(r'[0-9a-f]{40}', revision) else None
-                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision})
+                from .deployment import production_binding_proof
+                try:
+                    bindings = production_binding_proof(os.environ)
+                except (ValueError, TypeError):
+                    bindings = {'databaseBindingVerified': False}
+                return self._json(start_response, 200, {"status": "ok", "execution": "phase2-hosted-candidate", "configured": bool(configured), "phase0": "incomplete", "customerValidated": False, "sourceRevision": revision, "productionBindings": bindings})
             if path == "/api/catalog" and method == "GET":
                 provider = (self.public_auth or {}).get("provider", "supabase")
                 return self._json(start_response, 200, {"templates": catalog(), "routes": routes(), "profileMetadata": metadata(), "phase2": True, "authMode": "dev" if provider == "dev" else "supabase", "execution": (self.public_auth or {}).get("execution", "hosted")})
