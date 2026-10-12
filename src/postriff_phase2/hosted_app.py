@@ -692,11 +692,23 @@ class HostedApplication:
                 supplied = environ.get("HTTP_AUTHORIZATION", "")
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
+                preserved_cron = None
+                if telegram_canary:
+                    from .telegram.canary_cron import preserve_live_cron
+                    preserved_cron = preserve_live_cron(environ, os.environ, expected)
                 service = self._runtime()
                 if telegram_canary:
                     provider = getattr(getattr(service, 'oauth', None), 'telegram', None)
-                    result = self.worker.tick_telegram_canary(getattr(provider, 'candidate_scope', None))
+                    try:
+                        result = self.worker.tick_telegram_canary(getattr(provider, 'candidate_scope', None))
+                    except AlphaError as error:
+                        if preserved_cron is None:
+                            raise
+                        # Grant expiry cannot interrupt the preceding accepted cron.
+                        result = {'processed': 0, 'acceptanceState': 'unavailable', 'acceptanceCode': error.code}
                     result['acceptanceScope'] = 'telegram_owner_only'
+                    if preserved_cron is not None:
+                        result['preservedLiveCron'] = preserved_cron
                     return self._json(start_response, 200, result)
                 result = self.worker.tick()
                 telegram = getattr(getattr(service, 'oauth', None), 'telegram', None)

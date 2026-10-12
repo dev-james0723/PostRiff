@@ -8,6 +8,8 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted_app import HostedApplication
 from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.telegram.canary_worker import LEGACY_FENCE_AT, accepts_event, dispatch_at, fence_job, ingress_scope, preserve_fence, selected, worker_scope
+from postriff_phase2.telegram.canary_cron import NoRedirect, preserve_live_cron
+from postriff_phase2.social_release import PRODUCTION_PROJECT, PRODUCTION_REF, PRODUCTION_URL
 from test_postriff_phase2_hosted import invoke
 
 NOW = 1800000000
@@ -24,6 +26,103 @@ def approved_job():
     return {'id': 'qa-job', 'state': 'approved', 'approvedBy': ACTOR, 'approvalDigest': 'reviewed',
             'nextAt': NOW, 'manifest': {'platform': 'Telegram', 'workspaceId': WORKSPACE,
                 'actor': ACTOR, 'channelId': 'qa', 'expiresAt': NOW + 300}}
+
+
+class CanaryCronContinuityTests(unittest.TestCase):
+    def values(self):
+        return {'VERCEL_ENV': 'production', 'VERCEL_PROJECT_ID': PRODUCTION_PROJECT,
+                'VERCEL_URL': 'postriff-phase2-private-new-jamesau0723-6572s-projects.vercel.app',
+                'POSTRIFF_SUPABASE_URL': PRODUCTION_URL, 'NEXT_PUBLIC_SUPABASE_URL': PRODUCTION_URL,
+                'POSTRIFF_DATABASE_URL': 'postgresql://postgres.' + PRODUCTION_REF + ':synthetic@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require',
+                'POSTRIFF_TELEGRAM_CANARY_ENABLED': 'true',
+                'POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN': 'https://postriff-phase2-private-accepted-jamesau0723-6572s-projects.vercel.app'}
+
+    def platform_headers(self):
+        return {'Authorization': 'Bearer ' + 'c' * 24, 'User-Agent': 'vercel-cron/1.0',
+                'X-Vercel-Cron-Schedule': '* * * * *'}
+
+    def test_manual_acceptance_does_not_invoke_live_worker(self):
+        send = Mock(side_effect=AssertionError('No shared worker'))
+        self.assertIsNone(preserve_live_cron({}, self.values(), 'c' * 24, send=send))
+        send.assert_not_called()
+
+    def test_platform_call_delegates_once_to_exact_accepted_host(self):
+        send = Mock(return_value=200)
+        result = preserve_live_cron({'HTTP_USER_AGENT': 'vercel-cron/1.0',
+                                     'HTTP_X_VERCEL_CRON_SCHEDULE': '* * * * *'},
+                                    self.values(), 'c' * 24, send=send)
+        self.assertEqual(result, {'state': 'delegated', 'upstreamHttpStatus': 200, 'retried': False})
+        url, headers = send.call_args.args
+        self.assertEqual(url, self.values()['POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN'] + '/api/cron/worker')
+        self.assertEqual(headers['Authorization'], 'Bearer ' + 'c' * 24)
+        self.assertEqual(headers['X-Postriff-Telegram-Cron-Relay'], '1')
+        send.assert_called_once()
+
+    def test_unknown_missing_alias_redirect_and_self_targets_never_receive_secret(self):
+        for origin in ('', 'https://rafii.io', 'http://postriff-phase2-private-accepted-jamesau0723-6572s-projects.vercel.app',
+                       self.values()['POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN'] + '/redirect',
+                       self.values()['POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN'] + '?url=another',
+                       'https://' + self.values()['VERCEL_URL'],
+                       'https://user:password@postriff-phase2-private-accepted-jamesau0723-6572s-projects.vercel.app'):
+            with self.subTest(origin=origin):
+                send = Mock()
+                with self.assertRaises(AlphaError):
+                    preserve_live_cron({'HTTP_USER_AGENT': 'vercel-cron/1.0'},
+                                       {**self.values(), 'POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN': origin},
+                                       'c' * 24, send=send)
+                send.assert_not_called()
+
+    def test_relay_loop_and_wrong_environment_stop_before_network(self):
+        for env, values in (({'HTTP_X_POSTRIFF_TELEGRAM_CRON_RELAY': '1'}, self.values()),
+                            ({}, {**self.values(), 'VERCEL_ENV': 'preview'}),
+                            ({}, {**self.values(), 'VERCEL_PROJECT_ID': 'another'})):
+            send = Mock()
+            with self.assertRaises(AlphaError):
+                preserve_live_cron({'HTTP_USER_AGENT': 'vercel-cron/1.0', **env}, values, 'c' * 24, send=send)
+            send.assert_not_called()
+
+    def test_failed_or_ambiguous_old_worker_calls_are_scrubbed_and_never_retried(self):
+        for response in (302, 401, 500, RuntimeError('Bearer ' + 'c' * 24)):
+            send = Mock(side_effect=response) if isinstance(response, Exception) else Mock(return_value=response)
+            with self.subTest(response=type(response).__name__), self.assertRaises(AlphaError) as caught:
+                preserve_live_cron({'HTTP_USER_AGENT': 'vercel-cron/1.0'}, self.values(), 'c' * 24, send=send)
+            self.assertNotIn('c' * 24, str(caught.exception))
+            send.assert_called_once()
+
+    def test_redirect_handler_never_moves_cron_authorization_to_another_host(self):
+        self.assertIsNone(NoRedirect().redirect_request(None, None, 302, '', {}, 'https://another.example'))
+
+    def test_unauthorized_platform_request_never_relays_or_opens_runtime(self):
+        app = HostedApplication(cron_secret='c' * 24)
+        app._runtime = Mock()
+        with patch.dict('os.environ', self.values()), patch('postriff_phase2.telegram.canary_cron._send') as send:
+            status, _, _ = invoke(app, 'GET', '/api/cron/worker',
+                                  headers={**self.platform_headers(), 'Authorization': 'Bearer wrong'})
+        self.assertEqual(status, 401)
+        send.assert_not_called()
+        app._runtime.assert_not_called()
+
+    def test_missing_live_target_stops_platform_request_before_runtime(self):
+        app = HostedApplication(cron_secret='c' * 24)
+        app._runtime = Mock()
+        with patch.dict('os.environ', {**self.values(), 'POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN': ''}), \
+                patch('postriff_phase2.telegram.canary_cron._send') as send:
+            status, _, _ = invoke(app, 'GET', '/api/cron/worker', headers=self.platform_headers())
+        self.assertEqual(status, 503)
+        send.assert_not_called()
+        app._runtime.assert_not_called()
+
+    def test_grant_expiry_preserves_accepted_cron_without_shared_candidate_worker(self):
+        service = SimpleNamespace(oauth=SimpleNamespace(telegram=SimpleNamespace(candidate_scope={})))
+        worker = Mock()
+        worker.tick_telegram_canary.side_effect = AlphaError('Expired', 503, code='telegram_canary_unavailable')
+        app = HostedApplication(service, worker, cron_secret='c' * 24)
+        with patch.dict('os.environ', self.values()), patch('postriff_phase2.telegram.canary_cron._send', return_value=200) as send:
+            status, _, result = invoke(app, 'GET', '/api/cron/worker', headers=self.platform_headers())
+        self.assertEqual((status, result['processed'], result['acceptanceState']), (200, 0, 'unavailable'))
+        self.assertEqual(result['preservedLiveCron']['upstreamHttpStatus'], 200)
+        send.assert_called_once()
+        worker.tick.assert_not_called()
 
 
 class CanaryWorkerTests(unittest.TestCase):
