@@ -83,8 +83,15 @@ def validate_structure(root=ROOT):
     checks.append(_result("function-bundle-boundary", "pass" if private_exclusions else "fail", "local credentials, launchers, private social modules, tests and evidence are excluded"))
     upload_rules = (root / ".vercelignore").read_text().splitlines()
     normalized_upload_rules = {rule.removeprefix("/") for rule in upload_rules}
-    upload_boundary = all(rule in normalized_upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and not any(rule.startswith("!") for rule in upload_rules)
-    checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "explicit blocklist excludes credentials, hidden broker state, caches, private modules, tests and evidence from source upload"))
+    # Both service build commands need this public guard. Accept exactly that
+    # file after a scripts block, while rejecting every other upload exception.
+    guard_rule = "!/scripts/check_social_release_binding.py"
+    public_guard_only = ([rule for rule in upload_rules if rule.startswith("!")] == [guard_rule]
+                         and "/scripts/*" in upload_rules
+                         and upload_rules.index("/scripts/*") < upload_rules.index(guard_rule)
+                         and (root / "scripts/check_social_release_binding.py").is_file())
+    upload_boundary = all(rule in normalized_upload_rules for rule in (".env*", ".*-broker-*", ".upgrade-*", "broker.key", ".phase3-build-venv/", "desktop/", "vendor/", "src/james_au_social/", "studio/broker/", "studio/web/", "web/node_modules/", "web/.next/", "docs/", "tests/")) and public_guard_only
+    checks.append(_result("source-upload-boundary", "pass" if upload_boundary else "fail", "private inputs remain blocked; only the required public binding guard may bypass the scripts block"))
 
     dependencies = set((root / "requirements.txt").read_text().splitlines())
     pinned = "Pillow==12.3.0" in dependencies and "psycopg[binary]==3.3.5" in dependencies

@@ -63,7 +63,7 @@ class CanaryCronContinuityTests(unittest.TestCase):
                        self.values()['POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN'] + '/redirect',
                        self.values()['POSTRIFF_TELEGRAM_CANARY_LIVE_WORKER_ORIGIN'] + '?url=another',
                        'https://' + self.values()['VERCEL_URL'],
-                       'https://user:password@postriff-phase2-private-accepted-jamesau0723-6572s-projects.vercel.app'):
+                       'https://synthetic-user@postriff-phase2-private-accepted-jamesau0723-6572s-projects.vercel.app'):
             with self.subTest(origin=origin):
                 send = Mock()
                 with self.assertRaises(AlphaError):
