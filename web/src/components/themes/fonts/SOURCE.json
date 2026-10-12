@@ -1,0 +1,18 @@
+{
+  "reason": "Next.js Google Fonts extensionless URL build defect #99114",
+  "downloaded": "2026-10-11",
+  "files": [
+    {
+      "name": "Merriweather.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather%5Bopsz%2Cwdth%2Cwght%5D.ttf",
+      "bytes": 4628080,
+      "sha256": "d0ed0e359e396af7ad05e73dffd11a3a4c326ea0d0283c56bd9361cb2cc86a96"
+    },
+    {
+      "name": "OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/OFL.txt",
+      "bytes": 4438,
+      "sha256": "715bd349bfa6116f99e351e1548321dcfa25b91df65502d22ca8d624557697d2"
+    }
+  ]
+}

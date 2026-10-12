@@ -12,7 +12,7 @@ import { keys } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { OAuthComplete } from '@/lib/api/types';
 import { takeExpectedReconnect } from '@/lib/channels/connect-expect';
-import { useWorkspaceApi } from '@/lib/workspace/provider';
+import { useWorkspace } from '@/lib/workspace/provider';
 
 /**
  * Handles the platform's return (`/channels/connect?provider&state&code`) with the authenticated exchange.
@@ -21,7 +21,7 @@ import { useWorkspaceApi } from '@/lib/workspace/provider';
 export function ConnectReturn() {
   const params = useSearchParams();
   const router = useRouter();
-  const { api, workspaceId } = useWorkspaceApi();
+  const { api, workspaceId, workspaces, switchTo, status } = useWorkspace();
   const client = useQueryClient();
   const handled = useRef(false);
   const [result, setResult] = useState<OAuthComplete | null>(null);
@@ -31,26 +31,32 @@ export function ConnectReturn() {
   const state = params.get('state') ?? '';
 
   useEffect(() => {
-    if (handled.current) return;
+    if (handled.current || status !== 'ready' || !workspaceId) return;
     handled.current = true;
     if (!provider || !state) {
       setError('This link is incomplete. Start again from Channels.');
       return;
     }
-    api
+    let targetWorkspace = workspaceId;
+    api.oauthContext(provider, state).then((context) => {
+      if (!workspaces.some((item) => item.workspaceId === context.workspaceId)) throw new Error('Workspace unavailable');
+      targetWorkspace = context.workspaceId;
+      if (targetWorkspace !== workspaceId) switchTo(targetWorkspace);
+      return api
       // `iss` names the authorization server that answered (Bluesky); the API checks it against the one it started with.
-      .oauthComplete(workspaceId, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined, params.get('iss') ?? undefined)
+      .oauthComplete(targetWorkspace, provider, state, params.get('code') ?? undefined, params.get('error') ?? undefined, params.get('iss') ?? undefined);
+    })
       .then(async (value) => {
         // A reconnect parked the account it was meant for; read it once whatever the outcome.
         const expected = takeExpectedReconnect();
         // The API returns `connectionId` (oauth.py: complete); the TS type does not list it yet.
         const connectionId = (value as { connectionId?: string }).connectionId;
-        await client.invalidateQueries({ queryKey: keys.channels(workspaceId) });
-        void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
-        await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
+        await client.invalidateQueries({ queryKey: keys.channels(targetWorkspace) });
+        void client.invalidateQueries({ queryKey: keys.audit(targetWorkspace) });
+        await client.invalidateQueries({ queryKey: keys.snapshot(targetWorkspace) });
         if (value.connected && connectionId) {
           if (value.missingScopes?.length) {
-            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Publishing stays Assisted.` });
+            toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Additional permission is required for those features.` });
           }
           if (expected && expected.channelId !== connectionId) {
             toast.warning(`Different account connected. ${expected.account} still needs reconnecting.`);
@@ -62,7 +68,7 @@ export function ConnectReturn() {
         setResult(value);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Start again from Channels.'));
-  }, [api, client, params, provider, router, state, workspaceId]);
+  }, [api, client, params, provider, router, state, workspaceId, workspaces, switchTo, status]);
 
   const back = (
     <Link href='/app/channels' className={buttonVariants({ variant: 'glass', size: 'control' })}>
@@ -80,7 +86,7 @@ export function ConnectReturn() {
             <StateMessage
               kind='success'
               title={`Connected ${result.account ?? ''}`.trim()}
-              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. Publishing stays Assisted.` : undefined}
+              description={result.missingScopes?.length ? `Missing permissions: ${result.missingScopes.join(', ')}. Additional permission is required for those features.` : undefined}
               action={back}
             />
           ) : (

@@ -1,0 +1,16 @@
+{
+  "task": "test",
+  "provider": "depot",
+  "sourceHead": "d2a586cb930cb5f53ace900be80c23aad290a186",
+  "startedAt": "2026-10-07T05:10:03.243213+00:00",
+  "runId": "zhx7j29qw4",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/zhx7j29qw4",
+  "exitCode": 0,
+  "elapsedSeconds": 66.218,
+  "snapshot": {
+    "sourceFingerprint": "3415d0fd9a2c8413103d3bd61e7d357de8745c47684ac5dada61470bc624cc29",
+    "patchSha256": "c5be7f09a4307c18a5fe74f63d9aed497a625048bfec7824f977087437cfe150",
+    "baseSha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e"
+  },
+  "checks": "247 Python tests and all three disposable PostgreSQL programs pass; repairs full-suite integration failures"
+}

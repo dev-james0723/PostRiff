@@ -115,6 +115,20 @@ function load(file, cache = new Map()) {
   return mod.exports;
 }
 
+test('Direct member publishing does not inherit the provider-wide manual-publishing notice', () => {
+  const { deriveAttention } = load(join(SRC, 'lib/attention.ts'));
+  const now = 1_800_000_000;
+  const channel = (platform, level) => ({ id: platform, platform, account: platform + ' owner', connectionState: 'connected',
+    scopes: ['profile'], evidenceSource: 'live_provider', expiresAt: now + 60 * 86400,
+    capabilities: { identity: { level: 'Direct', verifiedAt: now }, publish: { level, verifiedAt: now } } });
+  const run = (channels) => deriveAttention({ snapshot: { isError: false }, usage: { isError: false }, now,
+    channels: { isError: false, data: { channels, providers: [{ platform: 'LinkedIn', productionReviewed: false }, { platform: 'X', productionReviewed: false }] } } });
+  const manual = (channels) => run(channels).items.find((item) => item.id === 'export-only');
+  assert.equal(manual([channel('LinkedIn', 'Direct'), channel('X', 'Assisted')]).title, 'X: you post the last step');
+  assert.equal(manual([channel('LinkedIn', 'Direct')]), undefined);
+  assert.equal(manual([channel('LinkedIn', 'Assisted')]).title, 'LinkedIn: you post the last step');
+});
+
 test('the writing allowance left the Overview strip, so running low or out is an actionable reminder', () => {
   const { deriveAttention } = load(join(SRC, 'lib/attention.ts'));
   const now = 1_800_000_000;

@@ -147,10 +147,12 @@ select 'PASS: two-user RLS, 9 object families, service-only chat media tables, f
 \ir ../../migrations/postriff/098_youtube_authorization_generation.sql
 \ir ../../migrations/postriff/099_youtube_policy_acceptance.sql
 \ir ../../migrations/postriff/100_youtube_api_privacy_erasure.sql
+\ir ../../migrations/postriff/101_x_oauth_provider.sql
 \ir ../../migrations/postriff/105_youtube_agent_history.sql
 \ir ../../migrations/postriff/106_youtube_operations_projection.sql
 \ir ../../migrations/postriff/107_youtube_planner_fairness.sql
 \ir ../../migrations/postriff/109_agent_permissions.sql
+\ir ../../migrations/postriff/118_social_cost_reservations.sql
 do $$ begin
  if not exists (
   select 1 from pg_indexes

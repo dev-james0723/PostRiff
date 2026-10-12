@@ -77,6 +77,7 @@ export interface Asset {
   storagePath?: string;
   /** Chat-context SPEC §5.13. `kind` is always derived from `mime` (`lib/media/asset-kinds.ts`), never trusted. */
   kind?: 'image' | 'video' | 'audio' | 'document' | 'file';
+  pages?: number;
   category?: 'media' | 'video' | string;
   durationSource?: 'container' | 'client';
   poster?: AssetImagePart;
@@ -159,7 +160,10 @@ export interface RunContentType {
   contentSkillRouteIds?: string[];
 }
 
+export interface WorkerBinding { environment: 'preview'; origin: string }
+
 export interface Manifest {
+  workerBinding?: WorkerBinding;
   workspaceId: string;
   actor: string;
   /** The connection this post goes out through (a `ChannelView.id`). */
@@ -191,6 +195,9 @@ export interface Job {
   approvedAt?: number;
   approvalDigest?: string;
   nextAt?: number;
+  leaseUntil?: number;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
   checks?: number;
   scheduleId?: string | null;
   url?: string;
@@ -200,7 +207,11 @@ export interface Job {
   resultSchema?: string;
   progress?: { version: number; stage: string };
   providerReference?: string;
+  publishedEdit?: { text: string; actionId: string; editedAt: number; verification: 'provider_accepted' };
   providerConfirmed?: string;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
@@ -763,6 +774,7 @@ export interface RecurringOccurrence {
 
 export interface Snapshot {
   revision: number;
+  workerBinding?: WorkerBinding | null;
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
@@ -1413,7 +1425,28 @@ export interface Capability {
   capabilityVersion: number;
 }
 
+export interface OfficialCapability {
+  key: string;
+  permission_group: string;
+  officialSupport: 'documented' | 'unsupported' | 'audit_unavailable';
+  state: 'READY' | 'BLOCKED';
+  appApproved: boolean;
+  granted: boolean;
+  eligible: boolean;
+  implemented: boolean;
+  liveE2E: boolean;
+  blockers: string[];
+  limitation: string;
+  method: string;
+  scopes: string[];
+  source: string;
+  scheduling: string;
+}
+
 export interface ChannelView {
+  /** Server-recorded identity read; independent of operation approval/evidence times. */
+  identityVerifiedAt?: number | null;
+  officialCapabilities?: Record<string, OfficialCapability>;
   id: string;
   platform: string;
   account: string;
@@ -1436,6 +1469,7 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  officialCapabilities?: Record<string, OfficialCapability>;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1453,6 +1487,8 @@ export interface ProviderView {
   id: string;
   platform: string;
   productionReviewed: boolean;
+  memberPublishingApproved?: boolean;
+  memberPublishingStatus?: { approved: boolean; code: string; message: string; runtimeEnvironmentVerified?: boolean; runtimeEnvironment?: 'preview' | 'production' | null } | null;
   executionPaused?: boolean;
   capabilities: Record<string, boolean>;
   wave?: string | null;
@@ -1488,7 +1524,8 @@ export interface ProviderView {
 export interface ChannelDestination {
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'member' | 'organization';
+  tasks?: string[];
   selected: boolean;
 }
 
@@ -1555,12 +1592,14 @@ export interface OAuthComplete {
 /* ---------- usage & billing ---------- */
 
 export interface Entitlement {
-  planTermsId: string;
-  writingBatchesRemaining: number;
-  mediaCreditsRemaining: number;
-  connectedAccounts: number;
-  members: number;
-  storageMb: number;
+  /** Internal Founder workspaces have no customer plan or numeric allowance ceiling. */
+  unlimited?: boolean;
+  planTermsId: string | null;
+  writingBatchesRemaining: number | null;
+  mediaCreditsRemaining: number | null;
+  connectedAccounts: number | null;
+  members: number | null;
+  storageMb: number | null;
   resetsAt: number | null;
   source: string;
   version: number;
@@ -1974,3 +2013,20 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+export interface NativeSocialReading {
+  provider: string;
+  feature: string;
+  availability: string;
+  data: unknown;
+  provenance: { kind: 'provider_native'; provider: string; reportingPeriod: Record<string, string> };
+  rate: Record<string, string>;
+  executionState?: string;
+  message?: string;
+}
+
+export interface NativeSocialPreview {
+  id: string;
+  digest: string;
+  state: 'preview';
+  manifest: { action: string; target: string; payload: Record<string, unknown>; platform: string; providerAccountId: string };
+}

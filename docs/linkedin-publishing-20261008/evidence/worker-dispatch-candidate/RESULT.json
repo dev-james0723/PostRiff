@@ -1,0 +1,62 @@
+{
+  "schema": "rafii.worker-dispatch-candidate.v1",
+  "at": "2026-10-08T07:00:01.459802+00:00",
+  "execution": "LOCAL_CANDIDATE_ONLY_NO_EXTERNAL_EFFECT",
+  "baseSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "filesSha256": {
+    "src/postriff_phase2/hosted.py": "b4e0c2b1247d6e1ae8309078dbd8acb6cbc05200ccfe4bdf42509b5d30e21b2a",
+    "src/postriff_phase2/hosted_app.py": "68295fdd71ba11a76bc642ec622de0610b0205e61f9a18ded63294590ecd62ab",
+    "src/postriff_phase2/hosted_worker.py": "367850f8cf379b4870c9aebc2c88d127285e653b51068594f69b27087a154ba4",
+    "src/postriff_phase2/store.py": "58fc6d50b5f0eb9797bfe06d7b54cc1e721a8833596a79817f8a057abd6f55d8",
+    "tests/test_hosted_job_dispatch.py": "2e1a5dde711fed56a7b8f8fda3508fc4a2dd9513659cb91116bef8fc8c2db57d",
+    "tests/phase2/postgres_official_social.py": "58d4f83dfbd8626d0c8dc599123886395652b80e7b217bb39c2af8269e34cc37",
+    "web/src/features/queue/job-dispatch.ts": "bb55e20bed356c6d65ae2fb7dc154897347737a51d103c54306e1887c6289807",
+    "web/src/features/queue/publish-approved-post-button.tsx": "7a8541c1f6e936e523efd8597551be2a93599fba8db7234f7552a1f2f7688df4",
+    "web/src/features/queue/job-sheet.tsx": "381ef10732e1cb49ba6b7b85bcf9f2e3d4d04f834a9029c4477abc8769681f66",
+    "web/src/features/queue/queue-view.tsx": "ba6eea3c3505b612f3efe30649890529f87e5ad8c5d3a87ae1e88ae0ba4ad134",
+    "web/src/lib/api/client.ts": "2fecca5c19338ef5e40c06163e07838f6140162e54d472928f9bb04dd243a037",
+    "web/src/lib/api/types.ts": "ab1f872106a23ad499d3766c7b73a09b42bccb603d6f69427146a337c824aada",
+    "web/tests/job-dispatch.test.mjs": "89428677adea76782063968fa00ffb6712d210ea9393d3f47936af2716b11a79",
+    "web/tests/official-social-browser.cjs": "ab4a89bbe291f24a5cf7df5440dffc7d6d6c8247d4babaf102160da6b2a93743"
+  },
+  "sharedFile": "store.py includes parent Facebook destination binding delta; preserve it",
+  "localValidation": [
+    {
+      "test": "HostedJobDispatch",
+      "tests": 6,
+      "result": "PASS",
+      "seconds": 0.168
+    },
+    {
+      "test": "PreviewApproval",
+      "tests": 4,
+      "result": "PASS",
+      "seconds": 0.055
+    },
+    {
+      "test": "preview manifest binding before fix",
+      "result": "RED KeyError workerBinding"
+    },
+    {
+      "test": "legacy disabled hold before fix",
+      "result": "RED unexpected worker_binding argument"
+    },
+    {
+      "test": "Python AST of six source/test files",
+      "result": "PASS"
+    }
+  ],
+  "remoteValidation": {
+    "ci": "PENDING parent exact-source Depot batch",
+    "browser": "PENDING existing e2e:social fixture updated; synthetic only"
+  },
+  "constraints": [
+    "No new jobs, live database rewrites, dispatches, provider calls, config changes, commit, push or deployment performed.",
+    "Existing held pilot can recover only its exact approval under a normal authenticated approve-permission action.",
+    "Only one completed DisabledHostedSocial no-submit attempt with exact result/event and zero provider effects qualifies for legacy preview binding.",
+    "New preview manifests bind fixed environment/origin into digest and start held; only scoped authenticated action atomically releases them with the lease.",
+    "Existing production unbound jobs retain default cron behavior; bound preview jobs/reviews are filtered before worker mutation.",
+    "Known provider receipts are reconciled without another create; uncertain or ambiguous holds cannot be rearmed."
+  ],
+  "next": "Parent runs configured ci/e2e on frozen exact snapshot before integration/deployment and any owner UI action."
+}

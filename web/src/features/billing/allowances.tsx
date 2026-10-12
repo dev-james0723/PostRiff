@@ -248,7 +248,7 @@ export function Allowances({
         ))}
         <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-sm'>
           <span className='text-foreground'>Storage</span>
-          <span className='text-muted-foreground tabular-nums'>{ent.storageMb.toLocaleString()} MB</span>
+          <span className='text-muted-foreground tabular-nums'>{ent.storageMb === null ? 'Unavailable' : `${ent.storageMb.toLocaleString()} MB`}</span>
         </div>
         {isOwner && usage.budget && <CostGuard budget={usage.budget} />}
       </Surface>
