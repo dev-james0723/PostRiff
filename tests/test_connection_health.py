@@ -23,13 +23,25 @@ ON = {health.FLAG: "1", health.WORKSPACES: "ws-a"}
 
 
 def environment(**extra):
-    values = {"POSTRIFF_PUBLIC_BASE_URL": "https://app.example", "POSTRIFF_TELEGRAM_BOT_TOKEN": "123456:synthetic-telegram-token",
+    values = {"POSTRIFF_PUBLIC_BASE_URL": "https://app.example", "VERCEL_ENV": "preview", "POSTRIFF_TELEGRAM_BOT_TOKEN": "123456:synthetic-telegram-token",
               "POSTRIFF_TELEGRAM_WEBHOOK_SECRET": "s" * 40, "POSTRIFF_DISCORD_BOT_TOKEN": "synthetic-discord-token",
               "POSTRIFF_OAUTH_REDDIT_CONTACT": "ops@example.com", "POSTRIFF_YOUTUBE_CREATOR_ENABLED": "1"}
     for pid in providers.ADAPTERS:
         prefix = f"POSTRIFF_OAUTH_{pid.upper()}_"
         values.update({prefix + "CLIENT_ID": "synthetic-id-" + pid, prefix + "CLIENT_SECRET": "synthetic-secret-" + pid,
                        prefix + "ENABLED": "true", prefix + "VERIFIED": "true"})
+        # The catalogue now requires explicit app-level minimum-connection evidence,
+        # independently of the account grant and feature review under test.
+        values[prefix + "CONNECTION_REVIEW_JSON"] = json.dumps({
+            "state": "approved", "audience": "external", "appId": "synthetic-id-" + pid,
+            "callbackUri": "https://app.example/api/oauth/" + pid + "/callback",
+            "approvedScopes": list(providers.ADAPTERS[pid].SCOPES.get("identity", [])),
+            "evidenceRef": "synthetic health fixture; never a real provider approval"})
+    if extra.get("POSTRIFF_OAUTH_LINKEDIN_REVIEWED") == "true":
+        values["POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON"] = json.dumps({"share_on_linkedin": {
+            "state": "approved", "audience": "external", "environment": "preview",
+            "appId": "synthetic-id-linkedin", "callbackUri": "https://app.example/api/oauth/linkedin/callback",
+            "approvedScopes": ["w_member_social"], "evidenceRef": "synthetic Share fixture"}})
     values.update(extra)
     return values
 
@@ -321,28 +333,30 @@ class NoFalseReadyTests(unittest.TestCase):
         quiet = world.account(view, youtube_policy={"ready": True, "requiredForConnection": False, "accepted": False})
         self.assertNotIn("youtube_policy_review", quiet["reasons"])
 
-    def test_instagram_analytics_wait_for_meta_and_for_collection(self):
+    def test_instagram_analytics_not_offered_without_verified_api_contract(self):
         world = World()
         view = world.view("instagram", "analytics", all_scopes(world.adapter("instagram")))
-        self.assertEqual(view["capabilities"]["analytics"]["level"], "Direct")   # account-scoped Standard Access grant
+        self.assertEqual(view["capabilities"]["analytics"]["level"], "Unsupported")
         waiting = world.account(view)
-        self.assertEqual(waiting["lines"]["analytics"]["status"], "awaiting_review")   # Meta approval not recorded
+        self.assertEqual(waiting["lines"]["analytics"]["status"], "not_offered")
         self.assertNotEqual(waiting["state"], "ready")
         approved = World(POSTRIFF_OAUTH_INSTAGRAM_ANALYTICS_APPROVED="true")
         view = approved.view("instagram", "analytics", all_scopes(approved.adapter("instagram")))
-        self.assertEqual(approved.account(view)["lines"]["analytics"]["status"], "not_collected")
-        self.assertEqual(approved.account(view, collection={"instagram": True})["lines"]["analytics"]["status"], "available")
+        self.assertEqual(approved.account(view)["lines"]["analytics"]["status"], "not_offered")
+        self.assertEqual(approved.account(view, collection={"instagram": True})["lines"]["analytics"]["status"], "not_offered")
 
-    def test_instagram_without_the_insights_scope_is_not_granted_whatever_the_row_says(self):
+    def test_stale_instagram_analytics_row_never_overrides_unverified_contract(self):
         world = World()
         granted = [s for s in all_scopes(world.adapter("instagram")) if s != "instagram_business_manage_insights"]
         full = world.view("instagram", "analytics", all_scopes(world.adapter("instagram")))
-        view = world.view("instagram", "publish", granted, matrix=copy.deepcopy(full["capabilities"]))   # stale Direct row
+        stale = copy.deepcopy(full["capabilities"])
+        stale['analytics']['level'] = 'Direct'  # A legacy row cannot create supported API access.
+        view = world.view("instagram", "publish", granted, matrix=stale)
         account = world.account(view, collection={"instagram": True})
-        self.assertEqual(account["lines"]["analytics"], {"status": "not_granted", "grant": "analytics"})
+        self.assertEqual(account["lines"]["analytics"], {"status": "not_offered"})
         missing = {m["capability"]: m["scopes"] for m in account["missingPermissions"]}
-        self.assertEqual(missing, {"analytics": ["instagram_business_manage_insights"]})
-        self.assertEqual(account["reconnect"]["grants"], ["analytics"])
+        self.assertNotIn('analytics', missing)
+        self.assertNotIn('analytics', account['reconnect'].get('grants', []))
 
     def test_ready_needs_working_publishing_and_collected_analytics(self):
         world = World(POSTRIFF_OAUTH_THREADS_REVIEWED="true", POSTRIFF_OAUTH_THREADS_ANALYTICS_APPROVED="true")

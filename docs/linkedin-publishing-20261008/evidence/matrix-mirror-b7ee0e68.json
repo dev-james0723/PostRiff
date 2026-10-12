@@ -1,0 +1,25 @@
+{
+  "atUtc": "2026-10-08T05:48:54.554640+00:00",
+  "execution": "EVIDENCE_MIRROR_REPAIR_ONLY_NO_PRODUCT_CONFIGURATION",
+  "changes": [
+    {
+      "provider": "linkedin",
+      "capability": "connected",
+      "previousJsonState": "NOT_RUN",
+      "existingCsvState": "PARTIAL",
+      "reason": "JSON mirror lagged already-recorded real ordinary B partial connection evidence; no feature READY or full PASS promotion"
+    },
+    {
+      "provider": "linkedin",
+      "capability": "member_identity",
+      "previousJsonState": "NOT_RUN",
+      "existingCsvState": "PARTIAL",
+      "reason": "JSON mirror lagged already-recorded real ordinary B partial connection evidence; no feature READY or full PASS promotion"
+    }
+  ],
+  "other203RowsUnchanged": true,
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "fullPassesAdded": 0,
+  "publishingCapabilitiesPromoted": false,
+  "evidence": "connection-b7ee0e68.json"
+}

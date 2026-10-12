@@ -30,6 +30,7 @@ export function kindOf(asset: AssetLike | null | undefined): AssetKind | null {
   if (mime.startsWith('audio/')) return 'audio';
   if (mime.startsWith('video/')) return 'video';
   if (mime.startsWith('image/')) return 'image';
+  if (mime === 'application/pdf') return 'document';
   return null;
 }
 
@@ -44,6 +45,7 @@ function live(asset: AssetLike | null | undefined): asset is AssetLike {
 export function isReady(asset: AssetLike | null | undefined): boolean {
   const kind = kindOf(asset);
   if (!live(asset) || kind === null) return false;
+  if (kind === 'document' && asset.mime === 'application/pdf' && asset.processing === 'validated') return true;
   if (kind === 'document' || kind === 'file' || kind === 'audio') return asset.processing === 'ready' || asset.processing === 'unsupported';
   return asset.processing === READY[kind];
 }

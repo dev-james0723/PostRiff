@@ -26,6 +26,13 @@ def isolated_environment(values):
     parsed = urlparse(origin)
     if not approved or origin != approved or parsed.scheme != 'https' or not parsed.hostname or parsed.path or parsed.query or parsed.fragment or parsed.username:
         raise ValueError('Preview callbacks require the exact approved staging HTTPS origin.')
+    # A shared staging alias can point at another branch. Once OAuth is configured,
+    # its codes must return to this candidate, never that other deployment.
+    oauth_configured = any(value for name, value in result.items()
+                           if name.startswith('POSTRIFF_OAUTH_') and name.endswith(('CLIENT_ID', 'CLIENT_SECRET')))
+    candidate_origins = {'https://' + result[name] for name in ('VERCEL_BRANCH_URL', 'VERCEL_URL') if result.get(name)}
+    if oauth_configured and origin not in candidate_origins:
+        raise ValueError('OAuth preview callbacks must use this deployment URL or its own Git branch URL.')
     if result.get('POSTRIFF_API_ORIGIN'):
         raise ValueError('Preview API rewrites must use the same deployment, not an external origin.')
     stripe = result.get('STRIPE_SECRET_KEY', '')

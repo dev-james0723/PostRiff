@@ -483,7 +483,10 @@ class WorkerCallSiteTests(unittest.TestCase):
     def test_the_bounded_retry_limit_records_publish_failed(self):
         from postriff_phase2.hosted_worker import PostgresWorker
         job = self.job(state="scheduled", attempts=[{"number": 1}, {"number": 2}, {"number": 3}], leaseOwner=None, leaseUntil=0, nextAt=0)
-        state = {"phase2": {"jobs": [job], "channels": []}}
+        channel = {'id': job['manifest']['channelId'], 'platform': 'LinkedIn',
+                   'configured': True, 'identityVerified': True, 'capabilityVerified': True,
+                   'revoked': False, 'verifiedAt': NOW, 'expiresAt': NOW + 3600}
+        state = {"phase2": {"jobs": [job], "channels": [channel]}}
         script = Script(answers=[("pg_try_advisory_xact_lock", [(True,)]), ("SELECT to_regclass", [('pr_worker_tenants',)]), ("SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces", [(WS, 1, json.dumps(state))]),
                                  ("SELECT m.role,m.can_publish", [("owner", True)])])
         worker = PostgresWorker(lambda: script, clock=lambda: NOW, worker_id="w1")

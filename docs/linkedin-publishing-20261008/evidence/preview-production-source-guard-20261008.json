@@ -1,0 +1,16 @@
+{
+  "atUtc": "2026-10-08 06:11:17 UTC",
+  "previewDeploymentId": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+  "previewSource": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "previewState": "BUILDING",
+  "production": {
+    "id": "dpl_23gCJrH5BWZt5gQSV4iqNt2sV5Vt",
+    "source": "3da806f0e31a01396a3bd4a9e27f66f9b21ce816",
+    "branch": "consumer-saas",
+    "target": "production",
+    "commitMessage": "Merge pull request #133 from dev-james0723/codex/rafii-library-thumbnails-20261008\n\nfeat(library): show thumbnails for every asset type"
+  },
+  "productionChangedByThisTask": false,
+  "releaseAuthorization": "PREVIEW_ONLY",
+  "futureProductionReleaseMustReconcileNewerProduction": true
+}

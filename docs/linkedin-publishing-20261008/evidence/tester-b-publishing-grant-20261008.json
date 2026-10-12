@@ -1,0 +1,35 @@
+{
+  "execution": "REAL_PREVIEW_OWNER_CONSENT_AND_PERSISTENCE",
+  "observedAt": "2026-10-08T06:48:15.861Z",
+  "deploymentId": "dpl_DoAcHfA5Gw6Ehyf2iWc2ZGLffjD3",
+  "sourceSha": "b7ee0e685d61f849b3d7c2bf036e5cef9d2c31c8",
+  "provider": "linkedin",
+  "appId": "263833009",
+  "workspaceRef": "249fd4ac7489aafd15b4fe6c6cc0b216",
+  "accountRef": "62c2c6ce86976d46e6c446e3ecefce46",
+  "connectionRef": "247a97cd88669d3bd8f327b71bac18c2",
+  "ordinaryExternalUserConfirmed": true,
+  "providerAppRole": false,
+  "ownerReturn": "success",
+  "normalCompletionStatus": 200,
+  "normalChannelsStatus": 200,
+  "workspaceBindingConfirmed": true,
+  "sameActualStoredProviderSubject": true,
+  "grantedScopes": [
+    "openid",
+    "profile",
+    "w_member_social"
+  ],
+  "persistedAfterReload": true,
+  "socialReadiness": {
+    "connection": "CONNECTED",
+    "history": "HISTORICAL_IMPORT_AWAITING_PROVIDER_APPROVAL",
+    "publishing": "PUBLISHING_AVAILABLE",
+    "fullyAvailable": false,
+    "evidence": "last_verified_grant",
+    "liveVerified": false
+  },
+  "publicPostProven": false,
+  "fullAcceptancePassed": false,
+  "redaction": "No token, OAuth code/state, raw user/workspace/subject IDs or private email retained."
+}

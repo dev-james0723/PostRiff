@@ -1,0 +1,343 @@
+{
+  "auditDate": "2026-10-05",
+  "sources": [
+    {
+      "id": "facebook-package",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-nodejs-business-sdk/main/package.json",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/facebook-package",
+      "sha256": "d45da6e24c9dc170a000fb6e4ad1a7643208fb59965087f3733fe53d2efa4f28",
+      "bytes": 2611,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "facebook-page-sdk",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-python-business-sdk/main/facebook_business/adobjects/page.py",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/facebook-page-sdk",
+      "sha256": "110ff690c9c6d570ae3ad85ba4ad2f8debc3eeaa5850f396c2975252945714b8",
+      "bytes": 57629,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "instagram-media-sdk",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-python-business-sdk/main/facebook_business/adobjects/instagrammedia.py",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/instagram-media-sdk",
+      "sha256": "f25624be5e22f0e1d0ca036ffd65cb8f7a17c5f4317a0910fa82a19be147addf",
+      "bytes": 6434,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "instagram-user-sdk",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-python-business-sdk/main/facebook_business/adobjects/instagramuser.py",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/instagram-user-sdk",
+      "sha256": "dd05a551d3f90a00f1e4168725cf81bb4d36855ebb518e06cf2de4c1bb655d1d",
+      "bytes": 13317,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-analytics",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/members/post-statistics?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-analytics",
+      "sha256": "c9c5336c84ab099ae7eeabe2587611131e1e70fd31f74b48d0e8d1853582dd97",
+      "bytes": 75433,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-auth",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-authorizations/organization-authorizations?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-auth",
+      "sha256": "8ba5abf5744538d235826190ce3470c386e64ec2da863cd4036d21035d17e9f2",
+      "bytes": 62756,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-comments",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/comments-api?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-comments",
+      "sha256": "2c921dd3d4cb337eb08b62b8764b5425683073555709fc1b806ad2e3c3b287d4",
+      "bytes": 86265,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-documents",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-documents",
+      "sha256": "7f97a27991d219edababce6a250c7b6dbed31cd3a33ce8c0c6212516a6f36885",
+      "bytes": 68465,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-images",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-images",
+      "sha256": "f0588f338b672ddc2ff808f1627b028a412c496ae403e2a9d1f71c803524c1de",
+      "bytes": 77389,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-review",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-review",
+      "sha256": "6dec753cca5dd525ba746e38aace74f7c6cfc2b42f944e470f4fb1328329c168",
+      "bytes": 59507,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "li-videos",
+      "url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/li-videos",
+      "sha256": "c3e44e89ecd61c90d5bd5f4d8184f1d2a6b87d30a0d6e3af466c57f31c8e5bc9",
+      "bytes": 94641,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "pinterest-schema",
+      "url": "https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.yaml",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/pinterest-schema",
+      "sha256": "1f14913381fe507d55e9e162c717b4b79f11077dcaf2329bb68d4f46940964a7",
+      "bytes": 2051009,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-articles",
+      "url": "https://docs.x.com/x-api/articles/introduction.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-articles",
+      "sha256": "9b9720961852d66c2702b8b38e65864133eda61c33b21bd234f04533e88d342b",
+      "bytes": 2756,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-chunk",
+      "url": "https://docs.x.com/x-api/media/quickstart/media-upload-chunked.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-chunk",
+      "sha256": "637a18df2c518b56b65545e0eb582fd951f7fbcbbfc43c06cc93e848030aca09",
+      "bytes": 11967,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-create",
+      "url": "https://docs.x.com/x-api/posts/create-post.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-create",
+      "sha256": "c805a358469f0cf78fb812cfb18dccc421a69a7533ff34802a601f4f87d924f3",
+      "bytes": 25155,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-edit",
+      "url": "https://docs.x.com/x-api/fundamentals/edit-posts.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-edit",
+      "sha256": "82f7bae3032e9e727431e6a19eb3898d7c958567a371bf0e45c3237b6aa0fd88",
+      "bytes": 5758,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-index",
+      "url": "https://docs.x.com/llms.txt",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-index",
+      "sha256": "944750d5311e79b5f447d2763879a34e191a2943f6f73684ed702978348ec7e8",
+      "bytes": 53629,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-price",
+      "url": "https://docs.x.com/x-api/getting-started/pricing.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-price",
+      "sha256": "6b89a4a5ea3ed2f001a8498c5e65d2f22feea091221d15662f7966121642f3f0",
+      "bytes": 12712,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-schema",
+      "url": "https://docs.x.com/openapi.json",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-schema",
+      "sha256": "e7c66179d988cddc4a88f528b152b886d60bd4381db03cc118763d5c4e2ad70d",
+      "bytes": 1072449,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "x-upload",
+      "url": "https://docs.x.com/x-api/media/initialize-media-upload.md",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/x-upload",
+      "sha256": "3d321baf270163dc689cd2e4326d4698cf5739684dbaa983d247c4d58f4c3d5e",
+      "bytes": 18755,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "youtube-analytics-discovery",
+      "url": "https://youtubeanalytics.googleapis.com/$discovery/rest?version=v2",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/youtube-analytics-discovery",
+      "sha256": "d49f4a680356f48b83671100d35e7db0e704319a845b27ce5d31c579289a71b9",
+      "bytes": 35631,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "youtube-discovery",
+      "url": "https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/youtube-discovery",
+      "sha256": "79a5cf52f1a85520a83b3d808268f2da36dca4ad4e32aa71df043a5be76d1080",
+      "bytes": 518330,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "youtube-reporting-discovery",
+      "url": "https://youtubereporting.googleapis.com/$discovery/rest?version=v1",
+      "auditDate": "2026-10-05",
+      "sourceKind": "primary documentation/schema/official SDK",
+      "retrieval": "retrieved and inspected",
+      "localRawPath": "/tmp/rafii-official-api-audit/youtube-reporting-discovery",
+      "sha256": "99bcfa9f263e191297d337587445a91f353c345bbca4686527227f46c7fbb876",
+      "bytes": 33111,
+      "caveat": "SDK methods do not establish selected-login-path permission; pricing is not an account invoice. Local raw cache is supplemental, not required to read this report."
+    },
+    {
+      "id": "tool-primary-0",
+      "url": "https://www.postman.com/meta/threads/documentation/dht3nzz/threads-api",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-1",
+      "url": "https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-2",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-nodejs-business-sdk/main/src/api.js",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-3",
+      "url": "https://raw.githubusercontent.com/facebook/facebook-python-business-sdk/main/facebook_business/apiconfig.py",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-4",
+      "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-5",
+      "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-photo-post",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-6",
+      "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-upload-video",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-7",
+      "url": "https://developers.tiktok.com/docs/en/content-posting-api-media-transfer-guide",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-8",
+      "url": "https://developers.google.com/youtube/v3/docs/videos/insert",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-9",
+      "url": "https://developers.google.com/youtube/v3/determine_quota_cost",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "tool-primary-10",
+      "url": "https://github.com/advisories/GHSA-vcvr-r3jv-pc5j",
+      "auditDate": "2026-10-05",
+      "retrieval": "inspected through official documentation/web tool; raw hash not retained",
+      "sha256": null
+    },
+    {
+      "id": "instagram-login-insights-audit",
+      "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/insights/",
+      "auditDate": "2026-10-05",
+      "retrieval": "unavailable: Meta 429; repeat official search empty",
+      "sha256": null,
+      "consequence": "No Insights OAuth permission offered; no live readiness claim; edit/delete contract also unverified."
+    }
+  ]
+}

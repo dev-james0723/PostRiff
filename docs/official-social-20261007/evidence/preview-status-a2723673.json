@@ -1,0 +1,170 @@
+{
+  "observedAt": "2026-10-08T01:18:58.872950+00:00",
+  "execution": "deployed preview verification; real Tester A and ordinary Tester B LinkedIn connections; no posts or X calls",
+  "implementation": {
+    "sha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "branch": "codex/social-connection-recovery-20261007",
+    "remote": "dev-james0723/PostRiff",
+    "pr": "https://github.com/dev-james0723/PostRiff/pull/131",
+    "prState": "OPEN DRAFT",
+    "codeDirty": false
+  },
+  "deployment": {
+    "id": "dpl_3DTXnHyuRyjMVLqVhAGiSE92C6Hh",
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "project": "postriff-phase2-private",
+    "target": "preview",
+    "state": "READY",
+    "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "url": "https://postriff-phase2-private-auzanqt0i-jamesau0723-6572s-projects.vercel.app",
+    "canonicalOrigin": "https://postriff-phase2-private-git-c-752940-jamesau0723-6572s-projects.vercel.app",
+    "source": "existing Git integration auto-deployed exact pushed SHA; no duplicate manual build",
+    "aliasVerified": true,
+    "configurationChangedInThisPatch": false
+  },
+  "browser": {
+    "tab": "Tester A Channels",
+    "savedAccountRefMd5": "c6ab7097b2851aa1d71208285a23fbab",
+    "reloadAfterDeployment": true,
+    "connectionMessage": "Connected — publishing not enabled.",
+    "connectedRow": "Identity verified for this account",
+    "memberIdentityRow": "Identity verified for this account",
+    "identityReleaseBlockers": [
+      "LIVE E2E NOT PROVEN"
+    ],
+    "publishing": "Platform approval unverified; individual operation gates retained",
+    "screenshotLocal": "/private/tmp/rafii-connection-status-preview-a2723673.jpg",
+    "screenshotSha256": "fd804f04294568b2ce3275b1c94afa77600b6427ac05befd03d02f61aba5ea0c",
+    "freshSession": "PENDING",
+    "realIPhone": "PENDING",
+    "newConnectionDefault": "Account only selected, Publish unselected, verified in real preview UI",
+    "cancelBeforeProviderConsent": "Verified; cancelled sheet closes, saved connection remains; not a provider-denied-consent test"
+  },
+  "liveConnectionEvidence": "linkedin-tester-a-20261008.json",
+  "qualification": {
+    "ordinaryExternalProviders": 0,
+    "targetCount": 8,
+    "livePassed": 0,
+    "capabilitiesPreserved": 205,
+    "e2eCasesPreserved": 196,
+    "e2ePartial": 2,
+    "e2eNotRun": 194,
+    "providerAppIndependence": "Tester B owner attested no provider-app role; Founder store verifies neither A nor B has an operator record",
+    "otherOperationsPromoted": false,
+    "operatorEvidenceStoreEdited": false,
+    "ordinaryExternalConnectionObservedProviders": 1,
+    "ordinaryExternalFullAcceptanceProviders": 0,
+    "twoDistinctUsersWorkspacesAccounts": true,
+    "liveCrossTenantNegativeTest": "NOT_RUN"
+  },
+  "validation": [
+    {
+      "task": "test",
+      "runId": "s46w6dqjbr",
+      "exitCode": 1,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/s46w6dqjbr",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T010621176484Z-test.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "e1cf1d16ded1f465313a3b1e30a37d468070bf0283124b1573b423b898e4cb2e",
+      "patchSha256": "9474781503c6a38735f1b8164cbffccf89ecd9d6d3ee6eaeabb9a0e821e3455f",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    },
+    {
+      "task": "ci",
+      "runId": "6071ptxnrz",
+      "exitCode": 0,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6071ptxnrz",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T011048545413Z-ci.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "bb357e713e92060a9244aa074039d58c2f274a03c9ed4b6936eb0b29a04e42ef",
+      "patchSha256": "26f9c7531026a7594848ba899924d5b68e8e54a95fcefd9b9889f0c989257b35",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    },
+    {
+      "task": "e2e",
+      "runId": "gts9clzcv7",
+      "exitCode": 0,
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/gts9clzcv7",
+      "receipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261008T011230958564Z-e2e.json",
+      "sourceHead": "a4c687fcf59b0a4b6c74e406a7416ee9c63e5ea2",
+      "sourceFingerprint": "bb357e713e92060a9244aa074039d58c2f274a03c9ed4b6936eb0b29a04e42ef",
+      "patchSha256": "26f9c7531026a7594848ba899924d5b68e8e54a95fcefd9b9889f0c989257b35",
+      "execution": "synthetic cloud validation; not live provider qualification"
+    }
+  ],
+  "githubChecks": {
+    "sourceSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "state": "RUNNING",
+    "releaseGateRun": "37712145502",
+    "releaseGateUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37712145502"
+  },
+  "production": {
+    "unchanged": true,
+    "id": "dpl_9Jiq5wtAzg7iwJHC7DqW5kbJw8en",
+    "sha": "91f6572c46fe9c357ca23ba43524f1ea3f27814e",
+    "origin": "https://postriff-phase2-private.vercel.app",
+    "releaseAuthorization": "NONE; no merge, production deploy or production DDL performed"
+  },
+  "rollback": {
+    "previewPriorDeployment": "dpl_dGprvZgYtv29YTby6NYbYJh53kFu",
+    "method": "Reassign only the canonical preview alias to the prior READY deployment if regression requires it; preserve branch env, credential key and grants",
+    "performed": false
+  },
+  "nextHumanSteps": [
+    "After preview update, owner clicks Continue for Account only when ready and completes LinkedIn consent within ten minutes.",
+    "Live tenant-negative and real iPhone Safari acceptance remain pending.",
+    "Production remains unauthorized; genuine expiry remains pending."
+  ],
+  "tokenPilot": {
+    "sessionId": "01a114a0-509b-7a43-a3bc-8f52d884ea1a",
+    "revision": 469,
+    "checkpoint": "Existing registry durable-item cap exceeded256; preserved without deleting other sessions. This scoped receipt is the continuation fallback.",
+    "tokenAndCostCounters": "unknown; no savings claimed"
+  },
+  "unrelatedState": "Existing dirty HANDOFF and prior untracked evidence preserved; no submodule/global-rule/secret changes.",
+  "latestObservedAt": "2026-10-08T02:44:03.580154+00:00",
+  "ordinaryExternalLiveEvidence": "linkedin-tester-b-20261008.json",
+  "browserTesterB": {
+    "surface": "Chrome user tab",
+    "connectionMessage": "Connected — publishing not enabled.",
+    "connectedAndMemberIdentity": "Identity verified for this account",
+    "visibleActualPermissions": [
+      "openid",
+      "profile"
+    ],
+    "publishing": "Not enabled; operation-specific blockers retained",
+    "screenshotLocal": "/private/tmp/rafii-linkedin-tester-b-a2723673.jpg",
+    "screenshotSha256": "9bb4a37941f69dca41b4a2ef8a2d0ae7d1f3e0435feac4f0add8119dee3464e4",
+    "screenshotRedaction": "Sidebar collapsed; no email, token, secret, state or verifier visible.",
+    "reload": true,
+    "freshSession": "PASS: genuinely new server Rafii session plus current Chrome UI and unchanged original credential",
+    "observationState": "Historical connected view. Latest B state is disconnected after authorized revocation, with new official consent pending."
+  },
+  "githubValidation": "github-validation-a2723673.json",
+  "prChecks": {
+    "state": "ALL_EIGHT_SUCCESS",
+    "headSha": "a27236736fe524caf842be5a1dc6c91fc34e1baa",
+    "releaseGate": 37712145502
+  },
+  "documentationState": "Preview remains a2723673. Six source files committed in local follow-up a7da3b62; owned live receipts/matrices remain local evidence. Unrelated dirty HANDOFF/receipts preserved.",
+  "freshSessionEvidence": "linkedin-tester-b-fresh-session-20261008.json",
+  "continuation": {
+    "phase": "LinkedIn ordinary-user lifecycle acceptance",
+    "freshSession": "PASS",
+    "nextAction": "Push validated follow-up through existing PR/Git preview integration, verify source/UI, then leave B at Account only before transaction start.",
+    "pendingApproval": false,
+    "activeTab": "Chrome Tester B returning to Channels after safely rejected expired callback",
+    "scopeConstraints": "No production, DDL, provider setting changes, broader scopes, posting, X spend or unrelated edits.",
+    "tokenPilot": "Known durable registry cap persists; scoped receipt saved without deleting or altering other sessions.",
+    "pendingHumanConsent": true,
+    "lifecycleReceipt": "linkedin-tester-b-lifecycle-20261008.json",
+    "engineering": "Follow-up a7da3b62 cloud CI/browser PASS; active callback hold cleared by real expiry reconciliation."
+  },
+  "lifecycleEvidence": "linkedin-tester-b-lifecycle-20261008.json",
+  "candidateFollowup": {
+    "sha": "a7da3b62299f51e737aa2803750023a0b389fa18",
+    "state": "VALIDATED_READY_TO_PUSH_CALLBACKS_RECONCILED_EXPIRED",
+    "evidence": "identity-verification-time-a7da3b62.json",
+    "deploymentHold": "Cleared: latest B transaction expired, unconsumed; no new token saved. Keep B at Channels before new OAuth start while updating preview."
+  }
+}
