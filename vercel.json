@@ -112,7 +112,8 @@
   "git": {
     "deploymentEnabled": {
       "codex/rafii-brand-brain-v11": false,
-      "codex/rafii-linkedin-production-release-20261012": false
+      "codex/rafii-linkedin-production-release-20261012": false,
+      "codex/mastodon-live-integration-20261013": false
     }
   }
 }
