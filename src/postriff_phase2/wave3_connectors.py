@@ -14,7 +14,7 @@ import json
 import re
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
-from .provider_base import GRAPH_VERSION, OAuthProvider, default_transport
+from .provider_base import GRAPH_VERSION, OAuthProvider, _credential_shape, default_transport, fixed_https_origin
 from .social_connectors import _load
 
 
@@ -196,17 +196,50 @@ class TikTokProvider(OAuthProvider):
     UPLOAD_HOSTS = (".tiktokapis.com",)
     MIN_CHUNK, MAX_CHUNK = 5 * 1024 * 1024, 64 * 1024 * 1024
 
-    def __init__(self, client_id, client_secret, hex_pkce=False, transport=None, production_reviewed=False):
+    def __init__(self, client_id, client_secret, hex_pkce=False, transport=None, production_reviewed=False,
+                 sandbox_mode=False):
         super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
         # TikTok's Web Login Kit documents no PKCE; its desktop PKCE hex-encodes SHA-256(verifier) instead of RFC 7636's
         # base64url. Off by default; POSTRIFF_TIKTOK_HEX_PKCE=true turns the hex form on if the Sandbox shows it is needed.
         self.hex_pkce = bool(hex_pkce)
+        self.sandbox_mode = bool(sandbox_mode)
+        if self.sandbox_mode:
+            self.production_reviewed = False
 
     @classmethod
     def mount(cls, values, transport=None):
-        client_id, secret, valid, diagnostic = cls.credential_pair(values)
         hex_pkce = str(values.get("POSTRIFF_TIKTOK_HEX_PKCE", "")).lower() == "true"
-        return (cls(client_id, secret, hex_pkce=hex_pkce, transport=transport) if valid else None), diagnostic
+        sandbox = str(values.get("POSTRIFF_TIKTOK_SANDBOX_ENABLED", "")).lower() == "true"
+        if not sandbox:
+            client_id, secret, valid, diagnostic = cls.credential_pair(values)
+            return (cls(client_id, secret, hex_pkce=hex_pkce, transport=transport) if valid else None), diagnostic
+
+        # A separately credentialed test lane. Never silently fall back to the production key/secret.
+        # Sandbox Login Kit still calls real TikTok OAuth endpoints: prevent an accidental production
+        # callback or deployment from accepting test grants.
+        prefix = "POSTRIFF_OAUTH_TIKTOK_SANDBOX_"
+        client_id, secret = values.get(prefix + "CLIENT_ID"), values.get(prefix + "CLIENT_SECRET")
+        presence = {"clientId": client_id is not None, "clientSecret": secret is not None}
+        missing = [prefix + suffix for suffix, present in (("CLIENT_ID", presence["clientId"]),
+                                                           ("CLIENT_SECRET", presence["clientSecret"])) if not present]
+        valid = _credential_shape(client_id) and _credential_shape(secret)
+        environment = str(values.get("VERCEL_ENV", "")).strip().lower()
+        forbidden_origins = {"https://rafii.io", "https://www.rafii.io",
+                             "https://postriff-phase2-private.vercel.app"}
+        callback_origins = (values.get("POSTRIFF_PUBLIC_BASE_URL"),
+                            values.get("POSTRIFF_OAUTH_TIKTOK_CALLBACK_ORIGIN"))
+        blocked = environment == "production" or any(fixed_https_origin(origin) in forbidden_origins
+                                                     for origin in callback_origins)
+        diagnostic = {"credentialPresence": presence, "missingVariables": missing,
+                      "sandboxMode": True,
+                      "configurationState": "not_configured" if len(missing) == 2
+                      else "partial_configuration" if missing
+                      else "configured" if valid else "invalid_configuration"}
+        if blocked:
+            diagnostic.update(configurationState="sandbox_forbidden_environment", missingVariables=[])
+            return None, diagnostic
+        return (cls(client_id, secret, hex_pkce=hex_pkce, transport=transport, sandbox_mode=True)
+                if valid else None), diagnostic
 
     @staticmethod
     def hex_challenge(challenge):

@@ -88,7 +88,10 @@ class OAuthService:
             if adapter is None:
                 prefix = f'POSTRIFF_OAUTH_{pid.upper()}_'
                 missing = diagnostic.get('missingVariables', [prefix + 'CLIENT_ID', prefix + 'CLIENT_SECRET'])
-                issues.append('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.')
+                if diagnostic.get('configurationState') == 'sandbox_forbidden_environment':
+                    issues.append('TikTok Sandbox OAuth is blocked on Production or a canonical production callback domain. Use a separate HTTPS Preview origin and sandbox credentials.')
+                else:
+                    issues.append('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.')
             if not self.vault.fernet:
                 issues.append('Server setup required: POSTRIFF_CREDENTIAL_KEY must protect connected-account tokens.')
             try:

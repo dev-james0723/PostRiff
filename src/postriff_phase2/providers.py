@@ -261,9 +261,10 @@ def registry_from_environment(values, transport=None):
             # Only a fixed HTTPS origin; a malformed value leaves the default rather than guessing.
             adapter.callback_origin = fixed_https_origin(values.get(prefix + "CALLBACK_ORIGIN"))
             registry.diagnostics[provider_id]["callbackOriginPinned"] = adapter.callback_origin is not None
-        adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
-        adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
-        adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
+        sandbox_lane = provider_id == "tiktok" and bool(getattr(adapter, "sandbox_mode", False))
+        adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true" and not sandbox_lane
+        adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true" and not sandbox_lane
+        adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true" and not sandbox_lane
         if provider_id == "pixelfed":
             adapter.qualified_instances = frozenset(re.split(r"[\s,]+", str(values.get(prefix + "QUALIFIED_INSTANCES", "")).strip())) - {""}
         webhook_configured = True
