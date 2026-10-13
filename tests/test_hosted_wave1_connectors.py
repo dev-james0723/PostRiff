@@ -153,18 +153,18 @@ class XAdapter(unittest.TestCase):
 # --- Mastodon -----------------------------------------------------------------------------------------------------
 class MastodonAdapter(unittest.TestCase):
     def test_registers_per_connect_then_pkce_exchange_identity_and_scopes(self):
-        wire = Wire([ok({"client_id": "cid", "client_secret": "csec"}),
+        wire = Wire([ok({"version": "4.3.0"}), ok({}, 404), ok({"client_id": "cid", "client_secret": "csec"}),
                      ok({"access_token": "MT", "scope": "read:accounts read:statuses write:statuses write:media"}),
                      ok({"id": "1099", "username": "james"}),
                      ok({"name": "Rafii", "scopes": ["read:accounts", "write:statuses"]})])
         mastodon = MastodonProvider(BASE, transport=wire, resolver=PUBLIC)
         begun = mastodon.begin(BASE + "/api/oauth/mastodon/callback", "STATE", "VERIFIER", "CHALLENGE", mastodon.capability_scopes("publish"), "https://Mastodon.Social/")
-        self.assertEqual(wire.calls[0]["url"], "https://mastodon.social/api/v1/apps")
-        self.assertEqual(wire.calls[0]["form"]["website"], BASE)
+        self.assertEqual(wire.calls[2]["url"], "https://mastodon.social/api/v1/apps")
+        self.assertEqual(wire.calls[2]["form"]["website"], BASE)
         query = parse_qs(urlparse(begun["authorizeUrl"]).query)
         self.assertEqual((query["client_id"][0], query["code_challenge_method"][0]), ("cid", "S256"))
         grant = mastodon.exchange("CODE", json.dumps({"verifier": "VERIFIER", **begun["context"]}), BASE + "/api/oauth/mastodon/callback")
-        self.assertEqual(wire.calls[1]["form"]["code_verifier"], "VERIFIER")
+        self.assertEqual(wire.calls[3]["form"]["code_verifier"], "VERIFIER")
         self.assertEqual(json.loads(grant["accessToken"])["instance"], "mastodon.social")
         self.assertEqual(mastodon.identity(grant["accessToken"])["providerAccountId"], "1099@mastodon.social")
         self.assertEqual(mastodon.inspect_scopes(grant["accessToken"]), ["read:accounts", "write:statuses"])
@@ -340,6 +340,8 @@ class Cursor:
             db.repository.revision += 1
         elif s.startswith("INSERT INTO public.pr_auth_throttle"):
             self.result = (1,)
+        elif s.startswith('SELECT pg_try_advisory_xact_lock'):
+            self.result = (True,)
         elif s.startswith("INSERT INTO public.pr_oauth_transactions"):
             workspace, member, provider, capability, redirect, scopes, state_hash, ciphertext, key_id, ttl = params
             txn_id = f"txn-{len(db.txns) + 1}"
@@ -375,6 +377,10 @@ class Cursor:
             self.result = ('00000000-0000-0000-0000-000000000098',) if found and not found['revoked'] else None
         elif s.startswith("UPDATE public.pr_encrypted_credentials SET scopes=%s"):
             db.credentials[params[2]]["scopes"] = params[0]
+        elif s.startswith("SELECT provider_account_id,access_ciphertext,key_id,scopes,extract(epoch from access_expires_at)"):
+            found = db.credentials.get(params[1])
+            self.result = ((found['account'], found['access'], found['key_id'], found['scopes'], found.get('expires'))
+                if found and found['provider'] == 'mastodon' and not found['revoked'] and found.get('workspace') == params[0] else None)
         elif s.startswith("SELECT provider_account_id FROM public.pr_encrypted_credentials"):
             found = db.credentials.get(params[1])
             self.result = (found["account"],) if found and found.get("workspace", "workspace") == params[0] else None
@@ -430,7 +436,10 @@ class Repository:
 
     def command(self, workspace, token, revision, command, requirement="edit", after=None, **kwargs):
         require(Membership("owner"), requirement)
-        self.state, self.revision = command(copy.deepcopy(self.state), "owner"), self.revision + 1
+        state = command(copy.deepcopy(self.state), "owner")
+        if after:
+            after(self.db.cursor(), state, 'owner')
+        self.state, self.revision = state, self.revision + 1
         return {"state": self.state, "revision": self.revision}
 
     def assert_fresh(self, token, principal):
@@ -455,9 +464,10 @@ class ServiceFlows(unittest.TestCase):
 
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_mastodon_needs_a_server_then_connects_without_a_false_expiry(self):
-        wire = Wire([ok({"client_id": "cid", "client_secret": "csec"}), ok({"access_token": "MT", "scope": "read:accounts"}),
+        wire = Wire([ok({"version": "4.3.0"}), ok({}, 404), ok({"client_id": "cid", "client_secret": "csec"}), ok({"access_token": "MT", "scope": "read:accounts"}),
                      ok({"id": "1099", "username": "james"}), ok({"name": "Rafii", "scopes": ["read:accounts"]})])
         service = self.service({"mastodon": MastodonProvider(BASE, transport=wire, resolver=PUBLIC)})
+        service.providers["mastodon"].application_cache = None  # This fixture tests OAuth, not the real SQL cache.
         with self.assertRaises(AlphaError):
             service.start("workspace", "session", "mastodon", "identity", inputs={})
         self.assertEqual(wire.calls, [])
@@ -471,6 +481,30 @@ class ServiceFlows(unittest.TestCase):
         stored = self.repo.db.credentials[result["connectionId"]]
         self.assertIsNone(stored["expires"])
         self.assertNotIn("csec", stored["access"])  # encrypted at rest
+
+    @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
+    def test_late_mastodon_completion_cannot_restore_revoked_or_replaced_consent(self):
+        for change in ('revoke', 'replace'):
+            with self.subTest(change=change):
+                wire = Wire([ok({'version': '4.3.0'}), ok({}, 404), ok({'client_id': 'cid', 'client_secret': 'csec'}),
+                    ok({'access_token': 'MT', 'scope': 'read:accounts'}), ok({'id': '1099', 'username': 'james'}),
+                    ok({'name': 'Rafii', 'scopes': ['read:accounts']})])
+                service = self.service({'mastodon': MastodonProvider(BASE, transport=wire, resolver=PUBLIC)})
+                service.providers['mastodon'].application_cache = None
+                begun = service.start('workspace', 'session', 'mastodon', 'identity', inputs={'instance': 'mastodon.social'})
+                state = parse_qs(urlparse(begun['authorizeUrl']).query)['state'][0]
+                command = self.repo.command
+                def change_before_save(*args, **kwargs):
+                    stored = next(iter(self.repo.db.credentials.values()))
+                    if change == 'revoke':
+                        stored['revoked'] = True
+                    else:
+                        stored['access'], stored['key_id'] = service.vault.encrypt(service.vault.decrypt(stored['access'], stored['key_id']))
+                    return command(*args, **kwargs)
+                with patch.object(self.repo, 'command', side_effect=change_before_save), self.assertRaises(AlphaError) as refused:
+                    service.complete('workspace', 'session', 'mastodon', state, 'CODE')
+                self.assertEqual(refused.exception.code, 'mastodon_dispatch_authorization_changed')
+                self.assertFalse(any(c.get('platform') == 'Mastodon' for c in self.repo.state['phase2']['channels']))
 
     @patch("postriff_phase2.billing.require_plan_capacity", lambda *a, **k: None)
     def test_telegram_code_is_claimed_by_the_first_channel_post_then_connects(self):
@@ -553,6 +587,10 @@ class Grants:
     def token_for_worker(self, workspace_id, connection_id):
         return {"accessToken": self.token, "scopes": self.scopes, "expiresAt": None}
 
+    @contextmanager
+    def mastodon_dispatch_fence(self, workspace_id, connection_id):
+        yield
+
 
 def manifest(platform, account_id, text="Hello from Rafii https://rafii.example/x", account="@james", media=None):
     return {"workspaceId": "w", "channelId": "conn", "platform": platform, "operation": "post", "providerAccountId": account_id, "account": account,
@@ -597,13 +635,13 @@ class Publishing(unittest.TestCase):
         self.assertTrue(verified["url"].endswith(rkey))
 
     def test_mastodon_uses_the_idempotency_key_and_reads_back_html(self):
-        wire = Wire([ok({"id": "111", "url": "https://mastodon.social/@james/111"}),
+        wire = Wire([ok({"version": "4.2.9"}), ok({"id": "111", "url": "https://mastodon.social/@james/111"}),
                      ok({"id": "111", "account": {"id": "1099"}, "content": "<p>Hello from Rafii <a href=\"https://rafii.example/x\"><span class=\"invisible\">https://</span><span>rafii.example/x</span></a></p>"})])
         mastodon = self.reviewed(MastodonProvider(BASE, transport=wire, resolver=PUBLIC))
-        token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "clientId": "c", "clientSecret": "s", "scope": ["write:statuses"]})
+        token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "capabilities": {"maxCharacters": 500, "maxMediaAttachments": 4}, "clientId": "c", "clientSecret": "s", "scope": ["write:statuses"]})
         social = HostedSocial(Grants(token, ["write:statuses", "read:statuses"]), {"mastodon": mastodon})
         result = social.submit(manifest("Mastodon", "1099@mastodon.social"))
-        self.assertEqual((result["state"], wire.calls[0]["headers"]["Idempotency-Key"]), ("provider_accepted", "k" * 64))
+        self.assertEqual((result["state"], wire.calls[1]["headers"]["Idempotency-Key"]), ("provider_accepted", hashlib.sha256(("k" * 64).encode()).hexdigest()))
         verified = social.reconcile(manifest("Mastodon", "1099@mastodon.social"), {"providerReference": result["reference"]})
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Mastodon"}})["state"], "verified")
 
@@ -823,19 +861,19 @@ class XReconcile(unittest.TestCase):
 
 class MinorFixes(unittest.TestCase):
     def test_mastodon_polls_the_same_media_instead_of_uploading_again(self):
-        image = [{"id": "m1", "mime": "image/png", "alt": "score"}]
+        image = [{"id": "m1", "mime": "image/png", "alt": "score", "bytes": 4, "hash": hashlib.sha256(b"\x89PNG").hexdigest()}]
         storage = SimpleNamespace(storage=SimpleNamespace(get=lambda *a: b"\x89PNG"))
-        wire = Wire([ok({"id": "990"}, 202), ok({"id": "990", "url": None}, 206), ok({"id": "990", "url": "https://files.example/990.png"}), ok({"id": "111"})])
+        wire = Wire([ok({"version": "4.2.9"}), ok({"id": "990"}, 202), ok({"id": "990", "url": None}, 206), ok({"id": "990", "url": "https://files.example/990.png"}), ok({"id": "111"})])
         mastodon = MastodonProvider(BASE, transport=wire, resolver=PUBLIC)
         mastodon.production_reviewed = True
-        token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "clientId": "c", "clientSecret": "s", "scope": ["write:statuses", "write:media"]})
+        token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "capabilities": {"maxCharacters": 500, "maxMediaAttachments": 4}, "clientId": "c", "clientSecret": "s", "scope": ["write:statuses", "write:media"]})
         social = HostedSocial(Grants(token, ["write:statuses", "write:media"]), {"mastodon": mastodon}, storage, sleep=lambda seconds: None)
         self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "provider_accepted")
-        self.assertEqual([c["method"] for c in wire.calls], ["POST", "GET", "GET", "POST"])  # one upload, two polls, the post
+        self.assertEqual([c["method"] for c in wire.calls], ["GET", "POST", "GET", "GET", "POST"])  # discovery, one upload, two polls, the post
         self.assertEqual(wire.calls[-1]["body"]["media_ids"], ["990"])
-        slow = Wire([ok({"id": "991"}, 202)] + [ok({"id": "991", "url": None}, 206)] * HostedSocial.MASTODON_MEDIA_POLLS)
+        slow = Wire([ok({"version": "4.2.9"}), ok({"id": "991"}, 202)] + [ok({"id": "991", "url": None}, 206)] * HostedSocial.MASTODON_MEDIA_POLLS)
         mastodon.transport = slow
-        self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "scheduled")
+        self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "held")
         self.assertEqual(sum(1 for c in slow.calls if c["method"] == "POST"), 1)
 
     def test_short_lived_tokens_renew_within_the_margin(self):

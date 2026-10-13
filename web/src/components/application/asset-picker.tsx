@@ -36,11 +36,11 @@ function Thumb({ asset, className }: { asset: Asset; className?: string }) {
     queryFn: async () => URL.createObjectURL(await api.media(workspaceId, asset.id)),
     staleTime: Infinity,
     retry: 1,
-    enabled: nearView && Boolean(workspaceId) && kindOf(asset) !== 'document'
+    enabled: nearView && Boolean(workspaceId) && (kindOf(asset) !== 'document' && kindOf(asset) !== 'audio')
   });
   return (
     <span ref={ref} className={cn('rafii-quiet relative block overflow-hidden', className)}>
-      {kindOf(asset) === 'document' ? <span className='grid size-full place-items-center text-xs'>PDF · {asset.pages ?? '?'} pages</span> : image.data ? (
+      {kindOf(asset) === 'document' ? <span className='grid size-full place-items-center text-xs'>PDF · {asset.pages ?? '?'} pages</span> : kindOf(asset) === 'audio' ? <span className='text-muted-foreground flex size-full flex-col items-center justify-center gap-1 p-2 text-center text-xs'><Icons.media className='size-5' aria-hidden /><span className='line-clamp-3'>{asset.displayTitle || asset.originalFilename || 'Audio'}</span></span> : image.data ? (
         <Image src={image.data} alt='' width={160} height={160} unoptimized className='size-full object-cover' />
       ) : image.isError ? (
         <span className='text-muted-foreground grid size-full place-items-center' title='Preview unavailable'>
@@ -80,8 +80,8 @@ function SelectedMark() {
 export function AssetPicker({ assets, value, onValueChange, id, disabled, className, noneLabel, kinds = ['image'], ...props }: AssetPickerProps) {
   const [open, setOpen] = useState(false);
   const videoOnly = kinds.length === 1 && kinds[0] === 'video';
-  const emptyLabel = noneLabel ?? (videoOnly ? 'Choose a video' : kinds.length > 1 ? 'Choose media' : 'No image');
-  const noun = videoOnly ? 'video' : kinds.length > 1 ? 'media item' : 'image';
+  const emptyLabel = noneLabel ?? (videoOnly ? 'Choose a video' : kinds.length > 1 ? 'Choose media' : kinds[0] === 'audio' ? 'Choose audio' : 'No image');
+  const noun = videoOnly ? 'video' : kinds.length > 1 ? 'attachment' : kinds[0] === 'audio' ? 'audio file' : 'image';
   const live = assets.filter((asset) => {
     const kind = kindOf(asset);
     return kind !== null && kinds.includes(kind) && (kind === 'image' ? isPostableImage(asset) : isReady(asset));
@@ -146,7 +146,7 @@ export function AssetPicker({ assets, value, onValueChange, id, disabled, classN
                 key={asset.id}
                 type='button'
                 aria-pressed={active}
-                aria-label={`${videoOnly ? 'Video' : 'Image'}${details ? ` ${details}` : ''}, hash starts with ${asset.hash.slice(0, 8)}`}
+                aria-label={`${kindOf(asset) === 'audio' ? `Audio ${asset.displayTitle || asset.originalFilename || ''}` : videoOnly ? 'Video' : 'Image'}${details ? ` ${details}` : ''}, hash starts with ${asset.hash.slice(0, 8)}`}
                 title={details || undefined}
                 onClick={() => choose(asset.id)}
                 className={cn(

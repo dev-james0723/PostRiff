@@ -3,11 +3,19 @@ import re
 from urllib.parse import urlsplit
 
 
-def valid_receipt_url(url, platform):
+def valid_receipt_url(url, platform, account=None):
     if not isinstance(url, str) or not 1 <= len(url) <= 2000 or any(c.isspace() or ord(c) < 32 for c in url):
         return False
     try:
         parsed = urlsplit(url)
+        if platform == 'Mastodon':
+            from .mastodon_protocol import instance_host
+            host = str(account or '').rsplit('@', 1)[-1]
+            try: host = instance_host(host)
+            except Exception: return False
+            return bool(parsed.scheme == 'https' and parsed.hostname == host and parsed.port is None
+                        and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
+                        and re.fullmatch(r'/(@[A-Za-z0-9_.-]+/[0-9]{1,40}|users/[A-Za-z0-9_.-]+/statuses/[0-9]{1,40})', parsed.path))
         hosts, path = {
             'Instagram': ({'instagram.com', 'www.instagram.com'}, r'/(p|reel|tv)/[A-Za-z0-9_-]+/?'),
             'Threads': ({'threads.net', 'www.threads.net', 'threads.com', 'www.threads.com'}, r'/@[A-Za-z0-9_.]+/post/[A-Za-z0-9_-]+/?'),
@@ -39,6 +47,20 @@ def normalize_result(result, job, reconciliation=False):
     allowed = {"native_scheduled", "canceled", "uncertain", "processing", "held", "scheduled", "failed", "provider_accepted", "published", "verified"}
     youtube_progress = bool(isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'YouTube'
                             and isinstance(result.get('progress'), dict) and result['progress'].get('version') == 2)
+    mastodon_pending = bool(isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'Mastodon'
+                            and isinstance(result.get('progress'), dict) and result['progress'].get('version') == 3
+                            and result['progress'].get('stage') == 'native_scheduled' and result.get('verification') == 'provider_lookup')
+    mastodon_thread = False
+    if isinstance(result, dict) and job.get('manifest', {}).get('platform') == 'Mastodon' and job['manifest'].get('payload', {}).get('threadParts'):
+        try:
+            from .mastodon_publishing import checked_progress
+            progress = checked_progress(result.get('progress'), job['manifest'])
+            mastodon_thread = progress['stage'] == 'provider_accepted' and bool(progress.get('threadReferences'))
+            if result.get('state') == 'verified' and (not mastodon_thread or progress.get('threadVerified') != len(progress['threadReferences'])):
+                return unknown('Every approved thread part needs saved IDs and account read-back before verification')
+        except Exception:
+            if result.get('state') == 'verified':
+                return unknown('Invalid thread publication evidence; manual review required')
     if youtube_progress and job.get('cancelRequested'):
         allowed.add('canceled')
     if (not isinstance(result, dict) or not isinstance(result.get("state"), str) or result["state"] not in allowed
@@ -56,7 +78,7 @@ def normalize_result(result, job, reconciliation=False):
     # The provider's own record of the submission saying it failed (a TikTok publish FAILED, a YouTube upload
     # rejected) is proof, not a lookup failure, so it may end the job as failed.
     provider_failure = result.get("state") == "failed" and result.get("verification") == "provider_lookup"
-    if reconciliation and result.get('verification') not in ('resumable_upload_status', 'thread_lookup') and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure and not youtube_progress:
+    if reconciliation and result.get('verification') not in ('resumable_upload_status', 'thread_lookup') and result["state"] in ("processing", "scheduled", "held", "failed") and not provider_failure and not youtube_progress and not ((mastodon_pending or mastodon_thread) and result['state'] == 'processing'):
         # A lookup failure or retry suggestion cannot prove that a prior POST did not run.
         return unknown("Reconciliation did not resolve the prior submission; manual review required")
     if result["state"] in ("published", "verified") and not reference:
@@ -74,8 +96,10 @@ def normalize_result(result, job, reconciliation=False):
     if container is not None and (not isinstance(container, str) or not re.fullmatch(r'[A-Za-z0-9_:-]{1,500}', container)):
         return unknown('Invalid provider container; manual review required')
     url = result.get('url', job.get('url'))
-    if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform')):
+    if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform'), job.get('manifest', {}).get('providerAccountId')):
         return unknown('Invalid canonical receipt URL; manual review required')
+    if url and job.get('manifest', {}).get('platform') == 'Mastodon' and urlsplit(url).path.rstrip('/').rsplit('/', 1)[-1] != reference:
+        return unknown('Mastodon receipt URL does not match the saved post ID')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
     if 'retryAfterSeconds' in result:
         delay = result['retryAfterSeconds']
@@ -96,6 +120,14 @@ def normalize_result(result, job, reconciliation=False):
             if progress.get('videoId') and progress['videoId'] != reference:
                 return unknown('YouTube progress and receipt resource IDs disagree')
             normalized['progress'] = {'version': 2, **upload_view(progress)}
+        elif job.get('manifest', {}).get('platform') == 'Mastodon' and isinstance(progress, dict) and progress.get('version') == 3:
+            from .mastodon_publishing import checked_progress
+            try:
+                normalized['progress'] = checked_progress(progress, job['manifest'])
+            except Exception:
+                return unknown('Invalid Mastodon progress; reconcile without resubmitting')
+            if progress.get('reference') and progress['reference'] != reference:
+                return unknown('Mastodon progress and provider reference disagree')
         else:
             if (not isinstance(progress, dict) or progress.get('version') != 1
                 or progress.get('stage') not in ('assets_uploaded', 'children_created', 'children_ready', 'container_created', 'container_ready', 'upload_session', 'upload_finalizable', 'next_asset', 'metadata_pending', 'provider_accepted', 'thread_ready')

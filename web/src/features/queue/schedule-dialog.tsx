@@ -2,7 +2,9 @@
 
 import { publishingSupport } from '@/lib/channels/publishing-support';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useTimeZone } from '@/lib/preferences';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -28,7 +30,7 @@ import { languageLabel } from '@/lib/locales';
 import { workflowKey } from '@/lib/time-back/active-time';
 import { NEEDS_OPTIONS, PublishOptions, type PublishOptionsValue } from './publish-options';
 import { useActiveWorkTimer } from '@/lib/time-back/use-active-work-timer';
-import { firstPostImageId, isPostableImage, isPostableVideo, kindOf } from '@/lib/media/asset-kinds';
+import { firstPostImageId, isPostableImage, isPostableVideo, isReady, kindOf } from '@/lib/media/asset-kinds';
 
 interface ScheduleDialogProps {
   open: boolean;
@@ -182,6 +184,13 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const [nativeSchedule, setNativeSchedule] = useState(false);
   const [assetId, setAssetId] = useState<string>(preselectedAsset ?? '');
   const [alt, setAlt] = useState('');
+  const threadId = useId();
+  const [threadParts, setThreadParts] = useState<string[]>([]);
+  const [extraMedia, setExtraMedia] = useState<{ assetId: string; alt: string }[]>([]);
+  const [audioSearch, setAudioSearch] = useState('');
+  const [nativeMastodon, setNativeMastodon] = useState(false);
+  const nativeMastodonId = useId();
+  const { api, workspaceId } = useWorkspaceApi();
   const [rights, setRights] = useState(false);
   const [acknowledge, setAcknowledge] = useState(false);
   // TikTok, YouTube and Pinterest need per-post choices; null until every one is made.
@@ -201,10 +210,34 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   const socialPlatform = ['LinkedIn', 'Threads', 'Instagram', 'Facebook', 'X'].includes(variant?.platform ?? '');
   const flexibleMedia = socialPlatform || variant?.platform === 'Pinterest' || (variant?.platform === 'TikTok' && tiktokPhoto);
   const needsVideo = ['YouTube', 'Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || (variant?.platform === 'TikTok' && !tiktokPhoto);
+  const mastodonMedia = variant?.platform === 'Mastodon';
+  const audioLibrary = useQuery({
+    queryKey: ['mastodon-library-audio', workspaceId, audioSearch],
+    queryFn: () => api.library(workspaceId, audioSearch, 200, 0, { kind: 'audio', tag: '', collection: '', sort: 'newest' }),
+    enabled: open && mastodonMedia && Boolean(workspaceId), staleTime: 30_000
+  });
+  const selectedAudio = useQuery({
+    queryKey: ['mastodon-selected-audio', workspaceId, assetId],
+    queryFn: () => api.libraryFile(workspaceId, assetId),
+    enabled: open && mastodonMedia && Boolean(assetId) && !(libraryAssets ?? []).some((a) => a.id === assetId)
+      && !(audioLibrary.data?.assets ?? []).some((a) => a.id === assetId), staleTime: 30_000
+  });
+  useEffect(() => { setExtraMedia([]); setThreadParts([]); setAudioSearch(''); setNativeMastodon(false); }, [variant?.id]);
   const needsImage = variant?.platform === 'Pixelfed';
-  const assets = useMemo(() => (libraryAssets ?? []).filter((candidate) =>
-    (needsVideo ? isPostableVideo(candidate, variant?.platform) && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
-      && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster)) : isPostableImage(candidate) || (flexibleMedia && isPostableVideo(candidate, variant?.platform)) || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated'))), [libraryAssets, needsVideo, variant?.platform, flexibleMedia]);
+  const assets = useMemo(() => {
+    const candidates = [...(libraryAssets ?? []), ...(mastodonMedia ? audioLibrary.data?.assets ?? [] : [])];
+    const selected = selectedAudio.data?.asset;
+    if (mastodonMedia && selected && !candidates.some((a) => a.id === selected.id)) candidates.push(selected);
+    return candidates.filter((candidate) => needsVideo
+      ? isPostableVideo(candidate, variant?.platform)
+        && (!['Douyin', 'Kuaishou'].includes(variant?.platform ?? '') || candidate.mime === 'video/mp4')
+        && (variant?.platform !== 'Kuaishou' || Boolean(candidate.poster))
+      : isPostableImage(candidate)
+        || (flexibleMedia && isPostableVideo(candidate, variant?.platform))
+        || (variant?.platform === 'LinkedIn' && kindOf(candidate) === 'document' && candidate.processing === 'validated')
+        || (mastodonMedia && (isPostableVideo(candidate, 'Mastodon')
+          || (kindOf(candidate) === 'audio' && isReady(candidate) && /^[0-9a-f]{64}$/.test(candidate.hash)))));
+  }, [libraryAssets, needsVideo, mastodonMedia, variant?.platform, flexibleMedia, audioLibrary.data?.assets, selectedAudio.data?.asset]);
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
@@ -228,6 +261,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     variant &&
       channel &&
       (youtubeNow || localTime) &&
+      (!nativeMastodon || Boolean(chosenAt && chosenAt > Date.now() + 360_000)) &&
       rights &&
       (!assetId || Boolean(asset)) &&
       (!needsVideo || Boolean(asset)) &&
@@ -235,8 +269,9 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       !steps.blocked &&
       (!steps.warnings.length || acknowledge) &&
       selectedMedia.every((item, index) => kindOf(item) !== 'image' || (index === 0 ? alt.trim() : mediaAlt[item.id]?.trim())) &&
+      (!mastodonMedia || extraMedia.every((item) => Boolean(item.assetId && item.alt.trim() && assets.some((a) => a.id === item.assetId && isPostableImage(a))))) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
-      (!needsOptions || publishOptions !== null)
+      (!needsOptions || publishOptions !== null) && (!mastodonMedia || threadParts.every((text) => text.trim().length > 0))
   );
 
   async function submit() {
@@ -269,17 +304,24 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
-          assetId: asset?.id,
-          assetIds: selectedMedia.length > 1 || tiktokPhoto ? selectedMedia.map((item) => item.id) : undefined,
+          assetId: mastodonMedia ? undefined : asset?.id,
+          assetIds: !mastodonMedia && (selectedMedia.length > 1 || tiktokPhoto) ? selectedMedia.map((item) => item.id) : undefined,
           mediaAlt,
           omitCaption: story || undefined,
+          attachments: mastodonMedia ? [...(asset ? [{ assetId: asset.id, alt: alt.trim() }] : []), ...extraMedia] : undefined,
           alt: alt.trim(),
           rightsConfirmed: rights,
           localTime,
           timeZone,
           acknowledgedWarnings: acknowledge ? current.warnings : [],
           fold: askFold ? fold : undefined,
-          publishOptions: needsOptions ? { ...publishOptions, ...(nativeSchedule && channel?.platform === 'YouTube' && wallTime.kind === 'exact' ? { publishAt: new Date(wallTime.at).toISOString(), privacyStatus: 'private' } : {}), ...(nativeSchedule && channel?.platform === 'Facebook' && wallTime.kind === 'exact' ? { scheduledPublishTime: Math.floor(wallTime.at / 1000) } : {}) } : undefined
+          threadParts: mastodonMedia && threadParts.length ? threadParts : undefined,
+          publishOptions: needsOptions ? {
+            ...publishOptions,
+            ...(nativeSchedule && channel?.platform === 'YouTube' && wallTime.kind === 'exact' ? { publishAt: new Date(wallTime.at).toISOString(), privacyStatus: 'private' } : {}),
+            ...(nativeSchedule && channel?.platform === 'Facebook' && wallTime.kind === 'exact' ? { scheduledPublishTime: Math.floor(wallTime.at / 1000) } : {}),
+            ...(mastodonMedia && nativeMastodon && chosenAt ? { scheduled_at: new Date(chosenAt).toISOString() } : {})
+          } : undefined
         }
       });
       // The Queue (or the Calendar) shows the new review; a short toast says where it went.
@@ -299,7 +341,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='rafii-elevated rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
+      <DialogContent className='rafii-elevated max-h-[90dvh] overflow-y-auto rounded-[var(--rafii-radius-mobile-dialog)] p-5 ring-0 sm:max-w-lg sm:rounded-[var(--rafii-radius-dialog)] sm:p-6 [&_[data-slot=dialog-close]]:top-3 [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:size-10 [&_[data-slot=dialog-close]]:rounded-full'>
         <DialogHeader>
           <DialogTitle className='text-lg font-medium tracking-tight'>Schedule a draft</DialogTitle>
           <DialogDescription>Nothing publishes until you approve it.</DialogDescription>
@@ -415,6 +457,18 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             )}
           </div>
 
+          {mastodonMedia && <div className='flex flex-col gap-3 rounded border p-3'>
+            <p className='text-sm'>Create a thread from this draft</p>
+            <p className='text-muted-foreground text-xs'>The draft is the first post. Each additional post replies to the previous one on this account. All parts need exact approval. Threads use Rafii-managed scheduling; attachments and polls stay on the first post.</p>
+            {threadParts.map((text, index) => <div key={index} className='flex flex-col gap-2'><label htmlFor={`${threadId}-${index}`} className='flex flex-col gap-1 text-sm'>Post {index + 2}<textarea id={`${threadId}-${index}`} aria-label={`Thread post ${index + 2}`} maxLength={500} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setThreadParts((parts) => parts.map((value, at) => at === index ? event.target.value : value))} /></label><Button variant='outline' size='sm' onClick={() => setThreadParts((parts) => parts.filter((_value, at) => at !== index))}>Remove post {index + 2}</Button></div>)}
+            <Button variant='outline' size='sm' disabled={threadParts.length >= 9} onClick={() => { setNativeMastodon(false); setThreadParts((parts) => [...parts, '']); }}>Add next thread post</Button>
+          </div>}
+          {mastodonMedia && <label htmlFor={nativeMastodonId} className='flex items-start gap-2 text-sm'>
+            <Checkbox id={nativeMastodonId} disabled={threadParts.length > 0} checked={nativeMastodon} onCheckedChange={(value) => setNativeMastodon(value === true)} />
+            <span>Schedule on the Mastodon server after approval
+              <span className='text-muted-foreground block text-xs'>Choose a time at least six minutes ahead. Rafii sends the approved schedule to your server first and checks its progress. Leave this off to use Rafii’s publishing calendar.</span>
+            </span>
+          </label>}
           <div className='grid gap-4 sm:grid-cols-2'>
             {!youtubeNow && <div className='flex flex-col gap-1.5' data-tour='schedule-time'>
               <Label htmlFor='schedule-time'>Publish at</Label>
@@ -433,8 +487,17 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
               {wallTime.kind === 'gap' && <Note>Clocks skip this time. Pick another.</Note>}
             </div>}
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : flexibleMedia ? 'Media' : 'Image (optional)'}</Label>
-              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={setAssetId} kinds={needsVideo ? ['video'] : flexibleMedia ? variant?.platform === 'LinkedIn' ? ['image', 'video', 'document'] : ['image', 'video'] : ['image']} />
+              <Label htmlFor='schedule-asset'>{needsVideo ? 'Video (required)' : mastodonMedia ? 'Image, video or audio (optional)' : flexibleMedia ? 'Media' : 'Image (optional)'}</Label>
+              <AssetPicker id='schedule-asset' assets={assets} value={assetId} onValueChange={(value) => {
+                setAssetId(value);
+                if (mastodonMedia) setExtraMedia((items) => kindOf(assets.find((a) => a.id === value)) === 'image' ? items.filter((item) => item.assetId !== value) : []);
+              }} kinds={needsVideo ? ['video'] : mastodonMedia ? ['image', 'video', 'audio'] : flexibleMedia ? variant?.platform === 'LinkedIn' ? ['image', 'video', 'document'] : ['image', 'video'] : ['image']} noneLabel={mastodonMedia ? 'No attachment' : undefined} />
+              {mastodonMedia && <>
+                <Label htmlFor='schedule-audio-search'>Search Library audio</Label>
+                <Input id='schedule-audio-search' value={audioSearch} onChange={(event) => setAudioSearch(event.target.value)} placeholder='Search by title or filename' />
+                {audioLibrary.isError && <Note>Audio Library could not load. <button type='button' className='underline' onClick={() => void audioLibrary.refetch()}>Try again</button></Note>}
+                <p className='text-muted-foreground text-xs'>Up to four images, or one video/audio file. Audio must finish Library verification. Your server may apply lower limits.</p>
+              </>}
             </div>
           </div>
 
@@ -466,12 +529,24 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
             </div>
           )}
 
-          {asset && kindOf(asset) === 'image' && (
+          {asset && (kindOf(asset) === 'image' || mastodonMedia) && (
             <div className='flex flex-col gap-1.5'>
-              <Label htmlFor='schedule-alt'>Alt text</Label>
+              <Label htmlFor='schedule-alt'>{kindOf(asset) === 'image' ? 'Alt text' : 'Media description (optional)'}</Label>
               <Input id='schedule-alt' className='text-base md:text-sm' value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={300} placeholder='Hands on piano keys under a warm light' />
             </div>
           )}
+
+          {mastodonMedia && asset && kindOf(asset) === 'image' && <div className='flex flex-col gap-3'>
+            {extraMedia.map((item, index) => <div key={index} className='flex flex-col gap-2 rounded border p-3'>
+              <Label htmlFor={'schedule-extra-' + index}>Image {index + 2}</Label>
+              <AssetPicker id={'schedule-extra-' + index} assets={assets.filter((a) => isPostableImage(a) && a.id !== assetId && !extraMedia.some((other, at) => at !== index && other.assetId === a.id))} value={item.assetId}
+                onValueChange={(value) => setExtraMedia((items) => items.map((entry, at) => at === index ? { ...entry, assetId: value } : entry))} />
+              <Label htmlFor={'schedule-extra-alt-' + index}>Image {index + 2} description</Label>
+              <Input id={'schedule-extra-alt-' + index} maxLength={1000} value={item.alt} onChange={(event) => setExtraMedia((items) => items.map((entry, at) => at === index ? { ...entry, alt: event.target.value } : entry))} />
+              <Button type='button' variant='quiet' onClick={() => setExtraMedia((items) => items.filter((_, at) => at !== index))}>Remove image {index + 2}</Button>
+            </div>)}
+            {extraMedia.length < 3 && <Button type='button' variant='outline' onClick={() => setExtraMedia((items) => [...items, { assetId: '', alt: '' }])}>Add another image</Button>}
+          </div>}
 
           {channel && socialPlatform && <SocialOptions key={channel.id} platform={channel.platform} channelId={channel.id} media={selectedMedia} onChange={setPublishOptions} />}
           {channel && needsOptions && !socialPlatform && (
@@ -481,7 +556,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
 
           <Label className='flex items-start gap-2 text-sm font-normal'>
             <Checkbox checked={rights} onCheckedChange={(v) => setRights(v === true)} />
-            <span>I have the rights to publish this text{asset ? ` and ${kindOf(asset)}` : ''} on this account.</span>
+            <span>I have the rights to publish this text{asset ? ` and ${extraMedia.length ? 'these attachments' : kindOf(asset)}` : ''} on this account.</span>
           </Label>
           {variant && steps.warnings.length > 0 && (
             <Label className='flex items-start gap-2 text-sm font-normal'>

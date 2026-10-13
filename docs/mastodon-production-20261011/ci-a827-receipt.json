@@ -1,0 +1,219 @@
+{
+  "headRevision": "a8273335860e6d386694f8a622a89ef03cfb78cc",
+  "testedMergeSha": "2189aac03eed1c71365c9836c03410f4aabda45b",
+  "status": "PASS",
+  "runId": 38171786322,
+  "artifactId": 11714538986,
+  "artifactName": "local-gates-2189aac03eed1c71365c9836c03410f4aabda45b",
+  "artifactLocalPath": "/private/tmp/rafii-mastodon-a827-ci.zip",
+  "ci-python": {
+    "name": "ci-python",
+    "command": [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_*.py"
+    ],
+    "cwd": "/home/runner/work/PostRiff/PostRiff",
+    "startedAt": "2026-10-11T20:22:20.739572+00:00",
+    "finishedAt": "2026-10-11T20:28:10.818808+00:00",
+    "seconds": 350.08,
+    "exitCode": 0,
+    "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+    "sourceUnchanged": true,
+    "status": "PASS",
+    "log": "docs/consumer-ready/evidence/ci-python.log"
+  },
+  "ci-postgres": {
+    "name": "ci-postgres",
+    "command": [
+      "python",
+      "scripts/postriff_pg_suite.py"
+    ],
+    "cwd": "/home/runner/work/PostRiff/PostRiff",
+    "startedAt": "2026-10-11T20:28:11.245920+00:00",
+    "finishedAt": "2026-10-11T20:41:46.440304+00:00",
+    "seconds": 815.19,
+    "exitCode": 0,
+    "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+    "sourceUnchanged": true,
+    "status": "PASS",
+    "log": "docs/consumer-ready/evidence/ci-postgres.log"
+  },
+  "ci-browser": {
+    "name": "ci-browser",
+    "command": [
+      "python",
+      "scripts/consumer_ready_browser.py"
+    ],
+    "cwd": "/home/runner/work/PostRiff/PostRiff",
+    "startedAt": "2026-10-11T20:47:58.136996+00:00",
+    "finishedAt": "2026-10-11T20:48:50.340167+00:00",
+    "seconds": 52.2,
+    "exitCode": 0,
+    "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+    "sourceUnchanged": true,
+    "status": "PASS",
+    "log": "docs/consumer-ready/evidence/ci-browser.log"
+  },
+  "ci-performance": {
+    "name": "ci-performance",
+    "command": [
+      "python",
+      "scripts/consumer_ready_browser.py",
+      "--performance"
+    ],
+    "cwd": "/home/runner/work/PostRiff/PostRiff",
+    "startedAt": "2026-10-11T20:48:50.745628+00:00",
+    "finishedAt": "2026-10-11T20:50:02.333308+00:00",
+    "seconds": 71.59,
+    "exitCode": 0,
+    "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+    "sourceUnchanged": true,
+    "status": "PASS",
+    "log": "docs/consumer-ready/evidence/ci-performance.log"
+  },
+  "ci-history-import": {
+    "name": "ci-history-import",
+    "command": [
+      "python",
+      "scripts/consumer_ready_browser.py",
+      "--history-import"
+    ],
+    "cwd": "/home/runner/work/PostRiff/PostRiff",
+    "startedAt": "2026-10-11T20:50:02.738617+00:00",
+    "finishedAt": "2026-10-11T20:50:24.018605+00:00",
+    "seconds": 21.28,
+    "exitCode": 0,
+    "head": "2189aac03eed1c71365c9836c03410f4aabda45b",
+    "source": "c8a0bc0ca6f0c493df54b71dd1371d3d426444986c7de4e25f2d1cb0d97a9fd3",
+    "sourceUnchanged": true,
+    "status": "PASS",
+    "log": "docs/consumer-ready/evidence/ci-history-import.log"
+  },
+  "pythonSummary": [
+    "Ran 5126 tests in 340.776s",
+    "OK (skipped=378)"
+  ],
+  "postgresSummary": {
+    "executed": 131,
+    "passed": 131,
+    "failed": 0
+  },
+  "scope": "All applicable protected checks PASS on this PR merge snapshot; synthetic provider tests do not prove real A-E. Later OAuth source repair requires new final CI.",
+  "checks": [
+    {
+      "conclusion": "SKIPPED",
+      "context": null,
+      "name": "dependency-lock",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "founder",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "growth-studio",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "native-learning-browser",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "scenes",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "local-gates",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "library",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SKIPPED",
+      "context": null,
+      "name": "generate-assets",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "document-runtime",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SKIPPED",
+      "context": null,
+      "name": "dependency-lock",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "agent-ui",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "agent-ui-browser",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": "SUCCESS",
+      "context": null,
+      "name": "Vercel Preview Comments",
+      "state": null,
+      "status": "COMPLETED"
+    },
+    {
+      "conclusion": null,
+      "context": "Vercel \u2013 postriff-phase2-private",
+      "name": null,
+      "state": "SUCCESS",
+      "status": null
+    },
+    {
+      "conclusion": null,
+      "context": "Vercel \u2013 rafii-consumer-staging",
+      "name": null,
+      "state": "SUCCESS",
+      "status": null
+    }
+  ]
+}

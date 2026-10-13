@@ -27,14 +27,25 @@ def main():
             subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)
             server_log=Path(tmp)/'postgres.log'
             try:
-                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o',f'-h 127.0.0.1 -p 55438 -k {tmp}','-w','start'],check=True,stdout=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 # TemporaryDirectory otherwise removes the only startup diagnostic.
                 # This cluster has no application credentials or customer records.
                 if server_log.exists():print(server_log.read_text(),flush=True)
                 raise
             try:
-                subprocess.run([str(PG/'psql'),DSN,'-v','ON_ERROR_STOP=1','-q','-f',str(ROOT/'tests/phase2/rls.sql')],check=True,stdout=subprocess.DEVNULL)
+                bootstrap=ROOT/'tests/phase2/rls.sql'
+                if script.stem=='postgres_mastodon_automation_legacy':
+                    # Exercise the shipped legacy path with both permission
+                    # tables absent, without creating and then dropping them.
+                    sql=bootstrap.read_text()
+                    optional='\\ir ../../migrations/postriff/109_agent_permissions.sql\n'
+                    assert sql.count(optional)==1
+                    subprocess.run([str(PG/'psql'),DSN,'-v','ON_ERROR_STOP=1','-q','-f','-'],
+                        input=sql.replace(optional,''),text=True,cwd=bootstrap.parent,
+                        check=True,stdout=subprocess.DEVNULL)
+                else:
+                    subprocess.run([str(PG/'psql'),DSN,'-v','ON_ERROR_STOP=1','-q','-f',str(bootstrap)],check=True,stdout=subprocess.DEVNULL)
                 group=[script]
                 if script.name=='postgres_plan_guards.py':group.insert(0,ROOT/'tests/phase2/postgres_repository.py')
                 if script.name=='postgres_instagram_lifecycle.py':group.append(ROOT/'tests/phase2/postgres_safety.py')

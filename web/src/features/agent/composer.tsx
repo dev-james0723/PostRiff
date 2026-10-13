@@ -29,7 +29,7 @@ export const MESSAGE_MAX = 6000;
 
 /** Platforms the drafting runtime can write for today (mirrors `agent_runtime.PLATFORMS`). X is draftable but never
  *  publishable: PostRiff has no X publisher, so X drafts are copied and posted by hand. */
-export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu', 'X'] as const;
+export const DRAFT_PLATFORMS = ['LinkedIn', 'Instagram', 'Threads', 'Xiaohongshu', 'X', 'Mastodon'] as const;
 export type DraftPlatform = (typeof DRAFT_PLATFORMS)[number];
 
 /** Tool pills in the compact composer: one height, one radius, disabled states with their reason in the title. */

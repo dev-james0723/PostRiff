@@ -439,13 +439,18 @@ class Phase2Store(Store):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
         extended_media = ("assetIds" in p or (p.get("assetId") and c["platform"] in ("LinkedIn", "Threads", "Instagram", "Facebook", "X", "YouTube", "TikTok", "Pinterest")))
-        if extended_media:
+        if c['platform'] == 'Mastodon':
+            from .mastodon_media import review_media
+            media = review_media(s, p)
+        elif p.get('attachments'):
+            raise AlphaError('Multiple attachment reviews are available for Mastodon only.', 409)
+        elif extended_media:
             from .social_formats import ordered_media
             media = ordered_media(data["assets"], p, c["platform"])
         elif p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
-                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
+                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou", "Mastodon"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
                 if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
@@ -470,13 +475,17 @@ class Phase2Store(Store):
         if c["platform"] in ("Instagram", "Pixelfed") and not media:
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
-        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
+        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text, now=self.clock())
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
-        if immediate_youtube:
+        native_mastodon = c['platform'] == 'Mastodon' and bool((options or {}).get('scheduled_at'))
+        if immediate_youtube or native_mastodon:
             from datetime import datetime, timezone
             approved_at = int(self.clock() // 60 * 60 + 60)
             timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
             timing['mode'] = 'now'
+            if native_mastodon:
+                timing['nativeProvider'] = 'Mastodon'
+                timing['nativePublicationAt'] = options['scheduled_at']
         else:
             timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
@@ -493,6 +502,11 @@ class Phase2Store(Store):
         if omit_caption:
             manifest['captionOmitted'] = True
             manifest['sourceTextDigest'] = digest(v['text'])
+        if p.get('threadParts'):
+            from .mastodon_threads import parts
+            manifest['payload']['threadParts'] = copy.deepcopy(p['threadParts'])
+            parts({**manifest, 'publishOptions': options})
+            manifest['payloadDigest'] = digest({'payload': manifest['payload'], 'media': media})
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
@@ -593,7 +607,9 @@ class Phase2Store(Store):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
+            media_ok = all((m['platform'] == 'Mastodon' and a.get('rightsConfirmed') is True) if a.get('normalizedLibrary') else
+                           not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"]
+                           for a in m["media"] + m.get('youtubeAssets', []))
             media_ok = media_ok and all(not a.get('poster') or all(find(s['phase2']['assets'],a['id']).get('poster',{}).get(k) == v for k,v in a['poster'].items()) for a in m['media'])
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
