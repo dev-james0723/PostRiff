@@ -147,7 +147,10 @@ class OAuthService:
                     'pinterest_trial_environment_invalid': 'The private Pinterest Trial API environment and Sandbox setting do not match. Connections stay closed; review the approved environment configuration.',
                     'pinterest_callback_origin_invalid': 'The Pinterest callback origin must be a fixed HTTPS origin without a path, query or fragment. Connections stay closed; review it against the registered callback.',
                 }.get(diagnostic.get('configurationIssueCode')) if pid == 'pinterest' else None
-                issues.append(pinterest_issue or ('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.'))
+                if diagnostic.get('configurationState') == 'sandbox_forbidden_environment':
+                    issues.append('TikTok Sandbox OAuth is blocked on Production or a canonical production callback domain. Use a separate HTTPS Preview origin and sandbox credentials.')
+                else:
+                    issues.append(pinterest_issue or ('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.'))
             if not self.vault.fernet:
                 issues.append('Server setup required: POSTRIFF_CREDENTIAL_KEY must protect connected-account tokens.')
             try:

@@ -74,6 +74,10 @@ class HostedSocial:
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
             return None
+        # Identity-only TikTok Sandbox can never be used by the publishing worker,
+        # even if an unrelated caller accidentally mutates the review flags.
+        if getattr(provider, "sandbox_mode", False):
+            return None
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.
