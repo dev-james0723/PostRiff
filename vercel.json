@@ -107,7 +107,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/rafii-brand-brain-v11": false
+      "codex/rafii-brand-brain-v11": false,
+      "codex/rafii-tiktok-sandbox-oauth-20261013": false
     }
   }
 }
