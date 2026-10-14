@@ -54,6 +54,16 @@ test('protected preview forwards existing deployment access only to fixed API re
  for(const secret of ['test-token','fixture-cookie','fixture-bypass']) assert.equal(JSON.stringify(result).includes(secret),false);
 });
 
+test('the visitor User-Agent reaches the API so the session is labelled with their browser',async()=>{
+ const agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+ const seen=[];
+ await fetchWorkspaceBootstrap('https://example.com','token','supabase',undefined,async(url,options)=>{seen.push(options.headers['User-Agent']);return Response.json(url.endsWith('/me')?me:{workspaces});},{userAgent:agent+'x'.repeat(1000)});
+ assert.deepEqual(seen,[agent+'x'.repeat(512-agent.length),agent+'x'.repeat(512-agent.length)]);
+ const none=[];
+ await fetchWorkspaceBootstrap('https://example.com','token','supabase',undefined,async(url,options)=>{none.push('User-Agent' in options.headers);return Response.json(url.endsWith('/me')?me:{workspaces});});
+ assert.deepEqual(none,[false,false]);
+});
+
 test('preview uses only pinned request aliases so deployment cookies stay on their own host',()=>{
  const env={VERCEL:'1',VERCEL_ENV:'preview',VERCEL_URL:'deployment.vercel.app',VERCEL_BRANCH_URL:'branch.vercel.app',POSTRIFF_STAGING_PUBLIC_BASE_URL:'https://approved-staging.vercel.app',NEXT_PUBLIC_APP_URL:'https://stale-staging.example.com'};
  for(const host of ['deployment.vercel.app','branch.vercel.app','approved-staging.vercel.app']) assert.equal(bootstrapOrigin(env,host),'https://'+host);
