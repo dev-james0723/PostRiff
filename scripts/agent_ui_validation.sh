@@ -35,6 +35,16 @@ need_pg() {
   sudo -n chmod 1777 /var/run/postgresql
 }
 
+# Full discovery includes real document/media rendering (test_library_preview).
+# Production bundles LibreOffice (runtime/build_document_renderer.py); match the
+# package set consumer-ready.yml installs before the same discovery.
+need_office() {
+  if ! command -v libreoffice >/dev/null || ! command -v ffmpeg >/dev/null; then
+    sudo -n apt-get -qq update
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install ffmpeg libreoffice-writer libreoffice-calc libreoffice-impress libseccomp2
+  fi
+}
+
 run_unit() {
   local log="$EVIDENCE/unit-python.log" status=0 count
   "$PY" -m unittest discover -s tests -p 'test_agent_ui_*.py' -v >"$log" 2>&1 || status=$?
@@ -70,6 +80,7 @@ run_database() {
 }
 
 run_regression() {
+  need_office
   local log="$EVIDENCE/regression-python.log" status=0 count
   "$PY" -m unittest discover -s tests -p 'test_*.py' >"$log" 2>&1 || status=$?
   tail -n 30 "$log"
