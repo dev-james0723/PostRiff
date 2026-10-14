@@ -191,11 +191,20 @@ jobs:
         run: npx --prefix web playwright install --with-deps webkit
       - name: Site agent journey, WebKit (the same checks)
         run: node web/tests/site-agent-browser.cjs --browser=webkit --out=docs/design/site-agent/evidence/ci-browser-webkit
-      - name: Rafii style, commands and weather, WebKit
+      # WebKit releases its browser process after every invocation. Run the
+      # cross-origin voice/weather scene in a fresh process rather than the one
+      # that already exercised four style/keyboard contexts. Both checks remain
+      # required: this changes isolation, never skips a failing assertion.
+      - name: Rafii deterministic weather, WebKit (fresh browser process)
         env:
           RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
           RAFII_VOICE_PG_PORT: '55480'
-        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone,weather --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
+        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=weather --out=docs/design/rafii-live-agent/evidence/ci-weather-webkit
+      - name: Rafii style and commands, WebKit
+        env:
+          RAFII_VOICE_WEB_URL: http://127.0.0.1:4441
+          RAFII_VOICE_PG_PORT: '55480'
+        run: node web/tests/rafii-live-agent-browser.cjs --browser=webkit --sections=style,style-phone,slash,slash-phone --out=docs/design/rafii-live-agent/evidence/ci-browser-webkit
       - name: Rafii Agent Chat and Meshy Live, WebKit
         env:
           RAFII_WEB_URL: http://127.0.0.1:4441
@@ -220,6 +229,7 @@ jobs:
             docs/design/rafii-live-agent/evidence/ci-thinkingops-chromium/
             docs/design/rafii-live-agent/evidence/ci-guide-chromium/
             docs/design/rafii-live-agent/evidence/ci-browser-webkit/
+            docs/design/rafii-live-agent/evidence/ci-weather-webkit/
             docs/design/rafii-live-agent/evidence/ci-guide-webkit/
             docs/design/rafii-live-agent/evidence/ci-phone-chromium/
             harness.log

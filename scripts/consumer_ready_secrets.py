@@ -9,6 +9,51 @@ from detect_secrets.settings import default_settings
 from consumer_ready_check import ROOT, OUT, fingerprint
 
 
+
+# This precisely scoped exception accepts no credential-like string:
+# the digest has to be an actual checksum of one of the two reviewed,
+# locally vendored Google Fonts assets. Any change to bytes, size, file
+# name, origin, field type, line, or manifest value fails closed.
+_FONT_MANIFEST = 'web/src/components/themes/fonts/SOURCE.json'
+_FONT_SOURCES = {
+    'Merriweather.ttf': 'https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather%5Bopsz%2Cwdth%2Cwght%5D.ttf',
+    'OFL.txt': 'https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/OFL.txt',
+}
+
+
+def verified_font_checksum(finding):
+    if finding.get('path') != _FONT_MANIFEST or finding.get('type') != 'Hex High Entropy String':
+        return False
+    manifest_path = ROOT / _FONT_MANIFEST
+    try:
+        line_number = finding.get('line')
+        lines = manifest_path.read_text().splitlines()
+        if not isinstance(line_number, int) or not 1 <= line_number <= len(lines):
+            return False
+        matched = re.fullmatch(r'\s*"sha256": "([a-f0-9]{64})",?\s*', lines[line_number - 1])
+        if not matched:
+            return False
+        digest = matched.group(1)
+        manifest = json.loads(manifest_path.read_text())
+        records = manifest.get('files', [])
+        if not isinstance(records, list) or len(records) != 2:
+            return False
+        matches = [row for row in records if isinstance(row, dict) and row.get('sha256') == digest]
+        if len(matches) != 1:
+            return False
+        entry = matches[0]
+        filename = entry.get('name')
+        if filename not in _FONT_SOURCES or entry.get('source') != _FONT_SOURCES[filename]:
+            return False
+        file = manifest_path.parent / filename
+        if file.is_symlink() or not file.is_file() or file.stat().st_size != entry.get('bytes'):
+            return False
+        if file.stat().st_size > 6 * 1024 * 1024:
+            return False
+        return hashlib.sha256(file.read_bytes()).hexdigest() == digest
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return False
+
 def main():
     manifest=fingerprint(); collection=SecretsCollection()
     paths=list(manifest['files']) + ['.env.example']
@@ -44,6 +89,8 @@ def main():
         line=lines[finding['line']-1]
         return bool(re.fullmatch(r'\s*"(libraryHash|promptHash)": "[a-f0-9]{64}",?\s*',line) or re.fullmatch(r'\s*"[a-f0-9]{64}",?\s*',line))
     def reviewed(finding):
+        if verified_font_checksum(finding):
+            return True
         if generated_digest(finding):
             return True
         if finding['path']=='docs/consumer-ready/secret-allowlist.json' and finding['type']=='Hex High Entropy String' and finding['hash'] in metadata_hashes:
