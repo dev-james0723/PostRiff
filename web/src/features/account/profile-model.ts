@@ -68,7 +68,8 @@ export function describeSecurityEvent(event: SecurityEvent): { label: string; to
   const role = roleLabel(meta.role);
   switch (event.kind) {
     case 'session.started':
-      return { label: `Signed in on ${typeof meta.client === 'string' && meta.client ? meta.client : 'an unknown device'}`, tone: 'neutral' };
+    case 'session.observed':
+      return { label: `Signed in on ${typeof meta.client === 'string' && meta.client ? meta.client : 'an unrecognized browser'}`, tone: 'neutral' };
     case 'mfa.enabled':
       return { label: 'Two-factor authentication turned on', tone: 'neutral' };
     case 'mfa.disabled':

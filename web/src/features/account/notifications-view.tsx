@@ -25,7 +25,7 @@ import { PhoneSettings } from '@/features/rafii-phone/phone-settings';
 const EMAILS = [
   { kind: 'Invitation', when: 'When someone is invited', to: 'The invitee' },
   { kind: 'Welcome', when: 'After your first workspace', to: 'You' },
-  { kind: 'New device sign-in', when: 'Only if turned on above', to: 'You' },
+  { kind: 'New sign-in', when: 'Only if turned on above', to: 'You' },
   { kind: 'Trial ending', when: '2–3 days before it ends', to: 'Owner' },
   { kind: 'Trial ended', when: 'Within a day after it ends', to: 'Owner' },
   { kind: 'Subscription active', when: 'When a plan starts or changes', to: 'Owner' },
@@ -56,17 +56,17 @@ function SecurityAlerts() {
     <SettingsSection id='notifications-security' title='Security alerts'>
       <Label className='flex min-h-11 items-center justify-between gap-4'>
         <span className='flex items-center gap-0.5'>
-          <span className='text-sm font-medium'>Email me when a new device signs in</span>
+          <span className='text-sm font-medium'>Email me about new sign-ins</span>
           <InfoTip
-            label='About new-device alerts'
+            label='About new sign-in alerts'
             className='-my-2 size-9'
-            description='One email per new device, with a link to review your sessions. Each alert also appears in your account history.'
+            description='One email each time a new session signs in to your account, with the browser, the time and a link to review your sessions. Sign-ins also appear in your account history, whether this is on or off.'
           />
         </span>
         {me.isLoading ? (
           <Skeleton className='h-5 w-9 shrink-0' />
         ) : (
-          <Switch checked={on} disabled={busy} onCheckedChange={(checked) => void toggle(checked)} aria-label='Email me when a new device signs in' />
+          <Switch checked={on} disabled={busy} onCheckedChange={(checked) => void toggle(checked)} aria-label='Email me about new sign-ins' />
         )}
       </Label>
     </SettingsSection>

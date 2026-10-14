@@ -173,3 +173,10 @@ do $$ begin
     ]
  ) then raise exception 'Library bucket is not private or lacks an accepted upload MIME'; end if;
 end $$;
+
+-- RAPv2 H-1: browser reads also need a live, unrevoked session (and AAL2 where two-factor is enforced). Suites that
+-- act as the browser role get one unrevoked session id by default; postgres_browser_session_guard.py sets its own.
+\ir ../../migrations/postriff/119_rapv2_browser_session_guard.sql
+do $$ begin
+ execute format('alter database %I set request.jwt.claim.session_id = %L', current_database(), 'harness-session-000000000001');
+end $$;

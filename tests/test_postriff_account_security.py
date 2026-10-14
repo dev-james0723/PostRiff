@@ -69,7 +69,7 @@ class FakeAccountService:
         self._record("me", client_label)
         return {"userId": PRINCIPAL, "displayName": "", "mfa": {"available": True, "enforced": False, "enforcedAt": None, "aal": "aal1"}}
 
-    def update_profile(self, token, changes):
+    def update_profile(self, token, changes, client_label=""):
         self._record("update_profile", changes)
         return {"displayName": changes.get("displayName", ""), "preferences": {"timeZone": changes.get("timeZone", ""), "locale": "", "alertNewDevice": False}}
 
@@ -105,7 +105,7 @@ class FakeAccountService:
         self._record("my_invitations")
         return {"available": True, "invitations": [{"invitationId": "inv-1", "workspaceName": "Studio", "role": "editor"}]}
 
-    def accept_my_invitation(self, token, invitation_id):
+    def accept_my_invitation(self, token, invitation_id, client_label=""):
         self._record("accept_my_invitation", invitation_id)
         return {"workspaceId": WORKSPACE, "role": "editor"}
 
@@ -187,7 +187,7 @@ class AccountRoutes(unittest.TestCase):
         fake = FakeAccountService()
         app = HostedApplication(fake, None, {"provider": "supabase"}, "c" * 24)
         self.assertEqual(invoke(app, "GET", "/api/me", headers={**AUTH, "User-Agent": "Safari/605.1 (iPhone)"})[0], 200)
-        self.assertEqual(fake.calls[0], ("me", "Safari"))  # the device label reaches the service for new-device alerts
+        self.assertEqual(fake.calls[0], ("me", "Safari on iPhone"))  # the browser label reaches the service for sign-in alerts
         self.assertEqual(invoke(app, "GET", "/api/me/channels", headers=AUTH)[1]["channels"][0]["platform"], "Threads")
         self.assertEqual(invoke(app, "PATCH", "/api/me", {"displayName": "James", "timeZone": "Asia/Hong_Kong"}, AUTH)[1]["preferences"]["timeZone"], "Asia/Hong_Kong")
         self.assertEqual(invoke(app, "POST", "/api/auth/mfa", {}, AUTH)[1]["enforced"], True)
@@ -553,8 +553,9 @@ class FakeMailer:
     def __init__(self):
         self.calls = []
 
-    def new_device(self, to, device_label, at, profile_url):
+    def new_device(self, to, device_label, at, profile_url, time_zone=""):
         self.calls.append((to, device_label, profile_url))
+        self.zones = [*getattr(self, "zones", []), time_zone]
         return {"sent": True, "kind": "new_device"}
 
 
@@ -579,14 +580,15 @@ class NewDeviceAlerts(unittest.TestCase):
 
     def test_first_sighting_emails_only_when_the_person_opted_in(self):
         # New session, alert on: one email and one audit line naming the session.
-        cursor = FakeCursor([((True,), 1), (("James", None, "", "", True), 1), *STYLE_READ, ((True,), 1), (None, 1)])
+        cursor = FakeCursor([((True,), 1), (("James", None, "", "", True), 1), *STYLE_READ, ((True, "Asia/Hong_Kong"), 1), (None, 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
+        self.assertEqual(svc.mailer.zones, ["Asia/Hong_Kong"])  # the alert is written in the person's own time zone
         self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
         self.assertIn("RETURNING (xmax = 0)", cursor.executed[0][0])
         self.assertEqual(cursor.executed[6][1][2:4], ("session.alerted", "session-current-0123456789"))
         # New session, alert off: the preference is read and nothing else happens.
-        cursor = FakeCursor([((True,), 1), (("James", None, "", "", False), 1), *STYLE_READ, ((False,), 1)])
+        cursor = FakeCursor([((True,), 1), (("James", None, "", "", False), 1), *STYLE_READ, ((False, ""), 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
         self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 6))
@@ -597,7 +599,7 @@ class NewDeviceAlerts(unittest.TestCase):
         self.assertEqual((svc.mailer.calls, len(cursor.executed)), ([], 5))
 
     def test_sessions_route_takes_the_same_path(self):
-        cursor = FakeCursor([((True,), 1), ([], 0), ((True,), 1), (None, 1)])
+        cursor = FakeCursor([((True,), 1), ([], 0), ((True, ""), 1), (None, 1)])
         svc = self.alerting(cursor)
         svc.sessions("t", client_label="Chrome")
         self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Chrome", "https://app.example/app/account/profile")])
