@@ -250,6 +250,9 @@ class TikTokProvider(OAuthProvider):
         # The env names say CLIENT_ID; TikTok calls the same value client_key. `state` is bound server-side to the
         # transaction (member, workspace, single use), which is what protects this redirect without PKCE.
         params = {"client_key": self.client_id, "scope": ",".join(scopes), "response_type": "code", "redirect_uri": redirect, "state": state}
+        if self.sandbox_mode:
+            # TikTok Login Kit for Web: show the real consent screen even when the user is already signed in.
+            params["disable_auto_auth"] = "1"
         if self.hex_pkce:
             params.update(code_challenge=self.hex_challenge(challenge), code_challenge_method="S256")
         return self.AUTH + "?" + urlencode(params)

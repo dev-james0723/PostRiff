@@ -59,6 +59,10 @@ class SandboxOAuthReadiness(unittest.TestCase):
         self.assertEqual(registry["tiktok"].client_id, "production-client-key-example")
         self.assertTrue(entry["connectReady"])
         self.assertFalse(evaluate(values)["readyForHumanIdentityOAuth"])
+        adapter = registry["tiktok"]
+        url = adapter.authorize_url(TEST_ORIGIN + "/api/oauth/tiktok/callback", "production-state", "challenge", ["user.info.basic"])
+        self.assertNotIn("disable_auto_auth", parse_qs(urlparse(url).query),
+                         "Production OAuth URLs must remain unchanged")
 
     def test_sandbox_missing_pair_never_falls_back_to_production(self):
         values = config()
@@ -135,6 +139,7 @@ class SandboxOAuthReadiness(unittest.TestCase):
         self.assertEqual(query["client_key"], ["sandbox-client-key-example"])
         self.assertEqual(query["redirect_uri"], [TEST_ORIGIN + "/api/oauth/tiktok/callback"])
         self.assertEqual(query["state"], ["synthetic-state"])
+        self.assertEqual(query["disable_auto_auth"], ["1"], "Sandbox should always show TikTok's consent page")
         self.assertNotIn("client_secret", url)
         self.assertNotIn("video.publish", url)
 
