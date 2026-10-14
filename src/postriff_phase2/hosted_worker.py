@@ -9,6 +9,7 @@ from postriff_alpha.domain import AlphaError
 from .store import IN_FLIGHT, TERMINAL, find
 from .hosted import HostedPhase2Commands
 from .contracts import digest
+from .hosted_social import HostedSocial
 from .outcomes import normalize_result, unknown
 from .permissions import Membership
 from .learning_service import record_published
@@ -452,7 +453,11 @@ class PostgresWorker:
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
             else:
-                result = self.social.submit(claimed["job"]["manifest"])
+                manifest = claimed['job']['manifest']
+                if manifest.get('platform') == 'Pinterest' and isinstance(self.social, HostedSocial):
+                    result = self.social.submit(manifest, dispatch_context={'leaseId': claimed['job'].get('leaseId'), 'leaseOwner': self.worker_id})
+                else:
+                    result = self.social.submit(manifest)
         except Exception:
             result = unknown()
         if crash == "after_provider":

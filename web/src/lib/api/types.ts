@@ -1488,8 +1488,11 @@ export interface ProviderView {
 export interface ChannelDestination {
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'section';
   selected: boolean;
+  boardId?: string;
+  privacy?: string;
+  eligible?: boolean;
 }
 
 export interface OwnedPost {

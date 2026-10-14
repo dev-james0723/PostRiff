@@ -942,7 +942,8 @@ class HostedApplication:
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                    board_id = self._query_str(environ, 'boardId')
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
                     return self._json(start_response, 200, oauth.creator_info(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "destination" and method == "POST":

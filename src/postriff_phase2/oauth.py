@@ -66,6 +66,10 @@ class OAuthService:
     def __init__(self, repository, commands, vault, providers, public_base_url, clock=time.time, youtube_public_base_url=None):
         self.repository, self.commands, self.vault, self.clock = repository, commands, vault, clock
         self.providers = providers if providers is not None else {}
+        pinterest = self.providers.get('pinterest')
+        if pinterest is not None and getattr(pinterest, 'quota_required', False):
+            from .pinterest_quota import PinterestQuota
+            pinterest.rate_gate = PinterestQuota(repository.connection_factory, pinterest.client_id, pinterest.environment, clock)
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.youtube_public_base_url = youtube_public_base_url or None
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
@@ -538,6 +542,10 @@ class OAuthService:
                 policy_acceptance = self.youtube_policy.require_pending(cur, workspace_id, principal, token,
                     adapter, returned_scopes, youtube_context)
             identity = adapter.identity(grant["accessToken"])
+            if provider_id == 'pinterest':
+                bound = json.loads(grant['accessToken'])
+                bound['accountId'] = identity['providerAccountId']
+                grant['accessToken'] = json.dumps(bound)
             # Requested scopes are not proof of granted scopes. Empty/unknown fails closed.
             reported = grant.get('scopes')
             if (reported is None or (provider_id == 'youtube' and not reported)) and hasattr(adapter, 'inspect_scopes'):
@@ -595,12 +603,18 @@ class OAuthService:
         # this workspace save. The same-transaction fence rolls back a stale
         # profile restoration rather than trusting a newly fetched revision.
         def consent_fence(cur, _state, _actor):
-            self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
-        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id == 'youtube' else {}))
-        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {}))
+            if provider_id == 'youtube':
+                self._assert_youtube_generation(cur, workspace_id, connection_id, consent_generation)
+            else:
+                cur.execute("SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='pinterest' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+                fresh = cur.fetchone()
+                if not fresh or fresh[0] != access_ct:
+                    raise AlphaError('Pinterest authorization changed while connecting. Reload and reconnect.', 409)
+        saved = self.repository.command(workspace_id, token, snapshot["revision"], lambda state, actor: self.commands.upsert_verified_channel(state, actor, channel, capability_verified=not missing and matrix["publish"]["level"] == "Direct"), requirement="manage_connections", **({'after': consent_fence} if provider_id in ('youtube', 'pinterest') else {}))
+        self._keep_picture(workspace_id, token, connection_id, identity, **({'youtube_generation': consent_generation} if provider_id == 'youtube' else {'pinterest_ciphertext': access_ct} if provider_id == 'pinterest' else {}))
         return {"connected": True, "connectionId": connection_id, "account": channel["account"], "providerAccountId": identity["providerAccountId"], "confirmAccount": True, "missingScopes": missing, "capabilities": matrix, "revision": saved["revision"]}
 
-    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None):
+    def _keep_picture(self, workspace_id, token, connection_id, identity, *, youtube_generation=None, pinterest_ciphertext=None):
         """Download outside any transaction, then store: the account's picture for previews (account_pictures.py)."""
         try:
             outcome = account_pictures.picture_from_identity(identity, self.picture_fetch)
@@ -612,6 +626,11 @@ class OAuthService:
             with self.repository.transaction(token, workspace_id) as (cur, _, _):
                 if youtube_generation is not None:
                     self._assert_youtube_generation(cur, workspace_id, connection_id, youtube_generation)
+                if pinterest_ciphertext is not None:
+                    cur.execute("SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='pinterest' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+                    credential = cur.fetchone()
+                    if not credential or credential[0] != pinterest_ciphertext:
+                        return
                 account_pictures.guarded(cur, account_pictures.store, workspace_id, connection_id, outcome)
         except AlphaError:
             pass  # membership ended in between; nothing to decorate
@@ -666,13 +685,66 @@ class OAuthService:
         grant = self.token_for_worker(workspace_id, connection_id)
         return self.provider_for_grant(grant), grant
 
-    def destinations(self, workspace_id, token, connection_id):
+    def destinations(self, workspace_id, token, connection_id, board_id=None):
         """Where this account can post: a Discord channel or Facebook Page (chosen once), or a Pinterest board (per Pin)."""
+        if board_id is not None and (not isinstance(board_id, str) or not re.fullmatch(r'\d{1,30}', board_id)):
+            raise AlphaError('Choose a valid Pinterest board.', 400)
         adapter, grant = self._member_grant(workspace_id, token, connection_id, "approve")
+        if board_id is not None:
+            if adapter.id != 'pinterest':
+                raise AlphaError('Board sections are available only for Pinterest.', 400)
+            return {'connectionId': connection_id, 'scope': 'post', 'boardId': board_id,
+                    'destinations': adapter.sections(grant['accessToken'], board_id)}
         if not getattr(adapter, "has_destinations", False):
             raise AlphaError("This account has nothing to choose.", 409)
         return {"connectionId": connection_id, "scope": getattr(type(adapter), "destination_scope", "connection"),
                 "destinations": adapter.destinations(grant["accessToken"])}
+
+    @contextmanager
+    def pinterest_dispatch(self, manifest, access_token, fence):
+        """Serialize the last authorized POST with disconnect and lease takeover.
+
+        Discovery runs outside this lock. A valid create ID is persisted before
+        releasing it so a disconnect cannot erase an already-known outcome.
+        """
+        from .contracts import digest
+        if not isinstance(fence, dict) or not fence.get('leaseId') or not fence.get('leaseOwner'):
+            raise AlphaError('Pinterest publication needs an active approved worker lease.', 409)
+        workspace_id, connection_id = manifest['workspaceId'], manifest['channelId']
+        with self.repository.connection_factory() as db, db.cursor() as cur:
+            cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
+            row = cur.fetchone()
+            state = row[0] if row and isinstance(row[0], dict) else json.loads(row[0]) if row else None
+            data = (state or {}).get('phase2') or {}
+            channel = next((c for c in data.get('channels', []) if c.get('id') == connection_id), None)
+            job = next((j for j in data.get('jobs', []) if j.get('manifest', {}).get('idempotencyKey') == manifest.get('idempotencyKey')), None)
+            if (not state or state.get('accountDeletion') or state.get('accountBlock') or not channel or channel.get('revoked')
+                    or not job or job.get('state') != 'submitting' or job.get('cancelRequested')
+                    or job.get('leaseId') != fence['leaseId'] or job.get('leaseOwner') != fence['leaseOwner']
+                    or job.get('leaseUntil', 0) <= self.clock() or job.get('approvalDigest') != digest(manifest)
+                    or job.get('manifest') != manifest):
+                raise AlphaError('Pinterest approval, account or worker lease changed. Nothing was posted.', 409)
+            from .permissions import Membership
+            from .billing import require_publishing
+            require_publishing(cur, workspace_id, self.clock())
+            cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job.get('approvedBy')))
+            member = cur.fetchone()
+            if (not member or not Membership.from_row(member[0], can_publish=member[1]).allows('approve')
+                    or job.get('approvedBy') != manifest.get('actor') or manifest.get('expiresAt', 0) <= self.clock()
+                    or not self.commands.engine.current(state, manifest)
+                    or self.commands.engine.channel_state(channel) != 'Ready for posting'):
+                raise AlphaError('Pinterest publishing authority changed. Review and approve again.', 409)
+            cur.execute("SELECT access_ciphertext,key_id,provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='pinterest' AND revoked_at IS NULL FOR UPDATE", (workspace_id, connection_id))
+            credential = cur.fetchone()
+            if not credential or credential[2] != manifest.get('providerAccountId') or self.vault.decrypt(credential[0], credential[1]) != access_token:
+                raise AlphaError('Pinterest authorization changed. Nothing was posted.', 409)
+            proof = {}
+            yield proof
+            if proof.get('pinId'):
+                job['providerReference'] = proof['pinId']
+                job.setdefault('events', []).append({'at': self.clock(), 'state': job['state'],
+                    'execution': manifest.get('execution', 'synthetic'), 'message': 'Pinterest returned a Pin ID; exact provider read-back is pending.'})
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
 
     def choose_destination(self, workspace_id, token, connection_id, destination_id):
         # Reject malformed identifiers before decrypting a grant or contacting a provider. Existing hosted
@@ -1498,6 +1570,11 @@ class OAuthService:
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             revoked_samples = revoke_connection_samples(state, connection_id, principal, self.clock())
             state_changed = bool(revoked_samples)
+            pinterest_stop = None
+            if stored[0] == 'pinterest':
+                from .pinterest_safety import revoke_authority
+                pinterest_stop = revoke_authority(state, connection_id, self.clock())
+                state_changed = True
             if stored[0] == 'youtube':
                 from .youtube.agent import revoke_connection_authority
                 state_changed = revoke_connection_authority(state, connection_id, principal, self.clock(),
@@ -1532,7 +1609,7 @@ class OAuthService:
         purge_after_disconnect(self.repository.connection_factory, workspace_id, connection_id)
         snapshot = self.repository.get(workspace_id, token)
         revision = snapshot["revision"]
-        if stored[0] != 'youtube':
+        if stored[0] not in ('youtube', 'pinterest'):
             try:
                 saved = self.repository.mutate(workspace_id, token, snapshot["revision"], "p2_channel_disconnect", {"channelId": connection_id})
                 revision = saved["revision"]
@@ -1542,6 +1619,9 @@ class OAuthService:
         # mutation here could incorrectly revoke a consent completed meanwhile.
         deferred = shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."
+        if stored[0] == 'pinterest':
+            note = 'Pinterest access removed. Pending jobs were canceled atomically; any request already sent requires reconciliation. Remove Rafii in Pinterest account settings to revoke provider consent.'
         if deferred:
             note += " Google project-wide revocation was deferred to protect other active Google connections. Review Google account permissions to revoke the entire project grant."
-        return {"connectionId": connection_id, "disconnected": True, "remoteRevoked": bool(remote), "remoteRevocationDeferred": deferred, "revision": revision, "note": note}
+        return {"connectionId": connection_id, "disconnected": True, "remoteRevoked": bool(remote), "remoteRevocationDeferred": deferred, "revision": revision, "note": note,
+                **(pinterest_stop or {})}

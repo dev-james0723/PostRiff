@@ -90,7 +90,7 @@ class HostedSocial:
         return self.assets.storage.signed_url(manifest["workspaceId"], "media", asset.get("objectName") or asset["id"], 600)
 
     # --- submit -------------------------------------------------------------------
-    def submit(self, manifest):
+    def submit(self, manifest, *, dispatch_context=None):
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -117,6 +117,8 @@ class HostedSocial:
                 return self._submit_threads(manifest, token)
             if manifest["platform"] == "Instagram":
                 return self._submit_instagram(manifest, token)
+            if manifest['platform'] == 'Pinterest':
+                return self._submit_pinterest(manifest, provider, token, dispatch_context=dispatch_context)
             if manifest["platform"] in WAVE1 + WAVE3:
                 return getattr(self, "_submit_" + manifest["platform"].lower())(manifest, provider, token)
         except AlphaError as error:
@@ -556,32 +558,64 @@ class HostedSocial:
         private = " Until TikTok audits Rafii, the post is private: only you can see it." if options["privacyLevel"] != "SELF_ONLY" else ""
         return {"state": "provider_accepted", "reference": publish_id, "confirmed": "TikTok received the video and is processing it; it may take a few minutes." + private}
 
-    def _submit_pinterest(self, manifest, provider, token):
+    def _submit_pinterest(self, manifest, provider, token, *, dispatch_context=None):
+        from .publish_options import normalize
+        from .pinterest_safety import https_url
         options = manifest.get("publishOptions") or {}
         media = manifest.get("media") or []
-        if not options.get("boardId") or len(media) != 1 or not str(media[0].get("mime") or "").startswith("image/"):
-            return {"state": "failed", "confirmed": "A Pin needs one image and a board. Review it again; nothing was posted."}
+        try:
+            canonical = normalize('Pinterest', options, media, manifest['payload']['text'])
+            if canonical != options:
+                return {'state': 'held', 'confirmed': 'Pin choices changed. Review the exact Pin again; nothing was posted.'}
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return {'state': 'held', 'confirmed': 'The Pinterest account changed. Reconnect and review again; nothing was posted.'}
+        except AlphaError as error:
+            return {'state': 'held', 'confirmed': str(error)}
         # The board must be one of this person's own boards (the composer offers only those; it may have gone since).
-        if options["boardId"] not in {board["id"] for board in provider.destinations(token)}:
+        if options["boardId"] not in {board["id"] for board in provider.destinations(token) if board.get('eligible')}:
             return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
-        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": self._image_url(manifest)}}
+        section = options.get('boardSectionId')
+        if section and section not in {s['id'] for s in provider.sections(token, options['boardId'])}:
+            return {'state': 'failed', 'confirmed': 'This section is unavailable on the chosen board. Review again; nothing was posted.'}
+        source = self._image_url(manifest)
+        if not https_url(source):
+            return {'state': 'held', 'confirmed': 'The approved image has no usable HTTPS source. Upload it again; nothing was posted.'}
+        pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": source}}
+        if section:
+            pin['board_section_id'] = section
         if options.get("title"):
             pin["title"] = options["title"]
         if options.get("link"):
             pin["link"] = options["link"]
         if media[0].get("alt"):
-            pin["alt_text"] = str(media[0]["alt"])[:500]
-        response = provider.api(token, "POST", "/v5/pins", content=True, body=pin)
+            pin["alt_text"] = media[0]["alt"]
+        dispatch = getattr(self.oauth, 'pinterest_dispatch', None)
+        if dispatch is None:
+            return {'state': 'held', 'confirmed': 'Pinterest dispatch fencing is unavailable. Nothing was posted.'}
+        attempted = False
+        try:
+            with dispatch(manifest, token, dispatch_context) as proof:
+                attempted = True
+                response = provider.api(token, 'POST', '/v5/pins', content=True, body=pin)
+                accepted = response.get('body') if isinstance(response.get('body'), dict) else {}
+                candidate_id = str(accepted.get('id') or '')
+                if response.get('status') in (200, 201) and re.fullmatch(r'\d{5,30}', candidate_id):
+                    proof['pinId'] = candidate_id
+        except AlphaError as error:
+            if attempted and error.code not in ('pinterest_rate_limited', 'pinterest_quota_unavailable'):
+                return _uncertain('Pinterest submission was interrupted. Check the board and reconcile; do not resubmit.')
+            return {'state': 'held', 'confirmed': str(error)}
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
         pin_id = str(body.get("id") or "")
         if response.get("status") in (200, 201) and re.fullmatch(r"\d{5,30}", pin_id):
             return {"state": "provider_accepted", "reference": pin_id, "confirmed": "Pinterest created the Pin" + (" in its sandbox (Trial access)" if provider.sandbox else "") + "; read-back pending"}
-        reason = _provider_reason(body)
+        # Pinterest error bodies are untrusted and can echo secrets or personal data.
+        reason = ''
         if response.get("status") == 404:
             return {"state": "failed", "confirmed": "Pinterest can't find that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
         if response.get("status") == 403:
             return {"state": "failed", "confirmed": "Pinterest won't let this account pin to that board, so nothing was posted" + (f" ({reason})" if reason else "") + ". Choose another board and review the Pin again."}
-        return self._classify_status(response.get("status"), body, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
+        return self._classify_status(response.get("status"), {}, "Pinterest") or _uncertain("No conclusive Pinterest create response; do not resubmit")
 
     def _reconcile_wave3(self, manifest, provider, token, reference, job=None):
         platform, text = manifest["platform"], manifest["payload"]["text"]
@@ -635,12 +669,20 @@ class HostedSocial:
                         "confirmed": "TikTok reports the post failed" + (f" ({reason})" if isinstance(reason, str) and reason else "") + "."}
             return _uncertain("TikTok did not report this post's status; check the account")
         if platform == "Pinterest":
-            if not reference:
+            if not isinstance(reference, str) or not re.fullmatch(r'\d{5,30}', reference):
                 return _uncertain("No Pin id was recorded; check the board; do not resubmit")
+            if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
+                return _uncertain('The Pinterest account changed. No write or retry is authorized.')
             response = provider.api(token, "GET", f"/v5/pins/{quote(reference)}", content=True)
             body = response.get("body") if isinstance(response.get("body"), dict) else {}
-            if response.get("status") == 200 and str(body.get("board_id")) == options.get("boardId") and body.get("description") == text:
-                result = {"state": "verified", "reference": reference, "confirmed": "Pinterest read-back matched the approved Pin and board", "verification": "provider_lookup"}
+            matches = (str(body.get('id')) == reference and str(body.get('board_id')) == options.get('boardId')
+                       and body.get('description') == text and (body.get('title') or '') == options.get('title', '')
+                       and (body.get('link') or '') == options.get('link', '')
+                       and (body.get('board_section_id') or '') == options.get('boardSectionId', '')
+                       and isinstance(body.get('media'), dict) and body['media'].get('media_type') == 'image')
+            if response.get("status") == 200 and matches:
+                result = {"state": "verified", "reference": reference, "confirmed": "Pinterest API read-back matched the approved Pin, account, board and metadata. Public visibility has not been verified.", "verification": "provider_lookup",
+                          'visibility': 'creator_only_sandbox' if provider.sandbox else 'unverified'}
                 if not provider.sandbox:
                     result["url"] = f"https://www.pinterest.com/pin/{reference}/"
                 return result
