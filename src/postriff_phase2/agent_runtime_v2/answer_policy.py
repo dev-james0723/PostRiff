@@ -61,7 +61,10 @@ _DID = re.compile(
     _EN_I + r"(?:created|linked|added|attached|generated|saved|changed|updated|edited|rewrote|rewritten|shortened|made|removed|moved"
     r"|applied|paused|resumed|rescheduled|enabled|disabled|activated|deactivated|restarted|stopped|turned\s+(?:on|off)|switched\s+(?:on|off))\b"
     rf"|{_ZH_I}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})\s*{_ZH_COMPLETE}"
-    rf"|{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
+    # An actor is required, as in English: "我已經更新咗" / "已經幫你改好咗" are claims, a subject-less "已經連接" / "已暫停" /
+    # "數據已經更新" describes a state (live G03 2026-10-14: four Chinese status answers were replaced by the fallback).
+    rf"|{_ZH_I}\s*{_ZH_DONE}\s*{_ZH_FOR}?\s*{_ZH_OBJ}(?:{_ZH_CHANGED})"
+    rf"|{_ZH_DONE}\s*{_ZH_FOR}\s*{_ZH_OBJ}(?:{_ZH_CHANGED})", re.I)
 
 
 # The tools that prepare or apply proposals (automation changes are MUTATE_REVERSIBLE proposals, not PREPARE_EXTERNAL).
