@@ -102,7 +102,8 @@ class DeliveryWorker:
         this message on this channel (their preferences may have changed since it was planned)."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute("""SELECT e.event_type, e.payload, e.severity, e.expires_at IS NOT NULL AND e.expires_at < now(), coalesce(p.locale,''),
-                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key, e.entity_type, e.entity_id, extract(epoch from e.occurred_at)
+                                  coalesce(w.state->'workspace'->>'name',''), e.grouping_key, e.entity_type, e.entity_id, extract(epoch from e.occurred_at),
+                                  coalesce(p.time_zone,'')
                            FROM public.pr_notification_events e LEFT JOIN public.pr_profiles p ON p.user_id=%s LEFT JOIN public.pr_workspaces w ON w.id=e.workspace_id
                            WHERE e.id::text=%s""", (row["userId"], row["eventId"]))
             event = cur.fetchone()
@@ -127,7 +128,8 @@ class DeliveryWorker:
             return None
         return {"type": event[0], "payload": event[1] or {}, "severity": event[2], "expired": bool(event[3]) or not trend_current, "locale": event[4] or "en",
                 "workspaceName": event[5] or None, "grouping": event[6], "member": member, "optedOut": opted_out,
-                "occurredAt": float(event[9]) if len(event)>9 and event[9] is not None else None}
+                "occurredAt": float(event[9]) if len(event)>9 and event[9] is not None else None,
+                "timeZone": event[10] if len(event) > 10 and isinstance(event[10], str) else ""}
 
     def _ack_path(self, href, row):
         from .sms import acknowledgement_path
@@ -149,7 +151,23 @@ class DeliveryWorker:
                   "title": payload.get("title") or "", "reason": payload.get("reason") or "", "count": payload.get("count") or 1}
         return email_render.render(spec["template"], locale=ctx["locale"], values=values, base_url=self.base_url, href=self._ack_path(payload.get("href"), row),
                                    workspace_name=ctx["workspaceName"], unsubscribe_url=self._unsubscribe_url(row, spec["category"]),
-                                   transactional=catalog.transactional(ctx["type"]), metrics=payload.get("metrics"))
+                                   transactional=catalog.transactional(ctx["type"]), metrics=payload.get("metrics"), details=self._sign_in_details(ctx))
+
+    @staticmethod
+    def _sign_in_details(ctx):
+        """New-sign-in notices (RAPv2): the browser and when, in the person's own zone and UTC, so they can tell
+        whether it was them. Only server-recorded facts; nothing when the event carries neither."""
+        payload = ctx["payload"]
+        if ctx["type"] != "security.new_device" or not (payload.get("device") or ctx.get("occurredAt")):
+            return None
+        from ..account_protection import security_time
+        labels = email_render.catalogue()["locales"][email_render.resolve_locale(ctx["locale"])]["templates"]["security_alert"]
+        details = []
+        if payload.get("device"):
+            details.append((labels.get("detailBrowser", "Browser"), payload["device"]))
+        if ctx.get("occurredAt"):
+            details.append((labels.get("detailTime", "Time"), security_time(ctx["occurredAt"], ctx.get("timeZone") or "", numeric=True)))
+        return details
 
     # --- channels ------------------------------------------------------------------------------------------------------------
     def send_email(self, row, ctx):

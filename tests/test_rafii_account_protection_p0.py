@@ -9,6 +9,7 @@ RAFII_ACCOUNT_PROTECTION_V2_MODE=observe, and `off` (the default) keeps today's 
 Statement-level tests over a recording cursor; the SQL dedupe between `session.observed` and `session.alerted` and the
 V2 cutover against a real database are covered by the acceptance matrix, not here.
 """
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -63,13 +64,15 @@ class SessionObserved(Mode):
 
     def test_first_sighting_is_recorded_with_the_session_even_when_alerts_are_off(self):
         self.observe()
-        cursor = base.FakeCursor([((True,), 1), (None, 1), (("James", None, "", "", False), 1), *base.STYLE_READ, ((False, ""), 1)])
+        cursor = base.FakeCursor([((True,), 1), ((False,), 1), (None, 1), (("James", None, "", "", False), 1), *base.STYLE_READ, ((False, ""), 1)])
         svc = self.alerting(cursor)
         svc.me("t", client_label="Safari on iPhone")
         self.assertIn("RETURNING (xmax = 0)", cursor.executed[0][0])
-        # The account event follows the session row on the same cursor (one transaction), before any preference read.
-        self.assertEqual(cursor.executed[1][1][1:4], (base.PRINCIPAL, *OBSERVED))
-        self.assertIn('"client": "Safari on iPhone"', cursor.executed[1][1][4])
+        # The account event follows the session row on the same cursor (one transaction), with the alert decision
+        # taken from the preference at that moment.
+        self.assertIn("alert_new_device", cursor.executed[1][0])
+        self.assertEqual(cursor.executed[2][1][1:4], (base.PRINCIPAL, *OBSERVED))
+        self.assertEqual(json.loads(cursor.executed[2][1][4]), {"client": "Safari on iPhone", "alert": False})
         self.assertEqual(svc.mailer.calls, [])
         self.assertEqual(audits(cursor, "session.alerted"), [])
 
@@ -83,7 +86,7 @@ class SessionObserved(Mode):
     def test_two_tabs_racing_record_one_event(self):
         # Two requests carrying one new session: PostgreSQL's ON CONFLICT lets exactly one insert win (xmax = 0).
         self.observe()
-        first = base.FakeCursor([((True,), 1), (None, 1)])
+        first = base.FakeCursor([((True,), 1), ((True,), 1), (None, 1)])
         second = base.FakeCursor([((False,), 1)])
         svc = self.alerting(first)
         self.assertTrue(svc._touch_session(first, base.PRINCIPAL, SESSION, "Chrome on Mac"))
@@ -100,7 +103,7 @@ class SessionObserved(Mode):
     def bootstrap(self, touch):
         responses = [((1,), 1), ((WS,), 1), ((1, {"phase2": {}}, "studio", 1.0, 2.0, 10, 0, 1, "owner", True, True, True, True), 1), touch]
         if touch[0] == (True,) and account_protection.observing():
-            responses += [(None, 1), ((True, ""), 1), (None, 1)]
+            responses += [((True,), 1), (None, 1), ((True, ""), 1), (None, 1)]
         cursor = base.FakeCursor(responses)
         svc = self.alerting(cursor)
         svc.commands = SimpleNamespace(present=lambda state, revision: {"revision": revision})
@@ -124,24 +127,51 @@ class SessionObserved(Mode):
     def accept(self, touch_fresh):
         invitation = ("inv-1", base.WORKSPACE, "editor", {"can_publish": True})
         responses = [((1,), 1), (invitation, 1), (None, 1), (None, 0), (None, 1), (None, 1), (("manual-seats", 10, 1, 2, 2, 200, None, "manual", 1), 1), ((1,), 1), (None, 1), (None, 1), (None, 1),
-                     ((touch_fresh,), 1), (None, 1), ((True, ""), 1), (None, 1)]
+                     ((touch_fresh,), 1)]
+        if touch_fresh and account_protection.observing():
+            responses += [((True,), 1), (None, 1), ((True, ""), 1), (None, 1)]
         cursor = base.FakeCursor(responses)
         svc = self.alerting(cursor)
-        return cursor, svc, svc.accept_my_invitation("t", "inv-1")
+        return cursor, svc, svc.accept_my_invitation("t", "inv-1", client_label="Safari on iPhone")
 
     def test_invitation_acceptance_on_a_new_session_alerts_after_commit(self):
         self.observe()
         cursor, svc, result = self.accept(True)
         self.assertNotIn("_alertSession", result)  # the marker never reaches the API response
         self.assertEqual(result["workspaceId"], base.WORKSPACE)
-        self.assertEqual(len(audits(cursor, "session.observed")), 1)
-        self.assertEqual(len(svc.mailer.calls), 1)
+        observed = audits(cursor, "session.observed")
+        self.assertEqual(json.loads(observed[0][4]), {"client": "Safari on iPhone", "alert": True})  # R1: the browser is kept
+        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
 
     def test_invitation_acceptance_off_mode_is_unchanged(self):
         self.off()
         cursor, svc, result = self.accept(True)
         self.assertNotIn("_alertSession", result)
         self.assertEqual((audits(cursor, "session.observed"), svc.mailer.calls), ([], []))
+
+
+class AlertsCannotBeCancelledBySignIn(Mode):
+    def test_a_new_session_turning_alerts_off_is_still_reported(self):
+        # The reviewed attack (A2): a fresh session's very first call is PATCH /api/me {alertNewDevice: false}.
+        self.observe()
+        cursor = base.FakeCursor([((True,), 1), ((True,), 1), (None, 1), (("James", "", "", False), 1), *base.STYLE_READ, ((False, ""), 1), (None, 1)])
+        svc = base.service(cursor, base.verifier(), email_lookup=lambda principal: "me@example.invalid")
+        svc.public_base_url, svc.mailer = "https://app.example", base.FakeMailer()
+        result = svc.update_profile("t", {"alertNewDevice": False}, client_label="Chrome on Windows")
+        self.assertFalse(result["preferences"]["alertNewDevice"])  # the change itself still applies
+        statements = [sql for sql, _ in cursor.executed]
+        observed = next(i for i, (sql, params) in enumerate(cursor.executed) if "pr_audit_events" in sql and params[2] == "session.observed")
+        upsert = next(i for i, sql in enumerate(statements) if "INSERT INTO public.pr_profiles" in sql)
+        self.assertLess(observed, upsert)  # observed (with the setting as it was) before the setting changes
+        self.assertEqual(json.loads(cursor.executed[observed][1][4]), {"client": "Chrome on Windows", "alert": True})
+        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Chrome on Windows", "https://app.example/app/account/profile")])
+
+    def test_off_mode_profile_changes_touch_nothing_new(self):
+        self.off()
+        cursor = base.FakeCursor([(("James", "", "", False), 1), *base.STYLE_READ])
+        svc = base.service(cursor, base.verifier())
+        svc.update_profile("t", {"alertNewDevice": False})
+        self.assertFalse(any("pr_sessions" in sql or "pr_audit_events" in sql for sql, _ in cursor.executed))
 
 
 class AccountHistory(unittest.TestCase):
@@ -170,7 +200,9 @@ class Detector(unittest.TestCase):
     def test_observed_sign_ins_carry_the_time_and_browser_and_follow_the_preference(self):
         cur, events = self.rows(("a1", base.PRINCIPAL, "session.observed", 1_791_996_977.0, "Safari on iPhone", False))
         sql = cur.executed[0][0]
-        self.assertIn("a.kind = 'session.observed' AND coalesce(p.alert_new_device, false)", sql)  # D-1: preference-governed
+        # D-1: preference-governed, as recorded at the first sighting (A2); the current setting only for older rows.
+        self.assertIn("a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'", sql)
+        self.assertIn("ELSE coalesce(p.alert_new_device, false) END", sql)
         self.assertIn("o.kind='session.observed' AND o.subject=a.subject", sql)  # one notice when both rows exist
         event = events[0]
         self.assertEqual((event["event_type"], event["dedupe_key"], event["occurred_at"]), ("security.new_device", "security.new_device:a1", 1_791_996_977.0))
@@ -189,8 +221,8 @@ class CommittingDB(base.FakeDB):
         pass
 
 
-class FirstRunBaseline(unittest.TestCase):
-    def test_the_first_run_baselines_only_alerts_the_legacy_mailer_delivered(self):
+class FirstRunBaseline(Mode):
+    def run_cron(self):
         from postriff_phase2.notifications.service import NotificationService  # needs the push dependencies
         events = [{"event_type": "security.new_device", "dedupe_key": "security.new_device:a1", "user_id": base.PRINCIPAL, "payload": {}, "legacy_sent": False},
                   {"event_type": "security.new_device", "dedupe_key": "security.new_device:a2", "user_id": base.PRINCIPAL, "payload": {}, "legacy_sent": True}]
@@ -202,9 +234,20 @@ class FirstRunBaseline(unittest.TestCase):
         svc.worker = lambda: mock.Mock()
         with mock.patch.object(detector, "security_events", return_value=events):
             result = svc.cron()
-        calls = {call.kwargs["dedupe_key"]: call.kwargs.get("baseline", False) for call in svc.emit.call_args_list}
-        self.assertEqual(calls, {"security.new_device:a1": False, "security.new_device:a2": True})
         self.assertTrue(all("legacy_sent" not in call.kwargs for call in svc.emit.call_args_list))
+        return {call.kwargs["dedupe_key"]: call.kwargs.get("baseline", False) for call in svc.emit.call_args_list}, result
+
+    def test_off_mode_keeps_the_original_first_run_baseline(self):
+        # A3: with account protection off, enabling notifications V2 never replays a day of old alerts.
+        self.off()
+        calls, result = self.run_cron()
+        self.assertEqual(calls, {"security.new_device:a1": True, "security.new_device:a2": True})
+        self.assertEqual(result["security"], {"created": 0})
+
+    def test_observe_mode_baselines_only_alerts_the_legacy_mailer_delivered(self):
+        self.observe()
+        calls, result = self.run_cron()
+        self.assertEqual(calls, {"security.new_device:a1": False, "security.new_device:a2": True})
         self.assertEqual(result["security"], {"created": 1})  # only the alert nobody was sent counts as a new notice
 
 
@@ -256,6 +299,39 @@ class SecurityTimes(unittest.TestCase):
             self.assertIn("09:56 PDT", body)
             self.assertIn("16:56 UTC", body)
         self.assertNotIn("PST", mail["text"])
+
+
+    def test_numeric_dates_for_copy_in_any_language(self):
+        self.assertEqual(account_protection.security_time(self.AT, "America/Los_Angeles", numeric=True), "2026-10-14 09:56 PDT (America/Los_Angeles) · 16:56 UTC")
+        self.assertEqual(account_protection.security_time(self.AT, "Asia/Hong_Kong", numeric=True), "2026-10-15 00:56 HKT (Asia/Hong_Kong) · 2026-10-14 16:56 UTC")
+        self.assertEqual(account_protection.security_time(self.AT, "", numeric=True), "2026-10-14 16:56 UTC")
+
+
+class V2SignInDetails(unittest.TestCase):
+    """R2: the Notification V2 security email shows the browser and the time, not only a title."""
+    AT = SecurityTimes.AT
+
+    def details(self, **ctx):
+        from postriff_phase2.notifications.delivery import DeliveryWorker  # needs the push dependencies
+        return DeliveryWorker._sign_in_details({"type": "security.new_device", "payload": {"device": "Safari on iPhone"}, "occurredAt": self.AT,
+                                                "timeZone": "America/Los_Angeles", "locale": "en", **ctx})
+
+    def test_browser_and_local_time_in_the_persons_language(self):
+        self.assertEqual(self.details(), [("Browser", "Safari on iPhone"), ("Time", "2026-10-14 09:56 PDT (America/Los_Angeles) · 16:56 UTC")])
+        self.assertEqual([label for label, _ in self.details(locale="zh-Hant-HK")], ["瀏覽器", "時間"])
+        self.assertEqual(self.details(payload={}, timeZone=""), [("Time", "2026-10-14 16:56 UTC")])
+
+    def test_only_new_sign_ins_and_only_recorded_facts(self):
+        self.assertIsNone(self.details(type="security.account_change"))
+        self.assertIsNone(self.details(payload={}, occurredAt=None))
+
+    def test_the_rendered_email_carries_them_in_text_and_html(self):
+        from postriff_phase2.notifications import email_render
+        message = email_render.render("security_alert", locale="en", values={"title": "New sign-in to your account"}, base_url="https://app.example",
+                                      href="/app/account/profile", transactional=True, details=self.details())
+        for body in (message["text"], message["html"]):
+            self.assertIn("Safari on iPhone", body)
+            self.assertIn("09:56 PDT", body)
 
 
 if __name__ == "__main__":

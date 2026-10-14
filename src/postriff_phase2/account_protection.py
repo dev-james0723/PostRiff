@@ -55,19 +55,23 @@ def _zone(name):
         return None
 
 
-def security_time(epoch, time_zone=""):
+def _day(moment, numeric):
+    return f"{moment:%Y-%m-%d}" if numeric else f"{moment.day} {moment:%B %Y},"
+
+
+def security_time(epoch, time_zone="", numeric=False):
     """When a security event happened, for a person to check against their own memory: the date and time in their
     IANA zone with the abbreviation that zone actually used on that date (PDT in October, not PST), then UTC.
-    Without a valid zone, UTC alone."""
+    Without a valid zone, UTC alone. `numeric` writes the date as 2026-10-14 for copy in any language."""
     try:
         instant = datetime.fromtimestamp(float(epoch), timezone.utc)
     except (TypeError, ValueError, OverflowError, OSError):
         return "an unknown time"
-    utc = f"{instant.day} {instant:%B %Y}, {instant:%H:%M} UTC"
+    utc = f"{_day(instant, numeric)} {instant:%H:%M} UTC"
     zone = _zone(time_zone)
     if zone is None:
         return utc
     local = instant.astimezone(zone)
     # The UTC part repeats the date only when it differs from the local one.
     tail = f"{instant:%H:%M} UTC" if local.date() == instant.date() else utc
-    return f"{local.day} {local:%B %Y}, {local:%H:%M} {local.tzname()} ({time_zone}) · {tail}"
+    return f"{_day(local, numeric)} {local:%H:%M} {local.tzname()} ({time_zone}) · {tail}"

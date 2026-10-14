@@ -69,7 +69,7 @@ class FakeAccountService:
         self._record("me", client_label)
         return {"userId": PRINCIPAL, "displayName": "", "mfa": {"available": True, "enforced": False, "enforcedAt": None, "aal": "aal1"}}
 
-    def update_profile(self, token, changes):
+    def update_profile(self, token, changes, client_label=""):
         self._record("update_profile", changes)
         return {"displayName": changes.get("displayName", ""), "preferences": {"timeZone": changes.get("timeZone", ""), "locale": "", "alertNewDevice": False}}
 
@@ -105,7 +105,7 @@ class FakeAccountService:
         self._record("my_invitations")
         return {"available": True, "invitations": [{"invitationId": "inv-1", "workspaceName": "Studio", "role": "editor"}]}
 
-    def accept_my_invitation(self, token, invitation_id):
+    def accept_my_invitation(self, token, invitation_id, client_label=""):
         self._record("accept_my_invitation", invitation_id)
         return {"workspaceId": WORKSPACE, "role": "editor"}
 

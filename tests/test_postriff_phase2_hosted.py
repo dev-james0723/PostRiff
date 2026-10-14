@@ -47,7 +47,7 @@ class FakeService:
     def revoke_invitation(self, workspace_id, token, invitation_id):
         return {"invitationId": invitation_id, "state": "revoked"}
 
-    def accept_invitation(self, token, raw, client=None):
+    def accept_invitation(self, token, raw, client=None, client_label=""):
         if raw == "throttled":
             raise AlphaError("Too many attempts. Wait a minute and try again.", 429)
         return {"workspaceId": "w", "role": "editor"}

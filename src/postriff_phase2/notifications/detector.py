@@ -213,8 +213,10 @@ def security_events(cur, since_seconds=86400):
 
     A new sign-in comes from `session.observed` (RAPv2, recorded for every first sighting whatever the preference)
     or, before that event existed, from the legacy `session.alerted` attempt. The new-sign-in notice itself stays
-    governed by the person's alert preference (owner decision D-1, 2026-10-14); when both rows exist for one
-    session only `session.observed` produces the notice, so nobody is told twice.
+    governed by the person's alert preference (owner decision D-1, 2026-10-14) as it stood at the first sighting,
+    recorded on the event (`meta.alert`), so the new session cannot cancel its own notice by switching alerts off
+    before this scan; rows written before that field existed fall back to the current preference. When both rows
+    exist for one session only `session.observed` produces the notice, so nobody is told twice.
 
     `legacy_sent` says whether the legacy mailer already delivered this alert; the service's very first run
     baselines (does not resend) only those."""
@@ -226,7 +228,8 @@ def security_events(cur, since_seconds=86400):
                             ELSE true END
                    FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
                    WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others')
-                          OR (a.kind = 'session.observed' AND coalesce(p.alert_new_device, false)))
+                          OR (a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'
+                                                                   ELSE coalesce(p.alert_new_device, false) END))
                    AND NOT (a.kind = 'session.alerted' AND a.subject <> '' AND EXISTS(SELECT 1 FROM public.pr_audit_events o
                             WHERE o.actor=a.actor AND o.kind='session.observed' AND o.subject=a.subject))
                    AND a.at > now() - make_interval(secs => %s) AND a.actor IS NOT NULL ORDER BY a.at DESC LIMIT 500""", (since_seconds,))

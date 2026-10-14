@@ -731,28 +731,39 @@ class HostedWorkspaceService:
 
     def _touch_session(self, cur, principal, session_id, client_label=""):
         """Record the session; True when this is its first sighting (a sign-in on a device we had not seen)."""
+        return self._observe_session(cur, principal, session_id, client_label)[0]
+
+    def _observe_session(self, cur, principal, session_id, client_label=""):
+        """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
+        first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
+        even by this same new session, governs later sign-ins only and cannot cancel this one's notice."""
         if not session_id:
-            return False
+            return False, False
         # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
         cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
         row = cur.fetchone()
         fresh = bool(row and row[0])
+        alert = False
         if fresh and account_protection.observing():
-            # RAPv2 P0: the first sighting is an account event of its own, committed with the session row and before
-            # any alert preference is read, so the history and the security notice never depend on the email setting.
-            audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40]})
-        return fresh
+            # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
+            # history never depends on the email setting; the setting is only read to record whether to notify.
+            cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+            setting = cur.fetchone()
+            alert = bool(setting and setting[0])
+            audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+        return fresh, alert
 
-    def _alert_new_device(self, principal, session_id, client_label):
+    def _alert_new_device(self, principal, session_id, client_label, eligible=None):
         """After a session's first sighting: one email, only if the person turned the alert on. The
-        audit line records the attempt either way, so the account history shows it."""
+        audit line records the attempt either way, so the account history shows it. `eligible` is the decision
+        already recorded at the first sighting (RAPv2 observe mode); otherwise the current preference decides."""
         if not self.public_base_url:
             return
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 cur.execute("SELECT alert_new_device,coalesce(time_zone,'') FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
-                if not row or not row[0]:
+                if not row or not (row[0] if eligible is None else eligible):
                     return
                 address = self._email_for(principal)
                 outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile", time_zone=row[1]) if address else {"sent": False}
@@ -868,7 +879,7 @@ class HostedWorkspaceService:
             "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
         }
 
-    def update_profile(self, token, changes):
+    def update_profile(self, token, changes, client_label=""):
         """PATCH /api/me: the display name and person-level preferences. Only the keys present change."""
         if not isinstance(changes, dict):
             raise AlphaError("Nothing to update.")
@@ -898,8 +909,14 @@ class HostedWorkspaceService:
             raise AlphaError("Nothing to update.")
         principal = self.verify_session(token)
         style = None
+        observed = (False, False)
         with self.connection_factory() as db:
             with db.cursor() as cur:
+                if account_protection.observing():
+                    # A brand-new session is observed before it can change the alert setting, so turning alerts off
+                    # from that session cannot cancel the notice about its own sign-in.
+                    session_id = self._session_id(token, principal)
+                    observed = self._observe_session(cur, principal, session_id, client_label)
                 if style_change is not None:
                     style = agent_style.merge(self._saved_agent_style(cur, principal), style_change)
                     columns["agent_style"] = json.dumps(style)
@@ -911,6 +928,8 @@ class HostedWorkspaceService:
                     style = agent_style.load(cur, principal)
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
+        if observed[0]:
+            self._alert_new_device(principal, session_id, client_label, eligible=observed[1])
         return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3]), "agentStyle": style}}
 
     @staticmethod
@@ -1126,7 +1145,7 @@ class HostedWorkspaceService:
             audit(cur, workspace_id, principal, "invitation.revoked", invitation_id)
             return {"invitationId": invitation_id, "state": "revoked"}
 
-    def accept_invitation(self, token, raw, client=None):
+    def accept_invitation(self, token, raw, client=None, client_label=""):
         if not isinstance(raw, str) or not 20 <= len(raw) <= 128:
             raise AlphaError("Invitation unavailable.", 404)
         if client:
@@ -1141,16 +1160,16 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                joined = self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation, client_label)
         # Alert only once the membership and the session row have committed.
         alert = joined.pop("_alertSession", None)
         if alert:
-            self._alert_new_device(*alert, "")
+            self._alert_new_device(*alert)
         return joined
 
     INVITATION_COLUMNS = "id::text,workspace_id::text,role,permissions"
 
-    def _join(self, cur, token, principal, invitation):
+    def _join(self, cur, token, principal, invitation, client_label=""):
         """Turn a locked pending invitation row (INVITATION_COLUMNS) into an active membership."""
         invitation_id, workspace_id, role, granted = invitation
         cur.execute("INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING", (principal,))
@@ -1168,8 +1187,8 @@ class HostedWorkspaceService:
         cur.execute("UPDATE public.pr_invitations SET accepted_by=%s,accepted_at=now() WHERE id::text=%s", (principal, invitation_id))
         audit(cur, workspace_id, principal, "invitation.accepted", invitation_id, {"role": role})
         session_id = self._session_id(token, principal)
-        fresh = self._touch_session(cur, principal, session_id) and account_protection.observing()
-        return {"_alertSession": (principal, session_id) if fresh else None, "workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
+        fresh, alert = self._observe_session(cur, principal, session_id, client_label)
+        return {"_alertSession": (principal, session_id, client_label, alert) if fresh and account_protection.observing() else None, "workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
 
     # --- invitations addressed to the signed-in person's verified email -----------------------
     # The emailed link works for anyone holding it; these routes instead match the invitation's
@@ -1194,7 +1213,7 @@ class HostedWorkspaceService:
             raise AlphaError("Your sign-in email could not be confirmed, so this invitation cannot be matched to you.", 409)
         return email
 
-    def accept_my_invitation(self, token, invitation_id):
+    def accept_my_invitation(self, token, invitation_id, client_label=""):
         if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
             raise AlphaError("Invitation unavailable.", 404)
         principal = self.verify_session(token)
@@ -1208,11 +1227,11 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                joined = self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation, client_label)
         # Alert only once the membership and the session row have committed.
         alert = joined.pop("_alertSession", None)
         if alert:
-            self._alert_new_device(*alert, "")
+            self._alert_new_device(*alert)
         return joined
 
     def decline_my_invitation(self, token, invitation_id):
