@@ -125,6 +125,8 @@ export interface SiteAgentCalendarCard {
   };
   sources: { calendarRange: CalendarCardSourceState; queueSummary: CalendarCardSourceState };
   href?: string | null;
+  /** Per-day counts (YYYY-MM-DD, at most 42) from a verified range read; null count = unknown. Older payloads omit it. */
+  days?: { date: string; count: number | null }[] | null;
 }
 
 export type SiteAgentBlock =
