@@ -13,4 +13,4 @@ pg_test_home="$(mktemp -d)"
 trap 'rm -rf -- "$pg_test_home"' EXIT
 env -i PATH="$PATH" HOME="$pg_test_home" CI=true LC_ALL=C PYTHONDONTWRITEBYTECODE=1 \
   PYTHONPATH="$PWD/src:$PWD/tests" POSTRIFF_PG_BIN="$pg_bin" POSTRIFF_RESEARCH=0 \
-  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_pinterest.py
+  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_pinterest.py tests/phase2/postgres_browser_session_guard.py
