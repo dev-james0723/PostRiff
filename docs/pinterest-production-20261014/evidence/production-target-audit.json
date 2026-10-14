@@ -69,5 +69,14 @@
   },
   "externalMutations": 0,
   "newProjectsCreated": 0,
-  "newOrganizationsCreated": 0
+  "newOrganizationsCreated": 0,
+  "sourceCandidate": "f54028edc1eb5bd8e78d089899c694505cd15c0e",
+  "providerConsole": {
+    "appId": "1615884",
+    "tier": "Trial access active",
+    "observedAt": "2026-10-14T23:33Z",
+    "standardAccess": "NOT APPROVED",
+    "secretValuesRead": false,
+    "settingsChanged": false
+  }
 }

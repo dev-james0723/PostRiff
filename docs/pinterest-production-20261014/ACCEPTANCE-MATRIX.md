@@ -4,7 +4,7 @@ Only PASS / FAIL / BLOCKED / NOT RUN are used. A synthetic PASS below never upgr
 
 | Required acceptance | Status | Execution / evidence / date |
 |---|---|---|
-| Dedicated isolated staging | BLOCKED | Step A APPROVED; existing DB isolation qualification FAIL. Shared consumer sessions/credentials/tasks; clean DB approval and bounded Vercel cost qualification pending. No deployment. evidence/step-a-preflight.json, 2026-10-14. |
+| Dedicated isolated staging | BLOCKED | New org/DB plans CANCELED by user. Existing production target confirmed; bounded pilot containment/design still required. No pilot deployment. production-target-audit.json, 2026-10-14. |
 | Public OAuth onboarding | NOT RUN | No live authorized-account consent. Synthetic OAuth custody/replay is independently tested below. |
 | Identity and boards | NOT RUN | No real identity/board read-back. Numeric identity/eligibility/sections tested with synthetic responses. |
 | Token refresh | NOT RUN | No real refresh cycle. Disposable PG: 12 concurrent callers caused exactly one injected refresh. |
@@ -18,7 +18,7 @@ Only PASS / FAIL / BLOCKED / NOT RUN are used. A synthetic PASS below never upgr
 | Account disconnection | NOT RUN | Real provider consent revocation/real queued jobs unobserved. Disposable local credential removal and pending authority cancellation PASS; no remote revoke is claimed. |
 | AI Agent end-to-end authorized action | NOT RUN | Live journey unavailable; optional read-only tool executor/registration are separately tested. |
 | Provider retention/AI-data permission | BLOCKED | Current guideline restrictions need clarification for exact data flows; public POLICY_APPROVED and Agent provider-data gates remain off. |
-| Standard Access | NOT RUN | No application submitted, no official Standard approval. |
+| Standard Access | NOT RUN | Official console read-back: Trial access active (app1615884); no application submitted or official Standard approval. |
 | Production release and canary | NOT RUN | No push/merge/deploy/credentials/migration/enablement or real canary. |
 | Public availability | NOT RUN | New eligible customer acceptance on rafii.io is not demonstrated. |
 | Synthetic concurrent load | PASS | 1,000 simultaneous arrivals; 64 peak workers; 0 unexpected failures; 980 verified mock read-backs + 20 injected lost create responses retained uncertain; no real provider traffic. validation-summary.json, 2026-10-14. |
@@ -43,3 +43,5 @@ Synthetic load measured 4,235.87 users/second over 0.23608 s, p50 105.49 ms, p95
 | Video/product tags/board mutation/Pin updates/analytics | Separate future gates, not activated or promised | NOT RUN | NOT RUN |
 
 Minimum image publishing/reconciliation scopes: user_accounts:read, boards:read, pins:read, pins:write. No secret-board scopes. Eligible personal-account access depends on Pinterest approval, including PINNER_DATA_ACCESS_DENIED restrictions; business eligibility is not a guaranteed entitlement either.
+
+Latest candidate f54028ed integrates deployed source7da3375c. Scoped Depot ff5rd1086p passed204 Python/42Node plus session-guard PG, build and UI; all live/public NOT RUN statuses remain unchanged. Source and migration plan: PRODUCTION-CHANGE-CANDIDATE.md.
