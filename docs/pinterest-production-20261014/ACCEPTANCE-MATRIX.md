@@ -4,7 +4,7 @@ Only PASS / FAIL / BLOCKED / NOT RUN are used. A synthetic PASS below never upgr
 
 | Required acceptance | Status | Execution / evidence / date |
 |---|---|---|
-| Dedicated isolated staging | BLOCKED | Step A approval pending; no deployment or staging qualification. Proposal and source-provenance.json, 2026-10-14. |
+| Dedicated isolated staging | BLOCKED | Step A APPROVED; existing DB isolation qualification FAIL. Shared consumer sessions/credentials/tasks; clean DB approval and bounded Vercel cost qualification pending. No deployment. evidence/step-a-preflight.json, 2026-10-14. |
 | Public OAuth onboarding | NOT RUN | No live authorized-account consent. Synthetic OAuth custody/replay is independently tested below. |
 | Identity and boards | NOT RUN | No real identity/board read-back. Numeric identity/eligibility/sections tested with synthetic responses. |
 | Token refresh | NOT RUN | No real refresh cycle. Disposable PG: 12 concurrent callers caused exactly one injected refresh. |
