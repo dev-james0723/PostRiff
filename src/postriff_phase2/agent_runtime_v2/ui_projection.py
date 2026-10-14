@@ -348,7 +348,8 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
                   "allowed_context": {"refs": refs, "counts": _counts(result, refs), "toolStates": _tool_states(result), "language": result.get("language") or "en",
                                       "surface": surface, "suggestedInputs": _suggested_inputs(journeys, refs, _library_ids(result)),
                                       "selection": [r for r in refs if r in ((selection_state or {}).get("references") or [])][:12] if isinstance(selection_state, dict) else [],
-                                      "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"]},
+                                      "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"],
+                                      **({"layout": layout_hint(handoff)} if layout_hint(handoff) else {})},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}
     manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope, flags=flags)
     projection.update({"manifest_id": manifest["manifestId"], "manifest": manifest,
@@ -360,9 +361,22 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
     return projection
 
 
+def layout_hint(handoff) -> dict | None:
+    """rafii-ui-plan/1 in ACTIVE mode only: the planner's chosen form and interaction classes for the presenter (enum values,
+    re-validated against ui_planner's fixed tables — a persisted plan is data, never trusted as is). None in shadow mode,
+    for plain text or for anything unrecognised, so the presenter input is byte-identical unless the planner is active."""
+    from . import ui_planner
+    plan = handoff.get("plan") if isinstance(handoff, dict) else None
+    if not isinstance(plan, dict) or plan.get("mode") != "active" or plan.get("form") not in ui_planner.FORMS or plan.get("form") == "text":
+        return None
+    table = ui_planner.INTERACTIONS[plan["form"]]
+    given = plan.get("interactions") if isinstance(plan.get("interactions"), dict) else {}
+    return {"form": plan["form"], **{k: [v for v in (given.get(k) or []) if v in table[k]][:6] for k in ("local", "reads", "actions")}}
+
+
 def presenter_view(projection: dict) -> dict:
     """Exactly what B may put in a presenter prompt: no fallback text, no server-only manifest metadata."""
     return {"journeyIds": list(projection.get("journey_ids") or []), "componentGroups": list(projection.get("component_group_ids") or []),
             "dataBindings": list(projection.get("data_bindings") or []), "actionBindings": list(projection.get("action_bindings") or []),
             "context": {k: v for k, v in (projection.get("allowed_context") or {}).items() if k in ("refs", "counts", "toolStates", "language", "surface",
-                                                                                                  "suggestedInputs", "selection", "ruleLabels")}}
+                                                                                                  "suggestedInputs", "selection", "ruleLabels", "layout")}}

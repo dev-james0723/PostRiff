@@ -241,6 +241,34 @@ class PlannerWiring(unittest.TestCase):
         self.assertFalse(decided["eligible"])
 
 
+class PlannerLayoutHint(unittest.TestCase):
+    """Active mode only: the planner's form reaches the presenter as context.layout (enum values from fixed tables)."""
+
+    def plan(self, **over):
+        return {"version": ui_planner.VERSION, "mode": "active", "form": "recovery", "eligible": True, "reason": "diagnosis",
+                "journeyIds": ["J08"], "interactions": {"local": ["expand_item"], "reads": ["refresh"], "actions": ["propose_retry"]}, **over}
+
+    def test_active_plan_becomes_a_validated_hint(self):
+        hint = ui_projection.layout_hint({"eligible": True, "plan": self.plan()})
+        self.assertEqual(hint, {"form": "recovery", "local": ["expand_item"], "reads": ["refresh"], "actions": ["propose_retry"]})
+
+    def test_shadow_text_tampered_or_missing_plans_give_no_hint(self):
+        for handoff in ({"plan": self.plan(mode="shadow")}, {"plan": self.plan(form="text")}, {"plan": self.plan(form="<script>")},
+                        {"plan": "x"}, {}, None, {"plan": self.plan(interactions={"local": ["rm -rf"], "reads": [], "actions": ["publish_now"]})}):
+            hint = ui_projection.layout_hint(handoff)
+            if hint is not None:   # a tampered interaction list is filtered to the fixed table, never passed through
+                self.assertEqual((hint["local"], hint["actions"]), ([], []))
+            else:
+                self.assertIsNone(hint)
+        self.assertIsNone(ui_projection.layout_hint({"plan": self.plan(form="<script>")}))
+
+    def test_presenter_view_carries_layout_only_when_present(self):
+        projection = {"journey_ids": ["J08"], "component_group_ids": [], "allowed_context": {"refs": [], "language": "en"}}
+        self.assertNotIn("layout", ui_projection.presenter_view(projection)["context"])
+        projection["allowed_context"]["layout"] = ui_projection.layout_hint({"plan": self.plan()})
+        self.assertEqual(ui_projection.presenter_view(projection)["context"]["layout"]["form"], "recovery")
+
+
 class PlannerTelemetry(unittest.TestCase):
     def test_verify_line_carries_only_the_plan_enums(self):
         from postriff_phase2 import agent_observability as obs
