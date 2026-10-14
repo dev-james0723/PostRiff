@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-14T21:42:01.055420+00:00",
+  "results": [
+    {
+      "url": "https://rafii.io/privacy",
+      "finalUrl": "https://rafii.io/privacy",
+      "httpStatus": 200,
+      "bytesInspected": 137561
+    },
+    {
+      "url": "https://rafii.io/terms",
+      "finalUrl": "https://rafii.io/terms",
+      "httpStatus": 200,
+      "bytesInspected": 104696
+    }
+  ],
+  "substanceReview": "NOT_RUN"
+}

@@ -1,0 +1,196 @@
+{
+  "load": {
+    "at": "2026-10-14T22:09:03.975510+00:00",
+    "createCalls": 1000,
+    "elapsedSeconds": 0.2021185050000014,
+    "execution": "synthetic_in_process",
+    "failureTypes": [],
+    "injectedLostCreateResponses": 20,
+    "latencyMs": {
+      "p50": 92.90802099999951,
+      "p95": 171.5482919999971,
+      "p99": 178.14535700000533
+    },
+    "limitations": [
+      "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
+      "Lost responses need manual provider reconciliation; no automatic resubmission."
+    ],
+    "lostResponsesPreservedUncertain": true,
+    "observedPeakWorkers": 64,
+    "outcomes": {
+      "failed": 0,
+      "uncertain": 20,
+      "verified": 980
+    },
+    "providerCalls": 0,
+    "simulatedProviderLatencyMs": 2,
+    "simultaneousArrivals": 1000,
+    "unexpectedFailureRate": 0.0,
+    "users": 1000,
+    "usersPerSecond": 4947.592502725038,
+    "workerLimit": 64
+  },
+  "postgres": {
+    "execution": "disposable_postgres_synthetic_provider",
+    "oauthReplayDenied": true,
+    "encryptedCustody": true,
+    "tenantNegativeRead": true,
+    "refreshConcurrentCallers": 12,
+    "providerRefreshes": 1,
+    "disconnectStopsTokenAccess": true,
+    "otherTenantUnaffected": true,
+    "quotaConcurrentReservations": 120,
+    "quotaAccepted": 100,
+    "quotaDenied": 20,
+    "quotaNextWindowRecovered": true,
+    "clientBudgetAccessDenied": true
+  },
+  "fieldsBrowser": {
+    "execution": "synthetic_actual_component",
+    "boardSelection": true,
+    "secretBoardDisabled": true,
+    "sectionSelection": true,
+    "httpLinkRejected": true,
+    "httpsLinkAccepted": true,
+    "accountSwitchClearsApprovalOptions": true,
+    "realProviderRequests": 0
+  },
+  "previewBrowser": {
+    "classification": "Mock PASS",
+    "fixtureOverlay": true,
+    "realPinterestApiRequests": 0,
+    "realIdentityVerified": false,
+    "exactTitle": true,
+    "boardVisible": true,
+    "exactDestination": true,
+    "noTitleInference": true,
+    "unsafeLinkNoCTA": true,
+    "externalRequestsBlocked": 0
+  },
+  "ci": {
+    "runId": "8ddwt8354q",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q",
+    "exitCode": 0,
+    "remoteExitCode": 0,
+    "sourceHead": "7e993563be9841f7f98758fb0c8c52f158ea7252",
+    "startedAt": "2026-10-14T22:08:08.451150+00:00",
+    "elapsedSeconds": 123.219,
+    "runner": "depot-ubuntu-24.04-16",
+    "sourceFingerprint": "211dc714228c59ac9a767ac9779e1eb08bce76c4244b95ac3af21937b9f96c8b",
+    "patchKey": "patch/7e993563be98/73f7dc83861c676f",
+    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T221011619235Z-ci.json"
+  },
+  "officialOpenApi": {
+    "version": "5.28.0",
+    "sha256": "1f14913381fe507d55e9e162c717b4b79f11077dcaf2329bb68d4f46940964a7"
+  },
+  "runHistory": [
+    {
+      "task": "ci",
+      "runId": "t9sgd2rg13",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/t9sgd2rg13",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T21:32:21.567166+00:00",
+      "elapsedSeconds": 75.137,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "16glcrn7m5",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/16glcrn7m5",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T21:36:27.252294+00:00",
+      "elapsedSeconds": 69.943,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "22pm5pq86n",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/22pm5pq86n",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T21:41:14.795157+00:00",
+      "elapsedSeconds": 81.598,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "6rgskr49f1",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/6rgskr49f1",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T21:44:28.360986+00:00",
+      "elapsedSeconds": 85.615,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "kbfz3xpwwn",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/kbfz3xpwwn",
+      "exitCode": 0,
+      "startedAt": "2026-10-14T21:49:10.385948+00:00",
+      "elapsedSeconds": 122.462,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "test",
+      "runId": "3pz0fq0wfp",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/3pz0fq0wfp",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T21:52:03.866719+00:00",
+      "elapsedSeconds": 65.158,
+      "runner": "depot-ubuntu-24.04-8"
+    },
+    {
+      "task": "test",
+      "runId": "kdk4wkqppx",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/kdk4wkqppx",
+      "exitCode": 0,
+      "startedAt": "2026-10-14T21:54:17.753798+00:00",
+      "elapsedSeconds": 60.688,
+      "runner": "depot-ubuntu-24.04-8"
+    },
+    {
+      "task": "ci",
+      "runId": "90z323nh29",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/90z323nh29",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T22:00:09.858674+00:00",
+      "elapsedSeconds": 69.888,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "975f4gr4tc",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/975f4gr4tc",
+      "exitCode": 1,
+      "startedAt": "2026-10-14T22:05:29.518597+00:00",
+      "elapsedSeconds": 65.155,
+      "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "8ddwt8354q",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q",
+      "exitCode": 0,
+      "startedAt": "2026-10-14T22:08:08.451150+00:00",
+      "elapsedSeconds": 123.219,
+      "runner": "depot-ubuntu-24.04-16"
+    }
+  ],
+  "providerBillingTotal": "unknown",
+  "agentRegistration": {
+    "task": "test",
+    "runId": "kdk4wkqppx",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/kdk4wkqppx",
+    "exitCode": 0,
+    "remoteExitCode": 0,
+    "startedAt": "2026-10-14T21:54:17.753798+00:00",
+    "elapsedSeconds": 60.688,
+    "runner": "depot-ubuntu-24.04-8",
+    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T215518417767Z-test.json"
+  },
+  "featureOnAndOffAgentRegistration": {
+    "status": "PASS",
+    "runId": "8ddwt8354q",
+    "evidence": "PINTEREST_AGENT_REGISTRATION_PASS plus default-off capability regression suite"
+  }
+}

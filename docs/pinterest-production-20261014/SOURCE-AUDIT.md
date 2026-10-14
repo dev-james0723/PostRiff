@@ -1,0 +1,40 @@
+# Pinterest production candidate audit — 2026-10-14
+
+Execution state: local candidate and synthetic cloud validation. **NOT PRODUCTION-READY.**
+
+The prior Step A proposal was read at its exact supplied path. Its SHA-256 and inherited source verification are in `evidence/source-provenance.json`. All 22 inherited candidate files matched their published digests before edits. The original dirty checkout and prior Trial worktree were preserved. This work continues detached base `7e993563be9841f7f98758fb0c8c52f158ea7252` in branch `codex/rafii-pinterest-production-prep-20261014`.
+
+## Architecture and changes
+
+| Area | Existing architecture / candidate change |
+|---|---|
+| Hosted OAuth | `oauth.py`, `providers.py`, `wave3_connectors.py`. Authenticated member/workspace start, hashed single-use state, fixed callback, server token exchange, encrypted vault, credential row lock for refresh. Pinterest now requires numeric stable account ID, rejects malformed callback configuration, retains environment/client binding and records refresh expiry. |
+| Desktop broker | Inherited `studio/broker/pinterest-broker.mjs` and Studio connection UI retained. Desktop identity-only connection remains distinct from the hosted multi-tenant product. |
+| Public onboarding | Registry defaults Pinterest connections off. Public connection requires explicit ENABLED + VERIFIED + REVIEWED + POLICY_APPROVED declarations. Isolated Sandbox + TRIAL_READONLY is a separate read-only pilot lane. Flags are declarations, not provider approval evidence. |
+| Destinations | Bounded complete pagination for boards and sections; invalid/repeated bookmarks fail closed. Public boards with known privacy qualify. Secret, ad-only and unknown-privacy boards do not qualify for v1. Worker rechecks section membership. |
+| Studio/review | Existing review, content variants, Brand Brain and account selector reused. JPEG/PNG, Rafii 10 MiB limit, 100-character title, 800-character description, 500-character alt text, HTTPS link, exact board/section are frozen into the manifest. No silent alt-text truncation. |
+| Worker | Existing durable jobs, approval digest, claim lease, membership/entitlement checks, bounded retries and reconciliation retained. Last Pinterest POST additionally locks workspace and credential, checks current lease/approval/manifest/member/expiry/source/account, and stores a known Pin ID before releasing the lock. |
+| Publication proof | 200/201 + valid Pin ID is `provider_accepted`; GET read-back must match ID/account/board/section/title/description/link/image type. API read-back does not prove public visibility or byte-identical transformed images. Lost create response without ID stays uncertain; no automatic POST retry. |
+| Disconnect | Local vault ciphertext removed and channel/reviews/pending jobs revoked in one transaction. In-flight outcomes remain uncertain; known Pin IDs are retained. Related recurring tasks pause without automatic resume. Pinterest consent removal in provider settings remains a human step; no invented revoke endpoint. |
+| Quotas | Candidate server-only PostgreSQL budgets reserve atomically: conservative shared-app 1,000 requests/minute; app and account 100 writes/minute. Public runtime fails closed without budget storage. Read-only Step A pilot does not require this new table. |
+| Agent | Existing metered SDK, content tools, proposals, calendar and explicit approval workflow reused. Pinterest added to draft platform enum. Optional `pinterest_boards` tool requires current unquoted request, connection-domain grant, approve role and an exact tenant connection; has no write tool. Feature flag defaults off. |
+| History/analytics | Full Pinterest analytics and content-history ingestion are not implemented by this phase. Agent must disclose this; boards are not performance evidence. |
+| CI | Scoped sanitized JCB candidate mapping; no push needed. Tests, disposable PostgreSQL, synthetic load, Hosted typecheck/lint/build and browser fixtures run remotely. Existing default workflow is restored after validation. |
+
+## Security findings and limits
+
+Fixed: mutable username identity fallback; unknown/private-board eligibility; incomplete metadata read-back; HTTP link accepted by UI; silent alt truncation; callback configuration fallback; nonfinite token expiry; stale OAuth/channel restoration; late dispatch after disconnect; lost known create ID; public onboarding opened by credentials alone; non-atomic pending-job cancellation; app-wide quota accounting.
+
+Tenant authorization remains server-side, scoped by `(workspace_id, connection_id)`. Server credential and OAuth tables deny ordinary browser reads. The new quota table has RLS and no authenticated/anon privileges. No raw provider error text is returned for Pinterest publishing. The inherited read-only journal excludes tokens, codes, states, private names and bookmarks. Existing agent tool adapter wraps provider data as untrusted data.
+
+Residual limits: no independent penetration test, no qualified staging, no real tokens/accounts, no provider revocation proof, no live scheduling acceptance, no Standard decision, no production rollback execution. Full-project CI is not claimed; the inherited unrelated Studio build error remains a separate limitation. DNS resolution/rebinding of destination links is not proved by URL syntax checks; Rafii does not fetch those user links during publication. Hosted image source comes from the existing workspace asset storage.
+
+Provider-policy gate: the current [Developer Guidelines](https://policy.pinterest.com/en/developer-guidelines) restrict API-data storage and third-party sharing, model training/development and imitation of Pinterest's UI. The inherited imitation preview was replaced with a native Rafii review card. The optional Agent provider-data tool additionally requires `POSTRIFF_PINTEREST_AGENT_PROVIDER_DATA_APPROVED=1`, left off. General user consent or Standard Access alone is not asserted to settle those terms. Obtain provider clarification for the exact storage/AI flows before public release, including generic agent context containing connected-account data. Do not activate unattended Pinterest publishing; customers must choose and approve each Pin. The full Developer/API Terms article could not be read through the inspected official URL (footer-only content); record that as `validation_unavailable` rather than compliance PASS.
+
+## Official sources verified today
+
+- [OAuth](https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/): exact redirect, Authorization Code, HTTP Basic token exchange, continuous refresh behavior. App creation date is unverified; no legacy refresh-mode change was made.
+- [Official API description](https://github.com/pinterest/api-description/blob/main/v5/openapi.yaml): retrieved version 5.28.0, with Account.id, sections, PinCreate and image schemas. Snapshot and digest retained in evidence. This published specification does not prove app entitlement.
+- [Access tiers](https://developers.pinterest.com/docs/key-concepts/access-tiers/): Trial-created content is creator-visible; Standard is a separate approval. Sandbox host selection and app access tier are different facts.
+- [Changelog](https://developer.pinterest.com/docs/changelog/changelog/): apps registered on/after 2026-09-14 may receive HTTP 403 with message `PINNER_DATA_ACCESS_DENIED` for non-business data access. Do not loop retries or assume app 1615884 is exempt; its registration date and pinner-data entitlement need provider confirmation.
+- [Rate limits](https://developers.pinterest.com/docs/reference/rate-limits/): Trial universal daily limit 1,000 and org_write 300/day/app; Standard category org_read 1,000/minute/user/app and org_write 100/minute/user/app, plus universal limits. The candidate public budgets are deliberately more conservative across the app. Trial publication remains disabled; the current pilot is bounded read-only.
