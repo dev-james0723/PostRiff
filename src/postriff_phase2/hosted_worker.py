@@ -61,6 +61,23 @@ def _no_provider_effect(job):
                                             'providerAssets', 'providerThread', 'progress', 'url', 'verification'))
 
 
+def _bluesky_automation_human_approved(job):
+    """Reject legacy/standing-authority Bluesky queue jobs before any provider I/O.
+
+    Direct UI jobs have no automation annotation and are still governed by the
+    immutable approval digest. Automated jobs must explicitly carry the trusted
+    exact-human approval receipt created by campaigns; an empty/malformed or
+    earlier owner-preauthorization annotation cannot become publish authority.
+    """
+    manifest = job.get('manifest') or {}
+    if manifest.get('platform') != 'Bluesky':
+        return True
+    if 'automation' not in job:
+        return True
+    automation = job['automation']
+    return isinstance(automation, dict) and automation.get('approvedVia') == 'human'
+
+
 class DisabledHostedSocial:
     """Fail closed until an exact provider transport and token vault are configured."""
     def submit(self, _manifest):
@@ -131,6 +148,8 @@ class PostgresWorker:
         from .billing import require_publishing
         try:
             if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
+                return False
+            if not _bluesky_automation_human_approved(job):
                 return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False
             require_publishing(cur, workspace_id, self.clock())

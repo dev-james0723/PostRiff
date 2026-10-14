@@ -24,6 +24,8 @@ from postriff_phase2.outcomes import normalize_result
 from postriff_phase2.permissions import Membership, require
 from postriff_phase2.social_connectors import DiscordProvider, MastodonProvider, TelegramConnector, XProvider
 
+RECORD_CID = "b" + base64.b32encode(bytes((1, 0x71, 0x12, 0x20)) + hashlib.sha256(b"test record").digest()).decode().lower().rstrip("=")
+
 BASE = "https://app.example"
 DID = "did:plc:abcdefghijklmnopqrstuvwx"
 BOT = "123456789:" + "A" * 35
@@ -590,7 +592,8 @@ class Publishing(unittest.TestCase):
         facet = record["facets"][0]["index"]
         self.assertEqual(record["text"].encode()[facet["byteStart"]:facet["byteEnd"]].decode(), "https://rafii.example/x")
         rkey = result["reference"].rsplit("/", 1)[1]
-        bluesky.transport = Wire([ok({"value": {"text": manifest("Bluesky", DID)["payload"]["text"]}})])
+        bluesky.transport = Wire([ok({"uri": result["reference"], "cid": RECORD_CID,
+                                     "value": record})])
         verified = social.reconcile(manifest("Bluesky", DID), {"providerReference": result["reference"]})
         self.assertEqual(verified["state"], "verified")
         self.assertEqual(normalize_result(verified, {"manifest": {"platform": "Bluesky"}})["state"], "verified")
@@ -739,7 +742,11 @@ class BlueskyIdempotency(unittest.TestCase):
 
     def test_a_retry_that_finds_its_own_earlier_record_is_accepted_not_duplicated(self):
         job = manifest("Bluesky", DID)
-        wire = Wire([ok({"error": "InvalidRequest", "message": "Record already exists"}, 400), ok({"value": {"text": job["payload"]["text"]}})])
+        reference = f"at://{DID}/app.bsky.feed.post/{HostedSocial.bluesky_rkey(job)}"
+        expected_record = {"$type": "app.bsky.feed.post", "text": job["payload"]["text"],
+                           "facets": HostedSocial._bluesky_facets(job["payload"]["text"])}
+        wire = Wire([ok({"error": "InvalidRequest", "message": "Record already exists"}, 400),
+                     ok({"uri": reference, "cid": RECORD_CID, "value": expected_record})])
         result = self.social(wire).submit(job)
         self.assertEqual(result["state"], "provider_accepted")
         self.assertEqual(wire.calls[0]["body"]["rkey"], wire.calls[1]["url"].split("rkey=")[1])

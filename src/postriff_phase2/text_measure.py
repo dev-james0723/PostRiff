@@ -16,8 +16,13 @@ UNITS = {"X": "x-weighted"}
 def measure(platform, text):
     """{"used", "limit", "unit"} for a draft on a platform; `limit` is None when PostRiff has no versioned limit for it."""
     text = text if isinstance(text, str) else ""
-    unit = UNITS.get(platform, "codepoint")
-    if unit == "x-weighted":
+    unit = "grapheme" if platform == "Bluesky" else UNITS.get(platform, "codepoint")
+    if unit == "grapheme":
+        # UAX #29: code-point and UTF-16 counts break on emoji ZWJ and combining marks.
+        # regex is pinned in requirements; never silently fall back to len(text).
+        import regex
+        used = len(regex.findall(r"\X", text))
+    elif unit == "x-weighted":
         used = sum(1 if any(low <= ord(ch) <= high for low, high in _X_LIGHT) else 2 for ch in text)
     else:
         used = len(text)

@@ -112,7 +112,9 @@
   "git": {
     "deploymentEnabled": {
       "codex/rafii-brand-brain-v11": false,
-      "codex/rafii-linkedin-production-release-20261012": false
+      "codex/rafii-linkedin-production-release-20261012": false,
+      "codex/rafii-bluesky-p0-20261013": false,
+      "codex/rafii-bluesky-prod-20261013": false
     }
   }
 }

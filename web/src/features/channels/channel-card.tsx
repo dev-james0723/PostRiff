@@ -247,6 +247,8 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const sentence = attentionSentence(channel, undefined, held);
   const identityVerifiedAt = channel.identityVerifiedAt ?? channel.capabilities.identity?.verifiedAt ?? null;
   const connectionMessage = connectionSummary(channel);
+  const blueskyHasPostGrant = channel.scopes.includes('transition:generic') ||
+    channel.scopes.includes('repo:app.bsky.feed.post?action=create');
   const activityTotal = activity ? activity.scheduled + activity.held + activity.published : 0;
 
   async function refresh() {
@@ -367,6 +369,24 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       )}
 
       {!disconnected && connectionMessage && <p className='text-sm' aria-label='Connection status'>{connectionMessage}</p>}
+      {!disconnected && channel.platform === 'Bluesky' && channel.connectionState === 'read_verified' && !blueskyHasPostGrant && (
+        <StateMessage
+          kind='permission'
+          layout='inline'
+          title='Bluesky identity connected — publishing permission required'
+          description='Rafii has confirmed this Bluesky identity, but it cannot publish posts with an identity-only grant.'
+          action={canManage && provider?.connectReady ? (
+            <Button variant='glass' size='control' onClick={() => onReconnect({
+              providerId: provider.id,
+              capability: 'publish',
+              reconnect: { channelId: channel.id, account: channel.account }
+            })}>
+              Grant publishing…
+            </Button>
+          ) : undefined}
+          className='rafii-quiet rounded-[var(--rafii-radius-control)] px-3'
+        />
+      )}
       {!disconnected && (channel.officialCapabilities ? <OfficialCapabilities features={channel.officialCapabilities} readiness={channel.socialReadiness} offered={provider?.capabilities} setupIssue={provider?.memberPublishingStatus && !provider.memberPublishingStatus.approved ? 'Rafii’s LinkedIn publishing setup is incomplete. Your account remains connected; the Rafii operator needs to finish setup.' : undefined} onEnable={canManage && provider ? (capability) => onReconnect({ providerId: provider.id, capability, reconnect: { channelId: channel.id, account: channel.account } }) : undefined} /> : <CapabilityChips capabilities={channel.capabilities} data-tour={tour ? 'capability-chips' : undefined} />)}
       {!disconnected && channel.officialCapabilities && <NativeSocialPanel channel={channel} />}
       {!disconnected && channel.platform === 'Facebook' && channel.accountType !== 'page' && <p className='text-sm'>Choose an eligible Page to finish connecting Facebook.</p>}

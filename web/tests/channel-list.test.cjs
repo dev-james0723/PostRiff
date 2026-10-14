@@ -104,6 +104,21 @@ test('disconnect receipts preserve the server note and distinguish deferred, con
   assert.match(disconnectReceipt('YouTube', 'My channel', {}).description, /revocation is not confirmed/);
 });
 
+test('Bluesky identity-only state never claims publishing and offers an explicit permission upgrade', () => {
+  const { channelBadge } = state();
+  const accountOnly = { platform: 'Bluesky', connectionState: 'read_verified',
+    scopes: ['atproto'], refreshSupported: true };
+  assert.deepEqual(channelBadge(accountOnly), { label: 'Identity connected', status: 'neutral' });
+  assert.notEqual(channelBadge(accountOnly).label, 'Connected');
+  assert.equal(channelBadge({ platform: 'LinkedIn', connectionState: 'read_verified' }).label, 'Read only');
+  const card = fs.readFileSync(path.resolve(__dirname, '../src/features/channels/channel-card.tsx'), 'utf8');
+  assert.match(card, /!blueskyHasPostGrant/);
+  assert.match(card, /scopes\.includes\('transition:generic'\)/);
+  assert.match(card, /scopes\.includes\('repo:app\.bsky\.feed\.post\?action=create'\)/);
+  assert.match(card, /capability: 'publish'/);
+  assert.match(card, /Grant publishing/);
+});
+
 test('YouTube local removal and Google authorization controls retain distinct effects and actual result', () => {
   const card = fs.readFileSync(path.resolve(__dirname, '../src/features/channels/channel-card.tsx'), 'utf8');
   assert.match(card, /Remove from Rafii/);
