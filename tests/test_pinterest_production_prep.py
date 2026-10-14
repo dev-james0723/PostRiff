@@ -12,6 +12,7 @@ from postriff_phase2.providers import registry_from_environment
 from postriff_phase2.wave3_connectors import PinterestProvider
 from postriff_phase2.oauth import OAuthService
 from postriff_phase2.contracts import digest
+from postriff_phase2.hosted_worker import defer_pinterest_budget
 from test_hosted_wave1_connectors import Wire, ok
 import test_hosted_wave3_connectors as wave3
 IMAGE, manifest = wave3.IMAGE, wave3.manifest
@@ -111,6 +112,21 @@ class PinterestProductionSafety(unittest.TestCase):
         result=social.submit(manifest('Pinterest','1234567',media=IMAGE,options=wave3.PinterestPublishing.options))
         self.assertEqual(result['state'],'uncertain')
         self.assertEqual(sum(c['method']=='POST' for c in wire.calls),1)
+
+    def test_pre_post_budget_wait_keeps_job_scheduled_without_any_post(self):
+        wire=Wire([ok({'code':429,'message':'limit'},429)])
+        social=wave3.PinterestPublishing().social(wire)
+        result=social.submit(manifest('Pinterest','1234567',media=IMAGE,options=wave3.PinterestPublishing.options))
+        self.assertEqual(result['state'],'scheduled')
+        self.assertTrue(result['pinterestBudgetDeferred'])
+        self.assertTrue(all(c['method']=='GET' for c in wire.calls))
+        job={'manifest':{'platform':'Pinterest','idempotencyKey':'key'},'attempts':[{'idempotencyKey':'key'}]}
+        self.assertTrue(defer_pinterest_budget(job,result,False))
+        self.assertEqual(job['attempts'],[])
+        self.assertEqual(job['pinterestBudgetDeferrals'],1)
+        self.assertFalse(defer_pinterest_budget(job,result,True))
+        job['providerReference']='987654321'
+        self.assertFalse(defer_pinterest_budget(job,result,False))
 
     def test_readback_checks_all_approved_fields_without_any_retry_post(self):
         body = {'id':'987654321','board_id':'1234567','description':'Rehearsal notes','title':'Score',

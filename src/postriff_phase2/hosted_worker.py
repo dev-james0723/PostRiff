@@ -52,6 +52,19 @@ def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtu
         ORDER BY """ + dispatch_order + """ LIMIT 100 FOR UPDATE OF w SKIP LOCKED"""
 
 
+def defer_pinterest_budget(job, result, reconciliation):
+    """A trusted pre-POST budget wait consumes no provider-write retry, but keeps an audit event."""
+    if (job.get('manifest', {}).get('platform') != 'Pinterest' or reconciliation or job.get('providerReference')
+            or not isinstance(result, dict) or result.get('state') != 'scheduled'
+            or result.get('pinterestBudgetDeferred') is not True):
+        return False
+    attempts = job.get('attempts') or []
+    if attempts and attempts[-1].get('idempotencyKey') == job['manifest'].get('idempotencyKey'):
+        attempts.pop()
+    job['pinterestBudgetDeferrals'] = job.get('pinterestBudgetDeferrals', 0) + 1
+    return True
+
+
 class DisabledHostedSocial:
     """Fail closed until an exact provider transport and token vault are configured."""
     def submit(self, _manifest):
@@ -295,6 +308,7 @@ class PostgresWorker:
                         cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                                     (json.dumps(state), claimed['workspaceId'], revision))
                         return False
+                defer_pinterest_budget(job, result, claimed['reconciliation'])
                 result = normalize_result(result, job, claimed['reconciliation'])
                 self._event(job, result["state"], result["confirmed"])
                 if result.get("reference"):

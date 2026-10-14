@@ -563,6 +563,11 @@ class HostedSocial:
         from .pinterest_safety import https_url
         options = manifest.get("publishOptions") or {}
         media = manifest.get("media") or []
+        def preflight_error(error):
+            if error.code == 'pinterest_rate_limited':
+                return {'state':'scheduled', 'pinterestBudgetDeferred':True,
+                        'confirmed':'Pinterest request budget reached before publication. This approved Pin waits for the next window; nothing was posted.'}
+            return {'state':'held', 'confirmed':str(error)}
         try:
             canonical = normalize('Pinterest', options, media, manifest['payload']['text'])
             if canonical != options:
@@ -570,14 +575,17 @@ class HostedSocial:
             if provider.identity(token)['providerAccountId'] != manifest.get('providerAccountId'):
                 return {'state': 'held', 'confirmed': 'The Pinterest account changed. Reconnect and review again; nothing was posted.'}
         except AlphaError as error:
-            return {'state': 'held', 'confirmed': str(error)}
+            return preflight_error(error)
         # The board must be one of this person's own boards (the composer offers only those; it may have gone since).
-        if options["boardId"] not in {board["id"] for board in provider.destinations(token) if board.get('eligible')}:
-            return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
-        section = options.get('boardSectionId')
-        if section and section not in {s['id'] for s in provider.sections(token, options['boardId'])}:
-            return {'state': 'failed', 'confirmed': 'This section is unavailable on the chosen board. Review again; nothing was posted.'}
-        source = self._image_url(manifest)
+        try:
+            if options["boardId"] not in {board["id"] for board in provider.destinations(token) if board.get('eligible')}:
+                return {"state": "failed", "confirmed": "That board isn't one of this Pinterest account's boards any more. Choose another board and review the Pin again; nothing was posted."}
+            section = options.get('boardSectionId')
+            if section and section not in {s['id'] for s in provider.sections(token, options['boardId'])}:
+                return {'state': 'failed', 'confirmed': 'This section is unavailable on the chosen board. Review again; nothing was posted.'}
+            source = self._image_url(manifest)
+        except AlphaError as error:
+            return preflight_error(error)
         if not https_url(source):
             return {'state': 'held', 'confirmed': 'The approved image has no usable HTTPS source. Upload it again; nothing was posted.'}
         pin = {"board_id": options["boardId"], "description": manifest["payload"]["text"], "media_source": {"source_type": "image_url", "url": source}}
@@ -604,7 +612,7 @@ class HostedSocial:
         except AlphaError as error:
             if attempted and error.code not in ('pinterest_rate_limited', 'pinterest_quota_unavailable'):
                 return _uncertain('Pinterest submission was interrupted. Check the board and reconcile; do not resubmit.')
-            return {'state': 'held', 'confirmed': str(error)}
+            return preflight_error(error)
         body = response.get("body") if isinstance(response.get("body"), dict) else {}
         pin_id = str(body.get("id") or "")
         if response.get("status") in (200, 201) and re.fullmatch(r"\d{5,30}", pin_id):
