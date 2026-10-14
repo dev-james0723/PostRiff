@@ -23,3 +23,15 @@ The connected `get_cost` tool is unavailable (`get_cost was not returned by tool
 The existing Vercel project `rafii-pinterest-trial-staging` (`prj_7AB6iulp2Vk0wPqeT1CRAi9XwBUl`) has no deployment or environment variables. Its team reports Pro billing **overdue**; deployment spend qualification is incomplete. No payment or billing-setting change is authorized. The alias is unassigned in this team (404); global availability is unverified. Default SSO protection is enabled for `all_except_custom_domains`; public callback access remains untested. Do not change protection without the separately scoped approval required by the original proposal.
 
 Callback registration, live OAuth consent, real Pins, Standard submission, public enablement, Git push/merge and production remain separate gates. [Read-only preflight evidence](evidence/step-a-preflight.json).
+
+## Approval and execution update — 2026-10-14
+
+User approved this provisioning scope. Authenticated provider quote and quota checks passed: US$10/month additional cost, Spend Cap enabled, no current quota excess. The form is prepared but password entry and submission remain a human handoff. No project was created; no generated ref is claimed. [Current evidence](evidence/clean-database-provisioning-preflight.json).
+
+## Superseding budget steering — 2026-10-14
+
+User asked to avoid the US$10. Paid creation is ON HOLD; no Micro project was created. Prepared paid forms were closed. [US$0 Free organization/project candidate](STEP-A-ZERO-COST-DATABASE-PROPOSAL.md) is proposed only, with a new target requiring scoped approval.
+
+## Final target correction
+
+User explicitly requires existing production `postriff-phase2-private` (`buoyhkbodnhzngaotoel`). Both new paid and Free organization/database proposals are CANCELED.
