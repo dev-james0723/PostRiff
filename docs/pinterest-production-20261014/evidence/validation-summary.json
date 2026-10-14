@@ -178,15 +178,19 @@
   ],
   "providerBillingTotal": "unknown",
   "agentRegistration": {
-    "task": "test",
-    "runId": "kdk4wkqppx",
-    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/kdk4wkqppx",
+    "runId": "8ddwt8354q",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q",
     "exitCode": 0,
     "remoteExitCode": 0,
-    "startedAt": "2026-10-14T21:54:17.753798+00:00",
-    "elapsedSeconds": 60.688,
-    "runner": "depot-ubuntu-24.04-8",
-    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T215518417767Z-test.json"
+    "sourceHead": "7e993563be9841f7f98758fb0c8c52f158ea7252",
+    "startedAt": "2026-10-14T22:08:08.451150+00:00",
+    "elapsedSeconds": 123.219,
+    "runner": "depot-ubuntu-24.04-16",
+    "sourceFingerprint": "211dc714228c59ac9a767ac9779e1eb08bce76c4244b95ac3af21937b9f96c8b",
+    "patchKey": "patch/7e993563be98/73f7dc83861c676f",
+    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T221011619235Z-ci.json",
+    "status": "PASS",
+    "evidence": "PINTEREST_AGENT_REGISTRATION_PASS in final CI plus default-off regression suite"
   },
   "featureOnAndOffAgentRegistration": {
     "status": "PASS",

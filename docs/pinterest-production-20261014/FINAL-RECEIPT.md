@@ -4,7 +4,7 @@
 
 ## Source
 
-Source commit: `faa4c3e0` (full SHA in evidence/source-provenance.json).
+Source commit: `faa4c3e0f9ba7a3095a9d1b34b00f3839d08281d`. [Reviewable source diff](evidence/engineering-candidate.patch).
 Branch: `codex/rafii-pinterest-production-prep-20261014`.
 Worktree: `/Users/ouxianxing/Documents/.agent-worktrees/rafii-pinterest-production-prep-20261014`.
 Inherited base: `7e993563be9841f7f98758fb0c8c52f158ea7252`; all 22 inherited candidate digests verified before changes. Prior worktree/package and dirty shared checkout preserved. Shared checkout HEAD was independently read as `80bc24d20397a90257cb5571f8a3914a652bfb51`; future branch integration must reconcile that newer source without overwriting other owners.
