@@ -328,8 +328,9 @@ class HostedPhase2Acceptance(unittest.TestCase):
     def test_wsgi_membership_invitation_session_routes(self):
         app = HostedApplication(FakeService(), FakeWorker(), {"projectUrl": "https://project.supabase.co", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
         auth = {"Authorization": "Bearer " + "t" * 32, "X-PostRiff-Request": "founder-alpha", "X-Forwarded-For": "203.0.113.5"}
-        status, _, created = invoke(app, "POST", "/api/auth/verify", {"plan": "studio"}, {**auth, "User-Agent": "PostRiffPWA/1.0"})
-        self.assertEqual((status, created["client"], created["label"]), (201, "203.0.113.5", "PostRiffPWA"))
+        iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        status, _, created = invoke(app, "POST", "/api/auth/verify", {"plan": "studio"}, {**auth, "User-Agent": iphone})
+        self.assertEqual((status, created["client"], created["label"]), (201, "203.0.113.5", "Safari on iPhone"))
         status, _, listed = invoke(app, "GET", "/api/workspaces", headers=auth)
         self.assertEqual((status, listed["workspaces"][0]["workspaceId"]), (200, "w"))
         status, _, members = invoke(app, "GET", "/api/workspaces/w/members", headers=auth)
