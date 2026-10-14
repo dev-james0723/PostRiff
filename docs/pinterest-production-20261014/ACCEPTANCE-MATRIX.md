@@ -22,12 +22,12 @@ Only PASS / FAIL / BLOCKED / NOT RUN are used. A synthetic PASS below never upgr
 | Production release and canary | NOT RUN | No push/merge/deploy/credentials/migration/enablement or real canary. |
 | Public availability | NOT RUN | New eligible customer acceptance on rafii.io is not demonstrated. |
 | Synthetic concurrent load | PASS | 1,000 simultaneous arrivals; 64 peak workers; 0 unexpected failures; 980 verified mock read-backs + 20 injected lost create responses retained uncertain; no real provider traffic. validation-summary.json, 2026-10-14. |
-| Scoped security/CI/browser contracts | PASS | [JCB 8ddwt8354q](https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q), remote exit 0. 131 Python + separate feature-on/off Agent registry + 42 Node tests, disposable PG, load, Hosted typecheck/lint/build, actual-component and preview browser scenarios. |
+| Scoped security/CI/browser contracts | PASS | [JCB plbpx66q8j](https://depot.dev/orgs/jf34f85hr0/workflows/plbpx66q8j), remote exit 0. 132 Python + separate feature-on/off Agent registry + 42 Node tests, disposable PG, load, Hosted typecheck/lint/build, actual-component and preview browser scenarios. |
 | Public policy/terms reachability | PASS | Independently HTTP 200 on both public URLs; substance/compliance certification remains NOT RUN. public-policy-reachability.json, 2026-10-14. |
 
 The feature-on/off Agent registration passed in the same final scoped CI; source SHA is finalized in FINAL-RECEIPT. All measured values and raw receipt locations are in `evidence/validation-summary.json`; final shipping/test fingerprints are in `evidence/final-source-hashes.json`.
 
-Synthetic load measured 4,947.59 users/second over 0.20212 s, p50 92.91 ms, p95 171.55 ms, p99 178.15 ms on the disposable 16-vCPU cloud runner with an injected 2-ms provider and 64 worker threads. This measures the in-process adapter/publisher harness. It does not measure HTTP hosting, a production scheduler/database, provider quotas, real OAuth, real account isolation or recovery of a lost real Pin ID. Its values must not be used as production capacity claims.
+Synthetic load measured 4,235.87 users/second over 0.23608 s, p50 105.49 ms, p95 196.53 ms, p99 201.85 ms on the disposable 16-vCPU cloud runner with an injected 2-ms provider and 64 worker threads. This measures the in-process adapter/publisher harness. It does not measure HTTP hosting, a production scheduler/database, provider quotas, real OAuth, real account isolation or recovery of a lost real Pin ID. Its values must not be used as production capacity claims.
 
 ## v1 capability and access-tier gates
 

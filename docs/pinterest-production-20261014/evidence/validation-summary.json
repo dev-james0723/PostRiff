@@ -1,15 +1,15 @@
 {
   "load": {
-    "at": "2026-10-14T22:09:03.975510+00:00",
+    "at": "2026-10-14T22:44:51.892234+00:00",
     "createCalls": 1000,
-    "elapsedSeconds": 0.2021185050000014,
+    "elapsedSeconds": 0.2360787799999997,
     "execution": "synthetic_in_process",
     "failureTypes": [],
     "injectedLostCreateResponses": 20,
     "latencyMs": {
-      "p50": 92.90802099999951,
-      "p95": 171.5482919999971,
-      "p99": 178.14535700000533
+      "p50": 105.49191550000003,
+      "p95": 196.53095500000006,
+      "p99": 201.84744699999868
     },
     "limitations": [
       "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
@@ -27,7 +27,7 @@
     "simultaneousArrivals": 1000,
     "unexpectedFailureRate": 0.0,
     "users": 1000,
-    "usersPerSecond": 4947.592502725038,
+    "usersPerSecond": 4235.874143368587,
     "workerLimit": 64
   },
   "postgres": {
@@ -68,17 +68,17 @@
     "externalRequestsBlocked": 0
   },
   "ci": {
-    "runId": "8ddwt8354q",
-    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q",
+    "runId": "plbpx66q8j",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/plbpx66q8j",
     "exitCode": 0,
     "remoteExitCode": 0,
-    "sourceHead": "7e993563be9841f7f98758fb0c8c52f158ea7252",
-    "startedAt": "2026-10-14T22:08:08.451150+00:00",
-    "elapsedSeconds": 123.219,
+    "sourceHead": "484f9136e6ba0d7e4ccbfa985ab0217b7fcff540",
+    "startedAt": "2026-10-14T22:43:54.604732+00:00",
+    "elapsedSeconds": 123.32,
     "runner": "depot-ubuntu-24.04-16",
-    "sourceFingerprint": "211dc714228c59ac9a767ac9779e1eb08bce76c4244b95ac3af21937b9f96c8b",
-    "patchKey": "patch/7e993563be98/73f7dc83861c676f",
-    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T221011619235Z-ci.json"
+    "sourceFingerprint": "47427009d6ef41bd397921c7c91fc19d34753d94de69cb1c9655a3b27e6d197c",
+    "patchKey": "patch/7e993563be98/0bcf0334c24eb4cc",
+    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T224557884253Z-ci.json"
   },
   "officialOpenApi": {
     "version": "5.28.0",
@@ -174,27 +174,36 @@
       "startedAt": "2026-10-14T22:08:08.451150+00:00",
       "elapsedSeconds": 123.219,
       "runner": "depot-ubuntu-24.04-16"
+    },
+    {
+      "task": "ci",
+      "runId": "plbpx66q8j",
+      "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/plbpx66q8j",
+      "exitCode": 0,
+      "startedAt": "2026-10-14T22:43:54.604732+00:00",
+      "elapsedSeconds": 123.32,
+      "runner": "depot-ubuntu-24.04-16"
     }
   ],
   "providerBillingTotal": "unknown",
   "agentRegistration": {
-    "runId": "8ddwt8354q",
-    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/8ddwt8354q",
+    "runId": "plbpx66q8j",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/plbpx66q8j",
     "exitCode": 0,
     "remoteExitCode": 0,
-    "sourceHead": "7e993563be9841f7f98758fb0c8c52f158ea7252",
-    "startedAt": "2026-10-14T22:08:08.451150+00:00",
-    "elapsedSeconds": 123.219,
+    "sourceHead": "484f9136e6ba0d7e4ccbfa985ab0217b7fcff540",
+    "startedAt": "2026-10-14T22:43:54.604732+00:00",
+    "elapsedSeconds": 123.32,
     "runner": "depot-ubuntu-24.04-16",
-    "sourceFingerprint": "211dc714228c59ac9a767ac9779e1eb08bce76c4244b95ac3af21937b9f96c8b",
-    "patchKey": "patch/7e993563be98/73f7dc83861c676f",
-    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T221011619235Z-ci.json",
+    "sourceFingerprint": "47427009d6ef41bd397921c7c91fc19d34753d94de69cb1c9655a3b27e6d197c",
+    "patchKey": "patch/7e993563be98/0bcf0334c24eb4cc",
+    "rawReceipt": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261014T224557884253Z-ci.json",
     "status": "PASS",
-    "evidence": "PINTEREST_AGENT_REGISTRATION_PASS in final CI plus default-off regression suite"
+    "evidence": "Feature-on/off registration contract in final CI"
   },
   "featureOnAndOffAgentRegistration": {
     "status": "PASS",
-    "runId": "8ddwt8354q",
+    "runId": "plbpx66q8j",
     "evidence": "PINTEREST_AGENT_REGISTRATION_PASS plus default-off capability regression suite"
   }
 }

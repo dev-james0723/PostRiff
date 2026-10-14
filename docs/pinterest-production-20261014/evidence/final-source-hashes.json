@@ -49,11 +49,11 @@
   },
   {
     "path": "src/postriff_phase2/hosted_social.py",
-    "sha256": "bc2082291fa4a5e58a26a2c27caf5708b94f789d59421028f9394f8f249657c2"
+    "sha256": "09690bd67e0d9366235057b1c897fe56039248e3d0a3c851e58bd4bb7e3e7a5c"
   },
   {
     "path": "src/postriff_phase2/hosted_worker.py",
-    "sha256": "beb005cbe0a45f24b17ecf37c138e1124158bfdfa6d1091f848c5848c182d23f"
+    "sha256": "268ffe77303942fdcb6e58f995867f586f8711e960bcfcebbb35a982f4e58faa"
   },
   {
     "path": "src/postriff_phase2/oauth.py",
@@ -121,7 +121,7 @@
   },
   {
     "path": "tests/test_pinterest_production_prep.py",
-    "sha256": "9c9c51036eb453415a46d1086c5770eb9d4754f2a2e4b973ffa38e0ac8e0588d"
+    "sha256": "f602237c056f022552767a5c3a44079478f86ba6c4eba59e9f7d285095f54469"
   },
   {
     "path": "tests/test_pinterest_trial_evidence.py",
