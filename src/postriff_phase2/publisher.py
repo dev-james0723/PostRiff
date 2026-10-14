@@ -48,8 +48,12 @@ def text_blockers(variant: dict, platform: str) -> list[str]:
     text = variant.get("text") or ""
     if not text.strip():
         return ["The draft is empty."]
-    if limit and len(text) > limit:
-        return [f"The draft is {len(text)} characters; {platform} allows {limit}."]
+    used = len(text)
+    if platform == "Bluesky":
+        from .text_measure import measure
+        used = measure("Bluesky", text)["used"]
+    if limit and used > limit:
+        return [f"The draft is {used} characters; {platform} allows {limit}."]
     return []
 
 
@@ -57,6 +61,8 @@ def auto_blockers(state: dict, task: dict, occurrence: dict, item: dict, variant
     """Why this draft may not publish without a person looking at it (empty = eligible for auto-publish)."""
     authority = task.get("publishAuthority") or {}
     reasons = []
+    if item.get("platform") == "Bluesky":
+        reasons.append("Bluesky posts require a human to approve each exact draft and account; standing authority is not sufficient.")
     if not authority or authority.get("definitionDigest") != task.get("definitionDigest"):
         reasons.append("Automatic publishing needs to be confirmed again after the automation changed.")
     if variant.get("unknowns"):
@@ -111,6 +117,9 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
         return {"jobId": item["jobId"], "state": item["state"], "note": "Already queued."}
     if item.get("state") != "approved" or task is None:
         raise AlphaError("Only an approved post can be queued.", 409, code="lifecycle_transition")
+    if item.get("platform") == "Bluesky" and item.get("approvedVia") != "human":
+        raise AlphaError("Bluesky requires human approval of every exact post; standing authority cannot queue it.", 409,
+                         code="exact_human_approval_required")
     if task.get("status") != "active":
         raise AlphaError("This automation is not active.", 409, code="automation_inactive")
     if principal != expected_principal(task, item):

@@ -185,7 +185,8 @@ class OAuthService:
                 history = 'HISTORICAL_IMPORT_AVAILABLE'
             elif read_scope:
                 history = 'HISTORICAL_IMPORT_PERMISSION_UNAVAILABLE'
-            if publish_scope and publish_scope in scopes:
+            has_publish = getattr(adapter_class, 'has_publish_scopes', None)
+            if publish_scope and (has_publish(scopes) if callable(has_publish) else publish_scope in scopes):
                 if not provider.get('productionReviewed'):
                     publishing = 'PUBLISHING_AWAITING_PROVIDER_REVIEW'
                 elif channel.get('capabilities', {}).get('publish', {}).get('level') == 'Direct':
@@ -894,7 +895,9 @@ class OAuthService:
         set_level(matrix, "identity", "Direct", "Account confirmed.", now, adapter.capability_version)
 
         publish_scopes = set(adapter.capability_scopes("publish"))
-        publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
+        publish_checker = getattr(adapter, 'has_publish_scopes', None)
+        publish_granted = (publish_checker(granted_set) if callable(publish_checker) else
+                           bool(publish_scopes) and publish_scopes <= granted_set)
         publisher_ready = not (
             getattr(adapter, "publisher", None) is not None and
             (not getattr(adapter, "publish_live_tested", False) or

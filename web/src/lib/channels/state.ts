@@ -13,6 +13,7 @@ import { relativeTime } from '@/lib/time';
 
 /** The fields any channel-shaped record needs for these helpers. `capabilities` is optional (MyChannel has none). */
 export type ChannelStateInput = Pick<ChannelView, 'connectionState'> & {
+  platform?: string;
   expiresAt?: number | null;
   refreshSupported?: boolean;
   refreshBindingRequired?: boolean;
@@ -98,6 +99,10 @@ export function channelBadge(channel: ChannelStateInput, now = nowSeconds()): Ch
   if (channel.refreshBindingRequired || state === 'client_binding_missing') return { label: STATUS.reconnect, status: 'warning' };
   if (VERIFIED_STATES.has(state)) {
     if (expiringSoon(channel, now)) return { label: STATUS.expiringSoon, status: 'warning' };
+    // ATproto's identity-only grant authenticates the DID; it does not provide repository read/write access.
+    if (state === 'read_verified' && channel.platform === 'Bluesky') {
+      return { label: 'Identity connected', status: 'neutral' };
+    }
     return { label: state === 'publish_verified' ? STATUS.connected : STATUS.readOnly, status: 'success' };
   }
   if (disconnectedByCustomer(channel)) return { label: STATUS.disconnected, status: 'neutral' };
