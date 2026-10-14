@@ -110,10 +110,10 @@ def client_address(environ):
 
 
 def client_label(environ):
-    """Coarse, non-identifying product token from the User-Agent for the device list."""
-    agent = environ.get("HTTP_USER_AGENT", "")
-    label = "".join(ch for ch in agent.split("/")[0] if ch.isalnum() or ch in " .-_")[:40].strip()
-    return label or "unknown"
+    """Coarse browser and OS family from the User-Agent for the session list ("Safari on iPhone"); never a device
+    model, and built from fixed names only, so no header text reaches storage or email."""
+    from .account_protection import browser_label
+    return browser_label(environ.get("HTTP_USER_AGENT", ""))
 
 
 # Legacy alpha actions that wrote drafts with the template writer directly; refused on the hosted HTTP route.
@@ -802,7 +802,7 @@ class HostedApplication:
             if path == "/api/me" and method == "GET":
                 return self._json(start_response, 200, service.me(token, client_label=client_label(environ)))
             if path == "/api/me" and method == "PATCH":
-                return self._json(start_response, 200, service.update_profile(token, self._body(environ)))
+                return self._json(start_response, 200, service.update_profile(token, self._body(environ), client_label=client_label(environ)))
             if path == "/api/me/channels" and method == "GET":
                 return self._json(start_response, 200, service.my_channels(token))
             if path == "/api/me/security-events" and method == "GET":
@@ -813,7 +813,7 @@ class HostedApplication:
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":
                 body = self._body(environ)
-                return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ)))
+                return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ), client_label=client_label(environ)))
             parts = path.strip("/").split("/")
             if len(parts) in (4, 5) and parts[:2] == ["api", "workspaces"] and parts[3] == "tokens":
                 tokens = service.repository.api_tokens
@@ -825,8 +825,9 @@ class HostedApplication:
                     return self._json(start_response, 200, tokens.revoke(parts[2], token, parts[4]))
             if len(parts) == 5 and parts[:3] == ["api", "me", "invitations"] and parts[4] in ("accept", "decline") and method == "POST":
                 self._body(environ)
-                settle = service.accept_my_invitation if parts[4] == "accept" else service.decline_my_invitation
-                return self._json(start_response, 200, settle(token, parts[3]))
+                if parts[4] == "accept":
+                    return self._json(start_response, 200, service.accept_my_invitation(token, parts[3], client_label=client_label(environ)))
+                return self._json(start_response, 200, service.decline_my_invitation(token, parts[3]))
             if len(parts) == 4 and parts[:2] == ["api", "tools"] and parts[3] == "invoke" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
