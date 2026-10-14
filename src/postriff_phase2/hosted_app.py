@@ -2,8 +2,11 @@
 
 It initializes lazily so build and health checks do not require credentials.
 """
+import contextvars
 import hmac
 import logging
+import threading
+from collections import OrderedDict
 import json
 import re
 import os
@@ -73,18 +76,63 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
             # A founder account block (operator_actions, migration 062) is folded into this one statement; it is
             # skipped, never an error, while the block table is not installed.
             from .operator_actions import blocked_error, session_flags
+            observed = None
             with connection_factory() as db:
                 with db.cursor() as cur:
                     (deleted, revoked, mfa_required), blocked = session_flags(db, cur, "SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal), principal, 3)
+                    # Someone who turned on two-factor authentication must present it on every session:
+                    # the UI hides nothing the API would not also refuse.
+                    refused = deleted or revoked or blocked or (enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2")
+                    if not refused and enforce_mfa:
+                        observed = _observe(db, cur, access_token, principal, session_id)
             if deleted or revoked:
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
             if blocked:
                 raise blocked_error()
-            # Someone who turned on two-factor authentication must present it on every session:
-            # the UI hides nothing the API would not also refuse.
-            if enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2":
+            if refused:
                 raise AlphaError("Two-factor verification required.", 403, code="mfa_required")
+            if observed:
+                _after_observed(*observed)
         return principal
+
+    def _observe(db, cur, access_token, principal, session_id):
+        """RAPv2 A1: every interactive session is observed here, at the one boundary all signed-in routes share, not
+        only on the four session routes. Observe mode only; inside an HTTP request only (its browser label is bound by
+        HostedApplication); at most once per session per process (`seen`). Never fails the request: the checks above
+        have already run, and an observation error rolls back nothing but itself."""
+        from .api_tokens import is_api_token
+        label = _REQUEST_LABEL.get()
+        if label is None or not session_id or is_api_token(access_token):
+            return None
+        from . import account_protection
+        if not account_protection.observing():
+            return None
+        key = (principal, session_id)
+        if seen.has(key):
+            return None
+        from .hosted import observe_session
+        try:
+            fresh, alert = observe_session(cur, principal, session_id, label)
+            # Commit here, so a failed commit is this observation's failure and never the request's.
+            db.commit()
+        except Exception as error:
+            _quiet(db.rollback)
+            logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "session.observe_failed", "error": type(error).__name__}))
+            return None
+        seen.add(key)
+        return (principal, session_id, label, alert) if fresh else None
+
+    def _after_observed(principal, session_id, label, alert):
+        """The notice for a first sighting, after its commit, under the existing _alert_new_device rules."""
+        notify = getattr(verify, "on_first_sighting", None)
+        if notify is None:
+            return
+        try:
+            notify(principal, session_id, label, alert)
+        except Exception as error:
+            logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "session.alert_failed", "error": type(error).__name__}))
+
+    seen = SeenSessions()
 
     def verify(access_token):
         return validate(access_token, enforce_mfa=True)
@@ -99,7 +147,47 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
     # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
     verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
+    # RAPv2 A1: runtime_from_environment points this at HostedWorkspaceService._alert_new_device.
+    verify.on_first_sighting = None
+    verify.seen = seen
     return verify
+
+
+def _quiet(call):
+    try:
+        call()
+    except Exception:
+        pass
+
+
+# The browser label of the HTTP request being served, bound by HostedApplication.__call__. None outside a request
+# (workers, cron, scripts), where the verifier never observes a session.
+_REQUEST_LABEL = contextvars.ContextVar("postriff_request_client_label", default=None)
+
+
+class SeenSessions:
+    """Bounded, thread-safe LRU of (user_id, session_id) keys this process has already observed, so a session's
+    steady-state requests add no statement. A miss (cold instance, eviction) costs one idempotent upsert, never a
+    second event: ON CONFLICT(user_id, session_id) decides first sightings in the database, not here."""
+
+    def __init__(self, limit=4096):
+        self.limit = limit
+        self._keys = OrderedDict()
+        self._lock = threading.Lock()
+
+    def has(self, key):
+        with self._lock:
+            if key in self._keys:
+                self._keys.move_to_end(key)
+                return True
+            return False
+
+    def add(self, key):
+        with self._lock:
+            self._keys[key] = True
+            self._keys.move_to_end(key)
+            while len(self._keys) > self.limit:
+                self._keys.popitem(last=False)
 
 
 def client_address(environ):
@@ -210,6 +298,7 @@ def runtime_from_environment(environ=None):
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+    verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -476,6 +565,8 @@ class HostedApplication:
         environ['postriff.request_id'] = request_id
         # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
         correlation = agent_observability.bind_request(request_id)
+        # RAPv2 A1: the token verifier labels a session it observes with this request's browser (never header text).
+        label_binding = _REQUEST_LABEL.set(client_label(environ))
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -506,6 +597,7 @@ class HostedApplication:
             except Exception:
                 pass
             agent_observability.release_request(correlation)
+            _REQUEST_LABEL.reset(label_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()

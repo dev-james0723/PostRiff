@@ -98,6 +98,28 @@ def audit(cur, workspace_id, actor, kind, subject="", meta=None):
     cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,%s,%s,%s,%s::jsonb)", (workspace_id, actor, kind, subject[:200], json.dumps(meta or {})))
 
 
+def observe_session(cur, principal, session_id, client_label=""):
+    """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
+    first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
+    even by this same new session, governs later sign-ins only and cannot cancel this one's notice. The one code path
+    for the session routes (HostedWorkspaceService._observe_session) and the token verifier (hosted_app)."""
+    if not session_id:
+        return False, False
+    # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
+    cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
+    row = cur.fetchone()
+    fresh = bool(row and row[0])
+    alert = False
+    if fresh and account_protection.observing():
+        # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
+        # history never depends on the email setting; the setting is only read to record whether to notify.
+        cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+        setting = cur.fetchone()
+        alert = bool(setting and setting[0])
+        audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+    return fresh, alert
+
+
 class PostgresWorkspaceRepository:
     def __init__(self, connection_factory, verify_session, commands=None, clock=time.time):
         self.connection_factory = connection_factory
@@ -734,24 +756,8 @@ class HostedWorkspaceService:
         return self._observe_session(cur, principal, session_id, client_label)[0]
 
     def _observe_session(self, cur, principal, session_id, client_label=""):
-        """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
-        first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
-        even by this same new session, governs later sign-ins only and cannot cancel this one's notice."""
-        if not session_id:
-            return False, False
-        # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
-        cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
-        row = cur.fetchone()
-        fresh = bool(row and row[0])
-        alert = False
-        if fresh and account_protection.observing():
-            # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
-            # history never depends on the email setting; the setting is only read to record whether to notify.
-            cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
-            setting = cur.fetchone()
-            alert = bool(setting and setting[0])
-            audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
-        return fresh, alert
+        """(first sighting?, alert eligible?) for this session; see observe_session."""
+        return observe_session(cur, principal, session_id, client_label)
 
     def _alert_new_device(self, principal, session_id, client_label, eligible=None):
         """After a session's first sighting: one email, only if the person turned the alert on. The
