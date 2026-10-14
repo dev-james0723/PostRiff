@@ -160,9 +160,12 @@ class NotificationService:
                 for event in detector.security_events(cur):
                     cur.execute("SAVEPOINT rafii_security")
                     try:
-                        # The very first run records the last day's security events as a baseline: those alerts were
-                        # already sent by the legacy mailer.
-                        made += 1 if self.emit(cur, workspace_id=None, **event, **({"baseline": True} if first_run else {})).get("created") and not first_run else 0
+                        # The very first run records the last day's security events as a baseline only when the legacy
+                        # mailer really delivered them; with this service on, the legacy mailer hands new-sign-in
+                        # alerts here instead, so baselining those would drop them unsent.
+                        legacy_sent = event.pop("legacy_sent", True)
+                        baseline = first_run and legacy_sent
+                        made += 1 if self.emit(cur, workspace_id=None, **event, **({"baseline": True} if baseline else {})).get("created") and not baseline else 0
                         cur.execute("RELEASE SAVEPOINT rafii_security")
                     except Exception:  # noqa: BLE001
                         cur.execute("ROLLBACK TO SAVEPOINT rafii_security")

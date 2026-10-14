@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -736,7 +736,12 @@ class HostedWorkspaceService:
         # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
         cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
         row = cur.fetchone()
-        return bool(row and row[0])
+        fresh = bool(row and row[0])
+        if fresh and account_protection.observing():
+            # RAPv2 P0: the first sighting is an account event of its own, committed with the session row and before
+            # any alert preference is read, so the history and the security notice never depend on the email setting.
+            audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40]})
+        return fresh
 
     def _alert_new_device(self, principal, session_id, client_label):
         """After a session's first sighting: one email, only if the person turned the alert on. The
@@ -745,12 +750,12 @@ class HostedWorkspaceService:
             return
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT alert_new_device FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+                cur.execute("SELECT alert_new_device,coalesce(time_zone,'') FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
                 if not row or not row[0]:
                     return
                 address = self._email_for(principal)
-                outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile") if address else {"sent": False}
+                outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile", time_zone=row[1]) if address else {"sent": False}
                 audit(cur, None, principal, "session.alerted", session_id or "", {"sent": bool(outcome.get("sent"))})
 
     def _present(self, saved):
@@ -785,7 +790,11 @@ class HostedWorkspaceService:
                     # Product taxonomy (PRD §8.6): the signup milestone, ids/enums only, behind its own savepoint.
                     product_events.record(cur, workspace_id, principal, "workspace.created", workspace_id, 1, {"plan": saved_plan})
                     created = True
-                self._touch_session(cur, principal, self._session_id(token, principal), client_label)
+                session_id = self._session_id(token, principal)
+                fresh = self._touch_session(cur, principal, session_id, client_label)
+        if fresh and account_protection.observing():
+            # The first request of a new sign-in can be this one; /api/me would then find the session already seen.
+            self._alert_new_device(principal, session_id, client_label)
         if created and self.public_base_url:
             address = self._email_for(principal)
             if address:
@@ -949,7 +958,7 @@ class HostedWorkspaceService:
 
     # The account history a person may see about themselves: what they did to the account, and what
     # others did to their memberships. Workspace content activity stays in the workspace audit log.
-    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics",
+    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "session.observed", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics",
                       # Rafii agent permissions (CF-2 §14): a person's own consent changes are part of their account history.
                       "agent.permission.preset_applied", "agent.permission.changed", "agent.permission.revoked", "agent.permission.revoked_all")
     ABOUT_ME_KINDS = ("member.updated", "member.removed")
@@ -963,7 +972,9 @@ class HostedWorkspaceService:
                 events = [{"id": item[0], "kind": item[1], "subject": item[2], "at": float(item[3]), "meta": item[4] if isinstance(item[4], dict) else {}, "workspaceId": item[5], "workspaceName": item[6]} for item in cur.fetchall()]
                 # A session's first sighting is the sign-in on that device; nothing else records it.
                 cur.execute("SELECT session_id,client_label,extract(epoch from first_seen) FROM public.pr_sessions WHERE user_id=%s ORDER BY first_seen DESC LIMIT %s", (principal, limit))
-                events.extend({"id": "session:" + item[0], "kind": "session.started", "subject": item[0], "at": float(item[2]), "meta": {"client": item[1]}, "workspaceId": None, "workspaceName": ""} for item in cur.fetchall())
+                # A session with a recorded `session.observed` event (RAPv2) is already in the list once.
+                observed = {event["subject"] for event in events if event["kind"] == "session.observed"}
+                events.extend({"id": "session:" + item[0], "kind": "session.started", "subject": item[0], "at": float(item[2]), "meta": {"client": item[1]}, "workspaceId": None, "workspaceName": ""} for item in cur.fetchall() if item[0] not in observed)
         events.sort(key=lambda event: event["at"], reverse=True)
         return {"events": events[:limit]}
 
@@ -1130,7 +1141,12 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                return self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation)
+        # Alert only once the membership and the session row have committed.
+        alert = joined.pop("_alertSession", None)
+        if alert:
+            self._alert_new_device(*alert, "")
+        return joined
 
     INVITATION_COLUMNS = "id::text,workspace_id::text,role,permissions"
 
@@ -1151,8 +1167,9 @@ class HostedWorkspaceService:
             cur.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish,can_reply,can_moderate,can_manage_connections) VALUES(%s,%s,%s,'active',%s,%s,%s,%s)", (workspace_id, principal, values[0], *values[1:]))
         cur.execute("UPDATE public.pr_invitations SET accepted_by=%s,accepted_at=now() WHERE id::text=%s", (principal, invitation_id))
         audit(cur, workspace_id, principal, "invitation.accepted", invitation_id, {"role": role})
-        self._touch_session(cur, principal, self._session_id(token, principal))
-        return {"workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
+        session_id = self._session_id(token, principal)
+        fresh = self._touch_session(cur, principal, session_id) and account_protection.observing()
+        return {"_alertSession": (principal, session_id) if fresh else None, "workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
 
     # --- invitations addressed to the signed-in person's verified email -----------------------
     # The emailed link works for anyone holding it; these routes instead match the invitation's
@@ -1191,7 +1208,12 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                return self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation)
+        # Alert only once the membership and the session row have committed.
+        alert = joined.pop("_alertSession", None)
+        if alert:
+            self._alert_new_device(*alert, "")
+        return joined
 
     def decline_my_invitation(self, token, invitation_id):
         if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
@@ -1230,7 +1252,8 @@ class HostedWorkspaceService:
                 if not cur.fetchone():
                     raise AlphaError("Session unavailable.", 404)
                 cur.execute("INSERT INTO public.pr_session_revocations(user_id,session_id) VALUES(%s,%s) ON CONFLICT DO NOTHING", (principal, session_id))
-                audit(cur, None, principal, "session.revoked", "")
+                # Which session: the person's own history must say what was signed out (it already lists session ids).
+                audit(cur, None, principal, "session.revoked", session_id)
         return {"sessionId": session_id, "revoked": True, "current": session_id == self._session_id(token, principal)}
 
     def revoke_other_sessions(self, token):

@@ -1873,7 +1873,7 @@ export interface MyChannel {
 
 /**
  * One line of the person's account history (`GET /api/me/security-events`): their own security
- * actions, first sign-ins per device (`session.started`), and changes others made to their
+ * actions, first sign-ins per session (`session.observed`, or `session.started` before it existed), and changes others made to their
  * memberships. Newest first.
  */
 export interface SecurityEvent {

@@ -320,8 +320,9 @@ class HostedPhase2Acceptance(unittest.TestCase):
         self.assertEqual(client_address({"HTTP_X_FORWARDED_FOR": "203.0.113.5, 10.0.0.1", "REMOTE_ADDR": "10.0.0.2"}), "203.0.113.5")
         self.assertEqual(client_address({"REMOTE_ADDR": "10.0.0.2"}), "10.0.0.2")
         self.assertIsNone(client_address({}))
-        self.assertEqual(client_label({"HTTP_USER_AGENT": "Mozilla/5.0 (secret token)"}), "Mozilla")
-        self.assertEqual(client_label({}), "unknown")
+        # Only fixed browser/OS names come back: header text such as "(secret token)" is never echoed.
+        self.assertEqual(client_label({"HTTP_USER_AGENT": "Mozilla/5.0 (secret token)"}), "Unrecognized browser")
+        self.assertEqual(client_label({}), "Unrecognized browser")
         self.assertLessEqual(len(client_label({"HTTP_USER_AGENT": "x" * 500})), 40)
 
     def test_wsgi_membership_invitation_session_routes(self):

@@ -110,10 +110,10 @@ def client_address(environ):
 
 
 def client_label(environ):
-    """Coarse, non-identifying product token from the User-Agent for the device list."""
-    agent = environ.get("HTTP_USER_AGENT", "")
-    label = "".join(ch for ch in agent.split("/")[0] if ch.isalnum() or ch in " .-_")[:40].strip()
-    return label or "unknown"
+    """Coarse browser and OS family from the User-Agent for the session list ("Safari on iPhone"); never a device
+    model, and built from fixed names only, so no header text reaches storage or email."""
+    from .account_protection import browser_label
+    return browser_label(environ.get("HTTP_USER_AGENT", ""))
 
 
 # Legacy alpha actions that wrote drafts with the template writer directly; refused on the hosted HTTP route.
