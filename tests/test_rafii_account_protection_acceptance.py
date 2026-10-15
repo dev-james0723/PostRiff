@@ -180,6 +180,22 @@ class Hygiene(unittest.TestCase):
         self.assertEqual({name for name in names if re.search(r"fingerprint|clientjs|evercookie", name)}, set())
 
 
+class SecurityCenterRevokeUI(unittest.TestCase):
+    CARD = (ROOT / "web" / "src" / "features" / "account" / "security-card.tsx").read_text()
+
+    def test_rap058_the_current_session_has_no_revoke_button(self):
+        # Both revoke affordances (row button and its menu) are rendered only for other, live sessions.
+        self.assertEqual(self.CARD.count("!session.current && !session.revoked"), 3)
+        self.assertIn("This device stays signed in.", self.CARD)
+
+    @unittest.expectedFailure
+    def test_rap057_single_revoke_says_provider_refresh_coverage_is_unknown(self):
+        # The API denies the session id at once, but a single revoke does not revoke Supabase's refresh token and the
+        # card never says so (nor shows revoke-others' refreshRevoked). Known gap: recorded FAIL in the results.
+        revoke_ui = self.CARD[self.CARD.index("async function revoke(sessionId"):self.CARD.index("return (", self.CARD.index("async function revokeOthers"))]
+        self.assertRegex(revoke_ui + self.CARD, r"refreshRevoked|refresh token|until (it|they) (next )?refresh")
+
+
 class RevokeOthersCoverage(unittest.TestCase):
     def revoke(self, identity):
         cursor = base.FakeCursor([(None, 2), (None, 1)])

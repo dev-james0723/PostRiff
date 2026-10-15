@@ -1,0 +1,25 @@
+{
+  "runId": "supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+  "approval": "James, 2026-10-15: one Supabase development branch of rafii-consumer-staging, about US$0.013/h, cap 24 h / US$2, delete after use",
+  "branch": {"id": "b765904f-2b73-4765-b721-e59ccb8c4433", "projectRef": "vfvivdguatamgvtzezbd", "parent": "oxacvkhpfgytkepxcaqh (rafii-consumer-staging)", "withData": false,
+             "createdAt": "2026-10-15T01:31:35Z", "deletedAt": "2026-10-15T01:33:29Z", "lifetime": "about 1 min 54 s",
+             "priceUsdPerHour": 0.01344, "costUsd": "0.0004 pro rata; at most 0.01344 if billed by the started hour"},
+  "replay": "Supabase replayed the parent's migration history only through postriff_025 (status MIGRATIONS_FAILED at 088): the session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones), storage and the real Supabase roles were present. Repo migration 119 (migrations/postriff/119_rapv2_browser_session_guard.sql, without its begin/commit) was applied with apply_migration and succeeded.",
+  "sideEffect": "Creating the first branch made Supabase list a default 'main' branch record for the staging project (branching metadata; no staging database statement was run). No statement ran on staging main or on production.",
+  "fixtures": "One synthetic auth.users row 0a0a0a0a-0000-4000-8000-00000000000a (owner-a@example.invalid), its pr_bootstrap workspace, sessions branch-live-session-000000001 and branch-revoked-session-000001 (revoked), one private storage object; all destroyed with the branch.",
+  "method": "Each read ran in its own transaction as `SET LOCAL ROLE authenticated` with `request.jwt.claims` set to the JSON object PostgREST sets for a user JWT: the same path a direct Data API or Storage request takes.",
+  "sql": "tests/phase2/supabase_branch_rapv2.sql",
+  "checks": [
+    {"rows": ["RAP-053", "RAP-054"], "case": "live session, aal1", "workspaces": 1, "privateObjects": 1, "result": "PASS"},
+    {"rows": ["RAP-053", "RAP-054"], "case": "revoked session, valid JWT", "workspaces": 0, "privateObjects": 0, "memberships": 0, "result": "PASS"},
+    {"rows": ["RAP-011", "RAP-053"], "case": "JWT without session_id", "workspaces": 0, "privateObjects": 0, "result": "PASS"},
+    {"rows": ["RAP-053"], "case": "two-factor enforced, aal1", "workspaces": 0, "privateObjects": 0, "personSessionEvents": 0, "result": "PASS"},
+    {"rows": ["RAP-053", "RAP-080"], "case": "two-factor enforced, aal2", "workspaces": 1, "privateObjects": 1, "personSessionEvents": 0, "result": "PASS"},
+    {"rows": ["RAP-053"], "case": "deleted account (tombstone), aal2", "workspaces": 0, "privateObjects": 0, "result": "PASS"},
+    {"rows": ["RAP-053", "RAP-054"], "case": "guard coverage", "browserReadableTables": 47, "unguarded": 0, "storageGuard": 1, "anonCanCallGuard": false, "result": "PASS"},
+    {"rows": ["RAP-079", "RAP-080", "RAP-082", "RAP-087"], "case": "privileges and RLS on the five session-security tables",
+     "observed": "RLS enabled and FORCED on all five; anon: no SELECT/INSERT/UPDATE/DELETE on any; authenticated: no INSERT/UPDATE/DELETE on any and SELECT only on pr_audit_events (tenant policy, person-level rows invisible); service_role: no UPDATE/DELETE on pr_audit_events",
+     "result": "PASS"},
+    {"rows": ["RAP-080", "RAP-091"], "case": "browser role inserts a forged pr_sessions row", "observed": "ERROR 42501 permission denied for table pr_sessions", "result": "PASS"}
+  ]
+}

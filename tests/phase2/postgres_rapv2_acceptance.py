@@ -391,6 +391,18 @@ def revoked_hosted():
     for path in (f"/api/workspaces/{workspace}", "/api/me", "/api/auth/sessions", "/api/me/security-events"):
         status, body = call("GET", path, stolen)
         assert status == 401 and set(body) <= {"error", "code", "requestId"}, (path, status, body)
+    # A refresh token Supabase still honours mints a new access JWT for the same session id: still denied (RAP-057 backend).
+    assert call("GET", f"/api/workspaces/{workspace}", token(user, other, iat=int(time.time()) + 600, refreshed=True))[0] == 401
+
+
+@check("RAP-058", "revoking the current session through the API takes effect at once (the UI offers no revoke button for it)")
+def revoke_current():
+    observe_mode()
+    user, workspace = person()
+    current = signed_in(user)
+    status, body = call("DELETE", f"/api/auth/sessions/{current}", token(user, current), {})
+    assert status == 200 and body["current"] is True, body
+    assert call("GET", f"/api/workspaces/{workspace}", token(user, current))[0] == 401
 
 
 @check("RAP-053", "the same revoked JWT straight through the Data API (authenticated role + JWT claims): reads no workspace row")
@@ -704,11 +716,11 @@ def service_writes():
         assert db.execute("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s", (user,)).fetchone()[0] == 1
 
 
-@check("RAP-082", "every session-security table has RLS enabled and FORCED, with policies")
+@check("RAP-082", "every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles)")
 def forced_rls():
     rows = sql("SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*) FROM pg_policy p WHERE p.polrelid=c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname = ANY(%s)", list(SECURITY_TABLES))
     assert len(rows) == len(SECURITY_TABLES), rows
-    assert all(enabled and forced and policies > 0 for _, enabled, forced, policies in rows), rows
+    assert all(enabled and forced for _, enabled, forced, _policies in rows), rows
 
 
 @check("RAP-086", "user A cannot read or command workspace B through the hosted API (membership check)")
