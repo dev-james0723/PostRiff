@@ -49,7 +49,19 @@ from postriff_phase2.notifications import webhooks  # noqa: E402
 from postriff_phase2.notifications.service import NotificationService  # noqa: E402
 
 # Rows whose expected result the shipped code does not meet (recorded FAIL, see the module docstring).
-KNOWN_GAPS = {}
+KNOWN_GAPS = {
+    # RAPv2 P1 as shipped (5e4f4e13) against the matrix; product decisions, not fixed in this tests-only PR.
+    "RAP-013": "an unrecordable security state refuses the protected capability with 403 step-up, not 503",
+    "RAP-021": "a copied device cookie plus an AAL1 bearer reads as a known browser: sensitive capabilities need no fresh proof",
+    "RAP-033": "only four capabilities are gated (tokens, connections, Agent grants, exports); private drafts stay readable",
+    "RAP-039": "the step-up gate does not consult account holds: a held account's interactive session can still export",
+    "RAP-045": "an account with no second factor is told to complete MFA it cannot complete (no enrolment/recovery next step)",
+    "RAP-046": "a fresh TOTP proof from before the factor was removed still satisfies step-up",
+    "RAP-064": "risk decisions and incidents queue no mandatory notice",
+    "RAP-104": "turning RAFII_SECURITY_INCIDENT_HOLD off stops enforcing existing holds",
+    "RAP-114": "an incident report sends no notice to any contact channel",
+    "RAP-138": "a browser idle for 200 days still reads as known (no inactivity expiry)",
+}
 
 results = {}
 
@@ -166,7 +178,15 @@ def call(method, path, access_token=None, body=None, agent=SAFARI, headers=None)
         environ["HTTP_" + key.upper().replace("-", "_")] = value
     captured = {}
     body_out = b"".join(app(environ, lambda status, values, *_: captured.update(status=status, headers=values)))
-    return int(captured["status"].split()[0]), json.loads(body_out or b"{}")
+    LAST_HEADERS[:] = list(captured.get("headers") or [])
+    try:
+        parsed = json.loads(body_out or b"{}")
+    except ValueError:
+        parsed = {"_bytes": len(body_out)}  # an export archive
+    return int(captured["status"].split()[0]), parsed
+
+
+LAST_HEADERS = []
 
 
 def observe_mode(on=True, v2=False):
@@ -723,10 +743,12 @@ def bounce():
 
 # --- Database / RLS / tenancy (G5) ---------------------------------------------------------------------------------
 
-SECURITY_TABLES = ("pr_sessions", "pr_session_revocations", "pr_audit_events", "pr_mfa_enforcement", "pr_account_tombstones")
+SECURITY_TABLES = ("pr_sessions", "pr_session_revocations", "pr_audit_events", "pr_mfa_enforcement", "pr_account_tombstones",
+                   # RAPv2 P1 (migrations 120-122)
+                   "pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents")
 
 
-@check("RAP-079", "anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 tables; the P1 tables do not exist yet)")
+@check("RAP-079", "anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 and P1)")
 def anon_tables():
     for table in SECURITY_TABLES:
         for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
@@ -745,7 +767,7 @@ def authenticated_tables():
         db.execute("SET ROLE authenticated")
         db.execute("SELECT set_config('request.jwt.claims',%s,false)", (json.dumps({"sub": user, "session_id": "harness-session-000000000001", "aal": "aal1"}),))
         db.execute("SELECT set_config('request.jwt.claim.sub',%s,false)", (user,))
-        for table in ("pr_sessions", "pr_session_revocations", "pr_mfa_enforcement", "pr_account_tombstones"):
+        for table in ("pr_sessions", "pr_session_revocations", "pr_mfa_enforcement", "pr_account_tombstones", *SECURITY_TABLES[5:]):
             try:
                 db.execute(f"SELECT count(*) FROM public.{table}")
                 raise AssertionError(f"authenticated could read {table}")
@@ -935,6 +957,809 @@ def cleanup_guard():
         except SystemExit:
             pass
     assert guard_target(DSN) == DSN
+
+
+# --- RAPv2 P1 (device registry 120, risk engine and step-up, holds 121, incidents 122, erasure 123) ------------------
+# Flags are set here only, per check: RAFII_ACCOUNT_PROTECTION_V2_MODE, RAFII_DEVICE_TRUST_V2 (+ synthetic HMAC keys)
+# and RAFII_SECURITY_INCIDENT_HOLD. Production leaves the last two unset.
+
+from postriff_phase2 import device_trust, security_holds  # noqa: E402
+from postriff_phase2.automation_runs import principal_repository  # noqa: E402
+
+KEY_NEW, KEY_OLD = "k" * 32, "o" * 32
+DEVICE_KEYS = f"2:{KEY_NEW},1:{KEY_OLD}"
+SAME_ORIGIN = {"Sec-Fetch-Site": "same-origin"}
+
+
+def p1(mode="observe", device=True, hold=False, keys=DEVICE_KEYS):
+    values = {"RAFII_ACCOUNT_PROTECTION_V2_MODE": mode}
+    if device:
+        values.update(RAFII_DEVICE_TRUST_V2="1", RAFII_DEVICE_COOKIE_KEYS=keys)
+    if hold:
+        values["RAFII_SECURITY_INCIDENT_HOLD"] = "1"
+    flags.attach(values)
+    verify.seen.__init__()
+
+
+def amr(method, at=None):
+    return [{"method": method, "timestamp": int(time.time() if at is None else at)}]
+
+
+def set_cookie():
+    return next((value for name, value in LAST_HEADERS if name.lower() == "set-cookie" and value.startswith(device_trust.COOKIE + "=")), None)
+
+
+def cookie_value(header):
+    return header.split(";", 1)[0].split("=", 1)[1] if header else None
+
+
+def browse(user, session=None, cookie=None, aal="aal1", method="password", path="/api/me", extra=None, **claims):
+    """A same-origin browser request; returns (status, body, the device cookie the browser now holds, session)."""
+    session = session or new_session()
+    headers = {**SAME_ORIGIN, **({"Cookie": f"{device_trust.COOKIE}={cookie}"} if cookie else {}), **(extra or {})}
+    status, body = call("GET", path, token(user, session, aal=aal, amr=amr(method), **claims), headers=headers)
+    return status, body, cookie_value(set_cookie()) or cookie, session
+
+
+def devices(user):
+    return sql("SELECT id::text,state,hmac_key_version,surface,display_label FROM public.pr_security_devices WHERE user_id=%s ORDER BY first_seen_at", user)
+
+
+def ledger(user, kind=None):
+    query = "SELECT event_type,session_id,device_id::text,details FROM public.pr_security_login_events WHERE user_id=%s" + (" AND event_type=%s" if kind else "")
+    return sql(query, *((user, kind) if kind else (user,)))
+
+
+def known_browser(user):
+    """A browser this person used in an earlier session: (cookie, a new session on it already observed as 'known')."""
+    _, _, cookie, _ = browse(user)
+    status, _, _, session = browse(user, cookie=cookie)
+    assert status == 200
+    return cookie, session
+
+
+def export(user, session, cookie=None, aal="aal1", method="password", at=None, extra=None):
+    """The `exports` sensitive capability (GET /api/workspaces/{id}/export) from this session and browser."""
+    workspace = sql("SELECT workspace_id::text FROM public.pr_memberships WHERE user_id=%s AND role='owner' LIMIT 1", user)[0][0]
+    headers = {**SAME_ORIGIN, **({"Cookie": f"{device_trust.COOKIE}={cookie}"} if cookie else {}), **(extra or {})}
+    return call("GET", f"/api/workspaces/{workspace}/export", token(user, session, aal=aal, amr=amr(method, at)), headers=headers)
+
+
+def step_up(result):
+    status, body = result
+    return status == 403 and body.get("code") == "security_step_up_required"
+
+
+@check("RAP-014", "first authenticated browser request without a device cookie: the server issues an opaque host-only cookie and records an `observed` device")
+def cookie_absent():
+    p1()
+    user, workspace = person()
+    status, _, cookie, _ = browse(user, path=f"/api/workspaces/{workspace}")
+    assert status == 200 and cookie and len(cookie) == 43, (status, cookie)
+    [(_, state, version, surface, _)] = devices(user)
+    assert (state, version, surface) == ("observed", 2, "web")
+    assert not sql("SELECT count(*) FROM public.pr_security_devices WHERE token_hash=%s", cookie)[0][0], "raw cookie stored"
+
+
+for row in ("RAP-135", "RAP-023"):
+    @check(row, "the device Set-Cookie is __Host- prefixed, Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain (never shared with a parent or old domain)")
+    def cookie_attributes():
+        p1()
+        user, _ = person()
+        browse(user)
+        header = set_cookie()
+        assert header, LAST_HEADERS
+        attributes = [part.strip().lower() for part in header.split(";")[1:]]
+        assert header.startswith("__Host-rafii_device=") and {"secure", "httponly", "samesite=lax", "path=/"} <= set(attributes), header
+        assert not any(a.startswith("domain") for a in attributes), header
+
+
+@check("RAP-017", "same browser, new session: the session is new, the device is the existing one; no new device claim")
+def existing_browser_new_session():
+    p1()
+    user, _ = person(alerts=True)
+    cookie, session = known_browser(user)
+    assert len(devices(user)) == 1 and len(ledger(user, "device.first_observed")) == 1
+    [(_, _, _, details)] = [e for e in ledger(user, "session.observed") if e[1] == session]
+    assert details["device"] == "known", details
+
+
+@check("RAP-018", "a new browser profile for an existing account: a new device record, a device.first_observed event and an eligible alert")
+def new_browser():
+    p1()
+    user, _ = person(alerts=True)
+    first, _ = known_browser(user)
+    _, _, second, session = browse(user)
+    assert second and second != first and len(devices(user)) == 2 and len(ledger(user, "device.first_observed")) == 2
+    assert sql("SELECT meta->>'alert' FROM public.pr_audit_events WHERE actor=%s AND kind='session.observed' AND subject=%s", user, session) == [("true",)]
+
+
+@check("RAP-019", "person B signs in on person A's browser: B gets an unrelated device record; A's device and trust are untouched")
+def same_browser_other_person():
+    p1()
+    alice, _ = person()
+    bob, _ = person()
+    cookie, _ = known_browser(alice)
+    before = devices(alice)
+    browse(bob, cookie=cookie)
+    [(bob_device, state, *_)] = devices(bob)
+    assert state == "observed" and bob_device not in {d[0] for d in before} and devices(alice) == before
+    [(_, _, _, details)] = ledger(bob, "session.observed")
+    assert details["device"] == "new", details  # A's history never makes B's browser known
+
+
+@check("RAP-020", "a copied device cookie without a JWT: 401, no device row, no data")
+def cookie_without_token():
+    p1()
+    user, workspace = person()
+    cookie, _ = known_browser(user)
+    rows = devices(user)
+    for path in ("/api/me", f"/api/workspaces/{workspace}", "/api/auth/sessions"):
+        status, body = call("GET", path, None, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})
+        assert status == 401 and set(body) <= {"error", "code", "requestId"}, (path, status)
+    assert devices(user) == rows
+
+
+@check("RAP-021", "a stolen device cookie plus a valid AAL1 JWT still needs fresh proof for a sensitive action (trust alone is not sufficient)")
+def stolen_cookie_and_token():
+    p1(mode="enforce")
+    user, _ = person()
+    cookie, session = known_browser(user)
+    # The attacker replays the victim's bearer and cookie from their own machine: to the server it is the known browser.
+    assert step_up(export(user, session, cookie=cookie)), "a known cookie plus an AAL1 bearer reached a sensitive capability without fresh proof"
+
+
+@check("RAP-022", "malformed or overlong device cookies: no crash, treated as no cookie, a fresh one is issued, no trust")
+def malformed_cookie():
+    p1()
+    user, _ = person()
+    for bad in ("!!!not-base64!!!", "A" * 5000, "a" * 42, "a" * 44, "x;y=z"):
+        status, _, issued, _ = browse(user, cookie=bad)
+        assert status == 200 and issued and issued != bad and len(issued) == 43, (bad[:10], status, issued)
+    assert all(state == "observed" for _, state, *_ in devices(user))
+
+
+@check("RAP-024", "a client claiming a native surface gains nothing: the device stays surface=web, state=observed")
+def native_spoof():
+    p1()
+    user, _ = person()
+    browse(user, extra={"X-Rafii-Surface": "native", "X-Rafii-Attestation": "trusted"})
+    call("PATCH", "/api/me", token(user, new_session()), {"surface": "native", "trusted": True}, headers=SAME_ORIGIN)
+    assert {(state, surface) for _, state, _, surface, _ in devices(user)} == {("observed", "web")}
+
+
+@check("RAP-025", "a private window (no cookie) on a known account: a separate observed device with a clear browser label")
+def private_window():
+    p1()
+    user, _ = person()
+    known_browser(user)
+    browse(user)
+    labels = [label for *_, label in devices(user)]
+    assert len(labels) == 2 and all(label == "Safari on iPhone" for label in labels), labels
+
+
+@check("RAP-026", "the browser's cookie expired: the next session is an unknown browser and a sensitive capability needs fresh proof")
+def cookie_expired():
+    p1(mode="enforce")
+    user, _ = person()
+    known_browser(user)
+    _, _, _, session = browse(user)  # no cookie any more
+    assert step_up(export(user, session))
+
+
+@check("RAP-027", "HMAC key rotation: a cookie hashed under the old key is recognised, re-hashed under the new key, and not trusted")
+def key_rotation():
+    p1(keys=f"1:{KEY_OLD}")
+    user, _ = person()
+    _, _, cookie, _ = browse(user)
+    [(device, _, version, _, _)] = devices(user)
+    assert version == 1
+    p1(keys=DEVICE_KEYS)
+    browse(user, cookie=cookie)
+    [(same, state, version, _, _)] = devices(user)
+    assert (same, state, version) == (device, "observed", 2), devices(user)
+    assert sql("SELECT token_hash FROM public.pr_security_devices WHERE id=%s", device)[0][0] == device_trust.token_hash(KEY_NEW.encode(), user, cookie)
+
+
+@check("RAP-028", "a revoked device's cookie replayed after a new sign-in: the old record stays revoked and a new untrusted record is made")
+def revoked_device_replay():
+    p1()
+    user, _ = person()
+    cookie, _ = known_browser(user)
+    [(device, *_)] = devices(user)
+    sql("UPDATE public.pr_security_devices SET state='revoked',revoked_at=now(),revoke_reason='acceptance' WHERE id=%s", device)
+    _, _, issued, _ = browse(user, cookie=cookie)
+    rows = {d[0]: d[1] for d in devices(user)}
+    assert rows[device] == "revoked" and len(rows) == 2 and issued != cookie and set(rows.values()) == {"revoked", "observed"}, rows
+
+
+@check("RAP-083", "pr_session_security cannot link person A's session to person B's device (composite foreign key)")
+def cross_user_device_fk():
+    p1()
+    alice, _ = person()
+    bob, _ = person()
+    _, _, _, alice_session = browse(alice)
+    browse(bob)
+    [(bob_device, *_)] = devices(bob)
+    with connection() as db:
+        try:
+            db.execute("UPDATE public.pr_session_security SET device_id=%s WHERE user_id=%s AND session_id=%s", (bob_device, alice, alice_session))
+            raise AssertionError("cross-user device link accepted")
+        except psycopg.errors.ForeignKeyViolation:
+            pass
+
+
+@check("RAP-090", "re-evaluations with new event keys are all kept; the same key twice is one row")
+def repeating_risk_events():
+    p1()
+    user, _ = person()
+    _, _, _, session = browse(user)
+    with connection() as db, db.cursor() as cur:
+        for key in ("session.risk_reassessed:acceptance-0001", "session.risk_reassessed:acceptance-0002", "session.risk_reassessed:acceptance-0002"):
+            device_trust.record(cur, user, "session.risk_reassessed", key, session_id=session, risk_level="medium")
+    assert len(ledger(user, "session.risk_reassessed")) == 2
+    try:
+        sql("UPDATE public.pr_security_login_events SET risk_level='low' WHERE user_id=%s", user)
+        raise AssertionError("ledger row changed")
+    except psycopg.errors.InsufficientPrivilege:
+        pass
+
+
+# Risk engine and step-up (enforce mode is set in-test only)
+
+@check("RAP-031", "known browser, no recent change, AAL2: an ordinary view and a sensitive capability are both allowed")
+def known_low_risk():
+    p1(mode="enforce")
+    user, workspace = person()
+    cookie, session = known_browser(user)
+    assert call("GET", f"/api/workspaces/{workspace}", token(user, session, aal="aal2"), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[0] == 200
+    assert export(user, session, cookie=cookie, aal="aal2")[0] == 200
+
+
+@check("RAP-032", "unknown browser: account security and ordinary views stay open, a sensitive capability asks for proof")
+def unknown_low():
+    p1(mode="enforce")
+    user, workspace = person()
+    _, _, _, session = browse(user)
+    for path in ("/api/me", "/api/auth/sessions", "/api/me/security-events", f"/api/workspaces/{workspace}"):
+        assert call("GET", path, token(user, session), headers=SAME_ORIGIN)[0] == 200, path
+    result = export(user, session)
+    assert step_up(result) and result[1]["nextAction"] == "complete_mfa" and "unknown_device" in result[1]["security"]["reasonCodes"], result
+
+
+@check("RAP-033", "unknown browser right after a sensitive account change: the private drafts list answers 403 security_step_up_required")
+def unknown_medium_private_drafts():
+    p1(mode="enforce")
+    user, workspace = person()
+    _, _, _, session = browse(user)
+    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta) VALUES(%s,'mfa.disabled','','{}')", user)
+    status, body = call("GET", f"/api/workspaces/{workspace}", token(user, session), headers=SAME_ORIGIN)
+    assert status == 403 and body.get("code") == "security_step_up_required", f"private workspace state served with {status}"
+
+
+@check("RAP-034", "a fresh same-inbox email OTP is not an independent factor: step-up still required")
+def same_email_otp():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    for method in ("otp", "magiclink", "email/signup", "password", "oauth"):
+        assert step_up(export(user, session, method=method)), method
+
+
+@check("RAP-035", "a fresh verified TOTP on an AAL2 session: allowed, and the step-up is recorded on this session")
+def fresh_totp():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    assert export(user, session, aal="aal2", method="totp")[0] == 200
+    assert sql("SELECT step_up_method FROM public.pr_session_security WHERE user_id=%s AND session_id=%s", user, session) == [("totp",)]
+    assert len(ledger(user, "session.step_up_verified")) == 1
+
+
+@check("RAP-036", "TOTP older than the step-up window: refused; a refreshed token (new iat) is not new proof")
+def stale_totp():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    old = time.time() - 1200
+    status, body = call("GET", sql("SELECT '/api/workspaces/'||workspace_id::text||'/export' FROM public.pr_memberships WHERE user_id=%s LIMIT 1", user)[0][0],
+                        token(user, session, aal="aal2", amr=amr("totp", old), iat=int(time.time())), headers=SAME_ORIGIN)
+    assert status == 403 and body.get("code") == "security_step_up_required", status
+
+
+@check("RAP-037", "a WebAuthn MFA ceremony is verified from the signed token; a client boolean proves nothing")
+def webauthn_mfa():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    assert step_up(export(user, session, extra={"X-Step-Up-Verified": "true"}))
+    assert export(user, session, aal="aal2", method="mfa/webauthn")[0] == 200
+    assert sql("SELECT step_up_method FROM public.pr_session_security WHERE user_id=%s AND session_id=%s", user, session) == [("webauthn_mfa",)]
+
+
+@check("RAP-038", "a passkey first-factor sign-in (AAL1) is not treated as AAL2 step-up")
+def passkey_aal1():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    for method in ("webauthn", "passkey", "mfa/webauthn", "totp"):
+        assert step_up(export(user, session, aal="aal1", method=method)), method
+
+
+@check("RAP-039", "an account hold blocks a sensitive capability even from a known browser with fresh AAL2 proof")
+def hold_blocks_sensitive():
+    p1(mode="enforce", hold=True)
+    user, _ = person()
+    cookie, session = known_browser(user)
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+    status, body = export(user, session, cookie=cookie, aal="aal2", method="totp")
+    assert status == 403 and body.get("code") in ("security_account_hold", "security_step_up_required"), f"export served under an active hold ({status})"
+
+
+@check("RAP-040", "riskLevel=low / trusted=true in the request is ignored: the challenge stands")
+def spoofed_allow_json():
+    p1(mode="enforce")
+    user, workspace = person()
+    _, _, _, session = browse(user)
+    status, body = call("POST", f"/api/workspaces/{workspace}/tokens", token(user, session),
+                        {"name": "acceptance", "riskLevel": "low", "trusted": True, "deviceState": "trusted", "security": {"outcome": "allow"}}, headers=SAME_ORIGIN)
+    assert status == 403 and body.get("code") == "security_step_up_required", (status, body)
+    assert sql("SELECT risk_level,enforcement FROM public.pr_session_security WHERE user_id=%s AND session_id=%s", user, session) == [("medium", "challenge")]
+
+
+@check("RAP-041", "a different country header on a known browser never locks the account; ordinary reads continue")
+def travel():
+    p1(mode="enforce", hold=True)
+    user, workspace = person()
+    cookie, session = known_browser(user)
+    geo = {"Cf-Ipcountry": "JP", "X-Vercel-Ip-Country": "JP", "X-Forwarded-For": "198.51.100.23"}
+    status = call("GET", f"/api/workspaces/{workspace}", token(user, session), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}", **geo})[0]
+    assert status == 200
+    assert sql("SELECT count(*) FROM public.pr_security_account_controls WHERE user_id=%s AND hold_active", user)[0][0] == 0
+
+
+@check("RAP-042", "spoofed X-Forwarded-For / geo headers are never stored or used in a decision")
+def spoofed_proxy():
+    p1(mode="enforce")
+    user, _ = person()
+    spoof = {"X-Forwarded-For": "203.0.113.99", "X-Real-Ip": "203.0.113.99", "Cf-Ipcountry": "KP"}
+    _, _, _, session = browse(user, extra=spoof)
+    plain = export(user, session)
+    spoofed = export(user, session, extra=spoof)
+    assert plain[0] == spoofed[0] == 403 and plain[1]["security"] == spoofed[1]["security"]
+    stored = json.dumps(sql("SELECT row_to_json(e) FROM public.pr_security_login_events e WHERE user_id=%s", user) + sql("SELECT row_to_json(s) FROM public.pr_session_security s WHERE user_id=%s", user), default=str)
+    assert "203.0.113.99" not in stored and "KP" not in stored
+
+
+@check("RAP-043", "a stale stored decision is never reused: the request is re-evaluated under the current policy first")
+def policy_version():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    sql("UPDATE public.pr_session_security SET risk_level='low',enforcement='allow',risk_reasons='[]',policy_version=1 WHERE user_id=%s AND session_id=%s", user, session)
+    assert step_up(export(user, session))
+    assert sql("SELECT enforcement FROM public.pr_session_security WHERE user_id=%s AND session_id=%s", user, session) == [("challenge",)]
+
+
+def security_state_unavailable(path_for):
+    """Make the gate's security read fail (the table is briefly renamed), then restore it."""
+    p1(mode="enforce", device=False)
+    user, workspace = person()
+    session = signed_in(user)
+    sql("ALTER TABLE public.pr_session_security RENAME TO pr_session_security_offline")
+    try:
+        sensitive = call(*path_for(workspace), token(user, session), {} if path_for(workspace)[0] == "POST" else None, headers=SAME_ORIGIN)
+        safe = [call("GET", p, token(user, session))[0] for p in ("/api/me", f"/api/workspaces/{workspace}")]
+    finally:
+        sql("ALTER TABLE public.pr_session_security_offline RENAME TO pr_session_security")
+    return sensitive, safe
+
+
+@check("RAP-044", "security state unreadable: the sensitive capability fails closed with 503; ordinary and help routes still work")
+def risk_db_unavailable():
+    (status, body), safe = security_state_unavailable(lambda w: ("GET", f"/api/workspaces/{w}/export"))
+    assert status == 503 and body.get("code") == "security_state_unavailable", (status, body)
+    assert safe == [200, 200], safe
+
+
+@check("RAP-144", "security state unreadable: connecting an account (the step before any connected publish) fails closed with 503")
+def risk_db_timeout_connected():
+    (status, body), safe = security_state_unavailable(lambda w: ("POST", f"/api/workspaces/{w}/channels/threads/oauth/start"))
+    assert status == 503 and body.get("code") == "security_state_unavailable", (status, body)
+    assert safe == [200, 200]
+
+
+@check("RAP-045", "an account with no second factor gets a deterministic enrolment/recovery next step, not an unsatisfiable MFA prompt")
+def mfa_unsupported():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    status, body = export(user, session)
+    assert status == 403 and body.get("nextAction") in ("enroll_mfa", "set_up_mfa", "recovery", "contact_support"), f"nextAction={body.get('nextAction')} for an account with no factor"
+
+
+@check("RAP-046", "a second factor removed after the proof: the old proof no longer authorizes a sensitive action")
+def factor_removed_after_proof():
+    p1(mode="enforce")
+    user, _ = person()
+    cookie, session = known_browser(user)
+    proved = time.time() - 60
+    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta) VALUES(%s,'mfa.disabled','','{}')", user)
+    assert step_up(export(user, session, cookie=cookie, aal="aal2", method="totp", at=proved)), "a TOTP proof from before the factor was removed still authorized the export"
+
+
+@check("RAP-047", "a direct API client with no Security Center code meets the same challenge")
+def no_ui_reliance():
+    p1(mode="enforce")
+    user, workspace = person()
+    session = new_session()
+    status, body = call("GET", f"/api/workspaces/{workspace}/export", token(user, session), agent="curl/8.7.1")
+    assert status == 403 and body.get("code") == "security_step_up_required", (status, body)
+
+
+@check("RAP-048", "proof made in session B never satisfies session A")
+def wrong_session_proof():
+    p1(mode="enforce")
+    user, _ = person()
+    _, _, _, session_a = browse(user)
+    _, _, _, session_b = browse(user)
+    assert export(user, session_b, aal="aal2", method="totp")[0] == 200
+    assert step_up(export(user, session_a))
+    assert sql("SELECT session_id FROM public.pr_session_security WHERE user_id=%s AND step_up_method IS NOT NULL", user) == [(session_b,)]
+
+
+@check("RAP-141", "enforce mode turns the gate on for protected operations; observe mode leaves them as before")
+def enforce_gated():
+    p1(mode="observe")
+    user, _ = person()
+    _, _, _, session = browse(user)
+    assert export(user, session)[0] == 200
+    p1(mode="enforce")
+    assert step_up(export(user, session))
+
+
+@check("RAP-013", "the session's security record cannot be written: no allowed state, and the protected route answers 503")
+def observation_fails():
+    p1(mode="enforce")
+    user, _ = person()
+    original = device_trust.observe
+    device_trust.observe = lambda *args, **kwargs: (_ for _ in ()).throw(psycopg.errors.CheckViolation("injected"))
+    try:
+        session = new_session()
+        status, body = export(user, session)
+    finally:
+        device_trust.observe = original
+    assert status != 200, "allowed without a security record"
+    assert status == 503, f"refused with {status} {body.get('code')} instead of 503"
+
+
+@check("RAP-096", "reconnecting a social account from a challenged session needs fresh proof")
+def reconnect_needs_proof():
+    p1(mode="enforce")
+    user, workspace = person()
+    _, _, _, session = browse(user)
+    status, body = call("POST", f"/api/workspaces/{workspace}/channels/threads/oauth/start", token(user, session), {}, headers=SAME_ORIGIN)
+    assert status == 403 and body.get("code") == "security_step_up_required", (status, body)
+
+
+@check("RAP-138", "a browser unused for more than 180 days is no longer silently known")
+def inactive_browser():
+    p1(mode="enforce")
+    user, _ = person()
+    cookie, _ = known_browser(user)
+    sql("UPDATE public.pr_security_devices SET first_seen_at=now()-interval '400 days', last_seen_at=now()-interval '200 days' WHERE user_id=%s", user)
+    _, _, _, session = browse(user, cookie=cookie)
+    assert step_up(export(user, session, cookie=cookie)), "a browser idle for 200 days still counted as known"
+
+
+# Account holds (RAFII_SECURITY_INCIDENT_HOLD in-test only)
+
+def api_token(user, workspace):
+    p1(mode="observe", device=False)
+    status, body = call("POST", f"/api/workspaces/{workspace}/tokens", token(user, signed_in(user), iat=int(time.time())), {"name": "acceptance", "scopes": ["read"], "expiresDays": 30})
+    assert status in (200, 201), (status, body)
+    return body.get("secret")
+
+
+for row in ("RAP-061", "RAP-101"):
+    @check(row, "a valid API token is refused at the action gateway while the account is held")
+    def token_on_hold():
+        user, workspace = person()
+        secret = api_token(user, workspace)
+        assert secret and secret.startswith("prt_"), secret
+        p1(device=False, hold=True)
+        assert call("GET", f"/api/workspaces/{workspace}", secret)[0] == 200
+        with connection() as db, db.cursor() as cur:
+            security_holds.place(cur, user, "acceptance.check")
+        status, body = call("GET", f"/api/workspaces/{workspace}", secret)
+        assert status == 403 and body.get("code") == "security_account_hold", (status, body)
+
+
+def worker_transaction(user, workspace, **fence):
+    repository, capability = principal_repository(service, workspace, user, "edit", **fence)
+    with repository.transaction(capability, workspace):
+        return True
+
+
+def refused_with(code, fn):
+    try:
+        fn()
+    except security_holds.AccountHeld as error:
+        assert error.code == code, error.code
+        return
+    raise AssertionError("the worker transaction ran")
+
+
+@check("RAP-093", "work approved before the hold (and the hold since released) is refused at worker claim")
+def preapproved_after_hold():
+    p1(device=False, hold=True)
+    user, workspace = person()
+    approved_at = time.time() - 30
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+        security_holds.release(cur, user, "acceptance.check")
+    refused_with("security_hold_changed", lambda: worker_transaction(user, workspace, authorized_at=approved_at))
+    assert worker_transaction(user, workspace, authorized_at=time.time() + 1)
+
+
+@check("RAP-094", "a hold placed after the worker claimed (epoch captured) stops the final pre-publish check")
+def hold_after_claim():
+    p1(device=False, hold=True)
+    user, workspace = person()
+    with connection() as db, db.cursor() as cur:
+        epoch = security_holds.snapshot(cur, user)
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+    refused_with("security_account_hold", lambda: worker_transaction(user, workspace, hold_epoch=epoch))
+
+
+@check("RAP-095", "hold set, released and set again: a job holding the old epoch is refused (no ABA)")
+def hold_epoch_aba():
+    p1(device=False, hold=True)
+    user, workspace = person()
+    with connection() as db, db.cursor() as cur:
+        epoch = security_holds.snapshot(cur, user)
+        security_holds.place(cur, user, "acceptance.check")
+        security_holds.release(cur, user, "acceptance.check")
+    refused_with("security_hold_changed", lambda: worker_transaction(user, workspace, hold_epoch=epoch))
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+        security_holds.release(cur, user, "acceptance.check")
+        current = security_holds.snapshot(cur, user)
+    assert current == epoch + 4 and worker_transaction(user, workspace, hold_epoch=current)
+
+
+@check("RAP-098", "an Agent/worker run prepared before the owner removed the grant is denied on the refreshed membership")
+def grant_revoked():
+    p1(device=False)
+    owner, workspace = person()
+    editor, _ = person()
+    sql("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'editor','active')", workspace, editor)
+    repository, capability = principal_repository(service, workspace, editor, "edit")
+    sql("UPDATE public.pr_memberships SET role='viewer' WHERE workspace_id=%s AND user_id=%s", workspace, editor)
+    try:
+        with repository.transaction(capability, workspace):
+            raise AssertionError("ran on the old grant")
+    except AlphaError as error:
+        assert error.status in (403, 404), error.status
+
+
+@check("RAP-097", "a viewer's direct publish/approve call is refused by role, whatever the browser")
+def viewer_publish():
+    p1(device=True)
+    owner, workspace = person()
+    viewer, _ = person()
+    sql("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status) VALUES(%s,%s,'viewer','active')", workspace, viewer)
+    cookie, session = known_browser(viewer)
+    revision = sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", workspace)[0][0]
+    status, body = call("POST", f"/api/workspaces/{workspace}/actions", token(viewer, session, aal="aal2"),
+                        {"expectedRevision": revision, "action": "p2_approve", "payload": {"draftId": "draft-acceptance"}},
+                        headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})
+    assert status == 403, (status, body)
+    assert sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", workspace)[0][0] == revision
+
+
+@check("RAP-099", "a held account's scheduled/proactive phone call is refused before any provider call")
+def phone_on_hold():
+    from postriff_phase2.phone.runtime import principal_phone
+    from postriff_phase2.phone.service import PhoneService
+    from postriff_phase2.phone.providers.fake import FakeTelephonyProvider
+    p1(device=False, hold=True)
+    user, workspace = person()
+    provider = FakeTelephonyProvider()
+    phone = PhoneService(service, {"RAFII_PHONE_ENABLED": "1"}, provider=provider)
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+    scoped, capability = principal_phone(phone, workspace, user)
+    try:
+        scoped.request(workspace, capability, {"idempotencyKey": "schedule:acceptance:1"}, kind="scheduled", reason_key="schedule:acceptance")
+        raise AssertionError("a scheduled call was admitted under a hold")
+    except AlphaError as error:
+        assert error.code == "security_account_hold", (error.status, error.code, str(error))
+    assert sql("SELECT count(*) FROM public.pr_phone_calls WHERE user_id=%s", user)[0][0] == 0
+    assert provider.create_count == 0, provider.create_count
+
+
+@check("RAP-104", "turning the incident/hold feature flag off after an incident keeps the core hold enforced")
+def rollback_keeps_hold():
+    user, workspace = person()
+    secret = api_token(user, workspace)
+    p1(device=False, hold=True)
+    with connection() as db, db.cursor() as cur:
+        security_holds.place(cur, user, "acceptance.check")
+    p1(device=False, hold=False)  # the rollback lever
+    status, body = call("GET", f"/api/workspaces/{workspace}", secret)
+    assert status == 403, f"the held account's API token worked again ({status}) once RAFII_SECURITY_INCIDENT_HOLD was off"
+
+
+# "This wasn't me" incidents
+
+def report(user, session, body=None, key=None, method="password", at=None, origin=None, access=None):
+    headers = {**({"Idempotency-Key": key} if key else {}), **({"Origin": origin} if origin else {})}
+    return call("POST", "/api/auth/security/incidents", access if access is not None else token(user, session, amr=amr(method, at)),
+                body if body is not None else {"type": "not_me", "confirmed": True, "revokeOtherSessions": True}, headers=headers)
+
+
+def hold_row(user):
+    return sql("SELECT hold_active,hold_epoch FROM public.pr_security_account_controls WHERE user_id=%s", user)
+
+
+@check("RAP-106", "an unconfirmed (cancelled) report changes nothing: no hold, no revocation")
+def incident_not_confirmed():
+    p1(hold=True)
+    user, _ = person()
+    current, other = signed_in(user), signed_in(user)
+    for body in ({"type": "not_me", "confirmed": False, "revokeOtherSessions": True}, {"type": "not_me", "revokeOtherSessions": True}):
+        assert report(user, current, body)[0] == 400
+    assert hold_row(user) == [] and sql("SELECT count(*) FROM public.pr_session_revocations WHERE user_id=%s", user)[0][0] == 0
+
+
+@check("RAP-107", "a confirmed report with fresh proof: one incident, the hold epoch moves, a receipt says what was done")
+def incident_confirmed():
+    p1(hold=True)
+    user, workspace = person()
+    current, other = signed_in(user), signed_in(user)
+    status, body = report(user, current)
+    assert status == 201 and body["accountHold"] is True and body["holdEpoch"] == 1, (status, body)
+    assert body["sessions"]["rafiiApiRevoked"] >= 1 and body["connectedAccounts"] == "not_disconnected", body
+    assert hold_row(user) == [(True, 1)] and sql("SELECT count(*) FROM public.pr_security_incidents WHERE user_id=%s", user)[0][0] == 1
+    assert call("GET", f"/api/workspaces/{workspace}", token(user, other))[0] == 401
+    assert call("GET", "/api/me", token(user, current))[0] == 200  # the reporting session stays
+
+
+@check("RAP-108", "an anonymous or forged report: 401 and no hold")
+def incident_anonymous():
+    p1(hold=True)
+    user, _ = person()
+    for access in ("", "not-a-jwt-" + "x" * 30, token(user, new_session(), expired=True)):
+        status, _ = report(user, None, access=access)
+        assert status == 401, status
+    assert hold_row(user) == []
+
+
+@check("RAP-109", "reporting another person's sign-in event: the same 404 as an unknown id, no incident, no hold")
+def incident_foreign_event():
+    p1(hold=True)
+    alice, _ = person()
+    bob, _ = person()
+    browse(bob)
+    [(bob_event,)] = sql("SELECT id::text FROM public.pr_security_login_events WHERE user_id=%s AND event_type='session.observed'", bob)
+    session = signed_in(alice)
+    body = {"type": "not_me", "confirmed": True, "revokeOtherSessions": False}
+    foreign = report(alice, session, {**body, "sourceEventId": bob_event})
+    unknown = report(alice, session, {**body, "sourceEventId": str(uuid.uuid4())})
+    strip = lambda result: (result[0], {k: v for k, v in result[1].items() if k != "requestId"})
+    assert strip(foreign) == strip(unknown) and foreign[0] == 404, (foreign, unknown)
+    assert hold_row(alice) == [] and hold_row(bob) == [] and sql("SELECT count(*) FROM public.pr_security_incidents WHERE user_id IN (%s,%s)", alice, bob)[0][0] == 0
+
+
+@check("RAP-110", "a repeated report with the same Idempotency-Key returns the same receipt; no second hold")
+def incident_idempotent():
+    p1(hold=True)
+    user, _ = person()
+    session = signed_in(user)
+    key = f"acceptance-{uuid.uuid4().hex}"
+    first = report(user, session, key=key)
+    second = report(user, session, key=key)
+    assert first[0] == 201 and second[0] == 200 and first[1]["incidentId"] == second[1]["incidentId"] and second[1]["holdEpoch"] == 1, (first, second)
+    assert hold_row(user) == [(True, 1)] and sql("SELECT count(*) FROM public.pr_security_incidents WHERE user_id=%s", user)[0][0] == 1
+
+
+@check("RAP-115", "the incident receipt says already-executed actions are not reversible and connected accounts were not disconnected")
+def incident_disclosure():
+    p1(hold=True)
+    user, _ = person()
+    status, body = report(user, signed_in(user))
+    assert status == 201 and body["agents"] == {"newSensitiveActions": "held", "alreadyExecutedActions": "not_reversible"}, body
+    assert "recall" not in json.dumps(body).lower() and "undo" not in json.dumps(body).lower()
+
+
+@check("RAP-116", "following an email link (GET) without confirming in the app changes nothing")
+def email_only():
+    p1(hold=True)
+    user, _ = person()
+    session = signed_in(user)
+    before = (hold_row(user), sql("SELECT count(*) FROM public.pr_session_revocations WHERE user_id=%s", user))
+    for path in ("/api/auth/security/incidents", "/api/me", "/api/auth/sessions", "/api/me/security-events"):
+        assert call("GET", path, token(user, session))[0] == 200, path
+    assert (hold_row(user), sql("SELECT count(*) FROM public.pr_session_revocations WHERE user_id=%s", user)) == before
+
+
+@check("RAP-085", "person A never sees person B's incidents, and B's incident is unchanged")
+def incident_cross_user():
+    p1(hold=True)
+    alice, _ = person()
+    bob, _ = person()
+    _, bob_report = report(bob, signed_in(bob))
+    listed = call("GET", "/api/auth/security/incidents", token(alice, signed_in(alice)))[1]["incidents"]
+    assert bob_report["incidentId"] not in json.dumps(listed)
+    assert sql("SELECT state FROM public.pr_security_incidents WHERE id=%s", bob_report["incidentId"]) == [("user_confirmed",)]
+
+
+@check("RAP-132", "probing the incident route with foreign or random ids gives one generic 404 body")
+def enumeration():
+    p1(hold=True)
+    alice, _ = person()
+    bob, _ = person()
+    browse(bob)
+    session = signed_in(alice)
+    # Three reports per person per hour: one foreign event id and one random id.
+    bob_event = sql("SELECT id::text FROM public.pr_security_login_events WHERE user_id=%s AND event_type='session.observed'", bob)[0][0]
+    bodies = set()
+    for target in (bob_event, str(uuid.uuid4())):
+        status, body = report(alice, session, {"type": "not_me", "confirmed": True, "revokeOtherSessions": False, "sourceEventId": target})
+        assert status == 404, status
+        bodies.add(json.dumps({k: v for k, v in body.items() if k != "requestId"}, sort_keys=True))
+    assert len(bodies) == 1, bodies
+
+
+@check("RAP-134", "a report from a hostile Origin is refused by the origin guard before anything changes")
+def incident_csrf():
+    p1(hold=True)
+    user, _ = person()
+    status, _ = report(user, signed_in(user), origin="https://evil.example")
+    assert status == 403 and hold_row(user) == []
+
+
+@check("RAP-064", "a high-risk security event queues a mandatory notice even with routine alerts off")
+def mandatory_notice():
+    p1(hold=True)
+    user, _ = person(alerts=False)
+    report(user, signed_in(user))
+    from postriff_phase2.notifications import detector
+    with connection() as db:
+        events = [e for e in detector.security_events(db.cursor()) if e["user_id"] == user]
+    assert events, "an incident report (hold placed, sessions revoked) produced no security notice for the person"
+
+
+@check("RAP-114", "an incident notifies previously verified contact channels")
+def incident_notice_recipients():
+    p1(hold=True)
+    user, _ = person(alerts=True)
+    report(user, signed_in(user))
+    from postriff_phase2.notifications import detector
+    with connection() as db:
+        kinds = [e["payload"].get("title") for e in detector.security_events(db.cursor()) if e["user_id"] == user]
+    assert any("report" in (k or "").lower() or "hold" in (k or "").lower() for k in kinds), kinds
+
+
+@check("RAP-102", "a consumer session reaches no founder/operator API on the consumer app")
+def founder_boundary():
+    p1(device=False)
+    user, _ = person()
+    session = signed_in(user)
+    for path in ("/api/founder/overview", "/api/control/overview", "/api/admin/users", "/api/founder/accounts/block"):
+        assert call("GET", path, token(user, session, aal="aal2"))[0] in (403, 404), path
+
+
+@check("RAP-092", "the P1 migrations (120-123) apply to a disposable database: every table and function exists, RLS forced")
+def migrations_dry_run():
+    tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents")
+    rows = sql("SELECT relname, relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname = ANY(%s)", list(tables))
+    assert sorted(rows) == sorted((t, True) for t in tables), rows
+    for function in ("public.pr_security_purge(uuid)", "public.pr_security_set_hold(uuid,boolean,text)", "public.pr_erase_session_history(uuid)"):
+        assert sql("SELECT to_regprocedure(%s) IS NOT NULL", function)[0][0], function
 
 
 # --- Verdict ---------------------------------------------------------------------------------------------------------

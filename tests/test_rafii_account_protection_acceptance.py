@@ -215,5 +215,33 @@ class RevokeOthersCoverage(unittest.TestCase):
         self.assertEqual(self.revoke(None)["refreshRevoked"], False)  # no identity admin: never claimed
 
 
+class P1Boundaries(unittest.TestCase):
+    """RAPv2 P1 rows answered by the code's own boundaries (no database needed)."""
+    SRC = ROOT / "src" / "postriff_phase2"
+    SECURITY_WRITERS = {"account_deletion.py", "device_trust.py", "hosted.py", "security_gate.py", "security_holds.py", "security_incidents.py", "security_policy.py"}  # security_policy: names the table in prose only (pure, no I/O)
+
+    def test_rap103_no_agent_or_tool_code_can_write_risk_trust_or_hold_state(self):
+        pattern = re.compile(r"pr_security_|pr_session_security|security_holds\.(place|release)|pr_security_set_hold|device_trust\.(record|register|observe)")
+        writers = {path.relative_to(self.SRC).as_posix() for path in self.SRC.rglob("*.py") if pattern.search(path.read_text(errors="ignore"))}
+        self.assertEqual(writers, self.SECURITY_WRITERS)
+        self.assertFalse(any(name.startswith(("agent_runtime_v2/", "tools", "ideas", "coworker")) for name in writers), writers)
+
+    def test_rap100_no_connector_can_send_email_as_the_person(self):
+        from postriff_phase2 import productivity_connectors
+        self.assertEqual(productivity_connectors.GmailProvider.scopes, ("https://www.googleapis.com/auth/gmail.readonly",))
+        source = (self.SRC / "productivity_connectors.py").read_text()
+        self.assertNotRegex(source, r"gmail\.send|gmail\.compose|gmail\.modify|messages/send|Mail\.Send")
+
+    @unittest.expectedFailure
+    def test_rap092_every_p1_migration_documents_its_rollback(self):
+        # Known gap: 120 and 121 say how to roll back; 122 does not, and 123 still says "Candidate only: not applied
+        # anywhere" although it is applied.
+        for name in ("120_rapv2_device_registry.sql", "121_rapv2_account_holds.sql", "122_rapv2_security_incidents.sql", "123_rapv2_session_history_erasure.sql"):
+            with self.subTest(migration=name):
+                header = (ROOT / "migrations" / "postriff" / name).read_text().split("begin;", 1)[0].split("BEGIN;", 1)[0]
+                self.assertRegex(header.lower(), r"roll ?back|to undo|reversible")
+                self.assertNotIn("not applied anywhere", header)
+
+
 if __name__ == "__main__":
     unittest.main()
