@@ -29,6 +29,27 @@ from phase2.postgres_discord_capacity import (
 
 
 class CapacityControls(unittest.TestCase):
+    def test_compact_state_observation_preserves_missing_and_unrequested_jobs(self):
+        runtime=Runtime.__new__(Runtime);runtime.m=Telemetry(capture_events=False)
+        calls=[]
+        def execute(query,parameters):
+            calls.append(parameters)
+            return SimpleNamespace(fetchall=lambda:[('one','verified'),('two','held'),('unrequested','verified')])
+        runtime.connection=lambda:nullcontext(SimpleNamespace(execute=execute))
+        records=[{'jobId':'one','alias':'first','fixture':{'workspace':'workspace-a'}},
+                 {'jobId':'two','alias':'second','fixture':{'workspace':'workspace-b'}},
+                 {'jobId':'missing','alias':'third','fixture':{'workspace':'workspace-a'}},
+                 {'jobId':None,'alias':'unadmitted','fixture':{'workspace':'workspace-c'}}]
+        observed=runtime.job_states(records)
+        self.assertEqual(observed,{'first':'verified','second':'held'})
+        self.assertEqual(len(calls),1);self.assertEqual(set(calls[0][0]),{'workspace-a','workspace-b'})
+        self.assertFalse(accounting(4,3,observed.values())['complete'])
+        self.assertEqual(runtime.m.counters['capacityJobStatePolls'],1)
+        self.assertEqual(runtime.m.counters['capacityJobStatePollRows'],3)
+        self.assertEqual(len(runtime.m.timings['capacityJobStatePollSeconds']),1)
+        self.assertEqual(runtime.job_states([records[-1]]),{})
+        self.assertEqual(len(calls),1)
+
     def test_post_start_failure_is_registered_before_cancellation_restores(self):
         for fail_on_start in (False,True):
             owned,registry,reported,order=[],{},set(),[]

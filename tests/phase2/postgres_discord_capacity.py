@@ -1047,9 +1047,20 @@ class Runtime:
         workspaces = list({r['fixture']['workspace'] for r in records if r['jobId']})
         if not workspaces:
             return {}
+        started=time.monotonic()
         with self.connection() as db:
-            rows = db.execute("SELECT state#>'{phase2,jobs}' FROM public.pr_workspaces WHERE id=ANY(%s::uuid[])", (workspaces,)).fetchall()
-        return {wanted[j['id']]: j['state'] for row in rows for j in (row[0] or []) if j['id'] in wanted}
+            # Observe the same transaction snapshot without transferring and
+            # decoding every frozen payload/intent/receipt in the parent. The
+            # observer shares its process with synthetic HTTP brokers; full
+            # job documents would make observation itself a load generator.
+            rows = db.execute("""SELECT job->>'id',job->>'state'
+                FROM public.pr_workspaces w CROSS JOIN LATERAL
+                jsonb_array_elements(coalesce(w.state#>'{phase2,jobs}','[]'::jsonb)) job
+                WHERE w.id=ANY(%s::uuid[])""", (workspaces,)).fetchall()
+        self.m.count('capacityJobStatePolls')
+        self.m.count('capacityJobStatePollRows',len(rows))
+        self.m.timing('capacityJobStatePollSeconds',time.monotonic()-started)
+        return {wanted[job_id]: state for job_id,state in rows if job_id in wanted}
 
     def change(self, f, update):
         # Synthetic scenario fault injection only; never changes approval data.
