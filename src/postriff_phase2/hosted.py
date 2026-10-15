@@ -117,6 +117,11 @@ def observe_session(cur, principal, session_id, client_label=""):
         setting = cur.fetchone()
         alert = bool(setting and setting[0])
         audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+    from . import device_trust
+    if device_trust.active():
+        # RAPv2 P1 device registry (RAFII_DEVICE_TRUST_V2): the browser behind this session and the ledger events
+        # that tell a new session apart from a new browser, in this same transaction.
+        device_trust.observe(cur, principal, session_id, client_label, fresh)
     return fresh, alert
 
 
