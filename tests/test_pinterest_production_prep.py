@@ -1,6 +1,7 @@
 """Synthetic security contracts; no live Pinterest consent, traffic or publication."""
 import copy
 import json
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -77,7 +78,11 @@ class PinterestProductionSafety(unittest.TestCase):
         public={**base,'POSTRIFF_OAUTH_PINTEREST_REVIEWED':'true','POSTRIFF_OAUTH_PINTEREST_ENABLED':'true','POSTRIFF_OAUTH_PINTEREST_VERIFIED':'true'}
         self.assertFalse(registry_from_environment(public)['pinterest'].execution_enabled)
         self.assertTrue(registry_from_environment({**public,'POSTRIFF_OAUTH_PINTEREST_POLICY_APPROVED':'true'})['pinterest'].execution_enabled)
-        trial = registry_from_environment({**base,'POSTRIFF_PINTEREST_SANDBOX':'true','POSTRIFF_PINTEREST_TRIAL_READONLY':'1'}, transport=Wire([]))['pinterest']
+        trial = registry_from_environment({**base,'POSTRIFF_PINTEREST_SANDBOX':'true','POSTRIFF_PINTEREST_TRIAL_READONLY':'1',
+            'POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID':'00000000-0000-0000-0000-000000000501',
+            'POSTRIFF_PINTEREST_TRIAL_ACTOR_ID':'00000000-0000-0000-0000-000000000502',
+            'POSTRIFF_PINTEREST_TRIAL_USERNAME':'mock',
+            'POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT':str(int(time.time())+3600)}, transport=Wire([]))['pinterest']
         self.assertTrue(trial.execution_enabled)
         token = trial._grant({'access_token':'MOCK','scope':'user_accounts:read'})['accessToken']
         with self.assertRaises(AlphaError): trial.api(token, 'POST', '/v5/pins', body={})

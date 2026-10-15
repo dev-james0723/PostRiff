@@ -283,7 +283,7 @@ def registry_from_environment(values, transport=None):
             trial = adapter.sandbox and getattr(adapter, 'trial_readonly', False)
             policy_approved = str(values.get(prefix + 'POLICY_APPROVED', '')).lower() == 'true'
             adapter.execution_enabled = not operator_disabled and (trial or (enabled and provider_verified and adapter.production_reviewed and policy_approved))
-            adapter.quota_required = not trial
+            adapter.quota_required = True
         approved_scopes = [scope for scope in re.split(r"[\s,]+", str(values.get(prefix + "APPROVED_SCOPES", "")).strip()) if scope]
         registry.diagnostics[provider_id].update({
             "featureFlagEnabled": enabled if getattr(cls, "feature_flag_required", False) else True,

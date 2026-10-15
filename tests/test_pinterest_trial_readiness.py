@@ -1,5 +1,6 @@
 """Offline regression tests. Mock PASS cannot establish Pinterest Trial access."""
 import json
+import time
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -24,9 +25,13 @@ class PinterestTrialReadiness(unittest.TestCase):
         self.assertEqual(diagnostic['configurationState'], 'invalid_configuration')
 
     def test_readonly_trial_mount_records_reads_and_denies_pin_post(self):
-        wire = Wire([ok({'username': 'MOCK-HANDLE', 'id': '1234567'})])
+        wire = Wire([ok({'username': 'MOCK_HANDLE', 'id': '1234567'})])
         values = {"POSTRIFF_OAUTH_PINTEREST_CLIENT_ID": "1615884", "POSTRIFF_OAUTH_PINTEREST_CLIENT_SECRET": "MOCK-SECRET",
-                  "POSTRIFF_PINTEREST_TRIAL_READONLY": "1", "POSTRIFF_PINTEREST_SANDBOX": "true"}
+                  "POSTRIFF_PINTEREST_TRIAL_READONLY": "1", "POSTRIFF_PINTEREST_SANDBOX": "true",
+                  "POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID": "00000000-0000-0000-0000-000000000501",
+                  "POSTRIFF_PINTEREST_TRIAL_ACTOR_ID": "00000000-0000-0000-0000-000000000502",
+                  "POSTRIFF_PINTEREST_TRIAL_USERNAME": "MOCK_HANDLE",
+                  "POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT": str(int(time.time()) + 3600)}
         adapter, _ = PinterestProvider.mount(values, transport=wire)
         grant = self.grant(adapter)
         with patch('builtins.print') as output:

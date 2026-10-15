@@ -11,6 +11,8 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.pinterest_quota import PinterestQuota
+from postriff_phase2.pinterest_pilot import PinterestTrialPolicy
+from postriff_phase2.pinterest_trial_evidence import SandboxReadOnlyEvidenceTransport
 from postriff_phase2.wave3_connectors import PinterestProvider
 
 DSN = os.environ['POSTRIFF_TEST_DSN']
@@ -25,14 +27,16 @@ with connection() as db:
     for uid in USERS.values(): db.execute('INSERT INTO auth.users VALUES(%s)',(uid,))
     db.execute(Path('migrations/postriff/20261014_pinterest_rate_budgets.sql').read_text())
 refreshes, lock = 0, threading.Lock()
+provider_calls, grant_scopes = [], ['user_accounts:read boards:read pins:read pins:write']
 def transport(method,url,**kw):
     global refreshes
+    provider_calls.append((method,url))
     if url.endswith('/oauth/token'):
         if kw['form']['grant_type']=='refresh_token':
             with lock: refreshes+=1
             time.sleep(.05)
         return {'status':200,'body':{'access_token':'MOCK-AT','refresh_token':'MOCK-RT','expires_in':3600,
-            'scope':'user_accounts:read boards:read pins:read pins:write'}}
+            'scope':grant_scopes[0]}}
     if url.endswith('/user_account'):
         return {'status':200,'body':{'id':'1234567','username':'synthetic','account_type':'BUSINESS'}}
     if '/boards?' in url: return {'status':200,'body':{'items':[]}}
@@ -77,6 +81,55 @@ try: service.oauth.token_for_worker(wid,cid)
 except AlphaError: pass
 else: raise AssertionError('Disconnected token returned')
 assert service.oauth.token_for_worker(workspaces['p2'],connections['p2'])['accessToken']
+# Switch only this disposable service to the bounded pilot. Old broader custody cannot be reused.
+pilot_wid, pilot_cid = workspaces['p2'], connections['p2']
+provider.trial_readonly = True
+provider.trial_policy = PinterestTrialPolicy(pilot_wid, USERS['p2'], 'synthetic', int(clock[0])+600)
+provider.transport = SandboxReadOnlyEvidenceTransport(lambda _:None, mock_transport=transport)
+provider.quota_required = True
+provider.rate_gate = PinterestQuota(connection,'1615884','sandbox',clock=lambda:clock[0],trial=True)
+before = len(provider_calls)
+try: service.oauth.token_for_worker(pilot_wid,pilot_cid)
+except AlphaError as error: assert error.code=='pinterest_trial_readonly'
+else: raise AssertionError('Broader old grant reused in read-only pilot')
+try: service.oauth.start(workspaces['p1'],'p1','pinterest','boards_read')
+except AlphaError as error: assert error.code=='pinterest_trial_denied'
+else: raise AssertionError('Wrong pilot workspace admitted')
+# Even another valid owner of the same tenant is outside the exact operator authority.
+with connection() as db:
+    db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish) VALUES(%s,%s,'owner','active',true)",(pilot_wid,USERS['p1']))
+for action in [lambda:service.oauth.start(pilot_wid,'p1','pinterest','boards_read'),
+               lambda:service.oauth.destinations(pilot_wid,'p1',pilot_cid),
+               lambda:service.oauth.verify(pilot_wid,'p1',pilot_cid)]:
+    try: action()
+    except AlphaError as error: assert error.code=='pinterest_trial_denied',error
+    else: raise AssertionError('Other same-tenant owner admitted to pilot')
+assert len(provider_calls)==before
+# The intended actor can complete exactly the two read scopes; no broad token is persisted.
+grant_scopes[0] = 'user_accounts:read boards:read'
+started = service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+assert set(started['scopes'])=={'user_accounts:read','boards:read'}
+pilot_state=parse_qs(urlparse(started['authorizeUrl']).query)['state'][0]
+provider.trial_policy = PinterestTrialPolicy(pilot_wid, USERS['p1'], 'synthetic', int(clock[0])+600)
+try: service.oauth.complete(pilot_wid,'p2','pinterest',pilot_state,'MOCK-CODE')
+except AlphaError as error: assert error.code=='pinterest_trial_denied'
+else: raise AssertionError('Callback ignored changed operator authority')
+assert len(provider_calls)==before
+provider.trial_policy = PinterestTrialPolicy(pilot_wid, USERS['p2'], 'synthetic', int(clock[0])+600)
+connected = service.oauth.complete(pilot_wid,'p2','pinterest',pilot_state,'MOCK-CODE')
+assert connected['connected'] and connected['connectionId']==pilot_cid
+assert service.oauth.destinations(pilot_wid,'p2',pilot_cid)['destinations']==[]
+with connection() as db:
+    scopes=db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
+    assert set(scopes)=={'user_accounts:read','boards:read'}
+# Expiry blocks token custody/refresh, but never blocks the member's disconnect cleanup.
+provider.trial_policy = PinterestTrialPolicy(pilot_wid, USERS['p2'], 'synthetic', int(clock[0])-1)
+before = len(provider_calls)
+try: service.oauth.token_for_worker(pilot_wid,pilot_cid)
+except AlphaError as error: assert error.code=='pinterest_trial_denied'
+else: raise AssertionError('Expired pilot token returned')
+assert service.oauth.disconnect(pilot_wid,'p2',pilot_cid)['disconnected']
+assert len(provider_calls)==before
 quota= PinterestQuota(connection,'1615884','synthetic',clock=lambda:clock[0])
 def reserve(_):
     try: quota('POST','/v5/pins','1234567'); return True
@@ -93,7 +146,25 @@ with connection() as db:
     try: db.execute('SELECT * FROM public.pr_pinterest_rate_budgets')
     except psycopg.errors.InsufficientPrivilege: pass
     else: raise AssertionError('Client can read server rate budgets')
+trial_quota= PinterestQuota(connection,'1615884','synthetic-trial-cap',clock=lambda:clock[0],trial=True)
+def trial_reserve(index):
+    try:
+        trial_quota('POST' if index%2 else 'GET','/v5/oauth/token' if index%2 else '/v5/boards')
+        return True
+    except AlphaError as error:
+        assert error.status==429,error
+        return False
+with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
+    trial_outcomes=list(pool.map(trial_reserve,range(120)))
+assert sum(trial_outcomes)==100,sum(trial_outcomes)
+clock[0]+=60
+assert not trial_reserve(0), 'Minute change reset daily pilot budget'
+clock[0]+=86400
+assert trial_reserve(1), 'Daily pilot budget did not recover'
 print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_synthetic_provider','oauthReplayDenied':True,
     'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':refreshes,
-    'disconnectStopsTokenAccess':True,'otherTenantUnaffected':True,'quotaConcurrentReservations':120,
+    'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,
+    'pilotTwoReadScopesConnected':True,'pilotExpiryStopsCustody':True,'pilotDisconnectAfterExpiry':True,
+    'trialDailyConcurrentReservations':120,'trialDailyAccepted':100,'trialDailyDenied':20,
+    'trialMinuteCannotResetDaily':True,'trialDailyRecovery':True,'disconnectStopsTokenAccess':True,'otherTenantUnaffected':True,'quotaConcurrentReservations':120,
     'quotaAccepted':100,'quotaDenied':20,'quotaNextWindowRecovered':True,'clientBudgetAccessDenied':True}))

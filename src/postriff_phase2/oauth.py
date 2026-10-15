@@ -69,7 +69,7 @@ class OAuthService:
         pinterest = self.providers.get('pinterest')
         if pinterest is not None and getattr(pinterest, 'quota_required', False):
             from .pinterest_quota import PinterestQuota
-            pinterest.rate_gate = PinterestQuota(repository.connection_factory, pinterest.client_id, pinterest.environment, clock)
+            pinterest.rate_gate = PinterestQuota(repository.connection_factory, pinterest.client_id, pinterest.environment, clock, trial=getattr(pinterest, 'trial_readonly', False))
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.youtube_public_base_url = youtube_public_base_url or None
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
@@ -130,7 +130,15 @@ class OAuthService:
                     'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
+            if pid == 'pinterest':
+                legacy['boards_read'] = bool(adapter and adapter.capability_scopes('boards_read'))
+                if getattr(adapter, 'trial_readonly', False):
+                    legacy = {key: key in ('identity', 'boards_read') for key in (*legacy, 'boards_read')}
+                    # The exact workspace/operator is enforced at every authenticated operation.
+                    connect_ready = bool(callback and self.vault.fernet and getattr(adapter, 'execution_enabled', False))
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False):
+                requested = sorted(adapter.capability_scopes('boards_read'))
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
@@ -150,7 +158,8 @@ class OAuthService:
                             'productionReviewed': reviewed, 'executionPaused': paused,
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
-                            'accountRequirement': cls.account_requirement,
+                            'accountRequirement': ('Read-only Trial for the approved operator and Pinterest account; Sandbox boards are separate from live boards.'
+                                                   if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False) else cls.account_requirement),
                             'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': feature_enabled,
                             'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
@@ -248,12 +257,17 @@ class OAuthService:
             provider.assert_read_scopes(grant.get('scopes'))
         return self.youtube_policy.guarded_provider(provider, grant) if grant['provider'] == 'youtube' else provider
 
+    def _assert_pinterest_context(self, provider_id, workspace_id, principal=None, *, scopes=None):
+        if provider_id == 'pinterest':
+            self._provider(provider_id).assert_trial_context(workspace_id, principal, scopes=scopes, now=self.clock())
+
     def provider_for_connection(self, workspace_id, connection_id):
         with self.repository.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT provider,access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL', (workspace_id, connection_id))
             row = cur.fetchone()
         if not row:
             raise AlphaError('Connection unavailable.', 404)
+        self._assert_pinterest_context(row[0], workspace_id)
         return self._provider_for_access(row[0], self.vault.decrypt(row[1], row[2]))
 
     @staticmethod
@@ -329,7 +343,7 @@ class OAuthService:
             if getattr(type(adapter), 'provider_approval_required', False) and not diagnostic.get('providerVerified'):
                 raise AlphaError("This connection is waiting for provider application approval.", 409)
             raise AlphaError("This connection is not enabled yet.", 409)
-        youtube_features = tuple(adapter.SCOPES) if provider_id == 'youtube' else ()
+        youtube_features = tuple(adapter.SCOPES) if provider_id == 'youtube' else ('boards_read',) if provider_id == 'pinterest' else ()
         if capability not in (*CAPABILITIES, 'posts_read', *youtube_features) or capability in ("media_types", "webhooks"):
             raise AlphaError("Choose the capability you want to enable.", 400)
         scopes = adapter.capability_scopes(capability)
@@ -342,6 +356,7 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit, throttle
             require(_membership(row), "manage_connections")
+            self._assert_pinterest_context(provider_id, workspace_id, principal, scopes=scopes)
             policy_acceptance = self.youtube_policy.require_user(cur, workspace_id, principal, token, adapter,
                 capability=capability, scopes=scopes) if provider_id == 'youtube' else None
             if provider_id == 'youtube' and lane == 'agentic':
@@ -465,11 +480,13 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
+            self._assert_pinterest_context(provider_id, workspace_id, principal)
             cur.execute("SELECT id::text,member_id::text,provider,capability,redirect_uri,scopes,verifier_ciphertext,key_id,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND workspace_id=%s FOR UPDATE", (state_hash, workspace_id))
             txn = cur.fetchone()
             if not txn:
                 raise AlphaError("Connection request unavailable.", 404)
             transaction_id, member_id, provider, capability, redirect, scopes, verifier_ct, key_id, expires_at, consumed = txn
+            self._assert_pinterest_context(provider_id, workspace_id, principal, scopes=scopes)
             if (consumed and claimed != transaction_id) or provider != provider_id or member_id != principal:
                 cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=coalesce(consumed_at,now()),outcome=coalesce(outcome,'mismatch') WHERE id::text=%s", (transaction_id,))
                 audit(cur, workspace_id, principal, "oauth.rejected", transaction_id, {"reason": "mismatch_or_replay"})
@@ -680,6 +697,8 @@ class OAuthService:
             require(_membership(row), requirement)
             cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
             stored = cur.fetchone()
+            if stored:
+                self._assert_pinterest_context(stored[0], workspace_id, principal)
         if not stored:
             raise AlphaError("Connection unavailable.", 404)
         grant = self.token_for_worker(workspace_id, connection_id)
@@ -708,6 +727,8 @@ class OAuthService:
         releasing it so a disconnect cannot erase an already-known outcome.
         """
         from .contracts import digest
+        if getattr(self._provider('pinterest'), 'trial_readonly', False):
+            raise AlphaError('This Pinterest Trial cannot publish or schedule Pins.', 403, code='pinterest_trial_readonly')
         if not isinstance(fence, dict) or not fence.get('leaseId') or not fence.get('leaseOwner'):
             raise AlphaError('Pinterest publication needs an active approved worker lease.', 409)
         workspace_id, connection_id = manifest['workspaceId'], manifest['channelId']
@@ -1107,6 +1128,7 @@ class OAuthService:
                 row = cur.fetchone()
                 if not row or row[6]:
                     raise AlphaError("Connection unavailable.", 404)
+                self._assert_pinterest_context(row[0], workspace_id, scopes=row[7])
                 authorization_generation = None
                 if row[0] == 'youtube':
                     # Check schema and capture consent before OAuth transport,
@@ -1233,6 +1255,7 @@ class OAuthService:
             stored = cur.fetchone()
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
+            self._assert_pinterest_context(stored[0], workspace_id, principal, scopes=stored[2])
             if stored[0] == 'youtube':
                 cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
                 generation_row = cur.fetchone()
