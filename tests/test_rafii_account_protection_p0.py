@@ -181,6 +181,17 @@ class SignInAlertDelivery(Mode):
         self.assertEqual(svc.deliver_sign_in_alerts(), {"status": "disabled"})
 
 
+class SessionHistoryErasure(unittest.TestCase):
+    """RAP-088 (owner decision A+B): deletion erases the session inventory, after the device-registry purge."""
+    SOURCE = (Path(__file__).resolve().parents[1] / "src" / "postriff_phase2" / "account_deletion.py").read_text()
+
+    def test_erasure_runs_only_when_installed_and_after_the_security_purge(self):
+        # pr_session_security references pr_sessions ON DELETE RESTRICT (migration 120), so its rows must go first.
+        self.assertIn("to_regprocedure('public.pr_erase_session_history(uuid)')", self.SOURCE)
+        self.assertLess(self.SOURCE.index("SELECT public.pr_security_purge(%s)"), self.SOURCE.index("SELECT public.pr_erase_session_history(%s)"))
+        self.assertLess(self.SOURCE.index("SELECT public.pr_erase_session_history(%s)"), self.SOURCE.index("DELETE FROM public.pr_profiles WHERE user_id=%s"))
+
+
 class AlertsCannotBeCancelledBySignIn(Mode):
     def test_a_new_session_turning_alerts_off_is_still_reported(self):
         # The reviewed attack (A2): a fresh session's very first call is PATCH /api/me {alertNewDevice: false}.

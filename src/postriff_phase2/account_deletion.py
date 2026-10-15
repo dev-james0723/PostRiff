@@ -166,11 +166,6 @@ def _delete(service, workspace_id, principal):
         # Profile deletion below removes all phone data, including data in other workspaces.
         # Person-keyed growth data (migration 025): events carry a user id without an FK; assignments are keyed by subject.
         cur.execute('DELETE FROM public.pr_product_events WHERE user_id=%s', (principal,))
-        # RAP-088 (owner decision A+B): session inventory deleted, person-level session.* history kept without the session
-        # id or browser label. Migration 123 owns the erasure; before it is applied this erases nothing.
-        cur.execute("SELECT to_regprocedure('public.pr_erase_session_history(uuid)') IS NOT NULL")
-        if cur.fetchone()[0]:
-            cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))
         cur.execute('DELETE FROM public.pr_experiment_assignments WHERE subject_key IN (%s, %s)', (str(principal), str(workspace_id)))
         # RAPv2 device registry (migration 120): devices, session security state and the append-only login ledger.
         # The purge function refuses without the tombstone written above; before 120 is applied there is nothing.
@@ -178,6 +173,12 @@ def _delete(service, workspace_id, principal):
         purge = cur.fetchone()
         if purge and purge[0] is True:
             cur.execute('SELECT public.pr_security_purge(%s)', (principal,))
+        # RAP-088 (owner decision A+B): session inventory deleted, person-level session.* history kept without the session
+        # id or browser label. Migration 123 owns the erasure; before it is applied this erases nothing.
+        # After pr_security_purge: pr_session_security references pr_sessions ON DELETE RESTRICT (migration 120).
+        cur.execute("SELECT to_regprocedure('public.pr_erase_session_history(uuid)') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.

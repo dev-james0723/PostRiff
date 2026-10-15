@@ -177,10 +177,11 @@ end $$;
 -- RAPv2 H-1: browser reads also need a live, unrevoked session (and AAL2 where two-factor is enforced). Suites that
 -- act as the browser role get one unrevoked session id by default; postgres_browser_session_guard.py sets its own.
 \ir ../../migrations/postriff/119_rapv2_browser_session_guard.sql
-\ir ../../migrations/postriff/123_rapv2_session_history_erasure.sql
 do $$ begin
  execute format('alter database %I set request.jwt.claim.session_id = %L', current_database(), 'harness-session-000000000001');
 end $$;
 
 -- RAPv2 P1: device registry (server-only, append-only login events).
 \ir ../../migrations/postriff/120_rapv2_device_registry.sql
+-- RAPv2 RAP-088: account deletion erases the session inventory and redacts sign-in history.
+\ir ../../migrations/postriff/123_rapv2_session_history_erasure.sql
