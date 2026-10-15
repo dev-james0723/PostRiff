@@ -967,6 +967,10 @@ from postriff_phase2 import device_trust, security_holds  # noqa: E402
 from postriff_phase2.automation_runs import principal_repository  # noqa: E402
 
 KEY_NEW, KEY_OLD = "k" * 32, "o" * 32
+# API tokens (migration 016) are not part of the base harness; tests/phase2/postgres_api_tokens.py loads it the same way.
+with connection() as _db:
+    if not _db.execute("SELECT to_regclass('public.pr_api_tokens')").fetchone()[0]:
+        _db.execute((Path(__file__).resolve().parents[2] / "migrations" / "postriff" / "016_api_tokens.sql").read_text())
 DEVICE_KEYS = f"2:{KEY_NEW},1:{KEY_OLD}"
 SAME_ORIGIN = {"Sec-Fetch-Site": "same-origin"}
 
@@ -1081,10 +1085,10 @@ def same_browser_other_person():
     bob, _ = person()
     cookie, _ = known_browser(alice)
     before = devices(alice)
-    browse(bob, cookie=cookie)
+    _, _, _, bob_session = browse(bob, cookie=cookie)
     [(bob_device, state, *_)] = devices(bob)
     assert state == "observed" and bob_device not in {d[0] for d in before} and devices(alice) == before
-    [(_, _, _, details)] = ledger(bob, "session.observed")
+    [(_, _, _, details)] = [e for e in ledger(bob, "session.observed") if e[1] == bob_session]
     assert details["device"] == "new", details  # A's history never makes B's browser known
 
 
@@ -1643,8 +1647,8 @@ def incident_foreign_event():
     p1(hold=True)
     alice, _ = person()
     bob, _ = person()
-    browse(bob)
-    [(bob_event,)] = sql("SELECT id::text FROM public.pr_security_login_events WHERE user_id=%s AND event_type='session.observed'", bob)
+    _, _, _, bob_session = browse(bob)
+    [(bob_event,)] = sql("SELECT id::text FROM public.pr_security_login_events WHERE user_id=%s AND event_type='session.observed' AND session_id=%s", bob, bob_session)
     session = signed_in(alice)
     body = {"type": "not_me", "confirmed": True, "revokeOtherSessions": False}
     foreign = report(alice, session, {**body, "sourceEventId": bob_event})
