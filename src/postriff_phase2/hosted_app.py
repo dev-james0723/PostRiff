@@ -35,7 +35,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import agent_observability, tools
+from . import agent_observability, device_trust, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -107,7 +107,9 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
         from . import account_protection
         if not account_protection.observing():
             return None
-        key = (principal, session_id)
+        from . import device_trust
+        marker = device_trust.seen_marker()
+        key = (principal, session_id) if marker is None else (principal, session_id, marker)
         if seen.has(key):
             return None
         from .hosted import observe_session
@@ -567,6 +569,8 @@ class HostedApplication:
         correlation = agent_observability.bind_request(request_id)
         # RAPv2 A1: the token verifier labels a session it observes with this request's browser (never header text).
         label_binding = _REQUEST_LABEL.set(client_label(environ))
+        # RAPv2 P1: the browser's device cookie, and the new one the device registry may issue after verification.
+        device_binding = device_trust.bind(environ)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -574,6 +578,9 @@ class HostedApplication:
             status_code = int(status.split()[0])
             headers = [(key,value) for key,value in headers if key.lower() != 'x-request-id']
             headers.append(('X-Request-ID', request_id))
+            issued = device_trust.set_cookie_header()
+            if issued is not None:
+                headers.append(issued)
             return start_response(status, headers, exc_info) if exc_info else start_response(status, headers)
         try:
             return self._handle(environ, respond)
@@ -598,6 +605,7 @@ class HostedApplication:
                 pass
             agent_observability.release_request(correlation)
             _REQUEST_LABEL.reset(label_binding)
+            device_trust.reset(device_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
