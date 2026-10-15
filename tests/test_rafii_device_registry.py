@@ -102,18 +102,18 @@ class Register(Case):
 
     def test_a_new_session_on_a_known_browser_is_a_new_session_only(self):
         request = self.request(f"{device_trust.COOKIE}={COOKIE}")
-        cursor = base.FakeCursor([((True,), 1), ((False,), 1), (None, 1), ((DEVICE, 2, "observed"), 1), (None, 1), (None, 1), (None, 1)])
+        cursor = base.FakeCursor([((True,), 1), ((False,), 1), (None, 1), ((DEVICE, 2, "observed", False), 1), (None, 1), (None, 1), (None, 1)])
         self.observe(cursor)
         self.assertIsNone(request.issued)
         self.assertIsNone(device_trust.set_cookie_header())
         self.assertEqual([e[0] for e in events(cursor)], ["session.observed"])
         self.assertEqual(events(cursor)[0][2]["device"], "known")
         lookup = statements(cursor, "pr_security_devices")[0][1]
-        self.assertEqual(lookup[1], [device_trust.token_hash(KEY_2.encode(), base.PRINCIPAL, COOKIE), device_trust.token_hash(KEY_1.encode(), base.PRINCIPAL, COOKIE)])
+        self.assertEqual(lookup[2], [device_trust.token_hash(KEY_2.encode(), base.PRINCIPAL, COOKIE), device_trust.token_hash(KEY_1.encode(), base.PRINCIPAL, COOKIE)])
 
     def test_a_match_under_the_old_key_is_rehashed_under_the_current_one(self):
         self.request(f"{device_trust.COOKIE}={COOKIE}")
-        cursor = base.FakeCursor([((DEVICE, 1, "observed"), 1), (None, 1)])
+        cursor = base.FakeCursor([((DEVICE, 1, "observed", False), 1), (None, 1)])
         self.assertEqual(device_trust.register(cursor, base.PRINCIPAL, SESSION), {"id": DEVICE, "new": False})
         sql, params = cursor.executed[1]
         self.assertIn("SET token_hash=%s,hmac_key_version=%s", sql)
@@ -121,11 +121,25 @@ class Register(Case):
 
     def test_a_revoked_browser_gets_a_new_token_and_record(self):
         request = self.request(f"{device_trust.COOKIE}={COOKIE}")
-        cursor = base.FakeCursor([((DEVICE, 2, "revoked"), 1), (("22222222-2222-4222-8222-222222222222", True), 1), (None, 1)])
+        cursor = base.FakeCursor([((DEVICE, 2, "revoked", False), 1), (("22222222-2222-4222-8222-222222222222", True), 1), (None, 1)])
         device = device_trust.register(cursor, base.PRINCIPAL, SESSION)
         self.assertEqual(device["new"], True)
         self.assertNotEqual(request.issued, COOKIE)
         self.assertEqual(cursor.executed[1][1][1], device_trust.token_hash(KEY_2.encode(), base.PRINCIPAL, request.issued))
+
+    def test_a_browser_idle_past_the_inactivity_limit_is_registered_again(self):
+        # RAP-138: the old record is revoked (kept as evidence) and the browser gets a new token and record.
+        request = self.request(f"{device_trust.COOKIE}={COOKIE}")
+        cursor = base.FakeCursor([((DEVICE, 2, "observed", True), 1), (None, 1), (None, 1), (("22222222-2222-4222-8222-222222222222", True), 1), (None, 1)])
+        device = device_trust.register(cursor, base.PRINCIPAL, SESSION)
+        self.assertEqual(device, {"id": "22222222-2222-4222-8222-222222222222", "new": True})
+        self.assertEqual(cursor.executed[0][1][0], device_trust.INACTIVE_SECONDS)
+        expire_sql, expire = cursor.executed[1]
+        self.assertIn("state='revoked'", expire_sql)
+        self.assertIn("revoke_reason='inactive'", expire_sql)
+        self.assertEqual(expire, (base.PRINCIPAL, DEVICE))
+        self.assertEqual(cursor.executed[2][1][3:5], ("device.revoked", f"device.revoked:{DEVICE}:inactive"))
+        self.assertNotEqual(request.issued, COOKIE)
 
     def test_an_unknown_cookie_never_matches_another_persons_record(self):
         # The same browser cookie under a second account is looked up with that account's hashes only.
@@ -133,7 +147,7 @@ class Register(Case):
         other = "22222222-2222-4222-8222-222222222222"
         cursor = base.FakeCursor([(None, 1), ((DEVICE, True), 1), (None, 1)])
         device_trust.register(cursor, other, SESSION)
-        self.assertEqual(cursor.executed[0][1][0], other)
+        self.assertEqual(cursor.executed[0][1][1], other)
         self.assertNotIn(device_trust.token_hash(KEY_2.encode(), base.PRINCIPAL, COOKIE), json.dumps(cursor.executed))
 
     def test_a_server_side_first_request_records_the_session_and_leaves_the_device_pending(self):

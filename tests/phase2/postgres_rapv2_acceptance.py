@@ -50,17 +50,9 @@ from postriff_phase2.notifications.service import NotificationService  # noqa: E
 
 # Rows whose expected result the shipped code does not meet (recorded FAIL, see the module docstring).
 KNOWN_GAPS = {
-    # RAPv2 P1 as shipped (5e4f4e13) against the matrix; product decisions, not fixed in this tests-only PR.
-    "RAP-013": "an unrecordable security state refuses the protected capability with 403 step-up, not 503",
-    "RAP-021": "a copied device cookie plus an AAL1 bearer reads as a known browser: sensitive capabilities need no fresh proof",
-    "RAP-033": "only four capabilities are gated (tokens, connections, Agent grants, exports); private drafts stay readable",
-    "RAP-039": "the step-up gate does not consult account holds: a held account's interactive session can still export",
-    "RAP-045": "an account with no second factor is told to complete MFA it cannot complete (no enrolment/recovery next step)",
-    "RAP-046": "a fresh TOTP proof from before the factor was removed still satisfies step-up",
-    "RAP-064": "risk decisions and incidents queue no mandatory notice",
-    "RAP-104": "turning RAFII_SECURITY_INCIDENT_HOLD off stops enforcing existing holds",
-    "RAP-114": "an incident report sends no notice to any contact channel",
-    "RAP-138": "a browser idle for 200 days still reads as known (no inactivity expiry)",
+    # Empty: the eleven P1 gaps of the 2026-10-15 re-run (RAP-013, 021, 033, 039, 045, 046, 064, 104, 114, 138, and the
+    # migration-header row RAP-092 in the unit suite) were closed by the follow-up fix PR. A new gap is added here with
+    # the reason the code does not meet the row.
 }
 
 results = {}
@@ -157,7 +149,11 @@ class IdentityAdmin:
         return True
 
     def verified_factors(self, principal):
-        return []
+        # People given a second factor by a check (FACTORS); everyone else has none (RAP-045).
+        return [{"id": "factor-acceptance", "type": "totp", "name": ""}] if principal in FACTORS else []
+
+
+FACTORS = set()
 
 
 service = HostedWorkspaceService(connection, verify, public_base_url="https://app.rafii.example", mailer=mailer, identity=IdentityAdmin(),
@@ -1224,6 +1220,7 @@ def known_low_risk():
 def unknown_low():
     p1(mode="enforce")
     user, workspace = person()
+    FACTORS.add(user)  # someone who can complete the MFA prompt
     _, _, _, session = browse(user)
     for path in ("/api/me", "/api/auth/sessions", "/api/me/security-events", f"/api/workspaces/{workspace}"):
         assert call("GET", path, token(user, session), headers=SAME_ORIGIN)[0] == 200, path

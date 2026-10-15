@@ -4,7 +4,8 @@ security_holds reads pr_security_account_controls (migration 121) and fails clos
 founder block helper (operator_actions._lookup), which fails open. Everything that acts as a person without them
 present re-checks it: API tokens, the campaign worker at claim and before the writer call, automation drafting and
 publishing and Agent task steps (through principal_repository, every transaction), and the social publish worker at
-claim and before dispatch. RAFII_SECURITY_INCIDENT_HOLD is off by default; off runs no statement.
+claim and before dispatch. RAFII_SECURITY_INCIDENT_HOLD is off by default; off still enforces an active hold (RAP-104)
+but fails open and runs no epoch or authorization-time fence.
 
 Statement-level tests over a recording cursor. Monotonic epochs, the trigger and grants against a real database are in
 tests/phase2/postgres_account_holds.py.
@@ -40,15 +41,34 @@ class Case(unittest.TestCase):
         saved = flags._values
         self.addCleanup(flags.attach, saved)
         flags.attach({"RAFII_SECURITY_INCIDENT_HOLD": "1"})
+        installed = dict(security_holds._INSTALLED)
+        self.addCleanup(security_holds._INSTALLED.update, installed)
+        security_holds._INSTALLED.update(readable=False, checked=float("-inf"))
 
 
 class Helper(Case):
-    def test_flag_off_runs_nothing(self):
+    def test_flag_off_still_enforces_an_active_hold(self):
+        # RAP-104: the flag is the rollback lever for incidents and fences, not a way to reopen a held account.
         flags.attach({})
-        cursor = base.FakeCursor([((True, 9, None), 1)])
+        cursor = base.FakeCursor([((True,), 1), ((True,), 1)])
+        with self.assertRaises(security_holds.AccountHeld) as raised:
+            security_holds.assert_clear(cursor, USER, expected_epoch=3, authorized_at=None)
+        self.assertEqual(raised.exception.code, "security_account_hold")
+        self.assertIn("to_regclass('public.pr_security_account_controls')", cursor.executed[0][0])
+        self.assertEqual(cursor.executed[1], ("SELECT hold_active FROM public.pr_security_account_controls WHERE user_id=%s", (USER,)))
+        # Once known to be readable it is not probed again; a released hold, a moved epoch or an old approval pass.
+        cleared = base.FakeCursor([((False,), 1)])
+        self.assertIsNone(security_holds.assert_clear(cleared, USER, expected_epoch=3, authorized_at=None))
+        self.assertEqual(len(cleared.executed), 1)
+
+    def test_flag_off_fails_open_without_the_table(self):
+        flags.attach({})
+        cursor = base.FakeCursor([((False,), 1)])
         self.assertIsNone(security_holds.assert_clear(cursor, USER))
-        self.assertIsNone(security_holds.assert_clear(cursor, USER, expected_epoch=3))
-        self.assertEqual(cursor.executed, [])
+        self.assertIsNone(security_holds.snapshot(cursor, USER))
+        # Not readable: probed once, then nothing until the probe interval passes.
+        self.assertEqual(len(cursor.executed), 1)
+        self.assertIsNone(security_holds.assert_clear(base.FakeCursor(), None))
 
     def test_no_control_row_is_clear_at_epoch_zero(self):
         cursor = base.FakeCursor([(None, 1)])
@@ -136,10 +156,13 @@ class ApiTokenRoutes(Case):
         self.assertEqual(grant["createdBy"], USER)
         self.assertEqual(holds(cursor), [(USER,)])
 
-    def test_flag_off_adds_no_statement(self):
+    def test_flag_off_still_refuses_a_held_creator(self):
         flags.attach({})
-        grant, cursor = self.validate(None)
-        self.assertEqual((holds(cursor), len(cursor.executed)), ([], 1))
+        security_holds._INSTALLED.update(readable=True)
+        with self.assertRaises(security_holds.AccountHeld):
+            self.validate((True,))
+        grant, cursor = self.validate((False,))
+        self.assertEqual((holds(cursor), len(cursor.executed)), ([(USER,)], 2))
 
 
 class PrincipalRepository(Case):

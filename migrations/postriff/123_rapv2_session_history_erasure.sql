@@ -1,5 +1,10 @@
 -- RAPv2 RAP-088 (owner decision 2026-10-15, option A+B): account deletion removes the person's session inventory and
--- keeps their person-level sign-in history with the identifying fields erased. Candidate only: not applied anywhere.
+-- keeps their person-level sign-in history with the identifying fields erased. Applied to staging and production
+-- (2026-10-15).
+--
+-- Rollback: drop function public.pr_erase_session_history(uuid); account deletion checks to_regprocedure first and
+-- skips the erasure when the function is absent, so no code change is needed. Rows it already erased are not restorable: the session inventory was deleted and the audit
+-- subjects and browser labels were overwritten (that is the point of the erasure).
 BEGIN;
 CREATE OR REPLACE FUNCTION public.pr_erase_session_history(uid uuid)
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $erasure$

@@ -232,10 +232,7 @@ class P1Boundaries(unittest.TestCase):
         source = (self.SRC / "productivity_connectors.py").read_text()
         self.assertNotRegex(source, r"gmail\.send|gmail\.compose|gmail\.modify|messages/send|Mail\.Send")
 
-    @unittest.expectedFailure
     def test_rap092_every_p1_migration_documents_its_rollback(self):
-        # Known gap: 120 and 121 say how to roll back; 122 does not, and 123 still says "Candidate only: not applied
-        # anywhere" although it is applied.
         for name in ("120_rapv2_device_registry.sql", "121_rapv2_account_holds.sql", "122_rapv2_security_incidents.sql", "123_rapv2_session_history_erasure.sql"):
             with self.subTest(migration=name):
                 header = (ROOT / "migrations" / "postriff" / name).read_text().split("begin;", 1)[0].split("BEGIN;", 1)[0]
