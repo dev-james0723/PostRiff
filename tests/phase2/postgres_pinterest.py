@@ -25,7 +25,27 @@ verify.session_id = lambda token, principal:'synthetic-pinterest-'+token
 verify.auth_time = lambda token, principal:clock[0]
 with connection() as db:
     for uid in USERS.values(): db.execute('INSERT INTO auth.users VALUES(%s)',(uid,))
-    db.execute(Path('migrations/postriff/20261014_pinterest_rate_budgets.sql').read_text())
+    # Reproduce Supabase's observed broad defaults so CREATE TABLE cannot silently inherit extra authority.
+    db.execute('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role')
+    migration = Path('migrations/postriff/20261014_pinterest_rate_budgets.sql').read_text()
+    db.execute(migration)
+    db.execute('ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM service_role')
+    # Re-applying this additive candidate must preserve the same bounded access.
+    db.execute(migration)
+    assert db.execute("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid='public.pr_pinterest_rate_budgets'::regclass").fetchone()==(True,True)
+    privileges = {row[0] for row in db.execute("SELECT privilege_type FROM information_schema.table_privileges WHERE table_schema='public' AND table_name='pr_pinterest_rate_budgets' AND grantee='service_role'")}
+    assert privileges=={'SELECT','INSERT','UPDATE','DELETE'}, privileges
+with connection() as db:
+    db.execute('SET ROLE service_role')
+    db.execute("INSERT INTO public.pr_pinterest_rate_budgets VALUES('permission-probe',0,1)")
+    db.execute("UPDATE public.pr_pinterest_rate_budgets SET used=2 WHERE budget_key='permission-probe'")
+    assert db.execute("SELECT used FROM public.pr_pinterest_rate_budgets WHERE budget_key='permission-probe'").fetchone()==(2,)
+    db.execute("DELETE FROM public.pr_pinterest_rate_budgets WHERE budget_key='permission-probe'")
+with connection() as db:
+    db.execute('SET ROLE service_role')
+    try: db.execute('TRUNCATE public.pr_pinterest_rate_budgets')
+    except psycopg.errors.InsufficientPrivilege: pass
+    else: raise AssertionError('Service role can erase all rate reservations')
 refreshes, lock = 0, threading.Lock()
 provider_calls, grant_scopes = [], ['user_accounts:read boards:read pins:read pins:write']
 def transport(method,url,**kw):
@@ -202,4 +222,6 @@ print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_sy
     'pilotTwoReadScopesConnected':True,'pilotExpiryStopsCustody':True,'pilotDisconnectAfterExpiry':True,
     'trialDailyConcurrentReservations':120,'trialDailyAccepted':100,'trialDailyDenied':20,
     'trialMinuteCannotResetDaily':True,'trialDailyRecovery':True,'disconnectStopsTokenAccess':True,'otherTenantUnaffected':True,'quotaConcurrentReservations':120,
-    'quotaAccepted':100,'quotaDenied':20,'quotaNextWindowRecovered':True,'clientBudgetAccessDenied':True}))
+    'quotaAccepted':100,'quotaDenied':20,'quotaNextWindowRecovered':True,'clientBudgetAccessDenied':True,
+    'supabaseDefaultGrantsSimulated':True,'quotaForcedRls':True,'quotaServiceRolePrivilegesBounded':True,
+    'quotaServiceRoleDmlPassed':True,'quotaServiceRoleTruncateDenied':True}))

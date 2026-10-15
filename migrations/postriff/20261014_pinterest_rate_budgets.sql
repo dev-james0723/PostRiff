@@ -1,4 +1,4 @@
--- Candidate only. Apply to an approved isolated DB first, then production only with release approval.
+-- Candidate only. Apply only to the specifically approved database after reviewed migration approval.
 begin;
 create table if not exists public.pr_pinterest_rate_budgets (
   budget_key text not null,
@@ -7,6 +7,9 @@ create table if not exists public.pr_pinterest_rate_budgets (
   primary key (budget_key, window_start)
 );
 alter table public.pr_pinterest_rate_budgets enable row level security;
+alter table public.pr_pinterest_rate_budgets force row level security;
+-- Supabase default table grants may include TRUNCATE/TRIGGER/REFERENCES; explicitly narrow them.
+revoke all on public.pr_pinterest_rate_budgets from service_role;
 revoke all on public.pr_pinterest_rate_budgets from public, anon, authenticated;
 grant select, insert, update, delete on public.pr_pinterest_rate_budgets to service_role;
 comment on table public.pr_pinterest_rate_budgets is 'Server-only Pinterest rate reservations. Hashed app/account keys, no credentials or content. Delete windows older than 48 hours via separately approved maintenance.';
