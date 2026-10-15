@@ -93,6 +93,8 @@ grant execute on function public.pr_security_purge(uuid) to service_role;
 alter table public.pr_security_account_controls enable row level security;
 alter table public.pr_security_account_controls force row level security;
 revoke all on public.pr_security_account_controls from public, anon, authenticated;
+-- Supabase's default privileges grant service_role ALL on new tables: take that back, then grant only the design.
+revoke all on public.pr_security_account_controls from service_role;
 grant select on public.pr_security_account_controls to service_role;
 create policy rapv2_service_only on public.pr_security_account_controls for all to service_role using (true) with check (true);
 

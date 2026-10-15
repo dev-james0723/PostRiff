@@ -1,0 +1,119 @@
+{
+  "status": "PASS",
+  "execution": "CLOUD SYNTHETIC APPLICATION BROWSER",
+  "published": false,
+  "genui": "default (flags off)",
+  "results": [
+    {
+      "width": 1440,
+      "draftable": [
+        "LinkedIn",
+        "Instagram",
+        "Threads",
+        "Facebook",
+        "X",
+        "Xiaohongshu"
+      ],
+      "revision": "cap_08d9843173beabc9a6fc",
+      "waves": [
+        "RAFII_CREATION_PROJECTION_ENABLED"
+      ],
+      "instagramFormats": 4,
+      "facebookFormats": 3,
+      "keyboard": true,
+      "overflow": 0,
+      "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-composer-1440.png",
+      "review": {
+        "facts": {
+          "instagram": {
+            "Account": "No Instagram account connected · draft, copy and export only",
+            "Format": "Carousel",
+            "Writing guide": "Instagram guide applied in full",
+            "Media": "Needs an image",
+            "Publishing": "Export only · Rafii can’t publish this format yet",
+            "Limits": "Platform limits for this format are unverified"
+          },
+          "facebook": {
+            "Account": "No Facebook account connected · draft, copy and export only",
+            "Format": "Reel",
+            "Writing guide": "Facebook guide applied in full",
+            "Media": "Needs your video · Rafii wrote the script, not a video",
+            "Publishing": "Export only · Rafii can’t publish this format yet",
+            "Limits": "Platform limits for this format are unverified"
+          },
+          "linkedin": {
+            "Account": "No LinkedIn account connected · draft, copy and export only",
+            "Format": "Post",
+            "Writing guide": "LinkedIn guide applied in full",
+            "Publishing": "Connect LinkedIn to publish",
+            "Limits": "Platform limits for this format are unverified"
+          }
+        },
+        "keyboardEditor": true,
+        "axeSeriousOrCritical": 0,
+        "overflow": 0,
+        "sideEffects": {
+          "jobs": 0,
+          "reviews": 0
+        },
+        "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-review-1440.png"
+      }
+    },
+    {
+      "width": 390,
+      "draftable": [
+        "LinkedIn",
+        "Instagram",
+        "Threads",
+        "Facebook",
+        "X",
+        "Xiaohongshu"
+      ],
+      "revision": "cap_08d9843173beabc9a6fc",
+      "waves": [
+        "RAFII_CREATION_PROJECTION_ENABLED"
+      ],
+      "instagramFormats": 4,
+      "facebookFormats": 3,
+      "keyboard": true,
+      "overflow": 0,
+      "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-composer-390.png",
+      "review": {
+        "facts": {
+          "instagram": {
+            "Account": "No Instagram account connected · draft, copy and export only",
+            "Format": "Carousel",
+            "Writing guide": "Instagram guide applied in full",
+            "Media": "Needs an image",
+            "Publishing": "Export only · Rafii can’t publish this format yet",
+            "Limits": "Platform limits for this format are unverified"
+          },
+          "facebook": {
+            "Account": "No Facebook account connected · draft, copy and export only",
+            "Format": "Reel",
+            "Writing guide": "Facebook guide applied in full",
+            "Media": "Needs your video · Rafii wrote the script, not a video",
+            "Publishing": "Export only · Rafii can’t publish this format yet",
+            "Limits": "Platform limits for this format are unverified"
+          },
+          "linkedin": {
+            "Account": "No LinkedIn account connected · draft, copy and export only",
+            "Format": "Post",
+            "Writing guide": "LinkedIn guide applied in full",
+            "Publishing": "Connect LinkedIn to publish",
+            "Limits": "Platform limits for this format are unverified"
+          }
+        },
+        "keyboardEditor": true,
+        "axeSeriousOrCritical": 0,
+        "overflow": 0,
+        "sideEffects": {
+          "jobs": 0,
+          "reviews": 0
+        },
+        "screenshot": "/home/runner/work/PostRiff/PostRiff/.jcb-artifacts/content-skills-browser/CLOUD-SYNTHETIC-review-390.png"
+      }
+    }
+  ],
+  "capturedAt": "2026-10-10T01:16:47.082Z"
+}
