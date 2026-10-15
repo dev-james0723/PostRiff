@@ -11,6 +11,9 @@ spec.loader.exec_module(suite)
 
 class PostgreSQLCatalogControls(unittest.TestCase):
     def test_guarded_fixtures_use_explicit_owned_routes_without_changing_ordinary_selection(self):
+        self.assertEqual(set(suite.OWNED_CLOUD_ONLY),{'postgres_discord_authorization.py',
+            'postgres_discord_connections.py','postgres_discord_worker.py',
+            'postgres_discord_rate_limits.py','postgres_discord_capacity.py'})
         ordinary=[Path('postgres_alpha.py'),Path('postgres_beta.py')]
         guarded=[Path(name) for name in suite.OWNED_CLOUD_ONLY]
         self.assertEqual(suite.select_scripts(ordinary+guarded,[]),ordinary)

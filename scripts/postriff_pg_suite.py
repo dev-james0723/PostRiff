@@ -13,6 +13,9 @@ DSN='host=127.0.0.1 port=55438 dbname=postgres'
 os.environ['LC_ALL']='C';os.environ['POSTRIFF_RESEARCH']='0'
 
 OWNED_CLOUD_ONLY={
+    'postgres_discord_authorization.py':'bash scripts/discord-p4-validation-cloud.sh',
+    'postgres_discord_connections.py':'bash scripts/discord-p4-validation-cloud.sh',
+    'postgres_discord_worker.py':'bash scripts/discord-p4-validation-cloud.sh',
     'postgres_discord_rate_limits.py':'bash scripts/discord-p4-validation-cloud.sh',
     'postgres_discord_capacity.py':'bash scripts/discord-capacity-cloud.sh with an explicit predeclared stage',
 }
