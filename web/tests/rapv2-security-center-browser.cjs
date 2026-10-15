@@ -101,7 +101,7 @@ async function shot(page, name) {
     // --- desktop: method, device counts, revoke-others dialog, keyboard, "This wasn't me", axe ------------------------
     {
       const { context, page, section } = await open(browser);
-      await section.getByText('Signed in with').first().waitFor({ timeout: 60000 });
+      await section.locator('text=Signed in with >> visible=true').first().waitFor({ timeout: 60000 });
       const text = await section.innerText();
       check('RAP-016', 'the current session reads "Unknown", never a guessed method', /Safari on iPhone[\s\S]*Unknown/.test(text), text.slice(0, 400));
       check('RAP-016', 'recorded methods read as recorded', text.includes('Google or another provider') && text.includes('Email code'), text.slice(0, 600));
@@ -175,7 +175,7 @@ async function shot(page, name) {
     // --- iPhone width: no sideways scroll, actions reachable (RAP-117) -------------------------------------------------
     {
       const { context, page, section } = await open(browser, { width: 375, height: 812 });
-      await section.getByText('Signed in with').first().waitFor({ timeout: 60000 });
+      await section.locator('text=Signed in with >> visible=true').first().waitFor({ timeout: 60000 });
       const wide = await page.evaluate(() => document.scrollingElement.scrollWidth <= window.innerWidth + 1);
       check('RAP-117', 'no horizontal overflow at 375px', wide, await page.evaluate(() => [document.scrollingElement.scrollWidth, window.innerWidth]));
       const actions = section.locator('button:visible', { hasText: /Revoke|Sign out others|This wasn’t me/ });
@@ -214,7 +214,7 @@ async function shot(page, name) {
     // --- backend 503: retry and support, never "secure" (RAP-128) -----------------------------------------------------
     {
       const { context, page, section } = await open(browser, { sessions: json({ error: 'The service is temporarily unavailable.' }, 503) });
-      const failed = section.getByText('Couldn’t load sessions');
+      const failed = section.locator('text=Couldn’t load sessions >> visible=true').first();
       await failed.waitFor({ timeout: 60000 });
       const text = await section.innerText();
       check('RAP-128', 'the error says sessions could not be loaded and offers Retry', (await section.getByRole('button', { name: 'Retry' }).count()) >= 1, text.slice(0, 500));
