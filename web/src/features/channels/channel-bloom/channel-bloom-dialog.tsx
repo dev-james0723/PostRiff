@@ -5,7 +5,7 @@ import { IconArrowLeft, IconArrowRight, IconBookmark, IconCheck, IconFolder, Ico
 import type { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { RafiiDialog, RafiiDialogBody, RafiiDialogContent, RafiiDialogFooter, RafiiDialogHeader, StateMessage } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
-import { DRAFT_PLATFORMS } from '@/features/agent/composer';
+import { useDraftPlatforms } from '@/features/agent/use-draft-platforms';
 import type { ChannelFolder } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
 import { FOLDER_MAX, FOLDER_SHELF, FOLDER_SYMBOLS, accountMatches, canMove, cleanSelection, snapshotContext, toggleGroup, validateFolder, visibleFolders, type FolderAccount, type FolderContext, type FolderSource, type FolderSymbol } from '@/lib/channels/folders';
@@ -107,7 +107,8 @@ function ChannelBloomPanel({ accounts, folders, selected: committed, context, on
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const folderApi = useChannelFolders();
-  const draftable = useMemo(() => draftableFrom(DRAFT_PLATFORMS), []);
+  const draftPlatforms = useDraftPlatforms();
+  const draftable = useMemo(() => draftableFrom(draftPlatforms), [draftPlatforms]);
   const pickable = useMemo(() => pickableAccounts(accounts, draftable), [accounts, draftable]);
 
   const [staged, setStaged] = useState<string[]>(() => cleanSelection(committed, pickable));

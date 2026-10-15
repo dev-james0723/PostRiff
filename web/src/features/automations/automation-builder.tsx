@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { DRAFT_PLATFORMS } from '@/features/agent/composer';
+import { useDraftPlatforms } from '@/features/agent/use-draft-platforms';
 import { contentChoice, type LibraryValue } from '@/features/agent/content-choice';
 import { ContentLibraryDialog } from '@/features/agent/content-library-dialog';
 import { pocketSources } from '@/features/agent/home/context-pocket';
@@ -250,7 +250,8 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
 
   const channels = useMemo(() => state?.phase2?.channels ?? [], [state?.phase2?.channels]);
   const accounts = useMemo(() => toFolderAccounts(channels), [channels]);
-  const draftable = useMemo(() => accounts.filter((a) => a.connected && (DRAFT_PLATFORMS as readonly string[]).includes(a.platform)), [accounts]);
+  const draftPlatforms = useDraftPlatforms();
+  const draftable = useMemo(() => accounts.filter((a) => a.connected && draftPlatforms.includes(a.platform)), [accounts, draftPlatforms]);
   const folders = useMemo(() => state?.phase2?.channelFolders ?? [], [state?.phase2?.channelFolders]);
   const sources = useMemo(() => pocketSources(state?.sources), [state?.sources]);
   const settings = useMemo(() => settingsOf(snapshot.data), [snapshot.data]);
@@ -773,7 +774,7 @@ export function AutomationBuilder({ open, onOpenChange, initial, isOwner, act, o
                   <div className='flex flex-col gap-2'>
                     <p className={HINT}>No accounts connected. Choose apps to draft for, or connect an account on Channels.</p>
                     <div className='flex flex-wrap gap-1.5'>
-                      {DRAFT_PLATFORMS.map((platform) => {
+                      {draftPlatforms.map((platform) => {
                         const on = targets.some((t) => !t.channelId && t.platform === platform);
                         return (
                           <button key={platform} type='button' aria-pressed={on} onClick={() => togglePlatform(platform)} className={cn('rafii-focus inline-flex min-h-11 items-center gap-2 rounded-[var(--rafii-radius-control)] px-3 text-sm', on ? 'rafii-glass-selected text-foreground' : 'rafii-quiet text-muted-foreground hover:text-foreground')}>
