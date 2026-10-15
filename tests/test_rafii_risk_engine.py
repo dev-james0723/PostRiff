@@ -3,7 +3,9 @@
 security_policy is pure (no I/O, no model) and versioned; security_gate applies it in front of creating API tokens,
 connecting accounts, widening Agent permissions and exports, only under RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce.
 Step-up is a fresh independent second factor on an AAL2 session read from the signed `amr` claim: never the JWT `iat`,
-never a same-inbox one-time code. Statement-level tests over a recording cursor.
+never a same-inbox one-time code, never a proof older than the last factor removal. A known browser alone is not proof:
+without a fresh factor a sensitive capability needs a low-risk AAL2 session. Private workspace reads are gated only at
+high risk and fail open. Statement-level tests over a recording cursor.
 """
 import io
 import json
@@ -17,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import test_postriff_account_security as base  # noqa: E402
 from postriff_alpha.domain import AlphaError  # noqa: E402
-from postriff_phase2 import security_gate, security_policy as policy  # noqa: E402
+from postriff_phase2 import security_gate, security_holds, security_policy as policy  # noqa: E402
 from postriff_phase2.coworker import flags  # noqa: E402
 from postriff_phase2.hosted_app import HostedApplication  # noqa: E402
 
@@ -26,13 +28,42 @@ SESSION = "session-risk-0123456789"
 WORKSPACE = "00000000-0000-0000-0000-0000000000aa"
 TOTP = policy.Proof("totp", NOW - 30, "aal2")
 KNOWN = policy.Signals(device="known")
+AAL2 = policy.Proof("password", NOW - 3600, "aal2")
+# The recorded session row: (revoked, device, recent change, last factor removal, session has a security record).
+
+
+def signals(revoked=False, device=None, recent=False, factor_removed=0, recorded=True):
+    return ((revoked, device, recent, factor_removed, recorded), 1)
 
 
 class Policy(unittest.TestCase):
-    def test_a_known_browser_without_recent_changes_needs_no_extra_proof(self):
+    def test_a_known_browser_without_recent_changes_needs_no_extra_proof_on_aal2(self):
+        for capability in policy.SENSITIVE:
+            decision = policy.evaluate(KNOWN, AAL2, NOW, capability)
+            self.assertEqual((decision.outcome, decision.risk_level, decision.reasons), ("allow", "low", ()))
+
+    def test_a_known_browser_alone_is_not_proof(self):
+        # RAP-021: a copied device cookie with an AAL1 bearer reads as the known browser; that is not enough.
         for capability in policy.SENSITIVE:
             decision = policy.evaluate(KNOWN, policy.Proof(), NOW, capability)
-            self.assertEqual((decision.outcome, decision.risk_level, decision.reasons), ("allow", "low", ()))
+            self.assertEqual((decision.outcome, decision.enforcement, decision.risk_level, decision.reasons), ("step_up", "challenge", "low", ("aal1_session",)))
+        self.assertEqual(policy.evaluate(KNOWN, TOTP, NOW, "exports").step_up_method, "totp")
+
+    def test_a_proof_made_before_the_factor_was_removed_is_void(self):
+        # RAP-046
+        removed = policy.Signals(device="known", recent_change=True, factor_changed_at=NOW - 10)
+        self.assertEqual(policy.evaluate(removed, TOTP, NOW, "exports").outcome, "step_up")
+        later = policy.Proof("totp", NOW - 5, "aal2")
+        self.assertEqual(policy.evaluate(removed, later, NOW, "exports").step_up_method, "totp")
+
+    def test_private_data_is_gated_only_at_high_risk(self):
+        # RAP-033
+        self.assertEqual(policy.evaluate(policy.Signals(device=None), policy.Proof(), NOW, "private_data").outcome, "allow")
+        self.assertEqual(policy.evaluate(policy.Signals(device="known", recent_change=True), policy.Proof(), NOW, "private_data").outcome, "allow")
+        high = policy.evaluate(policy.Signals(device=None, recent_change=True), policy.Proof(), NOW, "private_data")
+        self.assertEqual((high.outcome, high.risk_level), ("step_up", "high"))
+        self.assertEqual(policy.evaluate(policy.Signals(device="revoked"), policy.Proof(), NOW, "private_data").outcome, "step_up")
+        self.assertEqual(policy.evaluate(policy.Signals(device=None, recent_change=True), TOTP, NOW, "private_data").step_up_method, "totp")
 
     def test_an_unknown_browser_must_step_up_for_each_sensitive_capability(self):
         for device in (None, "new"):
@@ -71,7 +102,7 @@ class Policy(unittest.TestCase):
     def test_deterministic_and_versioned(self):
         runs = {policy.evaluate(policy.Signals(device=None), policy.Proof("otp", NOW, "aal2"), NOW, "exports") for _ in range(5)}
         self.assertEqual(len(runs), 1)
-        self.assertEqual(runs.pop().body(), {"outcome": "step_up", "riskLevel": "medium", "reasonCodes": ["unknown_device"], "policyVersion": 1})
+        self.assertEqual(runs.pop().body(), {"outcome": "step_up", "riskLevel": "medium", "reasonCodes": ["unknown_device"], "policyVersion": 2})
 
     def test_no_model_is_imported(self):
         source = (Path(policy.__file__)).read_text() + Path(security_gate.__file__).read_text()
@@ -90,14 +121,18 @@ class Capabilities(unittest.TestCase):
             ("PUT", f"api/workspaces/{WORKSPACE}/agent/permissions"): None,
             ("GET", f"api/workspaces/{WORKSPACE}/export"): "exports",
             ("GET", f"api/workspaces/{WORKSPACE}/profile-export"): "exports",
-            # Protective or read-only: never gated, so a person under challenge can still lock things down.
+            # Protective: never gated, so a person under challenge can still lock things down.
             ("DELETE", f"api/workspaces/{WORKSPACE}/tokens/abc"): None,
-            ("GET", f"api/workspaces/{WORKSPACE}/tokens"): None,
             ("DELETE", f"api/workspaces/{WORKSPACE}/channels/threads"): None,
             ("POST", f"api/workspaces/{WORKSPACE}/agent/permissions/revoke"): None,
-            ("GET", f"api/workspaces/{WORKSPACE}/agent/permissions"): None,
             ("POST", "api/auth/sessions/revoke-others"): None,
-            ("GET", f"api/workspaces/{WORKSPACE}"): None,
+            # Reads of private workspace state: gated only at high risk (RAP-033). Account security stays open.
+            ("GET", f"api/workspaces/{WORKSPACE}"): "private_data",
+            ("GET", f"api/workspaces/{WORKSPACE}/tokens"): "private_data",
+            ("GET", f"api/workspaces/{WORKSPACE}/agent/permissions"): "private_data",
+            ("GET", "api/workspaces"): None,
+            ("GET", "api/me"): None,
+            ("GET", "api/auth/sessions"): None,
         }
         for (method, path), expected in cases.items():
             self.assertEqual(security_gate.capability_for(method, path.split("/")), expected, (method, path))
@@ -109,15 +144,20 @@ class Gate(unittest.TestCase):
         self.addCleanup(flags.attach, saved)
         flags.attach({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce"})
         self.verified = []
+        # The hold table's availability probe (flag off) is not under test here: as if migration 121 were absent.
+        installed = dict(security_holds._INSTALLED)
+        self.addCleanup(security_holds._INSTALLED.update, installed)
+        security_holds._INSTALLED.update(readable=False, checked=float("inf"))
 
-    def service(self, cursor, proof=policy.Proof()):
+    def service(self, cursor, proof=policy.Proof(), factors=None):
         def verify(token):
             self.verified.append(token)
             return base.PRINCIPAL
         verify.session_id = lambda token, principal: SESSION
         verify.method_time = lambda token, principal: (proof.method, proof.at)
         verify.aal = lambda token, principal: proof.aal
-        return SimpleNamespace(repository=SimpleNamespace(verify_session=verify), connection_factory=lambda: base.FakeDB(cursor), clock=lambda: NOW)
+        identity = SimpleNamespace(verified_factors=lambda principal: factors) if factors is not None else None
+        return SimpleNamespace(repository=SimpleNamespace(verify_session=verify), connection_factory=lambda: base.FakeDB(cursor), clock=lambda: NOW, identity=identity)
 
     def test_off_and_observe_run_nothing(self):
         for values in ({}, {"RAFII_ACCOUNT_PROTECTION_V2_MODE": "observe"}):
@@ -127,20 +167,21 @@ class Gate(unittest.TestCase):
             self.assertEqual((cursor.executed, self.verified), ([], []))
 
     def test_known_browser_is_allowed_and_the_decision_recorded(self):
-        cursor = base.FakeCursor([((False, "known", False), 1), (None, 1)])
-        decision = security_gate.require(self.service(cursor), "t" * 40, "exports")
+        cursor = base.FakeCursor([signals(device="known"), (None, 1)])
+        decision = security_gate.require(self.service(cursor, AAL2), "t" * 40, "exports")
         self.assertEqual(decision.outcome, "allow")
         signals_sql, params = cursor.executed[0]
         self.assertIn("pr_session_revocations", signals_sql)
         self.assertEqual(params[:5], (base.PRINCIPAL, SESSION, base.PRINCIPAL, SESSION, []))
         self.assertEqual(params[5], base.PRINCIPAL)
+        self.assertEqual(params[8:], (base.PRINCIPAL, base.PRINCIPAL, SESSION))
         update_sql, update = cursor.executed[1]
         self.assertIn("UPDATE public.pr_session_security", update_sql)
-        self.assertEqual(update[:4], ("low", "allow", "[]", 1))
+        self.assertEqual(update[:4], ("low", "allow", "[]", 2))
         self.assertEqual(len(cursor.executed), 2)
 
     def test_unknown_browser_without_fresh_factor_is_refused_with_no_effect(self):
-        cursor = base.FakeCursor([((False, None, False), 1), (None, 1)])
+        cursor = base.FakeCursor([signals(), (None, 1)])
         with self.assertRaises(AlphaError) as raised:
             security_gate.require(self.service(cursor, policy.Proof("otp", NOW - 5, "aal2")), "t" * 40, "api_tokens")
         self.assertEqual((raised.exception.status, raised.exception.code), (403, "security_step_up_required"))
@@ -149,7 +190,7 @@ class Gate(unittest.TestCase):
         self.assertEqual(cursor.executed[1][1][:2], ("medium", "challenge"))
 
     def test_fresh_totp_satisfies_and_is_recorded_once(self):
-        cursor = base.FakeCursor([((False, "new", False), 1), (None, 1), (None, 1)])
+        cursor = base.FakeCursor([signals(device="new"), (None, 1), (None, 1)])
         decision = security_gate.require(self.service(cursor, TOTP), "t" * 40, "connections")
         self.assertEqual((decision.outcome, decision.step_up_method), ("allow", "totp"))
         event_sql, event = cursor.executed[2]
@@ -164,7 +205,7 @@ class Gate(unittest.TestCase):
         flags.attach({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce", "RAFII_DEVICE_COOKIE_KEYS": "1:" + "k" * 32})
         binding = device_trust.bind({"HTTP_COOKIE": f"{device_trust.COOKIE}={'A' * 43}"})
         self.addCleanup(device_trust.reset, binding)
-        cursor = base.FakeCursor([((False, None, False), 1), (None, 1)])
+        cursor = base.FakeCursor([signals(), (None, 1)])
         with self.assertRaises(AlphaError):
             security_gate.require(self.service(cursor), "t" * 40, "exports")
         sql, params = cursor.executed[0]
@@ -188,10 +229,63 @@ class Gate(unittest.TestCase):
         self.assertEqual((raised.exception.status, raised.exception.code), (503, "security_state_unavailable"))
 
     def test_a_revoked_session_is_unauthenticated(self):
-        cursor = base.FakeCursor([((True, "known", False), 1), (None, 1)])
+        cursor = base.FakeCursor([signals(revoked=True, device="known"), (None, 1)])
         with self.assertRaises(AlphaError) as raised:
             security_gate.require(self.service(cursor, TOTP), "t" * 40, "exports")
         self.assertEqual((raised.exception.status, raised.exception.code), (401, "session_revoked"))
+
+
+    def test_no_second_factor_gets_an_enrolment_next_step(self):
+        # RAP-045: an MFA prompt the person can never complete is not a next step.
+        for factors, expected in (([], "enroll_mfa"), ([{"id": "f", "type": "totp", "name": ""}], "complete_mfa")):
+            cursor = base.FakeCursor([signals(), (None, 1)])
+            with self.assertRaises(AlphaError) as raised:
+                security_gate.require(self.service(cursor, factors=factors), "t" * 40, "exports")
+            self.assertEqual(raised.exception.public_fields["nextAction"], expected)
+
+        def outage(principal):
+            raise AlphaError("The identity service could not resolve this account.", 502)
+        service = self.service(base.FakeCursor([signals(), (None, 1)]))
+        service.identity = SimpleNamespace(verified_factors=outage)
+        with self.assertRaises(AlphaError) as raised:
+            security_gate.require(service, "t" * 40, "exports")
+        self.assertEqual(raised.exception.public_fields["nextAction"], "complete_mfa")
+
+    def test_a_held_account_cannot_use_a_sensitive_capability_however_fresh_the_proof(self):
+        # RAP-039
+        flags.attach({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce", "RAFII_SECURITY_INCIDENT_HOLD": "1"})
+        cursor = base.FakeCursor([((True, 1, NOW - 60), 1)])
+        with self.assertRaises(AlphaError) as raised:
+            security_gate.require(self.service(cursor, TOTP), "t" * 40, "exports")
+        self.assertEqual((raised.exception.status, raised.exception.code), (403, "security_account_hold"))
+        self.assertEqual(len(cursor.executed), 1)
+        self.assertIn("pr_security_account_controls", cursor.executed[0][0])
+
+    def test_no_security_record_with_the_registry_on_fails_closed(self):
+        # RAP-013: the session's observation never committed, so nothing about it is known.
+        flags.attach({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce", "RAFII_DEVICE_TRUST_V2": "1", "RAFII_DEVICE_COOKIE_KEYS": "1:" + "k" * 32})
+        cursor = base.FakeCursor([signals(device="known", recorded=False)])
+        with self.assertRaises(AlphaError) as raised:
+            security_gate.require(self.service(cursor, TOTP), "t" * 40, "exports")
+        self.assertEqual((raised.exception.status, raised.exception.code), (503, "security_state_unavailable"))
+        self.assertEqual(len(cursor.executed), 1)
+
+    def test_private_data_is_refused_at_high_risk_and_fails_open(self):
+        refused = base.FakeCursor([signals(recent=True), (None, 1)])
+        with self.assertRaises(AlphaError) as raised:
+            security_gate.require(self.service(refused), "t" * 40, "private_data")
+        self.assertEqual((raised.exception.status, raised.exception.code), (403, "security_step_up_required"))
+        allowed = base.FakeCursor([signals()])
+        self.assertEqual(security_gate.require(self.service(allowed), "t" * 40, "private_data").outcome, "allow")
+        self.assertEqual(len(allowed.executed), 1)  # an allowed read writes nothing
+
+        class Broken(base.FakeCursor):
+            def execute(self, sql, params=None):
+                raise RuntimeError("statement timeout")
+        self.assertIsNone(security_gate.require(self.service(Broken()), "t" * 40, "private_data"))
+        tokens, self.verified = base.FakeCursor(), []
+        self.assertIsNone(security_gate.require(self.service(tokens), "prt_" + "x" * 40, "private_data"))
+        self.assertEqual((tokens.executed, self.verified), ([], []))
 
 
 class AgentGrants(unittest.TestCase):
@@ -206,13 +300,13 @@ class AgentGrants(unittest.TestCase):
 
 class Wsgi(Gate):
     def test_enforce_refuses_the_export_before_the_service_runs(self):
-        cursor = base.FakeCursor([((False, None, False), 1), (None, 1)])
+        cursor = base.FakeCursor([signals(), (None, 1)])
         service = self.service(cursor)
         service.export = lambda *args: self.fail("the export ran")
         app = HostedApplication(service, None, {"provider": "supabase"}, "c" * 24)
         status, body = base.invoke(app, "GET", f"/api/workspaces/{WORKSPACE}/export", headers=base.AUTH)
         self.assertEqual((status, body["code"], body["nextAction"]), (403, "security_step_up_required", "complete_mfa"))
-        self.assertEqual(body["security"], {"outcome": "step_up", "riskLevel": "medium", "reasonCodes": ["unknown_device"], "policyVersion": 1})
+        self.assertEqual(body["security"], {"outcome": "step_up", "riskLevel": "medium", "reasonCodes": ["unknown_device"], "policyVersion": 2})
 
     def test_off_leaves_error_bodies_unchanged(self):
         flags.attach({})

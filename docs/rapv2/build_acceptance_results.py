@@ -27,6 +27,7 @@ RECOVERY = "no factor-recovery route is built"
 RESOLUTION = "no incident resolution or hold release route is built (security_holds.release has no caller)"
 INCIDENT_UI = "the web app has no 'This wasn't me' dialog (the API exists, the UI does not)"
 P1 = "RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only"
+GAPS = "Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps)"
 HUMAN = "needs a person"
 
 # row -> (classification, how, note). Rows not listed here are an error.
@@ -56,15 +57,20 @@ auto("007", PG, "Observation and the existing session checks (revocation, tombst
 auto("009", PG, "Six concurrent first requests on one new session; ON CONFLICT(user_id, session_id) yields one event. Also " + A1 + ".")
 auto("011", PG, "verified_session_id refuses a JWT without session_id (401) on every session route. Also checked on the Supabase branch: such a JWT reads nothing directly (" + BRANCH + ").")
 auto("015", PG, "No token, expired token (getUser 401) and garbage token on ten security routes.")
-auto("013", PG, P1 + ". Enforce mode, device_trust.observe made to fail: the export is refused, but with 403 security_step_up_required rather than 503.")
+auto("013", PG, P1 + ". Enforce mode, device_trust.observe made to fail: the session has no security record, so the export answers 503 security_state_unavailable. " + GAPS + ".")
 auto("014", PG, P1)
 blocked("016", METHOD_DISPLAY, "/api/me exposes only the verified aal.")
 # Session vs device classification
-auto("017 018 019 020 021 022 023 025 026 027 028", PG, P1)
+auto("017 018 019 020 022 023 025 026 027 028", PG, P1)
+auto("021", PG, P1 + ". A known browser is not proof: without a fresh factor a sensitive capability needs a low-risk AAL2 session (policy v2). " + GAPS + ".")
 auto("024", PG, P1 + ". Native-surface headers and body fields leave the device at surface=web, state=observed.")
 auto("029 030", UNIT, "browser_label: never 'Mozilla' alone; no or garbage agent -> 'Unrecognized browser' (the product's wording for unknown browser and OS).")
 # Risk engine
-auto("031 032 033 034 035 036 037 038 039 040 041 043 044 045 046 047 048", PG, P1 + ". Sensitive capability used: GET /api/workspaces/{id}/export (exports).")
+auto("031 032 034 035 036 037 038 040 041 043 044 047 048", PG, P1 + ". Sensitive capability used: GET /api/workspaces/{id}/export (exports).")
+auto("033", PG, P1 + ". Private workspace reads (GET /api/workspaces/{id}...) are a gated capability at high risk only, and fail open when the security state is unreadable. " + GAPS + ".")
+auto("039", PG, P1 + ". The step-up gate checks the account hold before the policy: 403 security_account_hold even with fresh AAL2 proof on a known browser. " + GAPS + ".")
+auto("045", PG, P1 + ". The identity service's verified factors decide the next step: enroll_mfa with none, complete_mfa with one or when it cannot say. " + GAPS + ".")
+auto("046", PG, P1 + ". A proof made at or before the latest mfa.disabled is void (policy v2). " + GAPS + ".")
 auto("042", PG, P1 + ". No location is used at all: spoofed proxy/geo headers change no decision and are stored nowhere.")
 # Session revocation
 auto("049 050 051 052 055 059 060", PG)
@@ -77,7 +83,7 @@ auto("061", PG, P1)
 auto("062 142", PG)
 # Notifications
 auto("063 065 066", PG)
-auto("064", PG, P1 + ". Checked with the Notification V2 security detector after an incident report with routine alerts off.")
+auto("064", PG, P1 + ". Checked with the Notification V2 security detector after an incident report with routine alerts off: security.incident_reported is a transactional security.account_change notice. Risk decisions (step-up challenges) still queue no notice: that policy is not approved yet. " + GAPS + ".")
 auto("067 146", PG, "V2 on: legacy Mailer routes new_device to V2 (routed_to_notifications_v2) and V2 sends one email across two crons; V2 off: legacy sends one.")
 auto("068 069 070 071 078", PG)
 auto("072 073 074 075 130 136", UNIT, "Legacy Mailer.new_device and Notification V2 security_alert renders.")
@@ -95,15 +101,17 @@ auto("088", PG, "Owner decision A+B (2026-10-15): deletion removes pr_sessions a
 auto("089", PG, "pr_sessions primary key + RETURNING (xmax = 0): four concurrent inserts, one first sighting.")
 auto("090", PG, P1)
 auto("091", PG + " + " + BRANCH)
-auto("092", PG + " + " + UNIT, "Migrations 120-123 apply in the disposable database and every P1 table/function exists with forced RLS (" + PG + "); rollback is documented in 120 and 121 only, and 123 still says it is not applied anywhere (expectedFailure in " + UNIT + ").")
+auto("092", PG + " + " + UNIT, "Migrations 120-123 apply in the disposable database and every P1 table/function exists with forced RLS (" + PG + "); each header documents its rollback and 123 records that it is applied to staging and production (" + UNIT + "). " + GAPS + ".")
 # Agent and external permissions
-auto("093 094 095 096 098 099 101 104", PG, P1 + ". Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.")
+auto("093 094 095 096 098 099 101", PG, P1 + ". Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.")
+auto("104", PG, P1 + ". With RAFII_SECURITY_INCIDENT_HOLD off an active hold is still enforced (fail-open core check); only the epoch fences and the incident route turn off. " + GAPS + ".")
 auto("100", UNIT, "No connector can send email as the person (Gmail is read-only); account mail to the person is not an action as them.")
 auto("103", UNIT, "Only the security modules, account deletion and session observation can write risk, trust or hold state; no Agent, tool or ideas code can.")
 auto("097 102", PG, P1)
 # Incident and recovery
 auto("105", PG, "GET /api/me, /api/auth/sessions and /api/me/security-events never revoke or change factors. The Security Center page itself is a client page over these routes.")
-auto("106 107 108 109 110 114 115 116", PG, P1 + ". POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.")
+auto("106 107 108 109 110 115 116", PG, P1 + ". POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.")
+auto("114", PG, P1 + ". The report queues a mandatory security notice to the account's verified email (Notification V2); notifying an older address after a recent email change is not built. " + GAPS + ".")
 blocked("111", RECOVERY)
 blocked("112 113", RESOLUTION)
 # UI, localization, accessibility
@@ -120,7 +128,8 @@ auto("131", UNIT, "Source and dependency scan of web/ for canvas/audio/WebGL fin
 auto("132", PG, P1 + ". The incident route is the only P1 route taking an id; there is no device route (" + DEVICE_LIST + ").")
 auto("133", PG, "New-sign-in mail leaves the request in observe mode; the cron step (HostedWorkspaceService.deliver_sign_in_alerts) sends at most SIGN_IN_ALERT_CAP per person per hour and records the rest as suppressed. Also " + P0 + ".")
 auto("134", PG, P1 + ". The incident report is the only P1 recovery-type mutation; Rafii uses bearer tokens plus the Origin/X-PostRiff-Request guard.")
-auto("135 138", PG, P1)
+auto("135", PG, P1)
+auto("138", PG, P1 + ". A browser unseen for 180 days is expired on its return (old record revoked, reason inactive) and registered as new. " + GAPS + ".")
 blocked("137", RETENTION)
 # Rollout, flags and resilience
 auto("139 140 150", PG, "Also " + P0 + " (ModeFlag, off-mode tests).")
@@ -132,7 +141,7 @@ auto("147", PG, "guard_target refuses every DSN but the disposable 127.0.0.1:554
 manual("148", "release reviewer (G12)", "Evidence for the reviewer. 2026-10-15 first run: staging and production migration lists were read before and after and are unchanged; the only Supabase writes went to a dev branch deleted after 2 minutes. P1 re-run: no Supabase branch, migration, flag, env or production action; the only push is the tests/docs PR branch (it builds a Vercel preview); nothing merged, deployed or emailed.")
 manual("149", "config review", "No RP ID change is planned; web/src/lib/auth/passkey-host.ts turns passkey sign-in off when NEXT_PUBLIC_PASSKEY_RP_ID does not match the host. Needs a human review of the deployment configuration plan.")
 
-UNIT_EXPECTED_FAIL = {"RAP-092"}  # unittest.expectedFailure in UNIT
+UNIT_EXPECTED_FAIL = set()  # rows that are a unittest.expectedFailure in UNIT
 
 
 def build(matrix, pg, sha, ci_run, branch_run):
