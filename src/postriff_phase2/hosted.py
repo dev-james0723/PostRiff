@@ -262,6 +262,9 @@ class HostedPhase2Commands:
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
         shown['state']['brandBrain'] = brand_brain.projection(state)
+        # Frozen reports and their replay receipts are private storage. Only the review service may expose them, after
+        # its current-rights and integrity checks (coworker/review.py).
+        (shown['state'].get('coworker') or {}).pop('review', None)
         return shown
 
     def __call__(self, state, principal, action, payload):

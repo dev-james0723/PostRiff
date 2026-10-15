@@ -12,6 +12,11 @@ are re-checked before every read (a disconnect or account deletion stops reading
 'unavailable' observation that would hide an earlier real value: transient failures retry with backoff; terminal
 ones close the schedule row only. Everything is off unless POSTRIFF_METRIC_READS is "1" and the workspace is in
 POSTRIFF_METRIC_WORKSPACE_ALLOWLIST. Adapter review and exact native grant scopes are required at every boundary.
+
+Window truth (from the Growth Studio lane-B candidate, PR #142): a scheduled reading counts as its window only if it is
+taken by anchor + offset + WINDOW_TOLERANCE[offset] (t0 +15m, 1h +20m, 24h +3h, 7d +24h). A later read is never stored
+under that window's name: the row closes as 'unavailable' with failure_class 'window_missed' and nothing is recorded,
+so missing data stays missing. An observation's observed_at is the moment the provider was read, not the completion.
 """
 from __future__ import annotations
 
@@ -32,6 +37,8 @@ NATIVE_ANALYTICS_SCOPES = {
     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
 }
 OFFSETS = (("t0", 0), ("1h", 3600), ("24h", 86400), ("7d", 7 * 86400))
+OFFSET_SECONDS = dict(OFFSETS)
+WINDOW_TOLERANCE = {"t0": 15 * 60, "1h": 20 * 60, "24h": 3 * 3600, "7d": 24 * 3600}
 LEASE_SECONDS = 120            # token_for_worker plus one insights GET can take 40 s
 MAX_BACKOFF = 3600
 TERMINAL_HTTP = (400, 401, 403, 404)
@@ -52,6 +59,18 @@ def allowed_workspaces(env):
         return frozenset(str(uuid.UUID(value.strip())) for value in raw.split(","))
     except (ValueError, AttributeError):
         return frozenset()
+
+
+def window_deadline(offset, anchor_at):
+    """Latest moment a reading still counts as its window; None for backfill (no window) or unknown rows."""
+    if offset not in WINDOW_TOLERANCE or type(anchor_at) not in (int, float):
+        return None
+    return anchor_at + OFFSET_SECONDS[offset] + WINDOW_TOLERANCE[offset]
+
+
+def window_missed(row, at):
+    deadline = window_deadline(row.get("offset"), row.get("anchorAt"))
+    return deadline is not None and at > deadline
 
 
 def workspace_enabled(scheduler, workspace_id):
@@ -327,6 +346,9 @@ class MetricScheduler:
         try:
             if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
                 return {"state": "cancelled", "failure": "not_admitted"}
+            if window_missed(row, self.clock()):
+                # A late read would record a later moment under this window's name. Close it without a provider call.
+                return {"state": "unavailable", "failure": "window_missed", "http": None, "providerRead": False}
             eligibility = self._eligible(row)
             if eligibility == "cancel":
                 return {"state": "cancelled", "failure": "not_eligible"}
@@ -346,6 +368,7 @@ class MetricScheduler:
             if eligibility != "read":
                 return {"state": "cancelled", "failure": "not_eligible"}
             requested = True
+            read_at = self.clock()
             fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
         except AlphaError as error:
             status = getattr(error, "status", None)
@@ -358,7 +381,8 @@ class MetricScheduler:
             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
         status = fetched["status"]
         if status == 200:
-            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True}
+            return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
+                    "readAt": read_at}
         if status in TERMINAL_HTTP:
             return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
         return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
@@ -372,6 +396,9 @@ class MetricScheduler:
                 if eligibility != "read":
                     state = "cancelled" if eligibility == "cancel" else "transient"
                     outcome.update(state=state, failure="not_eligible" if eligibility == "cancel" else "purge_pending")
+                elif window_missed(row, outcome.get("readAt", self.clock())):
+                    state = "unavailable"
+                    outcome.update(state=state, failure="window_missed", found={})
             fence = (row["id"], self.worker_id, row["attempts"])
             if state == "done":
                 cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=NULL,
@@ -380,7 +407,7 @@ class MetricScheduler:
                 recorded = cur.rowcount == 1
                 if recorded:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
-                                                 outcome["found"], outcome["endpoint"], self.clock(), read_offset=row["offset"],
+                                                 outcome["found"], outcome["endpoint"], outcome.get("readAt", self.clock()), read_offset=row["offset"],
                                                  period_start=row["anchorAt"])
             elif state == "transient" and row["attempts"] < row["maxAttempts"]:
                 cur.execute("""UPDATE public.pr_metric_reads SET status='pending', due_at=now() + make_interval(secs => %s), last_http_status=%s,
@@ -412,7 +439,8 @@ class MetricScheduler:
 
     def tick(self, max_reads=10, max_seconds=15.0):
         """Bounded cron step. Returns a status dict of counts; never raises."""
-        counts = {"status": "ok", "claimed": 0, "done": 0, "retry": 0, "unavailable": 0, "cancelled": 0, "dead": 0, "deferred": 0}
+        counts = {"status": "ok", "claimed": 0, "done": 0, "retry": 0, "unavailable": 0, "cancelled": 0, "dead": 0, "deferred": 0,
+                  "missed": 0}
         counts.update(providerReads=0, providerErrors=0, costUnknownReads=0)
         try:
             deadline = self.monotonic() + max_seconds
@@ -442,6 +470,7 @@ class MetricScheduler:
                     counts["retry" if row["attempts"] < row["maxAttempts"] else "dead"] += 1
                 else:
                     counts[state] += 1
+                    counts["missed"] += int(outcome.get("failure") == "window_missed")
         except Exception as error:  # noqa: BLE001 - the cron handler's later steps must still run
             _note("metric_reads.tick_failed", error)
             counts["status"] = "unavailable"
