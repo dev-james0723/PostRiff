@@ -164,6 +164,35 @@ test('a Demo save whose revision did not advance is refused rather than trusted'
   await assert.rejects(client.demoAction('reset', 'all', '', 7), (error) => error instanceof errors.FounderApiError && error.code === 'UNVERIFIED_RESPONSE');
 });
 
+test('a Live workspace rename uses CSRF, reuses one request id on retry, trims the name, and verifies the advanced revision', async () => {
+  let attempt = 0;
+  const workspaceId = '568699ad-d66e-42b8-a7f1-e86d0c35ab02';
+  const { fetch, calls } = fakeFetch((url, init) => {
+    if (url.endsWith('/session')) return { body: session };
+    attempt += 1;
+    const body = JSON.parse(init.body);
+    if (attempt === 1) return { status: 503, body: { code: 'SOURCE_UNAVAILABLE' } };
+    return { body: envelope({ workspaceId, name: body.name, revision: body.revision + 1 }) };
+  });
+  const client = api.createFounderApi({ fetch });
+  await assert.rejects(client.liveWorkspaceRename(workspaceId, '  Acceptance name  ', 3));
+  const saved = await client.liveWorkspaceRename(workspaceId, '  Acceptance name  ', 3);
+  const actions = calls.filter((call) => call.url.endsWith('/workspace/live/rename'));
+  assert.equal(actions.length, 2);
+  assert.equal(actions[0].headers['X-CSRF-Token'], 'csrf-123');
+  assert.equal(actions[0].body.requestId, actions[1].body.requestId, 'a retry of the same canonical rename reuses its request id');
+  assert.deepEqual({ ...actions[1].body, requestId: undefined }, { workspaceId, name: 'Acceptance name', revision: 3, requestId: undefined });
+  assert.equal(saved.data.revision, 4);
+  assert.equal(saved.data.name, 'Acceptance name');
+});
+
+test('a Live workspace rename refuses an unverified or stale response', async () => {
+  const workspaceId = '568699ad-d66e-42b8-a7f1-e86d0c35ab02';
+  const { fetch } = fakeFetch((url) => (url.endsWith('/session') ? { body: session } : { body: envelope({ workspaceId, name: 'Acceptance name', revision: 3 }) }));
+  const client = api.createFounderApi({ fetch });
+  await assert.rejects(client.liveWorkspaceRename(workspaceId, 'Acceptance name', 3), (error) => error instanceof errors.FounderApiError && error.code === 'UNVERIFIED_RESPONSE');
+});
+
 test('founderFetch returns the body as sent (metrics answer with the receipt body, not an envelope)', async () => {
   const receipt = { requestId: 'q1', queryReceiptId: 'rcpt-1', asOf: '2026-10-01T00:00:00Z', dataState: 'measured', rows: [] };
   const { fetch, calls } = fakeFetch((url) => (url.endsWith('/session') ? { body: session } : { body: receipt }));

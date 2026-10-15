@@ -25,6 +25,7 @@ import type {
   FounderMode,
   FounderSession,
   FounderWorkspaceData,
+  LiveWorkspaceRenameResult,
   MetricQueryBody,
   MetricQueryResult,
   MetricReceipt,
@@ -199,6 +200,28 @@ export function createFounderApi(options: FounderApiOptions = {}) {
         throw new FounderApiError('The save response could not be verified. Retry the same action.', 409, 'UNVERIFIED_RESPONSE', result.requestId);
       }
       pending.delete(`demo:${action}:${targetId}`);
+      return result;
+    },
+    /**
+     * The sole Live business mutation in Founder Control. The server still enforces founder+AAL2, fresh MFA,
+     * workspaces.test.rename, and the exact expiring operator/workspace grant. The client only preserves
+     * idempotency and verifies the canonical result before trusting it.
+     */
+    async liveWorkspaceRename(workspaceId: string, name: string, revision: number) {
+      const trimmed = name.trim();
+      const payload = { workspaceId, name: trimmed, revision };
+      const operation = `live-rename:${workspaceId}`;
+      const body = { ...payload, requestId: stableKey(operation, payload) };
+      const result = await request<LiveWorkspaceRenameResult>('POST', '/workspace/live/rename', body);
+      if (
+        result.data.workspaceId !== workspaceId ||
+        result.data.name !== trimmed ||
+        typeof result.data.revision !== 'number' ||
+        result.data.revision <= revision
+      ) {
+        throw new FounderApiError('The save response could not be verified. Retry the same action.', 409, 'UNVERIFIED_RESPONSE', result.requestId);
+      }
+      pending.delete(operation);
       return result;
     },
     /** `POST /metrics/query` answers with the receipt body itself (no envelope); returned as sent. */

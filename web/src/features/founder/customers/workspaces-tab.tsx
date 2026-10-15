@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Icons } from '@/components/icons';
 import { ActiveFilters, FilterPanel, FilterSelect, Workbar } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useDataTable } from '@/hooks/use-data-table';
-import { useFounderMode, useRecords } from './kit/api';
+import { failureOf, useFounderMode, useRecords, useRenameLiveWorkspace } from './kit/api';
 import { count, recordLabel, stateLabel, whenDate } from './kit/format';
 import { DataStateChip } from './kit/page-frame';
 import { RECORDS_PAGE_SIZE, pageCount } from './kit/records';
@@ -31,7 +34,13 @@ function text(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
 }
 
-function columns(risk: RiskQuery, index: FlagIndex, onOpenCustomer: (customerId: string) => void): ColumnDef<RecordRow>[] {
+function columns(
+  risk: RiskQuery,
+  index: FlagIndex,
+  onOpenCustomer: (customerId: string) => void,
+  onRenameWorkspace: (workspace: RecordRow) => void,
+  canRenameLive: boolean
+): ColumnDef<RecordRow>[] {
   return [
     {
       id: 'name',
@@ -78,23 +87,41 @@ function columns(risk: RiskQuery, index: FlagIndex, onOpenCustomer: (customerId:
     {
       id: 'open',
       enableSorting: false,
-      header: () => <span className='sr-only'>Open</span>,
+      header: () => <span className='sr-only'>Actions</span>,
       cell: ({ row }) => {
         const owner = text(row.original.ownerId);
-        return owner ? (
-          <Button
-            variant='quiet'
-            size='sm'
-            aria-label={`Open the owner of ${recordLabel(row.original)}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenCustomer(owner);
-            }}
-          >
-            Owner <Icons.chevronRight />
-          </Button>
-        ) : (
-          <span className='text-muted-foreground text-xs'>No owner</span>
+        const renameAllowed = canRenameLive && row.original.renameAllowed === true;
+        return (
+          <div className='flex items-center justify-end gap-1'>
+            {renameAllowed && (
+              <Button
+                variant='quiet'
+                size='sm'
+                aria-label={`Rename approved test workspace ${recordLabel(row.original)}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRenameWorkspace(row.original);
+                }}
+              >
+                Rename
+              </Button>
+            )}
+            {owner ? (
+              <Button
+                variant='quiet'
+                size='sm'
+                aria-label={`Open the owner of ${recordLabel(row.original)}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenCustomer(owner);
+                }}
+              >
+                Owner <Icons.chevronRight />
+              </Button>
+            ) : (
+              <span className='text-muted-foreground text-xs'>No owner</span>
+            )}
+          </div>
         );
       }
     }
@@ -108,6 +135,16 @@ export interface WorkspaceFilters {
 
 export function WorkspacesTab({ filters, search, page, update, risk, index, onOpenCustomer }: { filters: WorkspaceFilters; search: string; page: number; update: (next: Partial<WorkspaceFilters>) => void; risk: RiskQuery; index: FlagIndex; onOpenCustomer: (customerId: string) => void }) {
   const mode = useFounderMode();
+  const renameWorkspace = useRenameLiveWorkspace();
+  const [editing, setEditing] = useState<RecordRow | null>(null);
+  const [name, setName] = useState('');
+  const [renameError, setRenameError] = useState('');
+  const [renameNotice, setRenameNotice] = useState('');
+  const beginRename = useCallback((workspace: RecordRow) => {
+    setEditing(workspace);
+    setName(text(workspace.name) ?? '');
+    setRenameError('');
+  }, []);
   const query = useRecords({ collection: 'workspaces', search, status: filters.status, page, recordId: '' });
   const data = query.data?.data;
   const [knownStatuses, setKnownStatuses] = useState<string[]>([]);
@@ -117,7 +154,10 @@ export function WorkspacesTab({ filters, search, page, update, risk, index, onOp
   }, [data?.statuses, knownStatuses]);
   const statuses = data?.statuses ?? knownStatuses;
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
-  const tableColumns = useMemo(() => columns(risk, index, onOpenCustomer), [risk, index, onOpenCustomer]);
+  const tableColumns = useMemo(
+    () => columns(risk, index, onOpenCustomer, beginRename, mode === 'live'),
+    [risk, index, onOpenCustomer, beginRename, mode]
+  );
   const { table } = useDataTable<RecordRow>({
     data: rows,
     columns: tableColumns,
@@ -128,8 +168,27 @@ export function WorkspacesTab({ filters, search, page, update, risk, index, onOp
     clearOnDefault: true
   });
   const activeFilterCount = filters.status !== 'all' ? 1 : 0;
+  const originalName = editing ? text(editing.name) ?? '' : '';
+  const editingRevision = editing && typeof editing.revision === 'number' ? editing.revision : null;
+  const trimmedName = name.trim();
+  const canSubmitRename = Boolean(editing && editing.renameAllowed === true && mode === 'live' && editingRevision !== null && trimmedName && trimmedName !== originalName && !renameWorkspace.isPending);
+
+  async function saveRename() {
+    if (!editing || editing.renameAllowed !== true || mode !== 'live' || editingRevision === null || !trimmedName || trimmedName === originalName) return;
+    setRenameError('');
+    try {
+      await renameWorkspace.mutateAsync({ workspaceId: editing.id, name: trimmedName, revision: editingRevision });
+      setRenameNotice(`Saved “${trimmedName}”. Restore “${originalName}” after acceptance verification.`);
+      setEditing(null);
+      setName('');
+    } catch (error) {
+      setRenameError(failureOf(error).message ?? 'The workspace name could not be saved.');
+    }
+  }
+
   return (
     <div className='flex min-w-0 flex-col gap-4'>
+      {renameNotice && <p role='status' className='text-muted-foreground text-xs'>{renameNotice}</p>}
       <Workbar
         search={filters.q}
         onSearch={(value) => update({ q: value })}
@@ -159,6 +218,53 @@ export function WorkspacesTab({ filters, search, page, update, risk, index, onOp
         filtered={Boolean(search) || activeFilterCount > 0}
         onClear={() => update({ q: '', status: 'all' })}
       />
+      <Dialog
+        open={Boolean(editing)}
+        onOpenChange={(open) => {
+          if (!open && !renameWorkspace.isPending) {
+            setEditing(null);
+            setName('');
+            setRenameError('');
+          }
+        }}
+      >
+        <DialogContent>
+          <form
+            className='flex flex-col gap-4'
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveRename();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Rename approved test workspace</DialogTitle>
+              <DialogDescription>
+                Live acceptance only · {editing?.id}. This control appears only when the server returned an exact, expiring rename grant. Saving changes the canonical Rafii workspace name, so restore the original name after verification.
+              </DialogDescription>
+            </DialogHeader>
+            <div className='flex flex-col gap-2'>
+              <Label htmlFor='founder-live-workspace-name'>Workspace name</Label>
+              <Input
+                id='founder-live-workspace-name'
+                value={name}
+                maxLength={80}
+                autoFocus
+                onChange={(event) => setName(event.target.value)}
+              />
+              {originalName && <p className='text-muted-foreground text-xs'>Original name: {originalName}</p>}
+              {renameError && <p role='alert' className='text-destructive text-sm'>{renameError}</p>}
+            </div>
+            <DialogFooter>
+              <Button type='button' variant='quiet' disabled={renameWorkspace.isPending} onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button type='submit' variant='action' disabled={!canSubmitRename}>
+                {renameWorkspace.isPending ? 'Saving…' : 'Save name'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
