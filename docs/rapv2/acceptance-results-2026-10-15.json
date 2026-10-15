@@ -6,25 +6,25 @@
   "date": "2026-10-14",
   "count": 150
  },
- "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
- "ciRun": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+ "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+ "ciRun": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
  "supabaseBranchRun": "supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
  "counts": {
-  "PASS": 62,
-  "FAIL": 5,
+  "PASS": 67,
+  "FAIL": 0,
   "BLOCKED": 73,
   "NOT_RUN": 10
  },
  "countsByPriority": {
   "P0": {
-   "PASS": 52,
-   "FAIL": 4,
+   "PASS": 56,
+   "FAIL": 0,
    "BLOCKED": 13,
    "NOT_RUN": 3
   },
   "P1": {
-   "PASS": 7,
-   "FAIL": 1,
+   "PASS": 8,
+   "FAIL": 0,
    "BLOCKED": 58,
    "NOT_RUN": 0
   },
@@ -53,8 +53,8 @@
    "expected_result": "One session.observed audit and one durable outbox decision",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: Google OAuth (amr oauth): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -69,8 +69,8 @@
    "expected_result": "Event recorded exactly once, subject matches verified user",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: email OTP (amr otp): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -85,8 +85,8 @@
    "expected_result": "First observation recorded independent of login provider",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: passkey (amr webauthn): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -101,8 +101,8 @@
    "expected_result": "Exactly one observation/eligible notification; no skipped alert",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: POST /api/auth/verify (bootstrap) before GET /api/me: exactly one observation and one alert | Real DB: POST /api/auth/verify then GET /api/me. Also unit-tested in tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -117,8 +117,8 @@
    "expected_result": "Single first-observed event across both routes",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/me then POST bootstrap: a single first-observed event across both routes",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -133,8 +133,8 @@
    "expected_result": "Exactly one observation, no duplicate",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/auth/sessions before /api/me: exactly one observation",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -149,8 +149,8 @@
    "expected_result": "Request-bound gateway observes and enforces before any protected data",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a workspace API as the very first request: the verifier observes it, and its session checks run before any data | Observation and the existing session checks (revocation, tombstone, MFA) run at the verifier before any handler. The v2 risk enforcement in the row's wording is P1 (RAP-031..048).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -165,8 +165,8 @@
    "expected_result": "No extra first-sighting events or mail",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/me ten times (cold process each time): one first-sighting event, one mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -181,8 +181,8 @@
    "expected_result": "Uniqueness yields one event and no deadlocks",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: parallel first requests (verifier, /api/me, sessions list, workspace) on one new session: one event, no deadlock | Six concurrent first requests on one new session; ON CONFLICT(user_id, session_id) yields one event. Also tests/test_rafii_account_protection_a1.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -197,8 +197,8 @@
    "expected_result": "No new-device event from token refresh alone",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a refreshed JWT (new iat, same session_id) records no new sign-in",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -213,8 +213,8 @@
    "expected_result": "401 and zero rows; no fallback random client session",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a verified JWT without a session_id claim: 401 on every session route, zero rows, no substitute session | verified_session_id refuses a JWT without session_id (401) on every session route. Also checked on the Supabase branch: such a JWT reads nothing directly (docs/rapv2/supabase-branch-evidence-2026-10-15.json).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -229,8 +229,8 @@
    "expected_result": "Input ignored/rejected; row belongs only to verified B",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a forged userId/sessionId in a request body is ignored: the row belongs to the verified subject only",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -245,7 +245,7 @@
    "expected_result": "No partially trusted/allowed state; 503 for protected route",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce does not exist; P0 treats it as off (observe mode is deliberately fail-open). In observe mode an observation failure never fails the request by design (tests/test_rafii_account_protection_a1.py test_an_observation_failure_never_fails_the_request); the 503 fail-closed behaviour belongs to enforce mode.",
    "classification": "NEEDS_FEATURE"
@@ -261,7 +261,7 @@
    "expected_result": "Server sets opaque host-only cookie and default observed state",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -277,8 +277,8 @@
    "expected_result": "401 or safe recovery; zero authorization bypass",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: no token, an expired token and a token getUser refuses: every security endpoint answers 401, no data | No token, expired token (getUser 401) and garbage token on ten security routes.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -293,7 +293,7 @@
    "expected_result": "Method Unknown and no invented factor proof",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 Security Center sign-in method display is not built. /api/me exposes only the verified aal; no method field exists to show 'Unknown'.",
    "classification": "NEEDS_FEATURE"
@@ -309,7 +309,7 @@
    "expected_result": "Session new, device existing; no new physical-device claim",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -325,7 +325,7 @@
    "expected_result": "New observed device record; eligible security alert",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -341,7 +341,7 @@
    "expected_result": "B is observed/untrusted; A trust never transfers",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -357,7 +357,7 @@
    "expected_result": "401; no device trust or authenticated data",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -373,7 +373,7 @@
    "expected_result": "Fresh proof still required; trust not sufficient",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -389,7 +389,7 @@
    "expected_result": "Rotate/reset safely, no crash and no trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -405,7 +405,7 @@
    "expected_result": "Host-only cookie not leaked/shared by parent domain",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -421,7 +421,7 @@
    "expected_result": "Client string does not grant native attestation or elevated trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built. There is no trust or attestation to grant; the client string is only ever a coarse label.",
    "classification": "NEEDS_FEATURE"
@@ -437,7 +437,7 @@
    "expected_result": "Separate observed instance and clear label",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -453,7 +453,7 @@
    "expected_result": "Trust expired, challenge required for protected capability",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -469,7 +469,7 @@
    "expected_result": "Dual-read migration and reissue without blanket trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -485,7 +485,7 @@
    "expected_result": "Old record stays revoked; no auto-trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -501,8 +501,8 @@
    "expected_result": "Shows Chrome/macOS or Unknown, never only Mozilla as sole classification",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | browser_label: never 'Mozilla' alone; no or garbage agent -> 'Unrecognized browser' (the product's wording for unknown browser and OS).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -517,8 +517,8 @@
    "expected_result": "Unknown browser and Unknown OS, no fabricated hardware",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | browser_label: never 'Mozilla' alone; no or garbage agent -> 'Unrecognized browser' (the product's wording for unknown browser and OS).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -533,7 +533,7 @@
    "expected_result": "Allow under normal role/agent permissions",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -549,7 +549,7 @@
    "expected_result": "Allowed safe scope, sensitive action requires proof",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -565,7 +565,7 @@
    "expected_result": "403 security_step_up_required; no private data",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -581,7 +581,7 @@
    "expected_result": "Denied as not independent factor",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -597,7 +597,7 @@
    "expected_result": "Signed AAL2 accepted if fresh and session matches",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -613,7 +613,7 @@
    "expected_result": "Step-up required; JWT refresh not new proof",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -629,7 +629,7 @@
    "expected_result": "Server verifies actual factor; no client boolean",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -645,7 +645,7 @@
    "expected_result": "AAL1 not automatically treated AAL2",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -661,7 +661,7 @@
    "expected_result": "Blocked even on trusted device",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -677,7 +677,7 @@
    "expected_result": "Server ignores/rejects spoofed classification",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -693,7 +693,7 @@
    "expected_result": "Country alone never automatic account lock",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -709,7 +709,7 @@
    "expected_result": "Ingress trust boundary prevents relying on fake location",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built. No location or proxy header is used by P0 at all.",
    "classification": "NEEDS_FEATURE"
@@ -725,7 +725,7 @@
    "expected_result": "Re-evaluate under new server policy before action",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -741,7 +741,7 @@
    "expected_result": "503 fail closed; safe help route accessible",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -757,7 +757,7 @@
    "expected_result": "Deterministic safe recovery/enrollment, not endless redirect",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -773,7 +773,7 @@
    "expected_result": "Risk re-evaluated, stale privilege fails",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -789,7 +789,7 @@
    "expected_result": "Backend enforces same challenge/hold policy",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -805,7 +805,7 @@
    "expected_result": "Wrong-session proof rejected",
    "required_evidence": "Policy fixtures + protected-route API traces",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -821,8 +821,8 @@
    "expected_result": "Own other session revoked; current unaffected",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: DELETE /api/auth/sessions/{own other}: that session is denied, the current one keeps working",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -837,8 +837,8 @@
    "expected_result": "404 indistinguishable; B state unchanged",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: DELETE of another person's session id: the same 404 as an unknown id, and B's session unchanged",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -852,10 +852,10 @@
    "action": "DELETE same session again",
    "expected_result": "Safe repeated response; no duplicate audit noise",
    "required_evidence": "API traces + Supabase direct access negative tests",
-   "status": "FAIL",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: repeating DELETE on an already revoked session: same safe response, no second audit row -> AssertionError: 2 session.revoked rows for one session",
+   "status": "PASS",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: repeating DELETE on an already revoked session: same safe response, no second audit row",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -869,8 +869,8 @@
    "expected_result": "401 on next request, no data",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a revoked session's still-valid access JWT: 401 on the next hosted API request, no data",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -885,8 +885,8 @@
    "expected_result": "Access denied OR explicit release-blocker recorded",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the same revoked JWT straight through the Data API (authenticated role + JWT claims): reads no workspace row | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Disposable PG (authenticated role + JWT claims) and the real Supabase branch: a revoked session's JWT reads 0 workspaces; also tests/phase2/postgres_browser_session_guard.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -901,8 +901,8 @@
    "expected_result": "No sensitive data; preissued URL TTL risk documented",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the revoked JWT cannot list private Storage objects (the signing step reads storage.objects under the same guard) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | A revoked JWT cannot read private storage.objects (which Storage reads and signs through). Residual risk: a signed URL issued before the revocation stays valid until its TTL expires.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -917,8 +917,8 @@
    "expected_result": "Others denied, current valid, result count accurate",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: POST revoke-others: every other session denied, the current one valid, the count exact",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -933,8 +933,8 @@
    "expected_result": "Supported provider receipts not assumed; accurate status",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | The API reports refreshRevoked from the identity admin's real answer (false when refused or unconfigured). The Security Center does not display it.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -948,10 +948,10 @@
    "action": "Revoke single session",
    "expected_result": "Backend blocked; UI clearly shows provider refresh coverage unknown",
    "required_evidence": "API traces + Supabase direct access negative tests",
-   "status": "FAIL",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
-   "notes": "tests/test_rafii_account_protection_acceptance.py (expectedFailure: known gap) | Backend: the revoked session id stays denied even for a refreshed JWT (tests/phase2/postgres_rapv2_acceptance.py RAP-052). UI: a single revoke never says provider refresh coverage is unknown (expectedFailure in tests/test_rafii_account_protection_acceptance.py).",
+   "status": "PASS",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "notes": "tests/test_rafii_account_protection_acceptance.py | Backend: the revoked session id stays denied even for a refreshed JWT (tests/phase2/postgres_rapv2_acceptance.py RAP-052). UI: a single revoke says its refresh token is not cancelled with the sign-in provider, and revoke-others reports refreshRevoked (tests/test_rafii_account_protection_acceptance.py).",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -965,8 +965,8 @@
    "expected_result": "Requires distinct sign-out flow / immediate token clear",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: revoking the current session through the API takes effect at once (the UI offers no revoke button for it) | tests/test_rafii_account_protection_acceptance.py | The UI offers no revoke for the current session (only the separate sign-out); the API, if called, denies the current session at once.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -981,8 +981,8 @@
    "expected_result": "No sensitive write commits after revocation fence",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: revocation fence in both orders: a write after the revocation commits nothing; a write before it stands alone",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -997,8 +997,8 @@
    "expected_result": "Same per-person revocation applied across both",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one revocation applies to the person in every workspace they belong to",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1013,7 +1013,7 @@
    "expected_result": "Hold blocks action despite token grant",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1029,8 +1029,8 @@
    "expected_result": "Core revocation continues denying access",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: account protection flag off: a revoked session stays denied (core revocation does not depend on RAPv2)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1045,8 +1045,8 @@
    "expected_result": "Audit exists; no optional routine email",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference off: the sign-in is in the account history, and no routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1061,7 +1061,7 @@
    "expected_result": "Mandatory notice decision queued per approved policy",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built. No risk events exist to make a mandatory notice from.",
    "classification": "NEEDS_FEATURE"
@@ -1077,8 +1077,8 @@
    "expected_result": "Exactly one optional mail decision",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference on: the sign-in is in the account history, and exactly one routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1093,8 +1093,8 @@
    "expected_result": "No routine mail but history still present",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference off: the sign-in is in the account history, and no routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1109,8 +1109,8 @@
    "expected_result": "Exactly one sender/outbox path owns notification",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one | V2 on: legacy Mailer routes new_device to V2 (routed_to_notifications_v2) and V2 sends one email across two crons; V2 off: legacy sends one.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1125,8 +1125,8 @@
    "expected_result": "Event retained; bounded retry/backoff; no dropped audit",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: transport failure: the event and audit stay, retries are bounded with backoff, then the delivery is dead (not dropped)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1141,8 +1141,8 @@
    "expected_result": "Sent/accepted, not delivered until webhook",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: provider accepted is `sent`, never `delivered`, until the provider's delivered webhook arrives",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1157,8 +1157,8 @@
    "expected_result": "Delivery updated once; no duplicate email",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the same provider callback twice (and concurrently): applied once, no second email",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1173,8 +1173,8 @@
    "expected_result": "Single lease/send with idempotency key",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: two delivery workers ticking at once: one lease, one send, one idempotency key",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1189,8 +1189,8 @@
    "expected_result": "No session ID, raw IP, access token, cookie, OTP or HMAC",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1205,8 +1205,8 @@
    "expected_result": "Link forced to canonical app Security Center",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1221,8 +1221,8 @@
    "expected_result": "HTML escaped, no script or phishing link",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1237,8 +1237,8 @@
    "expected_result": "09:56 PDT, not 09:56 PST",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1253,7 +1253,7 @@
    "expected_result": "Approximate location unavailable, not invented city",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: coarse location signal is not built (P0 collects no IP-derived location). Checked as supporting evidence (tests/test_rafii_account_protection_acceptance.py): neither email states any location, so none is invented; the 'Approximate location unavailable' wording does not exist.",
    "classification": "NEEDS_FEATURE"
@@ -1269,7 +1269,7 @@
    "expected_result": "Consistent reviewed Cantonese with fallback",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (needs a person). Requires a fluent reviewer for 'reviewed Cantonese'. Automated rendering of zh-Hant-HK with no placeholders is covered by tests/test_rafii_notifications.py::EmailTest.",
    "classification": "MANUAL_DEVICE"
@@ -1285,8 +1285,8 @@
    "expected_result": "Dead/suppressed state visible for operations, no fake delivered",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a bounce receipt: the delivery is failed and email suppressed (visible to operations), never delivered",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1301,8 +1301,8 @@
    "expected_result": "No read/write privilege",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 tables; the P1 tables do not exist yet) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1317,8 +1317,8 @@
    "expected_result": "No direct read/write privilege",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: authenticated: no direct write on any session-security table, and no read of other people's or person-level rows | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1333,8 +1333,8 @@
    "expected_result": "Controlled operations succeed",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the service role performs the expected session writes and reads | service_role writes/reads on the P0 tables; the P1 security tables (device/risk/incident/login-event tables) are not built.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1349,8 +1349,8 @@
    "expected_result": "ENABLE and FORCE RLS active",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1365,7 +1365,7 @@
    "expected_result": "Composite FK rejects link",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: the P1 security tables (device/risk/incident/login-event tables) are not built. No session_security <-> device link table exists.",
    "classification": "NEEDS_FEATURE"
@@ -1381,7 +1381,7 @@
    "expected_result": "Only A devices returned",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built. The P0 analogue (sessions list returns only the caller's sessions, ignoring any user parameter) is covered by RAP-091.",
    "classification": "NEEDS_FEATURE"
@@ -1397,7 +1397,7 @@
    "expected_result": "404, no B metadata changed",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1413,8 +1413,8 @@
    "expected_result": "Denied by membership check",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: user A cannot read or command workspace B through the hosted API (membership check)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1429,8 +1429,8 @@
    "expected_result": "Denied",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: sign-in events are append-only: no role (authenticated, service_role) may UPDATE or DELETE pr_audit_events | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | P0 stores sign-in events in pr_audit_events (pr_security_login_events is not built): no role has UPDATE/DELETE, service_role UPDATE is refused.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1444,10 +1444,10 @@
    "action": "Inspect all proposed tables",
    "expected_result": "User-person records deleted per documented policy",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "FAIL",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: account deletion removes the person's session inventory and sign-in history per policy -> AssertionError: {'pr_sessions': 2, 'session_audit': 1}",
+   "status": "PASS",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label) | Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 122's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -1461,8 +1461,8 @@
    "expected_result": "Exactly one first observation",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: two concurrent first-sighting inserts of one session: exactly one first observation | pr_sessions primary key + RETURNING (xmax = 0): four concurrent inserts, one first sighting.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1477,7 +1477,7 @@
    "expected_result": "Both recorded with distinct immutable keys",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1493,8 +1493,8 @@
    "expected_result": "Verified token user wins; cannot persist forged user",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the user id written for a session or revocation is always the verified token subject | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1509,7 +1509,7 @@
    "expected_result": "Schema valid, no production changes, rollback documented",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: the P1 security tables (device/risk/incident/login-event tables) are not built. The revised P1 candidate SQL is not approved or in the repo. Supporting evidence: repo migration 119 applied cleanly to a fresh Supabase branch (docs/rapv2/supabase-branch-evidence-2026-10-15.json); Supabase's own replay of staging history failed at 088 (MIGRATIONS_FAILED), a pre-existing staging history issue.",
    "classification": "NEEDS_FEATURE"
@@ -1525,7 +1525,7 @@
    "expected_result": "Held; no external publish",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1541,7 +1541,7 @@
    "expected_result": "No external API call",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1557,7 +1557,7 @@
    "expected_result": "Mismatch blocks stale approval",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1573,7 +1573,7 @@
    "expected_result": "Requires fresh proof; rejected when challenged",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1589,7 +1589,7 @@
    "expected_result": "403 role capability despite trusted device",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built. Existing role-capability and founder-operator checks are covered by the founder/permissions suites, but the row's 'despite trusted device / under hold' premise needs the P1 device trust and holds.",
    "classification": "NEEDS_FEATURE"
@@ -1605,7 +1605,7 @@
    "expected_result": "Denied on refreshed grant scope",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1621,7 +1621,7 @@
    "expected_result": "Held; no outbound call",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1637,7 +1637,7 @@
    "expected_result": "No send; requires user-approved action where applicable",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1653,7 +1653,7 @@
    "expected_result": "Denied by hold at action gateway",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1669,7 +1669,7 @@
    "expected_result": "Denied; needs separate operator/AAL2",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built. Existing role-capability and founder-operator checks are covered by the founder/permissions suites, but the row's 'despite trusted device / under hold' premise needs the P1 device trust and holds.",
    "classification": "NEEDS_FEATURE"
@@ -1685,7 +1685,7 @@
    "expected_result": "No modification to risk/trust state",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1701,7 +1701,7 @@
    "expected_result": "Core hold remains enforced",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
    "classification": "NEEDS_FEATURE"
@@ -1717,8 +1717,8 @@
    "expected_result": "No trust/hold/revoke side effect",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GETs of the Security Center's data (me, sessions, security events) never revoke, hold or change factors | GET /api/me, /api/auth/sessions and /api/me/security-events never revoke or change factors. The Security Center page itself is a client page over these routes.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1733,7 +1733,7 @@
    "expected_result": "No session revoked or hold placed",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1749,7 +1749,7 @@
    "expected_result": "Single incident + hold epoch increment + receipt",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1765,7 +1765,7 @@
    "expected_result": "401; no account lock",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1781,7 +1781,7 @@
    "expected_result": "404/403, no foreign incident",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1797,7 +1797,7 @@
    "expected_result": "Same receipt; no duplicate hold or mail",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1813,7 +1813,7 @@
    "expected_result": "Safe support path, not same inbox OTP bypass",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1829,7 +1829,7 @@
    "expected_result": "Step-up required, hold retained",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1845,7 +1845,7 @@
    "expected_result": "Hold released once, auditable version increment",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1861,7 +1861,7 @@
    "expected_result": "Previously verified channels considered; new address alone insufficient",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1877,7 +1877,7 @@
    "expected_result": "Clearly shows not reversible, no false recall claim",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1893,7 +1893,7 @@
    "expected_result": "No account state mutation",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1909,7 +1909,7 @@
    "expected_result": "No horizontal overflow, actions reachable",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -1925,7 +1925,7 @@
    "expected_result": "Visible focus, Escape/cancel, no hidden actions",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -1941,7 +1941,7 @@
    "expected_result": "Semantic labels, status announced, not color-only",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -1957,7 +1957,7 @@
    "expected_result": "Information complete without animation",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -1973,7 +1973,7 @@
    "expected_result": "Displays 1 recognized browser, 2 sessions",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -1989,8 +1989,8 @@
    "expected_result": "Correct zone offset, no ambiguous PST",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | security_time renders EDT/EST with the zone name. The browser UI formats times with the device's Intl (not checked here).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2005,7 +2005,7 @@
    "expected_result": "Terminology reviewed, no broken interpolation",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (needs a person). Terminology review needs a fluent reviewer; placeholder interpolation is covered by tests/test_rafii_notifications.py::EmailTest.",
    "classification": "MANUAL_DEVICE"
@@ -2021,8 +2021,8 @@
    "expected_result": "Correct localized copy or safe explicit fallback",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2037,8 +2037,8 @@
    "expected_result": "Unrecognized browser, not technical garbage",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2053,7 +2053,7 @@
    "expected_result": "Exact number of active others, explicit confirm/cancel",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -2069,7 +2069,7 @@
    "expected_result": "Actions and irreversible effects explained",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -2085,7 +2085,7 @@
    "expected_result": "Clear retry/support state without falsely saying secure",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
    "classification": "MANUAL_DEVICE"
@@ -2101,8 +2101,8 @@
    "expected_result": "Neither secret in stdout/traces/telemetry",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | One authenticated /api/me with every logger at DEBUG: no token, JWT payload, session id or user id in the output. Traces/telemetry exporters are not exercised.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2117,8 +2117,8 @@
    "expected_result": "No token, email identifier or user ID in URL",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2133,8 +2133,8 @@
    "expected_result": "No canvas/audio fingerprint or cross-site tracking",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Source and dependency scan of web/ for canvas/audio/WebGL fingerprinting and third-party trackers. The built bundle and live network are not inspected.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2149,7 +2149,7 @@
    "expected_result": "Generic 404 and no timing/body enumeration",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built; P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built. The existing session route's enumeration resistance is RAP-050.",
    "classification": "NEEDS_FEATURE"
@@ -2164,10 +2164,10 @@
    "action": "Simulate 200 attempts",
    "expected_result": "Bounded notices and safe abuse response, events retained",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "FAIL",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: 200 sign-ins in a burst with alerts on: notices are bounded, every event is retained -> AssertionError: 200 new-sign-in emails for one burst",
+   "status": "PASS",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: 200 sign-ins in a burst with alerts on: notices are bounded, every event is retained | New-sign-in mail leaves the request in observe mode; the cron step (HostedWorkspaceService.deliver_sign_in_alerts) sends at most SIGN_IN_ALERT_CAP per person per hour and records the rest as suppressed. Also tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -2181,7 +2181,7 @@
    "expected_result": "Denied by origin+auth checks",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built. No trust/recovery cookie endpoints exist; Rafii's API uses bearer tokens plus the X-PostRiff-Request/Origin guard.",
    "classification": "NEEDS_FEATURE"
@@ -2197,7 +2197,7 @@
    "expected_result": "Secure HttpOnly SameSite Lax Path / and no Domain",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -2213,8 +2213,8 @@
    "expected_result": "Canonical URL only, no open redirect",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2229,7 +2229,7 @@
    "expected_result": "Deletes only approved ages, respects incident preservation",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: no retention worker for session-security records is built.",
    "classification": "NEEDS_FEATURE"
@@ -2245,7 +2245,7 @@
    "expected_result": "No silent trust; new proof when required",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -2261,8 +2261,8 @@
    "expected_result": "Legacy behaviour preserved, no unexpected MFA friction",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: flag absent (default off): legacy behaviour — sessions recorded as before, no session.observed, no new friction | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2277,8 +2277,8 @@
    "expected_result": "Events recorded without imposed v2 challenge; existing guards unchanged",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: observe mode: sign-ins are recorded and an ordinary read is not challenged; existing guards unchanged (AAL1 still refused under 2FA) | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2293,7 +2293,7 @@
    "expected_result": "Security gate active for protected operations",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce does not exist; P0 treats it as off (observe mode is deliberately fail-open).",
    "classification": "NEEDS_FEATURE"
@@ -2309,8 +2309,8 @@
    "expected_result": "Core revoked-session denial continues",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the experimental v2 flag turned off after the revocation: a revoked session stays denied (core revocation does not depend on RAPv2)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2324,10 +2324,10 @@
    "action": "Observe login",
    "expected_result": "Auth path not waiting on transport; durable queue exists",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
-   "status": "FAIL",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: notification provider outage: the sign-in request does not wait on mail transport and the event is durable -> AssertionError: the legacy mailer ran inside the request",
+   "status": "PASS",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: notification provider outage: the sign-in request does not wait on mail transport and the event is durable | The sign-in request only records session.observed with its alert decision; the /api/cron/worker step sends the mail on another thread/invocation. Also tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -2341,7 +2341,7 @@
    "expected_result": "Fail closed without external publish, support accessible",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "BLOCKED",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
    "classification": "NEEDS_FEATURE"
@@ -2357,8 +2357,8 @@
    "expected_result": "Existing fields unchanged; no crash",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2373,8 +2373,8 @@
    "expected_result": "Single controlled route, not zero or duplicate without reason",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one | V2 on: legacy Mailer routes new_device to V2 (routed_to_notifications_v2) and V2 sends one email across two crons; V2 off: legacy sends one.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2389,8 +2389,8 @@
    "expected_result": "Refuses cleanup unless dedicated local test database verified",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the harness refuses any target but the dedicated local disposable cluster | guard_target refuses every DSN but the disposable 127.0.0.1:55438/postgres cluster.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2405,7 +2405,7 @@
    "expected_result": "No writes to prod/staging or push/merge/deploy/sends",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (release reviewer (G12)). Evidence for the reviewer: staging and production migration lists were read before and after the run and are unchanged; no statement ran on staging main or production; the only Supabase writes went to the deleted branch; the only push is this draft PR's branch (authorized by the task; it builds a Vercel preview), nothing merged, deployed or emailed.",
    "classification": "MANUAL_DEVICE"
@@ -2421,7 +2421,7 @@
    "expected_result": "No silent RP ID change or existing credential invalidation",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "NOT_RUN",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": null,
    "notes": "NOT_RUN (config review). No RP ID change is planned; web/src/lib/auth/passkey-host.ts turns passkey sign-in off when NEXT_PUBLIC_PASSKEY_RP_ID does not match the host. Needs a human review of the deployment configuration plan.",
    "classification": "MANUAL_DEVICE"
@@ -2437,8 +2437,8 @@
    "expected_result": "No resurrected revoked session or lost audit event",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "7e0d43a73fda92fc8917f0d9db880c280f05f1d6",
-   "test_run_id": "github-actions:38671163030 (https://github.com/dev-james0723/PostRiff/actions/runs/38671163030, PR merge ref 500447ad)",
+   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: rollback (observe → off): revoked sessions stay revoked and recorded sign-ins stay in the history | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   }
