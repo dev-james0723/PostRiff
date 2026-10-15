@@ -46,6 +46,22 @@ PLATFORM_ALIASES = (
     ("Mastodon", ("mastodon",)),
     ("Snapchat", ("snapchat",)),
     ("Discord", ("discord",)),
+    # The rest of the mapped channel skills. Only unambiguous names: a bare "line", "note", "moj" or "qq" stays an
+    # ordinary word (QQ is matched only with Tencent or its CJK name). Which of them a request may use is still the
+    # writer route's supported list (creation projection), so naming one never enables it.
+    ("Dcard", ("dcard", "狄卡")),
+    ("Feishu / Lark", ("feishu", "lark suite", "larksuite", "飛書", "飞书")),
+    ("Google Business Profile", ("google business profile", "google business", "google my business", "gbp")),
+    ("KakaoTalk Channel", ("kakaotalk", "kakao talk", "카카오톡")),
+    ("Kuaishou", ("kuaishou", "快手")),
+    ("LINE Official Account", ("line official account", "line oa", "line 官方帳號", "line官方帳號", "line官方账号")),
+    ("Moj", ("moj app",)),
+    ("Naver Blog", ("naver blog", "네이버 블로그")),
+    ("note", ("note.com", "note jp")),
+    ("Pixelfed", ("pixelfed",)),
+    ("ShareChat", ("sharechat",)),
+    ("Tencent QQ", ("tencent qq", "qzone", "qq空間", "qq空间")),
+    ("WhatsApp Channels", ("whatsapp channel", "whatsapp channels")),
 )
 
 # A bare capital "X" names the platform only where it reads as one: after a preposition or list joiner
@@ -409,8 +425,10 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
         if not isinstance(item, dict) or not isinstance(item.get("platform"), str) or not item["platform"]:
             continue
         channel_id = item["channelId"] if isinstance(item.get("channelId"), str) and item.get("channelId") else None
+        # A native format (creation projection) is part of the key: a Page post and a Reel are two destinations.
+        native_format = item["format"] if isinstance(item.get("format"), str) and item.get("format") else None
         tag = locales.canonical(item.get("language"))
-        tags = chosen.setdefault((item["platform"], channel_id), [])
+        tags = chosen.setdefault((item["platform"], channel_id, native_format), [])
         for candidate in ([tag] if tag else starting(item["platform"])):
             if candidate not in tags:
                 tags.append(candidate)
@@ -421,7 +439,7 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
     if selecting:
         selection = {}
         for platform in selecting + [p for p in named if p in paired]:
-            keys = [key for key in chosen if key[0] == platform] or [(platform, None)]
+            keys = [key for key in chosen if key[0] == platform] or [(platform, None, None)]
             for key in keys:
                 selection[key] = chosen.get(key) or starting(platform)
     else:
@@ -429,13 +447,13 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
         if not selection:
             for item in default:
                 tag = locales.canonical(item.get("language"))
-                tags = selection.setdefault((item["platform"], None), [])
+                tags = selection.setdefault((item["platform"], None, None), [])
                 for candidate in ([tag] if tag else starting(item["platform"])):
                     if candidate not in tags:
                         tags.append(candidate)
         for platform in named:
             if not any(key[0] == platform for key in selection):
-                selection[(platform, None)] = starting(platform)
+                selection[(platform, None, None)] = starting(platform)
     everyone, per_channel = None, {}
     for pair in languages:
         if pair["platforms"]:
@@ -444,7 +462,7 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
         else:
             everyone = pair
     destinations = []
-    for (platform, channel_id), tags in selection.items():
+    for (platform, channel_id, native_format), tags in selection.items():
         pair = per_channel.get(platform) or everyone
         if pair:
             tags = locales.apply_named(tags, pair["tags"], pair["said"])
@@ -452,6 +470,8 @@ def resolve_destinations(parsed, requested, language=None, default=(), settings=
             destination = {"platform": platform, "language": tag}
             if channel_id:
                 destination["channelId"] = channel_id
+            if native_format:
+                destination["format"] = native_format
             destinations.append(destination)
     return destinations
 

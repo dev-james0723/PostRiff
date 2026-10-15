@@ -67,3 +67,36 @@ class SuggestionAndLinkTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NativeFormatPublishTest(ManifestMediaTest):
+    """Content Skills Integration (review fix): a non-default native format is never approved as a default post."""
+
+    def with_format(self, native_format, native=None):
+        if not hasattr(self, "_drafted"):
+            self._drafted = (self.draft(), self.channel(platform="LinkedIn"))
+        variant, channel = self._drafted
+        state = copy.deepcopy(self.j.state)
+        state["variants"][0].update(platform="LinkedIn", text="Spring concert on 3 May.", format=native_format)
+        if native is not None:
+            state["variants"][0]["native"] = native
+        state["phase2"]["assets"] = [dict(IMAGE)]
+        payload = {"channelId": channel["id"], "variantId": variant["id"], "localTime": datetime.fromtimestamp(self.now + 60, timezone.utc).replace(tzinfo=None).isoformat(),
+                   "timeZone": "UTC", "acknowledgedWarnings": variant["warnings"], "assetId": IMAGE["id"], "alt": "A piano", "rightsConfirmed": True}
+        return self.store.build_manifest(state, payload, "actor")
+
+    def test_a_non_default_format_is_refused_and_the_default_still_schedules(self):
+        with self.assertRaises(AlphaError) as refused:
+            self.with_format("linkedin.document")
+        self.assertEqual(refused.exception.code, "format_not_publishable")
+        self.assertEqual([m["id"] for m in self.with_format("linkedin.post")["media"]], [IMAGE["id"]])
+
+    def test_a_native_record_alone_is_enough_to_refuse_a_non_default_format(self):
+        """Defence in depth: even if `format` were ever lost, the stored native draft's format still stops the post."""
+        with self.assertRaises(AlphaError) as refused:
+            self.with_format(None, native={"formatId": "linkedin.document"})
+        self.assertEqual(refused.exception.code, "format_not_publishable")
+        self.assertTrue(self.with_format(None, native={"formatId": "linkedin.post"})["media"])
+
+    # Inherited media tests already run in ManifestMediaTest.
+    test_a_postable_image_goes_with_the_post = test_a_verified_video_is_refused_on_an_image_channel = test_undecoded_or_deleted_images_are_refused = None
