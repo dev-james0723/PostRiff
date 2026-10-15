@@ -173,6 +173,12 @@ def _delete(service, workspace_id, principal):
         purge = cur.fetchone()
         if purge and purge[0] is True:
             cur.execute('SELECT public.pr_security_purge(%s)', (principal,))
+        # RAP-088 (owner decision A+B): session inventory deleted, person-level session.* history kept without the session
+        # id or browser label. Migration 123 owns the erasure; before it is applied this erases nothing.
+        # After pr_security_purge: pr_session_security references pr_sessions ON DELETE RESTRICT (migration 120).
+        cur.execute("SELECT to_regprocedure('public.pr_erase_session_history(uuid)') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.

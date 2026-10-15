@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import test_postriff_account_security as base  # noqa: E402
-from postriff_phase2 import account_protection  # noqa: E402
+from postriff_phase2 import account_protection, hosted  # noqa: E402
 from postriff_phase2.coworker import flags  # noqa: E402
 from postriff_phase2.email import Mailer, NullTransport  # noqa: E402
 from postriff_phase2.notifications import detector  # noqa: E402
@@ -112,11 +112,13 @@ class SessionObserved(Mode):
         svc.bootstrap("t", "studio", client_label="Safari on iPhone")
         return cursor, svc
 
-    def test_bootstrap_first_sign_in_alerts_like_api_me(self):
+    def test_bootstrap_first_sign_in_records_the_alert_decision_like_api_me(self):
         self.observe()
         cursor, svc = self.bootstrap(((True,), 1))
         self.assertEqual(len(audits(cursor, "session.observed")), 1)
-        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
+        # The email itself leaves the request (RAP-143): the cron's deliver_sign_in_alerts sends it from this row.
+        self.assertEqual(json.loads(audits(cursor, "session.observed")[0][4])["alert"], True)
+        self.assertEqual(svc.mailer.calls, [])
         # A later /api/me finds the session already seen, so the person is told exactly once.
         cursor, svc = self.bootstrap(((False,), 1))
         self.assertEqual((audits(cursor, "session.observed"), svc.mailer.calls), ([], []))
@@ -143,13 +145,53 @@ class SessionObserved(Mode):
         self.assertEqual(result["workspaceId"], base.WORKSPACE)
         observed = audits(cursor, "session.observed")
         self.assertEqual(json.loads(observed[0][4]), {"client": "Safari on iPhone", "alert": True})  # R1: the browser is kept
-        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
+        self.assertEqual(svc.mailer.calls, [])  # RAP-143: the cron sends it from the recorded decision
 
     def test_invitation_acceptance_off_mode_is_unchanged(self):
         self.off()
         cursor, svc, result = self.accept(True)
         self.assertNotIn("_alertSession", result)
         self.assertEqual((audits(cursor, "session.observed"), svc.mailer.calls), ([], []))
+
+
+class SignInAlertDelivery(Mode):
+    """RAP-133/143: the cron step that sends observe mode's new-sign-in emails, capped per person."""
+    def test_sends_from_the_recorded_event_and_suppresses_past_the_cap(self):
+        self.observe()
+        cursor = base.FakeCursor([([(base.PRINCIPAL, "sess-a"), (base.PRINCIPAL, "sess-b")], 2),
+                                  ((True,), 1), ((1_791_996_977.0, "Safari on iPhone", ""), 1), ((0,), 1), (None, 1),
+                                  ((True,), 1), ((1_791_996_978.0, "Chrome on Mac", ""), 1), ((hosted.SIGN_IN_ALERT_CAP,), 1), (None, 1)])
+        svc = base.service(cursor, base.verifier(), email_lookup=lambda principal: "me@example.invalid")
+        svc.public_base_url, svc.mailer = "https://app.example", base.FakeMailer()
+        self.assertEqual(svc.deliver_sign_in_alerts(), {"status": "ok", "pending": 2, "sent": 1, "suppressed": 1})
+        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Safari on iPhone", "https://app.example/app/account/profile")])
+        self.assertEqual([(params[3], json.loads(params[4])) for params in audits(cursor, "session.alerted")],
+                         [("sess-a", {"sent": True}), ("sess-b", {"sent": False, "reason": "rate_limited"})])
+
+    def test_a_person_locked_by_another_run_is_left_for_it(self):
+        self.observe()
+        cursor = base.FakeCursor([([(base.PRINCIPAL, "sess-a")], 1), ((False,), 1)])
+        svc = base.service(cursor, base.verifier(), email_lookup=lambda principal: "me@example.invalid")
+        svc.public_base_url, svc.mailer = "https://app.example", base.FakeMailer()
+        self.assertEqual(svc.deliver_sign_in_alerts()["sent"], 0)
+        self.assertEqual((svc.mailer.calls, audits(cursor, "session.alerted")), ([], []))
+
+    def test_off_mode_has_nothing_to_deliver(self):
+        self.off()
+        svc = base.service(base.FakeCursor([]), base.verifier())
+        svc.public_base_url = "https://app.example"
+        self.assertEqual(svc.deliver_sign_in_alerts(), {"status": "disabled"})
+
+
+class SessionHistoryErasure(unittest.TestCase):
+    """RAP-088 (owner decision A+B): deletion erases the session inventory, after the device-registry purge."""
+    SOURCE = (Path(__file__).resolve().parents[1] / "src" / "postriff_phase2" / "account_deletion.py").read_text()
+
+    def test_erasure_runs_only_when_installed_and_after_the_security_purge(self):
+        # pr_session_security references pr_sessions ON DELETE RESTRICT (migration 120), so its rows must go first.
+        self.assertIn("to_regprocedure('public.pr_erase_session_history(uuid)')", self.SOURCE)
+        self.assertLess(self.SOURCE.index("SELECT public.pr_security_purge(%s)"), self.SOURCE.index("SELECT public.pr_erase_session_history(%s)"))
+        self.assertLess(self.SOURCE.index("SELECT public.pr_erase_session_history(%s)"), self.SOURCE.index("DELETE FROM public.pr_profiles WHERE user_id=%s"))
 
 
 class AlertsCannotBeCancelledBySignIn(Mode):
@@ -166,7 +208,8 @@ class AlertsCannotBeCancelledBySignIn(Mode):
         upsert = next(i for i, sql in enumerate(statements) if "INSERT INTO public.pr_profiles" in sql)
         self.assertLess(observed, upsert)  # observed (with the setting as it was) before the setting changes
         self.assertEqual(json.loads(cursor.executed[observed][1][4]), {"client": "Chrome on Windows", "alert": True})
-        self.assertEqual(svc.mailer.calls, [("me@example.invalid", "Chrome on Windows", "https://app.example/app/account/profile")])
+        # The cron sends from that recorded decision (meta.alert), not from the preference the session just changed.
+        self.assertEqual(svc.mailer.calls, [])
 
     def test_off_mode_profile_changes_touch_nothing_new(self):
         self.off()
@@ -192,6 +235,14 @@ class AccountHistory(unittest.TestCase):
         svc.repository.assert_fresh = lambda token, principal: None
         svc.revoke_session("t", "session-other-0123456789")
         self.assertEqual(audits(cursor, "session.revoked")[0][3], "session-other-0123456789")
+
+    def test_repeating_a_revocation_writes_no_second_audit_row(self):
+        # RAP-051: the revocation row already exists (ON CONFLICT DO NOTHING inserts nothing), so nothing is audited.
+        cursor = base.FakeCursor([((1,), 1), (None, 0)])
+        svc = base.service(cursor, base.verifier())
+        svc.repository.assert_fresh = lambda token, principal: None
+        self.assertTrue(svc.revoke_session("t", "session-other-0123456789")["revoked"])
+        self.assertEqual(audits(cursor, "session.revoked"), [])
 
 
 class Detector(unittest.TestCase):

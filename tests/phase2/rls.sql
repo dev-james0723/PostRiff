@@ -189,3 +189,6 @@ end $$;
 
 -- RAPv2 P1: "This wasn't me" incidents (server-only).
 \ir ../../migrations/postriff/122_rapv2_security_incidents.sql
+
+-- RAPv2 RAP-088: account deletion erases the session inventory and redacts sign-in history.
+\ir ../../migrations/postriff/123_rapv2_session_history_erasure.sql
