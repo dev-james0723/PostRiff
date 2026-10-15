@@ -133,6 +133,25 @@ try: service.oauth.complete(pilot_wid,'p2','pinterest',failed_state,'MOCK-CODE')
 except AlphaError as error: assert error.status==404
 else: raise AssertionError('Failed exchange callback replayed')
 assert len(provider_calls)==before_failed_replay
+# Force disconnect into the exact committed-claim → exchange gap, using the real DB.
+cancel_start=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+cancel_state=parse_qs(urlparse(cancel_start['authorizeUrl']).query)['state'][0]
+original_complete=service.oauth._complete
+before_canceled_callback=len(provider_calls)
+def disconnect_before_exchange(*args,**kwargs):
+    assert service.oauth.disconnect(pilot_wid,'p2',pilot_cid)['disconnected']
+    return original_complete(*args,**kwargs)
+service.oauth._complete=disconnect_before_exchange
+try:
+    try: service.oauth.complete(pilot_wid,'p2','pinterest',cancel_state,'MOCK-CODE')
+    except AlphaError as error: assert error.status==409
+    else: raise AssertionError('Claimed callback restored a disconnected account')
+finally: service.oauth._complete=original_complete
+assert len(provider_calls)==before_canceled_callback
+# Reconnection needs a fresh explicit intent and succeeds after the old callback was canceled.
+again=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+again_state=parse_qs(urlparse(again['authorizeUrl']).query)['state'][0]
+assert service.oauth.complete(pilot_wid,'p2','pinterest',again_state,'MOCK-CODE')['connected']
 
 with connection() as db:
     scopes=db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
@@ -178,6 +197,7 @@ clock[0]+=86400
 assert trial_reserve(1), 'Daily pilot budget did not recover'
 print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_synthetic_provider','oauthReplayDenied':True,
     'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':refreshes,
+    'disconnectCancelsClaimedCallback':True,'canceledCallbackNoNetwork':True,'freshExplicitReconnectPassed':True,
     'failedExchangeStateConsumed':True,'failedExchangeReplayNoNetwork':True,'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,
     'pilotTwoReadScopesConnected':True,'pilotExpiryStopsCustody':True,'pilotDisconnectAfterExpiry':True,
     'trialDailyConcurrentReservations':120,'trialDailyAccepted':100,'trialDailyDenied':20,

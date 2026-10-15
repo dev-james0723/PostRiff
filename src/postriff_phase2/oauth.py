@@ -504,6 +504,11 @@ class OAuthService:
             from .hosted import _membership, audit
             require(_membership(row), "manage_connections")
             self._assert_pinterest_context(provider_id, workspace_id, principal)
+            if provider_id == 'pinterest' and claimed:
+                cur.execute("SELECT outcome FROM public.pr_oauth_transactions WHERE id::text=%s AND workspace_id=%s AND provider='pinterest' FOR UPDATE", (claimed, workspace_id))
+                claim = cur.fetchone()
+                if not claim or claim[0] != 'exchange_started':
+                    raise AlphaError('Pinterest connection was canceled. Start a new connection request.', 409)
             cur.execute("SELECT id::text,member_id::text,provider,capability,redirect_uri,scopes,verifier_ciphertext,key_id,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND workspace_id=%s FOR UPDATE", (state_hash, workspace_id))
             txn = cur.fetchone()
             if not txn:
@@ -1621,6 +1626,9 @@ class OAuthService:
             state_changed = bool(revoked_samples)
             pinterest_stop = None
             if stored[0] == 'pinterest':
+                # Also fence a callback already claimed before this disconnect.
+                # A new explicit connect request after disconnect remains possible.
+                cur.execute("UPDATE public.pr_oauth_transactions SET outcome='disconnected',consumed_at=coalesce(consumed_at,now()) WHERE workspace_id=%s AND provider='pinterest' AND (consumed_at IS NULL OR outcome='exchange_started')", (workspace_id,))
                 from .pinterest_safety import revoke_authority
                 pinterest_stop = revoke_authority(state, connection_id, self.clock())
                 state_changed = True
