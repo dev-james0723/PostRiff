@@ -355,10 +355,10 @@ class Cursor:
         elif s.startswith("SELECT outcome FROM public.pr_oauth_transactions"):
             found = db.txns.get(params[0])
             self.result = (found.get('outcome'),) if found and found['workspace'] == params[1] else None
-        elif s.startswith("UPDATE public.pr_oauth_transactions SET outcome='disconnected'"):
+        elif s.startswith("UPDATE public.pr_oauth_transactions SET outcome='denied'"):
             for txn in db.txns.values():
                 if txn['workspace'] == params[0] and txn['provider'] == 'pinterest' and (not txn['consumed'] or txn.get('outcome') == 'exchange_started'):
-                    txn.update(consumed=True,outcome='disconnected')
+                    txn.update(consumed=True,outcome='denied')
         elif s.startswith("UPDATE public.pr_oauth_transactions SET consumed_at"):
             db.txns[params[0]]["consumed"] = True
             db.txns[params[0]]['outcome'] = 'exchange_started' if "outcome='exchange_started'" in s else 'finished'

@@ -1628,7 +1628,7 @@ class OAuthService:
             if stored[0] == 'pinterest':
                 # Also fence a callback already claimed before this disconnect.
                 # A new explicit connect request after disconnect remains possible.
-                cur.execute("UPDATE public.pr_oauth_transactions SET outcome='disconnected',consumed_at=coalesce(consumed_at,now()) WHERE workspace_id=%s AND provider='pinterest' AND (consumed_at IS NULL OR outcome='exchange_started')", (workspace_id,))
+                cur.execute("UPDATE public.pr_oauth_transactions SET outcome='denied',consumed_at=coalesce(consumed_at,now()) WHERE workspace_id=%s AND provider='pinterest' AND (consumed_at IS NULL OR outcome='exchange_started')", (workspace_id,))
                 from .pinterest_safety import revoke_authority
                 pinterest_stop = revoke_authority(state, connection_id, self.clock())
                 state_changed = True
