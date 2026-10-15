@@ -52,6 +52,12 @@ class UnconsumedPublishPermit(RateDelayed):
         self.permit_id = permit_id
 
 
+class ReadAdmissionDelayed(RateDelayed):
+    """Minted only when a GET is denied inside pre-transport admission."""
+    def __init__(self, error):
+        super().__init__(error.retry_after_seconds, cause=error.rate_cause, scope=error.rate_scope_kind)
+
+
 def observation_remaining(previous, reported, *, first, pending, newly_mapped=0, current_unmapped=0):
     """Conservative credit after one response, with distinct admission counts.
 

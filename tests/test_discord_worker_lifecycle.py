@@ -25,6 +25,7 @@ class MemoryDatabase:
     def __init__(self, state):
         self.state, self.now, self.revision = copy.deepcopy(state), NOW + 301, 1
         self.queries, self.cursor_ready, self.member = [], True, ('owner', True)
+        self.projection_ready = False
 
     @contextmanager
     def connection(self):
@@ -41,6 +42,8 @@ class MemoryDatabase:
             self.rows = [(self.now,)]
         elif sql.startswith('SELECT pg_try_advisory'):
             self.rows = [(True,)]
+        elif sql == "SELECT to_regclass('public.pr_discord_worker_projection')":
+            self.rows = [('pr_discord_worker_projection' if self.projection_ready else None,)]
         elif sql.startswith('SELECT to_regclass'):
             self.rows = [('pr_worker_tenants' if self.cursor_ready else None,)]
         elif sql.startswith('SELECT revision,state') or sql.startswith('SELECT state'):
@@ -133,6 +136,19 @@ class WorkerLifecycle(unittest.TestCase):
         self.assertFalse(any('pg_try_advisory' in q for q, _ in self.db.queries))
         self.assertIsNone(self.worker.claim(discord_only=True))
         self.assertEqual(self.job()['leaseId'], claimed['job']['leaseId'])
+        self.assert_frozen()
+
+    def test_projection_is_only_selection_hint_and_keeps_workspace_lock(self):
+        self.db.projection_ready = True
+        claimed = self.claim()
+        self.assertIsNotNone(claimed)
+        self.assertEqual(claimed['job']['discordAuthorization'], self.original['discordAuthorization'])
+        self.assertTrue(any('JOIN public.pr_discord_worker_projection' in sql for sql,_ in self.db.queries))
+        projected=due_workspaces_sql(discord_only=True,discord_projected=True)
+        self.assertIn('LIMIT 1 FOR UPDATE OF w SKIP LOCKED',projected)
+        self.assertNotIn('jsonb_array_elements',projected)
+        self.assertNotIn('discordWorkerCursor',projected)
+        self.assertIsNone(self.worker.claim(discord_only=True))
         self.assert_frozen()
 
     def test_database_time_not_host_clock_controls_lease(self):

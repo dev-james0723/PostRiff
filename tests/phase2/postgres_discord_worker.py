@@ -27,6 +27,9 @@ from postriff_phase2.discord import worker as policy
 from postriff_phase2.hosted_worker import due_workspaces_sql
 
 with connection() as db:
+    db.execute((Path(__file__).resolve().parents[2]/'migrations/postriff/126_discord_worker_projection.sql').read_text())
+
+with connection() as db:
     assert db.execute('SELECT host(inet_server_addr()),inet_server_port(),current_database()').fetchone() == ('127.0.0.1', 55438, 'postgres')
     assert db.execute("SELECT to_regclass('public.pr_worker_tenants')").fetchone()[0]
     database_now = float(db.execute('SELECT extract(epoch from clock_timestamp())').fetchone()[0])
@@ -368,6 +371,57 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
     no_posts(f)
     set_jobs([{**job,'state':'held','leaseOwner':None,'leaseUntil':0} for job in (other,requested)])
 checks.append('scoped claim selects only requested job;locked digest and requester revocation checked;revocation after claim blocks final authorization;requester carried to final guard;other jobs unchanged;zero POST')
+
+with connection() as db:
+    assert db.execute("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid='public.pr_discord_worker_projection'::regclass").fetchone()==(True,True)
+    for role in ('anon','authenticated','service_role'):
+        rights=db.execute("SELECT has_table_privilege(%s,'public.pr_discord_worker_projection','SELECT'),has_table_privilege(%s,'public.pr_discord_worker_projection','INSERT'),has_table_privilege(%s,'public.pr_discord_worker_projection','UPDATE'),has_table_privilege(%s,'public.pr_discord_worker_projection','DELETE'),has_table_privilege(%s,'public.pr_discord_worker_projection','TRUNCATE')",(role,)*5).fetchone()
+        assert rights==((True,False,False,False,False) if role=='service_role' else (False,)*5)
+        for signature in ('public.pr_discord_queue_number(jsonb)','public.pr_discord_projection_refresh(uuid,jsonb,bigint)','public.pr_discord_workspace_projection_trigger()'):
+            assert not db.execute('SELECT has_function_privilege(%s,%s,\'EXECUTE\')',(role,signature)).fetchone()[0]
+for role in ('anon','authenticated'):
+    try:
+        with connection() as db:
+            db.execute('SET LOCAL ROLE '+role)
+            db.execute('SELECT count(*) FROM public.pr_discord_worker_projection')
+    except Exception as error:assert getattr(error,'sqlstate',None)=='42501'
+    else:raise AssertionError('Browser role read private selector')
+checks.append('projection FORCE RLS;browser roles cannot read;service SELECT only;direct refresh/trigger/helper execution denied')
+
+with patch('postriff_phase2.billing.require_publishing',return_value=None),patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
+    f=Fixture();original=f.job()
+    with connection() as db:
+        initial=db.execute('SELECT next_at,last_claimed_at,source_revision FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()
+        revision,state=db.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(f.workspace,)).fetchone()
+        assert initial and initial[0]<=time.time() and initial[2]==revision
+        state['phase2']['jobs'][0]['nextAt']=time.time()+600
+        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),f.workspace))
+        changed=db.execute('SELECT next_at,last_claimed_at,source_revision FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()
+        assert changed[0]>=state['phase2']['jobs'][0]['nextAt'] and changed[2]==revision+1
+        db.rollback()
+    with connection() as db:
+        assert db.execute('SELECT next_at,last_claimed_at,source_revision FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()==initial
+    frozen(f,original);no_posts(f);finish_fixture(f)
+checks.append('source-state update and projection are atomic;rolledback schedule edit restores exact hints/revision and original approval')
+
+with patch('postriff_phase2.billing.require_publishing',return_value=None),patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
+    f=Fixture();original=f.job();future=time.time()+600;change_job(f,nextAt=future)
+    with connection() as db:db.execute('UPDATE public.pr_discord_worker_projection SET next_at=0 WHERE workspace_id=%s',(f.workspace,))
+    assert worker(f,'forged-future-hint').claim(discord_only=True) is None,'A hint dispatched future work'
+    with connection() as db:assert db.execute('SELECT next_at FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()[0]>=future
+    make_due(f);owner=worker(f,'projection-lease-owner');claimed=owner.claim(discord_only=True);assert claimed
+    with connection() as db:
+        assert db.execute('SELECT next_at FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()[0]>=claimed['job']['leaseUntil']
+        db.execute('UPDATE public.pr_discord_worker_projection SET next_at=0 WHERE workspace_id=%s',(f.workspace,))
+    assert worker(f,'forged-live-lease-hint').claim(discord_only=True) is None,'A hint bypassed active lease'
+    assert owner.release_discord_unsent(claimed)
+    with connection() as db:
+        state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(f.workspace,)).fetchone()[0]
+        state['accountBlock']={'synthetic':True}
+        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),f.workspace))
+        assert db.execute('SELECT next_at FROM public.pr_discord_worker_projection WHERE workspace_id=%s',(f.workspace,)).fetchone()[0] is None
+    frozen(f,original);no_posts(f);finish_fixture(f)
+checks.append('forged stale due hint cannot bypass future source time or live lease;source guard repairs hints;account block removes due hint;zero POST')
 
 print('RAFII_DISCORD_WORKER_SQL_JSON ' + json.dumps({
     'status': 'PASS', 'execution': 'owned-disposable-cloud-postgres-synthetic-provider',

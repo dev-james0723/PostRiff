@@ -221,6 +221,12 @@ def selected_profile(stage, environment=None):
             setupDeadlineSeconds=300,totalHarnessDeadlineSeconds=480,
             purpose='functional pipeline and full safety-case qualification only;capacity A/B NOT_RUN')
         return p
+    if stage=='burst-diagnostic':
+        if plan:raise Incomplete('Burst diagnostic cannot inherit a capacity resource plan')
+        p=profile('a')
+        p.update(stage=stage,rampSeconds=2,steadySeconds=3,totalHarnessDeadlineSeconds=1200,
+            purpose='1000-user burst diagnosis with original A burst targets;full capacity A/B NOT_RUN')
+        return p
     p=profile(stage)
     if not plan:return p
     if plan!='b-extended-v2' or stage!='b':
@@ -339,6 +345,7 @@ class Telemetry:
         self.records = {}
         self.samples = []
         self.sql_failures = []
+        self.sql_operation_seconds = {}
         self.events = EVENTS.open('w')
 
     def count(self, key, n=1):
@@ -348,6 +355,11 @@ class Telemetry:
     def timing(self, key, value):
         with self.lock:
             self.timings.setdefault(key, []).append(value)
+
+    def sql_timing(self, operation, elapsed):
+        with self.lock:
+            row=self.sql_operation_seconds.setdefault(operation,{'count':0,'totalSeconds':0.,'maxSeconds':0.})
+            row['count']+=1;row['totalSeconds']+=elapsed;row['maxSeconds']=max(row['maxSeconds'],elapsed)
 
     @contextmanager
     def running(self, key):
@@ -397,7 +409,8 @@ class Telemetry:
             return {'counters': dict(self.counters), 'actualPeakConcurrency': dict(self.peak),
                     'latencies': {k: distribution(v, self.counters['mockHttpAttempts'] if k == 'mockHttpSeconds' else len(v))
                                   for k, v in self.timings.items()},
-                    'resourceSamples': self.samples, 'sqlFailureExamples': list(self.sql_failures)}
+                    'resourceSamples': self.samples, 'sqlFailureExamples': list(self.sql_failures),
+                    'sqlOperationSeconds': copy.deepcopy(self.sql_operation_seconds)}
 
 
 class TimedCursor:
@@ -437,6 +450,20 @@ class TimedCursor:
             batch = re.match(r'\s*WITH scope_(seed|lock|store)\b',query)
             if batch:
                 operation = 'scope_' + batch.group(1) + '_batch'
+            elif 'FROM public.pr_workspaces w' in query and 'SKIP LOCKED' in query:
+                operation='worker_due_selection'
+            elif re.match(r'\s*SELECT .* FROM public\.pr_workspaces WHERE id=',query,re.S):
+                operation='workspace_snapshot'
+            elif re.match(r'\s*UPDATE public\.pr_workspaces SET state=',query):
+                operation='workspace_state_write'
+            elif 'FROM public.pr_discord_route_buckets' in query:
+                operation='route_mapping_lock'
+            elif 'FROM public.pr_discord_request_admissions' in query:
+                operation='admission_read'
+            elif 'UPDATE public.pr_discord_request_admissions' in query:
+                operation='admission_write'
+            elif 'clock_timestamp()' in query:
+                operation='database_clock'
         try:
             self.raw.execute(*args, **kwargs)
             return self
@@ -452,6 +479,8 @@ class TimedCursor:
             self.metrics.count('sqlStatements')
             self.metrics.count('sqlOperation.' + operation)
             self.metrics.timing('sqlExecuteSeconds', time.monotonic() - started)
+            if callable(getattr(self.metrics,'sql_timing',None)):
+                self.metrics.sql_timing(operation,time.monotonic()-started)
 
 
 class TimedDatabase:
@@ -706,6 +735,7 @@ class Runtime:
         self.p, self.m, self.started = p, metrics, time.monotonic()
         self.tokens, self.discord_users, self.fixtures, self.nonces = {}, {}, [], {}
         self.observed_claims, self.worker_summaries = {}, []
+        self.selector_plans = []
         self.safety_completed = False
         self.lock = threading.RLock()
         self.stop_sample = threading.Event()
@@ -731,6 +761,7 @@ class Runtime:
             if hashlib.sha256(grants.read_bytes()).hexdigest()!='a0086cd1d01195c6114aba53de72cf5819d4c19b890b1716b453b33dc850c645':
                 raise Incomplete('Qualified worker grant migration drift')
             db.execute(grants.read_text())
+            db.execute((ROOT/'migrations/postriff/126_discord_worker_projection.sql').read_text())
         now = time.time()
         self.policy = {'version': 1, 'revision': 'synthetic-p8-' + p['stage'],
                        'issued_at': now - 1, 'expires_at': now + p.get('policyLifetimeSeconds',3600),
@@ -1101,6 +1132,11 @@ class Runtime:
             'Discord reserved rate slot expired after sealing. No POST was started; manual review required before any fresh approval.':'slot_expired_after_seal',
             'Discord delivery is uncertain. Reconcile before any further publication.':'ambiguous_transport_or_guard',
             'No conclusive Discord create response; reconcile without resubmitting.':'ambiguous_provider_status'}
+        reasons.update({
+            'Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.':'lookup_unavailable',
+            'Discord read-back did not match the approved message, author, channel and mention policy.':'lookup_mismatch',
+            'Provider outcome is unknown; reconcile before retry':'adapter_exception',
+            'Invalid provider retry delay; reconcile before retry':'invalid_retry_envelope'})
         operation=job.get('discordWorker') or {}
         result={'alias':record['alias'],'phase':record['phase'],'state':job.get('state'),
             'reason':reasons.get(job.get('providerConfirmed'),'other'),
@@ -1151,6 +1187,27 @@ class Runtime:
         self.m.event('cohort-result', **result)
         return result
 
+    def selector_probe(self, due_at, count):
+        """EXPLAIN only: future query parameters cannot claim or dispatch work."""
+        from statistics import median
+        from postriff_phase2.hosted_worker import due_workspaces_sql
+        result={'workspacesWithBurstJobs':count,'clock':'future EXPLAIN only;worker clock/approvals unchanged','variants':{}}
+        for projected in (False,True):
+            samples=[];indexes=set();nodes=set()
+            for _ in range(3):
+                query=due_workspaces_sql(discord_only=True,discord_projected=projected)
+                with self.connection() as db:
+                    plan=db.execute('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+query,(due_at+1,due_at+1,[])).fetchone()[0][0]
+                samples.append(plan['Execution Time'])
+                def walk(node):
+                    nodes.add(node['Node Type'])
+                    if node.get('Index Name'):indexes.add(node['Index Name'])
+                    for child in node.get('Plans',[]):walk(child)
+                walk(plan['Plan'])
+            result['variants']['projected' if projected else 'legacy']={
+                'medianExecutionMilliseconds':median(samples),'indexes':sorted(indexes),'nodeTypes':sorted(nodes)}
+        self.selector_plans.append(result)
+
     def burst(self, replicas, phase, count, comparison=False):
         selected = list(self.fixtures)
         random.Random(self.p['seed'] + replicas).shuffle(selected)
@@ -1177,6 +1234,7 @@ class Runtime:
                         raise Incomplete('Default edit changed frozen approval')
                 list(pool.map(edit_default, [r for r in records[:64] if r['jobId']]))
                 self.m.count('approvedDefaultsChanged', sum(r['jobId'] is not None for r in records[:64]))
+                self.selector_probe(due,count)
             states = self.wait_records(records, due + drain)
         return self.cohort_result(phase, records, states, due + drain, replicas, not comparison)
 
@@ -1791,7 +1849,7 @@ def run(stage):
     result = {'status': 'NOT_RUN', 'execution': 'disposable-cloud-postgres-mocked-discord',
               'profile': p, 'profileSha256': fingerprint(p), 'phases': {},
               'budgetPreflight': budget_lower_bound(p),
-              'capacityAcceptance':'NOT_RUN' if stage=='pipeline-qualification' else 'full fixed profile',
+              'capacityAcceptance':'NOT_RUN' if stage in ('pipeline-qualification','burst-diagnostic') else 'full fixed profile',
               'realDiscordAcceptance': 'NOT_RUN', 'productionReady': 'NO',
               'cost': {'actualCost': 'UNKNOWN', 'comparisonBaseline': None, 'savings': 'UNKNOWN'}}
     result['plannedJobRequests'] = p['comparisonJobsEach'] * len(p['comparisonReplicas']) + p['burstJobs'] + len(arrivals(p)) + p['plannedSafetyJobRequests']
@@ -1846,6 +1904,7 @@ def run(stage):
                 result.update(status='FAIL', cleanupError=type(error).__name__)
             result['safetyAccounting'] = runtime.final_safety()
             result['workers'] = runtime.worker_summaries
+            result['selectorPlans'] = runtime.selector_plans
             if result['safetyAccounting']['status'] != 'PASS':
                 result['status'] = 'FAIL'
             all_records = list(metrics.records.values())

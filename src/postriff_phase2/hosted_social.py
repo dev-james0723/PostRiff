@@ -397,6 +397,7 @@ class HostedSocial:
     def reconcile_discord(self, manifest, job):
         """Only GET a known message in the original channel; never use the default."""
         from .discord.authorization import SCHEMA, wire_content, digest, snowflake
+        from .discord.rate_limits import RateDelayed, ReadAdmissionDelayed
         frozen = manifest.get('discord') or {}
         target = frozen.get('target') or {}
         reference = job.get('providerReference')
@@ -429,6 +430,15 @@ class HostedSocial:
             return {'state': 'verified', 'reference': reference, 'verification': 'provider_lookup',
                     'url': f"https://discord.com/channels/{target['guildId']}/{channel}/{message_id}",
                     'confirmed': 'Discord read-back matched the approved text, bot, channel and mention policy.', 'discordDeliveryEvidence': 'accepted'}
+        except RateDelayed as error:
+            # A denied GET cannot undo an existing create receipt. Resume only
+            # this exact lookup, preserving the message ID and frozen target.
+            import math
+            return {'state': 'provider_accepted', 'reference': reference,
+                    'confirmed': 'Discord message receipt retained; awaiting shared capacity for the exact read-back. Do not resubmit.',
+                    'discordDeliveryEvidence': 'accepted', 'discordReadDeferred': True,
+                    'discordReadAdmissionDenied': isinstance(error, ReadAdmissionDelayed),
+                    'retryAfterSeconds': max(1, math.ceil(error.retry_after_seconds))}
         except (AlphaError, KeyError, TypeError, ValueError):
             return _uncertain('Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.')
 

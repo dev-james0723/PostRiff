@@ -65,7 +65,10 @@ class MemoryLedger:
         if sql.startswith('SET LOCAL') or sql.startswith("SELECT set_config('lock_timeout'"):return
         if sql.startswith('SELECT extract(epoch from clock_timestamp()'):
             self.result=[(self.workspace.now if self.workspace else self.now,)];return
-        if self.workspace and 'public.pr_discord_' not in sql:
+        workspace_selector = (sql == "SELECT to_regclass('public.pr_discord_worker_projection')"
+            or sql.startswith('SELECT w.id::text,w.revision,w.state')
+               and 'JOIN public.pr_discord_worker_projection' in sql)
+        if self.workspace and ('public.pr_discord_' not in sql or workspace_selector):
             self.workspace.execute(query,params)
             self.result=self.workspace.fetchall();self.rowcount=self.workspace.rowcount;return
         if sql.startswith('INSERT INTO public.pr_discord_route_buckets'):

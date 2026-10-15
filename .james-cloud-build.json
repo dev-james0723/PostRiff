@@ -32,7 +32,7 @@
   },
   "taskArgs": {
     "test": [
-      "--stage-a"
+      "--burst-coordinator-qualification"
     ],
     "ci": [
       "--with-discord-pipeline"

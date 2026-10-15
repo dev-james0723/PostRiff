@@ -34,7 +34,7 @@ def configured_worker_limits(values=None):
     return jobs, seconds
 
 
-def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True, linkedin_only=False, discord_only=False, exclude_discord=False):
+def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtube=False, operations_ready=True, linkedin_only=False, discord_only=False, exclude_discord=False, discord_projected=False):
     """The actual bounded selection, shared with disposable query-plan acceptance."""
     dispatch_join = 'LEFT JOIN public.pr_worker_tenants dispatch ON dispatch.workspace_id=w.id' if capacity_ready else ''
     dispatch_order = 'dispatch.last_claimed_at NULLS FIRST,w.id' if capacity_ready else 'w.id'
@@ -49,6 +49,13 @@ def due_workspaces_sql(capacity_ready=True, *, youtube_only=False, exclude_youtu
     if youtube_only and capacity_ready and operations_ready:
         from .youtube.operations import WORKER_SQL
         return WORKER_SQL
+    if discord_only and discord_projected:
+        # Migration126 mirrors due/lease/cursor hints in the SAME workspace
+        # transaction. The locked source checks below still own authorization.
+        return """SELECT w.id::text,w.revision,w.state FROM public.pr_workspaces w
+            JOIN public.pr_discord_worker_projection hint ON hint.workspace_id=w.id
+            WHERE hint.next_at<=least(%s,%s) AND NOT w.id=ANY(%s::uuid[])
+            ORDER BY hint.last_claimed_at,w.id LIMIT 1 FOR UPDATE OF w SKIP LOCKED"""
     platform_filter = (" AND j#>>'{manifest,platform}'='Discord'" if discord_only else
                        " AND j#>>'{manifest,platform}'='LinkedIn'" if linkedin_only else
                        " AND j#>>'{manifest,platform}'='YouTube'" if youtube_only else
@@ -158,9 +165,11 @@ class PostgresWorker:
         # Lock one row per selection, at most eight examined tenants per claim.
         # There is no global lock in this lane; peer workers can use other rows.
         excluded = []
+        cur.execute("SELECT to_regclass('public.pr_discord_worker_projection')")
+        projected = cur.fetchone()[0] is not None
         for _ in range(discord_worker.MAX_CANDIDATES):
             now = self._db_now(cur)
-            cur.execute(due_workspaces_sql(discord_only=True), (now, now, excluded))
+            cur.execute(due_workspaces_sql(discord_only=True,discord_projected=projected), (now, now, excluded))
             row = cur.fetchone()
             if not row:
                 return
@@ -709,6 +718,12 @@ class PostgresWorker:
                                     (json.dumps(state), claimed['workspaceId'], revision))
                         return False
                 result = normalize_result(result, job, claimed['reconciliation'])
+                if result.get('discordReadDeferred') is True:
+                    # A provider429 DID spend a GET. Only the private signal
+                    # minted before HTTP can refund a verification check.
+                    if result.get('discordReadAdmissionDenied') is True:
+                        job['checks'] = max(0, job.get('checks', 0) - 1)
+                    job['discordReadDeferrals'] = job.get('discordReadDeferrals', 0) + 1
                 self._event(job, result["state"], result["confirmed"], at=now)
                 if discord_worker.managed(job):
                     job[discord_worker.KEY]['stage'] = 'done'

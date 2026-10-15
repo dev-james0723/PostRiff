@@ -22,6 +22,10 @@ case "$1" in
     export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
     discord_coordinator_qualification=1
     discord_owned_deadline=9m ;;
+  --burst-coordinator-qualification)
+    export RAFII_DISCORD_CAPACITY_STAGE=burst-diagnostic
+    discord_coordinator_qualification=1
+    discord_owned_deadline=21m ;;
   --stage-b) export RAFII_DISCORD_CAPACITY_STAGE=b ;;
   --stage-b-extended-v2)
     export RAFII_DISCORD_CAPACITY_STAGE=b

@@ -363,6 +363,55 @@ class DiscordP0(unittest.TestCase):
         self.assertEqual(social.reconcile(job['manifest'], {'providerReference': SECOND + '/4444444'})['state'], 'uncertain')
         self.assertEqual(wire.calls, [])
 
+    def test_known_receipt_rate_wait_resumes_only_frozen_lookup(self):
+        from postriff_phase2.discord.rate_limits import RateDelayed, ReadAdmissionDelayed
+        from postriff_phase2.outcomes import normalize_result
+        engine, state, channel, variant = fixture(); job = approve(engine, state, review(engine, state, channel, variant))
+        wire, grants, social, db, worker = transport_and_worker(state)
+        job['providerReference'] = FIRST + '/4444444'
+        before = copy.deepcopy(job)
+        with patch.object(social.providers['discord'], '_bot', side_effect=ReadAdmissionDelayed(RateDelayed(172800.25))):
+            result = normalize_result(social.reconcile(job['manifest'], job), job, True)
+        self.assertEqual(result['state'], 'provider_accepted')
+        self.assertTrue(result['discordReadDeferred'])
+        self.assertTrue(result['discordReadAdmissionDenied'])
+        self.assertEqual(result['retryAfterSeconds'], 172801)
+        self.assertEqual(result['reference'], before['providerReference'])
+        self.assertEqual(job, before)
+        self.assertFalse(wire.calls)
+        self.assertEqual(social.reconcile(job['manifest'], job)['state'], 'verified')
+        self.assertTrue(all(method == 'GET' for method, _, _ in wire.calls))
+        self.assertEqual(wire.calls[-1][1], '/channels/' + FIRST + '/messages/4444444')
+
+    def test_read_wait_cannot_authorize_a_create_or_substitute_receipt(self):
+        from postriff_phase2.outcomes import normalize_result
+        engine, state, channel, variant = fixture(); job = approve(engine, state, review(engine, state, channel, variant))
+        job['providerReference'] = FIRST + '/4444444'
+        result = {'state': 'provider_accepted', 'confirmed': 'Synthetic read wait',
+                  'reference': job['providerReference'], 'discordDeliveryEvidence': 'accepted',
+                  'discordReadDeferred': True, 'retryAfterSeconds': 2}
+        self.assertEqual(normalize_result(result, job, False)['state'], 'uncertain')
+        result['reference'] = SECOND + '/4444444'
+        self.assertEqual(normalize_result(result, job, True)['state'], 'uncertain')
+
+    def test_provider_429_spends_read_check_but_unsent_get_does_not(self):
+        from postriff_phase2.discord.rate_limits import RateDelayed, ReadAdmissionDelayed
+        for error, denied in ((ReadAdmissionDelayed(RateDelayed(2)), True), (RateDelayed(2, cause='provider_429'), False)):
+            engine, state, channel, variant = fixture(); job = approve(engine, state, review(engine, state, channel, variant))
+            job.update(providerReference=FIRST + '/4444444', checks=5)
+            claimed = claimed_job(job); claimed['reconciliation'] = True
+            wire, grants, social, db, worker = transport_and_worker(state)
+            with patch.object(social.providers['discord'], '_bot', side_effect=error):
+                result = social.reconcile(job['manifest'], job)
+            self.assertEqual(result['discordReadAdmissionDenied'], denied)
+            self.assertTrue(worker.complete(claimed, result))
+            current = db.state['phase2']['jobs'][0]
+            self.assertEqual(current['checks'], 4 if denied else 5)
+            self.assertEqual(current['nextAt'], NOW + 303 if denied else NOW + 301 + 86400)
+            self.assertEqual(current['providerReference'], FIRST + '/4444444')
+            self.assertEqual(current['discordAuthorization'], job['discordAuthorization'])
+            self.assertFalse(wire.calls)
+
     def test_legacy_standing_automation_authority_is_rejected(self):
         engine, state, channel, variant = fixture(); job = approve(engine, state, review(engine, state, channel, variant))
         job['automation'] = {'approvedVia': 'owner_preauthorization'}

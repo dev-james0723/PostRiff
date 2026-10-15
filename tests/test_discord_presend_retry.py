@@ -3,7 +3,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from postriff_phase2.discord.rate_limits import Permit, RateDelayed, SharedPostgresBudget, UnconsumedPublishPermit, _digest
+from postriff_phase2.discord.rate_limits import Permit, RateDelayed, SharedPostgresBudget, UnconsumedPublishPermit, ReadAdmissionDelayed, _digest
 from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_rate_limits import MemoryLedger, synthetic_policy, APP, A, B
 
@@ -50,6 +50,7 @@ class PreSendRecovery(unittest.TestCase):
         with patch.object(self.budget, 'reserve', side_effect=RateDelayed(172800.25)) as reserve:
             with self.assertRaises(RateDelayed) as caught: self.p._bot('GET', '/users/@me')
         self.assertEqual(caught.exception.retry_after_seconds, 172800.25)
+        self.assertIsInstance(caught.exception, ReadAdmissionDelayed)
         self.assertEqual(reserve.call_count, 1)
         self.assertFalse(self.sent or self.waits)
 
@@ -78,6 +79,14 @@ class PreSendRecovery(unittest.TestCase):
             self.p._discord_http('POST', '/oauth2/token', credential_kind='oauth')
         self.assertEqual(len(calls), 1)
         self.assertFalse(self.waits)
+
+    def test_http_429_does_not_mint_a_presend_read_denial(self):
+        self.response = {'status':429,'body':{'retry_after':2,'global':True},'headers':{'Retry-After':'2'}}
+        with self.assertRaises(RateDelayed) as caught:
+            self.p._bot('GET','/channels/' + A + '/messages/' + B)
+        self.assertNotIsInstance(caught.exception, ReadAdmissionDelayed)
+        self.assertEqual(caught.exception.rate_cause,'provider_429')
+        self.assertEqual(len(self.sent),1)
 
     def test_only_consume_expiry_mints_the_unsent_publication_signal(self):
         path = '/channels/' + A + '/messages'

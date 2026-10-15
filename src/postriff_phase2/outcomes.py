@@ -83,10 +83,18 @@ def normalize_result(result, job, reconciliation=False):
             normalized['discordRateLimited'] = True
     if 'retryAfterSeconds' in result:
         delay = result['retryAfterSeconds']
-        if (job.get('manifest', {}).get('platform') != 'LinkedIn' or result['state'] != 'scheduled'
-                or type(delay) is not int or not 1 <= delay <= 86400):
-            return unknown('Invalid LinkedIn retry delay; reconcile before retry')
+        discord_read = (job.get('manifest', {}).get('platform') == 'Discord' and reconciliation
+                        and result['state'] == 'provider_accepted' and result.get('discordReadDeferred') is True
+                        and reference and reference == job.get('providerReference')
+                        and normalized.get('discordDeliveryEvidence') == 'accepted')
+        linkedin_wait = job.get('manifest', {}).get('platform') == 'LinkedIn' and result['state'] == 'scheduled'
+        ceiling = 253402300799 if discord_read else 86400
+        if (not (discord_read or linkedin_wait) or type(delay) is not int or not 1 <= delay <= ceiling):
+            return unknown('Invalid provider retry delay; reconcile before retry')
         normalized['retryAfterSeconds'] = delay
+        if discord_read:
+            normalized['discordReadDeferred'] = True
+            normalized['discordReadAdmissionDenied'] = result.get('discordReadAdmissionDenied') is True
     progress = result.get('progress')
     if progress is not None:
         if youtube_progress:
