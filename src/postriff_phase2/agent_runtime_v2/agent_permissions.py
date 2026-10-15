@@ -560,8 +560,11 @@ def _write(cur, *, workspace_id, user_id, actor, kind, source, before: Grants, p
     return receipt_id
 
 
-def apply_decision(cur, *, workspace_id, principal, member, state, token, payload, now, step_up: Callable[[], dict] | None = None, mode="shadow") -> dict:
-    """PUT …/agent/permissions (CF-2 §16). Returns the stored receipt; the HTTP layer adds the fresh GET body."""
+def apply_decision(cur, *, workspace_id, principal, member, state, token, payload, now, step_up: Callable[[], dict] | None = None, mode="shadow",
+                   on_widen: Callable[[], object] | None = None) -> dict:
+    """PUT …/agent/permissions (CF-2 §16). Returns the stored receipt; the HTTP layer adds the fresh GET body.
+    `on_widen` runs (and may raise) only when the change widens authority: the RAPv2 security gate, so narrowing is
+    never blocked."""
     authz.human_only(token)
     if not ready(cur):
         raise unavailable()
@@ -583,6 +586,8 @@ def apply_decision(cur, *, workspace_id, principal, member, state, token, payloa
     widened = bool(diff.widened) or diff.spend_looser
     if widened and not body["confirmed"]:
         raise authz.AuthzError("Confirm that Rafii may do more before saving.", "confirmation_required")
+    if widened and on_widen is not None:
+        on_widen()
     proof = None
     if needs_step_up(before, preset, scopes):
         if not body["stepUp"] or step_up is None:

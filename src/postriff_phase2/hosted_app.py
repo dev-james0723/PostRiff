@@ -35,7 +35,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import agent_observability, device_trust, tools
+from . import agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -879,6 +879,11 @@ class HostedApplication:
                 self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
+            # RAPv2 P1: a sensitive capability from a risky session needs fresh independent proof. Enforce mode only;
+            # in every other mode require() returns at once and runs nothing.
+            capability = security_gate.capability_for(method, path.strip("/").split("/"))
+            if capability is not None:
+                security_gate.require(service, token, capability)
             if path == "/api/ideas/models/rescan" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, service.ideas.rescan_models(body.get("workspaceId"), token))
@@ -1235,7 +1240,7 @@ class HostedApplication:
                 suffix = '/' + parts[-1] if len(parts) == 8 and parts[-1] in {'end', 'transcript'} else ''
                 environ['postriff.failure'] = {'errorCode': error.code if error.code in safe_codes else 'other',
                                               'routePattern': '/api/workspaces/:id/agent/voice/sessions' + ('/:id' + suffix if suffix else '')}
-            return self._json(start_response, error.status, {"error": str(error), "code": error.code})
+            return self._json(start_response, error.status, {"error": str(error), "code": error.code, **getattr(error, "public_fields", {})})
         except Exception as error:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
