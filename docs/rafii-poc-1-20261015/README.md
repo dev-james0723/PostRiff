@@ -13,6 +13,7 @@ publication was performed. The commit, push and draft PR followed James's separa
 - Reviewable diff: the draft PR (12 code, test and script paths). The remotely validated working tree had patch sha256
   `85415a3c…`; the commit holds exactly that tree plus this folder (docs are excluded from JCB uploads).
 - Case table: `CASES.md`; per-ID results: `ACCEPTANCE.md` / `acceptance.json`; runs: `runs.json`; open gates: `APPROVAL-PACKAGES.md`
+- Decisions: `DECISIONS.md` (D-1: #201 is the mainline over #126/#142); POC-2 read-only preflight: `POC2-PREFLIGHT.md`
 
 ## What changed (minimal increments, no second store/OAuth/approval/scheduler/router/ledger)
 | Path | Owner role | Change |

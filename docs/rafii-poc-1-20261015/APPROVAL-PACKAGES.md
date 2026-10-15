@@ -1,6 +1,6 @@
 # Rafii POC-1 — open gates and precise approval packages
 
-State: **CANDIDATE ONLY**. Only AP-1 has been executed. Each package is independent; approving one does not
+State: **CANDIDATE ONLY**. AP-1 executed; AP-2 decided on James's delegation; AP-4 parameters decided, awaiting yes. Each package is independent; approving one does not
 approve another.
 
 ## AP-1 Commit and open a draft PR (no merge, no deploy) — APPROVED by James 2026-10-15, executed
@@ -10,7 +10,7 @@ approve another.
 - Not included: merge, production deploy, flag enablement.
 - Rollback: close the PR and delete the remote branch (deletion itself needs its own yes).
 
-## AP-2 Integration ownership of PR #126 and PR #142
+## AP-2 Integration ownership of PR #126 and PR #142 — DECIDED 2026-10-15 (see DECISIONS.md D-1: #201 is mainline)
 - Fact: this candidate re-implements a **subset** of PR #126 (`coworker/review.py`, Growth Loop review binding,
   hosted presentation filter) and PR #142 (`metric_schedule` window truth). Both PRs stay OPEN and untouched.
 - PR #126 head `bdb9b22e10` has no local worktree (Codex session, last update 2026-10-05). PR #142 head `2a27875108`
@@ -26,12 +26,24 @@ approve another.
   No takeover was attempted; the canonical checkout and its dirty files were not touched.
 - Decision needed only if the candidate must live under the canonical root: coordinate with that session's owner.
 
-## AP-4 POC-2: one native read-only check on a real, already-authorized account (separate approval)
-- Needs, item by item: which workspace / Instagram or Threads account / environment; confirmation that a valid grant
-  with `*_manage_insights` already exists (no new OAuth, no scope expansion, no refresh unless named); read scopes;
-  at most 10 owned posts and 3 controlled reads; retention of the payload; AI processing **off**; cost cap (proposed
-  USD 5); who checks ordinary-user (non-developer) behaviour.
-- Proves only: the platform returns comparable native fields and ages for that account. Not publishing, not growth.
+## AP-4 POC-2: one native read-only check on a real, already-authorized account — PARAMETERS DECIDED, needs James's yes
+Preflight done read-only (see POC2-PREFLIGHT.md): the only eligible account is the founder's own Instagram (valid grant
+with insights scopes, analytics Direct); it has 0 Rafii-verified posts and production has never run a scheduled read,
+so the question cannot be answered from stored data.
+- Production change (needs yes): on Vercel project `postriff-phase2-private`, target Production only, set
+  `POSTRIFF_METRIC_READS=1` and `POSTRIFF_METRIC_WORKSPACE_ALLOWLIST=<founder workspace UUID>` (that one workspace,
+  explicit UUID, no wildcard), then **redeploy the current production commit** so the existing per-minute cron mounts
+  the existing scheduler. No code from PR #201 is deployed; no migration (035 is already live).
+- Founder action (James, not Claude): publish 3 ordinary Instagram posts through Rafii's existing review/approval after
+  the redeploy, so each verified post gets its t0/1h/24h/7d schedule.
+- Native effect: at most 3 posts x 4 reads = 12 Graph insights GETs with the existing grant; no new OAuth, scope or
+  refresh is requested (the token has about 48 days left); comments sync is not part of base. Cost: no provider
+  invoice for these reads; USD 0 expected, cap USD 5. AI processing: none.
+- Data/retention: native counts stay in `pr_metric_observations` for the founder's own workspace; purge on request.
+- Check: after 24–27 h run the read-only qualification query in POC2-PREFLIGHT.md.
+- Rollback: remove both env vars and redeploy; pending reads stop at the next eligibility check; stored readings remain
+  until a purge is requested.
+- Proves only: comparable native 24h values for this one account. Not publishing quality, not growth, not other platforms.
 
 ## AP-5 Screen (UI) rendering of the report — Lane D
 - Fact: no web source changed. A-D13 parity is proven for the frozen report payload (the JSON the screen would render),
