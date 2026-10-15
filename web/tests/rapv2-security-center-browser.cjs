@@ -23,6 +23,8 @@ const seed = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../docs/desi
 const TOUR_IDS = [...fs.readFileSync(path.resolve(__dirname, '../src/features/onboarding/tours.ts'), 'utf8').matchAll(/^ {2,4}id: '([a-z-]+)'/gm)].map((m) => m[1]);
 const TOURS_SEEN = JSON.stringify({ completed: {}, dismissed: Object.fromEntries(TOUR_IDS.map((id) => [id, 1])), nudged: Object.fromEntries(TOUR_IDS.map((id) => [id, 1])) });
 
+// The Security settings section (SettingsSection labels itself by its heading id).
+const SECTION = 'section[aria-labelledby="profile-security-heading"]';
 const now = Math.floor(Date.now() / 1000);
 const SESSIONS = {
   sessions: [
@@ -68,7 +70,7 @@ async function open(browser, { width = 1280, height = 900, reducedMotion = 'no-p
   await page.route('**/api/me/security-events', (route) => route.fulfill(json({ events: [] })));
   await page.goto(`${base}/app/account/profile`, { waitUntil: 'domcontentloaded', timeout: 400000 });
   const enter = page.getByRole('button', { name: 'Enter dev workspace' });
-  const section = page.locator('#profile-security');
+  const section = page.locator(SECTION);
   await section.or(enter).first().waitFor({ timeout: 400000 });
   if (await enter.isVisible().catch(() => false)) {
     await enter.click();
@@ -150,10 +152,10 @@ async function shot(page, name) {
 
       // RAP-119: axe over the Security section, and status said in words (not colour alone).
       await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
-      const violations = await page.evaluate(async () => {
-        const result = await window.axe.run('#profile-security', { resultTypes: ['violations'] });
+      const violations = await page.evaluate(async (sel) => {
+        const result = await window.axe.run(document.querySelector(sel), { resultTypes: ['violations'] });
         return result.violations.filter((v) => ['serious', 'critical'].includes(v.impact)).map((v) => ({ id: v.id, impact: v.impact, sample: v.nodes[0]?.target }));
-      });
+      }, SECTION);
       check('RAP-119', 'axe finds no serious or critical issue in the Security section', violations.length === 0, violations);
       const words = await section.innerText();
       check('RAP-119', 'session and browser states are words (this device, revoked, this browser), not colour only', ['this device', 'revoked', 'this browser'].every((w) => words.includes(w)), words.slice(0, 500));

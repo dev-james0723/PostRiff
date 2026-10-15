@@ -249,7 +249,9 @@ class RevokeOthersCoverage(unittest.TestCase):
 class P1Boundaries(unittest.TestCase):
     """RAPv2 P1 rows answered by the code's own boundaries (no database needed)."""
     SRC = ROOT / "src" / "postriff_phase2"
-    SECURITY_WRITERS = {"account_deletion.py", "device_trust.py", "hosted.py", "security_gate.py", "security_holds.py", "security_incidents.py", "security_policy.py"}  # security_policy: names the table in prose only (pure, no I/O)
+    SECURITY_WRITERS = {"account_deletion.py", "device_trust.py", "hosted.py", "security_gate.py", "security_holds.py", "security_incidents.py", "security_policy.py",
+                        # RAPv2 Security Center (device revoke, incident resolution) and the retention worker.
+                        "security_center.py", "security_retention.py"}  # security_policy: names the table in prose only (pure, no I/O)
 
     def test_rap103_no_agent_or_tool_code_can_write_risk_trust_or_hold_state(self):
         pattern = re.compile(r"pr_security_|pr_session_security|security_holds\.(place|release)|pr_security_set_hold|device_trust\.(record|register|observe)")
