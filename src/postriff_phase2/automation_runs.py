@@ -22,7 +22,7 @@ from contextlib import contextmanager
 
 from postriff_alpha.domain import AlphaError, clean
 
-from . import campaigns, capabilities, lifecycle, publisher, research as web_research, workflow as workflows
+from . import campaigns, capabilities, lifecycle, publisher, research as web_research, security_holds, workflow as workflows
 from .contracts import digest
 from .permissions import Membership, require
 from .planning_store import sync
@@ -35,9 +35,11 @@ CONTENT_WORDS = {"post": "post", "reflection": "personal reflection", "quote": "
                  "recap": "recap", "tip": "tip", "story": "story", "question": "question for the audience"}
 
 
-def principal_repository(service, workspace_id, principal, requirement, check=None, *, capability=None, config=None):
+def principal_repository(service, workspace_id, principal, requirement, check=None, *, capability=None, config=None, hold_epoch=None,
+                         authorized_at=security_holds._SKIP):
     """A private copy of the repository that acts as `principal` for one workspace (never an HTTP credential).
-    Every transaction re-checks the principal's membership class and, when given, the run's binding."""
+    Every transaction re-checks the principal's membership class, their security hold (RAPv2; `hold_epoch` is the
+    epoch the job captured at claim) and, when given, the run's binding."""
     private_token = object()
     repository = copy.copy(service.repository)
 
@@ -55,6 +57,7 @@ def principal_repository(service, workspace_id, principal, requirement, check=No
         with base(token, requested_workspace, **kwargs) as (cur, row, found):
             member = Membership.from_row(*row[2:7])
             require(member, requirement)
+            security_holds.assert_clear(cur, principal, hold_epoch, authorized_at=authorized_at)
             if capability is not None:
                 from .agent_runtime_v2 import authz
                 authz.recheck_principal(cur, workspace_id=workspace_id, principal=principal, member=member,
@@ -261,7 +264,7 @@ def generate(worker, claim):
     workspace_id, actor, binding = claim["workspaceId"], claim["actor"], claim["binding"]
     task, campaign, occurrence = claim["task"], claim["campaign"], claim["occurrence"]
     from .campaign_worker import validate
-    repository, capability = principal_repository(service, workspace_id, actor, "owner", check=lambda state: validate(state, binding))
+    repository, capability = principal_repository(service, workspace_id, actor, "owner", check=lambda state: validate(state, binding), hold_epoch=claim.get("holdEpoch"))
     record = occurrence.get("research")
     if task["workflow"].get("research") and record is None:
         record, stop = research_step(worker, claim, repository, capability)
@@ -634,7 +637,10 @@ def commit_item(worker, workspace_id, occurrence_id, item_key, principal, item, 
         # Automatic publishing was turned off (or the approval is gone): the post waits for a person again.
         return _commit_failed(service, workspace_id, occurrence_id, item_key, task, AlphaError("Automatic publishing is off for this automation now, so this post needs your approval.", 409, code="publish_authority_required"))
     # A standing auto-publish grant is an owner's: it is re-checked as owner, a human approval as approve.
-    repository, capability = principal_repository(service, workspace_id, principal, "owner" if item.get("approvedVia") == "owner_preauthorization" else "approve")
+    # RAPv2: a standing auto-publish grant dates from the automation's activation, a human approval from its decision.
+    authorized = task.get("activatedAt") if item.get("approvedVia") == "owner_preauthorization" else (item.get("decision") or {}).get("at")
+    repository, capability = principal_repository(service, workspace_id, principal, "owner" if item.get("approvedVia") == "owner_preauthorization" else "approve",
+                                                  authorized_at=authorized)
     try:
         for _ in range(2):
             try:

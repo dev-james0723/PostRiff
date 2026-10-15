@@ -130,7 +130,8 @@ checks.append('a revoked browser gets a new token and record; the revoked one is
 # Append-only, for the owner too; a cross-person device link is refused; pr_sessions cleanup cannot drop state.
 assert refused('UPDATE public.pr_security_login_events SET details=%s::jsonb WHERE user_id=%s', ('{}', ALICE))
 assert refused('DELETE FROM public.pr_security_login_events WHERE user_id=%s', (ALICE,))
-assert refused('TRUNCATE public.pr_security_login_events')
+# Refused by the trigger, or (once migration 122's incidents reference the ledger) by the foreign key first.
+assert refused('TRUNCATE public.pr_security_login_events', error=(errors.InsufficientPrivilege, errors.FeatureNotSupported))
 assert refused('UPDATE public.pr_session_security SET device_id=%s WHERE user_id=%s', (device_id, BOB), errors.ForeignKeyViolation)
 assert refused('DELETE FROM public.pr_sessions WHERE user_id=%s AND session_id=%s', (ALICE, S1), errors.ForeignKeyViolation)
 checks.append('the ledger refuses update, delete and truncate even for the owner; a session cannot point at another person\'s device; pr_sessions cleanup is refused while security state exists')

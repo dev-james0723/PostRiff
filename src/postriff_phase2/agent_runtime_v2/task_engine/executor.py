@@ -31,6 +31,7 @@ _CODE_CATEGORY = {
     "conflict": "conflict", "timeout": "timeout", "price_unknown": "budget", "budget": "budget", "insufficient_credits": "budget",
     "credit_limit": "budget", "voice_not_allowed": "unsupported", "tool_tenant": "unsupported", "tool_out_of_scope": "unsupported",
     "youtube_analytics_read_only": "unsupported", "asset_link_unsupported": "unsupported", "rate_limited": "retryable", "provider_unavailable": "retryable",
+    "security_account_hold": "permission", "security_hold_changed": "permission", "security_state_unavailable": "retryable",
 }
 
 CLAIM_SQL = """
@@ -378,6 +379,7 @@ def execute(runtime, claim: Claim, *, token=None, seconds_left: float = DEFAULT_
     ctx = None
     try:
         tool = tool_adapter.REGISTRY.get(step["capabilityId"])
+        hold_epoch = None
         with store.service_tx(runtime.service, task["workspaceId"]) as cur:
             current = store.lock_task(cur, runtime.service.ideas, task["workspaceId"], task["taskId"])
             member = authz_seam.membership(cur, task["workspaceId"], task["createdBy"])
@@ -389,6 +391,10 @@ def execute(runtime, claim: Claim, *, token=None, seconds_left: float = DEFAULT_
             elif verdict.verdict != "allow":
                 result = {"ok": False, "code": "agent_permission_revoked", "error": "This step is no longer allowed."}
             else:
+                # RAPv2 security hold on the task's creator, before the approval is used up and the tool runs; the epoch
+                # captured here fences every write the tool makes as that person (principal_repository).
+                from ... import security_holds
+                hold_epoch = security_holds.snapshot(cur, task["createdBy"], authorized_at=current.get("createdAt"))
                 if claim.approval_evidence:
                     consume_approval(cur, claim.approval_evidence)
                 result = None
@@ -397,8 +403,12 @@ def execute(runtime, claim: Claim, *, token=None, seconds_left: float = DEFAULT_
         if result is None:
             if claim.executor == "cron" or token is None:
                 from ...automation_runs import principal_repository
-                repository, capability = principal_repository(service, task["workspaceId"], task["createdBy"], tool.spec.permission)
+                repository, capability = principal_repository(service, task["workspaceId"], task["createdBy"], tool.spec.permission, hold_epoch=hold_epoch)
                 service, token = _ActingService(service, repository), capability
+            elif hold_epoch is not None:
+                # Inline (the person's own session): every write the tool makes re-checks the hold too.
+                from ... import security_holds
+                service = _ActingService(service, security_holds.fenced_repository(service.repository, task["createdBy"], hold_epoch))
             ctx = _context(runtime, claim, token=token, service=service, member=member, seconds_left=seconds_left)
             result = tool_adapter.execute(ctx, tool, dict(step["inputs"] or {}), agent=dispatch_agent(tool.name))
     except AlphaError as error:
