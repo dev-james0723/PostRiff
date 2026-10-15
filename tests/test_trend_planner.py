@@ -39,8 +39,13 @@ class FakeCursor:
         self.store, self.result = store, []
 
     def execute(self, sql, args=None):
+        self.store.sql.append(sql)
         if 'pg_advisory_xact_lock' in sql:
             self.result = []
+        elif 'pr_trend_ingestion_batches' in sql:
+            self.result = [{'trips': self.store.trips}]
+        elif 'pr_trend_jobs' in sql:
+            self.result = [{'busy': self.store.busy}]
         elif 'pr_trend_source_health' in sql:
             self.result = [self.store.health] if self.store.health else []
         elif 'pr_trend_budget_limits' in sql:
@@ -74,6 +79,9 @@ class FakeStore:
             [('sys', 'system'), ('provider', 'provider'), ('workspace', 'workspace')]]
         self.transactions = 0
         self.denied = False
+        self.trips = 1
+        self.busy = False
+        self.sql = []
 
     @contextmanager
     def transaction(self, cursor=None):
@@ -133,6 +141,29 @@ class FrontierTests(OfflineTest):
         self.planner.clock = lambda: '2026-09-27T12:01:59Z'
         self.assertEqual(len(self.planner.tick()['jobs']), 1)
         self.assertEqual(len(self.saved), 1)
+
+    def test_planner_skips_slots_during_cooldown_and_admits_single_probe_after(self):
+        # Open breaker: no slot is planned while the cooldown is in the future.
+        self.store.health = {'status': 'unavailable', 'next_allowed_at': '2026-09-27T12:15:00Z'}
+        with self.assertRaisesRegex(ContractError, 'source_paused'):
+            self.plan()
+        self.assertEqual(self.planner.tick()['blocked'], 1)
+        self.assertEqual(self.saved, {})
+        # Half-open: the lapsed pause admits exactly one in-flight probe job.
+        self.planner.clock = lambda: '2026-09-27T12:16:00Z'
+        self.store.manifest['schedule'] = schedule(max_samples=100)
+        self.store.busy = True
+        with self.assertRaisesRegex(ContractError, 'source_probe_in_flight'):
+            self.plan()
+        self.assertEqual(self.saved, {})
+        self.store.busy = False
+        self.assertIsNotNone(self.plan())
+        self.assertEqual(len(self.saved), 1)
+        # A cleared pause (successful batch) never runs the half-open query.
+        self.store.health = {'status': 'partial', 'next_allowed_at': None}
+        self.store.sql.clear(); self.store.busy = True
+        self.assertIsNotNone(self.plan())
+        self.assertFalse(any('pr_trend_jobs' in sql for sql in self.store.sql))
 
     def test_future_schedule_does_not_enqueue(self):
         self.store.manifest['schedule']['start_at'] = AFTER
