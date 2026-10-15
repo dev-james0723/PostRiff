@@ -218,6 +218,34 @@ def reconcile(args):
     return 0
 
 
+def runner_local_capacity_cache(workflow):
+    """Optional durable-cache services cannot gate this Python-only workload."""
+    cache_steps = ['Mount durable package cache', 'Mount durable Next.js cache',
+                   'Connect framework cache', 'Observe cache before', 'Observe cache after']
+    remaining, removed, skipping = [], [], False
+    for line in workflow.splitlines(keepends=True):
+        if line.startswith('      - '):
+            name = line[len('      - name: '):].strip() if line.startswith('      - name: ') else None
+            skipping = name in cache_steps
+            if skipping:
+                removed.append(name)
+        if not skipping:
+            remaining.append(line)
+    if removed != cache_steps:
+        raise SystemExit('Unexpected optional-cache workflow shape.')
+    result = ''.join(remaining)
+    original = '      NPM_CONFIG_CACHE: "/mnt/jcb-package-cache"\n'
+    install = '      - name: Frozen dependency install\n'
+    if result.count(original) != 1 or result.count(install) != 1:
+        raise SystemExit('Unexpected runner-local cache configuration.')
+    result = result.replace(original, '      NPM_CONFIG_CACHE: "${{ runner.temp }}/rafii-discord-b-npm"\n')
+    result = result.replace(install, '      - name: Prepare runner-local package cache\n'
+        '        run: install -d -m 700 "$NPM_CONFIG_CACHE"\n' + install)
+    if 'depot/cache-mount@' in result or '/mnt/jcb-' in result:
+        raise SystemExit('Unexpected durable-cache dependency remains.')
+    return result
+
+
 def setup(plan_name='workers16-v3'):
     plan=RESOURCE_PLANS[plan_name]
     sys.path.insert(0,str(Path.home()/'Documents/James-Cloud-Build/scripts'))
@@ -237,6 +265,8 @@ def setup(plan_name='workers16-v3'):
         raise SystemExit('Unexpected extended workflow shape.')
     workflow=workflow.replace('name: James Cloud Build','name: '+plan['workflowName'])
     workflow=workflow.replace('    timeout-minutes: 45','    timeout-minutes: 225')
+    if plan_name=='workers16-parent16-v4':
+        workflow=runner_local_capacity_cache(workflow)
     return jcb,cfg,workflow
 
 
