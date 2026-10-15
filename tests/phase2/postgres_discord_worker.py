@@ -372,6 +372,34 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
     set_jobs([{**job,'state':'held','leaseOwner':None,'leaseUntil':0} for job in (other,requested)])
 checks.append('scoped claim selects only requested job;locked digest and requester revocation checked;revocation after claim blocks final authorization;requester carried to final guard;other jobs unchanged;zero POST')
 
+
+# Latest production RAPv2 holds must also fence the managed Discord lane.
+with patch('postriff_phase2.billing.require_publishing', return_value=None), patch('postriff_phase2.billing.require_plan_capacity', return_value=None), patch.dict(os.environ, {'RAFII_SECURITY_INCIDENT_HOLD':'true'}):
+    for stage in ('before-claim','after-claim'):
+        f=Fixture();original=f.job();w=worker(f,'p3-account-hold-'+stage)
+        claimed=exact_claim(f,w,original) if stage=='after-claim' else None
+        if stage=='after-claim':
+            assert claimed and claimed['job']['id']==original['id'],'After-claim regression requires a real acquired lease'
+        with connection() as db:
+            db.execute("SELECT public.pr_security_set_hold(%s,true,'synthetic.discord_hold')",(f.user,))
+        if claimed:
+            assert seal(f,w,claimed) is False,'Account hold after claim reached dispatch authorization'
+        else:
+            try: denied=exact_claim(f,w,original)
+            except AlphaError as error: assert error.status in (403,409)
+            else: assert denied is None,'Active account hold acquired a publishing lease'
+        no_posts(f);frozen(f,original)
+        with connection() as db:
+            db.execute("SELECT public.pr_security_set_hold(%s,false,'synthetic.discord_release')",(f.user,))
+        # Restore only the scheduling state, preserving the original human approval.
+        # Lifting a hold cannot make a pre-hold approval valid again.
+        change_job(f,state=original['state'],leaseOwner=None,leaseUntil=0)
+        try: denied=exact_claim(f,w,original)
+        except AlphaError as error: assert error.status in (403,409)
+        else: assert denied is None,'Released hold revived a pre-hold publishing approval'
+        no_posts(f);frozen(f,original);finish_fixture(f)
+checks.append('RAPv2 active account hold blocks Discord claim and post-claim authorization;release cannot revive pre-hold approval;zero POST')
+
 with connection() as db:
     assert db.execute("SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid='public.pr_discord_worker_projection'::regclass").fetchone()==(True,True)
     for role in ('anon','authenticated','service_role'):

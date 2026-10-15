@@ -30,6 +30,7 @@ export const keys = {
   me: ['me'] as const,
   myChannels: ['me', 'channels'] as const,
   securityEvents: ['me', 'security-events'] as const,
+  securityIncidents: ['me', 'security-incidents'] as const,
   myInvitations: ['me', 'invitations'] as const,
   tools: ['tools'] as const,
   models: ['models'] as const,
@@ -156,6 +157,12 @@ export function useMyChannels() {
 export function useSecurityEvents() {
   const { api } = useWorkspace();
   return useQuery({ queryKey: keys.securityEvents, queryFn: () => api.securityEvents() });
+}
+
+/** "This wasn't me" reports. The route answers 404 while the feature is off, so no retry: the section stays hidden. */
+export function useSecurityIncidents() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.securityIncidents, queryFn: () => api.securityIncidents(), retry: false });
 }
 
 /** Invitations waiting for the person's verified email. */

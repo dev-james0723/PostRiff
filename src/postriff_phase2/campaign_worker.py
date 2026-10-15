@@ -13,6 +13,7 @@ import zoneinfo
 from postriff_alpha.domain import AlphaError
 from . import campaigns, insights
 from .planning_store import sync
+from . import security_holds
 from .permissions import Membership, require
 
 
@@ -86,6 +87,15 @@ class CampaignWorker:
             if not member or not Membership.from_row(*member).allows('owner'):
                 occurrence.update(state='held', reason='owner_authority_unavailable'); task['status'] = 'paused'
                 self._save(cur, workspace_id, state, actor); return {'held': True}
+            # RAPv2 security hold (RAFII_SECURITY_INCIDENT_HOLD): a held account's run is paused and needs a person to
+            # resume it; it never runs on the earlier activation. Unreadable controls raise 503 and roll this claim back.
+            try:
+                hold_epoch = security_holds.snapshot(cur, actor, authorized_at=task.get('activatedAt'))
+            except security_holds.AccountHeld:
+                occurrence.update(state='held', reason='security_hold')
+                task.update(status='paused', pauseReason='security_hold')
+                self._save(cur, workspace_id, state, actor)
+                return {'held': True}
             # Accounts disconnected since activation are skipped with a note; with none left the run is held.
             kept, skipped = campaigns.connected_destinations(state, [task['destination']] if task.get('authorityVersion') == 1 else task['destinations'])
             labels = task.get('accountLabels') or {}
@@ -136,7 +146,7 @@ class CampaignWorker:
                 if occurrence['evergreen']:
                     context['evergreen'] = {key: occurrence['evergreen'][key] for key in ('platform', 'publishedAt', 'text')}
             self._save(cur, workspace_id, state, actor)
-            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources, 'staged':staged}
+            return {'workspaceId':workspace_id, 'actor':actor, 'task':task, 'campaign':campaign, 'occurrence':occurrence, 'binding':binding, 'destinations':kept, 'context':context, 'sources':extra_sources, 'staged':staged, 'holdEpoch':hold_epoch}
 
     @staticmethod
     def _title(task, occurrence):
@@ -169,6 +179,7 @@ class CampaignWorker:
             if requested_workspace != workspace_id: raise AlphaError('Workspace unavailable.', 403)
             with base_transaction(token, requested_workspace) as (cur, row, principal):
                 require(Membership.from_row(*row[2:7]), 'owner')
+                security_holds.assert_clear(cur, actor, claim['holdEpoch'])
                 validate(row[1], binding)
                 yield cur, row, principal
         repository.transaction = transaction
@@ -179,6 +190,11 @@ class CampaignWorker:
         ideas.credit_requests = CreditRequests(ideas)
         ideas.recurring_binding = binding
         task, campaign, occurrence = claim['task'], claim['campaign'], claim['occurrence']
+        if claim['holdEpoch'] is not None:
+            # Immediately before the writer call: a hold placed since the claim stops it (the lease expires, and the next
+            # claim pauses the run).
+            with self.connection_factory() as db, db.cursor() as cur:
+                security_holds.assert_clear(cur, actor, claim['holdEpoch'])
         result = None
         try:
             # No implicit research, fallback writer, publishing plan or extra sources.

@@ -47,7 +47,7 @@ discord_validation_gate python python -m unittest test_discord_rate_limits test_
   test_postriff_automation_chat test_automation_credit_rebind test_social_readiness_hardening \
   test_hosted_wave3_connectors test_youtube_identity_fence \
   test_youtube_worker_refresh test_youtube_oauth_binding test_discord_presend_retry \
-  test_postgres_pool_controls test_discord_capacity_approval_receipt
+  test_postgres_pool_controls test_discord_capacity_approval_receipt test_rafii_account_holds
 discord_validation_gate sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_rate_limits.py
 python - <<'PY_EVIDENCE'
 import json

@@ -63,6 +63,8 @@ import type {
   VideoUploadTicket,
   VideoResumeTicket,
   SecurityEvent,
+  SecurityIncident,
+  SecurityIncidentReport,
   SessionInfo,
   Snapshot,
   ActiveTimeBeat,
@@ -205,6 +207,10 @@ export function createApi(getToken: TokenSource) {
     disableMfa: () => send<{ enforced: boolean; enforcedAt: number | null }>('DELETE', '/api/auth/mfa'),
     revokeOtherSessions: () =>
       send<{ revoked: number; refreshRevoked: boolean; current: string }>('POST', '/api/auth/sessions/revoke-others'),
+    securityIncidents: () => get<{ incidents: SecurityIncident[] }>('/api/auth/security/incidents'),
+    /** "This wasn't me": the confirmation is explicit in the body; the server also wants a sign-in from the last 10 minutes. */
+    reportNotMe: (revokeOtherSessions: boolean, sourceEventId: string | null = null) =>
+      send<SecurityIncidentReport>('POST', '/api/auth/security/incidents', { type: 'not_me', confirmed: true, revokeOtherSessions, sourceEventId }),
 
     /* snapshot + single mutation channel */
     snapshot: (w: string) => get<Snapshot>(ws(w)),

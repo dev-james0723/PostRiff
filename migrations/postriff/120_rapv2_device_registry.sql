@@ -136,6 +136,8 @@ alter table public.pr_session_security force row level security;
 alter table public.pr_security_login_events enable row level security;
 alter table public.pr_security_login_events force row level security;
 revoke all on public.pr_security_devices, public.pr_session_security, public.pr_security_login_events from public, anon, authenticated;
+-- Supabase's default privileges grant service_role ALL on new tables: take that back, then grant only the design.
+revoke all on public.pr_security_devices, public.pr_session_security, public.pr_security_login_events from service_role;
 grant select, insert, update on public.pr_security_devices, public.pr_session_security to service_role;
 grant select, insert on public.pr_security_login_events to service_role;
 create policy rapv2_service_only on public.pr_security_devices for all to service_role using (true) with check (true);

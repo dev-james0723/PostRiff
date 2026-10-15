@@ -335,6 +335,9 @@ class PostgresWorker:
             if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
                 return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False
+            # RAPv2 security hold on the approver is checked at claim and before dispatch.
+            from . import security_holds
+            security_holds.assert_clear(cur, job.get('approvedBy'), authorized_at=job.get('approvedAt'))
             require_publishing(cur, workspace_id, now)
             assert_job_authority(state, job, now)
             manifest = job['manifest']

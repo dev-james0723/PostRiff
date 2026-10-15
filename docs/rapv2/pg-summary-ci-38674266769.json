@@ -1,0 +1,216 @@
+{
+ "suite": "postgres_rapv2_acceptance",
+ "execution": "disposable-local-postgres; fake mail/push; synthetic tokens",
+ "counts": {
+  "PASS": 51,
+  "FAIL": 0
+ },
+ "rows": {
+  "RAP-001": {
+   "status": "PASS",
+   "check": "Google OAuth (amr oauth): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-002": {
+   "status": "PASS",
+   "check": "email OTP (amr otp): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-003": {
+   "status": "PASS",
+   "check": "passkey (amr webauthn): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-004": {
+   "status": "PASS",
+   "check": "POST /api/auth/verify (bootstrap) before GET /api/me: exactly one observation and one alert"
+  },
+  "RAP-005": {
+   "status": "PASS",
+   "check": "GET /api/me then POST bootstrap: a single first-observed event across both routes"
+  },
+  "RAP-006": {
+   "status": "PASS",
+   "check": "GET /api/auth/sessions before /api/me: exactly one observation"
+  },
+  "RAP-007": {
+   "status": "PASS",
+   "check": "a workspace API as the very first request: the verifier observes it, and its session checks run before any data"
+  },
+  "RAP-008": {
+   "status": "PASS",
+   "check": "GET /api/me ten times (cold process each time): one first-sighting event, one mail"
+  },
+  "RAP-009": {
+   "status": "PASS",
+   "check": "parallel first requests (verifier, /api/me, sessions list, workspace) on one new session: one event, no deadlock"
+  },
+  "RAP-010": {
+   "status": "PASS",
+   "check": "a refreshed JWT (new iat, same session_id) records no new sign-in"
+  },
+  "RAP-011": {
+   "status": "PASS",
+   "check": "a verified JWT without a session_id claim: 401 on every session route, zero rows, no substitute session"
+  },
+  "RAP-012": {
+   "status": "PASS",
+   "check": "a forged userId/sessionId in a request body is ignored: the row belongs to the verified subject only"
+  },
+  "RAP-015": {
+   "status": "PASS",
+   "check": "no token, an expired token and a token getUser refuses: every security endpoint answers 401, no data"
+  },
+  "RAP-049": {
+   "status": "PASS",
+   "check": "DELETE /api/auth/sessions/{own other}: that session is denied, the current one keeps working"
+  },
+  "RAP-050": {
+   "status": "PASS",
+   "check": "DELETE of another person's session id: the same 404 as an unknown id, and B's session unchanged"
+  },
+  "RAP-051": {
+   "status": "PASS",
+   "check": "repeating DELETE on an already revoked session: same safe response, no second audit row"
+  },
+  "RAP-052": {
+   "status": "PASS",
+   "check": "a revoked session's still-valid access JWT: 401 on the next hosted API request, no data"
+  },
+  "RAP-053": {
+   "status": "PASS",
+   "check": "the same revoked JWT straight through the Data API (authenticated role + JWT claims): reads no workspace row"
+  },
+  "RAP-054": {
+   "status": "PASS",
+   "check": "the revoked JWT cannot list private Storage objects (the signing step reads storage.objects under the same guard)"
+  },
+  "RAP-055": {
+   "status": "PASS",
+   "check": "POST revoke-others: every other session denied, the current one valid, the count exact"
+  },
+  "RAP-058": {
+   "status": "PASS",
+   "check": "revoking the current session through the API takes effect at once (the UI offers no revoke button for it)"
+  },
+  "RAP-059": {
+   "status": "PASS",
+   "check": "revocation fence in both orders: a write after the revocation commits nothing; a write before it stands alone"
+  },
+  "RAP-060": {
+   "status": "PASS",
+   "check": "one revocation applies to the person in every workspace they belong to"
+  },
+  "RAP-062": {
+   "status": "PASS",
+   "check": "account protection flag off: a revoked session stays denied (core revocation does not depend on RAPv2)"
+  },
+  "RAP-063": {
+   "status": "PASS",
+   "check": "alert preference off: the sign-in is in the account history, and no routine mail"
+  },
+  "RAP-065": {
+   "status": "PASS",
+   "check": "alert preference on: the sign-in is in the account history, and exactly one routine mail"
+  },
+  "RAP-066": {
+   "status": "PASS",
+   "check": "alert preference off: the sign-in is in the account history, and no routine mail"
+  },
+  "RAP-067": {
+   "status": "PASS",
+   "check": "one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one"
+  },
+  "RAP-068": {
+   "status": "PASS",
+   "check": "transport failure: the event and audit stay, retries are bounded with backoff, then the delivery is dead (not dropped)"
+  },
+  "RAP-069": {
+   "status": "PASS",
+   "check": "provider accepted is `sent`, never `delivered`, until the provider's delivered webhook arrives"
+  },
+  "RAP-070": {
+   "status": "PASS",
+   "check": "the same provider callback twice (and concurrently): applied once, no second email"
+  },
+  "RAP-071": {
+   "status": "PASS",
+   "check": "two delivery workers ticking at once: one lease, one send, one idempotency key"
+  },
+  "RAP-078": {
+   "status": "PASS",
+   "check": "a bounce receipt: the delivery is failed and email suppressed (visible to operations), never delivered"
+  },
+  "RAP-079": {
+   "status": "PASS",
+   "check": "anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 tables; the P1 tables do not exist yet)"
+  },
+  "RAP-080": {
+   "status": "PASS",
+   "check": "authenticated: no direct write on any session-security table, and no read of other people's or person-level rows"
+  },
+  "RAP-081": {
+   "status": "PASS",
+   "check": "the service role performs the expected session writes and reads"
+  },
+  "RAP-082": {
+   "status": "PASS",
+   "check": "every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles)"
+  },
+  "RAP-086": {
+   "status": "PASS",
+   "check": "user A cannot read or command workspace B through the hosted API (membership check)"
+  },
+  "RAP-087": {
+   "status": "PASS",
+   "check": "sign-in events are append-only: no role (authenticated, service_role) may UPDATE or DELETE pr_audit_events"
+  },
+  "RAP-088": {
+   "status": "PASS",
+   "check": "account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label)"
+  },
+  "RAP-089": {
+   "status": "PASS",
+   "check": "two concurrent first-sighting inserts of one session: exactly one first observation"
+  },
+  "RAP-091": {
+   "status": "PASS",
+   "check": "the user id written for a session or revocation is always the verified token subject"
+  },
+  "RAP-105": {
+   "status": "PASS",
+   "check": "GETs of the Security Center's data (me, sessions, security events) never revoke, hold or change factors"
+  },
+  "RAP-133": {
+   "status": "PASS",
+   "check": "200 sign-ins in a burst with alerts on: notices are bounded, every event is retained"
+  },
+  "RAP-139": {
+   "status": "PASS",
+   "check": "flag absent (default off): legacy behaviour \u2014 sessions recorded as before, no session.observed, no new friction"
+  },
+  "RAP-140": {
+   "status": "PASS",
+   "check": "observe mode: sign-ins are recorded and an ordinary read is not challenged; existing guards unchanged (AAL1 still refused under 2FA)"
+  },
+  "RAP-142": {
+   "status": "PASS",
+   "check": "the experimental v2 flag turned off after the revocation: a revoked session stays denied (core revocation does not depend on RAPv2)"
+  },
+  "RAP-143": {
+   "status": "PASS",
+   "check": "notification provider outage: the sign-in request does not wait on mail transport and the event is durable"
+  },
+  "RAP-146": {
+   "status": "PASS",
+   "check": "one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one"
+  },
+  "RAP-147": {
+   "status": "PASS",
+   "check": "the harness refuses any target but the dedicated local disposable cluster"
+  },
+  "RAP-150": {
+   "status": "PASS",
+   "check": "rollback (observe \u2192 off): revoked sessions stay revoked and recorded sign-ins stay in the history"
+  }
+ },
+ "regressions": [],
+ "closedGaps": []
+}

@@ -35,7 +35,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import agent_observability, device_trust, tools
+from . import agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -793,6 +793,12 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
+                if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
+                    try:
+                        result['signInAlerts'] = sign_in_alerts()
+                    except Exception as exc:
+                        result['signInAlerts'] = {'status': 'unavailable', 'error': type(exc).__name__}
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()
@@ -899,6 +905,11 @@ class HostedApplication:
                 self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
+            # RAPv2 P1: a sensitive capability from a risky session needs fresh independent proof. Enforce mode only;
+            # in every other mode require() returns at once and runs nothing.
+            capability = security_gate.capability_for(method, path.strip("/").split("/"))
+            if capability is not None:
+                security_gate.require(service, token, capability)
             if path == "/api/ideas/models/rescan" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, service.ideas.rescan_models(body.get("workspaceId"), token))
@@ -913,6 +924,14 @@ class HostedApplication:
                 return self._json(start_response, 200, service.logout(token))
             if path == "/api/auth/sessions" and method == "GET":
                 return self._json(start_response, 200, service.sessions(token, client_label=client_label(environ)))
+            if path == "/api/auth/security/incidents" and method in ("GET", "POST"):
+                # RAPv2 "This wasn't me" (RAFII_SECURITY_INCIDENT_HOLD; 404 while off). GET never changes anything.
+                from .security_incidents import SecurityIncidents
+                incidents = SecurityIncidents(service)
+                if method == "GET":
+                    return self._json(start_response, 200, incidents.list(token))
+                reported = incidents.report(token, self._body(environ), environ.get("HTTP_IDEMPOTENCY_KEY"))
+                return self._json(start_response, 200 if reported.pop("replayed", False) else 201, reported)
             if path == "/api/auth/sessions/revoke-others" and method == "POST":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_other_sessions(token))
@@ -1271,7 +1290,7 @@ class HostedApplication:
                 suffix = '/' + parts[-1] if len(parts) == 8 and parts[-1] in {'end', 'transcript'} else ''
                 environ['postriff.failure'] = {'errorCode': error.code if error.code in safe_codes else 'other',
                                               'routePattern': '/api/workspaces/:id/agent/voice/sessions' + ('/:id' + suffix if suffix else '')}
-            return self._json(start_response, error.status, {"error": str(error), "code": error.code})
+            return self._json(start_response, error.status, {"error": str(error), "code": error.code, **getattr(error, "public_fields", {})})
         except Exception as error:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.

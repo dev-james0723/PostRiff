@@ -119,7 +119,7 @@ if [ "$discord_coordinator_qualification" -eq 1 ]; then
   discord_qualification_exit=0
   python -m unittest test_discord_rate_limits test_discord_worker_lifecycle \
     test_discord_oauth_lifecycle test_discord_destinations test_discord_publish_authorization \
-    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls test_discord_capacity_approval_receipt || discord_qualification_exit=$?
+    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls test_discord_capacity_approval_receipt test_rafii_account_holds || discord_qualification_exit=$?
   printf 'RAFII_DISCORD_COORDINATOR_GATE {"gate":"offline-python","exitCode":%d}\n' "$discord_qualification_exit"
   if [ "$discord_qualification_exit" -ne 0 ]; then exit "$discord_qualification_exit"; fi
   # First owned cluster: existing P0-P3 chain ONCE, then actual P4 regression
