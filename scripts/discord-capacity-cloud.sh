@@ -10,16 +10,30 @@ if [ "$#" -ne 1 ]; then
   exit 64
 fi
 discord_coordinator_qualification=0
+discord_dispatch_diagnostic=0
 discord_owned_deadline=43m
 case "$1" in
   --stage-a) export RAFII_DISCORD_CAPACITY_STAGE=a ;;
   --stage-a-workers16-v3)
     export RAFII_DISCORD_CAPACITY_STAGE=a
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3 ;;
+  --stage-a-workers16-parent16-v4)
+    export RAFII_DISCORD_CAPACITY_STAGE=a
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-parent16-v4 ;;
+  --pipeline-workers16-parent16-v4)
+    export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-parent16-v4
+    discord_coordinator_qualification=1
+    discord_owned_deadline=9m ;;
   --pipeline-workers16-v3)
     export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3
     discord_coordinator_qualification=1
+    discord_owned_deadline=9m ;;
+  --dispatch-workers16-v3)
+    export RAFII_DISCORD_CAPACITY_STAGE=dispatch-diagnostic
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3
+    discord_dispatch_diagnostic=1
     discord_owned_deadline=9m ;;
   --burst-workers16-v3)
     export RAFII_DISCORD_CAPACITY_STAGE=burst-diagnostic
@@ -48,6 +62,11 @@ case "$1" in
   --stage-b-workers16-v3)
     export RAFII_DISCORD_CAPACITY_STAGE=b
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-workers16-v3
+    discord_coordinator_qualification=1
+    discord_owned_deadline=201m ;;
+  --stage-b-workers16-parent16-v4)
+    export RAFII_DISCORD_CAPACITY_STAGE=b
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-workers16-parent16-v4
     discord_coordinator_qualification=1
     discord_owned_deadline=201m ;;
   --connection-diagnostic) export RAFII_DISCORD_CAPACITY_STAGE=connection-diagnostic ;;
@@ -133,6 +152,9 @@ export RAFII_DISCORD_SYNTHETIC_FENCE=1
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="$discord_capacity_root/scripts/linkedin_test_fence:$discord_capacity_root/src:$discord_capacity_root/tests"
 python -c 'import sitecustomize; sitecustomize.self_check()'
+if [ "$discord_dispatch_diagnostic" -eq 1 ]; then
+  python -m unittest test_discord_worker_lifecycle
+fi
 if [ "$discord_coordinator_qualification" -eq 1 ]; then
   discord_qualification_exit=0
   python -m unittest test_discord_rate_limits test_discord_worker_lifecycle \

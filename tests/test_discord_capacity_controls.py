@@ -571,6 +571,39 @@ class SqlAuthorizationProbeControls(unittest.TestCase):
 
 
 class ExtendedResourcePlanTests(unittest.TestCase):
+    def test_parent16_plan_preserves_all_workload_and_strict_process_evidence(self):
+        changed={'version','resourcePlan','parentPoolSize','aggregateConnectionCap','resourceChange'}
+        for stage in ('a','pipeline-qualification','b'):
+            base='b-extended-workers16-v3' if stage=='b' else 'workers16-v3'
+            name='b-extended-workers16-parent16-v4' if stage=='b' else 'workers16-parent16-v4'
+            old=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':base})
+            plan=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':name})
+            self.assertEqual(set(old),set(plan))
+            for key,value in old.items():
+                if key not in changed:self.assertEqual(plan[key],value,(stage,key))
+            self.assertEqual(arrivals(old),arrivals(plan))
+            self.assertEqual(validate_worker_budget(plan),1)
+            self.assertEqual((plan['parentPoolSize'],plan['aggregateConnectionCap']),(16,32))
+            for key,value in [('referenceReplicas',8),('workerPoolSize',2),('parentPoolSize',4),
+                              ('parentPoolSize',True),('aggregateConnectionCap',33),('version',3),
+                              ('resourcePlan','unrecognized')]:
+                invalid=copy.deepcopy(plan);invalid[key]=value
+                with self.assertRaises(Incomplete):validate_worker_budget(invalid)
+            runtime=SimpleNamespace(p=plan,child_fences=[],worker_summaries=[])
+            next_pid=123
+            for phase,replicas in planned_worker_groups(plan):
+                workers=[{'pid':pid} for pid in range(next_pid,next_pid+replicas)]
+                runtime.worker_summaries.append({'phase':phase,'replicas':replicas,'workers':workers,
+                    'status':'PASS','parentConnectionCap':16,'aggregateConnectionCap':32,'perReplicaConnectionCap':1})
+                runtime.child_fences.extend({'phase':phase,'pid':worker['pid'],'unexpectedAttempts':0,
+                    'expectedSelfCheckDenials':4} for worker in workers)
+                next_pid+=replicas
+            parent=SimpleNamespace(_unexpected=0,_expected=4)
+            self.assertEqual(combined_transport_fence(runtime,parent)['unexpectedAttempts'],0)
+            for key,value in [('parentConnectionCap',4),('aggregateConnectionCap',20),('perReplicaConnectionCap',2)]:
+                invalid=copy.deepcopy(runtime);invalid.worker_summaries[0][key]=value
+                self.assertIsNone(combined_transport_fence(invalid,parent)['unexpectedAttempts'])
+
     def test_workers16_plan_preserves_workload_targets_and_binds_all_37_proofs(self):
         env={'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'workers16-v3'}
         plan=selected_profile('a',env)

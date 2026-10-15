@@ -273,6 +273,41 @@ class WorkerLifecycle(unittest.TestCase):
         self.assertFalse(any(method == 'POST' for method, _, _ in self.wire.calls))
         self.assert_frozen()
 
+    def test_expired_linked_identity_can_refresh_before_strict_lease_renewal(self):
+        fresh = False
+        grant, prepare = self.grants.discord_grant_for_worker, self.social.prepare_discord_dispatch
+        def expired_until_refresh(*args, **kwargs):
+            if kwargs.get('cur') is not None and not fresh:
+                raise AlphaError('The linked identity expired.', 409)
+            return grant(*args, **kwargs)
+        def refresh_then_prepare(manifest):
+            nonlocal fresh
+            fresh = True
+            return prepare(manifest)
+        with patch.object(self.grants, 'discord_grant_for_worker', side_effect=expired_until_refresh), \
+                patch.object(self.social, 'prepare_discord_dispatch', side_effect=refresh_then_prepare) as preflight:
+            self.assertTrue(self.worker.step(discord_only=True))
+        self.assertTrue(fresh)
+        self.assertEqual(preflight.call_count, 1)
+        self.assertEqual(sum(method == 'POST' for method, _, _ in self.wire.calls), 1)
+        self.assertNotEqual(self.job()['state'], 'held')
+        self.assert_frozen()
+
+    def test_revocation_during_identity_preflight_blocks_before_rate_reservation(self):
+        prepare = self.social.prepare_discord_dispatch
+        def revoked_after_read(manifest):
+            prepared = prepare(manifest)
+            self.grants.revoked = True
+            return prepared
+        with patch.object(self.social, 'prepare_discord_dispatch', side_effect=revoked_after_read), \
+                patch.object(self.social, 'reserve_discord_send') as reserve:
+            self.assertTrue(self.worker.step(discord_only=True))
+        reserve.assert_not_called()
+        self.assertEqual(self.job()['state'], 'held')
+        self.assertFalse(self.job().get('discordDispatchIntents'))
+        self.assertFalse(any(method == 'POST' for method, _, _ in self.wire.calls))
+        self.assert_frozen()
+
     def test_permanent_preflight_failure_holds_instead_of_retry(self):
         with patch.object(self.social, 'prepare_discord_dispatch', side_effect=AlphaError('forbidden', 403)):
             self.assertTrue(self.worker.step(discord_only=True))

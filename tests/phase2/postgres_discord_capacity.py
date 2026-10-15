@@ -227,6 +227,28 @@ def diagnostic(error):
     return result
 
 
+def observe_dispatch_preflight(social, metrics):
+    """Retain symbolic origins before the real worker converts a failure to held.
+
+    No exception message, token, provider response or tenant identifier is emitted.
+    This observation does not change the returned value or raised exception.
+    """
+    original = social.prepare_discord_dispatch
+    def observed(manifest):
+        try:
+            return original(manifest)
+        except Exception as error:
+            detail = diagnostic(error)
+            metrics.count('dispatchPreflightClass.' + detail['type'])
+            if detail.get('code'):
+                metrics.count('dispatchPreflightCode.' + detail['code'])
+            for frame in detail['frames'][-4:]:
+                metrics.count('dispatchPreflightFrame.' + frame['file'] + ':'
+                              + frame['function'] + ':' + str(frame['line']))
+            raise
+    social.prepare_discord_dispatch = observed
+
+
 def profile(stage):
     if stage not in ('a', 'b'):
         raise ValueError('Explicit stage a or b required')
@@ -273,7 +295,14 @@ def selected_profile(stage, environment=None):
     """Preserve historical profiles; name every resource change before execution."""
     environment=os.environ if environment is None else environment
     plan=environment.get('RAFII_DISCORD_CAPACITY_RESOURCE_PLAN','')
-    if stage=='pipeline-qualification':
+    if plan in ('workers16-parent16-v4','b-extended-workers16-parent16-v4'):
+        base='b-extended-workers16-v3' if plan.startswith('b-extended-') else 'workers16-v3'
+        p=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':base})
+        p.update(version=4,resourcePlan=plan,parentPoolSize=16,aggregateConnectionCap=32,
+            resourceChange='16 existing one-connection worker replicas; parent pool4 to16 and aggregate20 to32; workload, quotas, compute and targets unchanged')
+        validate_worker_budget(p)
+        return p
+    if stage in ('pipeline-qualification','dispatch-diagnostic'):
         if plan not in ('','workers16-v3'):raise Incomplete('Unknown pipeline resource plan')
         p=profile('a')
         p.update(stage=stage,users=32,comparisonJobsEach=4,comparisonDrainSeconds=30,
@@ -281,6 +310,9 @@ def selected_profile(stage, environment=None):
             burstDrainSeconds=30,rampSeconds=2,steadySeconds=3,
             setupDeadlineSeconds=300,totalHarnessDeadlineSeconds=480,
             purpose='functional pipeline and full safety-case qualification only;capacity A/B NOT_RUN')
+        if stage == 'dispatch-diagnostic':
+            p.update(forceExpiredIdentityBeforeDispatch=True,
+                     purpose='forced-expiry identity dispatch diagnosis only; capacity A/B NOT_RUN')
     elif stage=='burst-diagnostic':
         if plan not in ('','workers16-v3'):raise Incomplete('Unknown burst resource plan')
         p=profile('a')
@@ -289,7 +321,7 @@ def selected_profile(stage, environment=None):
     else:
         p=profile(stage)
     if not plan:return p
-    if plan=='workers16-v3' and stage in ('a','pipeline-qualification','burst-diagnostic'):
+    if plan=='workers16-v3' and stage in ('a','pipeline-qualification','burst-diagnostic','dispatch-diagnostic'):
         p.update(version=3,resourcePlan=plan,referenceReplicas=16,workerPoolSize=1,
             parentPoolSize=4,aggregateConnectionCap=20,
             resourceChange='16 existing worker replicas with one connection each; workload, quotas and latency targets unchanged')
@@ -315,8 +347,11 @@ def validate_worker_budget(p, replicas=None):
     """Bind process/pool arithmetic before spawn; booleans are never counts."""
     reference,pool=p['referenceReplicas'],p.get('workerPoolSize',2)
     parent,cap=p.get('parentPoolSize',4),p.get('aggregateConnectionCap',20)
+    expanded=p.get('resourcePlan') in ('workers16-parent16-v4','b-extended-workers16-parent16-v4')
     if (any(type(value) is not int for value in (reference,pool,parent,cap))
-            or not 1<=reference<=16 or pool not in (1,2) or parent!=4 or cap!=20
+            or not 1<=reference<=16 or pool not in (1,2)
+            or (expanded and (p.get('version')!=4 or (reference,pool,parent,cap)!=(16,1,16,32)))
+            or (not expanded and (parent,cap)!=(4,20))
             or parent+reference*pool>cap):
         raise Incomplete('Fixed worker/database connection budget exceeded')
     if replicas is not None and (type(replicas) is not int or not 1<=replicas<=reference
@@ -858,8 +893,9 @@ class Runtime:
         self.setup_deadline = None
         self.wire = MockDiscord(self)
         validate_fence(sys.platform, os.environ, transport=self.wire)
-        # Same aggregate cap as the original harness: 4 parent + 8 * 2 child.
-        self.database_factory = PooledPostgresFactory(DSN, max_size=4, max_waiting=64,
+        # Connection resources are explicit profile inputs, never inferred from
+        # load. Historical profiles retain4 parent/20 aggregate connections.
+        self.database_factory = PooledPostgresFactory(DSN, max_size=p.get('parentPoolSize',4), max_waiting=64,
             options='-c statement_timeout=10000 -c lock_timeout=8000', observer=self.pool_statement)
         with self.connection() as db:
             row = db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_user,current_setting('data_directory'),current_setting('server_version_num')").fetchone()
@@ -1000,8 +1036,10 @@ class Runtime:
                     or adapter.rate_limiter.policy is None
                     or adapter.rate_policy_raw != self.policy):
                 raise Incomplete('OAuth mount lost the reviewed synthetic rate policy')
+            social = self.Social(service.oauth, {'discord': adapter})
+            observe_dispatch_preflight(social, self.m)
             f = {'index': index, 'user': uid, 'token': token, 'guilds': guilds,
-                 'service': service, 'provider': adapter, 'social': self.Social(service.oauth, {'discord': adapter})}
+                 'service': service, 'provider': adapter, 'social': social}
             f['workspace'] = service.bootstrap(token, 'studio')['workspaceId']
             f['identity'] = self.oauth_flow(f, 'identity')
             f['connections'], f['destinations'] = [], []
@@ -1315,8 +1353,8 @@ class Runtime:
                         and all(p.exitcode == 0 for p in processes)
                         and all(s['status'] == 'PASS' for s in summaries))
             self.worker_summaries.append({'phase': phase, 'replicas': replicas,
-                'execution': 'spawned-processes', 'aggregateConnectionCap': 20,
-                'parentConnectionCap': 4, 'perReplicaConnectionCap': pool_size,
+                'execution': 'spawned-processes', 'aggregateConnectionCap': self.p.get('aggregateConnectionCap',20),
+                'parentConnectionCap': self.p.get('parentPoolSize',4), 'perReplicaConnectionCap': pool_size,
                 'status': 'PASS' if complete else 'FAIL', 'cleanup': cleanup, 'workers': summaries})
             if not complete:
                 self.worker_failure.set()
@@ -1339,13 +1377,15 @@ class Runtime:
             'Discord delivery is uncertain. Reconcile before any further publication.':'ambiguous_transport_or_guard',
             'No conclusive Discord create response; reconcile without resubmitting.':'ambiguous_provider_status'}
         reasons.update({
+            'Discord authority changed during renewal; no new dispatch is permitted':'renewal_authority_changed',
+            'Discord destination, grant, media or rollout verification is unavailable. Nothing was posted.':'preflight_unavailable',
             'Discord receipt lookup is unavailable. Keep the original message ID; do not resubmit.':'lookup_unavailable',
             'Discord read-back did not match the approved message, author, channel and mention policy.':'lookup_mismatch',
             'Provider outcome is unknown; reconcile before retry':'adapter_exception',
             'Invalid provider retry delay; reconcile before retry':'invalid_retry_envelope'})
         operation=job.get('discordWorker') or {}
         result={'alias':record['alias'],'phase':record['phase'],'state':job.get('state'),
-            'reason':reasons.get(job.get('providerConfirmed'),'other'),
+            'reason':reasons.get(job.get('providerConfirmed') or (job.get('events') or [{}])[-1].get('message'),'other'),
             'nextInSeconds':job.get('nextAt',now)-now,'leaseRemainingSeconds':job.get('leaseUntil',now)-now,
             'approvalRemainingSeconds':job['manifest']['expiresAt']-now,
             'workerStage':operation.get('stage'),'unsentFailures':operation.get('unsentFailures'),
@@ -1468,7 +1508,7 @@ class Runtime:
         for phase in ('ramp', 'steady'):
             cohort = [r for r in records if (r['requestedAt'] < started + self.p['rampSeconds']) == (phase == 'ramp')]
             subset = {r['alias']: states[r['alias']] for r in cohort if r['alias'] in states}
-            results.append(self.cohort_result(phase, cohort, subset, started + duration + self.p['sustainedDrainSeconds'], 8, phase == 'steady',
+            results.append(self.cohort_result(phase, cohort, subset, started + duration + self.p['sustainedDrainSeconds'], self.p['referenceReplicas'], phase == 'steady',
                                              self.p['rampSeconds'] if phase == 'ramp' else self.p['steadySeconds']))
         return {'status': 'PASS' if all(r['status'] == 'PASS' for r in results) else 'FAIL',
                 'declaredRampSeconds': self.p['rampSeconds'], 'declaredSteadySeconds': self.p['steadySeconds'],
@@ -2061,6 +2101,7 @@ def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expect
             vault=CredentialVault(synthetic_vault_key), providers={'discord': provider},
             public_base_url='https://rafii.example.invalid')
         social = HostedSocial(service.oauth, {'discord': provider})
+        observe_dispatch_preflight(social, metrics)
         worker = PostgresWorker(replica.connection, social, worker_id=worker_id, discord_workers=True)
         def watch_shutdown():
             while not watcher_done.wait(.05):
@@ -2119,8 +2160,8 @@ def combined_transport_fence(runtime, parent_fence):
     identities=[(group.get('phase'),worker['pid']) for group in groups for worker in group.get('workers',[])]
     group_proofs=(len(groups)==len(planned) and all(
         group.get('phase')==phase and type(group.get('replicas')) is int and group['replicas']==replicas
-        and group.get('status')=='PASS' and group.get('aggregateConnectionCap')==20
-        and group.get('parentConnectionCap')==4 and group.get('perReplicaConnectionCap')==pool
+        and group.get('status')=='PASS' and group.get('aggregateConnectionCap')==runtime.p.get('aggregateConnectionCap',20)
+        and group.get('parentConnectionCap')==runtime.p.get('parentPoolSize',4) and group.get('perReplicaConnectionCap')==pool
         and len(group.get('workers',[]))==replicas
         for group,(phase,replicas) in zip(groups,planned)))
     parent_unexpected = getattr(parent_fence, '_unexpected', None)
@@ -2313,7 +2354,7 @@ def run(stage):
     result = {'status': 'NOT_RUN', 'execution': 'disposable-cloud-postgres-mocked-discord',
               'profile': p, 'profileSha256': fingerprint(p), 'phases': {},
               'budgetPreflight': budget_lower_bound(p),
-              'capacityAcceptance':'NOT_RUN' if stage in ('pipeline-qualification','burst-diagnostic') else 'full fixed profile',
+              'capacityAcceptance':'NOT_RUN' if stage in ('pipeline-qualification','burst-diagnostic','dispatch-diagnostic') else 'full fixed profile',
               'realDiscordAcceptance': 'NOT_RUN', 'productionReady': 'NO',
               'cost': {'actualCost': 'UNKNOWN', 'comparisonBaseline': None, 'savings': 'UNKNOWN'}}
     result['plannedJobRequests'] = p['comparisonJobsEach'] * len(p['comparisonReplicas']) + p['burstJobs'] + len(arrivals(p)) + p['plannedSafetyJobRequests']
@@ -2345,6 +2386,21 @@ def run(stage):
                 'setupSeconds': time.monotonic() - setup_started, 'logicalConnections': p['users'],
                 'actualProducerConcurrency': metrics.peak['connectionProducers'],
                 'browserConcurrencyClaim': False}
+            if p.get('forceExpiredIdentityBeforeDispatch'):
+                # Diagnostic fixtures only, in the already fenced disposable DB.
+                # Keep application/database clocks, consent generations, grants,
+                # permissions and all publication timing/authorization unchanged.
+                with runtime.connection() as db:
+                    for f in runtime.fixtures:
+                        db.execute("UPDATE public.pr_encrypted_credentials SET access_expires_at=clock_timestamp()-interval '1 second' WHERE workspace_id=%s AND connection_id=%s",
+                                   (f['workspace'], f['identity']))
+                        state = db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',
+                                           (f['workspace'],)).fetchone()[0]
+                        for channel in state['phase2']['channels']:
+                            channel['verifiedAt'] = time.time() - 7200
+                        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                                   (canonical(state), f['workspace']))
+                result['diagnosticFixtureChange'] = '32 linked identity expiries and installation observation ages only; no consent/destination/content/clock or capacity-target changes'
             for replicas in p['comparisonReplicas']:
                 name = 'comparison-' + str(replicas)
                 runtime.progress_phase=metrics.phase=name

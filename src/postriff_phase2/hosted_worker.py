@@ -1064,11 +1064,14 @@ class PostgresWorker:
             if managed and self._stopping:
                 self.release_discord_unsent(claimed)
                 return True
-            if managed and not self.renew_discord_lease(claimed):
-                return True
             try:
                 from .discord.rate_limits import RateDelayed, RateCoordinatorUnavailable
                 claimed['discordPrepared'] = self.social.prepare_discord_dispatch(claimed['job']['manifest'])
+                # Preflight refreshes an expired linked identity outside SQL locks.
+                # The unchanged strict renewal must pass before reserving any
+                # publish permit; final authorization still rechecks every fence.
+                if managed and not self.renew_discord_lease(claimed):
+                    return True
                 # P4: reserve shared bot capacity BEFORE the P0 durable intent.
                 # Denied budget is proven unsent and must not consume an attempt.
                 claimed['discordPrepared']['ratePermit'] = self.social.reserve_discord_send(

@@ -28,6 +28,17 @@ STAGE_A='9969648414b93a5c057a19772c358bf1869ffdb0cb32d500acf5804b335463da'
 STAGE_B='e932a215a3f3226905988b4370feafe30dc2ce9e9199963e659d757081d45637'
 PIPELINE='bf1859ec092392dcdb08a6ee8d1d786db1ccaaf6094a4405548edf07ffda9e2c'
 ORG='jf34f85hr0'
+RESOURCE_PLANS={
+    'workers16-v3':{'workflow':WORKFLOW,'stageA':STAGE_A,'stageB':STAGE_B,'pipeline':PIPELINE,
+        'planFile':'P8-STAGE-B-RESOURCE-PLAN-WORKERS16-V3.json','flag':'--stage-b-workers16-v3',
+        'workflowName':'Rafii Discord Stage B workers16 v3'},
+    'workers16-parent16-v4':{'workflow':Path('.depot/workflows/discord-capacity-stage-b-workers16-parent16-v4.yml'),
+        'stageA':'f92b46b3039d8022abe3596c93867b06e42973f6c8ed8e3fd8d3115a22f4495e',
+        'stageB':'5b5a5d0d6ef54e1d0f4ad771b26d57f29009e0379660fe0c58e99e1a93ab7575',
+        'pipeline':'c77a644efe881ef8a0d2aaf192cd7f6157b18cae5f074fbf50b4bc26ee776c05',
+        'planFile':'P8-STAGE-B-RESOURCE-PLAN-PARENT16-V4.json','flag':'--stage-b-workers16-parent16-v4',
+        'workflowName':'Rafii Discord Stage B workers16 parent16 v4'},
+}
 
 
 def stream_failure_kind(controller_log):
@@ -207,7 +218,8 @@ def reconcile(args):
     return 0
 
 
-def setup():
+def setup(plan_name='workers16-v3'):
+    plan=RESOURCE_PLANS[plan_name]
     sys.path.insert(0,str(Path.home()/'Documents/James-Cloud-Build/scripts'))
     import jcb
     cfg=jcb.detect(ROOT,json.loads((ROOT/'.james-cloud-build.json').read_text()),task='test')
@@ -217,13 +229,13 @@ def setup():
     if (ROOT/jcb.WORKFLOW).read_text()!=jcb.workflow(cfg):
         raise SystemExit('Standard JCB workflow/config drift; reconcile before submission.')
     cfg['tasks']={'test':'test:discord:capacity:jcb'}
-    cfg['taskArgs']={'test':['--stage-b-workers16-v3']}
+    cfg['taskArgs']={'test':[plan['flag']]}
     cfg['runner']={'validation':'depot-ubuntu-24.04-32','build':'depot-ubuntu-24.04-32'}
-    cfg['cacheScope']='rafii-discord-release-20261015-stage-b-workers16-v3'
+    cfg['cacheScope']='rafii-discord-release-20261015-stage-b-'+plan_name
     workflow=jcb.workflow(cfg)
     if workflow.count('    timeout-minutes: 45')!=1:
         raise SystemExit('Unexpected extended workflow shape.')
-    workflow=workflow.replace('name: James Cloud Build','name: Rafii Discord Stage B workers16 v3')
+    workflow=workflow.replace('name: James Cloud Build','name: '+plan['workflowName'])
     workflow=workflow.replace('    timeout-minutes: 45','    timeout-minutes: 225')
     return jcb,cfg,workflow
 
@@ -270,6 +282,7 @@ def main():
     mode.add_argument('--prepare',action='store_true');mode.add_argument('--submit',action='store_true')
     mode.add_argument('--reconcile',action='store_true')
     p.add_argument('--stage-a-evidence',type=Path);p.add_argument('--pipeline-evidence',type=Path)
+    p.add_argument('--resource-plan',choices=tuple(RESOURCE_PLANS),default='workers16-v3')
     p.add_argument('--journal',type=Path,required=True)
     args=p.parse_args()
     if args.journal.resolve().parent!=EVIDENCE.resolve():
@@ -279,6 +292,9 @@ def main():
 
 def controlled_main(args):
     if args.reconcile:return reconcile(args)
+    plan_name=getattr(args,'resource_plan','workers16-v3')
+    binding=RESOURCE_PLANS[plan_name]
+    workflow_path=binding['workflow']
     canonical=json.loads(STATE.read_text()) if STATE.exists() else None
     if canonical and canonical.get('status') not in ('NATIVE_FAILED',):
         raise SystemExit('Canonical StageB attempt is active/unknown/finished; reconcile it, never submit a duplicate.')
@@ -286,43 +302,43 @@ def controlled_main(args):
         old=json.loads(args.journal.read_text())
         if old.get('runId') or old.get('status') not in ('PREPARED',):
             raise SystemExit('Existing attempt must be reconciled; never duplicate an uncertain submission.')
-    plan=json.loads((EVIDENCE/'P8-STAGE-B-RESOURCE-PLAN-WORKERS16-V3.json').read_text())
+    plan=json.loads((EVIDENCE/binding['planFile']).read_text())
     actual_plan=hashlib.sha256(json.dumps(plan['profile'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
-    if plan.get('profileSha256')!=STAGE_B or actual_plan!=STAGE_B or plan['profile'].get('jobTimeoutMinutes')!=225:
+    if plan.get('profileSha256')!=binding['stageB'] or actual_plan!=binding['stageB'] or plan['profile'].get('jobTimeoutMinutes')!=225:
         raise SystemExit('Predeclared extended B plan drift.')
     approvals={}
     if args.submit:
         if not args.stage_a_evidence or not args.pipeline_evidence:
             raise SystemExit('Pass actual full StageA and pipeline result files.')
-    jcb,cfg,workflow=setup()
-    (ROOT/WORKFLOW).write_text(workflow)
+    jcb,cfg,workflow=setup(plan_name)
+    (ROOT/workflow_path).write_text(workflow)
     record={'status':'PREPARED','recordedAt':datetime.now(timezone.utc).isoformat(),
         'execution':'native Depot CI using JCB safe remote_patch snapshot',
         'authority':'discord-remaining-gates-human-authorization-20261015.json',
-        'workflow':str(WORKFLOW),'workflowSha256':hashlib.sha256(workflow.encode()).hexdigest(),
-        'profileSha256':STAGE_B,'prerequisiteEvidence':approvals,'org':ORG,
+        'workflow':str(workflow_path),'workflowSha256':hashlib.sha256(workflow.encode()).hexdigest(),
+        'profileSha256':binding['stageB'],'resourcePlan':plan_name,'prerequisiteEvidence':approvals,'org':ORG,
         'cpu':32,'memoryGiB':128,'maximumMinutes':225,'computeCeilingProxyUsd':21.60,
         'actualCost':'UNKNOWN','realDiscordRequests':0,'productionReady':'NO'}
     write_record(args.journal,record)
     if args.prepare:
-        print(json.dumps({'status':'PREPARED_NOT_SUBMITTED','workflow':str(WORKFLOW),
-            'profileSha256':STAGE_B,'jobTimeoutMinutes':225}));return 0
+        print(json.dumps({'status':'PREPARED_NOT_SUBMITTED','workflow':str(workflow_path),
+            'profileSha256':binding['stageB'],'jobTimeoutMinutes':225}));return 0
     # Native CLI uploads only the already filtered temporary JCB snapshot.
     # No --follow: reconcile native status/logs on this same run ID separately.
     with jcb.Snapshot(ROOT,cfg.get('baseRef'),cfg.get('inputExcludes'),'remote_patch') as snapshot:
-        if (snapshot.path/WORKFLOW).read_text()!=workflow:
+        if (snapshot.path/workflow_path).read_text()!=workflow:
             raise SystemExit('Snapshot does not contain the reviewed workflow.')
         materialize_qualification_sources(snapshot,jcb)
         # Qualify against the captured bytes, never the subsequently mutable
         # worktree. Reject subset manifests and altered pipeline profiles.
-        approvals['stageA']=qualified(args.stage_a_evidence,'a',1000,STAGE_A,snapshot.path)
-        approvals['pipeline']=qualified(args.pipeline_evidence,'pipeline-qualification',32,PIPELINE,snapshot.path)
+        approvals['stageA']=qualified(args.stage_a_evidence,'a',1000,binding['stageA'],snapshot.path)
+        approvals['pipeline']=qualified(args.pipeline_evidence,'pipeline-qualification',32,binding['pipeline'],snapshot.path)
         record.update(status='SUBMISSION_IN_PROGRESS',snapshot=snapshot.manifest,
             journal=str(args.journal.resolve()),prerequisiteEvidence=approvals,
             previousAttempt=({'runId':canonical.get('runId'),'journal':canonical.get('journal'),
                 'status':canonical.get('status')} if canonical else None))
         write_record(STATE,record);write_record(args.journal,record)
-        command=['depot','ci','run','--workflow',str(WORKFLOW),'--job','test','--org',ORG]
+        command=['depot','ci','run','--workflow',str(workflow_path),'--job','test','--org',ORG]
         try:
             response=subprocess.run(command,cwd=snapshot.path,env=jcb.clean_env(),text=True,
                 stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=90)
