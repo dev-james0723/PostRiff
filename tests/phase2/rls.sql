@@ -186,3 +186,6 @@ end $$;
 
 -- RAPv2 P1: account holds (monotonic hold_epoch, server-only).
 \ir ../../migrations/postriff/121_rapv2_account_holds.sql
+
+-- RAPv2 P1: "This wasn't me" incidents (server-only).
+\ir ../../migrations/postriff/122_rapv2_security_incidents.sql

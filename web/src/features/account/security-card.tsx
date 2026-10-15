@@ -19,13 +19,14 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { keys, useMe, useSecurityEvents, useSessions } from '@/lib/api/hooks';
+import { keys, useMe, useSecurityEvents, useSecurityIncidents, useSessions } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import { describeSecurityEvent } from './profile-model';
 import {
@@ -678,6 +679,87 @@ function Sessions() {
   );
 }
 
+/**
+ * "This wasn't me" (RAPv2). Shown only where the server offers it (the route answers 404 while the feature is off).
+ * One explicit confirmation lists exactly what happens; nothing changes from a link or a page view.
+ */
+function NotMe() {
+  const { api } = useWorkspace();
+  const incidents = useSecurityIncidents();
+  const client = useQueryClient();
+  const reportChangeError = useChangeError();
+  const [open, setOpen] = useState(false);
+  const [signOutOthers, setSignOutOthers] = useState(true);
+  const [busy, setBusy] = useState(false);
+  if (!incidents.isSuccess) return null;
+  const list = incidents.data.incidents;
+  const held = list.some((incident) => incident.accountHold);
+
+  async function report() {
+    setBusy(true);
+    try {
+      const result = await api.reportNotMe(signOutOthers);
+      const ended = result.sessions.rafiiApiRevoked;
+      toast.success('Your account is on a security hold', {
+        description: `${ended === 1 ? '1 other session was' : `${ended} other sessions were`} signed out. Scheduled posts, automations, Agent tasks and API tokens are paused. Your connected accounts were not disconnected.`
+      });
+      await Promise.all([keys.securityIncidents, keys.sessions, keys.securityEvents].map((queryKey) => client.invalidateQueries({ queryKey })));
+    } catch (err) {
+      reportChangeError(err, 'The report could not be sent. Nothing was changed.');
+    } finally {
+      setBusy(false);
+      setOpen(false);
+    }
+  }
+
+  return (
+    <SettingsGroup
+      icon={<Icons.warning className='size-4' />}
+      title='Something you don’t recognise?'
+      description={held ? 'Your account is on a security hold. Nothing runs for it in the background until the hold is lifted.' : 'If a sign-in or change wasn’t you, lock things down here.'}
+      action={
+        <Button variant='glass' size='control' disabled={busy} onClick={() => setOpen(true)}>
+          This wasn’t me
+        </Button>
+      }
+    >
+      {list.length > 0 && (
+        <ul className='rafii-glass flex flex-col rounded-[var(--rafii-radius-card)] px-4 py-1'>
+          {list.map((incident) => (
+            <li key={incident.incidentId} className='flex min-h-11 items-center justify-between gap-3 py-2 text-sm'>
+              <span className='text-foreground flex items-center gap-2'>
+                Reported as not you
+                {incident.accountHold && incident.state !== 'resolved' && <Badge variant='secondary'>on hold</Badge>}
+              </span>
+              <span className='text-muted-foreground shrink-0 text-xs'>{relativeTime(incident.createdAt ? Date.parse(incident.createdAt) / 1000 : null)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className={rafiiDialog}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Report activity that wasn’t you?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
+              Rafii puts your account on a security hold: scheduled posts, automations, Agent tasks and API tokens stop acting for you, and anything already approved needs your approval again. Posts already published can’t be undone. Your connected social accounts stay connected; disconnect any you’re worried about from Channels. You need to have signed in within the last 10 minutes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Label className='flex items-center gap-2 text-sm'>
+            <Checkbox checked={signOutOthers} onCheckedChange={(value) => setSignOutOthers(value === true)} />
+            Also sign out every other session (this one stays signed in)
+          </Label>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' disabled={busy} onClick={() => void report()}>
+              Yes, this wasn’t me
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SettingsGroup>
+  );
+}
+
 const ACTIVITY_PREVIEW = 8;
 
 /** The person's own account history, read from the audit trail; workspace content activity is not here. */
@@ -744,6 +826,7 @@ export function SecurityCard() {
     <SettingsSection id='profile-security' title='Security' bodyClassName='gap-8'>
       <TwoFactor />
       <Sessions />
+      <NotMe />
       <SecurityActivity />
     </SettingsSection>
   );

@@ -898,6 +898,14 @@ class HostedApplication:
                 return self._json(start_response, 200, service.logout(token))
             if path == "/api/auth/sessions" and method == "GET":
                 return self._json(start_response, 200, service.sessions(token, client_label=client_label(environ)))
+            if path == "/api/auth/security/incidents" and method in ("GET", "POST"):
+                # RAPv2 "This wasn't me" (RAFII_SECURITY_INCIDENT_HOLD; 404 while off). GET never changes anything.
+                from .security_incidents import SecurityIncidents
+                incidents = SecurityIncidents(service)
+                if method == "GET":
+                    return self._json(start_response, 200, incidents.list(token))
+                reported = incidents.report(token, self._body(environ), environ.get("HTTP_IDEMPOTENCY_KEY"))
+                return self._json(start_response, 200 if reported.pop("replayed", False) else 201, reported)
             if path == "/api/auth/sessions/revoke-others" and method == "POST":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_other_sessions(token))
