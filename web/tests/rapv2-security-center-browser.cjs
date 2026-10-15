@@ -44,6 +44,8 @@ const DEVICES = {
 const json = (body, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 const rows = {};
+let lastPage = null; // for the failure screenshot and text
+const seen = []; // API paths the page requested (stubbed or not), for diagnosing a scene that never fills
 let failures = 0;
 function check(row, name, ok, detail) {
   if (!ok) failures += 1;
@@ -64,6 +66,12 @@ async function open(browser, { width = 1280, height = 900, reducedMotion = 'no-p
     localStorage.setItem('postriff-onboarding', tours);
   }, { id: seed.principal, tours: TOURS_SEEN });
   const page = await context.newPage();
+  lastPage = page;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/')) seen.push(`${request.method()} ${url.pathname}`);
+  });
+  page.on('pageerror', (error) => seen.push(`pageerror ${error.message.slice(0, 200)}`));
   await page.route('**/api/auth/sessions', (route) => route.fulfill(sessions));
   await page.route('**/api/auth/devices', (route) => route.fulfill(json(DEVICES)));
   await page.route('**/api/auth/security/incidents', (route) => route.fulfill(json({ incidents: [] })));
@@ -223,7 +231,18 @@ async function shot(page, name) {
   fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(summary, null, 1) + '\n');
   process.stdout.write(JSON.stringify({ suite: summary.suite, browser: browserName, failures, rows: Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v.status])) }) + '\n');
   process.exit(failures ? 1 : 0);
-})().catch((error) => {
+})().catch(async (error) => {
   console.error(error);
+  try {
+    fs.mkdirSync(out, { recursive: true });
+    if (lastPage) {
+      await lastPage.screenshot({ path: path.join(out, 'failure.png'), fullPage: true }).catch(() => undefined);
+      const text = await lastPage.locator(SECTION).innerText().catch(() => '(no Security section)');
+      fs.writeFileSync(path.join(out, 'failure.txt'), `${error.stack || error}\n\n--- Security section ---\n${text}\n\n--- requests ---\n${seen.join('\n')}\n`);
+      console.error(`--- Security section text ---\n${text.slice(0, 2000)}\n--- API requests ---\n${seen.slice(-60).join('\n')}`);
+    }
+  } catch {
+    // diagnostics only
+  }
   process.exit(1);
 });
