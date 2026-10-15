@@ -23,11 +23,61 @@ if ROOT.parent.name!='.worktrees' or ROOT.name!='rafii-discord-release-20261015'
 EVIDENCE=ROOT.parents[1]/'docs/discord-integration-20261012/implementation'
 STATE=EVIDENCE/'p8-stage-b-extended-submission-state.json'
 LOCK=EVIDENCE/'p8-stage-b-extended-submission.lock'
-WORKFLOW=Path('.depot/workflows/discord-capacity-stage-b-v2.yml')
-STAGE_A='fe939c0d1a8b55b2f68ad48f25b7f9caad7e63259ca954d97f5fd9cafe513836'
-STAGE_B='dbf0252804259fa31f0409ebe732aa02e7e8ddd4d01b0ce0169a42476ff20f53'
-PIPELINE='05fa895bbfac8ad5ff5d193aa12c80c06057d7930871a0ab8138992e2f728847'
+WORKFLOW=Path('.depot/workflows/discord-capacity-stage-b-workers16-v3.yml')
+STAGE_A='9969648414b93a5c057a19772c358bf1869ffdb0cb32d500acf5804b335463da'
+STAGE_B='e932a215a3f3226905988b4370feafe30dc2ce9e9199963e659d757081d45637'
+PIPELINE='bf1859ec092392dcdb08a6ee8d1d786db1ccaaf6094a4405548edf07ffda9e2c'
 ORG='jf34f85hr0'
+
+
+def stream_failure_kind(controller_log):
+    if type(controller_log) is not bytes:return None
+    for line in controller_log.decode('utf-8').splitlines():
+        if line.startswith('failed to stream logs: invalid_argument: protocol error: incomplete envelope: http2: server sent GOAWAY'):
+            return 'http2_log_stream_goaway'
+        if re.fullmatch(r'failed to stream logs: invalid_argument: protocol error: incomplete envelope: read tcp [0-9a-fA-F.:\[\]]+->[0-9a-fA-F.:\[\]]+: read: operation timed out',line):
+            return 'http2_log_stream_read_timeout'
+    return None
+
+
+def completed_native_prerequisite(run, receipt, controller, status, metrics, controller_log):
+    """Positive native completion, including one known post-submit stream fault.
+
+    Never turns a failed/pending test into success or rewrites controller exits.
+    Profile, artifact, accounting and frozen-source gates remain in qualified().
+    """
+    try:
+        if (type(controller_log) is not bytes or receipt['status']!='PASS' or receipt['native']!='finished' or receipt['capacityCriticalHashesMatch'] is not True
+                or receipt['runId']!=run or controller['runId']!=run or controller['orgId']!=ORG
+                or status['run_id']!=run or status['org_id']!=ORG or status['status']!='finished'
+                or metrics['run']['run_id']!=run or metrics['run']['status']!='finished'
+                or len(status['workflows'])!=1 or len(metrics['workflows'])!=1):return False
+        workflow=status['workflows'][0];measured=metrics['workflows'][0]
+        if (workflow['status']!='finished' or measured['workflow']['status']!='finished'
+                or workflow['workflow_id']!=measured['workflow']['workflow_id']
+                or len(workflow['jobs'])!=1 or len(measured['jobs'])!=1):return False
+        job=workflow['jobs'][0];sample=measured['jobs'][0]
+        last=max(job['attempts'],key=lambda row:row['attempt'])
+        observed=max(sample['attempts'],key=lambda row:row['attempt']['attempt'])['attempt']
+        if (job['job_key'].split(':',1)[-1]!='test' or job['job_id']!=sample['job']['job_id']
+                or job['status']!='finished' or sample['job']['status']!='finished'
+                or sample['job']['conclusion']!='success' or last['status']!='finished'
+                or last['attempt_id']!=observed['attempt_id'] or last['attempt']!=observed['attempt']
+                or observed['status']!='finished' or observed['conclusion']!='success'
+                or receipt['nativeJobConclusion']!='success' or receipt['nativeAttemptConclusion']!='success'
+                or type(receipt['nativeRemoteExitCode']) is not int or receipt['nativeRemoteExitCode']!=0):return False
+        for key in ('sourceHead','sourceFingerprint','includedFileCount'):
+            value=receipt['sourceProof'][key]
+            if value is None or value!=controller['snapshot'][key] or value!=controller['transport']['remoteSource'][key]:return False
+        code=controller['exitCode']
+        if type(code) is not int or type(receipt['controllerExit']) is not int or receipt['controllerExit']!=code:return False
+        if code==0:return type(controller.get('remoteExitCode')) is int and controller['remoteExitCode']==0
+        failure=stream_failure_kind(controller_log)
+        return (code==1 and type(controller.get('submissionExitCode')) is int and controller['submissionExitCode']==1 and controller.get('remoteExitCode') is None
+                and failure is not None and receipt.get('controllerTransportFailure')==failure
+                and receipt.get('controllerLogSha256')==hashlib.sha256(controller_log).hexdigest())
+    except (KeyError,TypeError,ValueError,AttributeError):
+        return False
 
 
 def qualified(path, stage, users, profile, frozen_root):
@@ -38,8 +88,15 @@ def qualified(path, stage, users, profile, frozen_root):
     receipt=json.loads(reconciliation.read_text())
     raw=path.read_bytes()
     actual_sha=hashlib.sha256(raw).hexdigest()
+    controller=json.loads(Path(receipt['receipt']).read_text())
+    status=json.loads((EVIDENCE/('p8-'+match[1]+'-status.json')).read_text())
+    metrics=json.loads((EVIDENCE/('p8-'+match[1]+'-metrics.json')).read_text())
+    log_path=EVIDENCE/receipt['controllerLog']
+    if log_path.resolve().parent!=EVIDENCE.resolve():
+        raise SystemExit('Controller log must stay in this mission evidence directory.')
     if (receipt.get('runId')!=match[1] or receipt.get('status')!='PASS'
-            or receipt.get('native')!='finished' or receipt.get('controllerExit')!=0
+            or receipt.get('native')!='finished'
+            or not completed_native_prerequisite(match[1],receipt,controller,status,metrics,log_path.read_bytes())
             or receipt.get('capacityCriticalHashesMatch') is not True
             or receipt.get('artifactSha256',{}).get('discord-capacity-results.json')!=actual_sha):
         raise SystemExit('Native recovered PASS/source/artifact reconciliation is required.')
@@ -144,13 +201,13 @@ def setup():
     if (ROOT/jcb.WORKFLOW).read_text()!=jcb.workflow(cfg):
         raise SystemExit('Standard JCB workflow/config drift; reconcile before submission.')
     cfg['tasks']={'test':'test:discord:capacity:jcb'}
-    cfg['taskArgs']={'test':['--stage-b-extended-v2']}
+    cfg['taskArgs']={'test':['--stage-b-workers16-v3']}
     cfg['runner']={'validation':'depot-ubuntu-24.04-32','build':'depot-ubuntu-24.04-32'}
-    cfg['cacheScope']='rafii-discord-release-20261015-stage-b-v2'
+    cfg['cacheScope']='rafii-discord-release-20261015-stage-b-workers16-v3'
     workflow=jcb.workflow(cfg)
     if workflow.count('    timeout-minutes: 45')!=1:
         raise SystemExit('Unexpected extended workflow shape.')
-    workflow=workflow.replace('name: James Cloud Build','name: Rafii Discord extended Stage B')
+    workflow=workflow.replace('name: James Cloud Build','name: Rafii Discord Stage B workers16 v3')
     workflow=workflow.replace('    timeout-minutes: 45','    timeout-minutes: 225')
     return jcb,cfg,workflow
 
@@ -213,7 +270,7 @@ def controlled_main(args):
         old=json.loads(args.journal.read_text())
         if old.get('runId') or old.get('status') not in ('PREPARED',):
             raise SystemExit('Existing attempt must be reconciled; never duplicate an uncertain submission.')
-    plan=json.loads((EVIDENCE/'P8-STAGE-B-RESOURCE-PLAN-V2.json').read_text())
+    plan=json.loads((EVIDENCE/'P8-STAGE-B-RESOURCE-PLAN-WORKERS16-V3.json').read_text())
     actual_plan=hashlib.sha256(json.dumps(plan['profile'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
     if plan.get('profileSha256')!=STAGE_B or actual_plan!=STAGE_B or plan['profile'].get('jobTimeoutMinutes')!=225:
         raise SystemExit('Predeclared extended B plan drift.')

@@ -270,27 +270,32 @@ def profile(stage):
 
 
 def selected_profile(stage, environment=None):
-    """The original profiles remain immutable; extended B changes resources only."""
+    """Preserve historical profiles; name every resource change before execution."""
     environment=os.environ if environment is None else environment
     plan=environment.get('RAFII_DISCORD_CAPACITY_RESOURCE_PLAN','')
     if stage=='pipeline-qualification':
-        if plan:raise Incomplete('Pipeline qualification cannot inherit a capacity resource plan')
+        if plan not in ('','workers16-v3'):raise Incomplete('Unknown pipeline resource plan')
         p=profile('a')
         p.update(stage=stage,users=32,comparisonJobsEach=4,comparisonDrainSeconds=30,
             burstJobs=8,burstSubmissionSeconds=1,burstScheduleLeadSeconds=3,
             burstDrainSeconds=30,rampSeconds=2,steadySeconds=3,
             setupDeadlineSeconds=300,totalHarnessDeadlineSeconds=480,
             purpose='functional pipeline and full safety-case qualification only;capacity A/B NOT_RUN')
-        return p
-    if stage=='burst-diagnostic':
-        if plan:raise Incomplete('Burst diagnostic cannot inherit a capacity resource plan')
+    elif stage=='burst-diagnostic':
+        if plan not in ('','workers16-v3'):raise Incomplete('Unknown burst resource plan')
         p=profile('a')
         p.update(stage=stage,rampSeconds=2,steadySeconds=3,totalHarnessDeadlineSeconds=1200,
             purpose='1000-user burst diagnosis with original A burst targets;full capacity A/B NOT_RUN')
-        return p
-    p=profile(stage)
+    else:
+        p=profile(stage)
     if not plan:return p
-    if plan!='b-extended-v2' or stage!='b':
+    if plan=='workers16-v3' and stage in ('a','pipeline-qualification','burst-diagnostic'):
+        p.update(version=3,resourcePlan=plan,referenceReplicas=16,workerPoolSize=1,
+            parentPoolSize=4,aggregateConnectionCap=20,
+            resourceChange='16 existing worker replicas with one connection each; workload, quotas and latency targets unchanged')
+        validate_worker_budget(p)
+        return p
+    if plan not in ('b-extended-v2','b-extended-workers16-v3') or stage!='b':
         raise Incomplete('Unknown capacity resource plan')
     p.update(version=2,resourcePlan='b-extended-v2',setupDeadlineSeconds=6000,
         totalHarnessDeadlineSeconds=12000,policyLifetimeSeconds=12300,
@@ -298,7 +303,35 @@ def selected_profile(stage, environment=None):
         computeUsdPerSecond=.0016,jobTimeoutMinutes=225,
         originalVersionOneStatus='BLOCKED: minimum2560s exceeds original2520s deadline',
         workloadAndTargets='UNCHANGED from version1;extended compute and time declared before execution')
+    if plan=='b-extended-workers16-v3':
+        p.update(version=3,resourcePlan=plan,referenceReplicas=16,workerPoolSize=1,
+            parentPoolSize=4,aggregateConnectionCap=20,
+            resourceChange='16 existing worker replicas with one connection each; B-v2 workload, resources, quotas and latency targets unchanged')
+        validate_worker_budget(p)
     return p
+
+
+def validate_worker_budget(p, replicas=None):
+    """Bind process/pool arithmetic before spawn; booleans are never counts."""
+    reference,pool=p['referenceReplicas'],p.get('workerPoolSize',2)
+    parent,cap=p.get('parentPoolSize',4),p.get('aggregateConnectionCap',20)
+    if (any(type(value) is not int for value in (reference,pool,parent,cap))
+            or not 1<=reference<=16 or pool not in (1,2) or parent!=4 or cap!=20
+            or parent+reference*pool>cap):
+        raise Incomplete('Fixed worker/database connection budget exceeded')
+    if replicas is not None and (type(replicas) is not int or not 1<=replicas<=reference
+                                or parent+replicas*pool>cap):
+        raise Incomplete('Fixed worker-process budget exceeded')
+    return pool
+
+
+def planned_worker_groups(p):
+    if p['stage']=='connection-diagnostic':return []
+    validate_worker_budget(p)
+    if p['comparisonReplicas']!=[1,4] or any(type(n) is not int for n in p['comparisonReplicas']):
+        raise Incomplete('Unknown comparison worker plan')
+    return [('comparison-1',1),('comparison-4',4),
+            ('burst',p['referenceReplicas']),('sustained',p['referenceReplicas'])]
 
 
 def connection_diagnostic_profile():
@@ -1164,8 +1197,9 @@ class Runtime:
 
     @contextmanager
     def workers(self, replicas, phase):
-        if type(replicas) is not int or not 1 <= replicas <= 8:
-            raise Incomplete('Fixed worker-process budget exceeded')
+        pool_size=validate_worker_budget(self.p,replicas)
+        if (phase,replicas) not in planned_worker_groups(self.p):
+            raise Incomplete('Unplanned worker process group')
         context = multiprocessing.get_context('spawn')
         stop = context.Event()
         summaries, processes, brokers, channels, ready = [], [], [], [], []
@@ -1212,12 +1246,12 @@ class Runtime:
                     elif kind == 'summary':
                         if active:
                             raise Incomplete('Child finished with active work')
-                        validate_worker_summary(value, process.pid)
+                        validate_worker_summary(value, process.pid,pool_size)
                         absorb_worker_metrics(self.m, value.pop('metrics'), phase)
                         with self.lock:
                             self.reported_worker_pids.add(process.pid)
                             self.finished_worker_cpu += value['cpuSeconds']
-                            self.child_fences.append(value['transportFence'])
+                            self.child_fences.append({'phase':phase,'pid':process.pid,**value['transportFence']})
                             summaries.append(value)
                         received = True
                         if value['status'] != 'PASS':
@@ -1240,7 +1274,7 @@ class Runtime:
                 worker_id = 'p8-' + phase + '-' + str(index)
                 process = context.Process(target=process_worker, name=worker_id,
                     args=(child, stop, worker_id, self.policy, self.synthetic_vault_key,
-                          self.database, self.started + self.p['totalHarnessDeadlineSeconds']))
+                          self.database, self.started + self.p['totalHarnessDeadlineSeconds'],pool_size))
                 start_owned_worker(process, child, processes, self.worker_processes, self.lock, self.reported_worker_pids)
                 started = threading.Event()
                 ready.append(started)
@@ -1271,7 +1305,7 @@ class Runtime:
                         and all(s['status'] == 'PASS' for s in summaries))
             self.worker_summaries.append({'phase': phase, 'replicas': replicas,
                 'execution': 'spawned-processes', 'aggregateConnectionCap': 20,
-                'parentConnectionCap': 4, 'perReplicaConnectionCap': 2,
+                'parentConnectionCap': 4, 'perReplicaConnectionCap': pool_size,
                 'status': 'PASS' if complete else 'FAIL', 'cleanup': cleanup, 'workers': summaries})
             if not complete:
                 self.worker_failure.set()
@@ -1914,7 +1948,7 @@ def absorb_worker_metrics(metrics, payload, phase):
         # peaks would invent simultaneous checkout concurrency.
 
 
-def validate_worker_summary(value, pid):
+def validate_worker_summary(value, pid, pool_size=2):
     fields = {'pid', 'worker', 'status', 'cpuSeconds', 'counters', 'poolStats',
               'transportFence', 'metrics', 'error', 'perProcessPeakConcurrency'}
     if (not isinstance(value, dict) or set(value) != fields or value['pid'] != pid
@@ -1924,8 +1958,11 @@ def validate_worker_summary(value, pid):
             or not isinstance(value['transportFence'], dict)):
         raise Incomplete('Missing owned worker evidence')
     fence, pool = value['transportFence'], value['poolStats']
-    if (fence.get('unexpectedAttempts') != 0 or fence.get('expectedSelfCheckDenials') != 4
-            or pool.get('closed') is not True or pool.get('maxConnections') != 2):
+    if (type(pool_size) is not int or pool_size not in (1,2)
+            or type(fence.get('unexpectedAttempts')) is not int or fence['unexpectedAttempts']!=0
+            or type(fence.get('expectedSelfCheckDenials')) is not int or fence['expectedSelfCheckDenials']!=4
+            or pool.get('closed') is not True or type(pool.get('maxConnections')) is not int
+            or pool['maxConnections'] != pool_size):
         raise Incomplete('Worker fence or pool cleanup failed')
     if value['status'] == 'PASS' and value['error'] is not None:
         raise Incomplete('Worker error cannot be passing evidence')
@@ -1963,7 +2000,7 @@ class SpawnMockTransport:
         return value['response']
 
 
-def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expected_database, deadline):
+def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expected_database, deadline, pool_size=2):
     """Spawn target: constructs every application/DB object in this process."""
     signal.pthread_sigmask(signal.SIG_UNBLOCK, WORKER_SIGNALS)
     validate_fence(sys.platform, os.environ)
@@ -1975,6 +2012,8 @@ def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expect
     watcher_done = threading.Event()
     error = None
     try:
+        if type(pool_size) is not int or pool_size not in (1,2):
+            raise Incomplete('Unknown owned worker pool size')
         sys.path[:0] = [str(ROOT / 'src')]
         from postriff_phase2.hosted import HostedWorkspaceService
         from postriff_phase2.hosted_social import HostedSocial
@@ -1992,7 +2031,7 @@ def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expect
             pool_statement = Runtime.pool_statement
         replica = Replica()
         replica.m = metrics
-        replica.database_factory = PooledPostgresFactory(DSN, max_size=2, max_waiting=8,
+        replica.database_factory = PooledPostgresFactory(DSN, max_size=pool_size, max_waiting=8,
             options='-c statement_timeout=10000 -c lock_timeout=8000', observer=replica.pool_statement)
         with replica.connection() as db:
             row = db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_user,current_setting('data_directory'),current_setting('server_version_num')").fetchone()
@@ -2062,10 +2101,26 @@ def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expect
 
 def combined_transport_fence(runtime, parent_fence):
     children = runtime.child_fences if runtime is not None else []
-    expected = sum(group['replicas'] for group in runtime.worker_summaries) if runtime is not None else 0
+    planned=planned_worker_groups(runtime.p) if runtime is not None else []
+    expected=sum(replicas for _,replicas in planned)
+    groups=runtime.worker_summaries if runtime is not None else []
+    pool=validate_worker_budget(runtime.p) if planned else None
+    identities=[(group.get('phase'),worker['pid']) for group in groups for worker in group.get('workers',[])]
+    group_proofs=(len(groups)==len(planned) and all(
+        group.get('phase')==phase and type(group.get('replicas')) is int and group['replicas']==replicas
+        and group.get('status')=='PASS' and group.get('aggregateConnectionCap')==20
+        and group.get('parentConnectionCap')==4 and group.get('perReplicaConnectionCap')==pool
+        and len(group.get('workers',[]))==replicas
+        for group,(phase,replicas) in zip(groups,planned)))
     parent_unexpected = getattr(parent_fence, '_unexpected', None)
-    complete = len(children) == expected and all(row.get('unexpectedAttempts') == 0
-        and row.get('expectedSelfCheckDenials') == 4 for row in children)
+    # A PID may be reused after a previous phase has reaped all its workers.
+    # Phase/PID identities must be unique; simultaneous PIDs still cannot repeat.
+    complete = (group_proofs and len(children)==expected and len(identities)==expected
+        and all(type(pid) is int and pid>0 for _,pid in identities) and len(set(identities))==expected
+        and set(identities)=={(row.get('phase'),row.get('pid')) for row in children}
+        and all(type(row.get('unexpectedAttempts')) is int and row['unexpectedAttempts']==0
+                and type(row.get('expectedSelfCheckDenials')) is int and row['expectedSelfCheckDenials']==4
+                for row in children))
     return {'unexpectedAttempts': parent_unexpected + sum(row['unexpectedAttempts'] for row in children)
                 if type(parent_unexpected) is int and complete else None,
             'expectedSelfCheckDenials': getattr(parent_fence, '_expected', None),
@@ -2284,7 +2339,7 @@ def run(stage):
                 runtime.progress_phase=metrics.phase=name
                 result['phases'][name] = runtime.burst(replicas, name, p['comparisonJobsEach'], comparison=True)
             runtime.progress_phase=metrics.phase='burst'
-            result['phases']['burst'] = runtime.burst(8, 'burst', p['burstJobs'])
+            result['phases']['burst'] = runtime.burst(p['referenceReplicas'], 'burst', p['burstJobs'])
             runtime.progress_phase=metrics.phase='sustained'
             result['phases']['sustained'] = runtime.sustained()
             runtime.progress_phase=metrics.phase='safety'

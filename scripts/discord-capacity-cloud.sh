@@ -13,6 +13,19 @@ discord_coordinator_qualification=0
 discord_owned_deadline=43m
 case "$1" in
   --stage-a) export RAFII_DISCORD_CAPACITY_STAGE=a ;;
+  --stage-a-workers16-v3)
+    export RAFII_DISCORD_CAPACITY_STAGE=a
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3 ;;
+  --pipeline-workers16-v3)
+    export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3
+    discord_coordinator_qualification=1
+    discord_owned_deadline=9m ;;
+  --burst-workers16-v3)
+    export RAFII_DISCORD_CAPACITY_STAGE=burst-diagnostic
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3
+    discord_coordinator_qualification=1
+    discord_owned_deadline=21m ;;
   --pipeline-qualification)
     export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
     # The caller must retain same-source backend/SQL qualification. Combined
@@ -30,6 +43,11 @@ case "$1" in
   --stage-b-extended-v2)
     export RAFII_DISCORD_CAPACITY_STAGE=b
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-v2
+    discord_coordinator_qualification=1
+    discord_owned_deadline=201m ;;
+  --stage-b-workers16-v3)
+    export RAFII_DISCORD_CAPACITY_STAGE=b
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-workers16-v3
     discord_coordinator_qualification=1
     discord_owned_deadline=201m ;;
   --connection-diagnostic) export RAFII_DISCORD_CAPACITY_STAGE=connection-diagnostic ;;
@@ -119,7 +137,8 @@ if [ "$discord_coordinator_qualification" -eq 1 ]; then
   discord_qualification_exit=0
   python -m unittest test_discord_rate_limits test_discord_worker_lifecycle \
     test_discord_oauth_lifecycle test_discord_destinations test_discord_publish_authorization \
-    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls test_discord_capacity_approval_receipt test_rafii_account_holds || discord_qualification_exit=$?
+    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls test_discord_capacity_approval_receipt test_rafii_account_holds \
+    test_founder_product_events test_youtube_fleet || discord_qualification_exit=$?
   printf 'RAFII_DISCORD_COORDINATOR_GATE {"gate":"offline-python","exitCode":%d}\n' "$discord_qualification_exit"
   if [ "$discord_qualification_exit" -ne 0 ]; then exit "$discord_qualification_exit"; fi
   # First owned cluster: existing P0-P3 chain ONCE, then actual P4 regression

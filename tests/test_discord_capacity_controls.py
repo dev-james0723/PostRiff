@@ -24,6 +24,7 @@ from phase2.postgres_discord_capacity import (
     SpawnMockTransport, Telemetry, absorb_worker_metrics, combined_transport_fence,
     send_worker_message, receive_worker_message, validate_worker_summary,
     reap_owned_workers, start_owned_worker,
+    selected_profile, validate_worker_budget, planned_worker_groups,
 )
 
 
@@ -117,12 +118,22 @@ class CapacityControls(unittest.TestCase):
                        lambda s:s['poolStats'].update(closed=False),lambda s:s.pop('transportFence')):
             invalid=copy.deepcopy(summary);mutate(invalid)
             with self.assertRaises(Incomplete):validate_worker_summary(invalid,123)
-        runtime=SimpleNamespace(child_fences=[],worker_summaries=[{'replicas':1}])
+        runtime=SimpleNamespace(p=profile('a'),child_fences=[],worker_summaries=[])
         parent=SimpleNamespace(_unexpected=0,_expected=4)
         self.assertIsNone(combined_transport_fence(runtime,parent)['unexpectedAttempts'])
-        runtime.child_fences.append(summary['transportFence'])
+        next_pid=123
+        for phase,replicas in planned_worker_groups(runtime.p):
+            workers=[{'pid':pid} for pid in range(next_pid,next_pid+replicas)]
+            runtime.worker_summaries.append({'phase':phase,'replicas':replicas,'workers':workers,
+                'status':'PASS','parentConnectionCap':4,'aggregateConnectionCap':20,'perReplicaConnectionCap':2})
+            runtime.child_fences.extend({'phase':phase,'pid':worker['pid'],**summary['transportFence']} for worker in workers)
+            next_pid+=replicas
         result=combined_transport_fence(runtime,parent)
-        self.assertEqual((result['unexpectedAttempts'],result['observedReplicaProofs']),(0,1))
+        self.assertEqual((result['unexpectedAttempts'],result['observedReplicaProofs']),(0,21))
+        # Deriving the expected count from only the surviving groups would
+        # wrongly accept these complete-looking but truncated reports.
+        runtime.worker_summaries.pop();runtime.child_fences=runtime.child_fences[:-8]
+        self.assertIsNone(combined_transport_fence(runtime,parent)['unexpectedAttempts'])
 
     def test_capacity_progress_emits_only_allowlisted_aggregates(self):
         runtime=Runtime.__new__(Runtime)
@@ -539,6 +550,62 @@ class SqlAuthorizationProbeControls(unittest.TestCase):
 
 
 class ExtendedResourcePlanTests(unittest.TestCase):
+    def test_workers16_plan_preserves_workload_targets_and_binds_all_37_proofs(self):
+        env={'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'workers16-v3'}
+        plan=selected_profile('a',env)
+        changed={'version','referenceReplicas'}
+        for stage in ('a','pipeline-qualification','burst-diagnostic'):
+            old=selected_profile(stage,{})
+            new=selected_profile(stage,env)
+            for key,value in old.items():
+                if key not in changed:self.assertEqual(new[key],value,(stage,key))
+            self.assertEqual(validate_worker_budget(new),1)
+            self.assertEqual(planned_worker_groups(new),[('comparison-1',1),('comparison-4',4),('burst',16),('sustained',16)])
+        old_b=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-v2'})
+        new_b=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-workers16-v3'})
+        for key,value in old_b.items():
+            if key not in changed|{'resourcePlan'}:self.assertEqual(new_b[key],value,key)
+        self.assertEqual(arrivals(old_b),arrivals(new_b))
+        self.assertEqual(budget_lower_bound(new_b)['status'],'PASS')
+        for key,value in [('referenceReplicas',True),('referenceReplicas',17),('workerPoolSize',True),
+                          ('workerPoolSize',2),('parentPoolSize',True),('aggregateConnectionCap',21)]:
+            invalid=copy.deepcopy(plan);invalid[key]=value
+            with self.assertRaises(Incomplete):validate_worker_budget(invalid)
+        for replicas in (True,0,17):
+            with self.assertRaises(Incomplete):validate_worker_budget(plan,replicas)
+        runtime=SimpleNamespace(p=plan,child_fences=[],worker_summaries=[])
+        next_pid=123
+        for phase,replicas in planned_worker_groups(plan):
+            workers=[{'pid':pid} for pid in range(next_pid,next_pid+replicas)]
+            runtime.worker_summaries.append({'phase':phase,'replicas':replicas,'workers':workers,
+                'status':'PASS','parentConnectionCap':4,'aggregateConnectionCap':20,'perReplicaConnectionCap':1})
+            runtime.child_fences.extend({'phase':phase,'pid':worker['pid'],'unexpectedAttempts':0,'expectedSelfCheckDenials':4} for worker in workers)
+            next_pid+=replicas
+        parent=SimpleNamespace(_unexpected=0,_expected=4)
+        proof=combined_transport_fence(runtime,parent)
+        self.assertEqual((proof['unexpectedAttempts'],proof['expectedReplicaProcesses'],proof['observedReplicaProofs']),(0,37,37))
+        reused=copy.deepcopy(runtime)
+        for group in reused.worker_summaries:
+            for index,worker in enumerate(group['workers']):worker['pid']=123+index
+        reused.child_fences=[{'phase':group['phase'],'pid':worker['pid'],
+            'unexpectedAttempts':0,'expectedSelfCheckDenials':4}
+            for group in reused.worker_summaries for worker in group['workers']]
+        self.assertEqual(combined_transport_fence(reused,parent)['unexpectedAttempts'],0)
+        for mutate in (lambda r:r.child_fences.pop(),lambda r:r.worker_summaries.pop(),
+                       lambda r:r.worker_summaries.reverse(),lambda r:r.worker_summaries[0].update(replicas=True),
+                       lambda r:r.worker_summaries[0].update(perReplicaConnectionCap=2),
+                       lambda r:r.child_fences[-1].update(phase=r.child_fences[0]['phase'],pid=r.child_fences[0]['pid'])):
+            invalid=copy.deepcopy(runtime);mutate(invalid)
+            self.assertIsNone(combined_transport_fence(invalid,parent)['unexpectedAttempts'])
+        summary={'pid':123,'worker':'p8-burst-0','status':'PASS','cpuSeconds':1.,'counters':{},
+            'poolStats':{'closed':True,'maxConnections':1},
+            'transportFence':{'unexpectedAttempts':0,'expectedSelfCheckDenials':4},
+            'metrics':{},'error':None,'perProcessPeakConcurrency':{}}
+        validate_worker_summary(summary,123,1)
+        for value in (True,2):
+            invalid=copy.deepcopy(summary);invalid['poolStats']['maxConnections']=value
+            with self.assertRaises(Incomplete):validate_worker_summary(invalid,123,1)
+
     def test_original_profiles_and_all_workloads_targets_are_preserved(self):
         from phase2.postgres_discord_capacity import selected_profile
         a,b=profile('a'),profile('b')

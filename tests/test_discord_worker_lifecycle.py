@@ -326,6 +326,17 @@ class WorkerLifecycle(unittest.TestCase):
         self.assertTrue(self.job()['discordReceipts'][-1]['late'])
         self.assert_frozen()
 
+    def test_legacy_minimal_completion_cannot_complete_a_discord_job(self):
+        claimed=self.claim();self.assertTrue(self.seal(claimed))
+        before=copy.deepcopy(self.db.state)
+        minimal={**claimed,'job':{'id':claimed['job']['id'],'leaseId':claimed['job']['leaseId']}}
+        result={'state':'verified','reference':FIRST+'/4444444','confirmed':'Untrusted minimal completion',
+                'verification':'provider_lookup','discordDeliveryEvidence':'accepted'}
+        self.assertFalse(self.worker.complete(minimal,result))
+        self.assertEqual(self.db.state,before)
+        self.assertFalse(any(method=='POST' for method,_,_ in self.wire.calls))
+        self.assert_frozen()
+
     def test_removed_cursor_blocks_parallel_lane_without_schema_fallback(self):
         self.db.cursor_ready = False
         self.assertIsNone(self.worker.claim(discord_only=True))

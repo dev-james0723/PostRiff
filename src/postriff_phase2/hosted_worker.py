@@ -699,7 +699,12 @@ class PostgresWorker:
                 job = find(state["phase2"]["jobs"], claimed["job"]["id"])
                 now = self._lease_now(cur, job)
                 owns_lease = self._owns(job, claimed, now)
-                if claimed['job']['manifest'].get('platform') == 'Discord':
+                # Legacy non-Discord completion may carry only job/lease IDs.
+                # Either Discord snapshot still requires receipt fencing.
+                if (job.get('manifest', {}).get('platform') == 'Discord'
+                        or claimed['job'].get('manifest', {}).get('platform') == 'Discord'):
+                    if not isinstance(claimed['job'].get('manifest'), dict):
+                        return False
                     from .discord.authorization import record_receipt
                     evidence = normalize_result(result, claimed['job'], claimed['reconciliation'])
                     if record_receipt(job, claimed, evidence, now, not owns_lease) and not owns_lease:
@@ -1183,6 +1188,7 @@ class PostgresWorker:
                 'counterScope': 'worker-instance', 'counters': dict(self.discord_stats), 'queue': queue,'rateLimits':rate}
 
     def _tick(self, max_jobs=None, max_seconds=None, *, youtube_only=False, exclude_youtube=False, discord_only=False):
+        self._ensure_lifecycle()
         if max_jobs is None or max_seconds is None:
             configured_jobs, configured_seconds = configured_worker_limits()
             max_jobs = configured_jobs if max_jobs is None else max_jobs

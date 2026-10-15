@@ -18,5 +18,6 @@ def source_paths(root):
         'tests/test_discord_publish_authorization.py', 'tests/test_discord_capacity_controls.py',
         'tests/test_discord_presend_retry.py', 'tests/test_postgres_pool_controls.py',
         'tests/test_discord_capacity_approval_receipt.py', 'tests/test_rafii_account_holds.py', 'tests/test_postriff_account_security.py',
+        'tests/test_founder_product_events.py', 'tests/test_youtube_fleet.py',
     })
     return tuple(sorted(paths))
