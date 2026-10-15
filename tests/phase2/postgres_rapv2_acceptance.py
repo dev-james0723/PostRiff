@@ -141,7 +141,19 @@ class Transport:
 operator_actions._STATE.update(status="not_installed", checked=float("inf"))
 verify = supabase_verifier("https://project.supabase.co", "p" * 24, connection, get_user=get_user)
 mailer = FakeMailer()
-service = HostedWorkspaceService(connection, verify, public_base_url="https://app.rafii.example", mailer=mailer,
+class IdentityAdmin:
+    """Production configures the Supabase identity admin; a fake one keeps logout and revoke-others on their real paths."""
+    def logout(self, access_token):
+        return True
+
+    def logout_others(self, access_token):
+        return True
+
+    def verified_factors(self, principal):
+        return []
+
+
+service = HostedWorkspaceService(connection, verify, public_base_url="https://app.rafii.example", mailer=mailer, identity=IdentityAdmin(),
                                  email_lookup=lambda principal: f"{principal[:8]}@example.invalid")
 verify.on_first_sighting = lambda principal, session_id, label, alert: service._alert_new_device(principal, session_id, label, alert)
 app = HostedApplication(service, None, {"provider": "supabase"}, "c" * 24)
