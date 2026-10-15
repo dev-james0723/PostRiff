@@ -1,0 +1,496 @@
+{
+ "suite": "postgres_rapv2_acceptance",
+ "execution": "disposable-local-postgres; fake mail/push; synthetic tokens",
+ "counts": {
+  "PASS": 121,
+  "FAIL": 0
+ },
+ "rows": {
+  "RAP-001": {
+   "status": "PASS",
+   "check": "Google OAuth (amr oauth): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-002": {
+   "status": "PASS",
+   "check": "email OTP (amr otp): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-003": {
+   "status": "PASS",
+   "check": "passkey (amr webauthn): first protected request records one session.observed for the verified subject and one alert decision"
+  },
+  "RAP-004": {
+   "status": "PASS",
+   "check": "POST /api/auth/verify (bootstrap) before GET /api/me: exactly one observation and one alert"
+  },
+  "RAP-005": {
+   "status": "PASS",
+   "check": "GET /api/me then POST bootstrap: a single first-observed event across both routes"
+  },
+  "RAP-006": {
+   "status": "PASS",
+   "check": "GET /api/auth/sessions before /api/me: exactly one observation"
+  },
+  "RAP-007": {
+   "status": "PASS",
+   "check": "a workspace API as the very first request: the verifier observes it, and its session checks run before any data"
+  },
+  "RAP-008": {
+   "status": "PASS",
+   "check": "GET /api/me ten times (cold process each time): one first-sighting event, one mail"
+  },
+  "RAP-009": {
+   "status": "PASS",
+   "check": "parallel first requests (verifier, /api/me, sessions list, workspace) on one new session: one event, no deadlock"
+  },
+  "RAP-010": {
+   "status": "PASS",
+   "check": "a refreshed JWT (new iat, same session_id) records no new sign-in"
+  },
+  "RAP-011": {
+   "status": "PASS",
+   "check": "a verified JWT without a session_id claim: 401 on every session route, zero rows, no substitute session"
+  },
+  "RAP-012": {
+   "status": "PASS",
+   "check": "a forged userId/sessionId in a request body is ignored: the row belongs to the verified subject only"
+  },
+  "RAP-013": {
+   "status": "PASS",
+   "check": "the session's security record cannot be written: no allowed state, and the protected route answers 503"
+  },
+  "RAP-014": {
+   "status": "PASS",
+   "check": "first authenticated browser request without a device cookie: the server issues an opaque host-only cookie and records an `observed` device"
+  },
+  "RAP-015": {
+   "status": "PASS",
+   "check": "no token, an expired token and a token getUser refuses: every security endpoint answers 401, no data"
+  },
+  "RAP-016": {
+   "status": "PASS",
+   "check": "a session without amr reads sign-in method 'unknown' and no second factor (aal2 alone proves none); a recorded one reads its method"
+  },
+  "RAP-017": {
+   "status": "PASS",
+   "check": "same browser, new session: the session is new, the device is the existing one; no new device claim"
+  },
+  "RAP-018": {
+   "status": "PASS",
+   "check": "a new browser profile for an existing account: a new device record, a device.first_observed event and an eligible alert"
+  },
+  "RAP-019": {
+   "status": "PASS",
+   "check": "person B signs in on person A's browser: B gets an unrelated device record; A's device and trust are untouched"
+  },
+  "RAP-020": {
+   "status": "PASS",
+   "check": "a copied device cookie without a JWT: 401, no device row, no data"
+  },
+  "RAP-021": {
+   "status": "PASS",
+   "check": "a stolen device cookie plus a valid AAL1 JWT still needs fresh proof for a sensitive action (trust alone is not sufficient)"
+  },
+  "RAP-022": {
+   "status": "PASS",
+   "check": "malformed or overlong device cookies: no crash, treated as no cookie, a fresh one is issued, no trust"
+  },
+  "RAP-023": {
+   "status": "PASS",
+   "check": "the device Set-Cookie is __Host- prefixed, Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain (never shared with a parent or old domain)"
+  },
+  "RAP-024": {
+   "status": "PASS",
+   "check": "a client claiming a native surface gains nothing: the device stays surface=web, state=observed"
+  },
+  "RAP-025": {
+   "status": "PASS",
+   "check": "a private window (no cookie) on a known account: a separate observed device with a clear browser label"
+  },
+  "RAP-026": {
+   "status": "PASS",
+   "check": "the browser's cookie expired: the next session is an unknown browser and a sensitive capability needs fresh proof"
+  },
+  "RAP-027": {
+   "status": "PASS",
+   "check": "HMAC key rotation: a cookie hashed under the old key is recognised, re-hashed under the new key, and not trusted"
+  },
+  "RAP-028": {
+   "status": "PASS",
+   "check": "a revoked device's cookie replayed after a new sign-in: the old record stays revoked and a new untrusted record is made"
+  },
+  "RAP-031": {
+   "status": "PASS",
+   "check": "known browser, no recent change, AAL2: an ordinary view and a sensitive capability are both allowed"
+  },
+  "RAP-032": {
+   "status": "PASS",
+   "check": "unknown browser: account security and ordinary views stay open, a sensitive capability asks for proof"
+  },
+  "RAP-033": {
+   "status": "PASS",
+   "check": "unknown browser right after a sensitive account change: the private drafts list answers 403 security_step_up_required"
+  },
+  "RAP-034": {
+   "status": "PASS",
+   "check": "a fresh same-inbox email OTP is not an independent factor: step-up still required"
+  },
+  "RAP-035": {
+   "status": "PASS",
+   "check": "a fresh verified TOTP on an AAL2 session: allowed, and the step-up is recorded on this session"
+  },
+  "RAP-036": {
+   "status": "PASS",
+   "check": "TOTP older than the step-up window: refused; a refreshed token (new iat) is not new proof"
+  },
+  "RAP-037": {
+   "status": "PASS",
+   "check": "a WebAuthn MFA ceremony is verified from the signed token; a client boolean proves nothing"
+  },
+  "RAP-038": {
+   "status": "PASS",
+   "check": "a passkey first-factor sign-in (AAL1) is not treated as AAL2 step-up"
+  },
+  "RAP-039": {
+   "status": "PASS",
+   "check": "an account hold blocks a sensitive capability even from a known browser with fresh AAL2 proof"
+  },
+  "RAP-040": {
+   "status": "PASS",
+   "check": "riskLevel=low / trusted=true in the request is ignored: the challenge stands"
+  },
+  "RAP-041": {
+   "status": "PASS",
+   "check": "a different country header on a known browser never locks the account; ordinary reads continue"
+  },
+  "RAP-042": {
+   "status": "PASS",
+   "check": "spoofed X-Forwarded-For / geo headers are never stored or used in a decision"
+  },
+  "RAP-043": {
+   "status": "PASS",
+   "check": "a stale stored decision is never reused: the request is re-evaluated under the current policy first"
+  },
+  "RAP-044": {
+   "status": "PASS",
+   "check": "security state unreadable: the sensitive capability fails closed with 503; ordinary and help routes still work"
+  },
+  "RAP-045": {
+   "status": "PASS",
+   "check": "an account with no second factor gets a deterministic enrolment/recovery next step, not an unsatisfiable MFA prompt"
+  },
+  "RAP-046": {
+   "status": "PASS",
+   "check": "a second factor removed after the proof: the old proof no longer authorizes a sensitive action"
+  },
+  "RAP-047": {
+   "status": "PASS",
+   "check": "a direct API client with no Security Center code meets the same challenge"
+  },
+  "RAP-048": {
+   "status": "PASS",
+   "check": "proof made in session B never satisfies session A"
+  },
+  "RAP-049": {
+   "status": "PASS",
+   "check": "DELETE /api/auth/sessions/{own other}: that session is denied, the current one keeps working"
+  },
+  "RAP-050": {
+   "status": "PASS",
+   "check": "DELETE of another person's session id: the same 404 as an unknown id, and B's session unchanged"
+  },
+  "RAP-051": {
+   "status": "PASS",
+   "check": "repeating DELETE on an already revoked session: same safe response, no second audit row"
+  },
+  "RAP-052": {
+   "status": "PASS",
+   "check": "a revoked session's still-valid access JWT: 401 on the next hosted API request, no data"
+  },
+  "RAP-053": {
+   "status": "PASS",
+   "check": "the same revoked JWT straight through the Data API (authenticated role + JWT claims): reads no workspace row"
+  },
+  "RAP-054": {
+   "status": "PASS",
+   "check": "the revoked JWT cannot list private Storage objects (the signing step reads storage.objects under the same guard)"
+  },
+  "RAP-055": {
+   "status": "PASS",
+   "check": "POST revoke-others: every other session denied, the current one valid, the count exact"
+  },
+  "RAP-058": {
+   "status": "PASS",
+   "check": "revoking the current session through the API takes effect at once (the UI offers no revoke button for it)"
+  },
+  "RAP-059": {
+   "status": "PASS",
+   "check": "revocation fence in both orders: a write after the revocation commits nothing; a write before it stands alone"
+  },
+  "RAP-060": {
+   "status": "PASS",
+   "check": "one revocation applies to the person in every workspace they belong to"
+  },
+  "RAP-061": {
+   "status": "PASS",
+   "check": "a valid API token is refused at the action gateway while the account is held"
+  },
+  "RAP-062": {
+   "status": "PASS",
+   "check": "account protection flag off: a revoked session stays denied (core revocation does not depend on RAPv2)"
+  },
+  "RAP-063": {
+   "status": "PASS",
+   "check": "alert preference off: the sign-in is in the account history, and no routine mail"
+  },
+  "RAP-064": {
+   "status": "PASS",
+   "check": "a high-risk security event queues a mandatory notice even with routine alerts off"
+  },
+  "RAP-065": {
+   "status": "PASS",
+   "check": "alert preference on: the sign-in is in the account history, and exactly one routine mail"
+  },
+  "RAP-066": {
+   "status": "PASS",
+   "check": "alert preference off: the sign-in is in the account history, and no routine mail"
+  },
+  "RAP-067": {
+   "status": "PASS",
+   "check": "one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one"
+  },
+  "RAP-068": {
+   "status": "PASS",
+   "check": "transport failure: the event and audit stay, retries are bounded with backoff, then the delivery is dead (not dropped)"
+  },
+  "RAP-069": {
+   "status": "PASS",
+   "check": "provider accepted is `sent`, never `delivered`, until the provider's delivered webhook arrives"
+  },
+  "RAP-070": {
+   "status": "PASS",
+   "check": "the same provider callback twice (and concurrently): applied once, no second email"
+  },
+  "RAP-071": {
+   "status": "PASS",
+   "check": "two delivery workers ticking at once: one lease, one send, one idempotency key"
+  },
+  "RAP-076": {
+   "status": "PASS",
+   "check": "no geo signal: the first sighting records location unavailable and both notices say 'Approximate location unavailable', never a place"
+  },
+  "RAP-078": {
+   "status": "PASS",
+   "check": "a bounce receipt: the delivery is failed and email suppressed (visible to operations), never delivered"
+  },
+  "RAP-079": {
+   "status": "PASS",
+   "check": "anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 and P1)"
+  },
+  "RAP-080": {
+   "status": "PASS",
+   "check": "authenticated: no direct write on any session-security table, and no read of other people's or person-level rows"
+  },
+  "RAP-081": {
+   "status": "PASS",
+   "check": "the service role performs the expected session writes and reads"
+  },
+  "RAP-082": {
+   "status": "PASS",
+   "check": "every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles)"
+  },
+  "RAP-083": {
+   "status": "PASS",
+   "check": "pr_session_security cannot link person A's session to person B's device (composite foreign key)"
+  },
+  "RAP-084": {
+   "status": "PASS",
+   "check": "GET /api/auth/devices names another person in the query, header or path: only the caller's browsers come back; their browser cannot be revoked"
+  },
+  "RAP-085": {
+   "status": "PASS",
+   "check": "person A never sees person B's incidents, and B's incident is unchanged"
+  },
+  "RAP-086": {
+   "status": "PASS",
+   "check": "user A cannot read or command workspace B through the hosted API (membership check)"
+  },
+  "RAP-087": {
+   "status": "PASS",
+   "check": "sign-in events are append-only: no role (authenticated, service_role) may UPDATE or DELETE pr_audit_events"
+  },
+  "RAP-088": {
+   "status": "PASS",
+   "check": "account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label)"
+  },
+  "RAP-089": {
+   "status": "PASS",
+   "check": "two concurrent first-sighting inserts of one session: exactly one first observation"
+  },
+  "RAP-090": {
+   "status": "PASS",
+   "check": "re-evaluations with new event keys are all kept; the same key twice is one row"
+  },
+  "RAP-091": {
+   "status": "PASS",
+   "check": "the user id written for a session or revocation is always the verified token subject"
+  },
+  "RAP-092": {
+   "status": "PASS",
+   "check": "the P1 migrations (120-123, and 127 retention) apply to a disposable database: every table and function exists, RLS forced"
+  },
+  "RAP-093": {
+   "status": "PASS",
+   "check": "work approved before the hold (and the hold since released) is refused at worker claim"
+  },
+  "RAP-094": {
+   "status": "PASS",
+   "check": "a hold placed after the worker claimed (epoch captured) stops the final pre-publish check"
+  },
+  "RAP-095": {
+   "status": "PASS",
+   "check": "hold set, released and set again: a job holding the old epoch is refused (no ABA)"
+  },
+  "RAP-096": {
+   "status": "PASS",
+   "check": "reconnecting a social account from a challenged session needs fresh proof"
+  },
+  "RAP-097": {
+   "status": "PASS",
+   "check": "a viewer's direct publish/approve call is refused by role, whatever the browser"
+  },
+  "RAP-098": {
+   "status": "PASS",
+   "check": "an Agent/worker run prepared before the owner removed the grant is denied on the refreshed membership"
+  },
+  "RAP-099": {
+   "status": "PASS",
+   "check": "a held account's scheduled/proactive phone call is refused before any provider call"
+  },
+  "RAP-101": {
+   "status": "PASS",
+   "check": "a valid API token is refused at the action gateway while the account is held"
+  },
+  "RAP-102": {
+   "status": "PASS",
+   "check": "a consumer session reaches no founder/operator API on the consumer app"
+  },
+  "RAP-104": {
+   "status": "PASS",
+   "check": "turning the incident/hold feature flag off after an incident keeps the core hold enforced"
+  },
+  "RAP-105": {
+   "status": "PASS",
+   "check": "GETs of the Security Center's data (me, sessions, security events) never revoke, hold or change factors"
+  },
+  "RAP-106": {
+   "status": "PASS",
+   "check": "an unconfirmed (cancelled) report changes nothing: no hold, no revocation"
+  },
+  "RAP-107": {
+   "status": "PASS",
+   "check": "a confirmed report with fresh proof: one incident, the hold epoch moves, a receipt says what was done"
+  },
+  "RAP-108": {
+   "status": "PASS",
+   "check": "an anonymous or forged report: 401 and no hold"
+  },
+  "RAP-109": {
+   "status": "PASS",
+   "check": "reporting another person's sign-in event: the same 404 as an unknown id, no incident, no hold"
+  },
+  "RAP-110": {
+   "status": "PASS",
+   "check": "a repeated report with the same Idempotency-Key returns the same receipt; no second hold"
+  },
+  "RAP-111": {
+   "status": "PASS",
+   "check": "no factor: the recovery route offers the support path only; an email code, or a factor enrolled after the report, never lifts the hold"
+  },
+  "RAP-112": {
+   "status": "PASS",
+   "check": "resolve with stale or weak proof (old TOTP, a proof older than the report, AAL1 email code): 403 step-up, hold retained"
+  },
+  "RAP-113": {
+   "status": "PASS",
+   "check": "resolve with fresh proof from a factor enrolled before the report: the hold is released once (epoch +1); repeats and races change nothing"
+  },
+  "RAP-114": {
+   "status": "PASS",
+   "check": "an incident notifies previously verified contact channels"
+  },
+  "RAP-115": {
+   "status": "PASS",
+   "check": "the incident receipt says already-executed actions are not reversible and connected accounts were not disconnected"
+  },
+  "RAP-116": {
+   "status": "PASS",
+   "check": "following an email link (GET) without confirming in the app changes nothing"
+  },
+  "RAP-121": {
+   "status": "PASS",
+   "check": "two sessions in one browser: the list reports 1 recognized browser and 2 sessions; revoking another browser ends its sessions"
+  },
+  "RAP-132": {
+   "status": "PASS",
+   "check": "probing the incident route with foreign or random ids gives one generic 404 body"
+  },
+  "RAP-133": {
+   "status": "PASS",
+   "check": "200 sign-ins in a burst with alerts on: notices are bounded, every event is retained"
+  },
+  "RAP-134": {
+   "status": "PASS",
+   "check": "a report from a hostile Origin is refused by the origin guard before anything changes"
+  },
+  "RAP-135": {
+   "status": "PASS",
+   "check": "the device Set-Cookie is __Host- prefixed, Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain (never shared with a parent or old domain)"
+  },
+  "RAP-137": {
+   "status": "PASS",
+   "check": "retention dry run deletes nothing; the real run removes only records past the approved age, keeping incidents and everything of a held account"
+  },
+  "RAP-138": {
+   "status": "PASS",
+   "check": "a browser unused for more than 180 days is no longer silently known"
+  },
+  "RAP-139": {
+   "status": "PASS",
+   "check": "flag absent (default off): legacy behaviour \u2014 sessions recorded as before, no session.observed, no new friction"
+  },
+  "RAP-140": {
+   "status": "PASS",
+   "check": "observe mode: sign-ins are recorded and an ordinary read is not challenged; existing guards unchanged (AAL1 still refused under 2FA)"
+  },
+  "RAP-141": {
+   "status": "PASS",
+   "check": "enforce mode turns the gate on for protected operations; observe mode leaves them as before"
+  },
+  "RAP-142": {
+   "status": "PASS",
+   "check": "the experimental v2 flag turned off after the revocation: a revoked session stays denied (core revocation does not depend on RAPv2)"
+  },
+  "RAP-143": {
+   "status": "PASS",
+   "check": "notification provider outage: the sign-in request does not wait on mail transport and the event is durable"
+  },
+  "RAP-144": {
+   "status": "PASS",
+   "check": "security state unreadable: connecting an account (the step before any connected publish) fails closed with 503"
+  },
+  "RAP-146": {
+   "status": "PASS",
+   "check": "one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one"
+  },
+  "RAP-147": {
+   "status": "PASS",
+   "check": "the harness refuses any target but the dedicated local disposable cluster"
+  },
+  "RAP-150": {
+   "status": "PASS",
+   "check": "rollback (observe \u2192 off): revoked sessions stay revoked and recorded sign-ins stay in the history"
+  }
+ },
+ "regressions": [],
+ "closedGaps": []
+}
