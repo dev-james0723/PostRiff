@@ -1,10 +1,12 @@
 # Pinterest acceptance and capability matrix
 
-Updated2026-10-15 UTC, latest source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f`. **NOT PRODUCTION-READY.** Mock/synthetic evidence never supplies a real-account result. [Exact-source cloud receipt](https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw) · [machine-readable evidence](evidence/pilot-current-production-validation.json).
+Updated2026-10-15 UTC, quota-hardening source `6d36716cfcc945fcc93a819ba243ffa870a1a799`, retaining earlier b99cf89a checks. **NOT PRODUCTION-READY.** Mock/synthetic evidence never supplies a real-account result. [Exact-source cloud receipt](https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw) · [machine-readable evidence](evidence/pilot-current-production-validation.json).
 
 | Required acceptance | Status | Evidence / remaining requirement |
 |---|---|---|
 | OAuth callback console registration | PASS | Approved app1615884 URI saved and verified after reload,2026-10-15. [Receipt](evidence/pinterest-callback-registration.json) · [Screenshot](evidence/pinterest-callback-registered.jpg). Runtime OAuth remains NOT RUN. |
+| Quota migration least privilege | PASS | Cloud7lkkltn4d9 on disposablePG16.15: Supabase broad defaults, forced RLS, migration replay, bounded service-role DML and denied TRUNCATE,2026-10-15. [Receipt](evidence/quota-permission-validation.json). Production17.6 apply/parity NOT RUN. |
+| Latest live security-baseline integration | BLOCKED | Live5e4f4e13 differs from current candidate. Automatic review rejected local merge pending exact approval; no merge executed. [Action](NEXT-ACTION-MERGE.md). |
 | Public OAuth onboarding | NOT RUN | Needs exact authorized real account, consent and eligible-customer acceptance. Synthetic Authorization Code/state tests passed2026-10-15. |
 | Identity and boards | NOT RUN | No real provider read-back. Synthetic pagination, account ID and username binding passed. |
 | Token refresh | NOT RUN | No live refresh cycle. DisposablePG12 concurrent callers→1 mock refresh passed2026-10-15. |
@@ -38,4 +40,4 @@ Updated2026-10-15 UTC, latest source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f`.
 
 Identity-only scope:`user_accounts:read`; profile+boards:`user_accounts:read,boards:read`; approved image publishing/read-back additionally needs`pins:read,pins:write`. No secret-board scopes. The pilot rejects prior broader grants rather than silently reusing their authorization. Personal-account access can require Pinterest approval (`PINNER_DATA_ACCESS_DENIED`); business-account eligibility is not a guaranteed entitlement. Sandbox boards/visibility are separate from live Pinterest, and neither Sandbox nor Trial results establish public visibility. See [pilot operation scope](READONLY-PILOT-CANDIDATE.md).
 
-Fresh production preflight: deployed cab2b288 preserved in the candidate; own active owner/@jamesaucreates identified without live OAuth. Callback origin still uses the old alias; correct URI is only staged in the unsaved provider form. Credential pair/quota table absent; team Pro/overdue blocks deployment qualification. No live/NOT RUN row is upgraded by these metadata observations. See FINAL-RECEIPT and NEXT-ACTION-CALLBACK.
+Fresh continuation preflight: live5e4f4e13/READY is not yet merged into the candidate; the exact local merge approval is pending. The rafii.io callback was saved and reload-verified; real OAuth remains NOT RUN. Credential pair/quota table remain absent. Team Pro/overdue alone does not prove deployment rejection because a later READY deployment exists. No deployment attempted. See FINAL-RECEIPT and NEXT-ACTION-MERGE.
