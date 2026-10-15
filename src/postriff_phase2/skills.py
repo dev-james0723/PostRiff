@@ -340,6 +340,7 @@ class SkillLibrary:
         if _size(text) > budget:
             # The editorial core, voice pass, adapter contract and adapters alone exceed the budget:
             # the last resort, never reached by a normal turn. The cut lands on the last adapters.
+            omitted.append({"skill": None, "path": "(hard cut)", "chars": _size(text) - budget, "cut": True})
             text = text.encode()[:budget].decode(errors="ignore")
             warnings.append(f"Skill text was cut at {budget} bytes, so a channel adapter may be incomplete. Review the draft against the platform rules before scheduling.")
         return {"bindings": bindings, "text": text, "warnings": warnings, "omitted": omitted, "budget": budget}

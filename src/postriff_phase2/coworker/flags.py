@@ -45,6 +45,10 @@ FLAGS = (
     "RAFII_TREND_OPPORTUNITY_LAB_ENABLED",
     "RAFII_TREND_MULTIMODAL_ENABLED",
     "RAFII_TREND_FORECASTS_ENABLED",
+    # Content Skills Integration rollout waves (creation_capabilities.WAVE_FLAGS): wave 1 adds Facebook drafting,
+    # wave 2 every mapped platform whose draft checks pass. Drafting only; no publishing, OAuth or billing change.
+    "RAFII_CREATION_PROJECTION_ENABLED",
+    "RAFII_CREATION_ALL_PLATFORMS_ENABLED",
 )
 # Flags whose features reach an external service (email, push, the public web). Preview pins them off.
 EGRESS_FLAGS = ("RAFII_NOTIFICATIONS_V2_ENABLED", "RAFII_WEB_PUSH_ENABLED", "RAFII_SMS_ENABLED", "RAFII_SMS_ESCALATION_ENABLED", "RAFII_RESEARCH_BROKER_ENABLED", "RAFII_LISTENING_ENABLED")

@@ -18,7 +18,7 @@ import zoneinfo
 from postriff_alpha.domain import AlphaError, clean
 
 from . import automation_chat, campaigns, capabilities, research as web_research, workflow as workflows, workflow_parse
-from .agent_runtime import PLATFORMS
+from .agent_runtime import draftable_platforms
 
 POLICY_REPLIES = ("Publish automatically", "Send them to me for approval first", "Just prepare drafts")
 POLICY_QUESTION = "Should I publish these automatically, or send them to you for approval first?"
@@ -172,10 +172,11 @@ def destinations_for(state: dict, reading: dict, fallback: list[dict], notes: li
     """The platforms the person named (their languages as Home would choose), else Home's destinations; each
     platform gets its connected account when the workspace has exactly one there."""
     named = list(dict.fromkeys(reading.get("platforms") or []))
-    unsupported = [name for name in named if name not in PLATFORMS]
+    supported = draftable_platforms()
+    unsupported = [name for name in named if name not in supported]
     if unsupported:
         notes.append(f"Rafii can't prepare {automation_chat._join(unsupported)} posts yet, so {'it was' if len(unsupported) == 1 else 'they were'} left out.")
-    wanted = [name for name in named if name in PLATFORMS]
+    wanted = [name for name in named if name in supported]
     by_platform = {}
     for destination in fallback:
         by_platform.setdefault(destination["platform"], []).append(destination)

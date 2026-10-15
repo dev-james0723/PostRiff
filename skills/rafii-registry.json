@@ -62,9 +62,9 @@
   },
   {
    "id": "postriff-content-engine",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "kind": "knowledge",
-   "sha256": "sha256:bef9fe3135847c250a519b2c99a774c9aebc14ca0ffc4b95be5489176428c147",
+   "sha256": "sha256:d4df512be50110d9f494eb88431998740d5ae380da0826cbf9f8965df8aaca3e",
    "description": "Use when creating, researching, localizing, reviewing, or scheduling social content for a PostRiff workspace, in any language and for any channel the workspace has connected.",
    "intents": [
     "*"
@@ -111,7 +111,7 @@
      "id": "postriff-content-engine"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "1.2.0"
   },
   {
    "id": "postriff-content-craft",
@@ -304,9 +304,9 @@
   },
   {
    "id": "postriff-channel-bilibili",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "kind": "knowledge",
-   "sha256": "sha256:571b7ac37cc49cb41b293121c4464612c1e311a75ae97b09de3c570c85429af9",
+   "sha256": "sha256:17516336ea0965f6e0904c5b66be9ed620f05f4db6547c658545dd0554a6ded2",
    "description": "Prepare and validate bilibili native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -360,7 +360,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "1.2.0"
   },
   {
    "id": "postriff-channel-bluesky",
@@ -544,9 +544,9 @@
   },
   {
    "id": "postriff-channel-douyin",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:2ed2595f8d852be85749b524281ec584ff8217510b0cbf03589f1d17c7455907",
+   "sha256": "sha256:8e7bba89fa4d8cfbe4be9552ff96cb36590a82462b36666265f28b1d42f3b696",
    "description": "Prepare and validate douyin native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -600,7 +600,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-channel-facebook",
@@ -1864,9 +1864,9 @@
   },
   {
    "id": "postriff-channel-wechat-channels",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:aeba13d6ef342f52f1c8f6a03ee3ab3d4696145d0fa843e71037cd1ace008754",
+   "sha256": "sha256:bbc93a2c74efe14680f6a9736f415dc2da07fd114eb2648f978dfd1a84344dcb",
    "description": "Prepare and validate wechat-channels native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -1920,13 +1920,13 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-channel-weibo",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:24d5eae0ea410f84c9746bcde68e765a35a90bad978f815ce90cb60a344051b6",
+   "sha256": "sha256:248871217f8325981e3f0a08f4bb66d023a0a7e06dc39a74f9e9d286ea5297b4",
    "description": "Prepare and validate weibo native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -1980,7 +1980,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-channel-whatsapp-channels",
@@ -2044,9 +2044,9 @@
   },
   {
    "id": "postriff-channel-x",
-   "version": "1.0.1",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:f6d4528c36f74206d28dfd83c3b42a3d985942752335e358cc68156280957b82",
+   "sha256": "sha256:2f59dec0c18e30a26298e61ba47ea4165b1648df1a898bf85e54e9b6e7e35e9c",
    "description": "Prepare and validate X drafts, or use the qualified free controlled-browser route for exact approved text posts and X-native scheduling.",
    "intents": [
     "*"
@@ -2100,13 +2100,13 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.1"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-channel-xiaohongshu",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "kind": "knowledge",
-   "sha256": "sha256:378607aa558f9c8299206fd8e83d6bfd1d60b92b01f8428f681a07cd21f78346",
+   "sha256": "sha256:280ce1d0115e8c6849999c0e296bac9c1b343fcb6ffa9d0b49efaafdf84b5320",
    "description": "Prepare and validate xiaohongshu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -2160,7 +2160,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.1.0"
+   "lockedVersion": "1.2.0"
   },
   {
    "id": "postriff-channel-youtube",
@@ -2224,9 +2224,9 @@
   },
   {
    "id": "postriff-channel-zhihu",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "kind": "knowledge",
-   "sha256": "sha256:fab00d230271a6a50d1d72342471a98c80c70d12ca70f3b07910e6cbec1d98cc",
+   "sha256": "sha256:ec3d5d1a188267da0f458d3ebf1552c2fc7d10ceb3f2189ef28b41c7adda161f",
    "description": "Prepare and validate zhihu native draft handoffs with exact account, destination and format bindings. This adapter does not provide a live publishing transport.",
    "intents": [
     "*"
@@ -2280,7 +2280,7 @@
      "version": "^1.0.0"
     }
    ],
-   "lockedVersion": "1.0.0"
+   "lockedVersion": "1.1.0"
   },
   {
    "id": "postriff-discoverability",
@@ -4702,7 +4702,6 @@
    "kind": "policy",
    "sha256": "sha256:b4a30dd35f09b2eedb9b63d20dad8a60b1b99ff86aec21e58a8f7d1d9ed87319",
    "description": "Deterministic unified attention planning: recipients by permission class, urgency, consent, separate SMS/phone channels, durable escalation, acknowledgement, quiet hours, digest, mute, unsubscribe, rate limits and dedupe. A model never decides these.",
-
    "intents": [
     "*"
    ],

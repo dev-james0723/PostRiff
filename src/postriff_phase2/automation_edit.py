@@ -17,7 +17,7 @@ import zoneinfo
 from postriff_alpha.domain import AlphaError, clean
 
 from . import automation_chat, automation_plan, campaigns, workflow as workflows
-from .agent_runtime import PLATFORMS
+from .agent_runtime import draftable_platforms
 
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP = {"the", "a", "an", "my", "this", "that", "automation", "automations", "post", "posts", "one", "it", "about", "for", "on"}
@@ -184,7 +184,7 @@ def apply(state: dict, actor: str, now: float, edit: dict, *, conversation_task_
                 payload["destinations"] = kept
                 done.append(f"stopped posting to {change['platform']}")
         elif op == "add_platform":
-            if change["platform"] not in PLATFORMS:
+            if change["platform"] not in draftable_platforms():
                 raise AlphaError(f"Rafii can't prepare {change['platform']} posts yet.")
             if not any(d["platform"] == change["platform"] for d in payload["destinations"]):
                 destination = {"platform": change["platform"], "language": payload["destinations"][0]["language"]}

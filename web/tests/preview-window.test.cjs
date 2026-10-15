@@ -37,7 +37,7 @@ test('channel chips retain the connected account display state', () => {
   const chips = nodesWhere((node) => ts.isVariableDeclaration(node) && node.name.getText(conversation) === 'chips');
   assert.equal(chips.length, 1);
   const expression = chips[0].initializer.getText(conversation);
-  const compiled = ts.transpileModule(`module.exports = function (DRAFT_PLATFORMS, channels) { return ${expression}; };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const compiled = ts.transpileModule(`module.exports = function (draftPlatforms, channels) { return ${expression}; };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const m = new Module('preview-chip-regression', module);
   m._compile(compiled, 'preview-chip-regression.js');
   assert.deepEqual(m.exports(['Threads'], [{ platform: 'Threads', account: '@james', displayState: 'connected' }]), [{ platform: 'Threads', account: '@james', state: 'connected' }]);
