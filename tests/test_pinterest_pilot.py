@@ -56,7 +56,9 @@ class PinterestPilot(unittest.TestCase):
             with self.assertRaises(AlphaError) as caught:service.start('workspace','session','pinterest',capability)
             self.assertEqual(caught.exception.code,'pinterest_trial_readonly')
         self.assertEqual(p.transport.calls,[])
+        p.production_reviewed=True  # Even an operator review flag cannot call a Trial public-ready.
         view=next(v for v in service.provider_catalog() if v['id']=='pinterest')
+        self.assertFalse(view['publicConnectionReady'])
         self.assertTrue(view['capabilities']['boards_read'])
         self.assertFalse(view['capabilities']['publish'])
 

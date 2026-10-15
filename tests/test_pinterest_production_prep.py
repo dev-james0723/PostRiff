@@ -179,7 +179,7 @@ class PinterestRevocationAndAgent(unittest.TestCase):
             def __exit__(self,*args): pass
         repo=SimpleNamespace(connection_factory=DB)
         engine=SimpleNamespace(current=lambda *a:current,channel_state=lambda *a:'Ready for posting')
-        service=OAuthService(repo,SimpleNamespace(engine=engine),SimpleNamespace(decrypt=lambda x,k:x),{},'https://example.com',clock=lambda:100)
+        service=OAuthService(repo,SimpleNamespace(engine=engine),SimpleNamespace(decrypt=lambda x,k:x),{'pinterest':PinterestProvider('1615884','MOCK',sandbox=True,transport=Wire([]))},'https://example.com',clock=lambda:100)
         return service,manifest,job,updates
 
     def test_dispatch_checks_live_lease_and_cancel_before_external_action(self):

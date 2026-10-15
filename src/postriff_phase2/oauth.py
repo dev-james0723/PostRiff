@@ -152,7 +152,7 @@ class OAuthService:
             readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
-                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed, 'liveVerified': False,
+                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed and not getattr(adapter, 'trial_readonly', False), 'liveVerified': False,
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
@@ -727,7 +727,10 @@ class OAuthService:
         releasing it so a disconnect cannot erase an already-known outcome.
         """
         from .contracts import digest
-        if getattr(self._provider('pinterest'), 'trial_readonly', False):
+        adapter = self._provider('pinterest')
+        if not getattr(adapter, 'execution_enabled', True):
+            raise AlphaError('Pinterest is paused. Nothing was posted.', 503)
+        if getattr(adapter, 'trial_readonly', False):
             raise AlphaError('This Pinterest Trial cannot publish or schedule Pins.', 403, code='pinterest_trial_readonly')
         if not isinstance(fence, dict) or not fence.get('leaseId') or not fence.get('leaseOwner'):
             raise AlphaError('Pinterest publication needs an active approved worker lease.', 409)
