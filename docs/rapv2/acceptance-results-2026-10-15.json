@@ -1447,7 +1447,7 @@
    "status": "PASS",
    "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
    "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label) | Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 122's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label) | Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 123's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.",
    "classification": "AUTOMATABLE_NOW"
   },
   {

@@ -167,7 +167,7 @@ def _delete(service, workspace_id, principal):
         # Person-keyed growth data (migration 025): events carry a user id without an FK; assignments are keyed by subject.
         cur.execute('DELETE FROM public.pr_product_events WHERE user_id=%s', (principal,))
         # RAP-088 (owner decision A+B): session inventory deleted, person-level session.* history kept without the session
-        # id or browser label. Migration 122 owns the erasure; before it is applied this erases nothing.
+        # id or browser label. Migration 123 owns the erasure; before it is applied this erases nothing.
         cur.execute("SELECT to_regprocedure('public.pr_erase_session_history(uuid)') IS NOT NULL")
         if cur.fetchone()[0]:
             cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))

@@ -91,7 +91,7 @@ blocked("084", DEVICE, "The P0 analogue (sessions list returns only the caller's
 blocked("085", INCIDENT)
 auto("086", PG)
 auto("087", PG + " + " + BRANCH, "P0 stores sign-in events in pr_audit_events (pr_security_login_events is not built): no role has UPDATE/DELETE, service_role UPDATE is refused.")
-auto("088", PG, "Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 122's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.")
+auto("088", PG, "Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 123's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.")
 auto("089", PG, "pr_sessions primary key + RETURNING (xmax = 0): four concurrent inserts, one first sighting.")
 blocked("090", RISK)
 auto("091", PG + " + " + BRANCH)
