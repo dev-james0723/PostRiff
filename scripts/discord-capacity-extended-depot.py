@@ -40,6 +40,15 @@ def stream_failure_kind(controller_log):
     return None
 
 
+def completed_follower_retirement(controller, controller_log):
+    """Classify a stopped viewer only; caller must prove native success first."""
+    return (type(controller_log) is bytes
+        and type(controller.get('exitCode')) is int and controller['exitCode']==-15
+        and type(controller.get('submissionExitCode')) is int and controller['submissionExitCode']==-15
+        and controller.get('remoteExitCode') is None
+        and b'Waiting for logs from job "test" (status: finished)...' in controller_log.splitlines())
+
+
 def completed_native_prerequisite(run, receipt, controller, status, metrics, controller_log):
     """Positive native completion, including one known post-submit stream fault.
 
@@ -72,6 +81,13 @@ def completed_native_prerequisite(run, receipt, controller, status, metrics, con
         code=controller['exitCode']
         if type(code) is not int or type(receipt['controllerExit']) is not int or receipt['controllerExit']!=code:return False
         if code==0:return type(controller.get('remoteExitCode')) is int and controller['remoteExitCode']==0
+        if code==-15:
+            # Retiring a reader of a completed native job is not a failed test.
+            # Keep that exit visible; all positive native/source checks above
+            # and full artifact/profile/source gates in qualified still apply.
+            return (completed_follower_retirement(controller,controller_log)
+                and receipt.get('controllerTransportFailure')=='completed_log_follower_terminated'
+                and receipt.get('controllerLogSha256')==hashlib.sha256(controller_log).hexdigest())
         failure=stream_failure_kind(controller_log)
         return (code==1 and type(controller.get('submissionExitCode')) is int and controller['submissionExitCode']==1 and controller.get('remoteExitCode') is None
                 and failure is not None and receipt.get('controllerTransportFailure')==failure
