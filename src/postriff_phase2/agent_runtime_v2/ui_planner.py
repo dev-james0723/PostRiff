@@ -9,12 +9,17 @@ The planner wraps ui_projection.eligibility (the deterministic baseline) and nev
 baseline refuses because GenUI is off, the turn was not a metered Manager turn, it carries YouTube provider context, it is
 a greeting/acknowledgement, it was voice without a view request, or it touched no journey's data stays plain text here
 too. Inside that envelope it does three things the baseline cannot:
-- picks a response *form* from FORMS (comparison, chart, table, timeline, cards, calendar, approval, recovery — or text);
+- picks a response *form* from FORMS (comparison, chart, table, timeline, cards, calendar, approval, recovery, tool — or text);
 - declines expensive UI a concise answer serves better: the person asked for a short or text-only answer ("just tell me",
   "no table", "簡單講"), or asked a count/yes-no question and no view;
 - adds a view the baseline misses, only from a *verified* read in workspace scope and never in voice: a failure diagnosis
   over automation/job reads (J08/J02 → recovery), an attention read (J02 → cards), and a refinement of the view the person
-  is looking at (uiContext present → keep the view).
+  is looking at (uiContext present → keep the view);
+- adds a *tool* view (journey J10, form "tool") — the one upgrade that needs no data read — when the person asked Rafii to
+  build/make/create an interactive tool (calculator, converter, estimator, planner, checklist, quiz; English, Traditional and
+  Simplified Chinese), the turn read NO workspace data (ui_projection.reads_no_workspace_data: help/guide/navigation tools
+  only), workspace scope, text modality, and RAFII_GENUI_TOOLS_ENABLED (`flags["tools"]`). A J10 view computes everything
+  locally; its manifest has no queries and no actions. A plain question ("What does engagement rate mean?") stays text.
 
 Like the baseline it never calls a model and never sees private text: the plan holds enum values, journey ids, tool names
 and counts only. Interactions are declared from the fixed INTERACTIONS table; they name *classes* the renderer already
@@ -28,7 +33,7 @@ import re
 from . import ui_contracts, ui_projection
 
 VERSION = "rafii-ui-plan/1"
-FORMS = ("text", "comparison", "chart", "table", "timeline", "cards", "calendar", "approval", "recovery")
+FORMS = ("text", "comparison", "chart", "table", "timeline", "cards", "calendar", "approval", "recovery", "tool")
 # The baseline reasons the planner may never turn into a view (hard safety and spend vetoes).
 HARD_VETOES = frozenset({"youtube_context", "disabled", "not_manager", "not_metered", "greeting", "voice"})
 
@@ -44,6 +49,8 @@ INTERACTIONS = {
     "calendar": {"local": ("week_navigate", "platform_filter", "select_slot"), "reads": ("refresh",), "actions": ("review_proposal",)},
     "approval": {"local": ("expand_item",), "reads": ("refresh",), "actions": ("review_proposal",)},
     "recovery": {"local": ("expand_item",), "reads": ("refresh",), "actions": ("propose_retry",)},
+    # J10: inputs and computed readouts in this view only. No reads, no actions, ever.
+    "tool": {"local": ("number_input", "slider", "toggle", "select", "computed_readout"), "reads": (), "actions": ()},
 }
 DATA_FORMS = frozenset({"comparison", "chart", "table", "timeline", "cards", "calendar"})
 
@@ -76,6 +83,19 @@ _PLATFORMS = re.compile(r"\b(?:instagram|ig|tiktok|youtube|facebook|threads|link
 _REFINEMENT = re.compile(r"^\s*(?:only|just)\b(?!\s+(?:tell|say|give))|^\s*(?:what|how)\s+about\b|\binstead\b"
                          r"|^\s*(?:只|淨係|净系|仲有|還有|还有)|改為|改为|換成|换成", re.I)
 
+# "Build me a … calculator / converter / estimator / planner / checklist / quiz / (interactive) tool". A verb that asks Rafii to
+# make something, then (within a short span, no sentence break) the kind of tool. Questions about tools ("which tool should I
+# use?", "what does engagement rate mean?") have no making verb before the noun and stay text.
+_TOOL_REQUEST = re.compile(
+    r"\b(?:build|make|create|generate|design|code|set\s+up|put\s+together|whip\s+up|give\s+me|i\s+(?:want|need)|can\s+(?:you|i)\s+(?:have|get))\b"
+    r"[^.?!。？！\n]{0,60}?"
+    r"\b(?:calculators?|converters?|estimators?|planners?|checklists?|quiz(?:zes)?|splitters?|simulators?|what[\s-]if\s+tools?"
+    r"|(?:interactive|little|small|simple|quick)\s+(?:\w+\s+){0,2}tools?|tools?\s+(?:to|that|for)\b)"
+    r"|(?:整|做|製作|制作|建立|建|設計|设计|弄|寫|写|生成|開發|开发)[^。？！\n]{0,14}?"
+    r"(?:計算機|计算机|計算器|计算器|換算器|换算器|換算|换算|轉換器|转换器|估算器|估算|預算器|预算器|規劃器|规划器|核對表|核对表|清單|清单|"
+    r"測驗|测验|小測|小测|問答|问答|倒數|倒数|互動工具|互动工具|小工具)",
+    re.I)
+
 DIAGNOSIS_TOOLS = {"automation_get": "J08", "automation_explain": "J08", "job_get": "J02"}
 ATTENTION_TOOLS = {"attention_summary": "J02"}
 
@@ -94,9 +114,16 @@ def _with_journey(journeys: list[str], journey: str) -> list[str]:
     return ([journey] + [j for j in journeys if j != journey])[:ui_projection.MAX_JOURNEYS]
 
 
+def asks_for_tool(text: str) -> bool:
+    """The person asked Rafii to build an interactive tool (en / zh-Hant / zh-Hans). Wording only; never enough by itself."""
+    return bool(_TOOL_REQUEST.search(text or ""))
+
+
 def _form(result: dict, text: str, journeys: list[str], scope: str) -> str:
     """The form for an eligible turn, by fixed precedence (most specific signal first)."""
     tools = {str(a.get("tool")) for a in _verified(result)}
+    if journeys == list(ui_contracts.TOOL_JOURNEYS):
+        return "tool"
     if scope == "founder":
         return "table"
     if _PLANNING.search(text) and "J02" in journeys:
@@ -142,6 +169,11 @@ def plan(result, request_text, modality, *, flags, scope="workspace", context=No
         eligible = False
     elif _DECLINE_UI.search(text):
         eligible, reason = False, "declined_ui"
+    elif (flags.get("tools") and scope == "workspace" and modality == "text" and asks_for_tool(text)
+          and ui_projection.reads_no_workspace_data(result)):
+        # J10: the only upgrade without a data read. The view is local-only (no queries, no actions), so nothing the turn did not
+        # read can reach it; the presenter gets the request as its brief only behind the same tools flag (ui_projection.tool_brief).
+        eligible, reason, journeys = True, "tool", list(ui_contracts.TOOL_JOURNEYS)
     elif _COUNT_QUESTION.search(text) and not view_asked and not _BREAKDOWN.search(text):
         eligible, reason = False, "concise_answer" if eligible else reason
     elif not eligible and scope == "workspace" and modality != "voice":
@@ -157,6 +189,10 @@ def plan(result, request_text, modality, *, flags, scope="workspace", context=No
             eligible, reason = True, "ui_intent"
     if eligible and not journeys:
         eligible, reason = False, "plain_answer"
+    if reason != "tool" and any(j in ui_contracts.TOOL_JOURNEYS for j in journeys):
+        journeys = [j for j in journeys if j not in ui_contracts.TOOL_JOURNEYS]   # J10 only ever comes from the tool branch
+        if eligible and not journeys:
+            eligible, reason = False, "plain_answer"
 
     form = _form(result, text, journeys, scope) if eligible else "text"
     if form == "recovery":

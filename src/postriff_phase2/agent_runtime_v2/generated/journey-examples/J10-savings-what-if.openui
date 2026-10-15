@@ -1,0 +1,16 @@
+root = RafiiRoot([tabs], "Savings what-if")
+$monthly = 2000
+$years = 5
+$rate = 3
+$withLump = false
+$lump = 10000
+tabs = Tabs([TabItem("Your plan", [monthly, years, rate, withLump, lump]), TabItem("Result", [figures, note])])
+monthly = NumberField("monthly", "Saved each month", $monthly, 0, 1000000, 100)
+years = Slider("years", "Years", 1, 40, $years, 1, "years")
+rate = Slider("rate", "Yearly return", 0, 12, $rate, 0.5, "%")
+withLump = Toggle("withLump", "Add a one-off amount now", $withLump)
+lump = NumberField("lump", "One-off amount", $lump, 0, 100000000, 100)
+figures = Grid([putIn, total], 2)
+putIn = Readout("You put in", $monthly * 12 * $years + ($withLump ? $lump : 0), "number")
+total = Readout("Estimated total", $monthly * 12 * $years * (1 + $rate / 100 * $years / 2) + ($withLump ? $lump * (1 + $rate / 100 * $years) : 0), "number")
+note = Text("A simple-interest estimate using the return you set; real returns vary.", "muted")

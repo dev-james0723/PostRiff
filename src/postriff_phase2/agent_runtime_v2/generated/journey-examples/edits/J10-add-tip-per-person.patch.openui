@@ -1,0 +1,2 @@
+root = RafiiRoot([inputs, results, tipShare, note], "Split the bill")
+tipShare = Readout("Tip per person", $people > 0 ? $bill * $tip / 100 / $people : null, "currency")

@@ -169,7 +169,7 @@ def _error_class(value):
     return None if _SECRET.search(value.lower()) else value
 
 
-_UI_PLAN = re.compile(r"^(?:shadow|active):(?:text|comparison|chart|table|timeline|cards|calendar|approval|recovery):(?:same|upgrade|downgrade)$")
+_UI_PLAN = re.compile(r"^(?:shadow|active):(?:text|comparison|chart|table|timeline|cards|calendar|approval|recovery|tool):(?:same|upgrade|downgrade)$")
 
 FIELDS = {
     "uiPlan": lambda v: v if isinstance(v, str) and _UI_PLAN.match(v) else None,

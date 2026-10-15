@@ -69,6 +69,16 @@ DateRange(name: string, label: string, value?: $binding<{start: string, end: str
 Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary" | "quiet") — A local control that never changes saved data: Action([@Set($v, x)]), @Reset, @Run(query) to refresh, @ToAssistant("follow-up") or @OpenUrl("/app/…"). variant: primary | secondary | quiet.
 Inputs only change this view. Bind them to $variables and use those in Query arguments.
 
+### Tool inputs
+NumberField(name: string, label: string, value?: $binding<number>, min?: number, max?: number, step?: number, unit?: string) — A labelled number input. Bind value to a $variable declared with a starting number (for example $bill = 120) and use it in Readout expressions. min, max and step limit what can be entered; unit is a short suffix such as "kg" or "%".
+Slider(name: string, label: string, min: number, max: number, value?: $binding<number>, step?: number, unit?: string) — A labelled slider between min and max (step defaults to 1). Bind value to a $variable declared with a starting number; moving it updates every Readout that uses the $variable. unit is a short suffix such as "%" or "years".
+Toggle(name: string, label: string, value?: $binding<boolean>) — A labelled on/off switch. Bind value to a $variable declared true or false and use it in a ternary, for example $roundUp ? @Ceil($share) : $share.
+Declare each input’s $variable with a sensible starting value from the request, for example $people = 4. Inputs only change this view.
+
+### Computed readouts
+Readout(label: string, value: number | string, format?: "number" | "currency" | "percent", unit?: string, currency?: string) — Shows one value computed from $variables with + - * / and ternaries, for example ($bill * (1 + $tip / 100)) / $people. format: number | currency (with a 3-letter currency code) | percent (a ratio: 0.15 shows 15%). A value that cannot be computed shows "—".
+A Readout value is an expression over $variables (+ - * /, comparisons, ternaries, @Round, @Ceil, @Floor). Guard a division with a ternary, for example $people > 0 ? $total / $people : null.
+
 ### Registered actions
 ActionButton(actionId: string, formName?: string, inputs?: Record<string, any>) — Starts one registered action by its id. Its label, confirmation and result come from Rafii, never from you. Inside a Form it sends that form’s fields; inputs adds bound values such as {draftIds: $picked}.
 Use only action ids listed under Rafii bindings. If none fits, explain with Text instead of adding a button.

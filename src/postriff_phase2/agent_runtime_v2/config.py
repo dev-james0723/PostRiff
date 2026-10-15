@@ -25,7 +25,11 @@ FLAGS = ("RAFII_AGENT_V2_ENABLED", "RAFII_VOICE_ENABLED", "RAFII_IMAGE_AGENT_ENA
          "RAFII_TASK_ENGINE_ENABLED", "RAFII_TASK_ENGINE_AUTHORITATIVE", "RAFII_TASK_ENGINE_BACKGROUND",
          "RAFII_AGENT_LIBRARY_BROWSE_ENABLED",
          # Adaptive UI Planner (rafii-ui-plan/1): shadow unless _ACTIVE; only for workspaces in RAFII_GENUI_PLANNER_WORKSPACES.
-         "RAFII_GENUI_PLANNER_ENABLED", "RAFII_GENUI_PLANNER_ACTIVE")
+         "RAFII_GENUI_PLANNER_ENABLED", "RAFII_GENUI_PLANNER_ACTIVE",
+         # J10 interactive tools (default OFF, fail closed): lets the active planner propose a local tool view for a turn that read
+         # no workspace data, and lets that view's presenter see the person's request text (`toolBrief`). Egress change: see
+         # ui_projection.tool_brief — the text goes only to the provider the parent turn already used, only for J10.
+         "RAFII_GENUI_TOOLS_ENABLED")
 LIBRARY_BROWSE_WORKSPACES_ENV = "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES"
 GENUI_PLANNER_WORKSPACES_ENV = "RAFII_GENUI_PLANNER_WORKSPACES"
 
@@ -193,6 +197,11 @@ class RuntimeConfig:
         return {"enabled": on, "actions": on and self.enabled("RAFII_GENUI_ACTIONS_ENABLED"), "edits": on and self.enabled("RAFII_GENUI_EDITS_ENABLED"),
                 "canary": bool(self.genui_workspaces)}
 
+    def genui_tools_for(self, workspace_id: str | None, *, founder: bool = False) -> bool:
+        """J10 interactive tools (RAFII_GENUI_TOOLS_ENABLED): GenUI on for this workspace, never founder scope. Kept out of
+        genui_for() so the public /status contract is unchanged; the planner (own flags + allowlist) is the only way in."""
+        return bool(not founder and self.genui_for(workspace_id).get("enabled") and self.enabled("RAFII_GENUI_TOOLS_ENABLED"))
+
     def genui_planner_for(self, workspace_id: str | None, *, founder: bool = False) -> str:
         """off | shadow | active for the Adaptive UI Planner (ui_planner). Needs GenUI on for this workspace, the planner flag
         and a listed workspace (fail closed). shadow records the plan beside the baseline decision and changes nothing;
@@ -295,10 +304,10 @@ class RuntimeConfig:
 
     def public(self) -> dict:
         """What the browser and traces may see: flags, aliases and availability. Never a credential."""
-        # Permission/task/planner rollout switches have dedicated authenticated endpoints or none.
+        # Permission/task/planner/tool rollout switches have dedicated authenticated endpoints or none.
         # Keeping them out preserves the existing off/shadow status contract.
         public_flags = {key: value for key, value in self.flags.items()
-                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_", "RAFII_GENUI_PLANNER_"))}
+                        if not key.startswith(("RAFII_AGENT_PERMISSIONS_", "RAFII_TASK_ENGINE_", "RAFII_GENUI_PLANNER_", "RAFII_GENUI_TOOLS_"))}
         return {"flags": public_flags, "models": dict(self.models), "provider": self.provider,
                 "voiceAvailable": self.has_openai_key and self.enabled("RAFII_VOICE_ENABLED"),
                 "imageAvailable": self.provider is not None and self.enabled("RAFII_IMAGE_AGENT_ENABLED")}

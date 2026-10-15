@@ -6,7 +6,8 @@ Frozen entry points:
   results -> eligible. Called by service._persist (A seam) and stored as result.ui.
 - project_ui_context(cur, auth, verified_result, surface, selection_state) -> dict UiProjection {manifest_id, journey_ids,
   component_group_ids, data_bindings, action_bindings, allowed_context, fallback_text, egress_decision}. Only data refs, counts,
-  kinds and opaque ids the Manager already saw; never media bytes, signed URLs, private text or secrets.
+  kinds and opaque ids the Manager already saw; never media bytes, signed URLs, private text or secrets — with one bounded,
+  flagged exception for J10 interactive tools (`allowed_context.toolBrief`, see tool_brief below).
 
 Eligibility is a predicate on the finished turn's *structure* plus a small keyword list for explicit UI intents in
 English, Traditional and Simplified Chinese. It never calls a model. A turn is eligible only when it is a completed,
@@ -87,6 +88,40 @@ _ACK = re.compile(r"^\s*(?:ok(?:ay)?|k|sure|great|cool|nice|perfect|thanks?(?:\s
                   r"好|好的|好啊|好呀|好嘅|得|得啦|ok啦|收到|知道了|知道|明白|明白了|多謝|多谢|謝謝|谢谢|唔該|唔该|冇問題|没问题|係|是|不用|唔使)[\s!！.,，。~～]*$", re.I)
 
 _NOT = {"eligible": False, "slot": "main", "journeyIds": []}
+
+# --- J10 interactive tools ---------------------------------------------------------------------------------------------
+# Tools that read no workspace data: public product help, navigation and guides. A turn whose tool activity is only these
+# (or none) "read no workspace data"; anything else (a read, a write, a proposal, research, a reference, a generated asset,
+# a Library listing, founder data) means it did, and the turn can never become a J10 tool view.
+NON_DATA_TOOLS = frozenset({"help_search", "help_get", "route_describe", "skills_list", "ui_navigate", "ui_show_help", "ui_guide"})
+TOOL_BRIEF_CHARS = 600
+_DATA_RESULT_KEYS = ("references", "changedEntities", "pendingApprovals", "generatedAssets", "libraryIds", "research", "founder")
+
+
+def reads_no_workspace_data(result) -> bool:
+    """True only when the finished turn provably touched no workspace data (fail closed on anything odd)."""
+    if not isinstance(result, dict):
+        return False
+    activity = result.get("toolActivity")
+    if activity is None:
+        activity = []
+    if not isinstance(activity, list):
+        return False
+    for item in activity:
+        if not isinstance(item, dict) or str(item.get("tool") or "") not in NON_DATA_TOOLS:
+            return False
+    return not any(result.get(key) for key in _DATA_RESULT_KEYS)
+
+
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def tool_brief(request_text) -> str:
+    """The person's own request, as the J10 presenter's brief: control characters removed, whitespace collapsed, at most
+    TOOL_BRIEF_CHARS characters. Empty for anything that is not text."""
+    if not isinstance(request_text, str):
+        return ""
+    return " ".join(_CONTROL.sub(" ", request_text).split())[:TOOL_BRIEF_CHARS]
 
 
 def has_youtube_context(value) -> bool:
@@ -340,6 +375,12 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
         surface = "founder" if scope == "founder" else "chat"
     handoff = result.get("ui") if isinstance(result.get("ui"), dict) else {}
     journeys = [j for j in handoff.get("journeyIds") or [] if j in (ui_contracts.FOUNDER_JOURNEYS if scope == "founder" else ui_contracts.CONSUMER_JOURNEYS)]
+    if any(j in ui_contracts.TOOL_JOURNEYS for j in journeys) and (
+            journeys != list(ui_contracts.TOOL_JOURNEYS) or scope != "workspace" or not (flags or {}).get("tools")
+            or not reads_no_workspace_data(result)):
+        # A tool view is J10 alone, in workspace scope, with RAFII_GENUI_TOOLS_ENABLED on now (a kill switch for views not yet
+        # started), and only for a turn that read no workspace data. Anything else is refused, never re-routed to a data view.
+        raise AlphaError("This answer doesn't need an interactive view.", 409, code="ui_not_eligible")
     if not journeys:
         journeys = detect_journeys(result, "", scope=scope)
     refs = _refs(result, selection_state if isinstance(selection_state, dict) else None)
@@ -351,6 +392,13 @@ def project_ui_context(cur, auth, verified_result, surface, selection_state, *, 
                                       "ruleLabels": ["unknown is not zero", "prepared is not applied", "published only when verified"],
                                       **({"layout": layout_hint(handoff)} if layout_hint(handoff) else {})},
                   "fallback_text": str(result.get("answerText") or "")[:12000]}
+    brief = _tool_brief_for(journeys, handoff, result, scope, flags)
+    if brief:
+        # EGRESS (J10 only, RAFII_GENUI_TOOLS_ENABLED only): the person's own request text, bounded, so the presenter can build
+        # the tool they described. It reaches only the provider the parent turn already sent that same text to (egress_decision
+        # above, re-checked by ui_presenter.build_plan), and only for a turn that read no workspace data, so it can carry no
+        # workspace record. Every other journey keeps D-A17: the presenter never sees request or answer text.
+        projection["allowed_context"]["toolBrief"] = brief
     manifest = ui_capabilities.build_manifest(cur, auth, projection, scope=scope, flags=flags)
     projection.update({"manifest_id": manifest["manifestId"], "manifest": manifest,
                        "data_bindings": [{"name": q["name"], "description": q["description"], "argsSchema": q["argsSchema"], "refreshMinSeconds": q["refreshMinSeconds"],
@@ -374,9 +422,29 @@ def layout_hint(handoff) -> dict | None:
     return {"form": plan["form"], **{k: [v for v in (given.get(k) or []) if v in table[k]][:6] for k in ("local", "reads", "actions")}}
 
 
-def presenter_view(projection: dict) -> dict:
-    """Exactly what B may put in a presenter prompt: no fallback text, no server-only manifest metadata."""
-    return {"journeyIds": list(projection.get("journey_ids") or []), "componentGroups": list(projection.get("component_group_ids") or []),
-            "dataBindings": list(projection.get("data_bindings") or []), "actionBindings": list(projection.get("action_bindings") or []),
-            "context": {k: v for k, v in (projection.get("allowed_context") or {}).items() if k in ("refs", "counts", "toolStates", "language", "surface",
-                                                                                                  "suggestedInputs", "selection", "ruleLabels", "layout")}}
+def _tool_brief_for(journeys, handoff, result, scope, flags) -> str:
+    """The J10 brief when every gate holds: tools flag on, workspace scope, the view is J10 alone, the turn read no workspace
+    data, and the turn's own handoff recorded the brief (service.ui_handoff, active planner, form "tool"). Else ""."""
+    if not (flags or {}).get("tools") or scope != "workspace" or journeys != list(ui_contracts.TOOL_JOURNEYS):
+        return ""
+    if not reads_no_workspace_data(result) or not isinstance(handoff, dict):
+        return ""
+    return tool_brief(handoff.get("toolBrief"))
+
+
+def presenter_view(projection: dict, *, tools_enabled: bool = False) -> dict:
+    """Exactly what B may put in a presenter prompt: no fallback text, no server-only manifest metadata. `toolBrief` (the
+    person's request, J10 only) passes only when the caller says the tools flag is on, the view is J10 alone and it has no
+    data or action bindings; otherwise it is dropped (fail closed)."""
+    journeys = list(projection.get("journey_ids") or [])
+    data, actions = list(projection.get("data_bindings") or []), list(projection.get("action_bindings") or [])
+    keys = ("refs", "counts", "toolStates", "language", "surface", "suggestedInputs", "selection", "ruleLabels", "layout")
+    if tools_enabled and journeys == list(ui_contracts.TOOL_JOURNEYS) and not data and not actions:
+        keys += ("toolBrief",)
+    context = {k: v for k, v in (projection.get("allowed_context") or {}).items() if k in keys}
+    if "toolBrief" in context:
+        context["toolBrief"] = tool_brief(context["toolBrief"])
+        if not context["toolBrief"]:
+            context.pop("toolBrief")
+    return {"journeyIds": journeys, "componentGroups": list(projection.get("component_group_ids") or []),
+            "dataBindings": data, "actionBindings": actions, "context": context}

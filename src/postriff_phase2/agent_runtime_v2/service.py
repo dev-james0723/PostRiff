@@ -1529,6 +1529,7 @@ def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="work
     flags = cfg.genui_for(workspace_id, founder=scope == "founder")
     if not flags.get("enabled"):
         return {**_NOT_ELIGIBLE, "reason": "disabled"}
+    flags = {**flags, "tools": cfg.genui_tools_for(workspace_id, founder=scope == "founder")}
     try:
         from . import ui_projection
         decided = ui_projection.eligibility(result, request_text, modality, flags=flags, scope=scope)
@@ -1552,6 +1553,16 @@ def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="work
         return handoff
     if mode == "active":
         handoff = {**handoff, "eligible": bool(planned["eligible"]), "reason": str(planned["reason"])[:64], "journeyIds": list(planned["journeyIds"])[:9]}
+        if planned.get("form") == "tool" and handoff["eligible"] and flags.get("tools"):
+            # J10 interactive tool (RAFII_GENUI_TOOLS_ENABLED, active planner, turn read no workspace data): keep the person's own
+            # request, bounded, as the tool's brief. It stays on this run's result (the asker's own words) and reaches the
+            # presenter only through ui_projection's J10 gates, on the provider this turn already used.
+            from . import ui_projection
+            brief = ui_projection.tool_brief(request_text)
+            if brief:
+                handoff["toolBrief"] = brief
+            else:
+                handoff = {**handoff, "eligible": False, "reason": "plain_answer", "journeyIds": []}
     return {**handoff, "plan": planned}
 
 

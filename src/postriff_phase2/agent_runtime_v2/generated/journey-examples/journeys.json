@@ -662,6 +662,67 @@
     "partial",
     "failure"
    ]
+  },
+  "J10": {
+   "title": "Interactive tool",
+   "library": "consumer",
+   "groups": [],
+   "components": [],
+   "bindings": [],
+   "actions": [],
+   "examples": [
+    {
+     "file": "J10-bill-splitter.openui",
+     "request": "Build an interactive calculator for splitting a restaurant bill"
+    },
+    {
+     "file": "J10-unit-converter.openui",
+     "request": "幫我整個單位換算器（公里、英里、公斤、磅、攝氏、華氏）"
+    },
+    {
+     "file": "J10-savings-what-if.openui",
+     "request": "Make me a savings what-if tool: monthly amount, years and a return rate"
+    }
+   ],
+   "editCase": {
+    "id": "J10-add-tip-per-person",
+    "instruction": "Also show the tip each person pays",
+    "base": "J10-bill-splitter.openui",
+    "patch": "edits/J10-add-tip-per-person.patch.openui",
+    "preserves": [
+     "$bill",
+     "$tip",
+     "$people",
+     "$roundUp",
+     "inputs",
+     "bill",
+     "tip",
+     "people",
+     "roundUp",
+     "results",
+     "total",
+     "each",
+     "note"
+    ],
+    "removes": [],
+    "addsBindings": [],
+    "changes": [
+     "root"
+    ]
+   },
+   "truth": [
+    "A tool reads no workspace data: no Query, no @Run and no action id (the server's localOnly policy refuses them).",
+    "Numbers and labels the person supplied for their own tool may be literals; workspace facts never appear.",
+    "Every result is computed in the view from its inputs; nothing is saved, sent or charged when an input moves.",
+    "A value that cannot be computed shows a dash, never NaN or a made-up number."
+   ],
+   "scenarios": [
+    "normal",
+    "empty",
+    "denied",
+    "partial",
+    "failure"
+   ]
   }
  },
  "composite": {
@@ -737,6 +798,10 @@
   {
    "patch": "edits/J09-cost-by-model.patch.openui",
    "base": "J09-founder-overview.openui"
+  },
+  {
+   "patch": "edits/J10-add-tip-per-person.patch.openui",
+   "base": "J10-bill-splitter.openui"
   }
  ]
 }

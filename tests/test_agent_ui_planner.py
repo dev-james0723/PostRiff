@@ -151,6 +151,98 @@ class PlannerReviewRegressions(unittest.TestCase):
         self.assertNotEqual(plan_case(case)["form"], "comparison")
 
 
+class PlannerToolForm(unittest.TestCase):
+    """J10 interactive tools: the only upgrade that needs no data read, behind RAFII_GENUI_TOOLS_ENABLED (flags["tools"])."""
+    TOOLS = {**ON, "tools": True}
+    ASKS = ("Build an interactive calculator for splitting a restaurant bill",
+            "Can you make me a tip calculator?",
+            "Create a unit converter for kilometres and miles",
+            "make a loan estimator with an interest rate slider",
+            "Build me a quick tool to compare two pricing options",
+            "I need a countdown planner for my album launch",
+            "Make a 5-question quiz about music theory",
+            "整個計算機幫我計下每人要俾幾多",
+            "幫我做個互動工具計算分帳",
+            "做个计算器，算一下每个月要存多少",
+            "帮我做一个单位换算器")
+    PLAIN = ("What does engagement rate mean?", "How do I use the calculator on my phone?", "Which tool should I use to plan posts?",
+             "Is a calculator better than a spreadsheet?", "計算機點樣用？", "做咩工具最好？", "Tell me about my week")
+
+    def test_tool_requests_without_data_reads_become_a_j10_tool(self):
+        for text in self.ASKS:
+            for tools in ([], [["ui_guide", "verified"]], [["help_search", "verified"]]):
+                with self.subTest(text=text, tools=tools):
+                    plan = plan_case({"text": text, "tools": tools}, flags=self.TOOLS)
+                    self.assertEqual((plan["eligible"], plan["form"], plan["reason"], plan["journeyIds"]), (True, "tool", "tool", ["J10"]))
+                    self.assertEqual(plan["interactions"]["reads"], [])
+                    self.assertEqual(plan["interactions"]["actions"], [])
+                    self.assertFalse(plan["disclosure"]["asOfRequired"])
+
+    def test_plain_questions_stay_text(self):
+        for text in self.PLAIN:
+            with self.subTest(text=text):
+                plan = plan_case({"text": text}, flags=self.TOOLS)
+                self.assertEqual((plan["eligible"], plan["form"]), (False, "text"))
+                self.assertNotIn("J10", plan["journeyIds"])
+
+    def test_any_workspace_read_rules_out_a_tool(self):
+        text = "Build an interactive calculator for splitting a restaurant bill"
+        for tools in ([["calendar_range", "verified"]], [["publishing_summary", "unverified"]], [["draft_get", "failed"]],
+                      [["web_research", "verified"]], [["ui_guide", "verified"], ["memory_context", "verified"]], [["weather_now", "verified"]]):
+            with self.subTest(tools=tools):
+                plan = plan_case({"text": text, "tools": tools}, flags=self.TOOLS)
+                self.assertNotEqual(plan["form"], "tool")
+                self.assertNotIn("J10", plan["journeyIds"])
+        for extra in ({"refs": [["draft", "d1"]]}, {"approvals": ["schedule_draft"]}):
+            plan = plan_case({"text": text, **extra}, flags=self.TOOLS)
+            self.assertNotIn("J10", plan["journeyIds"], extra)
+
+    def test_tools_need_their_flag_text_modality_and_workspace_scope(self):
+        text = "Build an interactive calculator for splitting a restaurant bill"
+        self.assertEqual(plan_case({"text": text})["form"], "text", "flag off (default): plain text, production unchanged")
+        self.assertFalse(plan_case({"text": text}, flags={**self.TOOLS, "enabled": False})["eligible"])
+        for modality in ("voice", "image"):
+            self.assertFalse(plan_case({"text": text, "modality": modality}, flags=self.TOOLS)["eligible"], modality)
+        self.assertNotEqual(plan_case({"text": text, "scope": "founder", "founder": True}, flags=self.TOOLS)["form"], "tool")
+        for veto in ({"composed": "site_agent"}, {"billing": "free"}, {"youtube": True}):
+            self.assertFalse(plan_case({"text": text, **veto}, flags=self.TOOLS)["eligible"], veto)
+        self.assertFalse(plan_case({"text": "Just tell me, no widgets: build a tip calculator"}, flags=self.TOOLS)["eligible"])
+
+    def test_tool_plan_carries_no_request_text(self):
+        plan = plan_case({"text": "Build a tip calculator for my Falcon launch dinner"}, flags=self.TOOLS)
+        self.assertEqual(plan["form"], "tool")
+        self.assertNotIn("Falcon", json.dumps(plan))
+
+    def test_wiring_records_a_bounded_brief_only_when_active_and_flagged(self):
+        env = {"RAFII_GENUI_ENABLED": "1", "RAFII_AGENT_V2_ENABLED": "1", "RAFII_GENUI_PLANNER_ENABLED": "1", "RAFII_GENUI_PLANNER_ACTIVE": "1",
+               "RAFII_GENUI_PLANNER_WORKSPACES": WS}
+        text = "Build an interactive calculator for splitting a restaurant bill\x00 " + "x" * 900
+        case = {"text": text}
+        off = service.ui_handoff(config.RuntimeConfig.from_environment(env), WS, turn(case), text, "text")
+        self.assertEqual((off["eligible"], off["plan"]["form"]), (False, "text"))
+        self.assertNotIn("toolBrief", off)
+        cfg = config.RuntimeConfig.from_environment({**env, "RAFII_GENUI_TOOLS_ENABLED": "1"})
+        self.assertNotIn("RAFII_GENUI_TOOLS_ENABLED", cfg.public()["flags"])
+        self.assertFalse(cfg.genui_tools_for(WS, founder=True))
+        self.assertNotIn("tools", cfg.genui_for(WS), "the public status shape (genui_for) is unchanged")
+        on = service.ui_handoff(cfg, WS, turn(case), text, "text")
+        self.assertEqual((on["eligible"], on["reason"], on["journeyIds"], on["plan"]["form"]), (True, "tool", ["J10"], "tool"))
+        self.assertEqual(len(on["toolBrief"]), ui_projection.TOOL_BRIEF_CHARS)
+        self.assertTrue(on["toolBrief"].startswith("Build an interactive calculator"))
+        self.assertNotIn("\x00", on["toolBrief"])
+        shadow = service.ui_handoff(config.RuntimeConfig.from_environment({**env, "RAFII_GENUI_TOOLS_ENABLED": "1", "RAFII_GENUI_PLANNER_ACTIVE": ""}),
+                                    WS, turn(case), text, "text")
+        self.assertEqual((shadow["eligible"], shadow["plan"]["form"]), (False, "tool"))
+        self.assertNotIn("toolBrief", shadow, "shadow mode records the plan only")
+        other = service.ui_handoff(cfg, OTHER, turn(case), text, "text")
+        self.assertNotIn("toolBrief", other, "unlisted workspace: planner off")
+        self.assertFalse(other["eligible"])
+
+    def test_verify_line_accepts_the_tool_form(self):
+        from postriff_phase2 import agent_observability as obs
+        self.assertEqual(obs.clean({"uiPlan": "active:tool:upgrade"})[0], {"uiPlan": "active:tool:upgrade"})
+
+
 class PlannerCorpus(unittest.TestCase):
     def test_every_labelled_case(self):
         failures = []
