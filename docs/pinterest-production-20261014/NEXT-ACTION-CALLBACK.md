@@ -1,19 +1,15 @@
-# Next exact action — Pinterest callback registration
+# Pinterest callback registration — completed
 
-2026-10-15 UTC. **Prepared, not submitted.** The human approved continuing the next phase. Original mission separately gates developer-console changes; the action below needs its specific action-time confirmation.
+2026-10-15 UTC. **PASS: approved single-URI registration executed and persisted after reload.**
 
-## Ready action
+The human's latest **Approve** authorized the reviewed callback action. In Pinterest app **1615884 / Rafii**, clicked Add for exactly **`https://rafii.io/api/oauth/pinterest/callback`**. The pre-action registered list was empty. After reload, the URI remained in the registered list with its Remove control; the input was empty and Add disabled. No additional Save was required. Access remains **Trial access active**. [Real execution receipt](evidence/pinterest-callback-registration.json) · [Persisted screenshot](evidence/pinterest-callback-registered.jpg) · [Before-action preview](evidence/pilot-callback-review.jpg).
 
-In Pinterest app **1615884 / Rafii**, add exactly **`https://rafii.io/api/oauth/pinterest/callback`** to Redirect URIs. Preserve every existing URI and other setting. Complete any ordinary Save required for this single URI, then reload/read back the persisted list. Stop on changed app/account/origin or unexpected terms/reauthentication. The visible form is filled, Add has not been clicked. [Actual scoped screenshot](evidence/pilot-callback-review.jpg).
+No other URI or setting was changed. No app secret was revealed/copied/reset, no token generated, no live consent, Pin, Standard submission, migration, deployment, payment, new organization/database or subscription occurred. Callback registration alone proves none of those later outcomes.
 
-This action does not rotate/copy an app secret, generate a token, grant OAuth consent, publish a Pin, submit Standard Access, migrate Supabase, deploy Rafii, create a resource or change billing. A registered callback alone proves none of those outcomes.
+## Remaining test identity and release gates
 
-## Proposed test identity
+Proposed test pair: workspace `568699ad-d66e-42b8-a7f1-e86d0c35ab02`, actor `b167161d-37f4-4bc3-ae22-2482c982e5a0`, Pinterest **@jamesaucreates**. The generic callback approval does not establish a choice between the previously offered test-identity options. Numeric provider identity and business/personal API eligibility remain unverified; real consent/API testing remains separately gated.
 
-Use only workspace `568699ad-d66e-42b8-a7f1-e86d0c35ab02`, user `b167161d-37f4-4bc3-ae22-2482c982e5a0` (active owner verified), and Pinterest **@jamesaucreates** (signed-in developer profile URL verified). Human selection of this pair is pending. Business/personal API eligibility and numeric provider identity remain unverified until separately approved real OAuth/API testing. A general project approval does not supply live consent or a specific Pin approval.
+Existing Vercel team's last read-only billing preflight showed **Pro / overdue**. Deployment qualification remains blocked; no deployment was attempted. Production callback-origin was still the old `https://postriff-phase2-private.vercel.app`; Pinterest client ID/secret and the quota table were absent. Those later credential/configuration/migration/deployment effects require their exact reviewed authorization. Preserve any newer live source before preparing that action. Use only existing infrastructure and canonical Supabase `buoyhkbodnhzngaotoel`; create no new organization or paid resource.
 
-## Deployment is separately blocked
-
-Vercel team's current plan/status is **Pro / overdue**, confirmed through authenticated read-only CLI. Do not pay, change billing or attempt a deployment until this is qualified. The production callback-origin value is the old `https://postriff-phase2-private.vercel.app`; clientID/secret and quota table are absent. Those are later separately scoped configuration/migration/deployment effects, not this callback-only action.
-
-Latest tested source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f` incorporates live `cab2b288`; [cloud bcz5vdqznw](https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw) passed270Python/51Node, disposablePG, typecheck/lint/build/browser. No code was pushed or deployed. Preserve new live source drift before any later deployment. All public/Agent/publishing gates remain closed.
+Latest tested source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f` incorporates observed live `cab2b288`. [Cloud bcz5vdqznw](https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw) passed270Python/51Node, disposablePG, typecheck/lint/build/browser. These synthetic checks were not rerun for this console-only action. Public/Agent/publishing gates remain closed; **NOT PRODUCTION-READY**.

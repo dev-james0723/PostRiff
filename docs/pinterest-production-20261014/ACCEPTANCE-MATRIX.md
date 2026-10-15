@@ -4,6 +4,7 @@ Updated2026-10-15 UTC, latest source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f`.
 
 | Required acceptance | Status | Evidence / remaining requirement |
 |---|---|---|
+| OAuth callback console registration | PASS | Approved app1615884 URI saved and verified after reload,2026-10-15. [Receipt](evidence/pinterest-callback-registration.json) · [Screenshot](evidence/pinterest-callback-registered.jpg). Runtime OAuth remains NOT RUN. |
 | Public OAuth onboarding | NOT RUN | Needs exact authorized real account, consent and eligible-customer acceptance. Synthetic Authorization Code/state tests passed2026-10-15. |
 | Identity and boards | NOT RUN | No real provider read-back. Synthetic pagination, account ID and username binding passed. |
 | Token refresh | NOT RUN | No live refresh cycle. DisposablePG12 concurrent callers→1 mock refresh passed2026-10-15. |
@@ -15,7 +16,7 @@ Updated2026-10-15 UTC, latest source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f`.
 | Duplicate prevention | PASS | Synthetic concurrency, lease/final-authority checks, durable known ID and no lost-response resubmit; cloud2026-10-15. Real provider duplicate behavior unobserved. |
 | Account disconnection | NOT RUN | Real consent removal/provider access stop unobserved. DisposablePG ciphertext removal, stopped token access, pending/claimed callback cancellation and fresh reconnect PASS2026-10-15; no remote revocation claimed. |
 | AI Agent authorized end-to-end | NOT RUN | Optional read-only tool registration/tenant/current-intent tests PASS; provider-data/publication gates closed. |
-| Standard Access | NOT RUN | App1615884 last console observation: Trial access active2026-10-14. No submission or official Standard approval. |
+| Standard Access | NOT RUN | App1615884 last console observation: Trial access active2026-10-15, after approved callback reload/read-back. No submission or official Standard approval. |
 | Production release/canary | NOT RUN | No production DB/config/credentials/deployment/enablement or approved canary. |
 | Public availability | NOT RUN | New eligible customer's production journey not demonstrated. |
 | Synthetic concurrent scale | PASS | 1000 simultaneous arrivals/64 workers;4620.41 users/s; p50/p95/p99 96.10/180.68/186.30ms;0 unexpected/duplicate POST,20 expected uncertain responses,0 real provider calls. In-process harness only,2026-10-15. |
