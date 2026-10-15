@@ -30,10 +30,14 @@ export async function loadWorkspaceBootstrap() {
     }
     // Forward only existing deployment access to the pinned Preview origin.
     // Never persist it or expose it in the serialized bootstrap result.
-    const access = process.env.VERCEL_ENV === 'preview' ? {
+    const preview = process.env.VERCEL_ENV === 'preview' ? {
       cookie: jar.get('_vercel_jwt') ? `_vercel_jwt=${jar.get('_vercel_jwt')!.value}` : undefined,
       bypass: incoming?.get('x-vercel-protection-bypass') ?? undefined
-    } : undefined;
+    } : {};
+    // The visitor's own User-Agent: this prefetch is often a session's first API call, and the API records the
+    // browser label then. Without it the session shows as "Unrecognized browser".
+    const userAgent = (await headers()).get('user-agent') ?? undefined;
+    const access = { ...preview, userAgent };
     return await fetchWorkspaceBootstrap(origin, token, mode, jar.get('postriff_workspace')?.value, fetch, access);
   } catch { return null; }
 }

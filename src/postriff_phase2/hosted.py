@@ -98,6 +98,28 @@ def audit(cur, workspace_id, actor, kind, subject="", meta=None):
     cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,%s,%s,%s,%s::jsonb)", (workspace_id, actor, kind, subject[:200], json.dumps(meta or {})))
 
 
+def observe_session(cur, principal, session_id, client_label=""):
+    """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
+    first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
+    even by this same new session, governs later sign-ins only and cannot cancel this one's notice. The one code path
+    for the session routes (HostedWorkspaceService._observe_session) and the token verifier (hosted_app)."""
+    if not session_id:
+        return False, False
+    # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
+    cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
+    row = cur.fetchone()
+    fresh = bool(row and row[0])
+    alert = False
+    if fresh and account_protection.observing():
+        # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
+        # history never depends on the email setting; the setting is only read to record whether to notify.
+        cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+        setting = cur.fetchone()
+        alert = bool(setting and setting[0])
+        audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+    return fresh, alert
+
+
 class PostgresWorkspaceRepository:
     def __init__(self, connection_factory, verify_session, commands=None, clock=time.time):
         self.connection_factory = connection_factory
@@ -734,24 +756,8 @@ class HostedWorkspaceService:
         return self._observe_session(cur, principal, session_id, client_label)[0]
 
     def _observe_session(self, cur, principal, session_id, client_label=""):
-        """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
-        first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
-        even by this same new session, governs later sign-ins only and cannot cancel this one's notice."""
-        if not session_id:
-            return False, False
-        # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
-        cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
-        row = cur.fetchone()
-        fresh = bool(row and row[0])
-        alert = False
-        if fresh and account_protection.observing():
-            # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
-            # history never depends on the email setting; the setting is only read to record whether to notify.
-            cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
-            setting = cur.fetchone()
-            alert = bool(setting and setting[0])
-            audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
-        return fresh, alert
+        """(first sighting?, alert eligible?) for this session; see observe_session."""
+        return observe_session(cur, principal, session_id, client_label)
 
     def _alert_new_device(self, principal, session_id, client_label, eligible=None):
         """After a session's first sighting: one email, only if the person turned the alert on. The
@@ -1348,6 +1354,19 @@ class HostedWorkspaceService:
                 raise AlphaError("This private media object is unavailable.", 404)
             return self.assets.storage.get(workspace_id, "media", poster["objectName"]), "image/jpeg"
         return self.assets.storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime", "application/octet-stream")
+
+    def export_drafts(self, workspace_id, token, variant_ids):
+        """Copy/export fidelity (spec §12): exact text, native fields in order, Unicode and attribution per chosen draft,
+        plus a manifest with sha256 per file. Private production notes never leave; `published` is always False."""
+        from .creation_capabilities import export_package
+        if not isinstance(variant_ids, list) or not variant_ids or len(variant_ids) > 50 or not all(isinstance(v, str) for v in variant_ids):
+            raise AlphaError("Choose 1–50 drafts to export.", 400, code="export_selection")
+        state = self.get(workspace_id, token)["state"]
+        by_id = {v.get("id"): v for v in state.get("variants") or [] if isinstance(v, dict)}
+        missing = [v for v in variant_ids if v not in by_id]
+        if missing:
+            raise AlphaError("Some drafts aren't in this workspace.", 404, code="not_found")
+        return export_package([by_id[v] for v in dict.fromkeys(variant_ids)], created_at=self.clock())
 
     def export(self, workspace_id, token):
         from .learning_service import export_files

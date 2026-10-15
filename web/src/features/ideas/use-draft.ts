@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { DRAFT_PLATFORMS, type DraftPlatform } from '@/features/agent/composer';
+import { type DraftPlatform } from '@/features/agent/composer';
+import { draftableFrom } from '@/lib/creation/capabilities';
 import { useModelChoice } from '@/features/agent/use-model';
 import { keys, useModels, useSnapshot } from '@/lib/api/hooks';
 import type { Run } from '@/lib/api/types';
@@ -30,8 +31,8 @@ export function useDraftHandoff() {
 
   const platforms = useMemo(() => {
     const connected = (snapshot.data?.state.phase2?.channels ?? []).map((c) => c.platform);
-    return DRAFT_PLATFORMS.filter((p) => connected.includes(p)) as DraftPlatform[];
-  }, [snapshot.data]);
+    return draftableFrom(models.data?.creation).filter((p) => connected.includes(p)) as DraftPlatform[];
+  }, [snapshot.data, models.data?.creation]);
 
   // The model list failing to load leaves the choice to the server's default route. Ideas never sends a reasoning level,
   // and on Auto no model either (only a pinned writer is named), so the server resolves the workspace default.
