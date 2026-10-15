@@ -228,6 +228,71 @@ def refresh(cur, workspace_id, state, now, notifications=None, *, trend_report=N
     return {"posts": len(rows), "hypotheses": len(found), "created": created, "updated": updated, "superseded": superseded, "expired": expired}
 
 
+STALE_SECONDS = 7 * 86400
+
+
+def variant_evidence(cur, workspace_id, state, now):
+    """Content Skills Integration P2 (spec §15): results joined to the draft that produced them.
+
+    A row exists only where the application verified the post and the observation's provider post id, connection and
+    platform match the job that published it (`insights.summary` enforces the binding) and that job names a draft in
+    this workspace. Each row keeps the draft's native format and skill route, and each metric keeps its provider,
+    definition version, read window and availability. Missing, stale and unsupported metrics stay distinct from zero;
+    rows are never summed across providers and paid promotion is unknown unless the provider says otherwise."""
+    jobs = (state.get("phase2") or {}).get("jobs") or []
+    summary = insights.summary(cur, workspace_id, jobs, now, basis=None)
+    by_job = {j.get("id"): j for j in jobs if j.get("providerReference")}
+    variants = {v.get("id"): v for v in state.get("variants") or [] if isinstance(v, dict)}
+    rows, unlinked = [], 0
+    for post in summary["posts"]:
+        job = by_job.get(post["jobId"])
+        if job is None or post["publishedState"] != "verified":
+            continue
+        variant = variants.get((job.get("manifest") or {}).get("variantId"))
+        if variant is None:
+            unlinked += 1
+            continue
+        native = variant.get("native") or {}
+        observed = post["freshness"].get("observedAt")
+        metrics = {}
+        for name, read in post["metrics"].items():
+            state_ = "available" if read.get("value") is not None else "unavailable"
+            seen = read.get("observedAt") if read.get("observedAt") is not None else observed   # each metric's own read time
+            if state_ == "available" and seen is not None and now - seen > STALE_SECONDS:
+                state_ = "stale"
+            metrics[name] = {"value": read.get("value"), "state": state_, "definitionVersion": read.get("definitionVersion"),
+                             "window": read.get("readOffset"), "observedAt": seen, "provider": post["provider"]}
+        expected = PRIMARY.get(post["provider"])
+        if expected and expected not in metrics:
+            metrics[expected] = {"value": None, "state": "not_reported", "definitionVersion": None, "window": None, "provider": post["provider"]}
+        available = [m for m in metrics.values() if m["state"] == "available"]
+        rows.append({
+            "variantId": variant["id"], "jobId": job.get("id"), "postId": post["providerPostId"], "provider": post["provider"],
+            "platform": post.get("platform"), "account": post.get("connectionId"), "language": post.get("language"),
+            "formatId": native.get("formatId") or variant.get("format"), "skillRoute": {k: (native.get("skillRoute") or {}).get(k) for k in ("qualified", "missing")} if native.get("skillRoute") else None,
+            "metrics": metrics, "rates": post.get("rates"), "observedAt": observed,
+            "coverage": {"available": len(available), "reported": len(metrics)},
+            "distribution": {"published": "organic", "paidPromotion": "unknown"},
+        })
+    return {"variants": rows, "unlinkedVerifiedPosts": unlinked,
+            "rules": {"join": "verified post → its publishing job → the draft it named; observations must match the job's post id, account and platform",
+                      "missing": "unavailable, stale or not reported; never 0", "crossPlatform": "never summed or compared across providers",
+                      "causal": False, "paid": "unknown unless the provider reports it"}}
+
+
+def learning_summary(state, hypotheses):
+    """Three kinds kept apart (spec §15): what the person prefers (voice/brand notes and learned edits), what was
+    observed (verified results), and what may work (hypotheses: non-causal, sample-sized, reviewable)."""
+    from . import overlays
+    items = overlays.all_items(state)
+    return {
+        "preferences": [{k: i.get(k) for k in ("id", "memoryType", "statement", "origin", "status", "scope")} for i in items],
+        "hypotheses": [{k: h.get(k) for k in ("id", "platform", "dimension", "statement", "status", "samples", "dateRange", "confidence", "causal")} for h in hypotheses],
+        "labels": {"preferences": "Your preferences (you can edit or turn them off)", "observations": "What happened on verified posts",
+                   "hypotheses": "Patterns that may work for this account; not proven causes"},
+    }
+
+
 def view(cur, workspace_id, state, now, *, trend_report=None):
     from . import flags
     rows = observations(cur, workspace_id, state, now, basis=None)   # counts only; hypotheses were compared like-for-like
@@ -256,5 +321,6 @@ def view(cur, workspace_id, state, now, *, trend_report=None):
                 h['planningAccepted'] = h['canAcceptPlanning'] and h['planningAccepted'] and (h['experiment'] or {}).get('supportDigest') == current[h['id']]
     measured = [r for r in rows if r["value"] is not None]
     return {"posts": len(rows), "measured": len(measured), "unavailable": len(rows) - len(measured), "hypotheses": items,
+            "contentSkills": variant_evidence(cur, workspace_id, state, now), "learning": learning_summary(state, items),
             "rules": {"minimumPerGroup": MIN_ARM, "minimumDifference": f"{int(MIN_RELATIVE * 100)}%", "causal": False,
                       "note": "Only verified posts count. Unavailable metrics are never treated as zero. One strong post never becomes a rule."}}

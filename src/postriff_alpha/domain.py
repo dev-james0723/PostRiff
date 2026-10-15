@@ -395,6 +395,12 @@ class Store:
             v.update({k: candidate[k] for k in ("text", "openings", "sourceIds", "warnings", "unknowns", "voiceRevision", "briefRevision", "runId")})
             # Post media and the per-message content type chosen when it was written (chat-context SPEC §5.10).
             v.update({k: candidate[k] for k in ("media", "contentTypeId", "contentTypeVersion", "formatId") if k in candidate})
+            # Native drafts (creation projection): the replacement's slides, titles and scripts replace the old ones.
+            for key in ("format", "native", "nativeFields"):
+                if key in candidate:
+                    v[key] = candidate[key]
+                else:
+                    v.pop(key, None) if key != "format" else None
             v.update({"revision": revision, "customized": False, "needsReview": False, "blockedByRetraction": False, "proposedUpdate": None, "selectedOpening": 0})
             v.pop("sourceReviewRequired", None)
             v.pop("rejected", None)

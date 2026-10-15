@@ -172,6 +172,12 @@ def _delete(service, workspace_id, principal):
         if cur.fetchone()[0]:
             cur.execute('SELECT public.pr_erase_session_history(%s)', (principal,))
         cur.execute('DELETE FROM public.pr_experiment_assignments WHERE subject_key IN (%s, %s)', (str(principal), str(workspace_id)))
+        # RAPv2 device registry (migration 120): devices, session security state and the append-only login ledger.
+        # The purge function refuses without the tombstone written above; before 120 is applied there is nothing.
+        cur.execute("SELECT to_regprocedure('public.pr_security_purge(uuid)') IS NOT NULL")
+        purge = cur.fetchone()
+        if purge and purge[0] is True:
+            cur.execute('SELECT public.pr_security_purge(%s)', (principal,))
         cur.execute('DELETE FROM public.pr_profiles WHERE user_id=%s', (principal,))
         cur.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace_id,))
     # A failed identity call cannot undo deleted data. Keep the pending receipt for operator recovery.

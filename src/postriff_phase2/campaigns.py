@@ -25,7 +25,7 @@ from typing import Any
 from postriff_alpha.domain import AlphaError, clean, uid
 from . import asset_kinds, content_types, lifecycle, locales, source_policy
 from . import workflow as workflows
-from .agent_runtime import PLATFORMS
+from .agent_runtime import draftable_platforms
 from .contracts import digest
 
 DAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
@@ -352,7 +352,7 @@ def normalize_destinations(state: dict, value: Any) -> list[dict]:
     channels = {c.get("id"): c for c in (state.get("phase2") or {}).get("channels", []) if isinstance(c, dict)}
     out, seen = [], set()
     for item in value:
-        if not isinstance(item, dict) or item.get("platform") not in PLATFORMS:
+        if not isinstance(item, dict) or item.get("platform") not in draftable_platforms():
             raise AlphaError("Choose channels Rafii can draft for.")
         tag = locales.canonical(item.get("language"))
         if tag is None:
@@ -1030,9 +1030,9 @@ def _recurring_destination(state: dict, payload: dict) -> dict:
     raw = payload.get("destination")
     if raw is None:
         return {"platform": "LinkedIn", "language": payload.get("language", "en")}  # the earlier fixed default
-    from .agent_runtime import PLATFORMS
+    from .agent_runtime import draftable_platforms
     from . import locales
-    if not isinstance(raw, dict) or raw.get("platform") not in PLATFORMS:
+    if not isinstance(raw, dict) or raw.get("platform") not in draftable_platforms():
         raise AlphaError("Choose a platform recurring drafts can be written for.", 400)
     language = locales.canonical(raw.get("language"))
     if not language:

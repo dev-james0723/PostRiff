@@ -181,3 +181,6 @@ end $$;
 do $$ begin
  execute format('alter database %I set request.jwt.claim.session_id = %L', current_database(), 'harness-session-000000000001');
 end $$;
+
+-- RAPv2 P1: device registry (server-only, append-only login events).
+\ir ../../migrations/postriff/120_rapv2_device_registry.sql
