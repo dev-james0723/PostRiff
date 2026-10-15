@@ -94,6 +94,14 @@ def current():
     return _REQUEST.get()
 
 
+def presented_hashes(principal):
+    """The keyed hashes of the cookie this request presents, under every configured key; [] without one. Lets a
+    decision depend on the browser making *this* request, never only on the browser a session was first linked to."""
+    request = current()
+    raw = request.presented() if request is not None else None
+    return [token_hash(secret, principal, raw) for _, secret in keys()] if raw else []
+
+
 def seen_marker():
     """Part of the verifier's per-process seen key: a session first observed without a usable device (an SSR prefetch)
     is observed once more when its browser shows up, so the session is linked to that browser."""
