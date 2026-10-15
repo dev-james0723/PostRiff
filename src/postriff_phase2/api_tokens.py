@@ -126,6 +126,9 @@ class ApiTokens:
         from .operator_actions import account_blocked, blocked_error
         if account_blocked(cur, user_id=row[2], workspace_id=row[1]):
             raise blocked_error()
+        # RAPv2 security hold on the token's creator (RAFII_SECURITY_INCIDENT_HOLD); fails closed, no-op when off.
+        from . import security_holds
+        security_holds.assert_clear(cur, row[2])
         return {"tokenId": row[0], "workspaceId": row[1], "createdBy": row[2], "scopes": row[3], "membership": Membership.from_row(*row[4:9])}
 
     def resolve(self, raw, workspace_id=None):
