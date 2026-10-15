@@ -2,13 +2,11 @@
 
 **Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** No replacement production project, database access or release is authorized.
 
-## Next authorization
+## Existing-production pilot boundary (supersedes new staging)
 
-The unchanged [Step A proposal](/Users/ouxianxing/Documents/Codex/2026-10-14/continue-rafii-pinterest-trial-integration-from/outputs/04-APPROVAL-PROPOSAL.md) governs the immediate gate. It proposes the new `rafii-pinterest-trial-staging` Vercel project, Preview target and exact proposed `https://rafii-pinterest-trial-staging.vercel.app` origin. Availability, existing plan/cost, isolated staging DB/auth/key provenance and public callback must qualify before deployment. The origin is not reserved.
+Use only existing canonical Supabase `postriff-phase2-private` / `buoyhkbodnhzngaotoel` and existing Rafii Vercel project. Both new-DB proposals are canceled. The earlier Step A new-staging design is historical, not permission to run a shared-production pilot. [READONLY-PILOT-CANDIDATE](READONLY-PILOT-CANDIDATE.md) defines the exact tenant/operator/account/time-bound read-only lane and proposed configuration/migration/deployment effects. No new subscription or resource is needed.
 
-Review the source revision in FINAL-RECEIPT before approving its use for A. Public flags, POLICY_APPROVED and both Agent/provider-data flags stay off. Keep Sandbox + TRIAL_READONLY: only identity/board GET and token operations. Sections and Pin GET/POST cannot be silently added to that transport allowlist. This public-production engineering candidate contains additional capabilities, but A does not authorize executing them. The new public quota migration is not part of A's unchanged read-only pilot.
-
-Separate later approvals: B callback registration on app 1615884; C exact account/workspace and human OAuth consent; exact real Pin preview plus controlled write boundary; Standard application/video submission; production migration/credentials/deploy/canary; public expansion. No callback, live consent or Pin creation occurred here.
+Keep public/Agent gates closed. Two-scope profile/board consent, Sandbox-only identity/boards/token egress, daily100-call cap and disconnect are the proposed pilot scope. It now requires the reviewed quota table. No sections, Pin, analytics or Agent data action is included. Freeze actual actor/workspace/username/expiry, recheck current live source/schema/callback and obtain the specific external-operation/live-consent approval before executing. Standard and real-public-release acceptance remain separate.
 
 ## Migration and rollback
 
