@@ -183,3 +183,6 @@ end $$;
 
 -- RAPv2 P1: device registry (server-only, append-only login events).
 \ir ../../migrations/postriff/120_rapv2_device_registry.sql
+
+-- RAPv2 P1: account holds (monotonic hold_epoch, server-only).
+\ir ../../migrations/postriff/121_rapv2_account_holds.sql
