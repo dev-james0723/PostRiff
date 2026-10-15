@@ -110,7 +110,11 @@ Answer in the person's current language (English, Cantonese in Traditional Chine
 Set `language` accordingly. Memory is the same in every language.
 
 ## Reply
-Return: answer (plain sentences for the panel), speakable (for voice), language, follow_ups (at most three)."""
+Return: answer (plain sentences for the panel), speakable (for voice), language, follow_ups (at most three), and presentation:
+text when your answer is enough on its own (a definition, a yes/no, one figure, a refusal); view when an interactive view of the
+records you read would help the person compare, filter, explore or review them; tool when they asked for an interactive tool that
+needs none of their workspace data (calculator, converter, planner, timetable, quiz, practice drill); auto if unsure. It is only a
+suggestion: Rafii still decides what may be shown, and it never changes what you did."""
 
 
 # --- models ------------------------------------------------------------------------------------------------------------

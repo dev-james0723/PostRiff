@@ -186,6 +186,8 @@ def compose(ledger: EffectLedger, task=None, *, language: str | None = None, not
 
 def reply_type():
     """The Manager's structured output (pydantic, so the SDK validates it)."""
+    from typing import Literal
+
     from pydantic import BaseModel, Field
 
     class ManagerReply(BaseModel):
@@ -193,6 +195,12 @@ def reply_type():
         speakable: str = Field(description="One to three short spoken sentences for voice: the outcome and the next step. No lists, links or ids.")
         language: str = Field(default="en", description="BCP 47 tag of the language you answered in (en, zh-Hant-HK for Cantonese, zh-Hans or zh-Hant for Mandarin).")
         follow_ups: list[str] = Field(default_factory=list, description="Up to three short follow-up questions the person might ask next.")
+        presentation: Literal["auto", "text", "view", "tool"] = Field(
+            default="auto",
+            description="How this answer is best shown: text = the answer above is enough; view = an interactive view of the records "
+                        "you read would help (compare, filter, explore, review); tool = the person asked for an interactive tool "
+                        "(calculator, converter, planner, timetable, quiz, practice drill) that needs none of their workspace data; "
+                        "auto = no preference. This is a suggestion only; it changes nothing.")
 
     return ManagerReply
 

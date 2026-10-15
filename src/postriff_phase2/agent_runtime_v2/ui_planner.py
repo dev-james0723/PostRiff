@@ -96,6 +96,8 @@ _TOOL_REQUEST = re.compile(
     r"測驗|测验|小測|小测|問答|问答|倒數|倒数|互動工具|互动工具|小工具)",
     re.I)
 
+MODEL_HINTS = frozenset({"text", "view", "tool"})   # ManagerReply.presentation; "auto" (or anything else) means "use the rules"
+
 DIAGNOSIS_TOOLS = {"automation_get": "J08", "automation_explain": "J08", "job_get": "J02"}
 ATTENTION_TOOLS = {"attention_summary": "J02"}
 
@@ -164,21 +166,29 @@ def plan(result, request_text, modality, *, flags, scope="workspace", context=No
     eligible, reason = bool(base.get("eligible")), str(base.get("reason") or "")
     verified = {str(a.get("tool")) for a in _verified(result)}
     view_asked = ui_projection.wants_ui(text) or bool(_VIEW_REQUEST.search(text))
+    # The Manager's own judgement of how its answer is best presented (ManagerReply.presentation, kept only when the reply passed
+    # the truthful-answer guardrail). It replaces keyword guesses, never the envelope: hard vetoes, the person's explicit
+    # wording, verified reads for a data view and the tools flag + no workspace reads for a tool still decide.
+    hint = result.get("presentationHint") if result.get("presentationHint") in MODEL_HINTS else None
 
     if reason in HARD_VETOES or scope not in ("workspace", "founder"):
         eligible = False
     elif _DECLINE_UI.search(text):
         eligible, reason = False, "declined_ui"
-    elif (flags.get("tools") and scope == "workspace" and modality == "text" and asks_for_tool(text)
-          and ui_projection.reads_no_workspace_data(result)):
+    elif (flags.get("tools") and scope == "workspace" and modality == "text"
+          and (hint == "tool" or (hint is None and asks_for_tool(text))) and ui_projection.reads_no_workspace_data(result)):
         # J10: the only upgrade without a data read. The view is local-only (no queries, no actions), so nothing the turn did not
         # read can reach it; the presenter gets the request as its brief only behind the same tools flag (ui_projection.tool_brief).
-        eligible, reason, journeys = True, "tool", list(ui_contracts.TOOL_JOURNEYS)
+        eligible, reason, journeys = True, "model_tool" if hint == "tool" else "tool", list(ui_contracts.TOOL_JOURNEYS)
+    elif hint == "text" and not view_asked:
+        eligible, reason = False, "model_text" if eligible else reason
     elif _COUNT_QUESTION.search(text) and not view_asked and not _BREAKDOWN.search(text):
         eligible, reason = False, "concise_answer" if eligible else reason
     elif not eligible and scope == "workspace" and modality != "voice":
         # Upgrades: only from verified reads, workspace scope, text modality.
-        if _DIAGNOSIS.search(text) and verified & set(DIAGNOSIS_TOOLS):
+        if hint == "view" and verified and journeys:
+            eligible, reason = True, "model_view"
+        elif _DIAGNOSIS.search(text) and verified & set(DIAGNOSIS_TOOLS):
             journey = next(DIAGNOSIS_TOOLS[t] for t in DIAGNOSIS_TOOLS if t in verified)
             eligible, reason, journeys = True, "diagnosis", _with_journey(journeys, journey)
         elif verified & set(ATTENTION_TOOLS) and _ATTENTION.search(text):
@@ -189,7 +199,7 @@ def plan(result, request_text, modality, *, flags, scope="workspace", context=No
             eligible, reason = True, "ui_intent"
     if eligible and not journeys:
         eligible, reason = False, "plain_answer"
-    if reason != "tool" and any(j in ui_contracts.TOOL_JOURNEYS for j in journeys):
+    if reason not in ("tool", "model_tool") and any(j in ui_contracts.TOOL_JOURNEYS for j in journeys):
         journeys = [j for j in journeys if j not in ui_contracts.TOOL_JOURNEYS]   # J10 only ever comes from the tool branch
         if eligible and not journeys:
             eligible, reason = False, "plain_answer"

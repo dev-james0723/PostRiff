@@ -333,6 +333,55 @@ class PlannerWiring(unittest.TestCase):
         self.assertFalse(decided["eligible"])
 
 
+class PlannerModelHint(unittest.TestCase):
+    """The Manager states how its answer is best presented (ManagerReply.presentation -> result.presentationHint). The planner
+    prefers that judgement over keywords, inside the same safety envelope. Phrasings here are the test author's own, not holdout cases."""
+    TOOLS = {**ON, "tools": True}
+
+    def plan_with(self, hint, text, tools=(), *, flags=None, modality="text", scope="workspace", **extra):
+        turn_ = turn({"text": text, "tools": [[t, "verified"] for t in tools], **extra})
+        if hint is not None:
+            turn_["presentationHint"] = hint
+        return ui_planner.plan(turn_, text, modality, flags=flags or self.TOOLS, scope=scope)
+
+    def test_model_tool_hint_builds_a_tool_without_tool_words(self):
+        plan = self.plan_with("tool", "Help me drill French irregular verbs, ten at a time")
+        self.assertEqual((plan["eligible"], plan["form"], plan["reason"], plan["journeyIds"]), (True, "tool", "model_tool", ["J10"]))
+
+    def test_model_tool_hint_needs_the_tools_flag_and_no_workspace_reads(self):
+        self.assertFalse(self.plan_with("tool", "Help me drill French verbs", flags=ON)["eligible"])
+        self.assertFalse(self.plan_with("tool", "Plan my posting week as a timetable", ["calendar_range"])["form"] == "tool")
+
+    def test_model_text_hint_keeps_text_unless_the_person_asked_for_a_view(self):
+        self.assertEqual(self.plan_with("text", "What were my views last week?", ["publishing_summary"])["form"], "text")
+        self.assertTrue(self.plan_with("text", "Show my views last week as a table", ["publishing_summary"])["eligible"])
+
+    def test_model_view_hint_upgrades_only_from_verified_reads(self):
+        plan = self.plan_with("view", "Anything I should know about my drafts?", ["draft_get"], refs=[["draft", "d1"]])
+        self.assertEqual((plan["eligible"], plan["reason"]), (True, "model_view"))
+        self.assertFalse(self.plan_with("view", "Anything I should know?", [])["eligible"])
+
+    def test_model_hints_never_override_hard_vetoes(self):
+        self.assertFalse(self.plan_with("tool", "Make me a tip calculator", modality="voice")["eligible"])
+        self.assertFalse(self.plan_with("view", "hi", ["draft_get"])["eligible"])
+        self.assertFalse(self.plan_with("tool", "Make me a tip calculator", flags={"enabled": False})["eligible"])
+        self.assertFalse(self.plan_with("view", "Show costs", ["founder_cost_breakdown"])["eligible"])
+
+    def test_unknown_or_missing_hint_falls_back_to_rules(self):
+        for hint in (None, "auto", "dashboard", 7):
+            plan = self.plan_with(hint, "Build me a tip calculator")
+            self.assertEqual(plan["form"], "tool", hint)
+
+    @unittest.skipUnless(__import__("importlib").util.find_spec("pydantic"), "pydantic ships in the CI requirements, not on every dev Mac")
+    def test_reply_schema_accepts_presentation_and_defaults_to_auto(self):
+        from postriff_phase2.agent_runtime_v2 import answer_policy
+        Reply = answer_policy.reply_type()
+        self.assertEqual(Reply(answer="ok", speakable="ok").presentation, "auto")
+        self.assertEqual(Reply(answer="ok", speakable="ok", presentation="tool").presentation, "tool")
+        with self.assertRaises(Exception):
+            Reply(answer="ok", speakable="ok", presentation="dashboard")
+
+
 class PlannerLayoutHint(unittest.TestCase):
     """Active mode only: the planner's form reaches the presenter as context.layout (enum values from fixed tables)."""
 

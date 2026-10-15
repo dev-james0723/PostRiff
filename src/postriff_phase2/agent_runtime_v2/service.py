@@ -915,6 +915,9 @@ class AgentRuntimeService:
                 result["followUps"] = followups.clean([contracts.trim(item, 120) for item in (getattr(reply, "follow_ups", None) or []) if isinstance(item, str)],
                                                       exclude=ctx.request_text, limit=120)
                 result["language"] = getattr(reply, "language", None)
+                hint = getattr(reply, "presentation", None)
+                if hint in ("text", "view", "tool"):
+                    result["presentationHint"] = hint   # rafii-ui-plan/1: the Manager's suggestion; only the planner reads it
         if reply is None or reason is not None:
             composed_by = "deterministic"
             if interruptions:
