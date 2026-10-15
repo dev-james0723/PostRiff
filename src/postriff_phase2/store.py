@@ -88,7 +88,17 @@ class Phase2Store(Store):
             return "Connect"
         if c["revoked"] or c["expiresAt"] <= self.clock():
             return "Reconnect"
-        if not c["identityVerified"] or not c["capabilityVerified"] or c["verifiedAt"]+3600 < self.clock():
+        # A bot installation has no hourly OAuth expiry. Its durable consent
+        # is checked against the credential generation, and the worker checks
+        # the exact server/channel permissions again before every send. Aging
+        # this setup observation alone must not hold an unchanged approval.
+        discord_installation = (c.get('platform') == 'Discord'
+            and c.get('discordConnectionKind') == 'installation'
+            and c.get('qualification') == 'server_verified'
+            and c.get('evidenceSource') == 'live_provider'
+            and bool(c.get('discordAuthorizationGeneration')))
+        if (not c["identityVerified"] or not c["capabilityVerified"]
+                or not discord_installation and c["verifiedAt"]+3600 < self.clock()):
             return "Finish setup"
         return "Ready for posting"
 

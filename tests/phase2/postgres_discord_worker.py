@@ -244,12 +244,23 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
     checks.append('three unsent transient failures dead-letter with immutable approval and zero POST')
 
     f = Fixture(); original = f.job(); w = worker(f); f.wire.allowed.clear()
+    # Age only the server-owned installation observation. Neither frozen
+    # approval nor credential generation changes; live permission loss still
+    # must be discovered and block the exact destination before any POST.
+    with connection() as db:
+        state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',
+                         (f.workspace,)).fetchone()[0]
+        channel=state['phase2']['channels'][0]
+        channel.update(discordConnectionKind='installation', qualification='server_verified',
+                       evidenceSource='live_provider', verifiedAt=time.time()-7200)
+        db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                   (json.dumps(state),f.workspace))
     assert w.step(discord_only=True)
     state = state_of(f); destination = next(d for c in state['phase2']['channels'] for d in c.get('discordDestinations', []) if d['id'] == original['manifest']['destinationId'])
     assert job_of(f)['state'] == 'held' and destination['status'] == 'verification_required'
     assert w.claim(discord_only=True) is None
     frozen(f, original); no_posts(f); finish_fixture(f)
-    checks.append('lost channel permission holds exact destination pending explicit reauthorization')
+    checks.append('aged server bot installation still checks live channel permission;loss holds exact destination pending explicit reauthorization')
 
     f = Fixture(); original = f.job(); w = worker(f); claimed = exact_claim(f, w, original); assert claimed
     w.request_shutdown(); assert w.claim(discord_only=True) is None

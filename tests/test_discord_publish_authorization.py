@@ -162,6 +162,52 @@ def claimed_job(job):
 
 
 class DiscordP0(unittest.TestCase):
+    def test_aged_server_bot_installation_keeps_frozen_approval_and_fresh_permission_check(self):
+        engine, state, channel, variant = fixture()
+        channel.update(discordConnectionKind='installation', qualification='server_verified',
+                       evidenceSource='live_provider', verifiedAt=NOW-7200)
+        job = approve(engine, state, review(engine, state, channel, variant))
+        original = copy.deepcopy(job)
+        engine.invalidate(state)
+        self.assertEqual(job['state'], original['state'])
+        self.assertEqual(job['discordAuthorization'], original['discordAuthorization'])
+        self.assertTrue(auth.job_authorized(state, channel, job))
+        wire, grants, social, db, worker = transport_and_worker(state)
+        social.prepare_discord_dispatch(job['manifest'])
+        self.assertTrue(any(call[1] == '/guilds/'+GUILD+'/channels' for call in wire.calls))
+        wire.allowed.clear()
+        with self.assertRaises(AlphaError): social.prepare_discord_dispatch(job['manifest'])
+        self.assertEqual(sum(call[0] == 'POST' for call in wire.calls), 0)
+        self.assertEqual(job, original)
+
+    def test_aged_installation_exception_preserves_other_readiness_boundaries(self):
+        engine, state, channel, variant = fixture()
+        channel.update(discordConnectionKind='installation', qualification='server_verified',
+                       evidenceSource='live_provider', verifiedAt=NOW-7200)
+        self.assertEqual(engine.channel_state(channel), 'Ready for posting')
+        for changed in ({'revoked':True}, {'expiresAt':NOW}, {'configured':False},
+                        {'identityVerified':False}, {'capabilityVerified':False},
+                        {'discordConnectionKind':'identity'}, {'platform':'LinkedIn'},
+                        {'qualification':'implemented_with_fixtures'}, {'evidenceSource':'synthetic'},
+                        {'discordAuthorizationGeneration':None}):
+            with self.subTest(changed=changed):
+                self.assertNotEqual(engine.channel_state({**channel,**changed}), 'Ready for posting')
+
+    def test_timezone_metadata_cached_once_with_exact_package_or_system_label(self):
+        import importlib.metadata
+        from postriff_phase2.contracts import tzdb_version
+        for failure in (False, True):
+            tzdb_version.cache_clear()
+            try:
+                with patch('importlib.metadata.version', side_effect=importlib.metadata.PackageNotFoundError('tzdata') if failure else None,
+                           return_value='2026.2') as lookup:
+                    first=tzdb_version()
+                    self.assertTrue(first.startswith('system:') if failure else first=='tzdata 2026.2')
+                    self.assertEqual(tzdb_version(),first)
+                    lookup.assert_called_once_with('tzdata')
+            finally:
+                tzdb_version.cache_clear()
+
     def test_original_destination_mutation_exploit_is_blocked(self):
         engine, state, channel, variant = fixture()
         entry = review(engine, state, channel, variant)
