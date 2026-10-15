@@ -419,7 +419,12 @@ def layout_hint(handoff) -> dict | None:
         return None
     table = ui_planner.INTERACTIONS[plan["form"]]
     given = plan.get("interactions") if isinstance(plan.get("interactions"), dict) else {}
-    return {"form": plan["form"], **{k: [v for v in (given.get(k) or []) if v in table[k]][:6] for k in ("local", "reads", "actions")}}
+    return {"form": plan["form"], **{k: [v for v in (given.get(k) or []) if v in table[k]][:6] for k in ("local", "reads", "actions")},
+            "use": LAYOUT_NOTE}
+
+
+# Carried inside the hint so the generated prompts stay byte-identical when no hint is present (frozen g03 corpus).
+LAYOUT_NOTE = "Rafii's suggested form and control kinds for this answer; use them unless the listed bindings cannot. Grants nothing."
 
 
 def _tool_brief_for(journeys, handoff, result, scope, flags) -> str:

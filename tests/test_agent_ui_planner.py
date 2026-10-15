@@ -342,7 +342,12 @@ class PlannerLayoutHint(unittest.TestCase):
 
     def test_active_plan_becomes_a_validated_hint(self):
         hint = ui_projection.layout_hint({"eligible": True, "plan": self.plan()})
-        self.assertEqual(hint, {"form": "recovery", "local": ["expand_item"], "reads": ["refresh"], "actions": ["propose_retry"]})
+        self.assertEqual(hint, {"form": "recovery", "local": ["expand_item"], "reads": ["refresh"], "actions": ["propose_retry"],
+                                "use": ui_projection.LAYOUT_NOTE})
+        self.assertLessEqual(len(ui_projection.LAYOUT_NOTE), 160)   # ui_presenter.safe_context keeps strings up to 160 chars
+        from postriff_phase2.agent_runtime_v2 import ui_presenter
+        scrubbed = ui_presenter.presenter_context({"journey_ids": ["J08"], "allowed_context": {"layout": hint}})["context"]["layout"]
+        self.assertEqual(scrubbed, hint, "the hint must survive the presenter's private-key scrubber unchanged")
 
     def test_shadow_text_tampered_or_missing_plans_give_no_hint(self):
         for handoff in ({"plan": self.plan(mode="shadow")}, {"plan": self.plan(form="text")}, {"plan": self.plan(form="<script>")},
