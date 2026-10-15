@@ -3,12 +3,14 @@ import sys
 import ast
 import copy
 import hashlib
+import io
+import json
 import re
 import threading
 import time
 from collections import Counter
 import unittest
-from contextlib import nullcontext
+from contextlib import nullcontext,redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -19,10 +21,140 @@ from phase2.postgres_discord_capacity import (
     collect_fixture_cohort, connection_diagnostic_profile, configure_candidate_provider,
     diagnostic, diagnostic_phase, distribution, fingerprint, MockDiscord, TimedCursor,
     profile, rate_metadata, require_fixture, sql_metadata, validate_fence,
+    SpawnMockTransport, Telemetry, absorb_worker_metrics, combined_transport_fence,
+    send_worker_message, receive_worker_message, validate_worker_summary,
+    reap_owned_workers, start_owned_worker,
 )
 
 
 class CapacityControls(unittest.TestCase):
+    def test_post_start_failure_is_registered_before_cancellation_restores(self):
+        for fail_on_start in (False,True):
+            owned,registry,reported,order=[],{},set(),[]
+            process=SimpleNamespace(pid=None)
+            def start():
+                process.pid=123
+                if fail_on_start:raise Incomplete('synthetic post-start failure')
+            process.start=start
+            def close():
+                self.assertEqual(owned,[process]);self.assertIs(registry[123],process)
+                order.append('registered-close')
+                raise Incomplete('synthetic close failure')
+            def mask(action,values):
+                if order:
+                    self.assertIs(registry[123],process);order.append('restored')
+                return set()
+            with patch('phase2.postgres_discord_capacity.signal.pthread_sigmask',side_effect=mask):
+                with self.assertRaises(Incomplete):start_owned_worker(process,SimpleNamespace(close=close),owned,registry,threading.RLock(),reported)
+            self.assertEqual(order,['registered-close','restored'])
+
+    def test_owned_worker_cleanup_has_shared_deadlines_and_reports_survivors(self):
+        class Handle:
+            def __init__(self,pid,unkillable=False):
+                self.pid,self.unkillable=pid,unkillable
+                self.alive=True;self.exitcode=None;self.actions=[]
+            def join(self,timeout):clock[0]+=timeout if self.alive else 0
+            def is_alive(self):return self.alive
+            def terminate(self):self.actions.append('terminate')
+            def kill(self):
+                self.actions.append('kill')
+                if not self.unkillable:self.alive=False;self.exitcode=-9
+        for unkillable in (False,True):
+            clock=[0.];handles=[Handle(i,unkillable) for i in range(8)]
+            with patch('phase2.postgres_discord_capacity.time.monotonic',side_effect=lambda:clock[0]):
+                result=reap_owned_workers(handles,[])
+            self.assertLessEqual(clock[0],18.)
+            self.assertEqual((result['forcedCount'],result['killCount']),(8,8))
+            self.assertEqual(result['survivingPids'],list(range(8)) if unkillable else [])
+            self.assertTrue(all(h.actions==['terminate','kill'] for h in handles))
+
+    def test_spawn_transport_response_identity_and_route_are_fail_closed(self):
+        class Channel:
+            def __init__(self):self.sent=[];self.response=['response',{'requestId':2,'response':{}}]
+            def send_bytes(self, value):self.sent.append(json.loads(value))
+            def poll(self, _timeout):return True
+            def recv_bytes(self, _maximum):return json.dumps(self.response).encode()
+        channel=Channel();metrics=Telemetry(capture_events=False)
+        transport=SpawnMockTransport(channel,metrics)
+        with self.assertRaises(Incomplete):transport('GET','https://discord.com/api/v10/guilds/123')
+        self.assertEqual(metrics.counters['unexpectedTransport'],1)
+        self.assertEqual(channel.sent[0][1]['requestId'],1)
+        with self.assertRaises(Incomplete):transport('POST','https://foreign.example.invalid/messages')
+        self.assertEqual(len(channel.sent),1)
+        channel.response=['response',{'requestId':2,'response':{'status':200}}]
+        self.assertEqual(transport('GET','https://discord.com/api/v10/guilds/123'),{'status':200})
+
+    def test_worker_protocol_bounds_and_metric_merge_preserve_denominators(self):
+        class Channel:
+            def __init__(self):self.values=[]
+            def send_bytes(self,value):self.values.append(value)
+            def recv_bytes(self,maximum):return self.values.pop(0)
+        channel=Channel()
+        with patch('phase2.postgres_discord_capacity.WORKER_PIPE_BYTES',32):
+            with self.assertRaises(Incomplete):send_worker_message(channel,'http','x'*64)
+        send_worker_message(channel,'step-start',None)
+        self.assertEqual(receive_worker_message(channel),['step-start',None])
+        metrics=Telemetry(capture_events=False);metrics.timing('workerStepSeconds',10.)
+        payload={'counters':{'sqlStatements':2},'timings':{'workerStepSeconds':[1.,3.]},
+            'peak':{'databaseConnections':2},'sqlFailures':[],
+            'sqlOperations':{'scope_lock_batch':{'count':2,'totalSeconds':.5,'maxSeconds':.3}}}
+        absorb_worker_metrics(metrics,payload,'burst')
+        self.assertEqual(metrics.timings['workerStepSeconds'],[10.,1.,3.])
+        self.assertEqual(metrics.counters['sqlStatements'],2)
+        self.assertEqual(metrics.peak['databaseConnections'],0)
+        self.assertEqual(metrics.phase_sql_operation_seconds['burst']['scope_lock_batch']['count'],2)
+        payload['timings']['private tenant secret']=[1.]
+        with self.assertRaises(Incomplete):absorb_worker_metrics(metrics,payload,'burst')
+        self.assertEqual(metrics.counters['sqlStatements'],2)
+
+    def test_child_fence_missing_evidence_cannot_pass(self):
+        summary={'pid':123,'worker':'p8-burst-0','status':'PASS','cpuSeconds':1.,'counters':{},
+            'poolStats':{'closed':True,'maxConnections':2},
+            'transportFence':{'unexpectedAttempts':0,'expectedSelfCheckDenials':4},
+            'metrics':{},'error':None,'perProcessPeakConcurrency':{}}
+        validate_worker_summary(summary,123)
+        for mutate in (lambda s:s['transportFence'].update(unexpectedAttempts=1),
+                       lambda s:s['poolStats'].update(closed=False),lambda s:s.pop('transportFence')):
+            invalid=copy.deepcopy(summary);mutate(invalid)
+            with self.assertRaises(Incomplete):validate_worker_summary(invalid,123)
+        runtime=SimpleNamespace(child_fences=[],worker_summaries=[{'replicas':1}])
+        parent=SimpleNamespace(_unexpected=0,_expected=4)
+        self.assertIsNone(combined_transport_fence(runtime,parent)['unexpectedAttempts'])
+        runtime.child_fences.append(summary['transportFence'])
+        result=combined_transport_fence(runtime,parent)
+        self.assertEqual((result['unexpectedAttempts'],result['observedReplicaProofs']),(0,1))
+
+    def test_capacity_progress_emits_only_allowlisted_aggregates(self):
+        runtime=Runtime.__new__(Runtime)
+        runtime.started=time.monotonic()-1
+        runtime.progress_phase='private-token-or-tenant'
+        runtime.fixtures=['private-user-one','private-user-two']
+        runtime.m=SimpleNamespace(lock=threading.RLock(),records={'private-job':{'content':'private-body'}},
+            counters=Counter({'mockHttpAttempts':17,'private-secret':99}))
+        output=io.StringIO()
+        with redirect_stdout(output):runtime.emit_progress({'pipelineQueueDepth':3,'unsentEligibleQueueDepth':2,
+            'oldestFrozenDueLagSeconds':1.25,'private-token':'never-log'})
+        line=output.getvalue()
+        self.assertNotIn('private',line)
+        value=json.loads(line.removeprefix('RAFII_DISCORD_CAPACITY_PROGRESS '))
+        self.assertEqual(set(value),{'phase','elapsedSeconds','fixturesCompleted','jobRequests','mockHttpAttempts',
+            'pipelineQueueDepth','unsentEligibleQueueDepth','oldestFrozenDueLagSeconds'})
+        self.assertEqual((value['phase'],value['fixturesCompleted'],value['jobRequests'],value['mockHttpAttempts']),('unknown',2,1,17))
+        self.assertEqual((value['pipelineQueueDepth'],value['unsentEligibleQueueDepth'],value['oldestFrozenDueLagSeconds']),(3,2,1.25))
+
+    def test_owned_runner_streams_only_exact_fenced_capacity_script(self):
+        source=Path(__file__).resolve().parents[1]/'scripts/postriff_disposable_postgres.py'
+        function=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.FunctionDef) and n.name=='run_script')
+        calls=[];pipe=object()
+        scope={'subprocess':SimpleNamespace(PIPE=pipe,run=lambda *args,**kwargs:calls.append((args,kwargs))),
+            'sys':SimpleNamespace(executable='synthetic-python'),'ROOT':Path('/synthetic-root')}
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[function],type_ignores=[])),'actual-runner-output-policy','exec'),scope)
+        for script in ('tests/phase2/postgres_discord_capacity.py','tests/phase2/postgres_discord_rate_limits.py',
+                       'tests/phase2/./postgres_discord_capacity.py'):
+            scope['run_script'](script,{'CI':'true'})
+        self.assertEqual([kw['stdout'] for _,kw in calls],[None,pipe,pipe])
+        self.assertTrue(all(kw['stderr'] is pipe and kw['text'] is True and kw['env']=={'CI':'true'} for _,kw in calls))
+
     def test_actual_learning_formula_preserves_quota_and_conservative_pending_debits(self):
         root=Path(__file__).resolve().parents[1]
         tree=ast.parse((root/'src/postriff_phase2/discord/rate_limits.py').read_text())
@@ -37,6 +169,7 @@ class CapacityControls(unittest.TestCase):
         self.assertEqual(calc(0,249,first=False,pending=0),0)
         for change in ({'pending':True},{'newly_mapped':1},{'current_unmapped':2},{'first':1}):
             with self.assertRaises(Incomplete):calc(0,249,**({'first':True,'pending':0}|change))
+
 
     def test_new_denial_scope_metadata_is_allowlisted(self):
         for name in ('application','discovery','learned_route','unknown_route','embargo','permit','unknown'):
@@ -200,7 +333,8 @@ class CapacityControls(unittest.TestCase):
         observe = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'observe')
         parse = next(n for n in observe.body if isinstance(n, ast.Assign)
                      and any(isinstance(t, ast.Name) and t.id == 'new_bucket' for t in n.targets))
-        hold = next(n for n in ast.walk(observe) if isinstance(n, ast.If)
+        observe_once = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '_observe_once')
+        hold = next(n for n in ast.walk(observe_once) if isinstance(n, ast.If)
                     and ast.unparse(n.test) == 'raw_bucket is not None and new_bucket is None')
         code = compile(ast.fix_missing_locations(ast.Module(body=[copy.deepcopy(parse), copy.deepcopy(hold)],
                            type_ignores=[])), 'actual-rate-bucket-parser', 'exec')

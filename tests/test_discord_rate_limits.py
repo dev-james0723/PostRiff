@@ -44,9 +44,10 @@ class MemoryLedger:
         self.states,self.maps,self.admissions={},{},{}
         self.result=[];self.rowcount=1;self.serial=0;self.active=0;self.insert_delay=0
         self.scope_calls=[];self.lock_fault=None;self.store_fault=None;self.scope_lock_delay=0
-        self.admission_lock_delay=0
+        self.admission_lock_delay=0;self.connection_calls=0
     @contextmanager
     def connection(self):
+        self.connection_calls+=1
         with self.lock:
             before=copy.deepcopy((self.states,self.maps,self.admissions))
             workspace_before=copy.deepcopy(self.workspace.state) if self.workspace else None
@@ -73,6 +74,7 @@ class MemoryLedger:
             self.result=self.workspace.fetchall();self.rowcount=self.workspace.rowcount;return
         if sql.startswith('INSERT INTO public.pr_discord_route_buckets'):
             self.maps.setdefault(tuple(params),[None,0])
+            if 'RETURNING bucket_key,observation_seq' in sql:self.result=[tuple(self.maps[tuple(params)])]
         elif sql.startswith('SELECT bucket_key,observation_seq'):
             row=self.maps.get(tuple(params))
             self.result=[tuple(row)] if row is not None else []
@@ -88,7 +90,8 @@ class MemoryLedger:
         elif sql.startswith('WITH scope_lock AS MATERIALIZED'):
             self.now+=self.scope_lock_delay
             if self.workspace:self.workspace.now+=self.scope_lock_delay
-            ordered=params[0];self.scope_calls.append(('lock',tuple(ordered)))
+            ordered=sorted(set(params[0])|set(params[1])) if 'FOR SHARE' in sql else params[0]
+            self.scope_calls.append(('lock',tuple(ordered)))
             self.result=[(key,)+tuple(self.states[key][k] for k in
                 ('kind','cap','left','window','reset','blocked','circuit','streak','hold','seq','policy','policyExpires','learned','freshAfter')) for key in ordered if key in self.states]
             if self.lock_fault=='missing':self.result=self.result[1:]
@@ -126,7 +129,7 @@ class MemoryLedger:
             self.serial+=1
             names=('id','application','auth','credential','kind','method','path','route','major','bucket','keys',
                 'publish','binding','workspace','publication','manifest','authorization','approval','worker','lease','channel','expires')
-            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='reserved',intent=None,reserved=moment)
+            row=dict(zip(names,params[:-1]));row.update(seq=self.serial,state='sent' if ',state,sent_at)' in sql else 'reserved',intent=None,reserved=moment)
             if row['publish'] and any(r['binding']==row['binding'] for r in self.admissions.values()):
                 raise ValueError('Duplicate synthetic binding')
             self.admissions[row['id']]=row
@@ -309,6 +312,71 @@ class BotIdentityCacheRegression(unittest.TestCase):
         self.assertEqual(sum(path=='/guilds/'+self.guild+'/channels' for _,path,_ in self.wire.calls),2)
 
 
+class SharedObservationRegression(unittest.TestCase):
+    """Rollback/eligibility controls; shared-lock proof requires real PG17."""
+    def setUp(self):
+        self.db=MemoryLedger()
+        self.s=SharedPostgresBudget(self.db.connection,APP,policy=synthetic_policy())
+        self.identity=RequestIdentity.make(APP,'bot','inert-shared-observer')
+        self.path='/channels/'+A+'/messages/'+B
+        self.response={'status':200,'headers':{'X-RateLimit-Bucket':'shared-observer',
+            'X-RateLimit-Limit':'100','X-RateLimit-Remaining':'99','X-RateLimit-Reset-After':'30'}}
+        p=self.s.reserve_read('GET',self.path,identity=self.identity)
+        self.s.observe(p,self.response)
+
+    def permit(self):return self.s.reserve_read('GET',self.path,identity=self.identity)
+
+    def test_warm_success_writes_only_route_and_preserves_common_guards(self):
+        p=self.permit()
+        common={k:copy.deepcopy(v) for k,v in self.db.states.items() if k[:3] in ('00:','10:','11:','20:','40:')}
+        self.db.scope_calls.clear()
+        with patch.object(self.s,'_locked',wraps=self.s._locked) as locked:
+            self.s.observe(p,self.response)
+        self.assertTrue(locked.call_args.kwargs['shared_keys'])
+        self.assertEqual(common,{k:self.db.states[k] for k in common})
+        self.assertTrue(all(k.startswith('50:') for k in self.db.scope_calls[-1][1]))
+        self.assertEqual(self.db.admissions[p.id]['state'],'observed')
+
+    def test_each_scope_hold_block_or_circuit_rolls_back_then_restarts_exclusively(self):
+        for kind in ('policy','global','credential','invalid','resource','route'):
+            for field,value in (('hold',True),('blocked',1005),('circuit',1005)):
+                with self.subTest(kind=kind,field=field):
+                    self.setUp();p=self.permit();waiting=self.s.reserve('GET',self.path,identity=self.identity)
+                    key=next(k for k in self.db.admissions[p.id]['keys'] if self.db.states[k]['kind']==kind)
+                    self.db.states[key][field]=value
+                    with patch.object(self.s,'_observe_once',wraps=self.s._observe_once) as observed:
+                        self.s.observe(p,self.response)
+                    self.assertEqual([call.args[-1] for call in observed.call_args_list],[True,False])
+                    self.assertEqual(self.db.states[key][field],value)
+                    self.assertEqual(self.db.admissions[waiting.id]['state'],'blocked')
+
+    def test_bad_numeric_hint_restarts_before_alias_scan_and_retains_hold(self):
+        p=self.permit();response=copy.deepcopy(self.response)
+        response['headers']['X-RateLimit-Remaining']='invalid'
+        with patch.object(self.s,'_alias_pending',wraps=self.s._alias_pending) as pending:
+            with patch.object(self.s,'_observe_once',wraps=self.s._observe_once) as observed:
+                self.s.observe(p,response)
+        self.assertEqual([call.args[-1] for call in observed.call_args_list],[True,False])
+        self.assertEqual(pending.call_count,1)
+        self.assertTrue(any(v['hold'] for v in self.db.states.values() if v['kind']=='route'))
+
+    def test_discovery_historical_membership_forces_original_exclusive_path(self):
+        p=self.permit();discovery='30:'+_digest(self.identity.auth_key+':historical')
+        self.db.admissions[p.id]['keys'].append(discovery)
+        self.db.states[discovery]=dict(copy.deepcopy(next(v for v in self.db.states.values() if v['kind']=='route')),kind='discovery')
+        with patch.object(self.s,'_locked',wraps=self.s._locked) as locked:self.s.observe(p,self.response)
+        self.assertNotIn('shared_keys',locked.call_args.kwargs)
+
+    def test_error_publish_and_unsupported_outcomes_are_never_shared(self):
+        p=self.permit()
+        for status,scope,glob,transport,method,binding in ((401,None,False,False,'GET',None),
+                (429,None,True,False,'GET',None),(429,'shared',False,False,'GET',None),
+                (503,None,False,True,'GET',None),(200,None,False,False,'POST','frozen')):
+            classification={'status':status,'scope':scope,'global':glob,'invalid':status in (401,429)}
+            self.assertFalse(self.s._share_get_observation(replace(p,method=method,binding_hash=binding),
+                classification,_digest('bucket'),transport))
+
+
 class AliasLearningRegression(unittest.TestCase):
     """Targeted inert algorithm checks; real locking/RLS remains a SQL gate."""
     def setUp(self):
@@ -356,6 +424,17 @@ class AliasLearningRegression(unittest.TestCase):
         self.send();p=self.s.reserve('GET',self.path,identity=self.identity)
         self.s.consume(p,'GET',self.path);self.s.observe(p,self.response(249))
         self.assertEqual(self.db.states[self.alias()]['left'],248)
+
+    def test_tightened_stable_bucket_keeps_other_reserved_request_charged(self):
+        first=self.response(5);first['headers']['X-RateLimit-Limit']='6'
+        self.send(response=first)
+        sent=self.s.reserve_read('GET',self.path,identity=self.identity)
+        waiting=self.s.reserve('GET',self.path,identity=self.identity)
+        tightened=self.response(1);tightened['headers']['X-RateLimit-Limit']='2'
+        self.s.observe(sent,tightened)
+        self.assertEqual(self.db.states[self.alias()]['left'],0)
+        self.assertEqual(self.db.admissions[waiting.id]['state'],'reserved')
+        with self.assertRaises(RateDelayed):self.s.reserve_read('GET',self.path,identity=self.identity)
 
     def test_expired_insert_rolls_back_all_debits_and_creates_no_admission(self):
         self.db.insert_delay=2
@@ -491,6 +570,30 @@ class RateLimits(unittest.TestCase):
                 except RateDelayed:return None
             with ThreadPoolExecutor(max_workers=count) as pool:results=list(pool.map(claim,range(16)))
             self.assertEqual(sum(isinstance(r,Permit) for r in results),3)
+    def test_get_admission_is_one_committed_transaction_before_transport(self):
+        def transport(method,url,**kwargs):
+            self.assertEqual(self.db.active,0)
+            self.assertEqual(self.db.connection_calls,1)
+            self.assertEqual([r['state'] for r in self.db.admissions.values()],['sent'])
+            self.calls.append((method,url));return {'status':200,'headers':{},'body':{'id':B}}
+        self.p.transport=transport;self.p._bot('GET',self.path)
+        self.assertEqual(self.db.connection_calls,2)  # atomic admission, then observation
+        self.assertEqual([r['state'] for r in self.db.admissions.values()],['observed'])
+        self.assertEqual(len(self.calls),1)
+
+    def test_atomic_read_admission_rejects_mutation_and_reuse(self):
+        with self.assertRaises(RateCoordinatorUnavailable):self.s.reserve_read('POST','/channels/'+A+'/messages',identity=self.identity)
+        self.assertFalse(self.db.admissions)
+        permit=self.s.reserve_read('GET',self.path,identity=self.identity)
+        with self.assertRaises(RateCoordinatorUnavailable):self.s.consume(permit,'GET',self.path)
+        self.s.note_transport_failure(permit);self.db.now+=3
+        with self.assertRaises(RateDelayed):self.s.reserve_read('GET','/channels/'+A,identity=self.identity)
+
+    def test_atomic_read_late_insert_rolls_back_all_debits_before_transport(self):
+        self.db.insert_delay=2
+        with self.assertRaises(RateDelayed):self.p._bot('GET',self.path)
+        self.assertFalse(self.db.admissions or self.db.maps or self.db.states or self.calls)
+
     def test_cold_resource_probes_are_independent_but_same_major_aliases_serialize(self):
         first=self.reserve()
         second=self.reserve('/channels/'+B+'/messages/'+A)

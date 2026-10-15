@@ -311,12 +311,17 @@ class DiscordProvider(OAuthProvider):
             wait_deadline = time.monotonic() + 1
             for attempt in range(attempts):
                 try:
-                    permit = rate_permit if isinstance(rate_permit, Permit) else (
-                        self.rate_limiter.reserve(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
-                        if rate_permit is None else None)
+                    direct_read = method == 'GET' and rate_permit is None and binding is None
+                    if direct_read:
+                        permit = self.rate_limiter.reserve_read(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                    else:
+                        permit = rate_permit if isinstance(rate_permit, Permit) else (
+                            self.rate_limiter.reserve(method, path, identity=self._rate_identity(credential_kind,bearer,user_id))
+                            if rate_permit is None else None)
                     if permit is None or permit.identity != self._rate_identity(credential_kind,bearer,user_id):
                         raise RateCoordinatorUnavailable()
-                    self.rate_limiter.consume(permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
+                    if not direct_read:
+                        self.rate_limiter.consume(permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
                     break
                 except RateDelayed as error:
                     if (isinstance(rate_permit, Permit) and binding is not None

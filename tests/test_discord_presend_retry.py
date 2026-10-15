@@ -28,26 +28,26 @@ class PreSendRecovery(unittest.TestCase):
         network = patch('socket.socket.connect', side_effect=AssertionError('Real network forbidden'))
         network.start(); self.addCleanup(network.stop)
 
-    def first_denial(self):
-        original = self.budget.reserve
+    def first_denial(self, operation='reserve_read'):
+        original = getattr(self.budget, operation)
         self.reservations = 0
         def reserve(*args, **kwargs):
             self.reservations += 1
             if self.reservations == 1: raise RateDelayed(.05)
             return original(*args, **kwargs)
-        return patch.object(self.budget, 'reserve', side_effect=reserve)
+        return patch.object(self.budget, operation, side_effect=reserve)
 
     def test_get_waits_without_restarting_the_operation_and_sends_once(self):
         with self.first_denial(): self.p._bot('GET', '/channels/' + A + '/messages/' + B)
         self.assertEqual((self.reservations, len(self.sent), self.waits), (2, 1, [.05]))
 
     def test_oauth_post_admission_delay_never_reexchanges_a_sent_code(self):
-        with self.first_denial():
+        with self.first_denial('reserve'):
             self.p._discord_http('POST', '/oauth2/token', credential_kind='oauth', form={'code': 'synthetic-one-use'})
         self.assertEqual((self.reservations, len(self.sent)), (2, 1))
 
     def test_long_wait_is_not_shortened_or_polled_aggressively(self):
-        with patch.object(self.budget, 'reserve', side_effect=RateDelayed(172800.25)) as reserve:
+        with patch.object(self.budget, 'reserve_read', side_effect=RateDelayed(172800.25)) as reserve:
             with self.assertRaises(RateDelayed) as caught: self.p._bot('GET', '/users/@me')
         self.assertEqual(caught.exception.retry_after_seconds, 172800.25)
         self.assertIsInstance(caught.exception, ReadAdmissionDelayed)
@@ -55,7 +55,7 @@ class PreSendRecovery(unittest.TestCase):
         self.assertFalse(self.sent or self.waits)
 
     def test_local_attempts_are_bounded_and_never_reach_transport_when_denied(self):
-        with patch.object(self.budget, 'reserve', side_effect=RateDelayed(.05)) as reserve:
+        with patch.object(self.budget, 'reserve_read', side_effect=RateDelayed(.05)) as reserve:
             with self.assertRaises(RateDelayed): self.p._bot('GET', '/users/@me')
         self.assertEqual((reserve.call_count, len(self.waits), len(self.sent)), (3, 2, 0))
 

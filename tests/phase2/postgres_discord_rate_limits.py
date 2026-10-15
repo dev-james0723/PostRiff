@@ -14,7 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Barrier,Event
+from threading import Barrier,Event,Lock
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
@@ -108,10 +108,12 @@ with limiter._transaction() as cur:
     assert cur.fetchone()==('2s','5s'),'Both transaction-local safety timeouts remain active'
     assert limiter._map(cur,identity,_digest(template),major)==(None,0)
     assert limiter._map(cur,identity,_digest(template),major)==(None,0)
+    cur.execute('UPDATE public.pr_discord_route_buckets SET bucket_key=%s,observation_seq=17 WHERE auth_key=%s AND route_key=%s AND major_key=%s',(_digest('retained-synthetic-bucket'),identity.auth_key,_digest(template),major))
+    assert limiter._map(cur,identity,_digest(template),major)==(_digest('retained-synthetic-bucket'),17)
 with connection() as db:
     assert db.execute('SELECT count(*) FROM public.pr_discord_route_buckets WHERE auth_key=%s',
         (identity.auth_key,)).fetchone()[0]==1
-checks.append('combined local timeouts preserved;existing/cold locked mapping has one durable row')
+checks.append('combined local timeouts preserved;existing/cold locked mapping has one durable row;bucket and sequence retained')
 
 # Exercise the same optional factory used by hosted_app and the capacity
 # harness. Session-scoped settings are intentional fault injection here.
@@ -389,9 +391,9 @@ checks.append('expiry/consume/aliasrace re-readssentrow:smallerbucket3 retains1s
 
 limiter,identity,path,policy=setup(unknown_window_seconds=.05)
 class LateInsert(SharedPostgresBudget):
-    def _insert(self,cur,*args):
+    def _insert(self,cur,*args,**kwargs):
         cur.execute('SELECT pg_sleep(.08)')  # deterministic owned-DB timing, no real API
-        return super()._insert(cur,*args)
+        return super()._insert(cur,*args,**kwargs)
 late=LateInsert(connection,limiter.application_id,policy=policy)
 error=expect_denied(lambda:late.reserve('GET',path,identity=identity),RateDelayed)
 assert error.rate_cause=='permit_expired' and error.rate_scope_kind=='permit'
@@ -769,6 +771,312 @@ try:limiter.consume(second,'GET',other)
 except (RateDelayed,RateCoordinatorUnavailable):pass
 else:raise AssertionError('Global429 did not stop an independently reserved cold major')
 checks.append('global429 blocks outstanding independent-major cold permit across shared SQL;two-day Retry-After retained')
+
+# GET admission can debit and cross the pre-transport authorization boundary
+# in one commit. It never admits a mutation or reuses a sent permit.
+limiter,identity,path,policy=setup()
+permit=limiter.reserve_read('GET',path,identity=identity)
+with connection() as db:
+    row=db.execute("SELECT state,is_publish,binding_hash,sent_at=reserved_at,sent_at IS NOT NULL FROM public.pr_discord_request_admissions WHERE id=%s",(permit.id,)).fetchone()
+    assert row==('sent',False,None,True,True),row
+expect_denied(lambda:limiter.consume(permit,'GET',path),RateCoordinatorUnavailable)
+expect_denied(lambda:limiter.reserve_read('POST','/channels/'+path.split('/')[2]+'/messages',identity=identity),RateCoordinatorUnavailable)
+limiter.note_transport_failure(permit)
+with connection() as db:
+    db.execute("UPDATE public.pr_discord_rate_state SET reset_at=clock_timestamp()-interval '1 second' WHERE scope_key=ANY(%s::text[]) AND kind='discovery'",([k for k in limiter._keys(identity,_digest(route_identity('GET',path)[0]),route_identity('GET',path)[1],None) if k.startswith('30:')],))
+expect_denied(lambda:limiter.reserve_read('GET','/channels/'+path.split('/')[2],identity=identity),RateDelayed)
+checks.append('atomic GET admission commits sent state with debit;POST/reuse denied;ambiguous read retains major discovery debit across reset')
+
+limiter,identity,path,policy=setup(unknown_window_seconds=.05)
+late=LateInsert(connection,limiter.application_id,policy=policy)
+expired_read_keys=sorted(limiter._keys(identity,_digest(route_identity('GET',path)[0]),route_identity('GET',path)[1],None))
+with connection() as db:
+    expired_read_before=db.execute('SELECT * FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(expired_read_keys,)).fetchall()
+error=expect_denied(lambda:late.reserve_read('GET',path,identity=identity),RateDelayed)
+assert error.rate_cause=='permit_expired'
+with connection() as db:
+    assert db.execute('SELECT * FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(expired_read_keys,)).fetchall()==expired_read_before
+    assert db.execute('SELECT count(*) FROM public.pr_discord_request_admissions WHERE application_key=%s',(_digest(limiter.application_id),)).fetchone()[0]==0
+    assert db.execute('SELECT count(*) FROM public.pr_discord_route_buckets WHERE auth_key=%s',(identity.auth_key,)).fetchone()[0]==0
+checks.append('late atomic GET insert rolls back admission,mapping and every debit before any provider request')
+
+limiter,identity,path,policy=setup(app_capacity=3)
+barrier=Barrier(16)
+def fast_cold_claim(index):
+    replica=SharedPostgresBudget(connection,limiter.application_id,policy=policy)
+    barrier.wait(8)
+    try:return replica.reserve_read('GET','/channels/'+str(830000000000000000+index),identity=identity)
+    except RateDelayed:return None
+with ThreadPoolExecutor(max_workers=16) as pool:reserved=list(pool.map(fast_cold_claim,range(16)))
+assert sum(p is not None for p in reserved)==3,'Atomic GET admission bypassed shared application limit'
+checks.append('16 atomic GET contenders across independent majors admit exactly3 shared application slots')
+
+limiter,identity,path,policy=setup()
+learn(limiter,identity,path,cap=6)
+sent=limiter.reserve_read('GET',path,identity=identity)
+waiting=limiter.reserve('GET',path,identity=identity)
+limiter.observe(sent,{'status':200,'headers':{'X-RateLimit-Bucket':'synthetic-bucket',
+    'X-RateLimit-Limit':'2','X-RateLimit-Remaining':'1','X-RateLimit-Reset-After':'30'}})
+_,major=route_identity('GET',path)
+alias='50:'+_digest(identity.auth_key+':'+_digest('synthetic-bucket')+':'+major)
+with connection() as db:
+    assert db.execute('SELECT remaining FROM public.pr_discord_rate_state WHERE scope_key=%s',(alias,)).fetchone()[0]==0
+    assert db.execute('SELECT state FROM public.pr_discord_request_admissions WHERE id=%s',(waiting.id,)).fetchone()[0]=='reserved'
+expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateDelayed)
+checks.append('stable learned bucket tightening retains other reserved debit;reported remaining1 cannot expose an extra shared slot')
+
+def coordinator_snapshot(limiter,identity,path,extra=()):
+    template,major=route_identity('GET',path)
+    keys=set(limiter._keys(identity,_digest(template),major,None))|set(extra)
+    with connection() as db:
+        admissions=db.execute('SELECT * FROM public.pr_discord_request_admissions WHERE application_key=%s ORDER BY request_seq',(_digest(limiter.application_id),)).fetchall()
+        for row in db.execute('SELECT scope_keys FROM public.pr_discord_request_admissions WHERE application_key=%s',(_digest(limiter.application_id),)):
+            keys.update(row[0])
+        return (db.execute('SELECT * FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(sorted(keys),)).fetchall(),
+            db.execute('SELECT * FROM public.pr_discord_route_buckets WHERE auth_key=%s ORDER BY route_key,major_key',(identity.auth_key,)).fetchall(),admissions)
+
+# Delay inside the actual scope UPDATE. The frozen permit clock must be
+# checked after storage before admission INSERT; suppressed rows roll back.
+for suppress in (False,True):
+    limiter,identity,path,policy=setup(unknown_window_seconds=.05)
+    before=coordinator_snapshot(limiter,identity,path)
+    with connection() as db:
+        db.execute("""CREATE FUNCTION public.pr_discord_test_scope_write() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.scope_key=TG_ARGV[0] THEN
+                IF TG_ARGV[1]='suppress' THEN RETURN NULL; END IF;
+                PERFORM pg_sleep(.08);
+            END IF; RETURN NEW; END $$""")
+        from psycopg import sql
+        db.execute(sql.SQL('CREATE TRIGGER pr_discord_test_scope_write BEFORE UPDATE ON public.pr_discord_rate_state FOR EACH ROW EXECUTE FUNCTION public.pr_discord_test_scope_write({},{})').format(
+            sql.Literal('00:'+_digest(limiter.application_id)),sql.Literal('suppress' if suppress else 'delay')))
+    try:
+        error=expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable if suppress else RateDelayed)
+        if not suppress:assert error.rate_cause=='permit_expired'
+        assert coordinator_snapshot(limiter,identity,path)==before,'Storage failure committed a debit,mapping or admission'
+    finally:
+        with connection() as db:
+            db.execute('DROP TRIGGER pr_discord_test_scope_write ON public.pr_discord_rate_state')
+            db.execute('DROP FUNCTION public.pr_discord_test_scope_write()')
+checks.append('real UPDATE trigger delay expires frozen permit after storage;missing UPDATE row fails closed;both fully roll back scopes,mapping,admission')
+
+limiter,identity,path,policy=setup()
+learn(limiter,identity,path,cap=6)
+sent=limiter.reserve_read('GET',path,identity=identity)
+waiting=limiter.reserve('GET',path,identity=identity)
+limiter.observe(sent,{'status':429,'headers':{'X-RateLimit-Bucket':'batch-embargo-alias','X-RateLimit-Scope':'user',
+    'Retry-After':'.2'},'body':{'retry_after':.2,'global':False}})
+_,major=route_identity('GET',path)
+alias='50:'+_digest(identity.auth_key+':'+_digest('batch-embargo-alias')+':'+major)
+with connection() as db:
+    own=db.execute('SELECT state,scope_keys FROM public.pr_discord_request_admissions WHERE id=%s',(sent.id,)).fetchone()
+    other=db.execute('SELECT state,scope_keys FROM public.pr_discord_request_admissions WHERE id=%s',(waiting.id,)).fetchone()
+    assert own[0]=='observed' and own[1].count(alias)==1
+    assert other[0]=='blocked' and other[1].count(alias)==1
+checks.append('alias propagation adds each scope once;subsequent429 embargo blocks unused permit and preserves observed receipt')
+
+# Successful learned GET observers share unchanged common guards. Real SQL
+# overlap is proved with both transactions paused AFTER all scope locks.
+limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+paths=[path,'/channels/850000000000000001/messages/999999999999999999']
+for target in paths:learn(limiter,identity,target,cap=100)
+permits=[limiter.reserve_read('GET',target,identity=identity) for target in paths]
+response={'status':200,'headers':{'X-RateLimit-Bucket':'synthetic-bucket',
+    'X-RateLimit-Limit':'100','X-RateLimit-Remaining':'98','X-RateLimit-Reset-After':'30'}}
+shared_ready=Barrier(3);shared_release=Event();forward_entered=Event();observer_pids=[]
+class SharedPaused(SharedPostgresBudget):
+    def _locked(self,cur,keys,*,shared_keys=()):
+        rows=super()._locked(cur,keys,shared_keys=shared_keys)
+        assert shared_keys,'Warm success unexpectedly used exclusive locks'
+        observer_pids.append(cur.connection.info.backend_pid)
+        shared_ready.wait(3)
+        if not shared_release.wait(3):raise AssertionError('Shared observation release timed out')
+        return rows
+class ForwardTracked(SharedPostgresBudget):
+    def _locked(self,cur,keys,**kwargs):
+        forward_entered.set()
+        return super()._locked(cur,keys,**kwargs)
+with connection() as db:
+    app_before=db.execute('SELECT remaining FROM public.pr_discord_rate_state WHERE scope_key=%s',
+        ('00:'+limiter.application_key,)).fetchone()[0]
+with ThreadPoolExecutor(max_workers=3) as pool:
+    observing=[pool.submit(SharedPaused(connection,limiter.application_id,policy=policy).observe,p,response) for p in permits]
+    forward=None
+    try:
+        shared_ready.wait(3)
+        assert len(set(observer_pids))==2,'Two real PostgreSQL sessions must overlap'
+        forward=pool.submit(ForwardTracked(connection,limiter.application_id,policy=policy).reserve_read,
+            'GET','/channels/850000000000000002',identity=identity)
+        assert forward_entered.wait(1)
+        blocked=False;deadline=time.monotonic()+1
+        while time.monotonic()<deadline:
+            with connection() as db:
+                blocked=db.execute("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' "
+                    'AND pg_blocking_pids(pid)&&%s::integer[])',(observer_pids,)).fetchone()[0]
+            if blocked:break
+            time.sleep(.01)
+        assert blocked and not forward.done(),'Reservation bypassed retained common SHARE guards'
+    finally:shared_release.set()
+    for future in observing:future.result(timeout=3)
+    assert forward is not None;forward.result(timeout=3)
+with connection() as db:
+    assert db.execute('SELECT remaining FROM public.pr_discord_rate_state WHERE scope_key=%s',
+        ('00:'+limiter.application_key,)).fetchone()[0]==app_before-1,'Observations refunded application credit'
+checks.append('two learnedGET observers overlap actual commonSHARE locks;forward reservation waits on them and debits exactly once')
+
+# Reviewer counterexample: expired C(discoveryD,H2), later uncertain X(H1,H2).
+# A holds D+H1 and B holds H2. A must retain app00 exclusive, preventing the
+# historical alias/discovery admission locks from creating A-X-B-C-A.
+limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+learn(limiter,identity,path,bucket='history-h2',cap=100)
+b=limiter.reserve_read('GET',path,identity=identity)
+a_path=path.rsplit('/',1)[0]
+a=limiter.reserve_read('GET',a_path,identity=identity)
+_,major=route_identity('GET',path)
+h1='50:'+_digest(identity.auth_key+':'+_digest('history-h1')+':'+major)
+h2='50:'+_digest(identity.auth_key+':'+_digest('history-h2')+':'+major)
+d='30:'+_digest(identity.auth_key+':'+major)
+with connection() as db:
+    c=db.execute("INSERT INTO public.pr_discord_request_admissions(id,application_key,auth_key,credential_key,credential_kind,"
+        "method,path_key,route_key,major_key,bucket_key,scope_keys,reserved_at,expires_at,state) "
+        "SELECT gen_random_uuid(),application_key,auth_key,credential_key,credential_kind,method,path_key,route_key,major_key,"
+        "bucket_key,scope_keys||ARRAY[%s,%s]::text[],clock_timestamp()-interval '2 seconds',clock_timestamp()-interval '1 second','reserved' "
+        'FROM public.pr_discord_request_admissions WHERE id=%s RETURNING id',(d,h2,b.id)).fetchone()[0]
+    x=db.execute("INSERT INTO public.pr_discord_request_admissions(id,application_key,auth_key,credential_key,credential_kind,"
+        "method,path_key,route_key,major_key,bucket_key,scope_keys,reserved_at,expires_at,state) "
+        "SELECT gen_random_uuid(),application_key,auth_key,credential_key,credential_kind,method,path_key,route_key,major_key,"
+        "bucket_key,scope_keys||ARRAY[%s]::text[],clock_timestamp()-interval '2 seconds',clock_timestamp()-interval '1 second','uncertain' "
+        'FROM public.pr_discord_request_admissions WHERE id=%s RETURNING id',(h1,b.id)).fetchone()[0]
+entered,release=Event(),Event();a_shared=[]
+class HistoricalPaused(SharedPostgresBudget):
+    def _locked(self,cur,keys,*,shared_keys=()):
+        rows=super()._locked(cur,keys,shared_keys=shared_keys)
+        a_shared.append(bool(shared_keys));entered.set()
+        if not release.wait(3):raise AssertionError('Historical observation release timed out')
+        return rows
+with ThreadPoolExecutor(max_workers=2) as pool:
+    first=pool.submit(HistoricalPaused(connection,limiter.application_id,policy=policy).observe,a,
+        {'status':200,'headers':{'X-RateLimit-Bucket':'history-h1','X-RateLimit-Limit':'100',
+            'X-RateLimit-Remaining':'97','X-RateLimit-Reset-After':'30'}})
+    second=None
+    try:
+        assert entered.wait(2) and a_shared==[False],'Discovery-bearing observer must retain app00 UPDATE'
+        second=pool.submit(limiter.observe,b,{'status':200,'headers':{'X-RateLimit-Bucket':'history-h2',
+            'X-RateLimit-Limit':'100','X-RateLimit-Remaining':'97','X-RateLimit-Reset-After':'30'}})
+        time.sleep(.05);assert not second.done()
+    finally:release.set()
+    first.result(timeout=3);assert second is not None;second.result(timeout=3)
+with connection() as db:
+    states=dict(db.execute('SELECT id::text,state FROM public.pr_discord_request_admissions WHERE id=ANY(%s::uuid[])',
+        ([str(c),str(x),a.id,b.id],)).fetchall())
+    assert states[str(c)]=='reserved' and states[str(x)]=='uncertain'
+    assert states[a.id]==states[b.id]=='observed'
+checks.append('historical expiredC(discoveryD,H2)+uncertainX(H1,H2) concurrent observations finish without deadlock;discovery stays exclusive,uncertainty retained')
+
+# Real held-guard and malformed-hint fallback must rollback before acquiring
+# the full exclusive set. Record lock mode, never secret/provider data.
+for scenario in ('global-hold','route-circuit','bad-hint'):
+    limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+    learn(limiter,identity,path,cap=100)
+    sent=limiter.reserve_read('GET',path,identity=identity)
+    waiting=limiter.reserve('GET',path,identity=identity)
+    if scenario!='bad-hint':
+        with connection() as db:
+            if scenario=='global-hold':db.execute('UPDATE public.pr_discord_rate_state SET manual_hold=true WHERE scope_key=%s',('10:'+identity.auth_key,))
+            else:db.execute("UPDATE public.pr_discord_rate_state SET circuit_until=clock_timestamp()+interval '30 seconds' WHERE scope_key=%s",(next(k for k in limiter._keys(identity,_digest(route_identity('GET',path)[0]),route_identity('GET',path)[1],_digest('synthetic-bucket')) if k.startswith('50:')),))
+    modes=[]
+    class FallbackTracked(SharedPostgresBudget):
+        def _locked(self,cur,keys,*,shared_keys=()):
+            modes.append(bool(shared_keys));return super()._locked(cur,keys,shared_keys=shared_keys)
+    result_response=copy.deepcopy(response)
+    if scenario=='bad-hint':result_response['headers']['X-RateLimit-Remaining']='malformed'
+    FallbackTracked(connection,limiter.application_id,policy=policy).observe(sent,result_response)
+    assert modes==[True,False],(scenario,modes)
+    with connection() as db:
+        assert db.execute('SELECT state FROM public.pr_discord_request_admissions WHERE id=%s',(waiting.id,)).fetchone()[0]=='blocked'
+checks.append('realSQL globalhold/routecircuit/malformedhint shared attempt fully rolls back then exclusive retry preserves hold and fences unused permits')
+
+# One common 60000-record observed history is retained across paired cases.
+# The test-only reference disables sharing, leaving every production debit,
+# pending count and transaction boundary identical. No real provider requests.
+observer_comparison=[]
+limiter,identity,path,policy=setup(app_capacity=100000,app_window_seconds=600,permit_ttl_seconds=10)
+bench_pool=PooledPostgresFactory(DSN,max_size=12,max_waiting=32,timeout=8,
+    options='-c statement_timeout=10000 -c lock_timeout=5000')
+class ExclusiveObserver(SharedPostgresBudget):
+    @staticmethod
+    def _share_get_observation(*args):return False
+warm_paths=['/channels/'+str(860000000000000000+i)+'/messages/999999999999999999' for i in range(8)]
+bench_response={'status':200,'headers':{'X-RateLimit-Bucket':'shared-bench','X-RateLimit-Limit':'100000',
+    'X-RateLimit-Remaining':'99999','X-RateLimit-Reset-After':'600'}}
+try:
+    measured=SharedPostgresBudget(bench_pool,limiter.application_id,policy=policy)
+    for target in warm_paths:
+        p=measured.reserve_read('GET',target,identity=identity);measured.observe(p,bench_response)
+    with connection() as db:
+        db.execute("INSERT INTO public.pr_discord_request_admissions(id,application_key,auth_key,credential_key,credential_kind,"
+            "method,path_key,route_key,major_key,bucket_key,scope_keys,reserved_at,expires_at,state,status_code,outcome_at) "
+            "SELECT md5(%s||i::text)::uuid,application_key,auth_key,credential_key,credential_kind,method,path_key,route_key,major_key,"
+            "bucket_key,scope_keys,reserved_at,expires_at,'observed',200,clock_timestamp() "
+            'FROM public.pr_discord_request_admissions CROSS JOIN generate_series(1,60000) AS history(i) WHERE id=%s',
+            (limiter.application_id,p.id))
+    for temperature in ('warm','cold'):
+        for mode,kind in (('exclusive-reference',ExclusiveObserver),('shared-candidate',SharedPostgresBudget)):
+            replicas=[kind(bench_pool,limiter.application_id,policy=policy) for _ in range(8)]
+            ready=Barrier(8)
+            def observed_reads(index):
+                ready.wait(8)
+                for number in range(128):
+                    target=warm_paths[index] if temperature=='warm' else '/channels/'+str(870000000000000000+(0 if mode=='exclusive-reference' else 10000)+index*128+number)
+                    p=replicas[index].reserve_read('GET',target,identity=identity)
+                    replicas[index].observe(p,bench_response)
+            began=time.monotonic()
+            with ThreadPoolExecutor(max_workers=8) as pool:list(pool.map(observed_reads,range(8)))
+            elapsed=time.monotonic()-began
+            observer_comparison.append({'mode':mode,'temperature':temperature,'replicas':8,'getRequests':1024,
+                'observedHistory':60000,'elapsedSeconds':elapsed,'requestsPerSecond':1024/elapsed,'httpRequests':0})
+finally:bench_pool.close()
+metrics.append({'case':'shared-get-observation-paired-history','results':observer_comparison,
+    'meaning':'bounded coordinator comparison;not1000user capacity or Discord acceptance'})
+checks.append('same60000observedhistory warm/cold8replica1024GET reference/candidate comparison completes with unchanged production safety math')
+
+# Bounded synthetic coordinator comparison,not capacity/provider acceptance.
+# Same learned routes,8replicas,256GETs per mode and no HTTP. Record timings;
+# exact transaction counts prove the removed phase independently of timing noise.
+read_bench=[]
+for mode in ('reserve-then-consume','atomic-read'):
+    limiter,identity,path,policy=setup(app_capacity=100000)
+    pool=PooledPostgresFactory(DSN,max_size=12,max_waiting=32,timeout=8,
+        options='-c statement_timeout=10000 -c lock_timeout=5000')
+    transaction_count=[0];counter_lock=Lock()
+    @contextmanager
+    def counted_connection():
+        with counter_lock:transaction_count[0]+=1
+        with pool() as db:yield db
+    measured=SharedPostgresBudget(counted_connection,limiter.application_id,policy=policy)
+    paths=['/channels/'+str(840000000000000000+i)+'/messages/999999999999999999' for i in range(8)]
+    headers={'X-RateLimit-Bucket':'synthetic-read-bench','X-RateLimit-Limit':'10000','X-RateLimit-Remaining':'9999','X-RateLimit-Reset-After':'60'}
+    try:
+        for candidate in paths:
+            p=measured.reserve('GET',candidate,identity=identity);measured.consume(p,'GET',candidate);measured.observe(p,{'status':200,'headers':headers})
+        transaction_count[0]=0;ready=Barrier(8)
+        def reads(index):
+            ready.wait(8)
+            for _ in range(32):
+                if mode=='atomic-read':p=measured.reserve_read('GET',paths[index],identity=identity)
+                else:
+                    p=measured.reserve('GET',paths[index],identity=identity);measured.consume(p,'GET',paths[index])
+                measured.observe(p,{'status':200,'headers':headers})
+        began=time.monotonic()
+        with ThreadPoolExecutor(max_workers=8) as executor:list(executor.map(reads,range(8)))
+        elapsed=time.monotonic()-began
+        expected=256*(2 if mode=='atomic-read' else 3)
+        assert transaction_count[0]==expected,(mode,transaction_count[0],expected)
+        read_bench.append({'mode':mode,'replicas':8,'getRequests':256,'databaseTransactions':transaction_count[0],
+            'elapsedSeconds':elapsed,'requestsPerSecond':256/elapsed,'httpRequests':0,'capacityAcceptance':'NOT_RUN'})
+    finally:pool.close()
+metrics.append({'case':'atomic-get-transaction-comparison','results':read_bench,
+    'speedRatio':read_bench[0]['elapsedSeconds']/read_bench[1]['elapsedSeconds'],'meaning':'bounded coordinator timing only;not1000user capacity'})
+checks.append('bounded8replica256GET comparison:existing3transactions/request versus atomic2,with observation and no HTTP')
 
 result={'status':'PASS','execution':'owned-cloud-PG17-synthetic',
     'workerChecks':prior['checks'],'exactScopedDispatchRegression':any(x.startswith('scoped claim selects only requested job;') for x in prior['checks']),

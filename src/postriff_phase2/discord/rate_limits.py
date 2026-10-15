@@ -34,6 +34,10 @@ class RateCoordinatorUnavailable(AlphaError):
                          503, code='discord_rate_coordinator_unavailable')
 
 
+class _ExclusiveObservationRequired(RateCoordinatorUnavailable):
+    """Rollback the read-sharing attempt before retrying this outcome once."""
+
+
 class RateDelayed(AlphaError):
     """Denied before HTTP, with an unshortened provider/DB deadline."""
     def __init__(self, seconds=300.0, *, cause='rate_budget', scope='unknown'):
@@ -372,7 +376,7 @@ class SharedPostgresBudget:
             result['30:' + _digest(identity.auth_key + ':' + major)] = ('discovery', 1, p.unknown_window_seconds)
         return result
 
-    def _locked(self, cur, keys):
+    def _locked(self, cur, keys, *, shared_keys=()):
         ordered = sorted(keys)
         if not ordered:
             raise RateCoordinatorUnavailable()
@@ -388,19 +392,45 @@ class SharedPostgresBudget:
             INSERT INTO {STATE}(scope_key,kind,limit_count,remaining,window_seconds,reset_at,policy_revision,policy_expires_at)
             SELECT scope_key,kind,limit_count,remaining,window_seconds,clock_timestamp(),policy_revision,policy_expires_at
             FROM scope_seed ORDER BY scope_key COLLATE "C" ON CONFLICT(scope_key) DO NOTHING''',tuple(parameters))
-        cur.execute(f'''WITH scope_lock AS MATERIALIZED (
-            SELECT scope_key,kind,limit_count,remaining,window_seconds,extract(epoch from reset_at)::double precision,
+        columns = '''scope_key,kind,limit_count,remaining,window_seconds,extract(epoch from reset_at)::double precision,
                 extract(epoch from blocked_until)::double precision,extract(epoch from circuit_until)::double precision,error_streak,manual_hold,
                 observation_seq,policy_revision,extract(epoch from policy_expires_at)::double precision,
-                learned,extract(epoch from fresh_after)::double precision
-                FROM {STATE} WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key COLLATE "C" FOR UPDATE)
-            SELECT * FROM scope_lock ORDER BY scope_key COLLATE "C"''',(ordered,))
+                learned,extract(epoch from fresh_after)::double precision'''
+        shared = sorted(shared_keys)
+        if shared:
+            if (not set(shared) < set(ordered) or '00:'+self.application_key not in shared
+                    or any(key[:3] not in ('00:','10:','11:','20:','40:') for key in shared)):
+                raise RateCoordinatorUnavailable()
+            mutable = sorted(set(ordered)-set(shared))
+            # Materialization + COUNT consumes every common SHARE lock before
+            # the mutable route locks. All forward/exclusive paths need app00
+            # UPDATE, so they cannot enter admission scans during this phase.
+            cur.execute(f'''WITH scope_lock AS MATERIALIZED (
+                WITH guarded AS MATERIALIZED (
+                    SELECT {columns} FROM {STATE} WHERE scope_key=ANY(%s::text[])
+                    ORDER BY scope_key COLLATE "C" FOR SHARE),
+                mutable AS MATERIALIZED (
+                    SELECT {columns} FROM {STATE} AS target
+                    CROSS JOIN (SELECT count(*) AS guarded_count FROM guarded) AS fence
+                    WHERE target.scope_key=ANY(%s::text[]) AND fence.guarded_count=%s::integer
+                    ORDER BY target.scope_key COLLATE "C" FOR UPDATE OF target)
+                SELECT * FROM guarded UNION ALL SELECT * FROM mutable)
+                SELECT * FROM scope_lock ORDER BY scope_key COLLATE "C"''',(shared,mutable,len(shared)))
+        else:
+            cur.execute(f'''WITH scope_lock AS MATERIALIZED (
+                SELECT {columns} FROM {STATE} WHERE scope_key=ANY(%s::text[])
+                ORDER BY scope_key COLLATE "C" FOR UPDATE)
+                SELECT * FROM scope_lock ORDER BY scope_key COLLATE "C"''',(ordered,))
         values = cur.fetchall()
         if (len(values) != len(ordered) or any(len(value) != 15 for value in values)
                 or [value[0] for value in values] != ordered):
             raise RateCoordinatorUnavailable()
         fields = ('kind','cap','left','window','reset','blocked','circuit','streak','hold','seq','policy','policyExpires','learned','freshAfter')
-        return {value[0]:dict(zip(fields,value[1:])) for value in values}
+        rows = {value[0]:dict(zip(fields,value[1:])) for value in values}
+        expected = {'00:':'policy','10:':'global','11:':'credential','20:':'invalid','40:':'resource'}
+        if any(rows[key]['kind'] != expected[key[:3]] for key in shared):
+            raise RateCoordinatorUnavailable()
+        return rows
 
     def _store_batch(self, cur, rows, *, locked_keys, forward=True):
         ordered = sorted(locked_keys)
@@ -488,24 +518,41 @@ class SharedPostgresBudget:
             else:
                 row['reset'] = now + row['window']
 
-    def _insert(self, cur, permit, route, major, bucket, keys, binding):
+    def _insert(self, cur, permit, route, major, bucket, keys, binding, *, read_sent=False):
+        if read_sent and (permit.method != 'GET' or binding is not None or permit.binding_hash is not None):
+            raise RateCoordinatorUnavailable()
+        read_columns = ',state,sent_at' if read_sent else ''
+        read_values = ",'sent',at" if read_sent else ''
         # Store and compare the SAME database-clock value. Lock/storage latency
         # can exhaust an immutable expiry after reserve() calculated it. A
         # rejected insert raises inside the transaction and rolls back debits.
-        cur.execute(f'''WITH reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at)
-            INSERT INTO {ADMISSIONS}(id,application_key,auth_key,credential_key,credential_kind,
+        insert=f'''INSERT INTO {ADMISSIONS}(id,application_key,auth_key,credential_key,credential_kind,
             method,path_key,route_key,major_key,bucket_key,scope_keys,is_publish,binding_hash,workspace_id,
-            publication_id,manifest_digest,authorization_digest,approval_digest,worker_key,lease_key,channel_key,expires_at,reserved_at)
-            SELECT %s::uuid,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::uuid,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),at
-            FROM reservation_clock WHERE to_timestamp(%s)>at''',
-            (permit.id,self.application_key,permit.identity.auth_key,permit.identity.credential_key,permit.identity.kind,
+            publication_id,manifest_digest,authorization_digest,approval_digest,worker_key,lease_key,channel_key,expires_at,reserved_at{read_columns})
+            SELECT %s::uuid,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::uuid,%s,%s,%s,%s,%s,%s,%s,to_timestamp(%s),at{read_values}
+            FROM reservation_clock WHERE to_timestamp(%s)>at'''
+        parameters=(permit.id,self.application_key,permit.identity.auth_key,permit.identity.credential_key,permit.identity.kind,
              permit.method,permit.path_key,route,major,bucket,sorted(keys),binding is not None,permit.binding_hash,
              *(binding.get(k) if binding else None for k in ('workspaceId','publicationId','manifestDigest','authorizationDigest',
-                  'approvalDigest','workerKey','leaseKey','channelKey')),permit.expires_at,permit.expires_at))
+                  'approvalDigest','workerKey','leaseKey','channelKey')),permit.expires_at,permit.expires_at)
+        cur.execute('WITH reservation_clock AS MATERIALIZED (SELECT clock_timestamp() AS at) '+insert,parameters)
         if cur.rowcount != 1:
             raise RateDelayed(.05,cause='permit_expired',scope='permit')
 
+    def reserve_read(self, method, path, *, identity):
+        """Authorize one GET atomically with its debit, committed before I/O.
+
+        `sent` is the authorization linearization point, as in consume(). A lost
+        response retains the spent admission. Publishing never uses this path.
+        """
+        if method != 'GET':
+            raise RateCoordinatorUnavailable()
+        return self._reserve(method, path, identity=identity, read_sent=True)
+
     def reserve(self, method, path, *, identity, binding=None, valid_until=None):
+        return self._reserve(method, path, identity=identity, binding=binding, valid_until=valid_until)
+
+    def _reserve(self, method, path, *, identity, binding=None, valid_until=None, read_sent=False):
         template, major = route_identity(method,path)
         route = _digest(template)
         if (not isinstance(identity,RequestIdentity) or binding is not None and
@@ -549,7 +596,7 @@ class SharedPostgresBudget:
                     row['left'] -= 1
             self._store_batch(cur,rows,locked_keys=keys)
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
-            self._insert(cur,permit,route,major,bucket,keys,binding)
+            self._insert(cur,permit,route,major,bucket,keys,binding,read_sent=read_sent)
         return permit
 
     def _admission(self, cur, permit):
@@ -637,6 +684,21 @@ class SharedPostgresBudget:
         new_bucket = _digest(raw_bucket) if isinstance(raw_bucket,str) and re.fullmatch(r'[A-Za-z0-9_-]{1,128}',raw_bucket) else None
         if self.policy is None:
             raise RateCoordinatorUnavailable()
+        share = self._share_get_observation(permit,classification,new_bucket,transport_failure)
+        try:
+            return self._observe_once(permit,response,classification,headers,raw_bucket,new_bucket,transport_failure,share)
+        except _ExclusiveObservationRequired:
+            # The exception crossed _transaction, so all locks/writes rolled
+            # back. Retry this existing outcome once; no provider I/O repeats.
+            return self._observe_once(permit,response,classification,headers,raw_bucket,new_bucket,transport_failure,False)
+
+    @staticmethod
+    def _share_get_observation(permit, classification, new_bucket, transport_failure):
+        return (permit.method == 'GET' and permit.binding_hash is None and classification['status'] == 200
+                and not transport_failure and not classification['invalid'] and not classification['global']
+                and classification['scope'] != 'shared' and new_bucket is not None)
+
+    def _observe_once(self, permit, response, classification, headers, raw_bucket, new_bucket, transport_failure, share):
         with self._transaction() as cur:
             # Mapping -> scope -> admission is consistent with reservation.
             # A permit is immutable; read its route metadata without taking a lock.
@@ -654,7 +716,22 @@ class SharedPostgresBudget:
             for key in original:
                 if key not in keys:
                     keys[key] = ('route',1,self.policy.unknown_window_seconds)
-            rows = self._locked(cur,keys)
+            shared_keys = ()
+            header_key = '50:'+_digest(permit.identity.auth_key+':'+new_bucket+':'+meta[1]) if new_bucket else None
+            # Cold/discovery and historical alias-transition observations retain
+            # the original exclusive path and its complete admission lock order.
+            if (share and bucket == new_bucket and bucket is not None
+                    and not any(key.startswith('30:') for key in keys)
+                    and {key for key in keys if key.startswith('50:')} == {header_key}):
+                shared_keys = tuple(key for key in keys if key[:3] in ('00:','10:','11:','20:','40:'))
+            rows = self._locked(cur,keys,shared_keys=shared_keys) if shared_keys else self._locked(cur,keys)
+            immutable_guards = {key:dict(rows[key]) for key in shared_keys}
+            if shared_keys:
+                guard_now = self._policy(cur,forward=False)
+                if (any(row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0)>guard_now for row in rows.values())
+                        or any(row['kind'] == 'discovery' for row in rows.values())
+                        or any(row['kind'] != 'route' or not row['learned'] for key,row in rows.items() if key not in shared_keys)):
+                    raise _ExclusiveObservationRequired()
             admission = self._admission(cur,permit)
             if admission['state'] != 'sent':
                 raise RateCoordinatorUnavailable()  # duplicate observation cannot reset a circuit
@@ -666,6 +743,10 @@ class SharedPostgresBudget:
                           and left is not None and left.is_integer() and left <= limit
                           and (after is not None and after > 0 and now+after <= MAX_EPOCH
                                or absolute is not None and now < absolute <= MAX_EPOCH))
+            if shared_keys and not valid_hint:
+                # No alias/admission scan or outcome write has happened yet.
+                # Release every SHARE lock by rollback; never upgrade in place.
+                raise _ExclusiveObservationRequired()
             reset_hint = max(now+after if after is not None and after > 0 and now+after <= MAX_EPOCH else now,
                              absolute if absolute is not None and now < absolute <= MAX_EPOCH else now)
             retry, bad_retry = retry_hint(response,now) if classification['status'] == 429 else (0,False)
@@ -737,7 +818,8 @@ class SharedPostgresBudget:
                     row['hold'] = row['hold'] or bad_retry
                     if row['left'] is not None:
                         row['left'] = 0
-                row['seq'] = max(row['seq'],seq)
+                if key not in shared_keys:
+                    row['seq'] = max(row['seq'],seq)
             # Apply this response once per scope, then merge final alias state.
             # Doing inheritance before increments made streaks depend on key
             # sort order and could count the same failure twice.
@@ -762,7 +844,10 @@ class SharedPostgresBudget:
                     elif row['freshAfter'] is None:
                         row['reset'] = max(row['reset'],old['reset'])
                     row['seq'] = max(row['seq'],old['seq'])
-            self._store_batch(cur,rows,locked_keys=keys,forward=False)
+            if any(rows[key] != original for key,original in immutable_guards.items()):
+                raise RateCoordinatorUnavailable()  # future mutation under SHARE fails closed
+            mutable_rows = {key:row for key,row in rows.items() if key not in shared_keys}
+            self._store_batch(cur,mutable_rows,locked_keys=set(keys)-set(shared_keys),forward=False)
             if new_bucket and seq >= seen:
                 cur.execute(f'''UPDATE {ROUTES} SET bucket_key=%s,observation_seq=%s,updated_at=clock_timestamp()
                     WHERE auth_key=%s AND route_key=%s AND major_key=%s''', (new_bucket,seq,permit.identity.auth_key,*meta))
@@ -775,6 +860,8 @@ class SharedPostgresBudget:
                 ('uncertain' if transport_failure else 'observed',classification['status'],classification['scope'],permit.id))
             if cur.rowcount != 1:
                 raise RateCoordinatorUnavailable()
+            if shared_keys and any(row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0)>now for row in rows.values()):
+                raise _ExclusiveObservationRequired()
             for key,row in rows.items():
                 if row['hold'] or max(row['blocked'] or 0,row['circuit'] or 0) > now:
                     # Stop unused permits admitted before a later embargo. A

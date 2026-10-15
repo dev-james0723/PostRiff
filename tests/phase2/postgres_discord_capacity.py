@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import math
+import multiprocessing
 import os
 import random
 import re
@@ -20,7 +21,7 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
@@ -33,6 +34,66 @@ DRAFT_SHA = '91bc2b004468d4f265ea1f4532d2f90c485ff8e8ce2c24d994015f1c6ea12e61'
 RESULT = ROOT / '.depot/discord-capacity-results.json'
 EVENTS = ROOT / '.depot/discord-capacity-events.jsonl'
 TERMINAL = frozenset(('verified', 'held', 'failed', 'canceled', 'uncertain'))
+WORKER_PIPE_BYTES = 32 * 1024 * 1024
+WORKER_SIGNALS = frozenset((signal.SIGINT, signal.SIGTERM, signal.SIGALRM))
+
+
+def start_owned_worker(process, child_channel, owned_processes, registry, lock, reported_pids):
+    # Deliver cancellation only after a launched child is in BOTH registries.
+    # The child restores these signals at its own entry point after spawn.
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, WORKER_SIGNALS)
+    try:
+        owned_processes.append(process)
+        try:
+            process.start()
+        finally:
+            if process.pid is not None:
+                with lock:
+                    registry[process.pid] = process
+                    reported_pids.discard(process.pid)
+            child_channel.close()
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+def send_worker_message(channel, kind, value):
+    raw = json.dumps([kind, value], separators=(',', ':'), allow_nan=False).encode()
+    if len(raw) > WORKER_PIPE_BYTES:
+        raise Incomplete('Owned worker message exceeded its fixed bound')
+    channel.send_bytes(raw)
+
+
+def receive_worker_message(channel):
+    value = json.loads(channel.recv_bytes(WORKER_PIPE_BYTES))
+    if not isinstance(value, list) or len(value) != 2 or not isinstance(value[0], str):
+        raise Incomplete('Malformed owned worker message')
+    return value
+
+
+def reap_owned_workers(processes, brokers):
+    """Only supplied owned handles; fixed group deadlines, never N timeouts."""
+    errors = []
+    def join_group(handles, seconds):
+        deadline = time.monotonic() + seconds
+        for handle in handles:
+            try:handle.join(timeout=max(0., deadline-time.monotonic()))
+            except Exception as error:errors.append(type(error).__name__)
+    processes = [process for process in processes if process.pid is not None]
+    join_group(processes, 12)
+    forced = [process for process in processes if process.is_alive()]
+    for process in forced:
+        try:process.terminate()
+        except Exception as error:errors.append(type(error).__name__)
+    join_group(forced, 2)
+    surviving = [process for process in forced if process.is_alive()]
+    for process in surviving:
+        try:process.kill()
+        except Exception as error:errors.append(type(error).__name__)
+    join_group(surviving, 2)
+    join_group(brokers, 2)
+    remaining = [process.pid for process in processes if process.is_alive() or process.exitcode is None]
+    return {'forcedCount': len(forced), 'killCount': len(surviving), 'survivingPids': remaining,
+            'unfinishedBrokers': sum(thread.is_alive() for thread in brokers), 'errors': errors}
 
 
 class Incomplete(RuntimeError):
@@ -335,7 +396,7 @@ def budget_lower_bound(p):
 
 
 class Telemetry:
-    def __init__(self):
+    def __init__(self, *, capture_events=True):
         self.lock = threading.RLock()
         self._expected_sql=threading.local()
         self.counters = Counter()
@@ -346,7 +407,8 @@ class Telemetry:
         self.samples = []
         self.sql_failures = []
         self.sql_operation_seconds = {}
-        self.events = EVENTS.open('w')
+        self.phase,self.phase_sql_operation_seconds='fixture',{}
+        self.events = EVENTS.open('w') if capture_events else None
 
     def count(self, key, n=1):
         with self.lock:
@@ -358,8 +420,9 @@ class Telemetry:
 
     def sql_timing(self, operation, elapsed):
         with self.lock:
-            row=self.sql_operation_seconds.setdefault(operation,{'count':0,'totalSeconds':0.,'maxSeconds':0.})
-            row['count']+=1;row['totalSeconds']+=elapsed;row['maxSeconds']=max(row['maxSeconds'],elapsed)
+            for stats in (self.sql_operation_seconds,self.phase_sql_operation_seconds.setdefault(self.phase,{})):
+                row=stats.setdefault(operation,{'count':0,'totalSeconds':0.,'maxSeconds':0.})
+                row['count']+=1;row['totalSeconds']+=elapsed;row['maxSeconds']=max(row['maxSeconds'],elapsed)
 
     @contextmanager
     def running(self, key):
@@ -375,6 +438,8 @@ class Telemetry:
     def event(self, kind, **safe):
         # Callers supply aliases/counts/hashes only. No tokens, headers or bodies.
         with self.lock:
+            if self.events is None:
+                raise Incomplete('Child event output is forbidden')
             self.events.write(canonical({'kind': kind, 'at': time.time(), **safe}) + '\n')
             self.events.flush()
 
@@ -407,10 +472,14 @@ class Telemetry:
     def summary(self):
         with self.lock:
             return {'counters': dict(self.counters), 'actualPeakConcurrency': dict(self.peak),
+                    'peakConcurrencyScopes': {key: ('parent broker-observed lifecycle overlap across spawned replicas'
+                        if key == 'workerSteps' else 'parent control plane only; per-replica peaks are in worker summaries')
+                        for key in self.peak},
                     'latencies': {k: distribution(v, self.counters['mockHttpAttempts'] if k == 'mockHttpSeconds' else len(v))
                                   for k, v in self.timings.items()},
                     'resourceSamples': self.samples, 'sqlFailureExamples': list(self.sql_failures),
-                    'sqlOperationSeconds': copy.deepcopy(self.sql_operation_seconds)}
+                    'sqlOperationSeconds': copy.deepcopy(self.sql_operation_seconds),
+                    'phaseSqlOperationSeconds':copy.deepcopy(self.phase_sql_operation_seconds)}
 
 
 class TimedCursor:
@@ -433,7 +502,13 @@ class TimedCursor:
         # emit SQL, arguments, epochs, credential identifiers or PG messages.
         query = args[0] if args and isinstance(args[0], str) else ''
         operation, expiry = 'other', None
-        if (re.match(r'\s*INSERT INTO public\.pr_discord_request_admissions\b', query)
+        if re.match(r'\s*WITH scope_store\b',query) and 'inserted_admission AS (' in query:
+            operation='reservation_commit_batch'
+            values=args[1] if len(args)>1 else None
+            if isinstance(values,(tuple,list)) and values and type(values[-1]) in (int,float) and math.isfinite(values[-1]):expiry=values[-1]
+        elif re.match(r'\s*WITH scope_store\b',query) and 'observed_admission AS (' in query:
+            operation='observation_commit_batch'
+        elif (re.match(r'\s*INSERT INTO public\.pr_discord_request_admissions\b', query)
                 or re.match(r'\s*WITH reservation_clock AS MATERIALIZED\b', query)
                 and re.search(r'\bINSERT INTO public\.pr_discord_request_admissions\b', query)):
             operation = 'admission_insert'
@@ -456,7 +531,8 @@ class TimedCursor:
                 operation='workspace_snapshot'
             elif re.match(r'\s*UPDATE public\.pr_workspaces SET state=',query):
                 operation='workspace_state_write'
-            elif 'FROM public.pr_discord_route_buckets' in query:
+            elif ('FROM public.pr_discord_route_buckets' in query
+                    or re.match(r'\s*INSERT INTO public\.pr_discord_route_buckets\b',query)):
                 operation='route_mapping_lock'
             elif 'FROM public.pr_discord_request_admissions' in query:
                 operation='admission_read'
@@ -733,8 +809,13 @@ class Runtime:
         self.Service, self.Social, self.Vault, self.auth = HostedWorkspaceService, HostedSocial, CredentialVault, authorization
         self.RateDelayed, self.Budget = RateDelayed, SharedPostgresBudget
         self.p, self.m, self.started = p, metrics, time.monotonic()
+        self.progress_phase,self.next_progress='fixture',self.started
         self.tokens, self.discord_users, self.fixtures, self.nonces = {}, {}, [], {}
         self.observed_claims, self.worker_summaries = {}, []
+        self.worker_failure = threading.Event()
+        self.worker_processes, self.reported_worker_pids = {}, set()
+        self.finished_worker_cpu = 0.
+        self.child_fences = []
         self.selector_plans = []
         self.safety_completed = False
         self.lock = threading.RLock()
@@ -744,7 +825,8 @@ class Runtime:
         self.setup_deadline = None
         self.wire = MockDiscord(self)
         validate_fence(sys.platform, os.environ, transport=self.wire)
-        self.database_factory = PooledPostgresFactory(DSN, max_size=20, max_waiting=64,
+        # Same aggregate cap as the original harness: 4 parent + 8 * 2 child.
+        self.database_factory = PooledPostgresFactory(DSN, max_size=4, max_waiting=64,
             options='-c statement_timeout=10000 -c lock_timeout=8000', observer=self.pool_statement)
         with self.connection() as db:
             row = db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_user,current_setting('data_directory'),current_setting('server_version_num')").fetchone()
@@ -775,7 +857,8 @@ class Runtime:
         verify.session_id = lambda token, principal: 'synthetic-' + principal
         verify.auth_time = lambda token, principal: time.time()
         self.verify = verify
-        self.vault = self.Vault(self.Vault.generate_key())
+        self.synthetic_vault_key = self.Vault.generate_key()
+        self.vault = self.Vault(self.synthetic_vault_key)
         self.sampler = threading.Thread(target=self.sample, name='p8-metrics', daemon=True)
         self.sampler.start()
 
@@ -795,6 +878,7 @@ class Runtime:
         self.m.count('sqlStatements')
         self.m.count('sqlOperation.pool_reset')
         self.m.timing('sqlExecuteSeconds', elapsed)
+        self.m.sql_timing('pool_reset',elapsed)
         if error is not None:
             self.m.count('sqlErrors.' + error)
             with self.m.lock:
@@ -802,6 +886,8 @@ class Runtime:
                     self.m.sql_failures.append({'type': error, 'operation': 'pool_reset', 'statementSeconds': elapsed})
 
     def guard(self, minimum_remaining=0):
+        if getattr(self, 'worker_failure', None) is not None and self.worker_failure.is_set():
+            raise Incomplete('Owned worker process failed')
         if self.fixture_abort.is_set():
             raise FixtureCancelled('Fixture work cooperatively canceled')
         if self.setup_deadline is not None and time.monotonic() + minimum_remaining >= self.setup_deadline:
@@ -1078,44 +1164,119 @@ class Runtime:
 
     @contextmanager
     def workers(self, replicas, phase):
-        stop = threading.Event()
-        failures, summaries = [], []
-        workers = [self.worker(i, phase) for i in range(replicas)]
-        def loop(worker):
-            cpu = time.thread_time()
+        if type(replicas) is not int or not 1 <= replicas <= 8:
+            raise Incomplete('Fixed worker-process budget exceeded')
+        context = multiprocessing.get_context('spawn')
+        stop = context.Event()
+        summaries, processes, brokers, channels, ready = [], [], [], [], []
+        def broker(channel, process, started):
+            active = False
+            received = False
+            request_id = 0
             try:
-                while not stop.is_set():
-                    self.guard()
-                    with self.m.running('workerSteps'):
-                        started = time.monotonic()
-                        changed = worker.step(discord_only=True)
-                        self.m.timing('workerStepSeconds', time.monotonic() - started)
-                    if not changed:
-                        stop.wait(.05)
-            except Exception as error:
-                failures.append(type(error).__name__)
-                self.m.event('worker-failed', phase=phase, error=diagnostic(error))
-                stop.set()
+                while True:
+                    if not channel.poll(.2):
+                        if not process.is_alive():
+                            raise Incomplete('Worker exited without complete evidence')
+                        continue
+                    kind, value = receive_worker_message(channel)
+                    if kind == 'http':
+                        if (not started.is_set() or not isinstance(value, dict)
+                                or set(value) != {'requestId', 'method', 'url', 'kwargs'}
+                                or type(value['requestId']) is not int or value['requestId'] != request_id + 1):
+                            raise Incomplete('Invalid synthetic request identity')
+                        request_id = value['requestId']
+                        try:
+                            response = self.wire(value['method'], value['url'], **value['kwargs'])
+                        except TimeoutError:
+                            send_worker_message(channel, 'timeout', {'requestId': request_id})
+                        except BaseException:
+                            self.worker_failure.set()
+                            send_worker_message(channel, 'failure', {'requestId': request_id})
+                        else:
+                            send_worker_message(channel, 'response', {'requestId': request_id, 'response': response})
+                        if self.m.counters['unsafeCreateAttempts'] or self.m.counters['unexpectedTransport']:
+                            self.worker_failure.set()
+                            stop.set()
+                    elif kind == 'ready':
+                        if started.is_set() or value != process.pid:
+                            raise Incomplete('Invalid child readiness')
+                        started.set()
+                    elif kind in ('step-start', 'step-finish'):
+                        if not started.is_set() or active == (kind == 'step-start'):
+                            raise Incomplete('Invalid child step lifecycle')
+                        with self.m.lock:
+                            active = kind == 'step-start'
+                            self.m.active['workerSteps'] += 1 if active else -1
+                            self.m.peak['workerSteps'] = max(self.m.peak['workerSteps'], self.m.active['workerSteps'])
+                    elif kind == 'summary':
+                        if active:
+                            raise Incomplete('Child finished with active work')
+                        validate_worker_summary(value, process.pid)
+                        absorb_worker_metrics(self.m, value.pop('metrics'), phase)
+                        with self.lock:
+                            self.reported_worker_pids.add(process.pid)
+                            self.finished_worker_cpu += value['cpuSeconds']
+                            self.child_fences.append(value['transportFence'])
+                            summaries.append(value)
+                        received = True
+                        if value['status'] != 'PASS':
+                            self.worker_failure.set()
+                        break
+                    else:
+                        raise Incomplete('Unknown child protocol')
+            except BaseException as error:
+                self.worker_failure.set()
+                self.m.event('worker-process-failed', phase=phase, error=diagnostic(error))
             finally:
-                summaries.append({'worker': worker.worker_id, 'cpuSeconds': time.thread_time() - cpu,
-                                  'counters': dict(worker.discord_stats)})
-        threads = [threading.Thread(target=loop, args=(w,), name=w.worker_id) for w in workers]
-        for thread in threads:
-            thread.start()
+                if active:
+                    with self.m.lock:self.m.active['workerSteps'] -= 1
+                if not received:self.worker_failure.set()
+                channel.close()
         try:
-            yield workers
-            if failures:
-                raise Incomplete('Worker process failure')
+            for index in range(replicas):
+                parent, child = context.Pipe(duplex=True)
+                channels.append(parent)
+                worker_id = 'p8-' + phase + '-' + str(index)
+                process = context.Process(target=process_worker, name=worker_id,
+                    args=(child, stop, worker_id, self.policy, self.synthetic_vault_key,
+                          self.database, self.started + self.p['totalHarnessDeadlineSeconds']))
+                start_owned_worker(process, child, processes, self.worker_processes, self.lock, self.reported_worker_pids)
+                started = threading.Event()
+                ready.append(started)
+                thread = threading.Thread(target=broker, args=(parent, process, started), name=worker_id + '-mock', daemon=True)
+                brokers.append(thread)
+                thread.start()
+            readiness_deadline = time.monotonic() + 30
+            while not all(event.is_set() for event in ready):
+                self.guard()
+                if time.monotonic() >= readiness_deadline:
+                    raise Incomplete('Worker process readiness deadline exceeded')
+                stop.wait(.02)
+            yield processes
+            self.guard()
         finally:
             stop.set()
-            for worker in workers:
-                worker.request_shutdown()
-            for thread in threads:
-                thread.join(timeout=12)
-            if any(t.is_alive() for t in threads):
+            # Brokers remain alive until in-flight mock I/O and result collection
+            # finish. One deadline for the group, never N unbounded joins.
+            cleanup = reap_owned_workers(processes, brokers)
+            for channel in channels:channel.close()
+            with self.lock:
+                for process in processes:
+                    if process.pid not in cleanup['survivingPids']:
+                        self.worker_processes.pop(process.pid, None)
+            complete = (len(summaries) == replicas and not cleanup['forcedCount']
+                        and not cleanup['survivingPids'] and not cleanup['unfinishedBrokers'] and not cleanup['errors']
+                        and all(p.exitcode == 0 for p in processes)
+                        and all(s['status'] == 'PASS' for s in summaries))
+            self.worker_summaries.append({'phase': phase, 'replicas': replicas,
+                'execution': 'spawned-processes', 'aggregateConnectionCap': 20,
+                'parentConnectionCap': 4, 'perReplicaConnectionCap': 2,
+                'status': 'PASS' if complete else 'FAIL', 'cleanup': cleanup, 'workers': summaries})
+            if not complete:
+                self.worker_failure.set()
                 self.m.count('workerShutdownUnfinished')
-                raise Incomplete('Worker shutdown incomplete')
-            self.worker_summaries.append({'phase': phase, 'replicas': replicas, 'workers': summaries})
+                raise Incomplete('Worker process shutdown or evidence incomplete')
 
     def wait_records(self, records, deadline):
         while True:
@@ -1213,10 +1374,11 @@ class Runtime:
         random.Random(self.p['seed'] + replicas).shuffle(selected)
         selected = selected[:count]
         duration = self.p['burstSubmissionSeconds'] if not comparison else 1
-        started, due = time.time(), time.time() + (self.p['burstScheduleLeadSeconds'] if not comparison else self.p['comparisonScheduleLeadSeconds'])
         drain = self.p['comparisonDrainSeconds'] if comparison else self.p['burstDrainSeconds']
         records = []
         with self.workers(replicas, phase), ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool:
+            started = time.time()
+            due = started + (self.p['burstScheduleLeadSeconds'] if not comparison else self.p['comparisonScheduleLeadSeconds'])
             futures = []
             for index, f in enumerate(selected):
                 arrival = started + index * duration / count
@@ -1244,8 +1406,8 @@ class Runtime:
         offsets = arrivals(self.p)
         selected = list(self.fixtures)
         random.Random(self.p['seed']).shuffle(selected)
-        started = time.time()
         with self.workers(self.p['referenceReplicas'], 'sustained'), ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool:
+            started = time.time()
             futures = []
             for index, offset in enumerate(offsets):
                 self.guard()
@@ -1586,9 +1748,23 @@ class Runtime:
         return [{'action': 'concurrent-edit-vs-dispatch', 'status': 'PASS', 'state': job['state'],
                  'createdMessages': len(creates), 'linearization': 'CAS edit or sealed original approval'}]
 
+    def emit_progress(self, sample):
+        phase=self.progress_phase
+        if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety','cleanup'):
+            phase='unknown'
+        with self.m.lock:
+            progress={'phase':phase,'elapsedSeconds':round(time.monotonic()-self.started,3),
+                'fixturesCompleted':len(self.fixtures),'jobRequests':len(self.m.records),
+                'mockHttpAttempts':int(self.m.counters['mockHttpAttempts']),
+                'pipelineQueueDepth':int(sample['pipelineQueueDepth']),
+                'unsentEligibleQueueDepth':int(sample['unsentEligibleQueueDepth']),
+                'oldestFrozenDueLagSeconds':round(float(sample['oldestFrozenDueLagSeconds']),3)}
+        # Explicit fields only; never serialize records, IDs, payloads or SQL.
+        print('RAFII_DISCORD_CAPACITY_PROGRESS '+canonical(progress),flush=True)
+
     def sample(self):
         # Linux /proc process CPU/RSS, actual SQL wait/lock/deadlock counters.
-        # Thread CPU is separately attributed in workers(); RSS is process-wide.
+        # Child CPU and individual pool/concurrency scopes are retained too.
         while not self.stop_sample.is_set():
             try:
                 process = self.process_resources()
@@ -1605,13 +1781,16 @@ class Runtime:
                         coalesce(max(greatest(0,observed.at-(j#>>'{manifest,timing,timestamp}')::numeric))
                           FILTER(WHERE j->>'state' NOT IN ('verified','held','failed','canceled')),0)
                         FROM jobs CROSS JOIN observed""").fetchone()
-                with self.m.lock:
-                    self.m.samples.append({'elapsedSeconds': time.monotonic() - self.started,
+                sample={'elapsedSeconds': time.monotonic() - self.started,
                         **process, 'lockWaiters': int(waits[0]), 'activeDatabaseSessions': int(waits[1]),
                         'transactionsCommitted': int(stats[0]), 'transactionsRolledBack': int(stats[1]),
                         'databaseDeadlocks': int(stats[2]), 'databaseTempBytes': int(stats[3]),
                         'pipelineQueueDepth': int(queue[0]), 'unsentEligibleQueueDepth': int(queue[1]),
-                        'oldestFrozenDueLagSeconds': float(queue[2]), 'queueScope': 'all synthetic workspaces, includes read-back/uncertain work'})
+                        'oldestFrozenDueLagSeconds': float(queue[2]), 'queueScope': 'all synthetic workspaces, includes read-back/uncertain work'}
+                with self.m.lock:self.m.samples.append(sample)
+                if time.monotonic()>=self.next_progress:
+                    self.emit_progress(sample)
+                    self.next_progress=time.monotonic()+30
             except Exception as error:
                 self.m.count('metricSampleErrors.' + type(error).__name__)
             self.stop_sample.wait(5)
@@ -1630,11 +1809,20 @@ class Runtime:
         for _ in range(6):
             owned.update(pid for pid, v in processes.items() if v[0] in owned)
         own = processes.get(os.getpid())
+        with self.lock:
+            replica_ids = set(self.worker_processes)
+            reported = set(self.reported_worker_pids)
+            finished_cpu = self.finished_worker_cpu
+        replicas = [v for pid, v in processes.items() if pid in replica_ids and v[0] == os.getpid()]
+        active_cpu = sum(v[1] for pid, v in processes.items() if pid in replica_ids - reported and v[0] == os.getpid())
         database = [v for pid, v in processes.items() if pid in owned]
-        return {'workerProcessCpuSeconds': own[1] if own else None, 'workerProcessRssBytes': own[2] if own else None,
+        return {'workerProcessCpuSeconds': own[1] + finished_cpu + active_cpu if own else None,
+                'workerProcessRssBytes': own[2] + sum(v[2] for v in replicas) if own else None,
+                'controlPlaneCpuSeconds': own[1] if own else None, 'liveWorkerReplicas': len(replicas),
                 'databaseProcesses': len(database), 'databaseCpuSeconds': sum(v[1] for v in database) if database else None,
                 'databaseRssBytes': sum(v[2] for v in database) if database else None,
-                'rssMethod': 'sum of owned PostgreSQL process RSS, shared pages can be counted twice'}
+                'rssMethod': 'sum of owned parent/replica or PostgreSQL process RSS; shared pages can be counted twice',
+                'cpuMethod': 'control plane plus live and completed owned replicas; cumulative per-process CPU'}
 
     def final_safety(self):
         attempts = Counter(x['alias'] for x in self.wire.attempts)
@@ -1669,10 +1857,221 @@ class Runtime:
                 'readBackLookups': self.m.counters['knownMessageLookups']}
 
     def close(self):
+        survivors = False
+        with self.lock:remaining = list(self.worker_processes.values())
+        if remaining:
+            cleanup = reap_owned_workers(remaining, [])
+            with self.lock:
+                for process in remaining:
+                    if process.pid not in cleanup['survivingPids']:
+                        self.worker_processes.pop(process.pid, None)
+            survivors = bool(cleanup['survivingPids'])
         self.stop_sample.set()
         self.sampler.join(timeout=12)
         if self.sampler.is_alive():
             raise Incomplete('Resource sampler shutdown incomplete')
+        if survivors:
+            raise Incomplete('Owned test worker survived final cleanup')
+
+
+def worker_metric_payload(metrics):
+    with metrics.lock:
+        return {'counters': dict(metrics.counters), 'timings': copy.deepcopy(metrics.timings),
+                'peak': dict(metrics.peak), 'sqlFailures': list(metrics.sql_failures),
+                'sqlOperations': copy.deepcopy(metrics.sql_operation_seconds)}
+
+
+def absorb_worker_metrics(metrics, payload, phase):
+    if (not isinstance(payload, dict)
+            or set(payload) != {'counters', 'timings', 'peak', 'sqlFailures', 'sqlOperations'}):
+        raise Incomplete('Worker metric evidence is incomplete')
+    for collection in ('counters', 'timings', 'peak', 'sqlOperations'):
+        if (not isinstance(payload[collection], dict)
+                or any(not isinstance(key, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.]{0,100}', key)
+                       for key in payload[collection])):
+            raise Incomplete('Invalid worker metric category')
+    numeric = lambda value: type(value) in (int, float) and math.isfinite(value) and value >= 0
+    if (any(type(value) is not int or value < 0 for name in ('counters', 'peak') for value in payload[name].values())
+            or any(not isinstance(values, list) or not all(numeric(x) for x in values) for values in payload['timings'].values())
+            or not isinstance(payload['sqlFailures'], list) or len(payload['sqlFailures']) > 24):
+        raise Incomplete('Invalid worker numeric evidence')
+    for row in payload['sqlOperations'].values():
+        if (not isinstance(row, dict) or set(row) != {'count', 'totalSeconds', 'maxSeconds'}
+                or type(row['count']) is not int or row['count'] < 0
+                or not numeric(row['totalSeconds']) or not numeric(row['maxSeconds'])):
+            raise Incomplete('Invalid worker SQL timing evidence')
+    with metrics.lock:
+        metrics.counters.update(payload['counters'])
+        for key, values in payload['timings'].items():metrics.timings.setdefault(key, []).extend(values)
+        metrics.sql_failures.extend(payload['sqlFailures'][:max(0, 24-len(metrics.sql_failures))])
+        for operation, value in payload['sqlOperations'].items():
+            for collection in (metrics.sql_operation_seconds, metrics.phase_sql_operation_seconds.setdefault(phase, {})):
+                row = collection.setdefault(operation, {'count': 0, 'totalSeconds': 0., 'maxSeconds': 0.})
+                row['count'] += value['count']
+                row['totalSeconds'] += value['totalSeconds']
+                row['maxSeconds'] = max(row['maxSeconds'], value['maxSeconds'])
+        # Per-process peaks are retained in worker summaries. Adding unrelated
+        # peaks would invent simultaneous checkout concurrency.
+
+
+def validate_worker_summary(value, pid):
+    fields = {'pid', 'worker', 'status', 'cpuSeconds', 'counters', 'poolStats',
+              'transportFence', 'metrics', 'error', 'perProcessPeakConcurrency'}
+    if (not isinstance(value, dict) or set(value) != fields or value['pid'] != pid
+            or value['status'] not in ('PASS', 'FAIL')
+            or type(value['cpuSeconds']) not in (int, float) or not math.isfinite(value['cpuSeconds'])
+            or value['cpuSeconds'] < 0 or not isinstance(value['poolStats'], dict)
+            or not isinstance(value['transportFence'], dict)):
+        raise Incomplete('Missing owned worker evidence')
+    fence, pool = value['transportFence'], value['poolStats']
+    if (fence.get('unexpectedAttempts') != 0 or fence.get('expectedSelfCheckDenials') != 4
+            or pool.get('closed') is not True or pool.get('maxConnections') != 2):
+        raise Incomplete('Worker fence or pool cleanup failed')
+    if value['status'] == 'PASS' and value['error'] is not None:
+        raise Incomplete('Worker error cannot be passing evidence')
+
+
+class SpawnMockTransport:
+    """One in-flight synthetic request per child, over its owned bounded pipe."""
+    synthetic_only = True
+
+    def __init__(self, channel, metrics):
+        self.channel, self.metrics, self.request_id = channel, metrics, 0
+
+    def refuse(self):
+        self.metrics.count('unexpectedTransport')
+        raise Incomplete('Owned synthetic transport protocol failed')
+
+    def __call__(self, method, url, **kwargs):
+        from urllib.parse import urlsplit
+        parsed = urlsplit(url)
+        if (method not in ('GET', 'POST') or parsed.scheme != 'https' or parsed.netloc != 'discord.com'
+                or not parsed.path.startswith('/api/v10/')):
+            self.refuse()
+        self.request_id += 1
+        send_worker_message(self.channel, 'http', {'requestId': self.request_id, 'method': method,
+                                                  'url': url, 'kwargs': kwargs})
+        if not self.channel.poll(15):
+            self.refuse()
+        kind, value = receive_worker_message(self.channel)
+        if (kind not in ('response', 'timeout', 'failure') or not isinstance(value, dict)
+                or type(value.get('requestId')) is not int or value['requestId'] != self.request_id
+                or set(value) != ({'requestId', 'response'} if kind == 'response' else {'requestId'})):
+            self.refuse()
+        if kind == 'timeout':raise TimeoutError('Synthetic transport timeout')
+        if kind == 'failure':self.refuse()
+        return value['response']
+
+
+def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expected_database, deadline):
+    """Spawn target: constructs every application/DB object in this process."""
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, WORKER_SIGNALS)
+    validate_fence(sys.platform, os.environ)
+    import sitecustomize
+    sitecustomize.self_check()
+    metrics = Telemetry(capture_events=False)
+    stack = ExitStack()
+    replica, worker, watcher = None, None, None
+    watcher_done = threading.Event()
+    error = None
+    try:
+        sys.path[:0] = [str(ROOT / 'src')]
+        from postriff_phase2.hosted import HostedWorkspaceService
+        from postriff_phase2.hosted_social import HostedSocial
+        from postriff_phase2.hosted_worker import PostgresWorker
+        from postriff_phase2.oauth import CredentialVault
+        from postriff_phase2.social_connectors import DiscordProvider
+        from postriff_phase2.postgres_pool import PooledPostgresFactory
+        from unittest.mock import patch
+        # Match the parent fixture's documented billing-only exclusion. All
+        # tenant/RLS/approval/lease/credential/rate checks remain actual SQL.
+        stack.enter_context(patch('postriff_phase2.billing.require_publishing', return_value=None))
+        stack.enter_context(patch('postriff_phase2.billing.require_plan_capacity', return_value=None))
+        class Replica:
+            connection = Runtime.connection
+            pool_statement = Runtime.pool_statement
+        replica = Replica()
+        replica.m = metrics
+        replica.database_factory = PooledPostgresFactory(DSN, max_size=2, max_waiting=8,
+            options='-c statement_timeout=10000 -c lock_timeout=8000', observer=replica.pool_statement)
+        with replica.connection() as db:
+            row = db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_user,current_setting('data_directory'),current_setting('server_version_num')").fetchone()
+            columns = db.execute("SELECT array_agg(column_name::text ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='auth' AND table_name='users'").fetchone()[0]
+            database = {'host': row[0], 'port': row[1], 'name': row[2], 'user': row[3],
+                        'directory': row[4], 'authColumns': columns, 'majorVersion': int(row[5])//10000}
+            validate_fence(sys.platform, os.environ, database)
+            if database != expected_database:
+                raise Incomplete('Child database ownership differs from parent')
+        transport = SpawnMockTransport(channel, metrics)
+        provider = configure_candidate_provider(DiscordProvider(APP, 'synthetic-client-secret', 'synthetic-shared-bot',
+            'https://rafii.example.invalid', transport=transport, production_reviewed=True), policy)
+        def no_client_session(_token):
+            raise Incomplete('Background replica cannot impersonate a client session')
+        service = HostedWorkspaceService(replica.connection, no_client_session, clock=time.time,
+            vault=CredentialVault(synthetic_vault_key), providers={'discord': provider},
+            public_base_url='https://rafii.example.invalid')
+        social = HostedSocial(service.oauth, {'discord': provider})
+        worker = PostgresWorker(replica.connection, social, worker_id=worker_id, discord_workers=True)
+        def watch_shutdown():
+            while not watcher_done.wait(.05):
+                if stop.is_set():
+                    worker.request_shutdown()
+                    return
+        watcher = threading.Thread(target=watch_shutdown, name='owned-stop')
+        watcher.start()
+        send_worker_message(channel, 'ready', os.getpid())
+        while not stop.is_set():
+            if time.monotonic() >= deadline:
+                raise Incomplete('Fixed owned worker deadline exceeded')
+            send_worker_message(channel, 'step-start', None)
+            try:
+                with metrics.running('workerSteps'):
+                    started = time.monotonic()
+                    changed = worker.step(discord_only=True)
+                    metrics.timing('workerStepSeconds', time.monotonic()-started)
+                    if metrics.counters['unexpectedTransport']:
+                        raise Incomplete('Child synthetic transport evidence failed')
+            finally:
+                send_worker_message(channel, 'step-finish', None)
+            if not changed:stop.wait(.05)
+    except BaseException as failure:
+        error = diagnostic(failure)
+        stop.set()
+    finally:
+        if worker is not None:worker.request_shutdown()
+        watcher_done.set()
+        if watcher is not None:watcher.join(timeout=1)
+        pool = {}
+        if replica is not None:
+            try:
+                if metrics.active['databaseConnections']:
+                    raise Incomplete('Child database checkout remains active')
+                replica.database_factory.close()
+                pool = replica.database_factory.stats()
+            except BaseException as failure:error = diagnostic(failure)
+        fence = {'unexpectedAttempts': getattr(sitecustomize, '_unexpected', None),
+                 'expectedSelfCheckDenials': getattr(sitecustomize, '_expected', None)}
+        summary = {'pid': os.getpid(), 'worker': worker_id, 'status': 'FAIL' if error else 'PASS',
+                   'cpuSeconds': time.process_time(), 'counters': dict(worker.discord_stats) if worker else {},
+                   'poolStats': pool, 'transportFence': fence, 'metrics': worker_metric_payload(metrics),
+                   'error': error, 'perProcessPeakConcurrency': dict(metrics.peak)}
+        send_worker_message(channel, 'summary', summary)
+        channel.close()
+        stack.close()
+
+
+def combined_transport_fence(runtime, parent_fence):
+    children = runtime.child_fences if runtime is not None else []
+    expected = sum(group['replicas'] for group in runtime.worker_summaries) if runtime is not None else 0
+    parent_unexpected = getattr(parent_fence, '_unexpected', None)
+    complete = len(children) == expected and all(row.get('unexpectedAttempts') == 0
+        and row.get('expectedSelfCheckDenials') == 4 for row in children)
+    return {'unexpectedAttempts': parent_unexpected + sum(row['unexpectedAttempts'] for row in children)
+                if type(parent_unexpected) is int and complete else None,
+            'expectedSelfCheckDenials': getattr(parent_fence, '_expected', None),
+            'expectedReplicaProcesses': expected, 'observedReplicaProofs': len(children),
+            'replicaProofsComplete': complete,
+            'replicaExpectedSelfCheckDenials': sum(row['expectedSelfCheckDenials'] for row in children) if complete else None}
 
 
 def close_pool(runtime, result):
@@ -1825,8 +2224,7 @@ def run_connection_diagnostic():
             close_pool(runtime, result)
         if metrics:
             fence = sys.modules.get('sitecustomize')
-            result['transportFence'] = {'unexpectedAttempts': getattr(fence, '_unexpected', None),
-                                        'expectedSelfCheckDenials': getattr(fence, '_expected', None)}
+            result['transportFence'] = combined_transport_fence(runtime, fence)
             if result['transportFence']['unexpectedAttempts'] != 0:
                 result['status'] = 'FAIL'
             result['metrics'] = metrics.summary()
@@ -1883,9 +2281,13 @@ def run(stage):
                 'browserConcurrencyClaim': False}
             for replicas in p['comparisonReplicas']:
                 name = 'comparison-' + str(replicas)
+                runtime.progress_phase=metrics.phase=name
                 result['phases'][name] = runtime.burst(replicas, name, p['comparisonJobsEach'], comparison=True)
+            runtime.progress_phase=metrics.phase='burst'
             result['phases']['burst'] = runtime.burst(8, 'burst', p['burstJobs'])
+            runtime.progress_phase=metrics.phase='sustained'
             result['phases']['sustained'] = runtime.sustained()
+            runtime.progress_phase=metrics.phase='safety'
             result['phases']['safety'] = runtime.safety()
         if (not metrics.samples or not any(s['workerProcessRssBytes'] is not None and s['databaseRssBytes'] is not None for s in metrics.samples)
                 or metrics.counters['finalJobReadErrors'] or metrics.counters['unexpectedTransport']):
@@ -1896,6 +2298,7 @@ def run(stage):
             'reason': str(error) if isinstance(error, Incomplete) else 'Harness or concrete assertion failure; inspect sanitized case events'})
     finally:
         if runtime:
+            runtime.progress_phase='cleanup'
             runtime.fixture_ledger.cancel_queued()
             result['fixtureAccounting'] = runtime.fixture_ledger.summary()
             try:
@@ -1927,8 +2330,7 @@ def run(stage):
             close_pool(runtime, result)
         if metrics:
             fence = sys.modules.get('sitecustomize')
-            result['transportFence'] = {'unexpectedAttempts': getattr(fence, '_unexpected', None),
-                                        'expectedSelfCheckDenials': getattr(fence, '_expected', None)}
+            result['transportFence'] = combined_transport_fence(runtime, fence)
             if result['transportFence']['unexpectedAttempts'] != 0:
                 result['status'] = 'FAIL' if result['status'] != 'BLOCKED' else 'BLOCKED'
             result['metrics'] = metrics.summary()
