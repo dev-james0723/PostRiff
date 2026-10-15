@@ -72,6 +72,21 @@ def normalize_result(result, job, reconciliation=False):
     if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform')):
         return unknown('Invalid canonical receipt URL; manual review required')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
+    if job.get('manifest', {}).get('platform') == 'Discord':
+        delivery = result.get('discordDeliveryEvidence', 'uncertain')
+        if (delivery not in ('not_sent', 'rejected', 'accepted', 'uncertain')
+                or delivery == 'accepted' and not reference
+                or delivery in ('not_sent', 'rejected') and (reference or result['state'] not in ('held', 'failed', 'scheduled'))):
+            return unknown('Invalid Discord delivery evidence; reconcile without resubmission')
+        normalized['discordDeliveryEvidence'] = delivery
+        if result.get('discordRateLimited') is True and result['state'] == 'held' and delivery == 'rejected':
+            normalized['discordRateLimited'] = True
+    if 'retryAfterSeconds' in result:
+        delay = result['retryAfterSeconds']
+        if (job.get('manifest', {}).get('platform') != 'LinkedIn' or result['state'] != 'scheduled'
+                or type(delay) is not int or not 1 <= delay <= 86400):
+            return unknown('Invalid LinkedIn retry delay; reconcile before retry')
+        normalized['retryAfterSeconds'] = delay
     progress = result.get('progress')
     if progress is not None:
         if youtube_progress:

@@ -1,3 +1,4 @@
+import type { DiscordIdentity } from './types';
 import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
@@ -238,7 +239,7 @@ export function createApi(getToken: TokenSource) {
 
     /* channels */
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
-    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
+    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; discordIdentities?: DiscordIdentity[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
     connectionHealth: (w: string) => get<ConnectionHealth>(`${ws(w)}/connection-health`),
     youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
     acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
@@ -332,6 +333,10 @@ export function createApi(getToken: TokenSource) {
         `${ws(w)}/youtube/${encodeURIComponent(c)}/sensitive-authorization`,
         { capability, enabled, confirmed: true }
       ),
+    oauthContext: (provider: string, state: string) =>
+      send<{ workspaceId: string }>('POST', `/api/oauth/${encodeURIComponent(provider)}/context`, { state }),
+    discordGuilds: (w: string, id: string) => get<{ identityConnectionId: string; guilds: { id: string; name: string }[] }>(`${ws(w)}/discord/identities/${encodeURIComponent(id)}/guilds`),
+    disconnectDiscordIdentity: (w: string, id: string) => send<{ disconnected: boolean; note: string }>('POST', `${ws(w)}/discord/identities/${encodeURIComponent(id)}/disconnect`, {}),
     oauthStart: (w: string, provider: string, capability = 'identity', input?: Record<string, unknown>) =>
       send<OAuthStart>('POST', `${ws(w)}/channels/${encodeURIComponent(provider)}/oauth/start`, input ? { capability, input } : { capability }),
     oauthComplete: (w: string, provider: string, state: string, code?: string, error?: string, iss?: string) =>
@@ -347,6 +352,8 @@ export function createApi(getToken: TokenSource) {
     creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>
       send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),
+    removeDiscordDestination: (w: string, id: string, destinationId: string) =>
+      send<{ connectionId: string; destinationId: string; status: 'revoked' }>('DELETE', `${ws(w)}/channels/${encodeURIComponent(id)}/destinations/${encodeURIComponent(destinationId)}`),
     ownedPosts: (w: string, id: string, cursor?: string) =>
       send<import('./types').OwnedPostPage>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/posts`, { confirmed: true, cursor: cursor ?? null, limit: 25 }),
     historyImportStatus: (w: string, id: string) =>

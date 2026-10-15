@@ -345,6 +345,8 @@ def build_items(service, state, task, occurrence, cur, run_id, variant_ids, cost
     items, notices = [], []
     for destination in task["destinations"]:
         key = f"{destination['platform']}|{destination.get('channelId') or ''}|{destination['language']}"
+        if destination['platform'] == 'Discord':
+            key += '|' + (destination.get('destinationId') or 'unselected')
         variant_id = by_slot.get((destination["platform"], destination.get("channelId") or "", destination["language"])) or by_slot.get((destination["platform"], "*", destination["language"]))
         variant = variants.get(variant_id)
         route = capabilities.publish_route(state, destination, providers=providers, live=live, can_publish=can_publish)
@@ -353,6 +355,8 @@ def build_items(service, state, task, occurrence, cur, run_id, variant_ids, cost
                 "textDigest": digest(variant.get("text", "")) if variant else None, "state": "ready_for_review", "reason": None,
                 "publishAt": occurrence["stages"].get("publishAt"), "capability": {"publish": route["publish"], "code": route["code"], "reason": route["reason"]},
                 "decision": None, "approvedVia": None, "reviewId": None, "jobId": None, "attempts": 0, "lastError": None, "changedAt": now}
+        if destination['platform'] == 'Discord':
+            item['destinationId'] = destination.get('destinationId')
         if variant is None:
             item.update(state="failed", reason="The writer didn't return a draft for this platform.", publishAt=None)
         elif policy == "drafts":

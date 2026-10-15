@@ -4,6 +4,7 @@ The caller supplies a connection factory and a server-side verified Auth princip
 No browser may supply the principal. No service key or profile metadata is accepted.
 """
 from contextlib import contextmanager
+from urllib.parse import urlsplit
 import copy
 import hashlib
 import io
@@ -239,12 +240,20 @@ class HostedPhase2Commands:
     # against it). A worker or test that builds these commands alone has none, so it can only clear the default.
     writers = None
 
-    def __init__(self, clock=time.time):
+    def __init__(self, clock=time.time, worker_binding=None):
         self.clock = clock
+        if worker_binding is not None:
+            if not isinstance(worker_binding, dict) or set(worker_binding) != {'environment', 'origin'}:
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
+            parsed = urlsplit(worker_binding.get('origin', ''))
+            if (worker_binding['environment'] != 'preview' or parsed.scheme != 'https' or not parsed.hostname
+                    or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                raise ValueError('Preview worker binding requires one fixed HTTPS origin.')
         # The processors a photo or frame would go to now ({id, label}); the hosted service sets it (never the client).
         self.media_processors = lambda: ()
         self.engine = Phase2Store.__new__(Phase2Store)
         self.engine.clock = clock
+        self.engine.worker_binding = copy.deepcopy(worker_binding)
         # Hosted entitlement checks use live SQL, including paid plans after the original trial ends.
         self.engine.hosted_entitlements = True
         self.engine.social = FixtureSocial()
@@ -389,7 +398,7 @@ class HostedPhase2Commands:
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
         required = {"id", "platform", "account", "accountType", "scopes", "verifiedAt", "expiresAt", "capabilityVersion", "providerAccountId"}
         # `language` is optional: records from before per-channel languages still carry it (languages plan §6).
-        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt"} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
+        if set(channel) - {"language", "refreshBindingRequired", "authorizationLane", "youtubeIdentityIngestedAt", 'enabledPermissionGroups', 'destinationId', 'discordAuthorizationGeneration'} != required or channel["platform"] not in self.SERVER_VERIFIED_PLATFORMS:
             raise AlphaError("A complete server-verified channel record is required.")
         if channel.get("authorizationLane", "standard") not in ("standard", "agentic"):
             raise AlphaError("A server-bound YouTube authorization lane is required.")
@@ -399,6 +408,11 @@ class HostedPhase2Commands:
         saved.update({"configured": True, "identityVerified": True, "capabilityVerified": bool(capability_verified), "revoked": False, "qualification": "server_verified", "evidenceSource": "live_provider", "scenario": None})
         existing = next((item for item in state["phase2"]["channels"] if item["id"] == saved["id"]), None)
         if existing:
+            if saved['platform'] == 'Discord':
+                # Keep destination history, but new consent never inherits approval.
+                saved['discordDestinations'] = copy.deepcopy(existing.get('discordDestinations', []))
+                for destination in saved['discordDestinations']:
+                    destination['status'] = 'reauthorization_required'
             existing.clear()
             existing.update(saved)
         else:
@@ -409,12 +423,12 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None, worker_binding=None):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
         self.assets = assets
-        self.commands = HostedPhase2Commands(clock)
+        self.commands = HostedPhase2Commands(clock, worker_binding=worker_binding)
         self.repository = PostgresWorkspaceRepository(connection_factory, verify_session, self.commands, clock)
         self.clock = clock
         self.identity = identity
