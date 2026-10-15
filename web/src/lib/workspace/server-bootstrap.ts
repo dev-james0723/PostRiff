@@ -37,7 +37,12 @@ export async function loadWorkspaceBootstrap() {
     // The visitor's own User-Agent: this prefetch is often a session's first API call, and the API records the
     // browser label then. Without it the session shows as "Unrecognized browser".
     const userAgent = (await headers()).get('user-agent') ?? undefined;
-    const access = { ...preview, userAgent };
+    // RAPv2 device registry: the browser's own opaque device hint (only ever issued while RAFII_DEVICE_TRUST_V2 is on),
+    // so a returning browser is recognised on this first call too. Never minted or stored here.
+    const device = jar.get('__Host-rafii_device')?.value;
+    const deviceCookie = device && /^[A-Za-z0-9_-]{43}$/.test(device) ? `__Host-rafii_device=${device}` : undefined;
+    const cookie = [preview.cookie, deviceCookie].filter(Boolean).join('; ') || undefined;
+    const access = { ...preview, cookie, userAgent };
     return await fetchWorkspaceBootstrap(origin, token, mode, jar.get('postriff_workspace')?.value, fetch, access);
   } catch { return null; }
 }
