@@ -190,6 +190,14 @@ class PinterestRevocationAndAgent(unittest.TestCase):
                 with service.pinterest_dispatch(manifest,'MOCK',{'leaseId':'lease','leaseOwner':'worker'}): called=True
             self.assertFalse(called);self.assertEqual(updates,[])
 
+    def test_paused_provider_stops_final_dispatch(self):
+        service,manifest,_job,updates=self.dispatch()
+        service.providers['pinterest'].execution_enabled=False
+        with self.assertRaises(AlphaError) as caught:
+            with service.pinterest_dispatch(manifest,'MOCK',{'leaseId':'lease','leaseOwner':'worker'}):pass
+        self.assertEqual(caught.exception.status,503)
+        self.assertEqual(updates,[])
+
     def test_known_pin_id_is_saved_before_dispatch_lock_releases(self):
         service,manifest,job,updates=self.dispatch()
         with patch('postriff_phase2.billing.require_publishing'):

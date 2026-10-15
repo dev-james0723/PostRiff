@@ -1436,6 +1436,8 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  /** Restricted server-side Pinterest pilot; never a public release gate. */
+  trialReadonly?: boolean;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;

@@ -32,6 +32,7 @@ def transport(method,url,**kw):
     global refreshes
     provider_calls.append((method,url))
     if url.endswith('/oauth/token'):
+        if kw['form'].get('code')=='MOCK-FAIL': return {'status':503,'body':{}}
         if kw['form']['grant_type']=='refresh_token':
             with lock: refreshes+=1
             time.sleep(.05)
@@ -119,6 +120,20 @@ provider.trial_policy = PinterestTrialPolicy(pilot_wid, USERS['p2'], 'synthetic'
 connected = service.oauth.complete(pilot_wid,'p2','pinterest',pilot_state,'MOCK-CODE')
 assert connected['connected'] and connected['connectionId']==pilot_cid
 assert service.oauth.destinations(pilot_wid,'p2',pilot_cid)['destinations']==[]
+failed_start=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+failed_state=parse_qs(urlparse(failed_start['authorizeUrl']).query)['state'][0]
+try: service.oauth.complete(pilot_wid,'p2','pinterest',failed_state,'MOCK-FAIL')
+except AlphaError: pass
+else: raise AssertionError('Failed exchange accepted')
+with connection() as db:
+    consumed=db.execute('SELECT consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE id=%s',(failed_start['transactionId'],)).fetchone()[0]
+    assert consumed, 'Failed exchange rolled back one-time state consumption'
+before_failed_replay=len(provider_calls)
+try: service.oauth.complete(pilot_wid,'p2','pinterest',failed_state,'MOCK-CODE')
+except AlphaError as error: assert error.status==404
+else: raise AssertionError('Failed exchange callback replayed')
+assert len(provider_calls)==before_failed_replay
+
 with connection() as db:
     scopes=db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
     assert set(scopes)=={'user_accounts:read','boards:read'}
@@ -163,7 +178,7 @@ clock[0]+=86400
 assert trial_reserve(1), 'Daily pilot budget did not recover'
 print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_synthetic_provider','oauthReplayDenied':True,
     'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':refreshes,
-    'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,
+    'failedExchangeStateConsumed':True,'failedExchangeReplayNoNetwork':True,'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,
     'pilotTwoReadScopesConnected':True,'pilotExpiryStopsCustody':True,'pilotDisconnectAfterExpiry':True,
     'trialDailyConcurrentReservations':120,'trialDailyAccepted':100,'trialDailyDenied':20,
     'trialMinuteCannotResetDaily':True,'trialDailyRecovery':True,'disconnectStopsTokenAccess':True,'otherTenantUnaffected':True,'quotaConcurrentReservations':120,

@@ -156,6 +156,7 @@ class OAuthService:
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
+                            **({'trialReadonly': bool(getattr(adapter, 'trial_readonly', False))} if pid == 'pinterest' else {}),
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': ('Read-only Trial for the approved operator and Pinterest account; Sandbox boards are separate from live boards.'
@@ -432,6 +433,28 @@ class OAuthService:
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
+        if provider_id == 'pinterest':
+            # Claim in a separate committed transaction. A failed or ambiguous code
+            # exchange must not make the same callback usable again after rollback.
+            if not isinstance(state, str) or not 20 <= len(state) <= 128:
+                raise AlphaError('Connection request unavailable.', 404)
+            from .hosted import _membership, audit
+            adapter = self._provider(provider_id)
+            if not getattr(adapter, 'execution_enabled', True):
+                raise AlphaError('Pinterest is paused. Start again when enabled.', 503)
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(_membership(row), 'manage_connections')
+                self._assert_pinterest_context(provider_id, workspace_id, principal)
+                cur.execute("SELECT id::text,member_id::text,provider,capability,redirect_uri,scopes,verifier_ciphertext,key_id,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE state_hash=%s AND workspace_id=%s FOR UPDATE", (hashlib.sha256(state.encode()).hexdigest(), workspace_id))
+                txn = cur.fetchone()
+                if not txn or txn[1] != principal or txn[2] != provider_id or txn[9]:
+                    raise AlphaError('Connection request unavailable.', 404)
+                if txn[8] <= self.clock():
+                    raise AlphaError('This connection request expired. Start again.', 409)
+                self._assert_pinterest_context(provider_id, workspace_id, principal, scopes=txn[5])
+                cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchange_started' WHERE id::text=%s", (txn[0],))
+                audit(cur, workspace_id, principal, 'oauth.exchange_claimed', txn[0], {'provider': provider_id})
+            return self._complete(workspace_id, token, provider_id, state, code, error, iss, claimed=txn[0])
         if provider_id != 'youtube':
             return self._complete(workspace_id, token, provider_id, state, code, error, iss)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:

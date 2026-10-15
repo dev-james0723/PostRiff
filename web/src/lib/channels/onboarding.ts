@@ -3,6 +3,8 @@ import type { ConnectCapability } from './state';
 
 /** Least privilege for a new account; reconnect preserves an explicitly requested use. */
 export function defaultConnectCapability(provider: ProviderView | undefined, wanted?: ConnectCapability): ConnectCapability {
+  // A Trial reconnect must retain the approved board-read scope instead of dropping to profile-only.
+  if (provider?.id === 'pinterest' && provider.trialReadonly && provider.capabilities.boards_read && (!wanted || wanted === 'identity')) return 'boards_read';
   if (wanted && provider?.capabilities[wanted]) return wanted;
   const order: ConnectCapability[] = ['boards_read', 'posts_read', 'identity', 'publish', 'analytics', 'comments_read', 'reply'];
   return order.find((key) => provider?.capabilities[key]) ?? 'identity';

@@ -14,6 +14,7 @@ node --test studio/broker/tests/pinterest-broker.test.mjs
 node --experimental-strip-types --test studio/web/tests/connections-api.test.ts
 node --experimental-strip-types --test web/src/components/application/post-preview/preview-metadata.test.ts
 cd web
+node --test src/lib/channels/onboarding.test.cjs
 node node_modules/next/dist/bin/next typegen
 npm run typecheck
 npm run lint
