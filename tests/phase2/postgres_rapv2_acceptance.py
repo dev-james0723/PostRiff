@@ -336,9 +336,11 @@ def signed_out():
               ("DELETE", "/api/auth/mfa"), ("POST", "/api/auth/logout"), ("GET", f"/api/workspaces/{workspace}")]
     for method, path in routes:
         for access in (None, expired, "not-a-jwt-" + "x" * 30):
-            status, body = call(method, path, access, {} if method in ("POST", "PATCH", "DELETE") else None)
+            # A valid body, so the refusal comes from authentication and not from input validation.
+            status, body = call(method, path, access, {"displayName": "Signed out"} if method == "PATCH" else {} if method in ("POST", "DELETE") else None)
             assert status == 401, (method, path, status)
             assert set(body) <= {"error", "code", "requestId"}, body
+    assert sql("SELECT coalesce(display_name,'') FROM public.pr_profiles WHERE user_id=%s", user)[0][0] != "Signed out"
 
 
 # --- Session revocation (G4) ----------------------------------------------------------------------------------------
@@ -469,14 +471,20 @@ def revoke_race_orders():
     user, workspace = person()
     current, other = signed_in(user), signed_in(user)
     revision = call("GET", f"/api/workspaces/{workspace}", token(user, other))[1]["revision"]
-    # Order 1: write first, then revoke. The write is the session's last.
-    assert call("PATCH", "/api/me", token(user, other), {"displayName": "Before revoke"})[0] == 200
-    call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})
-    # Order 2: revoked, then the same token tries a profile write and a workspace command.
-    assert call("PATCH", "/api/me", token(user, other), {"displayName": "After revoke"})[0] == 401
-    assert call("POST", f"/api/workspaces/{workspace}/actions", token(user, other), {"expectedRevision": revision, "action": "rename_workspace", "payload": {"name": "After revoke"}})[0] == 401
+    # Order 1: the session writes, then it is revoked. The write is its last.
+    status, body = call("POST", f"/api/workspaces/{workspace}/actions", token(user, other), {"expectedRevision": revision, "action": "mode", "payload": {"mode": "personal"}})
+    assert status == 200, ("write before revoke", status, body)
+    written = sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", workspace)[0][0]
+    assert written > revision, (revision, written)
+    status, body = call("PATCH", "/api/me", token(user, other), {"displayName": "Before revoke"})
+    assert status == 200, ("profile before revoke", status, body)
+    assert call("DELETE", f"/api/auth/sessions/{other}", token(user, current), {})[0] == 200
+    # Order 2: revoked first, then the same still-valid JWT tries both writes.
+    status, body = call("POST", f"/api/workspaces/{workspace}/actions", token(user, other), {"expectedRevision": written, "action": "mode", "payload": {"mode": "studio"}})
+    assert status == 401, ("write after revoke", status, body)
+    assert call("PATCH", "/api/me", token(user, other), {"displayName": "After revoke"})[0] == 401, "profile after revoke"
     assert sql("SELECT display_name FROM public.pr_profiles WHERE user_id=%s", user)[0][0] == "Before revoke"
-    assert sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", workspace)[0][0] == revision
+    assert sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", workspace)[0][0] == written, "a write committed after the revocation"
 
 
 @check("RAP-060", "one revocation applies to the person in every workspace they belong to")
@@ -564,6 +572,16 @@ for row in ("RAP-067", "RAP-146"):
             verify.on_first_sighting = lambda p, s, label, alert: service._alert_new_device(p, s, label, alert)
 
 
+def emit_security(notifications):
+    """The security step of NotificationService.cron alone (no delivery tick), so the checks below drive the worker."""
+    from postriff_phase2.notifications import detector
+    with connection() as db:
+        cur = db.cursor()
+        for event in detector.security_events(cur):
+            event.pop("legacy_sent", None)
+            notifications.emit(cur, workspace_id=None, **event)
+
+
 def v2_sign_in(transport):
     observe_mode(v2=True)
     v2_hosted, notifications = v2_service(transport)
@@ -571,7 +589,8 @@ def v2_sign_in(transport):
     with connection() as db:
         from postriff_phase2.hosted import observe_session
         observe_session(db.cursor(), user, new_session(), "Safari on iPhone")
-    run_v2(notifications)
+    emit_security(notifications)
+    assert [row[1] for row in security_deliveries(user)] == ["pending"], security_deliveries(user)
     return user, notifications
 
 
@@ -588,15 +607,21 @@ def transport_failure():
     user, notifications = v2_sign_in(transport)
     worker = notifications.worker()
     [(delivery, status, attempts, max_attempts, _)] = security_deliveries(user)
+    assert (status, attempts) == ("pending", 0), (status, attempts)
     for attempt in range(1, max_attempts + 1):
         due(user)
         worker.tick()
         _, status, attempts, _, _ = security_deliveries(user)[0]
+        assert attempts == attempt, (attempt, attempts)
         if attempt < max_attempts:
-            assert status == "pending" and attempts == attempt, (status, attempts)
-            assert sql("SELECT next_attempt_at > now() FROM public.pr_notification_deliveries WHERE id::text=%s", delivery)[0][0]
-    assert status == "dead" and attempts == max_attempts and max_attempts <= 10, (status, attempts, max_attempts)
+            assert status == "pending", (attempt, status)
+            assert sql("SELECT next_attempt_at > now() + interval '30 seconds' FROM public.pr_notification_deliveries WHERE id::text=%s", delivery)[0][0], "no backoff"
+    assert status == "dead" and max_attempts <= 10, (status, attempts, max_attempts)
+    due(user)
+    worker.tick()
+    assert security_deliveries(user)[0][1:3] == ("dead", max_attempts), "a dead delivery was retried"
     assert observed(user) == 1 and transport.sent == []
+    assert sql("SELECT count(*) FROM public.pr_notification_events e JOIN public.pr_notification_deliveries d ON d.event_id=e.id WHERE d.id::text=%s", delivery)[0][0] == 1
 
 
 @check("RAP-069", "provider accepted is `sent`, never `delivered`, until the provider's delivered webhook arrives")
@@ -740,7 +765,7 @@ def cross_tenant():
     status, body = call("GET", f"/api/workspaces/{bob_workspace}", access)
     assert status in (403, 404), status
     revision = sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", bob_workspace)[0][0]
-    assert call("POST", f"/api/workspaces/{bob_workspace}/actions", access, {"expectedRevision": revision, "action": "rename_workspace", "payload": {"name": "Hijacked"}})[0] in (403, 404)
+    assert call("POST", f"/api/workspaces/{bob_workspace}/actions", access, {"expectedRevision": revision, "action": "mode", "payload": {"mode": "personal"}})[0] in (403, 404)
     assert sql("SELECT revision FROM public.pr_workspaces WHERE id=%s", bob_workspace)[0][0] == revision
 
 
