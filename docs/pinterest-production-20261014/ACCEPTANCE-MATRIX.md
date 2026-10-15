@@ -1,6 +1,6 @@
 # Pinterest acceptance and capability matrix
 
-Updated2026-10-15 UTC, source `cb49fe87b718b880d7ccf3feb6352f04277356c7`. **NOT PRODUCTION-READY.** Mock/synthetic evidence never supplies a real-account result. [Exact-source cloud receipt](https://depot.dev/orgs/jf34f85hr0/workflows/md6ps00zt7) · [machine-readable evidence](evidence/read-only-pilot-validation.json).
+Updated2026-10-15 UTC, latest source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f`. **NOT PRODUCTION-READY.** Mock/synthetic evidence never supplies a real-account result. [Exact-source cloud receipt](https://depot.dev/orgs/jf34f85hr0/workflows/bcz5vdqznw) · [machine-readable evidence](evidence/pilot-current-production-validation.json).
 
 | Required acceptance | Status | Evidence / remaining requirement |
 |---|---|---|
@@ -19,7 +19,7 @@ Updated2026-10-15 UTC, source `cb49fe87b718b880d7ccf3feb6352f04277356c7`. **NOT 
 | Production release/canary | NOT RUN | No production DB/config/credentials/deployment/enablement or approved canary. |
 | Public availability | NOT RUN | New eligible customer's production journey not demonstrated. |
 | Synthetic concurrent scale | PASS | 1000 simultaneous arrivals/64 workers;4620.41 users/s; p50/p95/p99 96.10/180.68/186.30ms;0 unexpected/duplicate POST,20 expected uncertain responses,0 real provider calls. In-process harness only,2026-10-15. |
-| Scoped CI/security/browser contracts | PASS |214Python/46Node, separate Agent registry, disposablePG incl browser-session guards, Hosted typecheck/lint/build/UI, remote/controller0,2026-10-15. Full-project CI NOT RUN. |
+| Scoped CI/security/browser contracts | PASS |270Python/51Node, separate Agent registry, disposablePG incl browser-session guards, Hosted typecheck/lint/build/UI, remote/controller0,2026-10-15. Full-project CI NOT RUN. |
 | Provider retention/AI-data policy | BLOCKED | Exact data-flow requirements unresolved; POLICY_APPROVED and Agent provider-data gates stay closed. |
 
 ## Supported feature/access-tier gates
@@ -36,3 +36,5 @@ Updated2026-10-15 UTC, source `cb49fe87b718b880d7ccf3feb6352f04277356c7`. **NOT 
 | Video/product tagging/board mutation/Pin updates/analytics | Separate future capability gates | Not enabled | NOT RUN |
 
 Identity-only scope:`user_accounts:read`; profile+boards:`user_accounts:read,boards:read`; approved image publishing/read-back additionally needs`pins:read,pins:write`. No secret-board scopes. The pilot rejects prior broader grants rather than silently reusing their authorization. Personal-account access can require Pinterest approval (`PINNER_DATA_ACCESS_DENIED`); business-account eligibility is not a guaranteed entitlement. Sandbox boards/visibility are separate from live Pinterest, and neither Sandbox nor Trial results establish public visibility. See [pilot operation scope](READONLY-PILOT-CANDIDATE.md).
+
+Fresh production preflight: deployed cab2b288 preserved in the candidate; own active owner/@jamesaucreates identified without live OAuth. Callback origin still uses the old alias; correct URI is only staged in the unsaved provider form. Credential pair/quota table absent; team Pro/overdue blocks deployment qualification. No live/NOT RUN row is upgraded by these metadata observations. See FINAL-RECEIPT and NEXT-ACTION-CALLBACK.

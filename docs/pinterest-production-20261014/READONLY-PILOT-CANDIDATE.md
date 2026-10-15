@@ -1,6 +1,6 @@
 # Existing-production read-only Trial pilot — candidate
 
-2026-10-15 UTC. **PREPARED; NOT ACTIVATED.** Source `cb49fe87b718b880d7ccf3feb6352f04277356c7` passed scoped cloud validation (md6ps00zt7, remote/controller0). This is an explicit change to the earlier new-staging design, following the human's existing-production-only direction. It creates no organization, database, Vercel project or subscription. It does not authorize execution.
+2026-10-15 UTC. **PREPARED; NOT ACTIVATED.** Source `b99cf89aef28972a5e9acc2c159fa43d3cb5962f` passed scoped cloud validation (bcz5vdqznw, remote/controller0). This is an explicit change to the earlier new-staging design, following the human's existing-production-only direction. It creates no organization, database, Vercel project or subscription. It does not authorize execution.
 
 ## Target and effects to review
 
@@ -16,9 +16,9 @@ Reuse the existing production vault key; do not rotate it or install the unused 
 
 - `POSTRIFF_PINTEREST_SANDBOX=true`
 - `POSTRIFF_PINTEREST_TRIAL_READONLY=1`
-- `POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID`: **PENDING exact approved canonical UUID**
-- `POSTRIFF_PINTEREST_TRIAL_ACTOR_ID`: **PENDING approved Rafii user's UUID and current membership verification**
-- `POSTRIFF_PINTEREST_TRIAL_USERNAME`: **PENDING exact Pinterest username and account eligibility**
+- `POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID`: `568699ad-d66e-42b8-a7f1-e86d0c35ab02` (own active-owner membership verified; human selection pending)
+- `POSTRIFF_PINTEREST_TRIAL_ACTOR_ID`: `b167161d-37f4-4bc3-ae22-2482c982e5a0` (active owner verified; human selection pending)
+- `POSTRIFF_PINTEREST_TRIAL_USERNAME`: `jamesaucreates` (signed-in developer profile verified; human selection/API eligibility pending)
 - `POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT`: **PENDING exact Unix seconds, within 24 hours at activation**
 - `POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN=https://rafii.io`, only after exact registered URI agreement is verified.
 - Keep public `ENABLED`, `VERIFIED`, `REVIEWED`, `POLICY_APPROVED` and Agent/provider-data gates closed. The read-only lane cannot set the public production diagnostic true. Existing emergency DISABLED overrides the pilot.
@@ -40,3 +40,7 @@ Emergency pause via the existing DISABLED flag; then approved actor disconnects,
 The exact workspace, Rafii actor, Pinterest account and time window remain unresolved; the prior input question is pending. After those facts arrive, freeze a concrete deployment/config/SQL/callback operation and request the required approval once. The user has already selected the existing production project; do not ask them to choose a new organization/database or revive paid/Free proposals. Actual human OAuth consent, a specific real Pin, Standard submission, production release/canary and public expansion remain separate gates.
 
 Official sources checked 2026-10-15: [Sandbox](https://developers.pinterest.com/docs/developer-tools/sandbox/), [rate limits](https://developer.pinterest.com/docs/reference/rate-limits/), [OAuth](https://developer.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/).
+
+## Fresh preflight — 2026-10-15
+
+Live rafii.io is cab2b288; latest merged/tested source is b99cf89a (270Python/51Node). The actual Production callback-origin is the old postriff-phase2-private.vercel.app, and no registered redirect was displayed in Pinterest. Exact rafii.io callback is staged but not added. Client ID/secret and quota table remain absent. Vercel team is Pro/overdue: deployment qualification BLOCKED, no payment/configuration change attempted. [NEXT-ACTION-CALLBACK](NEXT-ACTION-CALLBACK.md) is the currently feasible single console change awaiting specific approval. The larger credentials/migration/deployment/consent pilot remains inactive and must not be executed while this preflight fails.
