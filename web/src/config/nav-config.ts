@@ -144,7 +144,7 @@ export const navGroups: NavGroup[] = [
         access: { role: 'admin' }
       },
       {
-        title: 'Brand',
+        title: process.env.NEXT_PUBLIC_BRAND_BRAIN_V11 === '1' ? 'Brand Brain' : 'Brand',
         url: '/app/workspace/brand',
         icon: 'palette',
         items: [],
@@ -184,6 +184,12 @@ export const navGroups: NavGroup[] = [
       {
         title: 'Privacy & data',
         url: '/app/account/privacy',
+        icon: 'shieldCheck',
+        items: []
+      },
+      {
+        title: 'Rafii Agent',
+        url: '/app/account/agent',
         icon: 'shieldCheck',
         items: []
       },

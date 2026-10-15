@@ -1020,7 +1020,7 @@ class TrendService:
         return {"id": row["watch_id"], "revision": row.get("revision", 1), "trend_id": p["trend_id"],
                 "platforms": p["platforms"], "threshold": p["threshold"], "notification_policy": "in_app", "active": row["enabled"]}
 
-    def watches(self, workspace_id, token, *, payload=None, watch_id=None, delete=False):
+    def watches(self, workspace_id, token, *, payload=None, watch_id=None, delete=False, after=None):
         now = self.clock()
         with self.transaction(workspace_id, token, "edit" if payload is not None or delete else "read") as (store, cur, _row, actor, _state, _scopes):
             if delete:
@@ -1031,6 +1031,9 @@ class TrendService:
                     revision = int(revision)
                 if type(revision) is not int or revision < 1 or not isinstance(payload["idempotency_key"], str) or not 1 <= len(payload["idempotency_key"]) <= 200:
                     raise error("invalid_request", 400)
+                cur.execute('SELECT enabled FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s FOR UPDATE', (workspace_id, ident(watch_id)))
+                prior = cur.fetchone()
+                changed = bool(prior and prior[0])
                 data = self._watch(store.delete_watch(workspace_id, actor, ident(watch_id), expected_revision=revision,
                                                       idempotency_key=payload["idempotency_key"], cursor=cur))
             elif payload is None:
@@ -1051,8 +1054,12 @@ class TrendService:
                 if not isinstance(payload["idempotency_key"], str) or not 1 <= len(payload["idempotency_key"]) <= 200:
                     raise error("invalid_request", 400)
                 self._get(store, cur, workspace_id, actor, "trend", payload["trend_id"], now)
+                cur.execute('SELECT 1 FROM public.pr_trend_watches WHERE workspace_id=%s AND idempotency_key=%s', (workspace_id, payload['idempotency_key']))
+                changed = cur.fetchone() is None
                 data = self._watch(store.put_watch(workspace_id, actor, {k:v for k,v in payload.items() if k != "idempotency_key"},
                                                    idempotency_key=payload["idempotency_key"], cursor=cur))
+            if after is not None and (delete or payload is not None):
+                after(cur, data, changed)
             return envelope(data, now)
 
     def gated_mutation(self, workspace_id, token, feature=None):

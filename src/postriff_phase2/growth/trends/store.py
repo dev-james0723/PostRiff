@@ -692,6 +692,17 @@ class TrendStore:
             cur.execute('UPDATE public.pr_trend_watches SET enabled=false,revision=revision+1,deletion_key=%s WHERE workspace_id=%s AND watch_id=%s RETURNING *',(idempotency_key,workspace_id,uuid(watch_id)))
             return row(cur)
 
+    def restore_watch(self, workspace_id, actor_id, watch_id, *, expected_revision, cursor):
+        """Server-only conditional inverse: restore the same immutable watch, never create another."""
+        with self.transaction(cursor) as cur:
+            self._actor(cur, workspace_id, actor_id, write=True)
+            cur.execute('SELECT * FROM public.pr_trend_watches WHERE workspace_id=%s AND watch_id=%s FOR UPDATE', (workspace_id, uuid(watch_id)))
+            old = row(cur)
+            if not old or old['enabled'] or old['revision'] != expected_revision:
+                raise TrendStorageError('watch_revision_conflict')
+            cur.execute('UPDATE public.pr_trend_watches SET enabled=true,revision=revision+1,deletion_key=NULL WHERE workspace_id=%s AND watch_id=%s RETURNING *', (workspace_id, uuid(watch_id)))
+            return row(cur)
+
     def decide_opportunity(self, workspace_id, actor_id, object_id, *, revision, decision, idempotency_key, result=None, cursor=None):
         with self.transaction(cursor) as cur:
             self.lock_dependencies(workspace_id,actor_id,[{'kind':'opportunity','object_id':object_id,'revision':revision}],cursor=cur)

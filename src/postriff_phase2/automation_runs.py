@@ -35,14 +35,14 @@ CONTENT_WORDS = {"post": "post", "reflection": "personal reflection", "quote": "
                  "recap": "recap", "tip": "tip", "story": "story", "question": "question for the audience"}
 
 
-def principal_repository(service, workspace_id, principal, requirement, check=None):
+def principal_repository(service, workspace_id, principal, requirement, check=None, *, capability=None, config=None):
     """A private copy of the repository that acts as `principal` for one workspace (never an HTTP credential).
     Every transaction re-checks the principal's membership class and, when given, the run's binding."""
-    capability = object()
+    private_token = object()
     repository = copy.copy(service.repository)
 
     def verify(token):
-        if token is not capability:
+        if token is not private_token:
             raise AlphaError("Invalid worker capability.", 403)
         return principal
     repository.verify_session = verify
@@ -53,12 +53,18 @@ def principal_repository(service, workspace_id, principal, requirement, check=No
         if requested_workspace != workspace_id:
             raise AlphaError("Workspace unavailable.", 403)
         with base(token, requested_workspace, **kwargs) as (cur, row, found):
-            require(Membership.from_row(*row[2:7]), requirement)
+            member = Membership.from_row(*row[2:7])
+            require(member, requirement)
+            if capability is not None:
+                from .agent_runtime_v2 import authz
+                authz.recheck_principal(cur, workspace_id=workspace_id, principal=principal, member=member,
+                                       state=json.loads(row[1]) if isinstance(row[1], str) else row[1], capability=capability,
+                                       config=config or authz.runtime_config_for(service), now=service.clock())
             if check is not None:
                 check(json.loads(row[1]) if isinstance(row[1], str) else row[1])
             yield cur, row, found
     repository.transaction = transaction
-    return repository, capability
+    return repository, private_token
 
 
 def _save(cur, workspace_id, state, actor):
@@ -558,7 +564,7 @@ def advance(worker, max_workspaces=20, max_commits=10):
                             campaigns._history(occurrence, now, "failed", f"{item['platform']} post not published: {item['reason']}")
                             notices.append((workspace_id, task, occurrence, "publish_failed", [owner] + watchers, item["reason"]))
                             changed = True
-                        elif now >= publish_at - publisher.COMMIT_LEAD and len(commits) < max_commits:
+                        elif now >= publish_at - publisher.COMMIT_LEAD and now >= item.get("retryAt", 0) and len(commits) < max_commits:
                             commits.append((workspace_id, occurrence["id"], item["key"], publisher.expected_principal(task, item), dict(item), task))
                 # Posts waiting for approval: tell the person once, at the review time (or as soon as they are drafted).
                 waiting = [i for i in occurrence.get("items") or [] if i["state"] == "ready_for_review" and i.get("publishAt")]
@@ -600,6 +606,13 @@ def commit_item(worker, workspace_id, occurrence_id, item_key, principal, item, 
     if not row:
         return {"itemKey": item_key, "state": "gone"}
     state = row[0]
+    # Re-read the durable item, not a pre-backoff copy from another cron tick.
+    runs = ((state.get('raffi') or {}).get('campaignPlanning') or {}).get('occurrences') or []
+    occurrence = next((run for run in runs if run.get('id') == occurrence_id), None)
+    fresh = next((entry for entry in (occurrence or {}).get('items', []) if entry.get('key') == item_key), None)
+    if not fresh or fresh.get('state') != 'approved' or fresh.get('jobId') or fresh.get('retryAt',0) > now:
+        return {'itemKey': item_key, 'state': (fresh or {}).get('state','gone'), 'deferred': bool(fresh and fresh.get('retryAt',0)>now)}
+    item = dict(fresh)
     providers = getattr(getattr(service, "oauth", None), "providers", None) or {}
     route = capabilities.publish_route(state, {"platform": item["platform"], "channelId": item.get("channelId")}, providers=providers,
                                        live=bool(getattr(service, "publishing_live", False)), can_publish=can_publish)
@@ -609,10 +622,14 @@ def commit_item(worker, workspace_id, occurrence_id, item_key, principal, item, 
     if reverify is not None:
         try:
             checked = reverify(workspace_id, item["channelId"])
-        except AlphaError:
-            checked = {"ready": False, "state": "reauthorization_required"}
+        except AlphaError as error:
+            from . import recovery
+            checked = {"ready": False, "state": "verification_unavailable" if recovery.category(error) == 'retryable' else "reauthorization_required"}
         if not checked.get("ready"):
-            return _blocked(service, workspace_id, occurrence_id, item_key, task, {"code": "disconnected", "reason": f"{item.get('account') or item['platform']} couldn't be verified just now. Reconnect it to publish; the draft is kept."}, transient=checked.get("state") == "verification_unavailable")
+            transient = checked.get("state") == "verification_unavailable"
+            reason = (f"{item.get('account') or item['platform']} could not be checked just now. A bounded retry is scheduled; the draft is kept." if transient else
+                      f"{item.get('account') or item['platform']} couldn't be verified just now. Reconnect it to publish; the draft is kept.")
+            return _blocked(service, workspace_id, occurrence_id, item_key, task, {"code": "disconnected", "reason": reason}, transient=transient)
     if not principal:
         # Automatic publishing was turned off (or the approval is gone): the post waits for a person again.
         return _commit_failed(service, workspace_id, occurrence_id, item_key, task, AlphaError("Automatic publishing is off for this automation now, so this post needs your approval.", 409, code="publish_authority_required"))
@@ -645,16 +662,26 @@ def _blocked(service, workspace_id, occurrence_id, item_key, task, route, transi
         if transient:
             item["attempts"] = item.get("attempts", 0) + 1
             item["lastError"] = route["reason"]
-            if item["attempts"] < publisher.MAX_ATTEMPTS:
+            from . import recovery
+            item['recovery'] = recovery.record('retryable', item['attempts'], max_attempts=publisher.MAX_ATTEMPTS, now=now)
+            item['retryAt'] = item['recovery']['retryAt'] or 0
+            if item['recovery']['automaticRetry']:
                 return
-        target = "platform_disconnected" if route.get("code") in ("disconnected", "reauthorize", "not_connected") else "failed"
-        lifecycle.move(item, target, reason=route["reason"], at=now)
-        campaigns._history(occurrence, now, target, f"{item['platform']} post not queued: {route['reason']}")
-        notice.append((occurrence, target))
+        # Exhausted transient checks stay terminal; reconnect detection must not
+        # cycle them through approved and silently reset the bounded circuit.
+        target = "platform_disconnected" if not transient and route.get("code") in ("disconnected", "reauthorize", "not_connected") else "failed"
+        if not transient:
+            from . import recovery
+            item['recovery'] = recovery.record('permission' if target == 'platform_disconnected' else 'permanent',item.get('attempts',0),now=now)
+            item.pop('retryAt',None)
+        reason = (f"{item['platform']} could not be verified after {publisher.MAX_ATTEMPTS} attempts. Review the connection in Automations; the draft is kept." if transient else route["reason"])
+        lifecycle.move(item, target, reason=reason, at=now)
+        campaigns._history(occurrence, now, target, f"{item['platform']} post not queued: {reason}")
+        notice.append((occurrence, target, reason))
     result = _item_update(service, workspace_id, occurrence_id, item_key, change)
-    for occurrence, target in notice:
+    for occurrence, target, reason in notice:
         notify(service, workspace_id, task, occurrence, "platform_disconnected" if target == "platform_disconnected" else "publish_failed",
-               [task.get("activatedBy") or task["createdBy"]] + list(task.get("emailWatchers") or []), route["reason"])
+               [task.get("activatedBy") or task["createdBy"]] + list(task.get("emailWatchers") or []), reason)
     return {"itemKey": item_key, **(result or {}), "blocked": route.get("code")}
 
 
@@ -666,7 +693,12 @@ def _commit_failed(service, workspace_id, occurrence_id, item_key, task, error):
     def change(state, occurrence, _task, item):
         if item["state"] != "approved":
             return
-        if code in ("draft_changed", "publish_authority_required", "source_use_required", "auto_blocked") or status == 403:
+        from . import recovery
+        kind = recovery.category(error)
+        item['recovery'] = recovery.record(kind, item.get('attempts',0), max_attempts=publisher.MAX_ATTEMPTS, now=now)
+        if code in ("draft_changed", "publish_authority_required", "source_use_required", "auto_blocked") or status in (401,403):
+            item['recovery'] = recovery.record('permission',item.get('attempts',0),now=now)
+            item.pop('retryAt',None)
             item["decision"], item["approvedVia"] = None, None
             reason = message if status != 403 else "The person who approved this post can no longer approve posts here. Approve it again."
             lifecycle.move(item, "ready_for_review", reason=reason, at=now)
@@ -681,8 +713,12 @@ def _commit_failed(service, workspace_id, occurrence_id, item_key, task, error):
         else:
             item["attempts"] = item.get("attempts", 0) + 1
             item["lastError"] = clean(message, 300)
+            # This failure occurred while queuing locally, before any provider POST.
+            item['recovery'] = recovery.record('retryable' if status == 409 else kind, item['attempts'], max_attempts=publisher.MAX_ATTEMPTS, now=now,
+                                                retry_after=getattr(error,'retry_after',None))
+            item['retryAt'] = item['recovery']['retryAt'] or 0
             campaigns._history(occurrence, now, "retry", f"{item['platform']}: couldn't queue ({item['lastError']}); attempt {item['attempts']} of {publisher.MAX_ATTEMPTS}.")
-            if item["attempts"] >= publisher.MAX_ATTEMPTS:
+            if not item['recovery']['automaticRetry']:
                 lifecycle.move(item, "failed", reason=f"It couldn't be queued: {item['lastError']} The approved draft is kept.", at=now)
                 notice.append(("publish_failed", item["reason"]))
     result = _item_update(service, workspace_id, occurrence_id, item_key, change)

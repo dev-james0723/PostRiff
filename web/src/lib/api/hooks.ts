@@ -14,6 +14,7 @@ export const keys = {
   snapshot: (w: string) => ['snapshot', w] as const,
   usage: (w: string) => ['usage', w] as const,
   channels: (w: string) => ['channels', w] as const,
+  connectionHealth: (w: string) => ['channels', w, 'health'] as const,
   analytics: (w: string) => ['analytics', w] as const,
   timeSavings: (w: string, range: string) => ['time-savings', w, range] as const,
   audience: (w: string) => ['audience', w] as const,
@@ -59,6 +60,12 @@ export function useUsage() {
 export function useChannels() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.channels(w), queryFn: () => api.channels(w), enabled });
+}
+
+/** Connection Health Center: only requested where the Channels response said this workspace may open it. */
+export function useConnectionHealth(options: { enabled?: boolean } = {}) {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.connectionHealth(w), queryFn: () => api.connectionHealth(w), enabled: enabled && options.enabled !== false, retry: false });
 }
 
 export function useAnalytics() {

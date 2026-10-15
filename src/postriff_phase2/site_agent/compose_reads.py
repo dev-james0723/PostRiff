@@ -407,11 +407,18 @@ def _voice_check(get, classification, text):
     data = get("voice.check")
     if not data:
         return {"lines": ["Select a draft, or put the sentence in quotes, and I'll compare it with your stored voice."], "blocks": [], "refs": [], "grounded": True}
+    withheld = (data.get("withheld") or {}).get("reason")
+    if withheld == "cloud_memory_off":
+        # A cloud reader's check (reads.voice_check): stored, but not sent to the model, so not compared here.
+        return {"lines": ["I didn't compare this with your stored voice here: cloud memory is off for this workspace, so your voice profile and learned "
+                          "preferences aren't sent to a cloud model. They stay on the Brand page."], "blocks": [], "refs": [], "grounded": True, "nav": data.get("profileHref")}
     if data["empty"]:
         return {"lines": ["There's no approved voice profile or learned preference to compare with, so I won't judge this. Approve writing samples on Brand to build one."],
                 "blocks": [], "refs": [], "grounded": True, "nav": data.get("profileHref")}
     s = data["summary"]
     lines = [f"I compared {data['subject']} with your stored voice: {s['matches']} match, {s['differs']} differ, and {s['unclear']} need a writer's judgement."]
+    if withheld == "sample_route_grant_required":
+        lines.append("Your voice profile was built from writing samples, which reach only the writer each was shared with, so only your learned preferences were compared here.")
     checked = [f for f in data["findings"] if f["basis"] != "needs_writer"]
     judged = [f for f in data["findings"] if f["basis"] == "needs_writer"]
     differs = [f for f in checked if f["verdict"] == "differs"]

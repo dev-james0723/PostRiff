@@ -40,6 +40,19 @@ def result(tools=(), *, composed="manager", billing="metered", refs=(), approval
 
 
 class EligibilityTest(unittest.TestCase):
+    def test_founder_journey_requires_explicit_server_scope_and_verified_read(self):
+        founder = result([("founder_cost_breakdown", "verified")])
+        for scope in ("workspace", "invalid"):
+            self.assertFalse(ui_projection.eligibility(founder, "Show a cost table", "text", flags=ON, scope=scope)["eligible"])
+        decided = ui_projection.eligibility(founder, "Why did costs rise?", "text", flags=ON, scope="founder")
+        self.assertTrue(decided["eligible"])
+        self.assertEqual(decided["journeyIds"], ["J09"])
+        self.assertEqual(decided["reason"], "rich_result")
+        for status in ("blocked", "failed"):
+            blocked = result([("founder_cost_breakdown", status)])
+            self.assertFalse(ui_projection.eligibility(blocked, "Show a cost table", "text", flags=ON, scope="founder")["eligible"])
+        self.assertFalse(ui_projection.eligibility(founder, "Why did costs rise?", "voice", flags=ON, scope="founder")["eligible"])
+
     def test_disabled_and_non_manager_turns_never_qualify(self):
         r = result([("calendar_range", "verified")])
         self.assertEqual(ui_projection.eligibility(r, "show my week", "text", flags={"enabled": False})["reason"], "disabled")
@@ -86,6 +99,88 @@ class EligibilityTest(unittest.TestCase):
         self.assertFalse(decided["eligible"])
         self.assertEqual(decided["reason"], "voice")
 
+    def test_a_question_about_runs_after_a_run_history_read_is_a_collection(self):
+        # Run 3 J08-b: "What happened in my last automation runs?" read run history through automation_explain/automation_get,
+        # which harvest one automation reference, so the turn was a "single fact" and no view (or "Build interactive view") was
+        # offered although J08 shows run history (automation_history → RunHistory). D-A52: it is a collection when the person asks
+        # about several runs AND the verified reads covered two or more distinct runs (runIds recorded by the tool gate).
+        ref = [{"type": "automation", "id": "t_weekly_tips", "title": "Weekly tips"}]
+
+        def reads(*activities, refs=ref):
+            r = result([(tool, status) for tool, status, _ids in activities], refs=refs)
+            for entry, (_tool, _status, ids) in zip(r["toolActivity"], activities):
+                if ids is not None:
+                    entry["runIds"] = list(ids)
+            return r
+
+        three = reads(("automation_get", "verified", ["o1", "o2", "o3"]))
+        two_explains = reads(("automation_explain", "verified", ["o1"]), ("automation_explain", "verified", ["o2"]))
+        # ("show my automation run history" is also a UI intent, so it is eligible either way; test_run_history_wording covers its words.)
+        asks = ("What happened in my last automation runs?", "Any problems in the run history?",
+                "How did my last 3 runs go?", "睇吓我自動化嘅運行記錄", "我最近幾次自動化發生咩事？", "最近几次运行记录")
+        for r in (three, two_explains):
+            for text in asks:
+                with self.subTest(text=text, tools=[a["tool"] for a in r["toolActivity"]]):
+                    decided = ui_projection.eligibility(r, text, "text", flags=ON)
+                    self.assertTrue(decided["eligible"], decided)
+                    self.assertEqual((decided["reason"], decided["journeyIds"]), ("rich_result", ["J08"]))
+        # The words alone never qualify: one run, the same run twice, unverified or blocked reads, another tool, or an older
+        # stored result without runIds stay a single fact.
+        for r in (reads(("automation_get", "verified", ["o1"])), reads(("automation_explain", "verified", ["o1"]), ("automation_get", "verified", ["o1"])),
+                  reads(("automation_get", "unverified", ["o1", "o2"])), reads(("automation_get", "blocked", ["o1", "o2"])),
+                  reads(("draft_get", "verified", ["o1", "o2"]), refs=[{"type": "draft", "id": "v1"}]), reads(("automation_get", "verified", None))):
+            with self.subTest(activity=r["toolActivity"]):
+                self.assertFalse(ui_projection.eligibility(r, "What happened in my last automation runs?", "text", flags=ON)["eligible"])
+        # Several runs read, but the person asked about one run, a schedule ("runs" the verb) or declined history: native answer.
+        for text in ("Why did my last run fail?", "Why didn't my Tuesday post publish?", "what runs tomorrow?",
+                     "My automation runs at 9am, why did nothing publish?", "When does it run next?", "唔使睇歷史", "不用看历史，直接告诉我"):
+            with self.subTest(text=text):
+                decided = ui_projection.eligibility(three, text, "text", flags=ON)
+                self.assertEqual((decided["eligible"], decided["reason"]), (False, "single_fact"), decided)
+        # Voice still needs a visual ask.
+        self.assertEqual(ui_projection.eligibility(three, "what happened in my last runs", "voice", flags=ON)["reason"], "voice")
+
+    def test_run_history_wording(self):
+        for text in ("What happened in my last automation runs?", "show my automation run history", "the past few runs", "recent runs", "my runs",
+                     "history of its runs", "run log", "睇吓我自動化嘅運行記錄", "上幾次點樣", "最近几次", "执行记录", "顯示歷史"):
+            with self.subTest(text=text):
+                self.assertTrue(ui_projection.asks_run_history(text))
+        for text in ("Why did my last run fail?", "what runs tomorrow?", "My automation runs at 9am, why did nothing publish?", "It runs daily",
+                     "the previous run", "latest run", "唔使睇歷史", "唔好睇歷史", "不用看历史", "不要歷史", "", None):
+            with self.subTest(text=text):
+                self.assertFalse(ui_projection.asks_run_history(text))
+
+    def test_the_tool_gate_records_which_runs_a_verified_automation_read_covered(self):
+        from postriff_phase2.agent_runtime_v2 import config as rt_config, context as rt_context, contracts as rt_contracts, tool_adapter
+        from postriff_phase2.permissions import Membership as Member
+        get = {"ok": True, "verified": True, "data": {"taskId": "t1", "runs": [{"occurrenceId": "o1"}, {"occurrenceId": "o2"}, {"occurrenceId": "o1"},
+                                                                                {"occurrenceId": "bad id!"}, {"occurrenceId": None}, "x"]}}
+        self.assertEqual(tool_adapter.run_ids_read("automation_get", get), ["o1", "o2"])
+        self.assertEqual(tool_adapter.run_ids_read("automation_explain", {"ok": True, "data": {"automationId": "t1", "runId": "o9"}}), ["o9"])
+        self.assertEqual(tool_adapter.run_ids_read("automation_explain", {"ok": True, "data": {"automationId": None, "runId": None}}), [])
+        self.assertEqual(tool_adapter.run_ids_read("draft_get", get), [])
+        for odd in (None, "x", {"data": None}, {"data": {"runs": "nope"}}, {"data": {"runs": [{"occurrenceId": "o%d" % i} for i in range(40)]}}):
+            self.assertLessEqual(len(tool_adapter.run_ids_read("automation_get", odd)), tool_adapter.MAX_RUN_IDS)
+
+        def ctx():
+            return rt_context.RafiiRunContext(service=None, workspace_id="ws", token="t", principal="p", membership=Member.from_row("owner"),
+                                              conversation_id="c", trace_id=rt_contracts.new_trace_id(), modality="text", zone="Asia/Hong_Kong",
+                                              now=lambda: 1_760_000_000.0, config=rt_config.RuntimeConfig.from_environment({}))
+
+        def probe(name, outcome):
+            spec = rt_contracts.ToolSpec(name, rt_contracts.READ, "read", "probe")
+            return tool_adapter.Tool(spec, {"type": "object", "properties": {}, "required": [], "additionalProperties": False}, lambda _c, _a: outcome, "probe")
+
+        verified = ctx()
+        tool_adapter.execute(verified, probe("automation_get", get), {})
+        self.assertEqual(verified.ledger.tool_activity[-1]["runIds"], ["o1", "o2"])
+        unverified = ctx()
+        tool_adapter.execute(unverified, probe("automation_get", {**get, "verified": False}), {})
+        self.assertNotIn("runIds", unverified.ledger.tool_activity[-1])
+        other = ctx()
+        tool_adapter.execute(other, probe("draft_get", get), {})
+        self.assertNotIn("runIds", other.ledger.tool_activity[-1])
+
     def test_odd_input_never_raises(self):
         for odd in (None, "x", 3, {"toolActivity": "nope"}, {"composedBy": "manager", "usage": {"billing": "metered"}, "toolActivity": [None, 1]}):
             self.assertFalse(ui_projection.eligibility(odd, None, None, flags=ON)["eligible"])
@@ -114,6 +209,15 @@ class ProjectionTest(unittest.TestCase):
         self.assertTrue(all(ui_contracts.valid_name(n) for n in names))
         self.assertEqual(projection["egress_decision"]["allowed"], True)
         self.assertEqual(projection["egress_decision"]["provider"], "openai")
+
+    def test_an_automation_reference_suggests_its_detail_and_run_history(self):
+        r = result([("automation_explain", "verified")], refs=[{"type": "automation", "id": "t_weekly_tips", "title": "Weekly tips"}],
+                   ui={"eligible": True, "journeyIds": ["J08"]})
+        projection = ui_projection.project_ui_context(None, auth("owner"), r, "panel", None)
+        suggested = projection["allowed_context"]["suggestedInputs"]
+        self.assertIn({"binding": "automation_detail", "inputs": {"automationId": "t_weekly_tips"}}, suggested)
+        self.assertIn({"binding": "automation_history", "inputs": {"automationId": "t_weekly_tips"}}, suggested)
+        self.assertIn("automation_history", {b["name"] for b in projection["data_bindings"]}, "J08's manifest carries the run-history read")
 
     def test_unmetered_parent_turn_denies_presenter_egress(self):
         projection = ui_projection.project_ui_context(None, auth(), result([("draft_get", "verified")], billing="scripted", ui={"journeyIds": ["J01"]}), "chat", None)

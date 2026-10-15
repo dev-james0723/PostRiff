@@ -27,8 +27,8 @@ SHAPES: dict[str, dict] = {
     "drafts_list": _s("drafts offset missingIds", drafts=_DRAFT_ROW),
     "draft_read": _s(_DRAFT_ROW + " text openings selectedOpening unknowns warnings blockedByRetraction proposedUpdate scheduled editable editBlockedReason "
                      "voiceSourceCount revisionsCount", scheduled=_JOB_VIEW),
-    "draft_evidence": _s("draftId edges sources voiceFit",
-                         sources="sourceId ref available kind title active retracted approvedFacts facts origin host published fetchedAt"),
+    "draft_evidence": _s("draftId edges sources voiceFit workspaceId claimsTruncated",
+                         sources="sourceId ref available kind title active retracted approvedFacts facts origin host published fetchedAt evidence claims"),
     "draft_revisions": _s("draftId current revisions offset", revisions="revision origin at characters text textTruncated"),
     "writers_list": _s("models selected workspaceDefault", models="id label qualified costClass route detail"),
     # J02
@@ -63,7 +63,7 @@ SHAPES: dict[str, dict] = {
                             events="kind ref atUtc local status automationId name scheduleZone scheduleLocal runId items jobId jobZone jobLocal platform"),
     "task_progress": _s("task summary rule"),
     # J06
-    "analytics_posts": _s("posts offset timeZone startUtc endUtc families rules definitionVersion undated verifiedPostsInWindow postsWithReadings",
+    "analytics_posts": _s("posts offset timeZone startUtc endUtc families rules definitionVersion undated verifiedPostsInWindow postsWithReadings workspaceId",
                           posts="ref jobId provider platform connectionId providerPostId language publishedAt publishedLocal contentOrigin metrics rates cohort freshness"),
     "analytics_compare": _s("metric basis comparisons rules startUtc endUtc timeZone undated",
                             comparisons="cohort metric interpretation jobIds sampleSize measured missing mean minimum reason causalityEstablished"),
@@ -100,7 +100,8 @@ OPTIONAL: dict[str, dict] = {
     "analytics_compare": _s("", comparisons="sampleSize measured missing mean minimum reason causalityEstablished"),
     "research_results": _s("reason searches note"),
     # A source no longer in the workspace may be reported as {sourceId, available: false} alone.
-    "draft_evidence": _s("", sources="ref active approvedFacts facts fetchedAt host kind origin published retracted title"),
+    "draft_evidence": _s("workspaceId claimsTruncated", sources="ref active approvedFacts facts fetchedAt host kind origin published retracted title evidence claims"),
+    "analytics_posts": _s("workspaceId"),
     # With no multi-step task in the conversation the result may be {task: null} alone.
     "task_progress": _s("summary rule"),
 }

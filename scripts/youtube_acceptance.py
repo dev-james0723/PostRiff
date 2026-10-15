@@ -52,15 +52,17 @@ def main(argv=None):
     try:
         require(all(c in REQUIRED_CASES for c in args.capability), 'Unsupported import capability; no acceptance was written.')
         project = json.loads(os.environ.get('POSTRIFF_YOUTUBE_PROJECT_EVIDENCE', '{}'))
-        client = os.environ.get('POSTRIFF_OAUTH_YOUTUBE_CLIENT_ID')
-        require(isinstance(project, dict) and project.get('projectId') == args.project_id and
+        from postriff_phase2.youtube.provider import YouTubeProvider
+        client, _, credentials_valid, source_diagnostic = YouTubeProvider.standard_credential_pair(os.environ)
+        require(credentials_valid and isinstance(project, dict) and project.get('projectId') == args.project_id and
             project.get('clientId') == client == args.client_id, 'Current server client/project binding is missing or different.')
         base = os.environ.get('POSTRIFF_PUBLIC_BASE_URL', '').rstrip('/')
         origin = urlparse(base)
         require(origin.scheme == 'https' and origin.hostname and not any((origin.username, origin.password, origin.path, origin.query, origin.fragment)), 'A fixed current HTTPS server origin is required.')
+        callback_base = 'https://rafii.io' if source_diagnostic['credentialSource'] == 'dedicated_production' else base
         bindings = {'workspaceId': args.workspace_id, 'connectionId': args.connection_id,
             'channelId': args.channel_id, 'clientId': client, 'projectId': args.project_id,
-            'callbackUri': base + '/api/oauth/youtube/callback'}
+            'callbackUri': callback_base + '/api/oauth/youtube/callback'}
         template = read_document(ROOT / 'docs/youtube/real-e2e-matrix.json')
         matrix, attestation = read_document(args.matrix), read_document(args.attestation)
         required = {case for cap in args.capability for case in REQUIRED_CASES[cap]}

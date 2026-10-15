@@ -47,7 +47,7 @@ class FakeService:
     def revoke_invitation(self, workspace_id, token, invitation_id):
         return {"invitationId": invitation_id, "state": "revoked"}
 
-    def accept_invitation(self, token, raw, client=None):
+    def accept_invitation(self, token, raw, client=None, client_label=""):
         if raw == "throttled":
             raise AlphaError("Too many attempts. Wait a minute and try again.", 429)
         return {"workspaceId": "w", "role": "editor"}
@@ -320,15 +320,17 @@ class HostedPhase2Acceptance(unittest.TestCase):
         self.assertEqual(client_address({"HTTP_X_FORWARDED_FOR": "203.0.113.5, 10.0.0.1", "REMOTE_ADDR": "10.0.0.2"}), "203.0.113.5")
         self.assertEqual(client_address({"REMOTE_ADDR": "10.0.0.2"}), "10.0.0.2")
         self.assertIsNone(client_address({}))
-        self.assertEqual(client_label({"HTTP_USER_AGENT": "Mozilla/5.0 (secret token)"}), "Mozilla")
-        self.assertEqual(client_label({}), "unknown")
+        # Only fixed browser/OS names come back: header text such as "(secret token)" is never echoed.
+        self.assertEqual(client_label({"HTTP_USER_AGENT": "Mozilla/5.0 (secret token)"}), "Unrecognized browser")
+        self.assertEqual(client_label({}), "Unrecognized browser")
         self.assertLessEqual(len(client_label({"HTTP_USER_AGENT": "x" * 500})), 40)
 
     def test_wsgi_membership_invitation_session_routes(self):
         app = HostedApplication(FakeService(), FakeWorker(), {"projectUrl": "https://project.supabase.co", "publishableKey": "public", "flow": "pkce"}, "c" * 24)
         auth = {"Authorization": "Bearer " + "t" * 32, "X-PostRiff-Request": "founder-alpha", "X-Forwarded-For": "203.0.113.5"}
-        status, _, created = invoke(app, "POST", "/api/auth/verify", {"plan": "studio"}, {**auth, "User-Agent": "PostRiffPWA/1.0"})
-        self.assertEqual((status, created["client"], created["label"]), (201, "203.0.113.5", "PostRiffPWA"))
+        iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        status, _, created = invoke(app, "POST", "/api/auth/verify", {"plan": "studio"}, {**auth, "User-Agent": iphone})
+        self.assertEqual((status, created["client"], created["label"]), (201, "203.0.113.5", "Safari on iPhone"))
         status, _, listed = invoke(app, "GET", "/api/workspaces", headers=auth)
         self.assertEqual((status, listed["workspaces"][0]["workspaceId"]), (200, "w"))
         status, _, members = invoke(app, "GET", "/api/workspaces/w/members", headers=auth)

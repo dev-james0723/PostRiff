@@ -16,6 +16,8 @@ import time
 
 from postriff_alpha.domain import AlphaError
 
+from .. import agent_observability
+
 BIND_WINDOW_SECONDS = 600
 
 _YES = (r"yes|yeah|yep|yup|sure|ok(?:ay)?|confirm(?:ed)?|go\s+ahead|do\s+it|apply\s+it|please\s+do|sounds\s+good|that'?s\s+right|correct|approve\s+it"
@@ -133,6 +135,7 @@ def verify_applied(state: dict, proposal: dict) -> tuple[bool, list[dict]]:
     return all(c["verified"] for c in checks), checks
 
 
+@agent_observability.instrument_approval   # telemetry only: how long it waited, outcome, verified; result untouched
 def decide(service, workspace_id: str, token: str, *, conversation_id: str, message_id: str, proposal_id: str, digest: str, decision: str,
            zone: str | None = None) -> dict:
     """Apply or dismiss through the site agent's own path, then verify by re-reading. Never bypasses its checks."""

@@ -9,6 +9,9 @@ from postriff_alpha.domain import AlphaError
 CAPABILITIES = ("identity", "publish", "schedule", "analytics", "comments_read", "reply", "moderate", "media_types", "webhooks")
 LEVELS = ("Direct", "Assisted", "Bridge", "Unsupported")
 CONNECTION_STATES = ("disconnected", "identity_known", "scope_missing", "token_expired", "reauthorization_required", "client_binding_missing", "read_verified", "publish_verified")
+# connection_state() values the person has to act on (reconnect or grant again); the Channels page's ATTENTION_STATES
+# (web/src/lib/channels/state.ts). connectionState is computed for a view, never stored on the channel record.
+ATTENTION_STATES = ("token_expired", "reauthorization_required", "scope_missing", "client_binding_missing")
 
 
 def unsupported_matrix():

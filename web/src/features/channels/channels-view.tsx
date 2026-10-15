@@ -39,6 +39,7 @@ import { ChannelFoldersSection } from './channel-folders-section';
 import { ChannelsSummary } from './channels-summary';
 import { ConnectSheet, type ConnectRequest } from './connect-sheet';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
+import { ConnectionHealthPanel } from './health/connection-health-panel';
 
 const infoContent = {
   title: 'Channels',
@@ -381,6 +382,9 @@ function ChannelsPage() {
                 usage={usage.data}
                 data-tour='channels-summary'
               />
+
+              {/* Connection Health Center: present only where the server names it (RAFII_CONNECTION_HEALTH_ENABLED). */}
+              {data?.connectionHealth?.available === true && <ConnectionHealthPanel />}
 
               {/* rafii-v9: folders — Saved folders (Phase2State.channelFolders) through Stream A's Channel Bloom package. Hidden until there is an account to group. */}
               {channels.length > 0 && <ChannelFoldersSection accounts={folderAccounts} view={folderView} onViewChange={setFolderView} />}

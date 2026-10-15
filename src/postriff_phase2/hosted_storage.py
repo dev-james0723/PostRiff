@@ -71,10 +71,14 @@ class SupabaseStorage:
                     raise AlphaError("Storage response exceeded the safe size limit.", 502)
                 return response.status, dict(response.headers), data
         except HTTPError as error:
-            error.read(65536)
+            # Storage can return HTTP 400 with an embedded NoSuchKey (404) code.
+            # Retain this bounded body only for DELETE, so callers can distinguish
+            # an already-absent object from a genuine bad request.
+            error_body = error.read(65536)
             if 300 <= error.code < 400:
                 raise AlphaError("Private storage answered from an unexpected location.", 502) from None
-            return error.code, dict(error.headers), b""
+            body = error_body if method == "DELETE" and error.code == 400 else b""
+            return error.code, dict(error.headers), body
         except (URLError, TimeoutError, OSError) as error:
             raise AlphaError("Private storage is temporarily unavailable.", 503) from error
 
@@ -208,7 +212,18 @@ class SupabaseStorage:
     def delete(self, workspace_id, category, object_name):
         path = self._path(workspace_id, category, object_name)
         url = self._object_url(category, path)
-        status, _, _ = self.send("DELETE", url, self._headers(), None)
+        status, _, body = self.send("DELETE", url, self._headers(), None)
+        if status == 400:
+            try:
+                details = json.loads(body)
+            except (ValueError, TypeError):
+                details = None
+            # Supabase can wrap a storage 404 as an HTTP 400. Only an exact
+            # NoSuchKey response makes deletion idempotent; never swallow a
+            # bucket, authorization, or invalid-request error.
+            if (isinstance(details, dict) and details.get("code") == "NoSuchKey"
+                    and details.get("message") == "Object not found"):
+                return
         if status not in (200, 204, 404):
             raise AlphaError("Private storage could not delete this object.", 502)
 

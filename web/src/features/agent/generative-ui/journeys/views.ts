@@ -12,6 +12,7 @@
  *   - A view that fails to parse is shown as "can't show this data", never patched up with defaults.
  */
 import { z } from 'zod';
+import { evidenceEnvelopeSchema } from '@/lib/agent-runtime/evidence';
 import { uiQueryResultSchema, type DataState, type UiQueryResultV1 } from '@/lib/agent-runtime/ui-contracts';
 
 const text = (max: number) => z.string().max(max);
@@ -86,6 +87,8 @@ const draftRead = draftRow.extend({
 export type DraftDetail = z.infer<typeof draftRead>;
 const graphEdge = z.object({ edge: text(60), type: text(40), id: id, via: opt(text(120)), title: opt(text(200)), platform: opt(text(60)) });
 const evidenceSource = z.object({
+  evidence: opt(evidenceEnvelopeSchema),
+  claims: z.array(z.object({ claimId: opt(id), relation: opt(text(40)), evidence: evidenceEnvelopeSchema })).max(30).optional(),
   sourceId: id,
   ref: opt(ref),
   available: z.boolean(),
@@ -101,6 +104,8 @@ const evidenceSource = z.object({
 });
 const voiceFinding = z.object({ trait: text(200), verdict: z.enum(['matches', 'differs', 'unclear']), basis: text(40), evidence: opt(text(400)) });
 const draftEvidence = z.object({
+  workspaceId: opt(id),
+  claimsTruncated: z.boolean().optional(),
   draftId: id,
   edges: z.array(graphEdge).max(80),
   sources: z.array(evidenceSource).max(40),
@@ -478,6 +483,7 @@ const campaignTimeline = z.object({
 // --- J06 analytics -----------------------------------------------------------------------------------------------------
 export const ANALYTICS_METRICS = ['views', 'reach', 'likes', 'comments', 'replies', 'reposts', 'quotes', 'shares', 'saved'] as const;
 const reading = z.object({
+  evidence: opt(evidenceEnvelopeSchema),
   value: z.number().nullable(),
   availability: text(40),
   unit: opt(text(20)),
@@ -486,6 +492,7 @@ const reading = z.object({
   definitionVersion: opt(text(40)),
 });
 const analyticsPosts = z.object({
+  workspaceId: opt(id),
   posts: z
     .array(
       z.object({

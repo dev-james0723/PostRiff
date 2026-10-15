@@ -23,6 +23,7 @@ SLICES = (
     'founder_support',           # primary in-app tickets and explicit audited identity reveal
     'founder_policy',            # approved, configurable entitlement and provider spend defaults
     'founder_activation',        # full-activation gates and bounded telemetry health
+    'founder_agent_observability',  # P0.7 Rafii agent traces/metrics summary (read-only, content-free)
 )
 STATE = {'loaded': False, 'failed': {}}
 

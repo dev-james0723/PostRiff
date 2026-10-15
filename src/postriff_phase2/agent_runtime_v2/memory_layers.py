@@ -19,6 +19,9 @@ Voice and text read this same function; nothing is stored per language or per mo
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 from .. import campaigns, memory
 
 LAYERS = ("identity", "workspace", "brand", "voice", "preferences", "campaigns", "task")
@@ -27,6 +30,16 @@ EXPLICIT_ORIGINS = ("chat", "legacy")
 
 def cloud_allowed(state: dict) -> bool:
     return memory.egress(state).get("cloud") is True
+
+
+def context_revision(state: dict) -> str:
+    """Server-only freshness pin; no memory body is persisted in the execution trace."""
+    learning = state.get("learning") or {}
+    projection = memory.projection(state, "cloud")
+    value = {"shared": projection.get("shared"), "files": projection.get("files"),
+             "enabled": learning.get("enabled", True), "revision": learning.get("revision", 0),
+             "voiceRevision": (memory.active_profile(state) or {}).get("revision")}
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
 def _confidence(item: dict) -> str:
@@ -42,7 +55,7 @@ def preference_view(item: dict, *, with_statement: bool) -> dict:
     view = {"id": item.get("id"), "rule": item.get("ruleKey"), "polarity": item.get("polarity"), "scope": item.get("scope") or {},
             "status": item.get("status"), "origin": origin, "kind": "explicit" if origin in EXPLICIT_ORIGINS else "inferred",
             "acceptedBy": "owner" if item.get("confirmedBy") else None, "evidenceState": item.get("evidenceState"),
-            "evidence": item.get("evidenceSummary"), "since": item.get("since"), "supersedes": item.get("replaces") or item.get("proposalId") if item.get("replaces") else None,
+            "evidence": item.get("evidenceSummary"), "since": item.get("since"), "supersedes": item.get("replaces"),
             "retiredReason": item.get("retiredReason"), "confidence": _confidence(item)}
     if with_statement:
         view["statement"] = item.get("statement")
@@ -51,7 +64,7 @@ def preference_view(item: dict, *, with_statement: bool) -> dict:
 
 def read(state: dict, *, member=None, cur=None, workspace_id=None, zone=None, locale=None, task=None, layers=None) -> dict:
     from postriff_alpha import learning
-    wanted = [layer for layer in (layers or LAYERS) if layer in LAYERS]
+    wanted = [layer for layer in (LAYERS if layers is None else layers) if layer in LAYERS]
     shared = cloud_allowed(state)
     out = {"cloudMemory": shared, "layers": {}}
     if "identity" in wanted:
@@ -82,13 +95,17 @@ def read(state: dict, *, member=None, cur=None, workspace_id=None, zone=None, lo
         out["layers"]["voice"] = voice
     if "preferences" in wanted:
         items = learning.all_items(state)
-        views = [preference_view(item, with_statement=shared) for item in items][:40]
+        enabled = (state.get("learning") or {}).get("enabled", True) is True
+        views = [preference_view(item, with_statement=shared and enabled and item.get("status") == "active") for item in items][:40]
+        if not enabled:
+            for view in views:
+                view["confidence"] = "not_in_effect"
         pending = []
         if cur is not None and workspace_id:
             from ..learning_service import pending_proposals
             pending = [{"id": p.get("id"), "kind": "explicit" if p.get("source") == "chat" else "inferred", "origin": p.get("source"), "status": "pending",
-                        "confidence": "not_in_effect", **({"statement": (p.get("body") or {}).get("statement")} if shared else {})} for p in pending_proposals(cur, workspace_id)][:10]
-        out["layers"]["preferences"] = {"source": "learned_preferences", "items": views, "pending": pending, "shared": shared,
+                        "confidence": "not_in_effect", **({"statement": (p.get("body") or {}).get("statement")} if shared and enabled else {})} for p in pending_proposals(cur, workspace_id)][:10]
+        out["layers"]["preferences"] = {"source": "learned_preferences", "items": views, "pending": pending, "shared": shared, "enabled": enabled,
                                         "counts": {"active": sum(1 for v in views if v["status"] == "active"), "explicit": sum(1 for v in views if v["kind"] == "explicit"),
                                                    "inferred": sum(1 for v in views if v["kind"] == "inferred")}}
     if "campaigns" in wanted:

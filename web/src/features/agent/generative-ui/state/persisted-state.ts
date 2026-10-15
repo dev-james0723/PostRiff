@@ -113,6 +113,7 @@ export class UiStateController {
   private disposed = false;
   private declared: DeclaredState | null;
   private allowed: boolean;
+  private selectionListeners = new Set<() => void>();
 
   constructor(opts: UiStateControllerOptions) {
     this.opts = opts;
@@ -129,6 +130,22 @@ export class UiStateController {
   /** The state to hand OpenUI as `initialState`: what the server holds, with this tab's unsaved fields on top. */
   initialState(): Record<string, JsonValue> {
     return { ...this.local };
+  }
+
+  /** The ordered selection this tab holds now, saved or not (what the person sees); null before anything was picked. */
+  selection(): JsonValue | null {
+    return this.local[SELECTION_KEY] ?? null;
+  }
+
+  /** Told when this tab's selection changes (a pick, a rebase or another tab's state). Reads only; never saves. */
+  subscribeSelection = (listener: () => void): (() => void) => {
+    this.selectionListeners.add(listener);
+    return () => this.selectionListeners.delete(listener);
+  };
+
+  private selectionChanged(before: JsonValue | undefined) {
+    if (before === this.local[SELECTION_KEY]) return;
+    for (const listener of Array.from(this.selectionListeners)) listener();
   }
 
   current(): StoredState {
@@ -156,9 +173,11 @@ export class UiStateController {
     if (this.disposed) return;
     const value = selectionValue(listId, items, visible);
     if (same(value, this.local[SELECTION_KEY])) return;
+    const before = this.local[SELECTION_KEY];
     this.local[SELECTION_KEY] = value;
     this.dirty.add(SELECTION_KEY);
     this.schedule();
+    this.selectionChanged(before);
   }
 
   private schedule() {
@@ -231,7 +250,9 @@ export class UiStateController {
         return;
       }
       this.persisted = { safeState: { ...current.safeState }, stateRevision: current.stateRevision };
+      const before = this.local[SELECTION_KEY];
       this.local = { ...current.safeState, ...Object.fromEntries([...this.dirty].map((k) => [k, this.local[k] ?? null])) };
+      this.selectionChanged(before);
       return this.save(attempt + 1);
     }
     // 400 (a field this revision doesn't declare), 403 (not allowed), 404 (gone or disabled): keep it local, stop saving.
@@ -258,11 +279,13 @@ export class UiStateController {
    */
   rebase(next: StoredState, declared: DeclaredState | null): { initialState: Record<string, JsonValue>; lostFields: string[]; lostValues: Record<string, JsonValue> } {
     const result = applyUiPatch({ safeState: this.local }, next, this.dirtyFields(), declared);
+    const before = this.local[SELECTION_KEY];
     this.declared = declared;
     this.persisted = { safeState: { ...next.safeState }, stateRevision: next.stateRevision };
     this.local = { ...result.initialState };
     this.dirty = new Set([...this.dirty].filter((k) => !result.lostFields.includes(k)));
     this.schedule();
+    this.selectionChanged(before);
     return result;
   }
 
@@ -273,6 +296,7 @@ export class UiStateController {
 
   dispose() {
     this.disposed = true;
+    this.selectionListeners.clear();
     if (this.timer !== null) this.timers.clearTimeout(this.timer);
     this.timer = null;
   }

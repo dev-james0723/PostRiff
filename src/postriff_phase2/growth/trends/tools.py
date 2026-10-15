@@ -93,22 +93,33 @@ def register():
                 'expected': 'persisted', 'actual': 'persisted', 'verified': True})
         return result
 
+    def watch_receipt(ctx):
+        from ...agent_runtime_v2.task_engine import receipts
+        if not receipts.binding(ctx):
+            return None
+        def after(cur, data, changed):
+            receipts.commit_command(cur, ctx, verified=True,
+                changed_refs=[{'type': 'trend_watch', 'id': data['id'], 'change': 'watch_updated'}],
+                compensation_result={'watchId': data['id'], 'revision': data['revision'], 'changed': changed})
+        return after
+
     def watch(ctx, args):
+        args = {key: value for key, value in args.items() if key != 'stepId'}
         result = call(ctx, lambda svc: svc.watches(ctx.workspace_id, ctx.token,
-            payload={**args, 'notification_policy': 'in_app'}))
+            payload={**args, 'notification_policy': 'in_app'}, after=watch_receipt(ctx)))
         identity = result['data']['data']['data']['id'] if result['ok'] else None
         return changed(ctx, result, 'trend_watch', identity, 'Saved in-app trend watch')
     add('trend_watch_create', {**identifier, 'platforms': {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 12, 'required': True},
         'threshold': {'type': 'string', 'enum': ['stage_change', 'coverage_change'], 'required': True},
-        'idempotency_key': {'type': 'string', 'maxLength': 200, 'required': True}},
+        'idempotency_key': {'type': 'string', 'maxLength': 200, 'required': True}, 'stepId': {'type': 'string', 'maxLength': 40}},
         'Create an explicitly requested in-app watch. No email, publication or provider dispatch.', watch,
         effect=contracts.MUTATE_REVERSIBLE)
 
     def disable(ctx, args):
         return changed(ctx, call(ctx, lambda svc: svc.watches(ctx.workspace_id, ctx.token, watch_id=args['watch_id'], delete=True,
-            payload={k: v for k,v in args.items() if k != 'watch_id'})), 'trend_watch', args['watch_id'], 'Disabled trend watch')
+            payload={k: v for k,v in args.items() if k not in ('watch_id', 'stepId')}, after=watch_receipt(ctx))), 'trend_watch', args['watch_id'], 'Disabled trend watch')
     add('trend_watch_disable', {'watch_id': {'type': 'string', 'required': True},
-        'expected_revision': {'type': 'integer', 'required': True}, 'idempotency_key': {'type': 'string', 'required': True}},
+        'expected_revision': {'type': 'integer', 'required': True}, 'idempotency_key': {'type': 'string', 'required': True}, 'stepId': {'type': 'string', 'maxLength': 40}},
         'Disable an explicitly selected watch at its current revision.', disable, effect=contracts.MUTATE_REVERSIBLE)
     add('trend_lab_check', {**{k: {'type': 'string', 'required': True} for k in
         ('draft_id', 'opportunity_id', 'target_platform', 'idempotency_key')},

@@ -1,6 +1,7 @@
 """Synthetic bounded publishing-agent regressions. No real Google acceptance."""
 import copy
 import json
+import math
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -304,23 +305,59 @@ class AgentDatabase:
 
 class IndexedCandidateDatabase(AgentDatabase):
     """A thin statement-snapshot hint precedes hydration of current source state."""
-    def __init__(self, states):
+    def __init__(self, states, *, claim_rotation=True):
         super().__init__(None)
         self.states = copy.deepcopy(states)
         self.hints = [(workspace,) for workspace in states]
         self.hydrated, self.written = [], []
+        self.claim_rotation, self.selections = claim_rotation, []
+
+    def claim_order(self, workspace):
+        data = root(self.states[workspace])
+        for name in ('lastPlannerClaimAt', 'lastDispatchAt'):
+            value = data.get(name)
+            if type(value) not in (int, float):
+                continue
+            try:
+                if math.isfinite(value) and 0 <= value < 253402300799:
+                    return (0 if value < .000001 else value, workspace)
+            except OverflowError:
+                continue
+        return (0, workspace)
 
     def execute(self, sql, params=()):
+        normalized = ' '.join(sql.split())
         if sql.startswith('SELECT to_regclass'):
             self.result = ('pr_youtube_operations', 'pr_youtube_planner_candidates', True)
+        elif normalized == ("SELECT EXISTS(SELECT 1 FROM pg_attribute "
+                "WHERE attrelid=to_regclass('public.pr_youtube_operations') "
+                "AND attname='last_planner_claim' AND NOT attisdropped)"):
+            self.result = (self.claim_rotation,)
         elif sql.startswith('SELECT w.id::text'):
             # Deliberately stale lease hints: do not filter these against the
             # newer lease that the next source hydration will observe.
-            self.result = list(self.hints)
+            if len(params) != 4 or ' FOR UPDATE OF w SKIP LOCKED' not in sql:
+                raise AssertionError('Expected a bounded, locked fleet selection')
+            if self.claim_rotation:
+                if 'ORDER BY o.last_planner_claim,w.id LIMIT 100' not in sql:
+                    raise AssertionError('Migrated fleet selection must use the durable claim cursor')
+            elif ('ORDER BY coalesce(' not in sql or 'lastPlannerClaimAt' not in sql
+                    or 'lastDispatchAt' not in sql or ',w.id LIMIT 100' not in sql):
+                raise AssertionError('Pre-107 selection must retain the safe state claim-cursor fallback')
+            self.selections.append((sql, params))
+            excluded = set(params[2])
+            self.result = sorted((hint for hint in self.hints if hint[0] not in excluded),
+                                 key=lambda hint: self.claim_order(hint[0]))[:100]
         elif sql.startswith('SELECT state FROM public.pr_workspaces'):
             workspace = params[0]
             self.hydrated.append(workspace)
             self.result = (copy.deepcopy(self.states[workspace]),)
+        elif sql.startswith("UPDATE public.pr_workspaces SET state=state#-'{youtubeAgent,fleetLease}'"):
+            workspace, lease_id = params
+            data = root(self.states[workspace])
+            if (data.get('fleetLease') or {}).get('id') == lease_id:
+                data.pop('fleetLease')
+                self.written.append(workspace)
         elif sql.startswith('UPDATE public.pr_workspaces'):
             workspace = params[1]
             self.states[workspace] = json.loads(params[0])
@@ -390,6 +427,63 @@ class DispatchTests(unittest.TestCase):
                 self.assertEqual(db.hydrated, ['workspace-one', 'workspace-two'])
                 self.assertEqual(db.written, ['workspace-two'])
                 self.assertIs(db.states['workspace-one'], original, 'Malformed lease state cannot be replaced through a stale indexed hint.')
+
+    def test_fleet_claim_rotates_without_dispatch_progress_even_when_clock_stalls(self):
+        from postriff_phase2.youtube.fleet import release_planner
+        for migrated in (True, False):
+            with self.subTest(claim_rotation_column=migrated):
+                states = {}
+                for workspace in ('workspace-one', 'workspace-two', 'workspace-three'):
+                    value = state()
+                    draft_and_policy(value)
+                    root(value)['lastDispatchAt'] = NOW
+                    states[workspace] = value
+                db = IndexedCandidateDatabase(states, claim_rotation=migrated)
+                agent = self.agent(db)
+                selected, first_claim = [], None
+                for _ in range(4):
+                    candidate = agent._select_candidate(fleet=True)
+                    self.assertIsNotNone(candidate)
+                    selected.append(candidate[0])
+                    claimed = root(db.states[candidate[0]])['lastPlannerClaimAt']
+                    self.assertTrue(math.isfinite(claimed))
+                    self.assertGreater(claimed, NOW)
+                    if first_claim is None:
+                        first_claim = claimed
+                    elif len(selected) == 4:
+                        self.assertGreater(claimed, first_claim, 'A stalled wall clock cannot stall repeated claim rotation.')
+                    release_planner(agent, candidate)
+                self.assertEqual(selected, ['workspace-one', 'workspace-three', 'workspace-two', 'workspace-one'])
+                for workspace, original in states.items():
+                    current = db.states[workspace]
+                    self.assertEqual(root(current)['lastDispatchAt'], NOW)
+                    self.assertEqual(root(current)['policies'], root(original)['policies'])
+                    self.assertEqual(root(current)['drafts'], root(original)['drafts'])
+                    self.assertEqual(current['phase2']['jobs'], [], 'Claim fairness never grants publication authority or queues a job.')
+                    self.assertNotIn('fleetLease', root(current))
+                agent._agentic_gate.assert_not_called()
+                agent.creator.oauth.reverify_for_worker.assert_not_called()
+
+    def test_indexed_claim_discards_invalid_cursor_and_honors_workspace_exclusion(self):
+        invalid = (True, '0', float('nan'), float('inf'), float('-inf'), -1, 10 ** 400, 253402300799)
+        for previous in invalid:
+            with self.subTest(previous=previous):
+                states = self.indexed_states(None)
+                root(states['workspace-two'])['lastPlannerClaimAt'] = previous
+                root(states['workspace-two'])['lastDispatchAt'] = NOW - 1
+                db = IndexedCandidateDatabase(states)
+                agent = self.agent(db)
+                candidate = agent._select_candidate(fleet=True, exclude_workspaces=('workspace-one',))
+                self.assertEqual(candidate[0], 'workspace-two')
+                self.assertEqual(db.hydrated, ['workspace-two'])
+                self.assertEqual(db.written, ['workspace-two'])
+                self.assertEqual(db.selections[0][1][2], ['workspace-one'])
+                claimed = root(db.states['workspace-two'])['lastPlannerClaimAt']
+                self.assertEqual(claimed, NOW)
+                self.assertTrue(math.isfinite(claimed))
+                self.assertEqual(root(db.states['workspace-one']), root(states['workspace-one']))
+                self.assertEqual(root(db.states['workspace-two'])['policies'], root(states['workspace-two'])['policies'])
+                agent._agentic_gate.assert_not_called()
 
     def test_dispatcher_queues_exact_plan_once_without_provider_submission(self):
         value = state(); draft_and_policy(value); db = AgentDatabase(value)

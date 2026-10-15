@@ -79,6 +79,20 @@ def verified_passkey_time(access_token, principal):
                 and m.get('method') == 'passkey' and type(m.get('timestamp')) in (int, float)), default=0)
 
 
+def verified_method_time(access_token, principal):
+    """(method, timestamp) of the newest sign-in method Supabase signed into this session's `amr` claim: password,
+    one-time code, OAuth, passkey or a second factor. JWT iat never counts (a refresh resets it without a sign-in), so
+    a session that has only been refreshed reads as (None, 0) and fails any freshness window. Used for step-up."""
+    methods = _verified_payload(access_token, principal).get('amr') or []
+    if not isinstance(methods, list):
+        return None, 0
+    best = (None, 0)
+    for m in methods:
+        if isinstance(m, dict) and isinstance(m.get('method'), str) and type(m.get('timestamp')) in (int, float) and m['timestamp'] > best[1]:
+            best = (m['method'][:40], float(m['timestamp']))
+    return best
+
+
 class SupabaseIdentityAdmin:
     def __init__(self, project_url, publishable_key, service_key, send=None, fetch=None):
         self.project_url = project_url.rstrip("/")

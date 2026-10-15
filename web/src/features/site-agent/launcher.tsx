@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { LAUNCHER_ID, PANEL_ID } from './panel';
 import { RafiiAvatar } from './rafii-avatar';
 import { panelStore, usePanel } from './store';
+import { SelectionAction } from './selection-action';
 
 /** The header entry point to Rafii on every app page (⌘J / Ctrl+J). */
 export function SiteAgentLauncher() {
@@ -13,7 +14,7 @@ export function SiteAgentLauncher() {
   const open = usePanel((s) => s.open || s.above);
   const busy = usePanel((s) => Object.values(s.busy).some(Boolean));
   return (
-    <button
+    <><SelectionAction /><button
       id={LAUNCHER_ID}
       type='button'
       aria-label={`${open ? 'Close' : 'Ask'} ${siteConfig.name}`}
@@ -26,6 +27,6 @@ export function SiteAgentLauncher() {
     >
       <RafiiAvatar size={24} thinking={busy} />
       <span className='hidden text-sm sm:inline'>Ask {siteConfig.name}</span>
-    </button>
+    </button></>
   );
 }

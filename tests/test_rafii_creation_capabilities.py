@@ -577,7 +577,8 @@ class ReviewFixTest(FlagIsolation):
     def test_agent_rewrite_keeps_the_drafts_native_format(self):
         """Security review P3: rewriting a Story asks for that Story's slot, never a new default post."""
         source = (ROOT / "src/postriff_phase2/agent_runtime_v2/domain_tools.py").read_text()
-        body = source[source.index("def draft_rewrite"):source.index("key = \"agent-rewrite:\"")]
+        start = source.index("def draft_rewrite")
+        body = source[start:source.index("agent-rewrite:", start)]
         self.assertIn('destination["format"] = variant["format"]', body)
 
 

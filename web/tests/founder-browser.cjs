@@ -354,9 +354,15 @@ async function main() {
         await page.getByRole('tab', { name: 'Payments', selected: true }).waitFor({ timeout: 30000 });
         check(`${width}px revenue ?tab=payments selects its tab`, true);
         await page.goto(base + '/founder/operations?mode=demo&tab=connections');
+        // Streaming replacement can briefly retain the old and new anchor. Require
+        // one committed panel; do not arbitrarily choose one or ignore duplicates.
+        await page.waitForFunction(() => document.querySelectorAll('[data-tab="connections"]').length === 1, null, { timeout: 30000 });
         await page.locator('[data-tab="connections"]').waitFor({ timeout: 30000 });
         await settle(page, tracker);   // panels above load after the first scroll; the page keeps the target in place
-        const inView = await page.locator('[data-tab="connections"]').evaluate((element) => element.getBoundingClientRect().top < window.innerHeight);
+        const inView = await page.locator('[data-tab="connections"]').evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.top < window.innerHeight && bounds.bottom > 0;
+        });
         check(`${width}px operations ?tab=connections scrolls to its panel`, inView);
         await page.goto(base + '/founder/settings?tab=reports');
         await page.getByRole('tab', { name: 'Reports', selected: true }).waitFor({ timeout: 30000 });

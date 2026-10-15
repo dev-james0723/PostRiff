@@ -18,7 +18,7 @@ class Writer(FixtureAgentRuntime):
 
 class Models:
     def __init__(self):
-        self.calls=[];self.before=None;self.before_chat=None;self.ungrounded=False
+        self.calls=[];self.messages=[];self.before=None;self.before_chat=None;self.ungrounded=False
 
     def evaluate(self,state,questions,*,timeout_s):
         self.calls.append(('evaluate',state))
@@ -41,6 +41,7 @@ class Models:
 
     def chat(self,messages,model,max_tokens,timeout_s):
         self.calls.append(('chat',model))
+        self.messages.append(messages)
         if self.before_chat:
             before,self.before_chat=self.before_chat,None
             before()

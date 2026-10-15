@@ -33,7 +33,7 @@ type WhatDraftsReadProps = {
 function routeLine(file: MemoryFile, group: DraftGroup | null, egress: MemoryEgress | undefined) {
   if (group === null) return 'Couldn’t check which writers receive this file.';
   if (group === 'reference') return 'For you to read. Not sent to writers.';
-  const parts = [egress?.cloud ? 'Sent to local writers and the cloud model.' : 'Sent to local writers. The cloud model needs an owner’s OK.'];
+  const parts = [egress?.cloud ? 'Eligible for local writers and owner-permitted cloud routes, subject to source grants and voice selection.' : 'Eligible for local writers. The cloud model needs an owner’s OK.'];
   if (file.name === 'VOICE.md') parts.push('Each draft gets only the learned preferences for its channels.');
   const withheld = egress?.withheldBoundaries ?? 0;
   if (file.name === 'BOUNDARIES.md' && egress?.cloud && withheld > 0) {
@@ -53,7 +53,7 @@ function FileAction({ file, noVoice }: { file: MemoryFile; noVoice: boolean }) {
   if (!file.editHref) return null;
   return (
     <Link href={file.editHref} className={buttonVariants({ variant: 'glass', size: 'default' })}>
-      Edit in Brand
+      Edit in Brand Brain
     </Link>
   );
 }
@@ -136,7 +136,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
       <>
         <div className='flex flex-col gap-1 px-5 pt-5'>
           <h2 id={nameId} className='text-foreground text-base font-medium tracking-tight'>
-            What drafts read
+            Derived memory files
           </h2>
         </div>
         {!grouped.known ? (
@@ -151,7 +151,7 @@ export function WhatDraftsRead({ selected, showMemoryLink = false, className, ..
                 value={current}
                 onChange={setTab}
                 pattern='tabs'
-                label='Files sent to writers'
+                label='Candidate writer context files'
                 size='sm'
                 widths='content'
                 panelIds={panelIds}

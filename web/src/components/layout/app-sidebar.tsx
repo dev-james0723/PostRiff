@@ -35,6 +35,7 @@ import {
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navGroups } from '@/config/nav-config';
 import { useCoworkerNavGroups } from '@/features/coworker/nav';
+import { useTaskNavGroups } from '@/features/agent-tasks/nav';
 import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { useNavGroups } from '@/hooks/use-nav-groups';
 import { useSnapshot } from '@/lib/api/hooks';
@@ -119,7 +120,7 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const groups = useFilteredNavGroups(useCoworkerNavGroups(navGroups));
+  const groups = useFilteredNavGroups(useTaskNavGroups(useCoworkerNavGroups(navGroups)));
   const snapshot = useSnapshot();
   const { state: sidebarState, isMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
   // Choosing a page closes the menu on every device: the phone sheet, and the desktop sidebar back to its icon rail.

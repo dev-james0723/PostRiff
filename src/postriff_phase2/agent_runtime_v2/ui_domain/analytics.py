@@ -14,6 +14,7 @@ from fractions import Fraction
 from zoneinfo import ZoneInfo
 
 from postriff_alpha.domain import AlphaError
+from ... import evidence
 
 from .. import ui_contracts
 from . import common, query
@@ -97,14 +98,20 @@ def analytics_posts(dctx, inputs, cursor):
     from ... import insights
     summary = _summary(dctx)
     kept, undated, lo, hi = _filtered(dctx, inputs, summary["posts"])
-    page, next_cursor, start = common.paginate("analytics_posts", inputs, cursor, kept, default=50)
+    page, next_cursor, start = common.paginate("analytics_posts", {**inputs, "limit": min(common.page_size(inputs, 50), 20)}, cursor, kept, default=20)
     zone = dctx.zone
     rows = []
     for at, post in page:
-        metrics = {name: _metric_view(value) for name, value in (post.get("metrics") or {}).items()}
-        if inputs.get("metric"):
-            metrics = {k: v for k, v in metrics.items() if k == inputs["metric"]} or {inputs["metric"]: {"value": None, "availability": "not_read", "unit": "count",
-                                                                                                         "readOffset": None, "observedAt": None, "definitionVersion": insights.DEFINITION_VERSION}}
+        raw_metrics = post.get("metrics") or {}
+        names = [inputs["metric"]] if inputs.get("metric") else [n for n in raw_metrics if n != "all"]
+        if not names and "all" in raw_metrics:
+            names = list(METRICS)
+        metrics = {}
+        for name in names:
+            reading = raw_metrics.get(name) or {**raw_metrics.get("all", {}), "value": None,
+                "availability": (raw_metrics.get("all") or {}).get("availability") or "not_read", "unit": "count",
+                "definitionVersion": insights.DEFINITION_VERSION}
+            metrics[name] = {**_metric_view(reading), "evidence": evidence.metric(dctx.workspace_id, post, name, reading)}
         rows.append({"ref": common.ref("job", post.get("jobId")), "jobId": post.get("jobId"), "provider": post.get("provider"), "platform": post.get("platform"),
                      "connectionId": post.get("connectionId"), "providerPostId": post.get("providerPostId"), "language": post.get("language"),
                      "publishedAt": common.iso(at), "publishedLocal": common.local(at, zone), "contentOrigin": post.get("contentOrigin"),
@@ -113,7 +120,7 @@ def analytics_posts(dctx, inputs, cursor):
     measured = sum(1 for _, p in kept if any((m or {}).get("availability") == "available" for m in (p.get("metrics") or {}).values()))
     verified = _verified_in_window(dctx, inputs, lo, hi)
     latest = max((p.get("freshness") or {}).get("observedAt") or 0 for _, p in kept) if kept else None
-    data = {"posts": rows, "offset": start, "timeZone": zone, "startUtc": common.iso(lo), "endUtc": common.iso(hi), "families": summary.get("families"),
+    data = {"workspaceId": dctx.workspace_id, "posts": rows, "offset": start, "timeZone": zone, "startUtc": common.iso(lo), "endUtc": common.iso(hi), "families": summary.get("families"),
             "rules": summary.get("rules"), "definitionVersion": insights.DEFINITION_VERSION, "undated": undated,
             "verifiedPostsInWindow": len(verified), "postsWithReadings": measured}
     state = "available" if kept else ("empty" if verified == [] else "partial")

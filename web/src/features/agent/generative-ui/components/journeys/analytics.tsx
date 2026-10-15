@@ -8,6 +8,7 @@
  * never summed across platforms, and a comparison below the minimum sample says so and never claims a cause.
  */
 import { useState } from 'react';
+import { EvidenceDetails } from '../primitives/evidence';
 import { z } from 'zod';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
@@ -80,6 +81,7 @@ export function MetricTable({ props, statementId }: JourneyRendererProps) {
                         return (
                           <td key={m} className='py-1.5 pr-2 text-right tabular-nums'>
                             {shown ?? <span className='text-muted-foreground text-xs italic'>{r ? copy.analytics.availability[r.availability] ?? r.availability : copy.analytics.availability.not_read}</span>}
+                            <EvidenceDetails value={r?.evidence} workspaceId={data.workspaceId} />
                             {r && r.availability === 'available' && r.readOffset ? <span className='text-muted-foreground block text-[10px]'>{`${copy.analytics.readAfter} ${r.readOffset}`}</span> : null}
                           </td>
                         );

@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFlash } from '@/hooks/use-flash';
 import { ApiError } from '@/lib/api/client';
-import { useMemory } from '@/lib/api/hooks';
+import { useMemory, useSnapshot } from '@/lib/api/hooks';
+import { activeProfile, canExportPackage } from '@/features/workspace/brand/voice-model';
 import type { MemoryFile } from '@/lib/api/types';
 import { downloadBlob } from '@/lib/download';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -28,7 +29,7 @@ const infoContent = {
     {
       title: 'Plain Markdown, yours',
       description:
-        'Files marked “Sent to writers” are what a draft is written from. Local writers always get them; the cloud model only if an owner allows it, and never private boundaries. The agent can’t edit these files.'
+        'Files marked “Writer context candidates” may be included according to the selected voice and route permissions. Each completed draft records what was actually sent. Cloud routes require owner permission and never receive private boundaries. The agent can’t edit these files.'
     },
     {
       title: 'Proposals, never silent changes',
@@ -99,6 +100,8 @@ function MemoryFileList({ selected, onSelect }: { selected: string; onSelect: (n
 }
 
 export function MemoryView() {
+  const snapshot = useSnapshot();
+  const exportable = canExportPackage(activeProfile(snapshot.data?.state));
   const { api, workspaceId } = useWorkspaceApi();
   const [selected, setSelected] = useState('VOICE.md');
   useSiteAgentPageContext({ visibleState: { file: selected } });
@@ -122,7 +125,7 @@ export function MemoryView() {
       pageTitle='Memory'
       infoContent={infoContent}
       pageHeaderAction={
-        <Button variant='glass' size='control' data-tour='memory-export' disabled={exporting} onClick={() => void exportPackage()}>
+        <Button variant='glass' size='control' data-tour='memory-export' disabled={exporting || !exportable} title={exportable ? undefined : 'Approve an eligible voice package in Brand Brain before exporting.'} onClick={() => void exportPackage()}>
           <ActionSwapIcon value={exporting ? 'busy' : (exported ?? 'idle')} className='size-4'>
             {exporting ? <Icons.spinner className='size-4 motion-safe:animate-spin' /> : exported ? <Icons.check className='size-4' /> : <Icons.download className='size-4' />}
           </ActionSwapIcon>

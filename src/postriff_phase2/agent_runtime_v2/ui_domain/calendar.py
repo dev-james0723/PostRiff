@@ -269,6 +269,10 @@ def run_tool(dctx, name: str, args: dict, *, zone: str | None = None):
     ctx = RafiiRunContext(service=dctx.service, workspace_id=dctx.workspace_id, token=None, principal=dctx.principal, membership=dctx.member,
                           conversation_id=dctx.artifact["conversation_id"], trace_id=contracts.new_trace_id(), modality="text", zone=zone or dctx.zone,
                           run_id=dctx.artifact.get("parent_run_id"), now=lambda: dctx.now, config=getattr(dctx.runtime, "cfg", None), request_text="")
+    from .. import authz
+    authz.bind_context(ctx, cur=dctx.cur, state=dctx.state, member=dctx.member)
+    if getattr(dctx.auth, "verified_activation", None) and getattr(dctx.auth, "authz_mode", "off") == "enforce":
+        ctx.authz_actor = authz.Actor("human_ui", ctx.principal, evidence={"activationId": dctx.auth.verified_activation, "capabilityId": "tool." + name})
     return tool_adapter.execute(ctx, tool, args, scope=frozenset({name})), ctx
 
 
@@ -291,16 +295,18 @@ def schedule_execute(dctx, inputs, _key):
                    message="Prepared. Nothing is scheduled until you apply the proposal, and the post still needs its own approval.")
 
 
-query("calendar_agenda", "J02", "What is scheduled, waiting for approval or planned in a date range (inclusive YYYY-MM-DD dates in a time zone): each entry with its exact UTC "
-      "instant, local time and the job's own zone, complete status counts (unknown stays unknown), day counts and rule-labelled observations.",
+query("calendar_agenda", "J02", "Scheduled, waiting and planned posts in a date range (default: 7 days from today): each entry's UTC instant, local "
+      "time and zone, complete status counts (unknown stays unknown), day counts, empty days in data.derived.emptyDays, and posts that "
+      "collide (same account, <2 hours apart) in data.derived.closeTogether.pairs.",
       {"start": DATE, "end": DATE, "zone": ZONE, "platform": PLATFORM, "channelId": ID, "limit": {"type": "integer", "minimum": 1, "maximum": 100}},
       calendar_agenda, page=50, refresh=60, tool="calendar.range", invalidated_by=("calendar_agenda",), also=("J05",))
 query("queue_status", "J02", "The publishing queue now: reviews waiting for approval, approved posts waiting for their time, posts needing attention, complete counts.",
       {"limit": {"type": "integer", "minimum": 1, "maximum": 100}}, queue_status, refresh=60, tool="queue.summary", also=("J08",))
 query("job_detail", "J02", "One publishing job or review: state in plain words, timeline, time zone and next safe step.", {"jobId": ID}, job_detail, required=("jobId",),
       refresh=60, tool="job.get")
-query("slot_check", "J02", "Check a proposed local time for a draft or waiting post before preparing it: valid in that zone (DST), the account it would use and posts on "
-      "the same account less than 2 hours away. Read only.", {"draftId": ID, "jobId": ID, "local": LOCAL, "zone": ZONE, "channelId": ID},
+query("slot_check", "J02", "Checks ONE proposed local time (a RescheduleForm's) for one draft or waiting post: valid in that zone (DST), the account it would use "
+      "and posts on that account less than 2 hours away. Empty until a time and a draft or post are picked; for posts that already collide, "
+      "use calendar_agenda.", {"draftId": ID, "jobId": ID, "local": LOCAL, "zone": ZONE, "channelId": ID},
       slot_check, refresh=None)
 query("open_proposals", "J02", "Proposals in this conversation still waiting for the person (open, not expired), with digest and expiry. Applied only on their native card.",
       {}, open_proposals, refresh=30, tool="pending_approvals", also=("J05", "J08"))

@@ -23,6 +23,7 @@ import logging
 import math
 import re
 import time
+from types import SimpleNamespace
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
@@ -231,6 +232,21 @@ def live_transport(method, url, headers=None, body=None, timeout=20):
         raise failure from error
 
 
+class _VoiceAdmission:
+    """Server-only identity and one-way dispatch boundary for this start invocation."""
+    def __init__(self, workspace_id, principal, run_id, reservation_id):
+        self.workspace_id, self.principal = workspace_id, principal
+        self.run_id, self.reservation_id = run_id, reservation_id
+        self._provider_started = False
+
+    @property
+    def provider_started(self):
+        return self._provider_started
+
+    def begin_dispatch(self):
+        self._provider_started = True
+
+
 class VoiceSessions:
     def __init__(self, runtime, transport=None):
         self.runtime = runtime
@@ -253,12 +269,18 @@ class VoiceSessions:
             raise AlphaError(route.blocker, 503, code="voice_unavailable")
         repo, ideas = self.service.repository, self.service.ideas
         from . import style as agent_style
+        from . import authz
         with repo.transaction(token, workspace_id) as (cur, row, principal):
             member = ideas._member(row)
             # Voice runs a paid model: the same rule as model phrasing — viewers get grounded text answers, no model spend.
             require(member, "edit")
             # How this person wants Rafii to sound (Contract 1): an explicit valid voice or locale in the request wins.
             style = agent_style.load(cur, principal)
+            permission_ctx = SimpleNamespace(config=self.cfg, workspace_id=workspace_id, principal=principal,
+                                             membership=member, now=self.runtime.clock, style=style)
+            if authz.mode_for(self.cfg, workspace_id) != "off":
+                authz.bind_context(permission_ctx, cur=cur, state=ideas._state(row), member=member)
+                style = permission_ctx.style
             locale, voice = locale_and_voice(payload, style)
             from .greeting import opening
             opening_greeting = opening(cur, principal, locale)
@@ -275,7 +297,7 @@ class VoiceSessions:
                         "AND created_at>now()-make_interval(mins=>%s)", (workspace_id, principal, self._cap_minutes()))
             if cur.fetchone()[0] >= MAX_ACTIVE_SESSIONS:
                 raise AlphaError("Voice Mode is already on in another tab. End it there first.", 429, code="voice_busy")
-            history = self._history(cur, workspace_id, conversation_id)
+            history = self._history(cur, workspace_id, conversation_id, permission_ctx=permission_ctx)
             estimate = self.cfg.live_usd_micro_per_minute * self._cap_minutes()
             key = "voice:" + uid()
             cur.execute("INSERT INTO public.pr_agent_runs(conversation_id,workspace_id,actor,status,model,reasoning,context_digest,policy_epoch,idempotency_key,artifact) "
@@ -288,11 +310,32 @@ class VoiceSessions:
             artifact = self._artifact(cur, workspace_id, voice_session_id)
             artifact["voice"]["reservationId"] = reservation["reservationId"]
             self._save(cur, workspace_id, voice_session_id, artifact)
+        admission = _VoiceAdmission(workspace_id, principal, voice_session_id, reservation["reservationId"])
         try:
             session = session_config(route.model, locale, voice, style, history, browser=True)
         except Exception as error:  # noqa: BLE001 — reservation already committed
             self._start_failed(workspace_id, token, voice_session_id, reservation, "live_error", {"phase": "live_config"}, request_id)
             raise AlphaError("The voice service didn't start a session. You can keep typing.", 502, code="live_error") from error
+        if authz.mode_for(self.cfg, workspace_id) == "enforce":
+            try:
+                with repo.transaction(token, workspace_id) as (cur, row, current_principal):
+                    current_member = ideas._member(row)
+                    require(current_member, "edit")
+                    latest = SimpleNamespace(config=self.cfg, workspace_id=workspace_id, principal=current_principal,
+                                             membership=current_member, now=self.runtime.clock)
+                    authz.bind_context(latest, cur=cur, state=ideas._state(row), member=current_member)
+                    from . import memory_layers
+                    if (current_principal != principal or latest.grants.token() != permission_ctx.grants.token()
+                            or memory_layers.context_revision(latest.authz_state) != memory_layers.context_revision(permission_ctx.authz_state)):
+                        raise AlphaError("Your access or memory changed. Start Voice Mode again to use the current settings.", 403, code="agent_permission_revoked")
+            except Exception:
+                # No provider request was made. Do not invent upstream refusal or uncertain spend.
+                try:
+                    self._close_before_dispatch(admission)
+                except Exception:
+                    LOG.warning("rafii.voice.start.cleanup.failed %s", json.dumps({"phase": "permission_recheck"}))
+                raise
+        admission.begin_dispatch()  # From here even a transport exception may represent incurred cost.
         try:
             response = self.transport("POST", LIVE_ENDPOINT, headers={"Authorization": f"Bearer {self.cfg.credential('openai')}"}, body={"session": session, "transport": {"type": "webrtc", "sdp": sdp}})
         except AlphaError as error:
@@ -338,6 +381,54 @@ class VoiceSessions:
         return {"voiceSessionId": voice_session_id, "liveSessionId": live_id, "conversationId": conversation_id, "sdp": answer, "dataChannel": DATA_CHANNEL,
                 "model": route.model, "locale": locale, "voice": voice, "openingGreeting": opening_greeting, "capMinutes": self._cap_minutes(), "allowedClientEvents": list(ALLOWED_CLIENT_EVENTS)}
 
+    def _close_before_dispatch(self, admission):
+        """Zero only this invocation's existing reservation before any provider request.
+
+        Current user access may have disappeared. The engine's workspace-locked
+        service transaction permits financial bookkeeping, never new execution.
+        A started/unknown call can only use the normal conservative settlement.
+        """
+        if not isinstance(admission, _VoiceAdmission) or admission.provider_started:
+            raise AlphaError("Voice admission can no longer be released at zero.", 409)
+        from .task_engine import store
+        with store.service_tx(self.service, admission.workspace_id) as cur:
+            if cur is None:
+                raise AlphaError("Voice reservation unavailable.", 404)
+            cur.execute("SELECT r.artifact,r.status FROM public.pr_agent_runs r JOIN public.pr_usage_ledger u "
+                        "ON u.run_id=r.id AND u.workspace_id=r.workspace_id AND u.member_id=r.actor "
+                        "WHERE r.id::text=%s AND r.workspace_id=%s AND r.actor::text=%s "
+                        "AND r.idempotency_key LIKE 'voice:%%' AND u.id::text=%s AND u.kind='reserve' "
+                        "AND u.dimension='tool' AND u.provider='openai' AND u.idempotency_key='voice:'||r.id::text FOR UPDATE OF r",
+                        (admission.run_id, admission.workspace_id, admission.principal, admission.reservation_id))
+            row = cur.fetchone()
+            if row is None:
+                raise AlphaError("Voice reservation unavailable.", 404)
+            artifact, status = row
+            voice = (artifact or {}).get("voice") or {}
+            if voice.get("reservationId") != admission.reservation_id:
+                raise AlphaError("Voice reservation identity changed.", 409)
+            if status == "failed" and voice.get("reason") == "permission_changed" and voice.get("billingBasis") == "provider not contacted":
+                return {"voiceSessionId": admission.run_id, "state": "failed", "note": "Already ended."}
+            if (status != "running" or voice.get("state") != "connecting"
+                    or voice.get("connectedAt") is not None or voice.get("liveSessionId") is not None):
+                raise AlphaError("Voice admission is no longer pending.", 409)
+            # Serialize the absence-of-outcome proof with every normal ledger settlement.
+            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("pr_ledger:" + str(admission.reservation_id),))
+            cur.execute("SELECT 1 FROM public.pr_usage_ledger WHERE workspace_id=%s AND reservation_id::text=%s "
+                        "AND kind IN ('settle','release') LIMIT 1", (admission.workspace_id, admission.reservation_id))
+            if cur.fetchone() is not None:
+                raise AlphaError("Voice usage already has an outcome; reconcile it first.", 409)
+            self.service.ledger.settle(cur, admission.workspace_id, admission.reservation_id, "completed", 0)
+            voice.update(state="failed", reason="permission_changed", endedAt=self._now(), usageSeconds=0,
+                         costUsdMicro=0, billingBasis="provider not contacted", providerRequests=0,
+                         failureDiagnostic={"phase": "permission_recheck"})
+            artifact["voice"] = voice
+            self._save(cur, admission.workspace_id, admission.run_id, artifact, status="failed")
+            self.service.ideas._insert_event(cur, admission.workspace_id, admission.run_id,
+                safe_event("run.failed", message="Voice did not contact the provider because access changed."))
+            # No ai_call_events attempt: no provider call took place.
+        return {"voiceSessionId": admission.run_id, "state": "failed", "usageSeconds": 0}
+
     def _start_failed(self, workspace_id, token, voice_session_id, reservation, reason, diagnostic, request_id):
         details = {**diagnostic, "reason": reason}
         if isinstance(request_id, str) and re.fullmatch(r"[0-9a-f]{32}", request_id):
@@ -382,14 +473,21 @@ class VoiceSessions:
         from .config import MAX_VOICE_MINUTES
         return MAX_VOICE_MINUTES
 
-    def _history(self, cur, workspace_id, conversation_id) -> str:
+    def _history(self, cur, workspace_id, conversation_id, *, permission_ctx=None) -> str:
         """The same conversation, in words, so voice continues what text started (text-only; no ids)."""
+        from ..site_agent.contracts import cloud_withheld
         from ..youtube.agent_context import history_eligible
+        from . import authz
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT 16", (conversation_id, workspace_id))
         lines = []
         for role, body in reversed(cur.fetchall()):
             text = ((body or {}).get("text") or "").strip() if isinstance(body, dict) else ""
-            if text and role in ("user", "assistant") and history_eligible(role, body):
+            # The realtime voice model is a cloud model: a site-agent answer kept from cloud models is not its history.
+            if text and role in ("user", "assistant") and history_eligible(role, body) and not cloud_withheld(body):
+                if permission_ctx is None and authz.mode_for(self.cfg, workspace_id) == "enforce":
+                    continue
+                if permission_ctx is not None and not authz.history_eligible(cur, permission_ctx, role, body):
+                    continue
                 lines.append(("User: " if role == "user" else "Rafii: ") + contracts.speakable(text, 500))
         if not lines:
             return ""

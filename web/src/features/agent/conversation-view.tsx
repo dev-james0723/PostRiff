@@ -6,7 +6,7 @@ import { useCreditEstimate } from './use-credit-estimate';
 import { parseCreditLimit } from './credit-limit';
 import { CreditLimitField } from './credit-limit-field';
 
-import { effectiveVoiceMode, eligibleVoiceSources } from './voice-consent';
+import { effectiveVoiceMode, eligibleVoiceSources, manualVoiceAvailable } from './voice-consent';
 import { voiceLearningIntent, type VoiceLearningRequest } from './voice-learning-intent';
 import { VoiceLearningPanel } from './voice-learning-panel';
 import { ChatAutomationCard } from '@/features/automations/chat-automation-card';
@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StreamingText } from '@/components/ui/streaming-text';
-import { keys, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
+import { keys, useMemory, useModels, useSnapshot, useUsage } from '@/lib/api/hooks';
 import type { ChatAutomation, GeneratedImage, MemoryBinding, MemoryProposal, Message as ThreadMessage, Run, RunVariant, SchedulePlan } from '@/lib/api/types';
 import { DraftPreview } from '@/components/application/post-preview/draft-preview';
 import { PreviewWindow } from '@/components/application/post-preview/preview-window';
@@ -160,6 +160,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   const access = useWorkspaceAccess();
   const canEdit = checkAccess(access, { permission: 'edit' });
   const snapshot = useSnapshot();
+  const memory = useMemory();
   const navigationConversations = useInfiniteQuery({
     queryKey: [...keys.conversations(workspaceId), 'navigation-pages'], initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => api.navigationConversations(workspaceId, pageParam),
@@ -300,8 +301,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
   }, [recoveredTurn]);
   const maximum = parseCreditLimit(creditLimit);
   const voiceSourceIds = eligibleVoiceSources(state?.sources ?? [], choice.option);
-  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length);
-  const voiceAvailable = voiceSourceIds.length > 0;
+  const manualVoice = manualVoiceAvailable(state?.speaker, choice.option, memory.data?.egress?.cloud === true && !memory.isRefetchError);
+  const voiceMode = effectiveVoiceMode(voiceChoice, voiceSourceIds.length, manualVoice);
+  const voiceAvailable = voiceSourceIds.length > 0 || manualVoice;
   // One chip per platform; the composer expands it into one row per selected account (accountLabel).
   const chips: ChannelChip[] = draftPlatforms.map((platform) => {
     const account = channels.find((c) => c.platform === platform);
@@ -590,6 +592,9 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               <Link href='/app/queue' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-8 items-center rounded-md text-xs underline-offset-2 hover:underline'>
                 Open Queue
               </Link>
+              {agent.status?.tasks?.enabled && <Link href='/app/tasks' className='rafii-focus text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center rounded-md text-xs underline-offset-2 hover:underline'>
+                Tasks
+              </Link>}
             </div>
           </div>
 
@@ -800,6 +805,7 @@ function ConversationWorkspace({ conversationId }: { conversationId: string }) {
               voiceMode={voiceMode}
               onVoiceMode={setVoiceChoice}
               voiceAvailable={voiceAvailable}
+              voiceRevision={state?.speaker?.activeRevision ?? null}
               imageGeneration={{
                 enabled: imageRequested,
                 available: !creditMode && Boolean(imageCapability?.available),
