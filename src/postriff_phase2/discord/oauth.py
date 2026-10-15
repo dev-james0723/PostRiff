@@ -121,18 +121,29 @@ class DiscordConnections:
             raise error
         return response.get('body')
 
-    def verified_user(self, bearer, required, user_id=None):
+    def verified_authorization(self, bearer, required, user_id=None):
+        """Fresh token/subject/application proof; identify includes the user here."""
         info = self._response('GET', '/oauth2/@me', bearer, user_id=user_id)
-        verified_id = (info.get('user') or {}).get('id') if isinstance(info, dict) else None
+        user = info.get('user') if isinstance(info, dict) else None
+        verified_id = user.get('id') if isinstance(user, dict) else None
         if not snowflake(verified_id) or user_id is not None and verified_id != user_id:
             fail('Discord did not verify the expected identity.')
-        user = self._response('GET', '/users/@me', bearer, user_id=verified_id)
-        if (not isinstance(info, dict) or not isinstance(user, dict)
-                or (info.get('application') or {}).get('id') != self.adapter.client_id
-                or not snowflake(user.get('id')) or (info.get('user') or {}).get('id') != user['id']
-                or not isinstance(info.get('scopes'), list) or not set(required).issubset(info['scopes'])):
+        if (not isinstance(info.get('application'), dict)
+                or info['application'].get('id') != self.adapter.client_id
+                or not isinstance(info.get('scopes'), list)
+                or any(not isinstance(scope, str) for scope in info['scopes'])
+                or not set(required).issubset(info['scopes'])):
             fail('Discord did not verify the requested identity and application.')
         return user, list(info['scopes'])
+
+    def verified_user(self, bearer, required, user_id=None):
+        # Callback and rotating-token exchange retain an independent profile
+        # subject check. The hot path needs only the live authorization proof.
+        authorized, scopes = self.verified_authorization(bearer, required, user_id)
+        user = self._response('GET', '/users/@me', bearer, user_id=authorized['id'])
+        if not isinstance(user, dict) or not snowflake(user.get('id')) or user['id'] != authorized['id']:
+            fail('Discord did not verify the requested identity and application.')
+        return user, scopes
 
     @staticmethod
     def token_body(body):
@@ -333,7 +344,7 @@ class DiscordConnections:
         if fast is not None:
             # Local expiry is not proof that Discord still authorizes this user.
             try:
-                user, _ = self.verified_user(fast['bearer'], fast['scopes'], fast['userId'])
+                user, _ = self.verified_authorization(fast['bearer'], fast['scopes'], fast['userId'])
                 if user['id'] != fast['userId']:
                     fail('The Discord identity changed. Reconnect.')
             except AlphaError as error:

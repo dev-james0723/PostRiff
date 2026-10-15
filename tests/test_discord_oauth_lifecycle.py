@@ -65,12 +65,12 @@ class LifecycleWire(SyntheticWire):
         return super().__call__(method, url, **kwargs)
 
 
-def service():
+def service(*, with_vault=True):
     wire = LifecycleWire()
     adapter = DiscordProvider(APP, 'synthetic-secret', 'synthetic-bot', 'https://rafii.example.invalid', transport=wire, production_reviewed=True)
     adapter.connections_v2_enabled = adapter.authorization_v2_enabled = True
     oauth = SimpleNamespace(_provider=lambda _: adapter, callback_uri=lambda _: 'https://rafii.example.invalid/api/oauth/discord/callback',
-                            clock=lambda: NOW, vault=CredentialVault(CredentialVault.generate_key()))
+                            clock=lambda: NOW, vault=CredentialVault(CredentialVault.generate_key()) if with_vault else None)
     return DiscordConnections(oauth), wire
 
 
@@ -80,6 +80,28 @@ def context(purpose='identity'):
 
 
 class Lifecycle(unittest.TestCase):
+    def test_current_authorization_verifies_live_identity_without_discarded_profile_read(self):
+        s, wire = service(with_vault=False)
+        wire.tokens['synthetic-access'] = ['identify', 'guilds']
+        user, scopes = s.verified_authorization('synthetic-access', ['identify', 'guilds'], USER)
+        self.assertEqual((user['id'], scopes), (USER, ['identify', 'guilds']))
+        self.assertEqual(wire.lifecycle_calls, [('GET', '/oauth2/@me')])
+        wire.identity_revoked = True
+        with self.assertRaises(AlphaError):
+            s.verified_authorization('synthetic-access', ['identify', 'guilds'], USER)
+        self.assertEqual(wire.lifecycle_calls, [('GET', '/oauth2/@me'), ('GET', '/oauth2/@me')])
+
+    def test_current_authorization_rejects_missing_or_mismatched_grant_evidence(self):
+        valid = {'application': {'id': APP}, 'user': {'id': USER}, 'scopes': ['identify', 'guilds']}
+        for override in ({'user': None}, {'user': {'id': '999888'}}, {'application': {'id': '999888'}},
+                         {'scopes': ['identify']}, {'scopes': [{'name': 'identify'}]}, {'application': None}):
+            with self.subTest(override=override):
+                s, _ = service(with_vault=False)
+                s._response = Mock(return_value={**valid, **override})
+                with self.assertRaises(AlphaError):
+                    s.verified_authorization('synthetic-access', ['identify', 'guilds'], USER)
+                s._response.assert_called_once_with('GET', '/oauth2/@me', 'synthetic-access', user_id=USER)
+
     def test_server_state_binds_tenant_member_application_callback_purpose_and_scope(self):
         s, _ = service(); c = context()
         args = (WORKSPACE, ACTOR, s.adapter, s.oauth.callback_uri('discord'), ['identify', 'guilds'], 'identity')
@@ -192,7 +214,7 @@ class Lifecycle(unittest.TestCase):
         s.local = local
         s.bind_identity = Mock(return_value=(('ciphertext', 'key', None, NOW + 3600, 'generation', ['identify'], USER), {'user': USER, 'at': 'synthetic-access'}))
         revoked = AlphaError('Synthetic revoked authorization', 409); revoked.discord_permanent = True
-        s.verified_user = Mock(side_effect=revoked); s.invalidate_dependents = Mock(); s.save_state = Mock()
+        s.verified_authorization = Mock(side_effect=revoked); s.invalidate_dependents = Mock(); s.save_state = Mock()
         with self.assertRaises(AlphaError):
             s._fresh_identity(WORKSPACE, 'session', 'identity')
         self.assertEqual(record['status'], 'reconnect_required')

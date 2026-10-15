@@ -689,6 +689,13 @@ class MockDiscord:
             self.r.m.count('unexpectedTransport')
             raise Incomplete('Unexpected mocked provider route')
         path = parsed.path.removeprefix('/api/v10')
+        if (method == 'GET' and path in ('/oauth2/@me','/users/@me')
+                and kwargs.get('headers',{}).get('Authorization','').startswith('Bearer ')):
+            phase=getattr(self.r,'progress_phase','unknown')
+            if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety'):
+                phase='unknown'
+            kind='authorization' if path=='/oauth2/@me' else 'profile'
+            self.r.m.count('mockBearerReads.'+kind+'.'+phase)
         start = time.monotonic()
         stamp = time.time()
         delayed_old_header = False
