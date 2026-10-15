@@ -31,6 +31,12 @@ def _verified_payload(access_token, principal):
     return payload
 
 
+def verified_amr(access_token, principal):
+    """The `amr` list Supabase signed into this verified token ([] when absent or malformed)."""
+    methods = _verified_payload(access_token, principal).get("amr")
+    return methods if isinstance(methods, list) else []
+
+
 def verified_session_id(access_token, principal):
     session_id = _verified_payload(access_token, principal).get("session_id")
     if not isinstance(session_id, str) or not SESSION.fullmatch(session_id):
@@ -164,7 +170,9 @@ class SupabaseIdentityAdmin:
         if not isinstance(factors, list):
             return []
         return [
-            {"id": str(item.get("id", "")), "type": str(item.get("factor_type", "")), "name": str(item.get("friendly_name") or "")[:80]}
+            {"id": str(item.get("id", "")), "type": str(item.get("factor_type", "")), "name": str(item.get("friendly_name") or "")[:80],
+             # When it was enrolled: a factor added after a "This wasn't me" report never lifts its hold (security_center).
+             "createdAt": str(item.get("created_at") or "")[:40] or None}
             for item in factors
             if isinstance(item, dict) and item.get("status") == "verified"
         ]

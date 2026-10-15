@@ -120,7 +120,8 @@ def observe_session(cur, principal, session_id, client_label=""):
         cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
         setting = cur.fetchone()
         alert = bool(setting and setting[0])
-        audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+        # RAFII_SIGN_IN_DETAILS (off by default) adds the verified sign-in method and an approximate location.
+        audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert, **account_protection.first_sighting_details()})
     from . import device_trust
     if device_trust.active():
         # RAPv2 P1 device registry (RAFII_DEVICE_TRUST_V2): the browser behind this session and the ledger events
@@ -810,7 +811,7 @@ class HostedWorkspaceService:
                     cur.execute("SELECT pg_try_advisory_xact_lock(hashtext('rafii-sign-in-alert:' || %s))", (principal,))
                     if not cur.fetchone()[0]:
                         continue  # another run holds this person; it or the next run takes the row
-                    cur.execute("SELECT extract(epoch from o.at),coalesce(o.meta->>'client',''),coalesce(p.time_zone,'') FROM public.pr_audit_events o "
+                    cur.execute("SELECT extract(epoch from o.at),coalesce(o.meta->>'client',''),coalesce(p.time_zone,''),o.meta FROM public.pr_audit_events o "
                                 "JOIN public.pr_profiles p ON p.user_id=o.actor AND p.deleted_at IS NULL WHERE o.actor=%s AND o.kind='session.observed' AND o.subject=%s "
                                 "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=o.actor AND s.kind='session.alerted' AND s.subject=o.subject) LIMIT 1",
                                 (principal, session_id))
@@ -824,7 +825,10 @@ class HostedWorkspaceService:
                         suppressed += 1
                         continue
                     address = self._email_for(principal)
-                    outcome = self.mailer.new_device(address, row[1] or "an unrecognised device", float(row[0]), f"{self.public_base_url}/app/account/profile", time_zone=row[2]) if address else {"sent": False}
+                    meta = row[3] if len(row) > 3 and isinstance(row[3], dict) else {}
+                    # A location line only when the first sighting recorded one (RAFII_SIGN_IN_DETAILS location levels).
+                    place = {"location": account_protection.location_text(meta.get("location"))} if "location" in meta else {}
+                    outcome = self.mailer.new_device(address, row[1] or "an unrecognised device", float(row[0]), f"{self.public_base_url}/app/account/profile", time_zone=row[2], **place) if address else {"sent": False}
                     audit(cur, None, principal, "session.alerted", session_id, {"sent": bool(outcome.get("sent"))})
                     sent += bool(outcome.get("sent"))
         return {"status": "ok", "pending": len(pending), "sent": sent, "suppressed": suppressed}
@@ -935,6 +939,8 @@ class HostedWorkspaceService:
             "sessionId": session_id,
             # `available` is false for identities without assurance levels (the dev harness).
             "mfa": {"available": aal is not None, "enforced": enforced_at is not None, "enforcedAt": float(enforced_at) if enforced_at else None, "aal": aal(token, principal) if aal else None},
+            # RAP-016: how this session signed in, from its verified `amr` only; "unknown" without one (never inferred).
+            "signIn": self._sign_in(token, principal),
             # Empty strings mean "follow the device"; the browser fills them in. `agentStyle` is always complete.
             "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
         }
@@ -1067,6 +1073,9 @@ class HostedWorkspaceService:
         """Record that this user must present a second factor. The session proves enrolment (AAL2),
         and the identity service confirms a verified factor exists, before anything is written."""
         principal = self.verify_session(token)
+        # RAPv2: not while the account is on a security hold (a factor added during an incident is not recovery).
+        from .security_center import assert_enrolment_allowed
+        assert_enrolment_allowed(self, principal)
         if self._aal(token, principal) != "aal2":
             raise AlphaError("Verify a code from your authenticator app first.", 403)
         factors = getattr(self.identity, "verified_factors", None)
@@ -1314,11 +1323,29 @@ class HostedWorkspaceService:
         with self.connection_factory() as db:
             with db.cursor() as cur:
                 fresh = self._touch_session(cur, principal, current, client_label)
-                cur.execute("SELECT s.session_id,extract(epoch from s.first_seen),extract(epoch from s.last_seen),s.client_label,(r.session_id IS NOT NULL) FROM public.pr_sessions s LEFT JOIN public.pr_session_revocations r ON r.user_id=s.user_id AND r.session_id=s.session_id WHERE s.user_id=%s ORDER BY s.last_seen DESC LIMIT 50", (principal,))
+                # The sign-in method and approximate location are what the session's first sighting recorded
+                # (RAFII_SIGN_IN_DETAILS); a session recorded without them reads "unknown" / no location.
+                cur.execute("SELECT s.session_id,extract(epoch from s.first_seen),extract(epoch from s.last_seen),s.client_label,(r.session_id IS NOT NULL),o.meta FROM public.pr_sessions s"
+                            " LEFT JOIN public.pr_session_revocations r ON r.user_id=s.user_id AND r.session_id=s.session_id"
+                            " LEFT JOIN LATERAL (SELECT a.meta FROM public.pr_audit_events a WHERE a.actor=s.user_id AND a.kind='session.observed' AND a.subject=s.session_id ORDER BY a.at LIMIT 1) o ON true"
+                            " WHERE s.user_id=%s ORDER BY s.last_seen DESC LIMIT 50", (principal,))
                 rows = cur.fetchall()
         if fresh:
             self._alert_new_device(principal, current, client_label)
-        return {"sessions": [{"sessionId": item[0], "firstSeen": float(item[1]), "lastSeen": float(item[2]), "client": item[3], "revoked": bool(item[4]), "current": item[0] == current} for item in rows]}
+        this = self._sign_in(token, principal)
+        def details(item):
+            meta = item[5] if len(item) > 5 and isinstance(item[5], dict) else {}
+            recorded = meta.get("method") if meta.get("method") in account_protection.METHOD_CODES else "unknown"
+            return {"signInMethod": this["method"] if item[0] == current else recorded,
+                    "location": account_protection.location_text(meta.get("location"))}
+        return {"sessions": [{"sessionId": item[0], "firstSeen": float(item[1]), "lastSeen": float(item[2]), "client": item[3], "revoked": bool(item[4]), "current": item[0] == current, **details(item)} for item in rows]}
+
+    def _sign_in(self, token, principal):
+        amr = getattr(self.verify_session, "amr", None)
+        try:
+            return account_protection.sign_in_method(amr(token, principal) if callable(amr) else None)
+        except AlphaError:
+            return account_protection.sign_in_method(None)
 
     def revoke_session(self, token, session_id):
         principal = self.verify_session(token)

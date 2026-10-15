@@ -228,7 +228,8 @@ def security_events(cur, since_seconds=86400):
                             WHEN 'session.alerted' THEN coalesce(a.meta->>'sent','') = 'true'
                             WHEN 'session.observed' THEN EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=a.actor AND s.kind='session.alerted'
                                                                 AND s.subject=a.subject AND s.meta->>'sent'='true')
-                            ELSE true END
+                            ELSE true END,
+                          a.meta ? 'location', a.meta->'location'
                    FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
                    WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others','security.incident_reported')
                           OR (a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'
@@ -250,5 +251,9 @@ def security_events(cur, since_seconds=86400):
             event["occurred_at"] = float(rest[0])
             if rest[1]:
                 event["payload"]["device"] = rest[1][:40]
+            if len(rest) >= 5 and rest[3]:
+                # RAFII_SIGN_IN_DETAILS location levels: the recorded approximate location, or "" when none was known.
+                from ..account_protection import location_text
+                event["payload"]["location"] = location_text(rest[4]) or ""
         out.append(event)
     return out

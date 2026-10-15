@@ -26,7 +26,8 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { keys, useMe, useSecurityEvents, useSecurityIncidents, useSessions } from '@/lib/api/hooks';
+import { keys, useMe, useSecurityDevices, useSecurityEvents, useSecurityIncidents, useSecurityRecovery, useSessions } from '@/lib/api/hooks';
+import type { SecurityDevice, SecurityIncident, SignInMethod } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/client';
 import { describeSecurityEvent } from './profile-model';
 import {
@@ -49,6 +50,27 @@ import { SettingsGroup, SettingsSection } from './settings-section';
 const FACTORS_KEY = ['mfa-factors'] as const;
 
 const KIND_LABEL: Record<FactorKind, string> = { totp: 'Authenticator app', webauthn: 'Passkey · Face ID / Touch ID' };
+/** How a session signed in. `unknown` is said plainly: Rafii never guesses a method or a factor it has no record of. */
+const METHOD_LABEL: Record<SignInMethod, string> = {
+  password: 'Password',
+  email_code: 'Email code',
+  email_link: 'Email link',
+  oauth: 'Google or another provider',
+  passkey: 'Passkey',
+  sso: 'Single sign-on',
+  anonymous: 'Guest',
+  unknown: 'Unknown'
+};
+
+function plural(count: number, one: string, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** "Signed in with Passkey · near KKC, HK": the method always, the place only when the network edge reported one. */
+function sessionDetails(session: { signInMethod?: SignInMethod; location?: string | null }) {
+  const method = `Signed in with: ${METHOD_LABEL[session.signInMethod ?? 'unknown']}`;
+  return session.location ? `${method} · Approximate location: ${session.location}` : method;
+}
 const DIALOG_TITLE = 'text-foreground text-xl font-medium tracking-tight';
 
 function message(err: unknown, fallback: string) {
@@ -600,6 +622,7 @@ function Sessions() {
           kind='error'
           layout='inline'
           title='Couldn’t load sessions'
+          description='Rafii can’t check where you’re signed in right now, so it can’t tell you whether anything is wrong. Try again, or contact support if this keeps happening.'
           action={
             <Button size='sm' variant='glass' className='min-h-9' onClick={() => void sessions.refetch()}>
               Retry
@@ -621,7 +644,7 @@ function Sessions() {
                     <SessionBadges session={session} />
                   </span>
                 }
-                meta={`Last seen ${relativeTime(session.lastSeen)}`}
+                meta={`${sessionDetails(session)} · Last seen ${relativeTime(session.lastSeen)}`}
                 actions={
                   !session.current && !session.revoked ? (
                     <Button variant='quiet' size='sm' className='min-h-9' disabled={busy !== null} onClick={() => void revoke(session.sessionId)}>
@@ -637,6 +660,7 @@ function Sessions() {
               <TableHeader>
                 <TableRow className='hover:bg-transparent'>
                   <TableHead>Device</TableHead>
+                  <TableHead>Signed in with</TableHead>
                   <TableHead>Last seen</TableHead>
                   <TableHead />
                 </TableRow>
@@ -649,6 +673,10 @@ function Sessions() {
                         {session.client || 'Unknown device'}
                         <SessionBadges session={session} />
                       </span>
+                    </TableCell>
+                    <TableCell className='text-muted-foreground text-xs'>
+                      {METHOD_LABEL[session.signInMethod ?? 'unknown']}
+                      {session.location ? <span className='block'>Approximate location: {session.location}</span> : null}
                     </TableCell>
                     <TableCell className='text-muted-foreground text-xs'>{relativeTime(session.lastSeen)}</TableCell>
                     <TableCell className='text-right'>
@@ -689,6 +717,184 @@ function Sessions() {
         </AlertDialogContent>
       </AlertDialog>
     </SettingsGroup>
+  );
+}
+
+/**
+ * The browsers this account was used from (RAPv2 device registry). A browser can carry several sessions, so the two are
+ * counted apart. Hidden while the registry is off (the route answers 404).
+ */
+function Devices() {
+  const { api } = useWorkspace();
+  const devices = useSecurityDevices();
+  const client = useQueryClient();
+  const reportChangeError = useChangeError();
+  const [revoking, setRevoking] = useState<SecurityDevice | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (devices.isError && devices.error instanceof ApiError && devices.error.status === 404) return null;
+  if (devices.isPending) return null;
+  const list = devices.data?.devices ?? [];
+  const summary = devices.data?.summary;
+
+  async function revoke(device: SecurityDevice) {
+    setBusy(true);
+    try {
+      const result = await api.revokeDevice(device.deviceId);
+      toast.success(`${device.label} revoked`, {
+        description: `${plural(result.sessionsRevoked, 'session')} on it ${result.sessionsRevoked === 1 ? 'was' : 'were'} signed out. Next time it signs in, it counts as a new browser.`
+      });
+      await Promise.all([keys.securityDevices, keys.sessions, keys.securityEvents].map((queryKey) => client.invalidateQueries({ queryKey })));
+    } catch (err) {
+      reportChangeError(err, 'The browser could not be revoked.');
+    } finally {
+      setBusy(false);
+      setRevoking(null);
+    }
+  }
+
+  return (
+    <SettingsGroup
+      icon={<Icons.laptop className='size-4' />}
+      title='Browsers'
+      description={
+        summary ? (
+          <span data-testid='device-summary'>
+            {plural(summary.recognizedBrowsers, 'recognized browser')} · {plural(summary.activeSessions, 'session')}
+          </span>
+        ) : undefined
+      }
+    >
+      {devices.isError ? (
+        <StateMessage
+          kind='error'
+          layout='inline'
+          title='Couldn’t load your browsers'
+          description='Rafii can’t check which browsers are signed in right now, so it can’t tell you whether anything is wrong. Try again, or contact support if this keeps happening.'
+          action={
+            <Button size='sm' variant='glass' className='min-h-9' onClick={() => void devices.refetch()}>
+              Retry
+            </Button>
+          }
+        />
+      ) : list.length === 0 ? (
+        <StateMessage kind='empty' layout='inline' title='No browsers recorded yet' />
+      ) : (
+        <ul className='flex flex-col gap-1.5' aria-label='Browsers'>
+          {list.map((device) => (
+            <CollectionRow
+              key={device.deviceId}
+              as='li'
+              className='rafii-glass flex-wrap'
+              title={
+                <span className='flex flex-wrap items-center gap-2'>
+                  {device.label}
+                  {device.current && <Badge variant='secondary'>this browser</Badge>}
+                  {device.state === 'revoked' && <Badge variant='secondary'>revoked</Badge>}
+                </span>
+              }
+              meta={`${plural(device.activeSessions, 'session')} · Last seen ${relativeTime(device.lastSeen ? Date.parse(device.lastSeen) / 1000 : null)}`}
+              actions={
+                !device.current && device.state !== 'revoked' ? (
+                  <Button variant='quiet' size='sm' className='min-h-9' disabled={busy} aria-label={`Revoke ${device.label}`} onClick={() => setRevoking(device)}>
+                    Revoke
+                  </Button>
+                ) : undefined
+              }
+            />
+          ))}
+        </ul>
+      )}
+      <AlertDialog open={revoking !== null} onOpenChange={(open) => !open && setRevoking(null)}>
+        <AlertDialogContent className={rafiiDialog}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className='text-foreground text-lg font-medium tracking-tight'>Revoke {revoking?.label ?? 'this browser'}?</AlertDialogTitle>
+            <AlertDialogDescription className='leading-relaxed'>
+              {plural(revoking?.activeSessions ?? 0, 'session')} on it will be signed out, and Rafii stops recognising it. This browser stays signed in.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className={rafiiDialogFooter}>
+            <AlertDialogCancel variant='quiet' size='control'>Keep it</AlertDialogCancel>
+            <AlertDialogAction variant='action' size='control' disabled={busy} onClick={() => revoking && void revoke(revoking)}>
+              Revoke browser
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </SettingsGroup>
+  );
+}
+
+/**
+ * Ending a hold (RAPv2): only with a fresh code from a factor the account had before the report. Without one, the way
+ * back is support; an email code never lifts the hold.
+ */
+function EndHold({ incident }: { incident: SecurityIncident }) {
+  const auth = useAuth();
+  const { api } = useWorkspace();
+  const client = useQueryClient();
+  const recovery = useSecurityRecovery(true);
+  const reportChangeError = useChangeError();
+  const factors = useQuery({ queryKey: FACTORS_KEY, queryFn: () => listFactors(auth.supabase as SupabaseClient), enabled: Boolean(auth.supabase) });
+  const [proving, setProving] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const verified = (factors.data ?? []).filter((factor) => factor.verified);
+  const support = recovery.data?.path === 'support';
+
+  async function refresh() {
+    await Promise.all([keys.securityIncidents, keys.securityRecovery, keys.securityEvents].map((queryKey) => client.invalidateQueries({ queryKey })));
+  }
+
+  async function resolve() {
+    const result = await api.resolveIncident(incident.incidentId);
+    toast.success(result.holdReleased ? 'The security hold is lifted' : 'Report closed', {
+      description: result.holdReleased ? 'Scheduled posts, automations and Agent tasks can run again. Anything approved before the hold needs your approval again.' : 'Another report still holds the account.'
+    });
+    await refresh();
+  }
+
+  async function askSupport() {
+    try {
+      await api.requestRecovery();
+      toast.success('Support will contact you', { description: 'The hold stays on until your identity is confirmed outside this session.' });
+      await refresh();
+    } catch (err) {
+      reportChangeError(err, 'The request could not be sent.');
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <div className='flex flex-col gap-2'>
+      {support ? (
+        <>
+          <p className='text-muted-foreground text-xs leading-relaxed'>
+            This account has no second factor from before the report, so support has to confirm it’s you. An email code can’t lift the hold.
+          </p>
+          <Button size='sm' variant='glass' className='min-h-9 w-fit' disabled={asking || incident.state === 'recovering'} onClick={() => { setAsking(true); void askSupport(); }}>
+            {incident.state === 'recovering' ? 'Support recovery requested' : 'Ask support to recover the account'}
+          </Button>
+        </>
+      ) : (
+        <Button size='sm' variant='glass' className='min-h-9 w-fit' disabled={!recovery.isSuccess} onClick={() => setProving(true)}>
+          End the hold
+        </Button>
+      )}
+      <StepUpDialog
+        open={proving}
+        onOpenChange={setProving}
+        title='End the security hold?'
+        description='Confirm with an authenticator or security key you had before the report. Scheduled posts, automations and Agent tasks can run again; anything approved before the hold still needs your approval.'
+        actionLabel='End the hold'
+        factors={verified}
+        action={() =>
+          resolve().catch((err: unknown) => {
+            void refresh();
+            throw err;
+          })
+        }
+      />
+    </div>
   );
 }
 
@@ -739,12 +945,15 @@ function NotMe() {
       {list.length > 0 && (
         <ul className='rafii-glass flex flex-col rounded-[var(--rafii-radius-card)] px-4 py-1'>
           {list.map((incident) => (
-            <li key={incident.incidentId} className='flex min-h-11 items-center justify-between gap-3 py-2 text-sm'>
-              <span className='text-foreground flex items-center gap-2'>
-                Reported as not you
-                {incident.accountHold && incident.state !== 'resolved' && <Badge variant='secondary'>on hold</Badge>}
+            <li key={incident.incidentId} className='flex flex-col gap-2 py-2 text-sm'>
+              <span className='flex min-h-7 items-center justify-between gap-3'>
+                <span className='text-foreground flex items-center gap-2'>
+                  {incident.state === 'resolved' ? 'Reported as not you · resolved' : 'Reported as not you'}
+                  {incident.accountHold && incident.state !== 'resolved' && <Badge variant='secondary'>on hold</Badge>}
+                </span>
+                <span className='text-muted-foreground shrink-0 text-xs'>{relativeTime(incident.createdAt ? Date.parse(incident.createdAt) / 1000 : null)}</span>
               </span>
-              <span className='text-muted-foreground shrink-0 text-xs'>{relativeTime(incident.createdAt ? Date.parse(incident.createdAt) / 1000 : null)}</span>
+              {incident.accountHold && incident.state !== 'resolved' && <EndHold incident={incident} />}
             </li>
           ))}
         </ul>
@@ -839,6 +1048,7 @@ export function SecurityCard() {
     <SettingsSection id='profile-security' title='Security' bodyClassName='gap-8'>
       <TwoFactor />
       <Sessions />
+      <Devices />
       <NotMe />
       <SecurityActivity />
     </SettingsSection>
