@@ -3,8 +3,9 @@
 RAFII_ACCOUNT_PROTECTION_V2_MODE is `off` (the default: the legacy behaviour, unchanged) or `observe`: every first
 sighting of a session writes a `session.observed` account event in the same transaction as the session row, before
 any alert preference is read, and the sign-in paths that used to record a session silently (bootstrap, invitation
-acceptance) alert like /api/me does. `observe` adds no friction and blocks nothing; `enforce` belongs to P1 and is
-treated as `off` here, so a premature value can never switch on an enforcement this phase does not have.
+acceptance) alert like /api/me does. `observe` adds no friction and blocks nothing. `enforce` (P1) observes exactly
+like `observe` and, in addition, requires a fresh independent second factor before a sensitive capability is used from
+a risky session (security_gate, security_policy). No environment sets `enforce`.
 
 A label is a coarse browser family and OS family from the User-Agent, never a device model and never proof of
 anything: the header is supplied by the client.
@@ -14,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import zoneinfo
 
-MODES = ("off", "observe")
+MODES = ("off", "observe", "enforce")
 UNRECOGNIZED = "Unrecognized browser"
 
 # First match wins: Edge, Opera and Samsung Internet carry "Chrome/", Chrome on iOS and every Chromium carry "Safari/".
@@ -32,7 +33,12 @@ def mode(values=None):
 
 
 def observing(values=None):
-    return mode(values) == "observe"
+    """Observation runs in `observe` and in `enforce`: enforcement decides from what observation recorded."""
+    return mode(values) in ("observe", "enforce")
+
+
+def enforcing(values=None):
+    return mode(values) == "enforce"
 
 
 def browser_label(user_agent):

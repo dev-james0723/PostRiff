@@ -56,8 +56,11 @@ def _route(app, environ, runtime, token, method, workspace_id, rest):
             def step_up():
                 return authz.require_step_up(service.repository, token, principal, now=now, window=authz.R3_REAUTH_SECONDS,
                                              reason="full" if (body or {}).get("preset") == "full" else "sensitive_assist")
+            from ..security_gate import require as security_require
+            # RAPv2: a risky session needs fresh independent proof to widen Agent authority (enforce mode only).
             receipt = agent_permissions.apply_decision(cur, workspace_id=workspace_id, principal=principal, member=member, state=state, token=token,
-                                                       payload=body, now=now, step_up=step_up, mode=mode)
+                                                       payload=body, now=now, step_up=step_up, mode=mode,
+                                                       on_widen=lambda: security_require(service, token, "agent_grants"))
             return 200, {**agent_permissions.view(cur, workspace_id, principal, member, state, mode=mode, now=now), "receipt": receipt}
         if rest == ["revoke"] and method == "POST":
             receipt = agent_permissions.revoke(cur, workspace_id=workspace_id, principal=principal, member=member, state=state, token=token,

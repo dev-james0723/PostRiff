@@ -50,8 +50,10 @@ class ModeFlag(Mode):
     def test_off_unless_exactly_observe(self):
         self.assertEqual(account_protection.mode({}), "off")
         self.assertEqual(account_protection.mode({"RAFII_ACCOUNT_PROTECTION_V2_MODE": " Observe "}), "observe")
-        # P1's enforcement does not exist yet, so a premature value must not be read as anything but off.
-        self.assertEqual(account_protection.mode({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce"}), "off")
+        # P1 enforcement observes too; any other value is off.
+        self.assertEqual(account_protection.mode({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce"}), "enforce")
+        self.assertTrue(account_protection.observing({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "enforce"}))
+        self.assertFalse(account_protection.enforcing({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "observe"}))
         self.assertEqual(account_protection.mode({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "1"}), "off")
 
 
