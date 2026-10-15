@@ -547,6 +547,11 @@ function Sessions() {
     setBusy(sessionId);
     try {
       await api.revokeSession(sessionId);
+      // A single revoke denies this session id at once, but does not cancel its refresh token with the sign-in
+      // provider (RAP-057): say so, and point at the action that does.
+      toast.success('Session revoked', {
+        description: 'Rafii refuses it from now on. Its refresh token isn’t cancelled with the sign-in provider — use Sign out others to cancel those too.'
+      });
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
       reportChangeError(err, 'The session could not be revoked.');
@@ -559,7 +564,15 @@ function Sessions() {
     setBusy('others');
     try {
       const result = await api.revokeOtherSessions();
-      toast.success(result.revoked === 1 ? 'Signed out 1 other session' : `Signed out ${result.revoked} other sessions`);
+      const signedOut = result.revoked === 1 ? 'Signed out 1 other session' : `Signed out ${result.revoked} other sessions`;
+      // refreshRevoked: whether the sign-in provider confirmed the other refresh tokens were cancelled too.
+      if (result.refreshRevoked) {
+        toast.success(signedOut, { description: 'Their refresh tokens were cancelled with the sign-in provider too.' });
+      } else {
+        toast.warning(signedOut, {
+          description: 'Rafii refuses them from now on, but the sign-in provider didn’t confirm their refresh tokens were cancelled.'
+        });
+      }
       await client.invalidateQueries({ queryKey: keys.sessions });
     } catch (err) {
       reportChangeError(err, 'Other sessions could not be signed out.');

@@ -765,6 +765,12 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
+                if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
+                    try:
+                        result['signInAlerts'] = sign_in_alerts()
+                    except Exception as exc:
+                        result['signInAlerts'] = {'status': 'unavailable', 'error': type(exc).__name__}
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()

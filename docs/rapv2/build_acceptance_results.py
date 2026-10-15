@@ -71,7 +71,7 @@ auto("049 050 051 052 055 059 060", PG)
 auto("053", PG + " + " + BRANCH, "Disposable PG (authenticated role + JWT claims) and the real Supabase branch: a revoked session's JWT reads 0 workspaces; also " + GUARD + ".")
 auto("054", PG + " + " + BRANCH, "A revoked JWT cannot read private storage.objects (which Storage reads and signs through). Residual risk: a signed URL issued before the revocation stays valid until its TTL expires.")
 auto("056", UNIT, "The API reports refreshRevoked from the identity admin's real answer (false when refused or unconfigured). The Security Center does not display it.")
-auto("057", UNIT, "Backend: the revoked session id stays denied even for a refreshed JWT (" + PG + " RAP-052). UI: a single revoke never says provider refresh coverage is unknown (expectedFailure in " + UNIT + ").")
+auto("057", UNIT, "Backend: the revoked session id stays denied even for a refreshed JWT (" + PG + " RAP-052). UI: a single revoke says its refresh token is not cancelled with the sign-in provider, and revoke-others reports refreshRevoked (" + UNIT + ").")
 auto("058", PG + " + " + UNIT, "The UI offers no revoke for the current session (only the separate sign-out); the API, if called, denies the current session at once.")
 blocked("061", HOLD)
 auto("062 142", PG)
@@ -114,21 +114,21 @@ blocked("127", INCIDENT)
 auto("129", UNIT, "One authenticated /api/me with every logger at DEBUG: no token, JWT payload, session id or user id in the output. Traces/telemetry exporters are not exercised.")
 auto("131", UNIT, "Source and dependency scan of web/ for canvas/audio/WebGL fingerprinting and third-party trackers. The built bundle and live network are not inspected.")
 blocked("132", DEVICE + "; " + INCIDENT, "The existing session route's enumeration resistance is RAP-050.")
-auto("133", PG)
+auto("133", PG, "New-sign-in mail leaves the request in observe mode; the cron step (HostedWorkspaceService.deliver_sign_in_alerts) sends at most SIGN_IN_ALERT_CAP per person per hour and records the rest as suppressed. Also " + P0 + ".")
 blocked("134", INCIDENT, "No trust/recovery cookie endpoints exist; Rafii's API uses bearer tokens plus the X-PostRiff-Request/Origin guard.")
 blocked("135 138", DEVICE)
 blocked("137", RETENTION)
 # Rollout, flags and resilience
 auto("139 140 150", PG, "Also " + P0 + " (ModeFlag, off-mode tests).")
 blocked("141", ENFORCE)
-auto("143", PG)
+auto("143", PG, "The sign-in request only records session.observed with its alert decision; the /api/cron/worker step sends the mail on another thread/invocation. Also " + P0 + ".")
 blocked("144", RISK)
 auto("145", UNIT)
 auto("147", PG, "guard_target refuses every DSN but the disposable 127.0.0.1:55438/postgres cluster.")
 manual("148", "release reviewer (G12)", "Evidence for the reviewer: staging and production migration lists were read before and after the run and are unchanged; no statement ran on staging main or production; the only Supabase writes went to the deleted branch; the only push is this draft PR's branch (authorized by the task; it builds a Vercel preview), nothing merged, deployed or emailed.")
 manual("149", "config review", "No RP ID change is planned; web/src/lib/auth/passkey-host.ts turns passkey sign-in off when NEXT_PUBLIC_PASSKEY_RP_ID does not match the host. Needs a human review of the deployment configuration plan.")
 
-UNIT_EXPECTED_FAIL = {"RAP-057"}  # unittest.expectedFailure in UNIT
+UNIT_EXPECTED_FAIL = set()  # unittest.expectedFailure in UNIT (RAP-057 closed)
 
 
 def build(matrix, pg, sha, ci_run, branch_run):

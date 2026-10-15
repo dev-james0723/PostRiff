@@ -43,17 +43,14 @@ from postriff_alpha.domain import AlphaError  # noqa: E402
 from postriff_phase2 import hosted_app, operator_actions  # noqa: E402
 from postriff_phase2.coworker import flags  # noqa: E402
 from postriff_phase2.email import Mailer  # noqa: E402
-from postriff_phase2.hosted import HostedWorkspaceService  # noqa: E402
+from postriff_phase2.hosted import SIGN_IN_ALERT_BATCH, HostedWorkspaceService  # noqa: E402
 from postriff_phase2.hosted_app import HostedApplication, supabase_verifier  # noqa: E402
 from postriff_phase2.notifications import webhooks  # noqa: E402
 from postriff_phase2.notifications.service import NotificationService  # noqa: E402
 
 # Rows whose expected result the shipped code does not meet (recorded FAIL, see the module docstring).
 KNOWN_GAPS = {
-    "RAP-051": "a repeated DELETE of an already revoked session writes another session.revoked audit row",
     "RAP-088": "account deletion leaves pr_sessions rows (browser label, first/last seen) and person-level session.* audit events",
-    "RAP-133": "200 first sightings with alerts on send 200 new-sign-in emails; no per-person cap on the legacy path",
-    "RAP-143": "the legacy new-sign-in mail is sent synchronously inside the request after commit",
 }
 
 results = {}
@@ -201,7 +198,19 @@ def observed(user, session=None):
     return sql(query, *((user, session) if session else (user,)))[0][0]
 
 
+def cron_alerts(hosted=None):
+    """The /api/cron/worker step that sends observe mode's new-sign-in mail, run to completion on its own thread
+    (production runs it in a separate cron invocation, never inside the sign-in request)."""
+    def drain():
+        while (hosted or service).deliver_sign_in_alerts().get("pending", 0) >= SIGN_IN_ALERT_BATCH:
+            pass
+    worker = threading.Thread(target=drain, name="cron-worker")
+    worker.start()
+    worker.join(60)
+
+
 def mails_to(user):
+    cron_alerts()
     return [m for m in mailer.calls if m["to"].startswith(user[:8])]
 
 
@@ -578,6 +587,7 @@ for row in ("RAP-067", "RAP-146"):
             observe_mode(v2=False)
             legacy_user, _ = person(alerts=True)
             call("GET", "/api/me", token(legacy_user, new_session()))
+            cron_alerts(v2_hosted)
             assert len([m for m in transport.sent if m["to"].startswith(legacy_user[:8])]) == 1
             assert notifications.cron(max_items=500) == {"status": "disabled"}
         finally:
