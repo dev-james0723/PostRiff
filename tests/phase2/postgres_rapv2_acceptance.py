@@ -65,7 +65,9 @@ def check(row, description):
             fn()
             results[row] = {"status": "PASS", "check": description}
         except Exception as error:  # noqa: BLE001 - every row is recorded, the run decides at the end
-            results[row] = {"status": "FAIL", "check": description, "detail": f"{type(error).__name__}: {str(error)[:300]}"}
+            # Only an assertion about the expected result is a finding; any other exception is a harness or code error.
+            results[row] = {"status": "FAIL", "check": description, "detail": f"{type(error).__name__}: {str(error)[:300]}",
+                            "assertion": isinstance(error, AssertionError)}
         return fn
     return wrap
 
@@ -117,6 +119,10 @@ class FakeMailer:
     def new_device(self, to, device_label, at, profile_url, time_zone=""):
         self.calls.append({"to": to, "device": device_label, "url": profile_url, "thread": threading.current_thread().name})
         return {"sent": True}
+
+    def __getattr__(self, kind):
+        # Welcome, invitation and billing mail are not under test: accept and discard them.
+        return lambda *args, **kwargs: {"sent": False, "kind": kind}
 
 
 class Transport:
@@ -525,7 +531,7 @@ def v2_service(transport):
 def run_v2(notifications):
     # Not the service's very first run: that one baselines legacy-delivered alerts (covered by the P0 unit tests).
     sql("INSERT INTO public.pr_notification_scan(workspace_id,revision) SELECT id,0 FROM public.pr_workspaces LIMIT 1 ON CONFLICT DO NOTHING")
-    return notifications.cron()
+    return notifications.cron(max_items=500)
 
 
 def security_deliveries(user):
@@ -553,7 +559,7 @@ for row in ("RAP-067", "RAP-146"):
             legacy_user, _ = person(alerts=True)
             call("GET", "/api/me", token(legacy_user, new_session()))
             assert len([m for m in transport.sent if m["to"].startswith(legacy_user[:8])]) == 1
-            assert notifications.cron() == {"status": "disabled"}
+            assert notifications.cron(max_items=500) == {"status": "disabled"}
         finally:
             verify.on_first_sighting = lambda p, s, label, alert: service._alert_new_device(p, s, label, alert)
 
@@ -570,6 +576,8 @@ def v2_sign_in(transport):
 
 
 def due(user):
+    # Only this person's delivery is due, so the ticks below cannot be spent on other checks' notices.
+    sql("UPDATE public.pr_notification_deliveries SET next_attempt_at=now()+interval '1 day' WHERE user_id<>%s AND status='pending'", user)
     sql("UPDATE public.pr_notification_deliveries SET next_attempt_at=now()-interval '1 second' WHERE user_id=%s AND status='pending'", user)
 
 
@@ -883,7 +891,7 @@ def cleanup_guard():
 
 # --- Verdict ---------------------------------------------------------------------------------------------------------
 
-regressions = {row: r for row, r in results.items() if r["status"] == "FAIL" and row not in KNOWN_GAPS}
+regressions = {row: r for row, r in results.items() if r["status"] == "FAIL" and (row not in KNOWN_GAPS or not r["assertion"])}
 closed = sorted(row for row in KNOWN_GAPS if results.get(row, {}).get("status") == "PASS")
 for row, gap in KNOWN_GAPS.items():
     if row in results and results[row]["status"] == "FAIL":
