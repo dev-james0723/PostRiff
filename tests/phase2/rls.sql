@@ -177,6 +177,7 @@ end $$;
 -- RAPv2 H-1: browser reads also need a live, unrevoked session (and AAL2 where two-factor is enforced). Suites that
 -- act as the browser role get one unrevoked session id by default; postgres_browser_session_guard.py sets its own.
 \ir ../../migrations/postriff/119_rapv2_browser_session_guard.sql
+\ir ../../migrations/postriff/122_rapv2_session_history_erasure.sql
 do $$ begin
  execute format('alter database %I set request.jwt.claim.session_id = %L', current_database(), 'harness-session-000000000001');
 end $$;

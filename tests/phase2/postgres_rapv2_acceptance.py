@@ -49,9 +49,7 @@ from postriff_phase2.notifications import webhooks  # noqa: E402
 from postriff_phase2.notifications.service import NotificationService  # noqa: E402
 
 # Rows whose expected result the shipped code does not meet (recorded FAIL, see the module docstring).
-KNOWN_GAPS = {
-    "RAP-088": "account deletion leaves pr_sessions rows (browser label, first/last seen) and person-level session.* audit events",
-}
+KNOWN_GAPS = {}
 
 results = {}
 
@@ -805,7 +803,7 @@ def audit_append_only():
             pass
 
 
-@check("RAP-088", "account deletion removes the person's session inventory and sign-in history per policy")
+@check("RAP-088", "account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label)")
 def deletion_purge():
     observe_mode()
 
@@ -817,9 +815,12 @@ def deletion_purge():
     user, workspace = person()
     session = signed_in(user)
     deleting.delete_account(workspace, token(user, session, iat=int(time.time())), "DELETE")
-    leftovers = {"pr_sessions": sql("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s", user)[0][0],
-                 "session_audit": sql("SELECT count(*) FROM public.pr_audit_events WHERE actor=%s AND kind LIKE 'session.%%'", user)[0][0]}
-    assert leftovers == {"pr_sessions": 0, "session_audit": 0}, leftovers
+    # Policy (owner decision A+B, 2026-10-15): the inventory goes; the history stays with no identifying field left.
+    assert sql("SELECT count(*) FROM public.pr_sessions WHERE user_id=%s", user)[0][0] == 0
+    history = sql("SELECT subject, meta FROM public.pr_audit_events WHERE actor=%s AND kind LIKE 'session.%%'", user)
+    assert history, "the sign-in history was dropped instead of redacted"
+    identifying = [(subject, meta) for subject, meta in history if subject or {"client", "device"} & set(meta)]
+    assert identifying == [] and all(meta.get("privacyErased") for _, meta in history), history
 
 
 @check("RAP-089", "two concurrent first-sighting inserts of one session: exactly one first observation")
