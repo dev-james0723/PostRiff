@@ -729,6 +729,47 @@ checks.append('SQL worker permit+intent atomic;postcommit destination/grant/memb
 checks.append('expired unconsumed permit:old admission fenced,intent archived,same frozen approval resumes;revoked grant and sent admission never reopen')
 checks.append('expired reserved permit before intent releases only proven unsent managed job;same frozen approval resumes withonePOST')
 
+# Cold discovery is serialized per authentication + top-level major resource,
+# while the reviewed application ceiling still coordinates all replicas.
+for label,majorless in (('same-major',False),('majorless',True)):
+    limiter,identity,path,policy=setup()
+    options=[('GET','/users/@me'),('GET','/oauth2/applications/@me')] if majorless else [
+        ('GET',path),('GET','/channels/'+path.split('/')[2]),('POST','/channels/'+path.split('/')[2]+'/messages')]
+    barrier=Barrier(16)
+    def cold_claim(index):
+        replica=SharedPostgresBudget(connection,limiter.application_id,policy=policy)
+        barrier.wait(8)
+        method,candidate=options[index%len(options)]
+        try:return replica.reserve(method,candidate,identity=identity)
+        except RateDelayed:return None
+    with ThreadPoolExecutor(max_workers=16) as pool:reserved=list(pool.map(cold_claim,range(16)))
+    assert sum(item is not None for item in reserved)==1,(label,reserved)
+    metrics.append({'case':'cold-discovery-'+label,'replicas':16,'attempted':16,'admitted':1})
+checks.append('16 real SQL replicas serialize cold aliases within one auth+major;majorless routes remain grouped')
+
+limiter,identity,path,policy=setup(app_capacity=3)
+barrier=Barrier(16)
+def independent_cold_claim(index):
+    replica=SharedPostgresBudget(connection,limiter.application_id,policy=policy)
+    candidate='/channels/'+str(810000000000000000+index)+'/messages/999999999999999999'
+    barrier.wait(8)
+    try:return replica.reserve('GET',candidate,identity=identity)
+    except RateDelayed:return None
+with ThreadPoolExecutor(max_workers=16) as pool:reserved=list(pool.map(independent_cold_claim,range(16)))
+assert sum(item is not None for item in reserved)==3,'Cold resource independence bypassed shared application budget'
+metrics.append({'case':'cold-discovery-independent-majors','replicas':16,'attempted':16,'admitted':3,'applicationSlots':3})
+checks.append('16 real SQL cold-resource contenders share exactly3 application slots,without an auth-wide one-probe bottleneck')
+
+limiter,identity,path,policy=setup()
+other='/channels/820000000000000001/messages/999999999999999999'
+first=limiter.reserve('GET',path,identity=identity);second=limiter.reserve('GET',other,identity=identity)
+limiter.consume(first,'GET',path)
+limiter.observe(first,{'status':429,'headers':{'X-RateLimit-Scope':'global','Retry-After':'172800.25'},'body':{'global':True}})
+try:limiter.consume(second,'GET',other)
+except (RateDelayed,RateCoordinatorUnavailable):pass
+else:raise AssertionError('Global429 did not stop an independently reserved cold major')
+checks.append('global429 blocks outstanding independent-major cold permit across shared SQL;two-day Retry-After retained')
+
 result={'status':'PASS','execution':'owned-cloud-PG17-synthetic',
     'workerChecks':prior['checks'],'exactScopedDispatchRegression':any(x.startswith('scoped claim selects only requested job;') for x in prior['checks']),
     'checks':checks,'coordinationMetrics':metrics,'elapsedSeconds':time.monotonic()-started,

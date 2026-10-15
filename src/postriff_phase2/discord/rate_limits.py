@@ -365,7 +365,11 @@ class SharedPostgresBudget:
             '40:' + major: ('resource', None, None),
             '50:' + _digest(identity.auth_key + ':' + (bucket or route) + ':' + major): ('route', 1, p.unknown_window_seconds)}
         if bucket is None:
-            result['30:' + identity.auth_key] = ('discovery', 1, p.unknown_window_seconds)
+            # Cold aliases share one probe within the auth + major resource.
+            # Discord separates top-level guild/channel resources; app/global,
+            # credential and invalid-request gates above still span all majors.
+            # Key-generation changes require a quiesced, reconciled rollout.
+            result['30:' + _digest(identity.auth_key + ':' + major)] = ('discovery', 1, p.unknown_window_seconds)
         return result
 
     def _locked(self, cur, keys):

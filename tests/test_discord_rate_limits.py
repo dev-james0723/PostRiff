@@ -491,6 +491,37 @@ class RateLimits(unittest.TestCase):
                 except RateDelayed:return None
             with ThreadPoolExecutor(max_workers=count) as pool:results=list(pool.map(claim,range(16)))
             self.assertEqual(sum(isinstance(r,Permit) for r in results),3)
+    def test_cold_resource_probes_are_independent_but_same_major_aliases_serialize(self):
+        first=self.reserve()
+        second=self.reserve('/channels/'+B+'/messages/'+A)
+        self.assertNotEqual(first.id,second.id)
+        with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)
+        self.assertFalse(self.calls)
+
+    def test_majorless_cold_routes_share_one_probe(self):
+        self.reserve('/users/@me')
+        with self.assertRaises(RateDelayed):self.reserve('/oauth2/applications/@me')
+        self.assertFalse(self.calls)
+
+    def test_independent_cold_resources_still_share_application_limit(self):
+        self.s=SharedPostgresBudget(self.db.connection,APP,policy={**self.policy,'app_capacity':2})
+        self.reserve();self.reserve('/channels/'+B+'/messages/'+A)
+        with self.assertRaises(RateDelayed) as caught:self.reserve('/channels/333333333333333333/messages/'+A)
+        self.assertEqual(caught.exception.rate_scope_kind,'application')
+
+    def test_global_rejection_stops_another_cold_major_permit(self):
+        first=self.reserve();other_path='/channels/'+B+'/messages/'+A;second=self.reserve(other_path)
+        self.s.consume(first,'GET',self.path)
+        self.s.observe(first,{'status':429,'headers':{'X-RateLimit-Scope':'global','Retry-After':'172800.25'},'body':{'global':True}})
+        with self.assertRaises((RateDelayed,RateCoordinatorUnavailable)):self.s.consume(second,'GET',other_path)
+        with self.assertRaises(RateDelayed):self.reserve('/guilds/333333333333333333')
+
+    def test_ambiguous_cold_probe_keeps_its_major_blocked(self):
+        first=self.reserve();self.s.consume(first,'GET',self.path)
+        self.s.note_transport_failure(first);self.db.now+=3
+        with self.assertRaises(RateDelayed):self.reserve('/channels/'+A)
+        self.assertIsInstance(self.reserve('/channels/'+B+'/messages/'+A),Permit)
+
     def test_route_aliases_share_budget_and_major_resources_stay_separate(self):
         other='/channels/'+A+'/messages'
         self.learn();self.learn(other);self.db.now+=1.1
