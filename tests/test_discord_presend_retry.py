@@ -3,7 +3,7 @@ import copy
 import unittest
 from unittest.mock import patch
 
-from postriff_phase2.discord.rate_limits import Permit, RateDelayed, SharedPostgresBudget, _digest
+from postriff_phase2.discord.rate_limits import Permit, RateDelayed, SharedPostgresBudget, UnconsumedPublishPermit, _digest
 from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_rate_limits import MemoryLedger, synthetic_policy, APP, A, B
 
@@ -77,4 +77,22 @@ class PreSendRecovery(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             self.p._discord_http('POST', '/oauth2/token', credential_kind='oauth')
         self.assertEqual(len(calls), 1)
+        self.assertFalse(self.waits)
+
+    def test_only_consume_expiry_mints_the_unsent_publication_signal(self):
+        path = '/channels/' + A + '/messages'
+        permit = Permit('synthetic-permit', self.budget.application_key, 'POST', _digest(path),
+                        self.p._rate_identity('bot'), 'f' * 64, self.db.now + 1)
+        arguments = dict(rate_permit=permit, rate_binding={'synthetic': True},
+                         rate_intent_id='synthetic-intent', rate_authorize=lambda cur: self.db.now + 1)
+        with patch.object(self.budget, 'consume', side_effect=RateDelayed(.05, cause='permit_expired')):
+            with self.assertRaises(UnconsumedPublishPermit) as caught:
+                self.p._bot('POST', path, **arguments)
+        self.assertEqual(caught.exception.permit_id, permit.id)
+        self.assertFalse(self.sent)
+        self.p.transport = lambda *args, **kw: (_ for _ in ()).throw(RateDelayed(.05, cause='permit_expired'))
+        with patch.object(self.budget, 'consume'):
+            with self.assertRaises(RateDelayed) as caught:
+                self.p._bot('POST', path, **arguments)
+        self.assertNotIsInstance(caught.exception, UnconsumedPublishPermit)
         self.assertFalse(self.waits)

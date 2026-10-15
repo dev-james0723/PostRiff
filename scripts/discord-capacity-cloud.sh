@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepared only. ONE separate cloud + disposable SQL approval per run.
+# Authorized synthetic cloud validation; human mission authority is recorded.
 set -euo pipefail
 if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
   echo 'Discord capacity requires approved JCB/Depot Linux CI; no local fallback.' >&2
@@ -13,7 +13,21 @@ discord_coordinator_qualification=0
 discord_owned_deadline=43m
 case "$1" in
   --stage-a) export RAFII_DISCORD_CAPACITY_STAGE=a ;;
+  --pipeline-qualification)
+    export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
+    # The caller must retain same-source backend/SQL qualification. Combined
+    # CI runs it first, then uses this new owned cluster for pipeline safety.
+    discord_owned_deadline=9m ;;
+  --pipeline-coordinator-qualification)
+    export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
+    discord_coordinator_qualification=1
+    discord_owned_deadline=9m ;;
   --stage-b) export RAFII_DISCORD_CAPACITY_STAGE=b ;;
+  --stage-b-extended-v2)
+    export RAFII_DISCORD_CAPACITY_STAGE=b
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-v2
+    discord_coordinator_qualification=1
+    discord_owned_deadline=201m ;;
   --connection-diagnostic) export RAFII_DISCORD_CAPACITY_STAGE=connection-diagnostic ;;
   --coordinator-qualification)
     export RAFII_DISCORD_CAPACITY_STAGE=connection-diagnostic
@@ -64,9 +78,9 @@ PY
 PYTHONPATH="$discord_capacity_root/tests" python - <<'PY'
 import json
 import os
-from phase2.postgres_discord_capacity import budget_lower_bound, connection_diagnostic_profile, fingerprint, profile
+from phase2.postgres_discord_capacity import budget_lower_bound, connection_diagnostic_profile, fingerprint, profile, selected_profile
 stage = os.environ['RAFII_DISCORD_CAPACITY_STAGE']
-p = connection_diagnostic_profile() if stage == 'connection-diagnostic' else profile(stage)
+p = connection_diagnostic_profile() if stage == 'connection-diagnostic' else selected_profile(stage)
 result = {'status': 'PASS', 'meaning': 'connection diagnostic only; capacity NOT_RUN'} if stage == 'connection-diagnostic' else budget_lower_bound(p)
 print('RAFII_DISCORD_CAPACITY_PREFLIGHT ' + json.dumps({'stage': p['stage'], 'profileSha256': fingerprint(p), **result}), flush=True)
 if result['status'] == 'BLOCKED':
@@ -101,7 +115,7 @@ if [ "$discord_coordinator_qualification" -eq 1 ]; then
   discord_qualification_exit=0
   python -m unittest test_discord_rate_limits test_discord_worker_lifecycle \
     test_discord_oauth_lifecycle test_discord_destinations test_discord_publish_authorization \
-    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls || discord_qualification_exit=$?
+    test_discord_capacity_controls test_discord_presend_retry test_postgres_pool_controls test_discord_capacity_approval_receipt || discord_qualification_exit=$?
   printf 'RAFII_DISCORD_COORDINATOR_GATE {"gate":"offline-python","exitCode":%d}\n' "$discord_qualification_exit"
   if [ "$discord_qualification_exit" -ne 0 ]; then exit "$discord_qualification_exit"; fi
   # First owned cluster: existing P0-P3 chain ONCE, then actual P4 regression
@@ -114,7 +128,7 @@ if [ "$discord_coordinator_qualification" -eq 1 ]; then
   if [ "$discord_qualification_exit" -ne 0 ]; then exit "$discord_qualification_exit"; fi
   discord_assert_owned_stopped
 else
-  python -m unittest test_discord_capacity_controls
+  python -m unittest test_discord_capacity_controls test_discord_worker_lifecycle test_discord_presend_retry
 fi
 # One owned cluster for ordinary capacity/diagnostic; a NEW second cluster
 # only for qualification after the first has stopped. No migration re-apply

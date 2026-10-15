@@ -331,7 +331,7 @@ class HostedSocial:
 
     def _submit_discord(self, manifest, provider, token, dispatch=None):
         from .discord.authorization import grant_matches, wire_content, digest, snowflake
-        from .discord.rate_limits import Permit, RateDelayed
+        from .discord.rate_limits import Permit, RateDelayed, UnconsumedPublishPermit
         if (not dispatch or not getattr(provider, 'authorization_v2_enabled', False)
                 or (getattr(provider, 'rate_v1_enabled', False)
                     and (not isinstance(dispatch.get('ratePermit'), Permit)
@@ -365,6 +365,8 @@ class HostedSocial:
                 response = provider._bot('POST', f'/channels/{channel}/messages', headers={'Content-Type': content_type}, data=body, **rate_arguments)
             else:
                 response = provider._bot('POST', f'/channels/{channel}/messages', body=payload, **rate_arguments)
+        except UnconsumedPublishPermit:
+            raise  # Only the fenced worker can verify and archive unsent intent.
         except RateDelayed:
             # No HTTP call occurred, but the P0 intent was already sealed.
             # Keep it for manual reconciliation rather than make another POST.

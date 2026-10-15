@@ -449,13 +449,35 @@ class WorkerLifecycle(unittest.TestCase):
                 self.assert_frozen()
 
     def test_expiry_after_seal_blocks_consume_and_never_reposts(self):
+        from postriff_phase2.discord.rate_limits import UnconsumedPublishPermit
         self.enable_rate();claimed=self.claim();self.prepare_rate(claimed)
         self.assertTrue(self.worker.authorize_dispatch(claimed))
         self.db.now=claimed['discordPrepared']['ratePermit'].expires_at+.01
-        result=self.social.submit_discord_authorized(claimed['job']['manifest'],claimed['discordDispatch'])
-        self.assertEqual(result['state'],'uncertain')
+        with self.assertRaises(UnconsumedPublishPermit) as caught:
+            self.social.submit_discord_authorized(claimed['job']['manifest'],claimed['discordDispatch'])
+        self.assertEqual(caught.exception.permit_id,claimed['discordPrepared']['ratePermit'].id)
         self.assertFalse(any(method=='POST' for method,_,_ in self.wire.calls))
         self.assertEqual(len(self.job()['discordDispatchIntents']),1)
+        self.assert_frozen()
+
+    def test_expired_permit_before_intent_waits_with_the_same_frozen_approval(self):
+        self.enable_rate();claimed=self.claim();self.prepare_rate(claimed)
+        self.db.now=claimed['discordPrepared']['ratePermit'].expires_at+.01
+        self.assertFalse(self.worker.authorize_dispatch(claimed))
+        self.assertEqual(self.job()['state'],'scheduled')
+        self.assertEqual(self.job()['discordWorker']['stage'],'released')
+        self.assertEqual(self.job()['discordWorker']['ratePermitRetries'],1)
+        self.assertFalse(self.job().get('discordDispatchIntents'))
+        self.assertFalse(any(method=='POST' for method,_,_ in self.wire.calls))
+        self.assert_frozen()
+
+    def test_consumed_permit_is_never_a_preintent_expiry_retry(self):
+        self.enable_rate();claimed=self.claim();self.prepare_rate(claimed)
+        self.ledger.admissions[claimed['discordPrepared']['ratePermit'].id]['state']='sent'
+        self.assertFalse(self.worker.authorize_dispatch(claimed))
+        self.assertEqual(self.job()['state'],'held')
+        self.assertEqual(self.job()['discordWorker'].get('ratePermitRetries',0),0)
+        self.assertFalse(any(method=='POST' for method,_,_ in self.wire.calls))
         self.assert_frozen()
 
 if __name__ == '__main__':

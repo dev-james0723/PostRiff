@@ -50,6 +50,21 @@ with connection() as db:db.execute(draft.read_text())
 
 checks=[];metrics=[];case=0
 started=time.monotonic()
+
+# Reproduce the canonical Supabase default grant, then prove migration125
+# removes routine destructive access while preserving coordinator writes.
+grants=TASK_ROOT/'migrations/postriff/125_discord_service_grants.sql'
+assert hashlib.sha256(grants.read_bytes()).hexdigest()=='a0086cd1d01195c6114aba53de72cf5819d4c19b890b1716b453b33dc850c645'
+with connection() as db:
+    db.execute('GRANT ALL ON public.pr_discord_rate_state,public.pr_discord_route_buckets,public.pr_discord_request_admissions TO service_role')
+    db.execute('GRANT ALL ON SEQUENCE public.pr_discord_request_admissions_request_seq_seq TO service_role')
+    assert db.execute("SELECT has_table_privilege('service_role','public.pr_discord_rate_state','DELETE')").fetchone()[0]
+    db.execute(grants.read_text())
+    for table in ('pr_discord_rate_state','pr_discord_route_buckets','pr_discord_request_admissions'):
+        rights=db.execute("SELECT has_table_privilege('service_role',%s,'SELECT'),has_table_privilege('service_role',%s,'INSERT'),has_table_privilege('service_role',%s,'UPDATE'),has_table_privilege('service_role',%s,'DELETE'),has_table_privilege('service_role',%s,'TRUNCATE')",('public.'+table,)*5).fetchone()
+        assert rights==(True,True,True,False,False),rights
+    assert db.execute("SELECT has_sequence_privilege('service_role','public.pr_discord_request_admissions_request_seq_seq','UPDATE')").fetchone()[0] is False
+checks.append('canonical default service_role ALL reproduced;125 preserves SELECT/INSERT/UPDATE and revokes DELETE/TRUNCATE/sequence UPDATE')
 def db_now():
     with connection() as db:return float(db.execute('SELECT extract(epoch from clock_timestamp())').fetchone()[0])
 def setup(**changes):
@@ -544,7 +559,9 @@ checks.append('3 tables forcedRLS;anon/authenticated denied;trustedservice reada
 
 # P4 worker path uses the existing real credential/workspace/approval transactions.
 with patch('postriff_phase2.billing.require_publishing',return_value=None),patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
-    for change in ('none','destination','grant','membership','expiry','foreign-permit'):
+    for change in ('none','destination','grant','membership','expiry','foreign-permit',
+                   'expired-unsent','expired-revoked','expired-replaced-lease',
+                   'sent-recovery-denied','sent-no-ack-recovery-denied','consume-recovery-race','expired-before-seal'):
         f=Fixture();job=f.job();w=PostgresWorker(base['connection'],f.social,worker_id='p4-'+change,discord_workers=True)
         f.social.prepare_discord_dispatch(job['manifest'])
         routes=sorted({urlsplit(url).path.removeprefix('/api/v10') for method,url,_ in f.wire.calls if method=='GET'})
@@ -571,12 +588,106 @@ with patch('postriff_phase2.billing.require_publishing',return_value=None),patch
         assert claimed
         claimed['discordPrepared']=f.social.prepare_discord_dispatch(claimed['job']['manifest'])
         claimed['discordPrepared']['ratePermit']=f.social.reserve_discord_send(claimed['job']['manifest'],job=claimed['job'],workspace_id=f.workspace,worker_id=w.worker_id)
+        if change=='expired-before-seal':
+            time.sleep(max(0,claimed['discordPrepared']['ratePermit'].expires_at-db_now())+.03)
+            assert not w.authorize_dispatch(claimed)
+            current=prior['job_of'](f)
+            assert current['state']=='scheduled' and not current.get('discordDispatchIntents')
+            assert current['discordWorker']['ratePermitRetries']==1
+            assert not any(call[0]=='POST' for call in f.wire.calls)
+            time.sleep(max(0,current['nextAt']-db_now())+.02)
+            w.step(workspace_id=f.workspace,job_id=job['id'],approval_digest=job['approvalDigest'],dispatch_principal=f.user,discord_only=True)
+            current=prior['job_of'](f)
+            assert current['state']=='provider_accepted'
+            assert len([call for call in f.wire.calls if call[0]=='POST'])==1
+            for key in ('manifest','discordAuthorization','approvalDigest','approvedBy','approvedAt'):assert current[key]==job[key]
+            prior['finish_fixture'](f)
+            continue
         if change=='foreign-permit':
             from dataclasses import replace
             claimed['discordPrepared']['ratePermit']=replace(claimed['discordPrepared']['ratePermit'],binding_hash='f'*64)
             assert not w.authorize_dispatch(claimed)
         else:
             assert w.authorize_dispatch(claimed)
+            if change in ('expired-unsent','expired-revoked','expired-replaced-lease',
+                          'sent-recovery-denied','sent-no-ack-recovery-denied','consume-recovery-race'):
+                from postriff_phase2.discord.rate_limits import UnconsumedPublishPermit
+                rate=claimed['discordPrepared'];create_path='/channels/'+job['manifest']['discord']['target']['channelId']+'/messages'
+                if change in ('sent-recovery-denied','sent-no-ack-recovery-denied','consume-recovery-race'):
+                    if change=='sent-recovery-denied':
+                        accepted=f.social.submit_discord_authorized(claimed['job']['manifest'],claimed['discordDispatch'])
+                        assert accepted['state']=='provider_accepted',accepted
+                    elif change=='sent-no-ack-recovery-denied':
+                        coordinator.consume(rate['ratePermit'],'POST',create_path,binding=rate['rateBinding'],
+                            intent_id=claimed['discordIntent']['id'],authorize=rate['rateAuthorize'])
+                    else:
+                        waiting=rate['ratePermit'];paused.clear();release.clear();race.clear()
+                        consumer=SharedPostgresBudget(paused_connection,f.provider.client_id,policy=policy)
+                        with ThreadPoolExecutor(max_workers=2) as pool:
+                            consuming=pool.submit(consumer.consume,waiting,'POST',create_path,binding=rate['rateBinding'],
+                                intent_id=claimed['discordIntent']['id'],authorize=rate['rateAuthorize'])
+                            try:
+                                assert paused.wait(3)
+                                time.sleep(max(0,waiting.expires_at-db_now())+.03)
+                                recovering=pool.submit(expect_denied,lambda:w.release_discord_expired_permit(claimed,
+                                    UnconsumedPublishPermit(waiting.id,.05)),AlphaError)
+                                blocked=False;deadline=time.monotonic()+1
+                                while time.monotonic()<deadline:
+                                    with connection() as db:
+                                        blocked=db.execute("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND %s=ANY(pg_blocking_pids(pid)))",(race['consumerPid'],)).fetchone()[0]
+                                    if blocked:break
+                                    time.sleep(.01)
+                                assert blocked,'Recovery must wait for consume, not infer unsent from an expired snapshot'
+                            finally:release.set()
+                            consuming.result(timeout=3);recovering.result(timeout=3)
+                    signal=UnconsumedPublishPermit(claimed['discordPrepared']['ratePermit'].id,.05)
+                else:
+                    time.sleep(max(0,claimed['discordPrepared']['ratePermit'].expires_at-db_now())+.03)
+                    try:
+                        f.social.submit_discord_authorized(claimed['job']['manifest'],claimed['discordDispatch'])
+                    except UnconsumedPublishPermit as error:signal=error
+                    else:raise AssertionError('Expired admission reached transport')
+                    assert not any(call[0]=='POST' for call in f.wire.calls)
+                    if change=='expired-revoked':
+                        with base['connection']() as db:
+                            db.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=clock_timestamp() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'",(f.workspace,f.connection_id))
+                    elif change=='expired-replaced-lease':
+                        prior['change_job'](f,leaseId='synthetic-replaced-lease')
+                if change=='expired-unsent':
+                    def recover_once():
+                        try:return w.release_discord_expired_permit(claimed,signal)
+                        except AlphaError:return False
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        assert sorted(pool.map(lambda _:recover_once(),range(2)))==[False,True]
+                    current=prior['job_of'](f)
+                    assert current['state']=='scheduled' and not current['discordDispatchIntents']
+                    assert len(current['discordUnsentDispatches'])==1
+                    assert current['discordUnsentDispatches'][0]['id']==claimed['discordIntent']['id']
+                    with base['connection']() as db:
+                        assert db.execute('SELECT state,sent_at IS NULL FROM public.pr_discord_request_admissions WHERE id=%s::uuid',(signal.permit_id,)).fetchone()==('blocked',True)
+                    # A paused old sender cannot consume the now-fenced permit.
+                    expect_denied(lambda:coordinator.consume(claimed['discordPrepared']['ratePermit'],'POST',
+                        '/channels/'+job['manifest']['discord']['target']['channelId']+'/messages',
+                        binding=claimed['discordPrepared']['rateBinding'],intent_id=claimed['discordIntent']['id'],
+                        authorize=claimed['discordPrepared']['rateAuthorize']),RateCoordinatorUnavailable)
+                    time.sleep(max(0,current['nextAt']-db_now())+.02)
+                    w.step(workspace_id=f.workspace,job_id=job['id'],approval_digest=job['approvalDigest'],dispatch_principal=f.user,discord_only=True)
+                    current=prior['job_of'](f)
+                    assert current['state']=='provider_accepted',current['state']
+                    assert len(current['discordUnsentDispatches'])==1 and len(current['discordDispatchIntents'])==1
+                    assert current['discordDispatchIntents'][0]['id']!=claimed['discordIntent']['id']
+                    assert current['discordWorker']['ratePermitRetries']==1
+                else:
+                    expect_denied(lambda:w.release_discord_expired_permit(claimed,signal),AlphaError)
+                    current=prior['job_of'](f)
+                    assert len(current['discordDispatchIntents'])==1 and not current.get('discordUnsentDispatches')
+                for key in ('manifest','discordAuthorization','approvalDigest','approvedBy','approvedAt'):
+                    assert current[key]==job[key],key
+                posts=[call for call in f.wire.calls if call[0]=='POST']
+                assert len(posts)==(change in ('expired-unsent','sent-recovery-denied')),(change,len(posts))
+                print('RAFII_DISCORD_P4_WORKER_CASE '+json.dumps({'case':change,'status':'PASS','mockPosts':len(posts)}))
+                prior['finish_fixture'](f)
+                continue
             with base['connection']() as db:
                 state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(f.workspace,)).fetchone()[0]
                 current=next(j for j in state['phase2']['jobs'] if j['id']==claimed['job']['id'])
@@ -615,8 +726,11 @@ with patch('postriff_phase2.billing.require_publishing',return_value=None),patch
         print('RAFII_DISCORD_P4_WORKER_CASE '+json.dumps({'case':change,'status':'PASS','mockPosts':len(posts),'intents':len(current.get('discordDispatchIntents',[]))}))
         prior['finish_fixture'](f)
 checks.append('SQL worker permit+intent atomic;postcommit destination/grant/membership/expiry/forgery guards;onePOST maximum;frozen authority preserved')
+checks.append('expired unconsumed permit:old admission fenced,intent archived,same frozen approval resumes;revoked grant and sent admission never reopen')
+checks.append('expired reserved permit before intent releases only proven unsent managed job;same frozen approval resumes withonePOST')
 
 result={'status':'PASS','execution':'owned-cloud-PG17-synthetic',
+    'workerChecks':prior['checks'],'exactScopedDispatchRegression':any(x.startswith('scoped claim selects only requested job;') for x in prior['checks']),
     'checks':checks,'coordinationMetrics':metrics,'elapsedSeconds':time.monotonic()-started,
     'targets':{'unauthorizedPosts':0,'automaticDuplicateCreates':0,'learnedSlots':3,'maxContentionSeconds':8},
     'realDiscordRequests':0,'productionDatabaseWrites':0,'stage1000Users':'NOT_RUN','stage10000Users':'NOT_RUN'}

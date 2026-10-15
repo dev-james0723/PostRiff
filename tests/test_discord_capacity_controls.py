@@ -359,5 +359,74 @@ class CapacityControls(unittest.TestCase):
             validate_fence('linux', env, database, UnknownTransport())
 
 
+class ReorderedHeaderHarnessControls(unittest.TestCase):
+    def test_mapping_query_uses_durable_route_hash_after_real_response_reordering(self):
+        from phase2.postgres_discord_capacity import Runtime
+        from postriff_phase2.discord.rate_limits import route_identity
+        r=Runtime.__new__(Runtime);entered=threading.Event();lock=threading.Lock();calls=[]
+        path='/guilds/123456789012345678';route,major=route_identity('GET',path)
+        expected_route=hashlib.sha256(route.encode()).hexdigest()
+        expected_bucket=hashlib.sha256(('fixture-'+hashlib.sha256(path.encode()).hexdigest()).encode()).hexdigest()
+        wire=SimpleNamespace(reordered_entered=entered,reordered_finishes=[],set_fault=lambda *args:None)
+        def request(method,url):
+            with lock:index=len(calls);calls.append(url)
+            if index==0:entered.set();time.sleep(.02)
+            wire.reordered_finishes.append({'path':url,'old':index==0})
+            return {'status':200}
+        def execute(query,params):
+            self.assertEqual(params,('synthetic-auth-hash',expected_route,major))
+            return SimpleNamespace(fetchone=lambda:(expected_bucket,2) if query.startswith('SELECT bucket_key') else (2,))
+        r.wire=wire;r.connection=lambda:nullcontext(SimpleNamespace(execute=execute))
+        provider=SimpleNamespace(_bot=request,_rate_identity=lambda kind:SimpleNamespace(auth_key='synthetic-auth-hash'))
+        result=r.rate_reordering({'provider':provider,'guilds':['123456789012345678'],'destinations':[('connection','guild','channel')]})
+        self.assertEqual(result['status'],'PASS')
+        self.assertEqual(len(calls),2)
+
+
+class SqlAuthorizationProbeControls(unittest.TestCase):
+    def test_expected_denial_is_thread_scoped_and_never_hides_other_errors(self):
+        from phase2.postgres_discord_capacity import Telemetry
+        counters=Counter();failures=[]
+        metrics=SimpleNamespace(_expected_sql=threading.local(),count=lambda key:counters.update([key]),
+            sql_failure=lambda *args:failures.append(type(args[0]).__name__),timing=lambda *args:None)
+        class SqlFailure(Exception):pass
+        def fail(*args):
+            error=SqlFailure('synthetic');error.sqlstate=state[0];raise error
+        state=['42501'];cursor=TimedCursor(SimpleNamespace(execute=fail),metrics)
+        with Telemetry.expected_sqlstate(metrics,'42501'):
+            with self.assertRaises(SqlFailure):cursor.execute('SELECT synthetic')
+            state[0]='23514'
+            with self.assertRaises(SqlFailure):cursor.execute('SELECT synthetic')
+        state[0]='42501'
+        with self.assertRaises(SqlFailure):cursor.execute('SELECT synthetic')
+        self.assertEqual(counters['expectedSqlAuthorizationDenials'],1)
+        self.assertEqual(counters['sqlErrors.SqlFailure'],2)
+        self.assertEqual(len(failures),2)
+
+
+class ExtendedResourcePlanTests(unittest.TestCase):
+    def test_original_profiles_and_all_workloads_targets_are_preserved(self):
+        from phase2.postgres_discord_capacity import selected_profile
+        a,b=profile('a'),profile('b')
+        self.assertEqual(fingerprint(a),'fe939c0d1a8b55b2f68ad48f25b7f9caad7e63259ca954d97f5fd9cafe513836')
+        self.assertEqual(fingerprint(b),'1c76fcd6054dd4d5fb473bcd416c0bde8d6d65961556deb50a41c62d345f7e31')
+        extended=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-v2'})
+        for key,value in b.items():
+            if key not in ('version','setupDeadlineSeconds','totalHarnessDeadlineSeconds'):
+                self.assertEqual(extended[key],value,key)
+        self.assertEqual(arrivals(extended),arrivals(b))
+        self.assertEqual(budget_lower_bound(b)['status'],'BLOCKED')
+        self.assertEqual(budget_lower_bound(extended)['status'],'PASS')
+    def test_extended_resources_are_explicit_bounded_and_reject_unknown_plans(self):
+        from phase2.postgres_discord_capacity import selected_profile
+        e=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-v2'})
+        self.assertEqual((e['cpu'],e['memoryGiB'],e['jobTimeoutMinutes']),(32,128,225))
+        self.assertLess(e['setupDeadlineSeconds']+e['rampSeconds']+e['steadySeconds'],e['totalHarnessDeadlineSeconds'])
+        self.assertLess(e['totalHarnessDeadlineSeconds'],e['policyLifetimeSeconds'])
+        self.assertLess(e['policyLifetimeSeconds'],31*86400)
+        for stage,name in [('a','b-extended-v2'),('b','unknown')]:
+            with self.assertRaises(Incomplete):selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':name})
+
+
 if __name__ == '__main__':
     unittest.main()

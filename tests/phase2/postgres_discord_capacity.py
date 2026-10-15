@@ -13,6 +13,7 @@ import math
 import os
 import random
 import re
+import runpy
 import signal
 import sys
 import threading
@@ -206,6 +207,33 @@ def profile(stage):
     }
 
 
+
+def selected_profile(stage, environment=None):
+    """The original profiles remain immutable; extended B changes resources only."""
+    environment=os.environ if environment is None else environment
+    plan=environment.get('RAFII_DISCORD_CAPACITY_RESOURCE_PLAN','')
+    if stage=='pipeline-qualification':
+        if plan:raise Incomplete('Pipeline qualification cannot inherit a capacity resource plan')
+        p=profile('a')
+        p.update(stage=stage,users=32,comparisonJobsEach=4,comparisonDrainSeconds=30,
+            burstJobs=8,burstSubmissionSeconds=1,burstScheduleLeadSeconds=3,
+            burstDrainSeconds=30,rampSeconds=2,steadySeconds=3,
+            setupDeadlineSeconds=300,totalHarnessDeadlineSeconds=480,
+            purpose='functional pipeline and full safety-case qualification only;capacity A/B NOT_RUN')
+        return p
+    p=profile(stage)
+    if not plan:return p
+    if plan!='b-extended-v2' or stage!='b':
+        raise Incomplete('Unknown capacity resource plan')
+    p.update(version=2,resourcePlan='b-extended-v2',setupDeadlineSeconds=6000,
+        totalHarnessDeadlineSeconds=12000,policyLifetimeSeconds=12300,
+        runnerSize='depot-ubuntu-24.04-32',cpu=32,memoryGiB=128,
+        computeUsdPerSecond=.0016,jobTimeoutMinutes=225,
+        originalVersionOneStatus='BLOCKED: minimum2560s exceeds original2520s deadline',
+        workloadAndTargets='UNCHANGED from version1;extended compute and time declared before execution')
+    return p
+
+
 def connection_diagnostic_profile():
     base = profile('a')
     return {'version': 1, 'stage': 'connection-diagnostic', 'purpose': 'diagnostic only; no capacity qualification',
@@ -303,6 +331,7 @@ def budget_lower_bound(p):
 class Telemetry:
     def __init__(self):
         self.lock = threading.RLock()
+        self._expected_sql=threading.local()
         self.counters = Counter()
         self.timings = {}
         self.active = Counter()
@@ -344,6 +373,14 @@ class Telemetry:
             self.count('admissionDelayScope.' + action + '.' + safe['scope'])
         if 'waitSeconds' in safe:
             self.timing('admissionWaitSeconds.' + action + '.' + safe['cause'], safe['waitSeconds'])
+
+    @contextmanager
+    def expected_sqlstate(self, state):
+        if state!='42501':raise ValueError('Only explicit authorization probes may expect permission denial')
+        previous=getattr(self._expected_sql,'state',None)
+        self._expected_sql.state=state
+        try:yield
+        finally:self._expected_sql.state=previous
 
     def sql_failure(self, error, operation, started, expiry):
         safe = {'type': type(error).__name__, 'operation': operation,
@@ -404,8 +441,12 @@ class TimedCursor:
             self.raw.execute(*args, **kwargs)
             return self
         except Exception as error:
-            self.metrics.count('sqlErrors.' + type(error).__name__)
-            self.metrics.sql_failure(error, operation, started, expiry)
+            expected=getattr(getattr(self.metrics,'_expected_sql',None),'state',None)
+            if expected is not None and getattr(error,'sqlstate',None)==expected:
+                self.metrics.count('expectedSqlAuthorizationDenials')
+            else:
+                self.metrics.count('sqlErrors.' + type(error).__name__)
+                self.metrics.sql_failure(error, operation, started, expiry)
             raise
         finally:
             self.metrics.count('sqlStatements')
@@ -665,6 +706,7 @@ class Runtime:
         self.p, self.m, self.started = p, metrics, time.monotonic()
         self.tokens, self.discord_users, self.fixtures, self.nonces = {}, {}, [], {}
         self.observed_claims, self.worker_summaries = {}, []
+        self.safety_completed = False
         self.lock = threading.RLock()
         self.stop_sample = threading.Event()
         self.fixture_abort = threading.Event()
@@ -685,9 +727,13 @@ class Runtime:
             if hashlib.sha256(draft.read_bytes()).hexdigest() != DRAFT_SHA:
                 raise Incomplete('Qualified migration draft drift')
             db.execute(draft.read_text())  # Only inside this runner-owned cluster.
+            grants=ROOT/'migrations/postriff/125_discord_service_grants.sql'
+            if hashlib.sha256(grants.read_bytes()).hexdigest()!='a0086cd1d01195c6114aba53de72cf5819d4c19b890b1716b453b33dc850c645':
+                raise Incomplete('Qualified worker grant migration drift')
+            db.execute(grants.read_text())
         now = time.time()
         self.policy = {'version': 1, 'revision': 'synthetic-p8-' + p['stage'],
-                       'issued_at': now - 1, 'expires_at': now + 3600,
+                       'issued_at': now - 1, 'expires_at': now + p.get('policyLifetimeSeconds',3600),
                        'egress_scope': 'synthetic-p8', 'app_capacity': p['mock']['totalRequestsPerSecond'],
                        'app_window_seconds': 1, 'unknown_window_seconds': .05,
                        'invalid_capacity': 100, 'invalid_window_seconds': 60,
@@ -864,7 +910,8 @@ class Runtime:
                        (canonical(state), f['workspace']))
 
     def job(self, record):
-        return next(j for j in self.state(record['fixture'])['phase2']['jobs'] if j['id'] == record['jobId'])
+        expected=record.get('jobId') or record.get('expectedJobId')
+        return next(j for j in self.state(record['fixture'])['phase2']['jobs'] if j['id'] == expected)
 
     def command(self, f, revision, action, payload):
         # Client CAS conflicts caused by worker bookkeeping may reload the same
@@ -911,16 +958,33 @@ class Runtime:
                      'localTime': datetime.fromtimestamp(due, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f'),
                      'timeZone': 'UTC', 'acknowledgedWarnings': []})
                 entry = review['state']['phase2']['reviews'][-1]
-                approved = self.command(f, review['revision'], 'p2_approve',
-                    {'reviewId': entry['id'], 'digest': entry['digest'], 'confirmed': True})
-                job = next(j for j in approved['state']['phase2']['jobs'] if j['id'] == entry['jobId'])
-                record.update(jobId=job['id'], approvedAt=time.time(), frozen=copy.deepcopy(job['discordAuthorization']),
-                              manifest=copy.deepcopy(job['manifest']), processing=time.monotonic() - started)
-                nonce = hashlib.sha256(job['manifest']['idempotencyKey'].encode()).hexdigest()[:25]
+                # Register the exact preview identity before its approval can
+                # become visible to a concurrent worker. This grants nothing:
+                # create_oracle still reads durable approval, intent and sent
+                # admission from SQL before accepting any mock delivery.
+                preview=copy.deepcopy(entry['manifest'])
+                expected_id=preview['discord']['publicationId']
+                nonce=hashlib.sha256(preview['idempotencyKey'].encode()).hexdigest()[:25]
+                record.update(expectedJobId=expected_id,manifest=preview,frozen=None)
                 with self.lock:
                     if nonce in self.nonces:
                         raise Incomplete('Synthetic nonce collision')
-                    self.nonces[nonce] = record
+                    self.nonces[nonce]=record
+                approved = self.command(f, review['revision'], 'p2_approve',
+                    {'reviewId': entry['id'], 'digest': entry['digest'], 'confirmed': True})
+                # Repository responses are independent snapshots. The earlier
+                # review object cannot acquire the jobId written at approval.
+                confirmed=next(r for r in approved['state']['phase2']['reviews'] if r['id']==entry['id'])
+                if confirmed.get('jobId')!=expected_id:
+                    raise Incomplete('Approved publication differs from the exact preview')
+                job=next(j for j in approved['state']['phase2']['jobs'] if j['id']==expected_id)
+                if job['manifest']!=preview:
+                    raise Incomplete('Approved manifest differs from the exact preview')
+                with self.lock:
+                    if record['frozen'] is not None and record['frozen']!=job['discordAuthorization']:
+                        raise Incomplete('Concurrent delivery changed frozen approval')
+                    record.update(jobId=job['id'],approvedAt=time.time(),frozen=copy.deepcopy(job['discordAuthorization']),
+                                  processing=time.monotonic()-started)
                 self.m.event('approval', alias=alias, phase=phase, payloadHash=job['manifest']['payloadDigest'],
                              authorizationHash=fingerprint(job['discordAuthorization']))
             except Exception as error:
@@ -950,7 +1014,8 @@ class Runtime:
                     (record['fixture']['workspace'], job['id'], intent.get('id'), intent.get('rateAdmissionId'))).fetchone()
             expected = (fingerprint(manifest), job['discordAuthorization']['digest'], job['approvalDigest'],
                         digest_text(job.get('leaseOwner')), digest_text(job.get('leaseId')), digest_text(cid), 'sent')
-            safe = (job['discordAuthorization'] == record['frozen'] == self.auth.approval(job)
+            expected_authorization=record.get('frozen') or self.auth.approval(job)
+            safe = (job['discordAuthorization'] == expected_authorization == self.auth.approval(job)
                     and manifest == record['manifest'] and job['approvedBy'] == record['fixture']['user']
                     and manifest['workspaceId'] == record['fixture']['workspace']
                     and manifest['actor'] == job['approvedBy'] and target['channelId'] == cid
@@ -961,8 +1026,13 @@ class Runtime:
                     and payload.get('allowed_mentions') == {'parse': []}
                     and len(intents) == 1 and consumed == expected
                     and job.get('leaseUntil', 0) > at)
-            if record['postAt'] is None:
-                record['postAt'] = at
+            with self.lock:
+                if safe and record['frozen'] is None:
+                    record['frozen']=copy.deepcopy(job['discordAuthorization'])
+                elif safe and record['frozen']!=job['discordAuthorization']:
+                    safe=False
+                if record['postAt'] is None:
+                    record['postAt'] = at
             alias = record['alias']
         else:
             alias = 'unrecognized'
@@ -1024,6 +1094,30 @@ class Runtime:
                 return observed
             time.sleep(.2)
 
+    def job_probe(self, record):
+        """Only aliases, reason categories, counts and relative clocks; no content/IDs."""
+        job=self.job(record);now=time.time()
+        reasons={
+            'Discord reserved rate slot expired after sealing. No POST was started; manual review required before any fresh approval.':'slot_expired_after_seal',
+            'Discord delivery is uncertain. Reconcile before any further publication.':'ambiguous_transport_or_guard',
+            'No conclusive Discord create response; reconcile without resubmitting.':'ambiguous_provider_status'}
+        operation=job.get('discordWorker') or {}
+        result={'alias':record['alias'],'phase':record['phase'],'state':job.get('state'),
+            'reason':reasons.get(job.get('providerConfirmed'),'other'),
+            'nextInSeconds':job.get('nextAt',now)-now,'leaseRemainingSeconds':job.get('leaseUntil',now)-now,
+            'approvalRemainingSeconds':job['manifest']['expiresAt']-now,
+            'workerStage':operation.get('stage'),'unsentFailures':operation.get('unsentFailures'),
+            'rateReadRetries':operation.get('rateReadRetries'),'attemptCount':len(job.get('attempts',[])),
+            'intentCount':len(job.get('discordDispatchIntents',[])),'receiptCount':len(job.get('discordReceipts',[])),
+            'hasReference':bool(job.get('providerReference')),'manifestUnchanged':job['manifest']==record['manifest'],
+            'authorizationUnchanged':job.get('discordAuthorization')==record.get('frozen')}
+        intents=job.get('discordDispatchIntents',[])
+        if len(intents)==1 and intents[0].get('rateAdmissionId'):
+            with self.connection() as db:
+                row=db.execute("SELECT state,extract(epoch from expires_at-clock_timestamp())::double precision,sent_at IS NOT NULL,outcome_at IS NOT NULL FROM public.pr_discord_request_admissions WHERE id=%s::uuid AND workspace_id=%s AND publication_id=%s AND intent_id=%s",(intents[0]['rateAdmissionId'],record['fixture']['workspace'],job['id'],intents[0]['id'])).fetchone()
+            if row:result['admission']={'state':row[0],'expiresInSeconds':row[1],'sentRecorded':row[2],'outcomeRecorded':row[3]}
+        return result
+
     def cohort_result(self, phase, records, states, deadline, replicas, reference, measurement_seconds=None):
         summary = accounting(len(records), sum(r['jobId'] is not None for r in records), states.values())
         requested = len(records)
@@ -1052,6 +1146,8 @@ class Runtime:
                   'throughputMeasurementSeconds': elapsed if measurement_seconds is None else measurement_seconds,
                   'throughputJobsPerSecond': summary['states'].get('verified', 0) / max(.001, elapsed if measurement_seconds is None else measurement_seconds),
                   'latencyExclusions': 'No POST => undefined; held/failed/uncertain remain in denominator'}
+        if result['status']!='PASS':
+            result['failureExamples']=[self.job_probe(r) for r in records if r.get('jobId') and states.get(r['alias'])!='verified'][:8]
         self.m.event('cohort-result', **result)
         return result
 
@@ -1127,6 +1223,7 @@ class Runtime:
             worker.step(workspace_id=record['fixture']['workspace'], job_id=job['id'],
                         approval_digest=job['approvalDigest'], dispatch_principal=record['fixture']['user'], discord_only=True)
             time.sleep(.1)
+        self.m.event('safety-timeout',**self.job_probe(record))
         raise Incomplete('Safety case did not reach terminal state')
 
     def denied(self, label, action):
@@ -1172,7 +1269,7 @@ class Runtime:
             for sql in ('UPDATE public.pr_workspaces SET state=\'{}\'::jsonb WHERE id=%s',
                         'SELECT access_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s'):
                 try:
-                    with db.transaction():
+                    with self.m.expected_sqlstate('42501'), db.transaction():
                         db.execute(sql, (a['workspace'],))
                 except self.psycopg.errors.InsufficientPrivilege:
                     self.m.count('deniedRlsAttempts')
@@ -1188,7 +1285,11 @@ class Runtime:
                 'preflight-shared-429', 'reordered-headers', 'create-400', 'create-401',
                 'create-403', 'create-404', 'create-429', 'create-500', 'lost-create-response',
                 'unexpected-create-receipt', 'preflight-timeout'), 6):
-            checks.append(self.fault_case(index, mode, mode=mode))
+            # All synthetic workspaces share one bot credential. Its 401 must
+            # remain blocked across tenants, so test revocation only after all
+            # other cases that legitimately need that credential have finished.
+            if mode not in ('create-401','lost-create-response'):
+                checks.append(self.fault_case(index, mode, mode=mode))
         # Refresh uses the real encrypted identity flow; compare consent generation.
         f = self.fixtures[21]
         with self.connection() as db:
@@ -1207,6 +1308,13 @@ class Runtime:
         checks.append(self.fault_case(25, 'remote-identity-revoked', remote_identity=True))
         checks.append(self.unapproved_target(self.fixtures[26]))
         checks.append(self.rate_reordering(self.fixtures[27]))
+        # An ambiguous cold POST retains its discovery debit. Exercise it only
+        # after all new-route cases. Do not clear that evidence or refund quota.
+        checks.append(self.fault_case(17, 'lost-create-response', mode='lost-create-response'))
+        # The earlier 400 learned this exact target's bucket. Credential shutdown
+        # can then be tested on a known route without bypassing cold-route hold.
+        checks.append(self.fault_case(11, 'create-401', mode='create-401'))
+        self.safety_completed = True
         return {'status': 'PASS', 'checks': checks, 'scope': 'actual SQL/API, bounded synthetic negative cohort'}
 
     def fault_case(self, index, label, *, mode=None, edit=False, remove=False, disconnect=False, member=False, remote_identity=False):
@@ -1230,6 +1338,8 @@ class Runtime:
             self.wire.set_fault(cid, mode, 3 if mode == 'preflight-timeout' else 100 if mode in ('removed-bot', 'permission-loss') else 1)
         if remote_identity:
             self.wire.revoked_identity_indices.add(f['index'])
+        if mode=='reordered-headers':
+            self.rate_reordering(f)  # Two actual concurrent responses, then publish.
         # Membership loss must be observed by the autonomous tenant worker,
         # rather than accidentally relying on an authenticated user's endpoint.
         if member:
@@ -1332,12 +1442,13 @@ class Runtime:
             raise Incomplete('Out-of-order response fixture did not reorder')
         identity = f['provider']._rate_identity('bot')
         route, major = route_identity('GET', path)
+        route=hashlib.sha256(route.encode()).hexdigest()
         with self.connection() as db:
             bucket, observation = db.execute('SELECT bucket_key,observation_seq FROM public.pr_discord_route_buckets WHERE auth_key=%s AND route_key=%s AND major_key=%s',
                                              (identity.auth_key, route, major)).fetchone()
             maximum = db.execute('SELECT max(request_seq) FROM public.pr_discord_request_admissions WHERE auth_key=%s AND route_key=%s AND major_key=%s',
                                  (identity.auth_key, route, major)).fetchone()[0]
-        expected = hashlib.sha256(('fixture-' + path).encode()).hexdigest()
+        expected = hashlib.sha256(('fixture-' + hashlib.sha256(path.encode()).hexdigest()).encode()).hexdigest()
         if observation != maximum or bucket != expected:
             raise Incomplete('Older header replaced a newer shared bucket observation')
         return {'action': 'real-concurrent-delayed-old-header', 'status': 'PASS',
@@ -1481,7 +1592,9 @@ class Runtime:
         accepted_creates = Counter(int(x['at']) for x in self.wire.creates)
         checks['sharedCreateLimitBypass'] = max(0, max(accepted_creates.values(), default=0) - self.p['mock']['createsPerSecond'])
         checks['sharedRequestLimitBypass'] = max(0, max(self.wire.accepted_request_windows.values(), default=0) - self.p['mock']['totalRequestsPerSecond'])
-        coverage = bool(self.wire.attempts) and self.m.counters['competingClaimAttempts'] == 8
+        coverage = (self.safety_completed and bool(self.wire.attempts)
+            and self.m.counters['competingClaimAttempts'] == 8
+            and sum(r['phase']=='safety' for r in self.m.records.values())==self.p['plannedSafetyJobRequests'])
         return {'status': 'FAIL' if any(checks.values()) else 'PASS' if coverage else 'NOT_RUN', **checks,
                 'scenarioCoverageComplete': coverage,
                 'postAttempts': len(self.wire.attempts), 'createdMessages': len(self.wire.creates),
@@ -1674,10 +1787,11 @@ def run(stage):
     if stage == 'connection-diagnostic':
         return run_connection_diagnostic()
     validate_fence(sys.platform, os.environ)  # Refuse before any output/fixture creation.
-    p = profile(stage)
+    p = selected_profile(stage)
     result = {'status': 'NOT_RUN', 'execution': 'disposable-cloud-postgres-mocked-discord',
               'profile': p, 'profileSha256': fingerprint(p), 'phases': {},
               'budgetPreflight': budget_lower_bound(p),
+              'capacityAcceptance':'NOT_RUN' if stage=='pipeline-qualification' else 'full fixed profile',
               'realDiscordAcceptance': 'NOT_RUN', 'productionReady': 'NO',
               'cost': {'actualCost': 'UNKNOWN', 'comparisonBaseline': None, 'savings': 'UNKNOWN'}}
     result['plannedJobRequests'] = p['comparisonJobsEach'] * len(p['comparisonReplicas']) + p['burstJobs'] + len(arrivals(p)) + p['plannedSafetyJobRequests']
@@ -1694,12 +1808,7 @@ def run(stage):
         from unittest.mock import patch
         metrics = Telemetry()
         runtime = Runtime(p, metrics)
-        critical = ['src/postriff_phase2/hosted_worker.py', 'src/postriff_phase2/hosted_social.py',
-                    'src/postriff_phase2/hosted.py', 'src/postriff_phase2/oauth.py',
-                    'src/postriff_phase2/social_connectors.py', 'src/postriff_phase2/discord/oauth.py',
-                    'src/postriff_phase2/discord/authorization.py', 'src/postriff_phase2/discord/rate_limits.py',
-                    'src/postriff_phase2/discord/worker.py', 'migrations/postriff/124_discord_rate_limits.sql',
-                    'tests/phase2/postgres_discord_capacity.py']
+        critical = runpy.run_path(str(ROOT/'scripts/discord_capacity_sources.py'))['source_paths'](ROOT)
         result['sourceSha256'] = {f: hashlib.sha256((ROOT / f).read_bytes()).hexdigest() for f in critical}
         # Billing/generation are explicitly excluded, never mocked tenant/RLS/
         # approval/claims/leases/credentials/rate SQL or provider-send guards.
@@ -1767,8 +1876,8 @@ def run(stage):
             metrics.events.close()
             result['eventsSha256'] = hashlib.sha256(EVENTS.read_bytes()).hexdigest()
         result['elapsedSeconds'] = time.monotonic() - started
-        result['cost']['computeTimingProxyUsd'] = result['elapsedSeconds'] * .0004
-        result['cost']['proxyBasis'] = '8vCPU runner public compute rate $0.0004/s; harness time only, not invoice or total billable duration'
+        result['cost']['computeTimingProxyUsd'] = result['elapsedSeconds'] * p.get('computeUsdPerSecond',.0004)
+        result['cost']['proxyBasis'] = ('Declared runner public compute rate $'+str(p.get('computeUsdPerSecond',.0004))+'/s; harness time only, not invoice or total billable duration')
         RESULT.write_text(json.dumps(result, indent=2) + '\n')
         print('RAFII_DISCORD_CAPACITY_RESULT ' + canonical({'status': result['status'], 'stage': stage,
               'profileSha256': result['profileSha256'], 'resultFile': str(RESULT.relative_to(ROOT)),
@@ -1781,5 +1890,5 @@ if __name__ == '__main__':
         raise HarnessInterrupted('Harness deadline or cancellation: ' + str(signum))
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGALRM, terminate)
-    signal.alarm(480 if os.environ.get('RAFII_DISCORD_CAPACITY_STAGE') == 'connection-diagnostic' else 2520)
+    signal.alarm(480 if os.environ.get('RAFII_DISCORD_CAPACITY_STAGE') == 'connection-diagnostic' else selected_profile(os.environ.get('RAFII_DISCORD_CAPACITY_STAGE',''))['totalHarnessDeadlineSeconds'])
     sys.exit(run(os.environ.get('RAFII_DISCORD_CAPACITY_STAGE', '')))

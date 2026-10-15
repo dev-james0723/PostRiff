@@ -75,7 +75,7 @@ class PreviewApproval(unittest.TestCase):
 
 class Repository:
     def __init__(self):
-        manifest = {'workspaceId': 'workspace-one', 'actor': 'member-one', 'payload': {'text': 'Approved text'}}
+        manifest = {'workspaceId': 'workspace-one', 'platform': 'Discord', 'actor': 'member-one', 'payload': {'text': 'Approved text'}}
         self.job = {'id': 'job-one', 'manifest': manifest, 'approvalDigest': digest(manifest)}
         self.state = {'workspace': {'id': 'workspace-one'}, 'phase2': {'jobs': [self.job]}}
         self.role = 'owner'

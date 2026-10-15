@@ -32,7 +32,10 @@
   },
   "taskArgs": {
     "test": [
-      "--coordinator-qualification"
+      "--stage-a"
+    ],
+    "ci": [
+      "--with-discord-pipeline"
     ]
   },
   "inputExcludes": [

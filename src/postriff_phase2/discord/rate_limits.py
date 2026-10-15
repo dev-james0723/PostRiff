@@ -45,6 +45,13 @@ class RateDelayed(AlphaError):
                                                  'embargo','permit','unknown') else 'unknown'
 
 
+class UnconsumedPublishPermit(RateDelayed):
+    """Private transport signal: consume denied before provider I/O began."""
+    def __init__(self, permit_id, seconds):
+        super().__init__(seconds, cause='permit_expired', scope='permit')
+        self.permit_id = permit_id
+
+
 def observation_remaining(previous, reported, *, first, pending, newly_mapped=0, current_unmapped=0):
     """Conservative credit after one response, with distinct admission counts.
 
@@ -558,7 +565,9 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         row = self._admission(cur,permit)
         now = self._policy(cur)
-        if row['state'] != 'reserved' or min(row['expires'],valid_until) <= now:
+        if row['state'] != 'reserved':
+            raise RateCoordinatorUnavailable()
+        if min(row['expires'],valid_until) <= now:
             raise RateDelayed(max(.05,(row['expires'] or now)-now),cause='permit_expired')
         cur.execute(f"UPDATE {ADMISSIONS} SET state='sealed',intent_id=%s,sealed_at=clock_timestamp() WHERE id=%s::uuid AND state='reserved'", (intent_id,permit.id))
         if cur.rowcount != 1:
@@ -590,6 +599,26 @@ class SharedPostgresBudget:
                 raise RateCoordinatorUnavailable()
         # Transaction is committed BEFORE provider I/O. A crash now retains the
         # intent and spent admission. It can never manufacture a fresh POST.
+
+    def abandon_expired_publish(self, cur, permit, binding, intent_id):
+        """Fence a proven unconsumed intent in its owner's workspace transaction.
+
+        Never releases sent/observed/uncertain admissions or refunds quota.
+        The old frozen deadline and intent remain durable evidence.
+        """
+        if (not isinstance(permit, Permit) or not permit.binding_hash
+                or binding_hash(binding) != permit.binding_hash):
+            raise RateCoordinatorUnavailable()
+        row = self._admission(cur, permit)
+        now = self._now(cur)
+        if row['state'] != 'sealed' or row['intent'] != intent_id or row['expires'] > now:
+            raise RateCoordinatorUnavailable()
+        cur.execute(f'''UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp()
+            WHERE id=%s::uuid AND state='sealed' AND intent_id=%s
+                AND sent_at IS NULL AND outcome_at IS NULL AND expires_at<=clock_timestamp()''',
+            (permit.id, intent_id))
+        if cur.rowcount != 1:
+            raise RateCoordinatorUnavailable()
 
     def observe(self, permit, response, *, transport_failure=False):
         classification = classify_response(response,permit.identity.kind)

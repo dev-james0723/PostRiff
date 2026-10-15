@@ -321,6 +321,54 @@ with patch('postriff_phase2.billing.require_publishing', return_value=None), pat
     for f in mixed: finish_fixture(f)
     checks.append('continuous other-provider cursor updates cannot starve either Discord queue')
 
+# Real SQL regressions for the authenticated single-job nudge. The requested
+# approval is later in the same workspace than another valid eligible job.
+with patch('postriff_phase2.billing.require_publishing', return_value=None), patch('postriff_phase2.billing.require_plan_capacity', return_value=None):
+    from uuid import uuid4
+    from postriff_phase2.contracts import digest
+    from postriff_phase2.discord.authorization import approval
+    f,requester=Fixture(),Fixture()
+    requested=f.job();other=copy.deepcopy(requested)
+    other['id']=str(uuid4())
+    other['manifest']['discord']['publicationId']=other['id']
+    other['approvalDigest']=digest(other['manifest'])
+    other['discordAuthorization']=approval(other)
+    def set_jobs(jobs):
+        with connection() as db:
+            state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(f.workspace,)).fetchone()[0]
+            state['phase2']['jobs']=copy.deepcopy(jobs)
+            db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),f.workspace))
+    with connection() as db:
+        db.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish) VALUES(%s,%s,'approver','active',true)",(f.workspace,requester.user))
+    set_jobs([other,requested]);w=worker(f,'p3-exact-job-request')
+    scope=dict(workspace_id=f.workspace,job_id=requested['id'],approval_digest=requested['approvalDigest'],dispatch_principal=requester.user)
+    claimed=w.claim(**scope)
+    assert claimed and claimed['job']['id']==requested['id'] and claimed['dispatchPrincipal']==requester.user
+    assert state_of(f)['phase2']['jobs'][0]==other,'Unrequested job was mutated or dispatched'
+    claimed['discordPrepared']=f.social.prepare_discord_dispatch(claimed['job']['manifest'])
+    with connection() as db:
+        db.execute("UPDATE public.pr_memberships SET status='revoked' WHERE workspace_id=%s AND user_id=%s",(f.workspace,requester.user))
+    assert w.authorize_dispatch(claimed) is False,'Revoked requester reached final authorization'
+    no_posts(f)
+    with connection() as db:
+        db.execute("UPDATE public.pr_memberships SET status='active' WHERE workspace_id=%s AND user_id=%s",(f.workspace,requester.user))
+    for reason in ('stale-digest','revoked-requester'):
+        set_jobs([other,requested])
+        with connection() as db:
+            if reason=='stale-digest':
+                state=db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE',(f.workspace,)).fetchone()[0]
+                state['phase2']['jobs'][1]['manifest']['payload']['text']='Changed after route read'
+                db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),f.workspace))
+            else:db.execute("UPDATE public.pr_memberships SET status='revoked' WHERE workspace_id=%s AND user_id=%s",(f.workspace,requester.user))
+        before=state_of(f)
+        try:w.claim(**scope)
+        except AlphaError as error:assert error.status==(409 if reason=='stale-digest' else 403)
+        else:raise AssertionError('Scoped claim did not reject '+reason)
+        assert state_of(f)==before,'Denied scoped request mutated another stored approval'
+    no_posts(f)
+    set_jobs([{**job,'state':'held','leaseOwner':None,'leaseUntil':0} for job in (other,requested)])
+checks.append('scoped claim selects only requested job;locked digest and requester revocation checked;revocation after claim blocks final authorization;requester carried to final guard;other jobs unchanged;zero POST')
+
 print('RAFII_DISCORD_WORKER_SQL_JSON ' + json.dumps({
     'status': 'PASS', 'execution': 'owned-disposable-cloud-postgres-synthetic-provider',
     'prerequisites': {'p0': 'PASS', 'p0Groups': len(base['CHECKS']),

@@ -12,6 +12,7 @@ CURSOR = 'discordWorkerCursor'
 VERSION = 1
 LEASE_SECONDS = 45
 MAX_UNSENT_ATTEMPTS = 3
+MAX_UNCONSUMED_PERMIT_RECOVERIES = 8
 MAX_CANDIDATES = 8
 QUEUE_WORKSPACE_LIMIT = 256
 
@@ -47,6 +48,8 @@ def owns(job, claimed, worker_id, now):
 
 
 def has_effect(job):
+    # discordUnsentDispatches is an archive of transactionally blocked, never
+    # consumed admissions. Active/ambiguous intents and receipts still win.
     return any(job.get(key) for key in (
         'discordDispatchIntents', 'discordReceipts', 'providerReference', 'container',
         'providerUpload', 'providerAssets', 'providerThread', 'progress', 'url', 'verification'))
@@ -80,7 +83,7 @@ def begin(job, now, reconciliation):
     job[KEY] = {'version': VERSION, 'publicationId': job['id'], 'approvalDigest': job['approvalDigest'],
                 'leaseId': job['leaseId'], 'claimedAt': now,
                 'stage': 'reconcile' if reconciliation else 'pending',
-                **{key: prior.get(key, 0) for key in ('unsentFailures', 'recoveries', 'renewals','rateReadRetries')}}
+                **{key: prior.get(key, 0) for key in ('unsentFailures', 'recoveries', 'renewals','rateReadRetries','ratePermitRetries')}}
 
 
 def attempt_count(job):

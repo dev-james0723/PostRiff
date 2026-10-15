@@ -267,6 +267,7 @@ class HostedPhase2Commands:
     def present(self, state, revision):
         shown = self.engine._present(state, revision)
         shown['state']['brandBrain'] = brand_brain.projection(state)
+        shown['workerBinding'] = copy.deepcopy(self.engine.worker_binding)
         return shown
 
     def __call__(self, state, principal, action, payload):

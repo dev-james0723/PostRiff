@@ -16,6 +16,7 @@ from .permissions import Membership, require
 from .learning_service import record_published
 from .youtube.agent import assert_job_authority
 from .discord import worker as discord_worker
+from .discord.rate_limits import UnconsumedPublishPermit
 
 
 def configured_worker_limits(values=None):
@@ -372,6 +373,8 @@ class PostgresWorker:
             if state.get('workspace', {}).get('sample'):
                 raise AlphaError('Hosted sample workspaces are read-only.', 403)
             job = find(state.get('phase2', {}).get('jobs', []), job_id)
+            if job['manifest'].get('platform') != 'Discord':
+                raise AlphaError('Select an approved Discord post for this action.', 409)
             if (job['manifest'].get('workspaceId') != workspace_id
                     or approval_digest != job.get('approvalDigest') or approval_digest != digest(job['manifest'])):
                 raise AlphaError('This approval changed. Reload the post before continuing.', 409)
@@ -456,46 +459,58 @@ class PostgresWorker:
                     if not state.get('phase2') or 'accountDeletion' in state or 'accountBlock' in state:
                         continue
                     original = json.dumps(state, sort_keys=True)
-                    if youtube_only or exclude_youtube:
-                        # Invalidation can hold jobs too; the isolated lane must
-                        # not change another platform's review or queued job.
-                        data = state['phase2']
-                        jobs, reviews = data['jobs'], data['reviews']
-                        def selected_platform(item):
-                            match = item.get('manifest', {}).get('platform') == 'YouTube'
-                            return match if youtube_only else not match
-                        data['jobs'] = [job for job in jobs if selected_platform(job)]
-                        data['reviews'] = [review for review in reviews if selected_platform(review)]
-                        try:
-                            self.commands.engine.invalidate(state)
-                        finally:
-                            data['jobs'], data['reviews'] = jobs, reviews
+                    if scoped:
+                        if not self._requester_may_approve(cur, workspace_id, dispatch_principal):
+                            raise AlphaError("This action needs the 'approve' permission in this workspace.", 403)
+                        target = find(state['phase2']['jobs'], job_id)
+                        if (target['manifest'].get('platform') != 'Discord'
+                                or target['manifest'].get('workspaceId') != workspace_id
+                                or approval_digest != target.get('approvalDigest')
+                                or approval_digest != digest(target['manifest'])):
+                            raise AlphaError('This approval changed. Reload the post before continuing.', 409)
                     else:
-                        if youtube_only or exclude_youtube or linkedin_only or discord_only or exclude_discord:
+                        if youtube_only or exclude_youtube:
                             # Invalidation can hold jobs too; the isolated lane must
                             # not change another platform's review or queued job.
                             data = state['phase2']
                             jobs, reviews = data['jobs'], data['reviews']
                             def selected_platform(item):
-                                platform = item.get('manifest', {}).get('platform')
-                                if discord_only:
-                                    return platform == 'Discord'
-                                if exclude_discord and platform == 'Discord':
-                                    return False
-                                if linkedin_only:
-                                    return platform == 'LinkedIn'
-                                match = platform == 'YouTube'
-                                return match if youtube_only else not match if exclude_youtube else True
+                                match = item.get('manifest', {}).get('platform') == 'YouTube'
+                                return match if youtube_only else not match
                             data['jobs'] = [job for job in jobs if selected_platform(job)]
                             data['reviews'] = [review for review in reviews if selected_platform(review)]
                             try:
-                                self._invalidate_owned(state)
+                                self.commands.engine.invalidate(state)
                             finally:
                                 data['jobs'], data['reviews'] = jobs, reviews
                         else:
-                            self._invalidate_owned(state)
+                            if youtube_only or exclude_youtube or linkedin_only or discord_only or exclude_discord:
+                                # Invalidation can hold jobs too; the isolated lane must
+                                # not change another platform's review or queued job.
+                                data = state['phase2']
+                                jobs, reviews = data['jobs'], data['reviews']
+                                def selected_platform(item):
+                                    platform = item.get('manifest', {}).get('platform')
+                                    if discord_only:
+                                        return platform == 'Discord'
+                                    if exclude_discord and platform == 'Discord':
+                                        return False
+                                    if linkedin_only:
+                                        return platform == 'LinkedIn'
+                                    match = platform == 'YouTube'
+                                    return match if youtube_only else not match if exclude_youtube else True
+                                data['jobs'] = [job for job in jobs if selected_platform(job)]
+                                data['reviews'] = [review for review in reviews if selected_platform(review)]
+                                try:
+                                    self._invalidate_owned(state)
+                                finally:
+                                    data['jobs'], data['reviews'] = jobs, reviews
+                            else:
+                                self._invalidate_owned(state)
                     selected = None
                     for job in sorted(state["phase2"]["jobs"], key=lambda item: item.get('lastDispatchedAt', 0)):
+                        if scoped and job.get('id') != job_id:
+                            continue
                         is_youtube = job.get('manifest', {}).get('platform') == 'YouTube'
                         is_discord = job.get('manifest', {}).get('platform') == 'Discord'
                         if ((youtube_only and not is_youtube) or (exclude_youtube and is_youtube)
@@ -632,6 +647,8 @@ class PostgresWorker:
                         if discord_managed:
                             discord_worker.begin(job, now, reconciliation)
                         selected = {"workspaceId": workspace_id, "job": copy.deepcopy(job), "reconciliation": reconciliation}
+                        if scoped:
+                            selected['dispatchPrincipal'] = dispatch_principal
                         if is_youtube:
                             selected['youtubeAuthorizationGeneration'] = youtube_generation
                         if youtube_forward:
@@ -812,7 +829,7 @@ class PostgresWorker:
                     return False
                 if ((job.get('cancelRequested') and not youtube_cancel)
                         or (claimed.get('youtubeForward') and not youtube_verified)
-                        or (claimed.get('linkedinForward') and not linkedin_verified)
+                        or (claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal']))
                         or not self._approved(cur, claimed['workspaceId'], state, job, now=now)):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
                     stopped = 'canceled' if job.get('cancelRequested') and not claimed['reconciliation'] else 'held'
@@ -875,7 +892,6 @@ class PostgresWorker:
                 self.discord_stats['leaseLost'] += 1
                 return False
             job['leaseUntil'] = min(now + discord_worker.LEASE_SECONDS, manifest['expiresAt'])
-            job[discord_worker.KEY].update(stage='sealed', sealedAt=now)
         intent = {'id': job['leaseId'], 'publicationId': job['id'], 'manifestDigest': discord_digest(manifest),
                   'authorizationDigest': job['discordAuthorization']['digest'],
                   'authorizationGeneration': grant['authorizationGeneration'], 'at': now}
@@ -885,7 +901,22 @@ class PostgresWorker:
             try:
                 provider.rate_limiter.seal(cur,prepared.get('ratePermit'),binding,intent['id'],
                                           min(job['leaseUntil'],manifest['expiresAt']))
-            except (RateCoordinatorUnavailable,RateDelayed):
+            except RateDelayed as error:
+                operation = job.get(discord_worker.KEY) or {}
+                if (discord_worker.managed(job) and discord_worker.pending_unsent(job)
+                        and operation.get('ratePermitRetries',0) < discord_worker.MAX_UNCONSUMED_PERMIT_RECOVERIES):
+                    operation['ratePermitRetries'] = operation.get('ratePermitRetries',0) + 1
+                    status = discord_worker.release_unsent(job, now, 'rate_delayed',
+                        retry_after_seconds=error.retry_after_seconds)
+                    self._event(job, status, 'Discord rate permit expired before intent; frozen approval waits without a POST', at=now)
+                    self.discord_stats['rateDelays'] += 1
+                else:
+                    self._event(job,'held','Discord pre-intent permit recovery limit reached; nothing was posted',at=now)
+                    job['leaseOwner'],job['leaseUntil'] = None,0
+                cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
+                            (json.dumps(state),claimed['workspaceId']))
+                return False
+            except RateCoordinatorUnavailable:
                 self._event(job,'held','Discord rate permit expired or changed before sealing; nothing was posted',at=now)
                 job['leaseOwner'],job['leaseUntil'] = None,0
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',
@@ -894,6 +925,8 @@ class PostgresWorker:
             intent['rateAdmissionId'] = prepared['ratePermit'].id
             prepared['rateBinding'] = binding
             prepared['rateAuthorize'] = lambda cursor: self._authorize_discord_rate_send(cursor,claimed,intent,binding)
+        if discord_worker.managed(job):
+            job[discord_worker.KEY].update(stage='sealed', sealedAt=now)
         intents.append(intent)
         if job.get('attempts'):
             job['attempts'][-1]['discordIntentId'] = intent['id']
@@ -932,6 +965,52 @@ class PostgresWorker:
         if not self._owns(job,claimed,now) or job['manifest']['expiresAt'] <= now:
             raise RateCoordinatorUnavailable()
         return min(job['leaseUntil'],job['manifest']['expiresAt'])
+
+    def release_discord_expired_permit(self, claimed, error):
+        """Recover only this live worker's conclusively unconsumed rate permit."""
+        from .discord.rate_limits import UnconsumedPublishPermit
+        prepared = claimed.get('discordPrepared') or {}
+        permit, binding, intent = prepared.get('ratePermit'), prepared.get('rateBinding'), claimed.get('discordIntent')
+        if (not isinstance(error, UnconsumedPublishPermit) or not permit or error.permit_id != permit.id
+                or not binding or not intent):
+            return False
+        provider = getattr(self.social, 'providers', {}).get('discord')
+        with self.connection_factory() as db, db.cursor() as cur:
+            # Reuse the final live approval/member/grant/lease guard and its
+            # workspace -> credential lock order before locking the admission.
+            self._authorize_discord_rate_send(cur, claimed, intent, binding)
+            cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
+            row = cur.fetchone()
+            revision, raw_state = row
+            state = json.loads(raw_state) if isinstance(raw_state, str) else raw_state
+            job = find(state['phase2']['jobs'], claimed['job']['id'])
+            if (job.get('discordDispatchIntents') != [intent] or not discord_worker.managed(job)
+                    or job[discord_worker.KEY].get('stage') != 'sealed'
+                    or job[discord_worker.KEY].get('ratePermitRetries', 0) >= discord_worker.MAX_UNCONSUMED_PERMIT_RECOVERIES
+                    or not any(a.get('discordIntentId') == intent['id'] for a in job.get('attempts', []))
+                    or any(job.get(k) for k in ('discordReceipts','providerReference','container',
+                        'providerUpload','providerAssets','providerThread','progress','url','verification'))):
+                return False
+            provider.rate_limiter.abandon_expired_publish(cur, permit, binding, intent['id'])
+            now = self._db_now(cur)
+            if not self._owns(job, claimed, now) or job['manifest']['expiresAt'] <= now:
+                raise AlphaError('Discord authority expired during unsent recovery.', 409)
+            job.setdefault('discordUnsentDispatches', []).append({**intent,
+                'unsentProof': 'expired_unconsumed_admission', 'abandonedAt': now})
+            job['discordDispatchIntents'] = []
+            for attempt in job.get('attempts', []):
+                if attempt.get('discordIntentId') == intent['id']:
+                    attempt['discordUnsentIntentId'] = attempt.pop('discordIntentId')
+            job[discord_worker.KEY]['stage'] = 'pending'
+            job[discord_worker.KEY]['ratePermitRetries'] = job[discord_worker.KEY].get('ratePermitRetries', 0) + 1
+            status = discord_worker.release_unsent(job, now, 'rate_delayed',
+                retry_after_seconds=error.retry_after_seconds)
+            self._event(job, status, 'Expired Discord permit was never consumed; intent archived before safe rate wait', at=now)
+            cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
+                (json.dumps(state), claimed['workspaceId'], revision))
+            if cur.rowcount != 1:
+                raise AlphaError('Discord unsent recovery lost its workspace revision.', 409)
+        return True
 
     def defer_youtube_dispatch(self, claimed):
         """Release an unsent fenced operation after unavailable grant verification."""
@@ -1026,6 +1105,13 @@ class PostgresWorker:
                 result = self.social.submit_discord_authorized(claimed['job']['manifest'], claimed['discordDispatch'])
             else:
                 result = self.social.submit(claimed["job"]["manifest"])
+        except UnconsumedPublishPermit as error:
+            try:
+                if self.release_discord_expired_permit(claimed, error):
+                    return True
+            except Exception:
+                pass  # Unknown commit/authority state can never authorize retry.
+            result = unknown('Unsent Discord permit could not be safely reconciled; manual review required')
         except Exception:
             result = unknown()
         if crash == "after_provider":

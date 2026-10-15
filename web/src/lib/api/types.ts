@@ -228,6 +228,12 @@ export interface Job {
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
+  leaseUntil?: number;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
 }
 
 export interface Review {
@@ -796,6 +802,7 @@ export interface Snapshot {
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
+  workerBinding?: WorkerBinding | null;
 }
 
 export interface Bootstrap extends Snapshot {

@@ -286,7 +286,7 @@ class DiscordProvider(OAuthProvider):
         return self._discord_http(method, path, headers=headers, credential_kind='bot', **kwargs)
 
     def _discord_http(self, method, path, *, credential_kind, bearer=None, user_id=None, **kwargs):
-        from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable
+        from .discord.rate_limits import Permit, RateDelayed, RateCoordinatorUnavailable, UnconsumedPublishPermit
         rate_permit = kwargs.pop('rate_permit', None)
         binding = kwargs.pop('rate_binding', None)
         intent_id = kwargs.pop('rate_intent_id', None)
@@ -319,6 +319,11 @@ class DiscordProvider(OAuthProvider):
                     self.rate_limiter.consume(permit, method, path, binding=binding, intent_id=intent_id, authorize=authorize)
                     break
                 except RateDelayed as error:
+                    if (isinstance(rate_permit, Permit) and binding is not None
+                            and error.rate_cause == 'permit_expired'):
+                        # Mint only around admission/consume, before transport.
+                        # A transport exception can never acquire this proof.
+                        raise UnconsumedPublishPermit(rate_permit.id, error.retry_after_seconds) from error
                     wait = max(error.retry_after_seconds, .005 * 2 ** attempt) + secrets.randbelow(26) / 1000
                     if not resumable or attempt + 1 >= attempts or time.monotonic() + wait > wait_deadline:
                         raise

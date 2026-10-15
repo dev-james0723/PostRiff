@@ -46,7 +46,17 @@ discord_validation_gate python python -m unittest test_discord_rate_limits test_
   test_hosted_job_dispatch test_postriff_phase2 test_postriff_campaigns \
   test_postriff_automation_chat test_automation_credit_rebind test_social_readiness_hardening \
   test_hosted_wave3_connectors test_youtube_identity_fence \
-  test_youtube_worker_refresh test_youtube_oauth_binding
+  test_youtube_worker_refresh test_youtube_oauth_binding test_discord_presend_retry \
+  test_postgres_pool_controls test_discord_capacity_approval_receipt
 discord_validation_gate sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_rate_limits.py
+python - <<'PY_EVIDENCE'
+import json
+from pathlib import Path
+p=Path('.depot/discord-p4-coordinator-results.json')
+if not p.is_file():raise SystemExit('Actual PostgreSQL regression evidence is missing')
+d=json.loads(p.read_text())
+assert d['status']=='PASS' and d['exactScopedDispatchRegression'] is True
+print('RAFII_DISCORD_ACTUAL_SQL_REGRESSIONS '+json.dumps({'status':d['status'],'rateGroups':len(d['checks']),'workerGroups':len(d['workerChecks']),'exactScopedDispatchRegression':True,'realDiscordRequests':d['realDiscordRequests'],'productionDatabaseWrites':d['productionDatabaseWrites']}))
+PY_EVIDENCE
 discord_validation_gate fixture python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
 exit "$discord_validation_status"
