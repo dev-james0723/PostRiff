@@ -3,6 +3,22 @@ import uuid as uuidlib
 from .contracts import instant, iso, uuid
 from .store import TrendStorageError, bounded_json, row
 
+# Bounded effect summary returned by consume(); never content, IDs or free text.
+EFFECT_STATES = frozenset(('complete', 'ignored', 'suppressed', 'replayed', 'unknown'))
+EFFECT_REASONS = frozenset(('different_event_type', 'no_current_sources', 'no_eligible_posts',
+                            'no_eligible_membership', 'event_node_invalid'))
+# Explicit gap reasons kept as marker counts (gap_<reason>) so a re-anchored or
+# clamped stream is visible in the durable event without storing raw markers.
+GAP_REASONS = frozenset(('cursor_too_old', 'cursor_outdated', 'cursor_future', 'cursor_clamped'))
+MARKER_COUNT_KEYS = frozenset(('account', 'sync', 'gap', 'identity')) | frozenset('gap_' + r for r in GAP_REASONS)
+
+
+def effect_summary(value):
+    state = value.get('state') if isinstance(value, dict) else None
+    reason = value.get('reason') if isinstance(value, dict) else None
+    return {'state': state if isinstance(state, str) and state in EFFECT_STATES else 'unknown',
+            'reason': reason if isinstance(reason, str) and reason in EFFECT_REASONS else None}
+
 
 def ingestion_payload(payload):
     """Persist references and coverage controls, never raw account/sync markers."""
@@ -38,8 +54,11 @@ def ingestion_payload(payload):
         kind = marker.get('kind') if isinstance(marker,dict) else None
         if kind in ('account','sync','gap','identity'):
             counts[kind] = counts.get(kind,0)+1
+            reason = marker.get('reason_code') if kind=='gap' else None
+            if isinstance(reason,str) and reason in GAP_REASONS:
+                counts['gap_'+reason] = counts.get('gap_'+reason,0)+1
     for kind,count in payload.get('marker_counts',{}).items():
-        if kind in ('account','sync','gap','identity') and type(count) is int and 0<=count<=10000:
+        if isinstance(kind,str) and kind in MARKER_COUNT_KEYS and type(count) is int and 0<=count<=10000:
             counts[kind] = counts.get(kind,0)+count
     if counts:
         result['marker_counts'] = counts
@@ -101,13 +120,15 @@ class TrendOutbox:
         """effect(cursor,event) must be a transactional local domain mutation, never external HTTP.
 
         External delivery uses the existing notification worker and provider idempotency semantics.
+        Returns the consumer state plus a bounded ``effect`` {state, reason} summary
+        (e.g. suppressed/no_current_sources) so callers can count and log outcomes.
         """
         with self.store.transaction(cursor) as cur:
             cur.execute("""SELECT * FROM public.pr_trend_outbox_consumers WHERE consumer=%s AND scope_key=%s AND event_id=%s FOR UPDATE""",
                 (claim['consumer'],claim['scope_key'],claim['event_id']))
             current = row(cur)
             if current and current['state']=='done':
-                return {'state':'done','replayed':True}
+                return {'state':'done','replayed':True,'effect':{'state':'replayed','reason':None}}
             cur.execute("""SELECT 1 FROM public.pr_trend_outbox_consumers WHERE consumer=%s AND scope_key=%s AND event_id=%s
                 AND state='leased' AND lease_owner=%s AND lease_generation=%s AND lease_until>clock_timestamp()""",
                 (claim['consumer'],claim['scope_key'],claim['event_id'],claim['lease_owner'],claim['lease_generation']))
@@ -118,8 +139,8 @@ class TrendOutbox:
             if event['node_id']:
                 cur.execute('SELECT postriff_private.trend_node_valid(%s,%s) AS valid',(event['scope_key'],event['node_id']))
                 valid = row(cur)['valid']
-            if valid:
-                effect(cur,event)
+            summary = (effect_summary(effect(cur,event)) if valid
+                       else {'state':'suppressed','reason':'event_node_invalid'})
             state = 'done' if valid else 'suppressed'
             cur.execute('''UPDATE public.pr_trend_outbox_consumers SET state=%s,completed_at=clock_timestamp(),lease_until=NULL
                 WHERE consumer=%s AND scope_key=%s AND event_id=%s AND state='leased'
@@ -127,4 +148,4 @@ class TrendOutbox:
                 (state,claim['consumer'],claim['scope_key'],claim['event_id'],claim['lease_owner'],claim['lease_generation']))
             if cur.rowcount!=1:
                 raise TrendStorageError('stale_outbox_fence')
-            return {'state':state,'replayed':False}
+            return {'state':state,'replayed':False,'effect':summary}
