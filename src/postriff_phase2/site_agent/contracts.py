@@ -201,12 +201,26 @@ def error(message: str, code: str) -> dict:
     return {"type": "error", "message": message, "code": code}
 
 
-def calendar_card(*, range_view: dict, statuses: list[dict], entries: list[dict], total: int | None, queue: dict, sources: dict, href: str | None) -> dict:
+CALENDAR_CARD_MAX_DAYS = 42  # six weeks: any month fits the card's day grid
+
+
+def _day_count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def calendar_card(*, range_view: dict, statuses: list[dict], entries: list[dict], total: int | None, queue: dict, sources: dict, href: str | None,
+                  days: list[dict] | None = None) -> dict:
     """A structured, read-only calendar view.
 
     It deliberately has no action field.  The only optional destination is an allowlisted page link;
     scheduling, approval, editing and publishing remain on their existing product surfaces.
+    `days` (from a verified range read only) is the per-day count the card draws as a grid. A count
+    that is not a non-negative integer stays None (unknown), never 0.
     """
     shown = entries[:6]
-    return {"type": "calendar_card", "range": range_view, "statuses": statuses, "entries": shown, "total": total,
+    card = {"type": "calendar_card", "range": range_view, "statuses": statuses, "entries": shown, "total": total,
             "truncated": isinstance(total, int) and total > len(shown), "queue": queue, "sources": sources, "href": href}
+    if days is not None:
+        card["days"] = [{"date": str(day["date"]), "count": _day_count(day.get("count"))}
+                        for day in days if isinstance(day, dict) and day.get("date")][:CALENDAR_CARD_MAX_DAYS]
+    return card

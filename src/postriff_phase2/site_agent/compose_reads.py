@@ -5,6 +5,7 @@ also returns the items it named (`refs`), in the order shown, for "that draft" a
 """
 from __future__ import annotations
 
+import datetime as dt
 import re
 
 from . import contracts, routes
@@ -216,6 +217,38 @@ def _known_count(counts, key):
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
+EMPTY_DAYS_RULE = "Rule: from today, nothing scheduled, waiting or planned"
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _empty_runs(days: list[str]) -> str:
+    """"Sunday 2026-11-01", … → "1–10 Nov (10 days)"; gaps split runs ("3 Nov, 5–7 Nov (4 days)")."""
+    dates = []
+    for value in days:
+        try:
+            dates.append(dt.date.fromisoformat(str(value).split()[-1]))
+        except (ValueError, IndexError):
+            return ", ".join(str(day) for day in days[:10])
+    dates = sorted(set(dates))
+    runs: list[list] = []
+    for day in dates:
+        if runs and (day - runs[-1][1]).days == 1:
+            runs[-1][1] = day
+        else:
+            runs.append([day, day])
+    short = lambda d: f"{d.day} {_MONTHS[d.month - 1]}"  # noqa: E731
+    parts = []
+    for first, last in runs[:6]:
+        if first == last:
+            parts.append(short(first))
+        elif first.month == last.month and first.year == last.year:
+            parts.append(f"{first.day}–{short(last)}")
+        else:
+            parts.append(f"{short(first)}–{short(last)}")
+    text = ", ".join(parts) + (", …" if len(runs) > 6 else "")  # the day total below stays exact
+    return f"{text} ({len(dates)} days)" if len(dates) > 1 else text
+
+
 def _calendar(get, classification, text, *, results=None):
     results = results or {}
     calendar_result = results.get("calendar.range") or {}
@@ -247,14 +280,17 @@ def _calendar(get, classification, text, *, results=None):
     blocks = [contracts.calendar_card(range_view={key: data["range"].get(key) for key in ("label", "start", "end", "timeZone")}, statuses=statuses,
                                       entries=card_entries, total=total, queue=queue_view,
                                       sources={"calendarRange": _source_state(calendar_result), "queueSummary": _source_state(queue_result)},
-                                      href=data.get("href"))]
+                                      href=data.get("href"), days=data["days"] if isinstance(data.get("days"), list) else None)]
+    grid_days = blocks[0].get("days")
     if _source_state(queue_result) != "verified":
         blocks.append(contracts.warning("Queue state is unavailable. Its counts are shown as unavailable, not zero.", "queue_state_unavailable"))
     lines = [f"Here is the confirmed calendar state for {label}."] if entries else [f"Nothing is scheduled, waiting or planned {label}."]
     derived = data["derived"]
     observations = []
-    if derived["emptyDays"]["days"]:
-        observations.append(_item("gap", "Empty days: " + ", ".join(derived["emptyDays"]["days"][:10]), meta=f"Rule: {derived['emptyDays']['rule']}"))
+    # The card's day grid already shows a wholly empty range; repeating every date in words adds nothing.
+    grid_shows_empty = bool(grid_days) and total == 0 and all(day.get("count") == 0 for day in grid_days)
+    if derived["emptyDays"]["days"] and not grid_shows_empty:
+        observations.append(_item("gap", "Empty: " + _empty_runs(derived["emptyDays"]["days"]), meta=EMPTY_DAYS_RULE))
     for pair in derived["closeTogether"]["pairs"]:
         observations.append(_item("close", f"{pair['platform']} · {pair['account']}: {pair['minutes']} minutes apart ({pair['first']} and {pair['second']})", meta=f"Rule: {derived['closeTogether']['rule']}"))
     for pair in derived["similarText"]["pairs"]:

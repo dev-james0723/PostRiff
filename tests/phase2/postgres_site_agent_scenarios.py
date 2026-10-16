@@ -591,7 +591,10 @@ record("L03", "campaign", "Put these two posts into the launch campaign (after a
 r = ask("Are any posts scheduled too close together?", "/app/calendar")
 record("S05", "calendar", "Are any posts scheduled too close together?", r, "the 30-minute pair, labelled as a derived observation", "30 minutes apart" in said(r) and "Rule:" in said(r))
 r = ask("Do I have a content gap next week?", "/app/calendar")
-record("S06", "calendar", "Do I have a content gap next week?", r, "empty days next week, derived", "Empty days:" in said(r) and "Mon" in said(r))
+record("S06", "calendar", "Do I have a content gap next week?", r, "empty days next week, derived (short date runs; a wholly empty week is stated once and drawn by the card's day grid)",
+       ("Empty: " in said(r) and any(month in said(r) for month in ("Sep", "Oct")) and "Rule:" in said(r))
+       or ("Nothing is scheduled, waiting or planned next week" in said(r)
+           and any(b["type"] == "calendar_card" and b.get("days") for b in r["message"]["siteAgent"]["blocks"])))
 r = ask("Move this post to Thursday", "/app/queue", {"type": "job", "id": JOB_A["id"]})
 move = r["message"]["siteAgent"]["proposals"][0]
 agent.apply_proposal(wid, OWNER, {"conversationId": r["conversationId"], "messageId": r["messageId"], "proposalId": move["id"], "digest": move["digest"], "expectedRevision": revision()})

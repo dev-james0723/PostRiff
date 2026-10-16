@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { CalendarCard } from '@/features/site-agent/calendar-card';
 import type { SiteAgentCalendarCard } from '@/lib/site-agent/types';
 
@@ -85,10 +86,45 @@ const CARD: SiteAgentCalendarCard = {
   truncated: true,
   queue: { awaitingApproval: 1, needsAttention: 1, inFlight: 1, published: 1, verified: 2 },
   sources: { calendarRange: 'verified', queueSummary: 'verified' },
-  href: '/app/calendar'
+  href: '/app/calendar',
+  days: [
+    { date: '2026-09-28', count: 1 },
+    { date: '2026-09-29', count: 1 },
+    { date: '2026-09-30', count: 1 },
+    { date: '2026-10-01', count: 1 },
+    { date: '2026-10-02', count: 1 },
+    { date: '2026-10-03', count: 2 },
+    { date: '2026-10-04', count: 1 }
+  ]
+};
+
+/** `?state=empty`: a verified range with nothing in it (grid plus one line, no zero tiles). */
+const EMPTY: SiteAgentCalendarCard = {
+  type: 'calendar_card',
+  range: {
+    label: '1–10 Nov',
+    start: '2026-10-31T16:00:00Z',
+    end: '2026-11-10T16:00:00Z',
+    timeZone: 'Asia/Hong_Kong'
+  },
+  statuses: CARD.statuses.map((status) => ({ ...status, count: 0 })),
+  entries: [],
+  total: 0,
+  truncated: false,
+  queue: { awaitingApproval: 0, needsAttention: 0, inFlight: 0, published: 0, verified: 0 },
+  sources: { calendarRange: 'verified', queueSummary: 'verified' },
+  href: '/app/calendar',
+  days: Array.from({ length: 10 }, (_, i) => ({
+    date: `2026-11-${String(i + 1).padStart(2, '0')}`,
+    count: 0
+  }))
 };
 
 export function CalendarCardPlayground() {
+  const [state, setState] = useState<'full' | 'empty'>('full');
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('state') === 'empty') setState('empty');
+  }, []);
   return (
     <main className='rafii-canvas min-h-dvh overflow-x-clip px-3 py-5 sm:px-6 sm:py-8'>
       <div className='mx-auto flex w-full max-w-[430px] flex-col gap-3'>
@@ -98,7 +134,7 @@ export function CalendarCardPlayground() {
           </p>
           <h1 className='mt-1 text-lg font-semibold'>Calendar state</h1>
         </div>
-        <CalendarCard block={CARD} />
+        <CalendarCard block={state === 'empty' ? EMPTY : CARD} />
       </div>
     </main>
   );
