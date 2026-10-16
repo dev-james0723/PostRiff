@@ -930,6 +930,9 @@ class HostedWorkspaceService:
                 # A savepoint-guarded read of its own: before migration 030 the default style applies, and the session
                 # recorded above still commits.
                 style = agent_style.load(cur, principal)
+                # RAPv2 decision 5 (RAFII_SECURITY_INCIDENT_HOLD): the "This wasn't me" banner for the next sign-in.
+                from .security_center import incident_notice
+                notice = incident_notice(cur, principal, session_id)
         if fresh:
             self._alert_new_device(principal, session_id, client_label)
         display_name, enforced_at, time_zone, locale, alert_new_device = row if row else ("", None, "", "", False)
@@ -943,6 +946,7 @@ class HostedWorkspaceService:
             "signIn": self._sign_in(token, principal),
             # Empty strings mean "follow the device"; the browser fills them in. `agentStyle` is always complete.
             "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
+            "securityNotice": notice,
         }
 
     def update_profile(self, token, changes, client_label=""):

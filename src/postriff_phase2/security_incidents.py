@@ -148,6 +148,15 @@ class SecurityIncidents:
             device_trust.record(cur, principal, "account.hold_placed", f"account.hold_placed:{epoch}", session_id=current,
                                 details={"incidentId": str(incident_id), "holdEpoch": epoch, "reason": "incident.not_me"})
             audit(cur, None, principal, "security.incident_reported", str(incident_id), {"sessionsRevoked": len(revoked), "holdEpoch": epoch})
+            if current:
+                # Owner decision 5: the banner shows at the next sign-in, never on the session that filed the report.
+                # Migration 128's column; before it is applied the report still files (and the banner shows everywhere).
+                cur.execute("SAVEPOINT rapv2_reporter")
+                try:
+                    cur.execute("UPDATE public.pr_security_incidents SET reported_session_id=%s WHERE user_id=%s AND id=%s", (current, principal, incident_id))
+                    cur.execute("RELEASE SAVEPOINT rapv2_reporter")
+                except Exception:  # noqa: BLE001
+                    cur.execute("ROLLBACK TO SAVEPOINT rapv2_reporter")
         provider = "unsupported"
         if request["revokeOtherSessions"]:
             logout_others = getattr(self.service.identity, "logout_others", None)

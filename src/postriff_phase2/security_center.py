@@ -26,7 +26,19 @@ Recovery and resolution (RAP-111, RAP-112, RAP-113), behind RAFII_SECURITY_INCID
                                          less answers 403 and the hold stays.
   While a hold is active, POST /api/auth/mfa (recording that the account now requires a factor) is refused too.
 
-Releasing a hold for someone else (support, the founder) is not built: it is an open product decision.
+Owner decisions of 2026-10-16 (docs/rapv2/blocked-features-decisions-2026-10-15.md), behind RAFII_SECURITY_INCIDENT_HOLD:
+  Incident banner (decision 5): `incident_notice` is the newest "This wasn't me" report the person has not dismissed,
+                                         shown by GET /api/me (`securityNotice`) on every session except the one that
+                                         filed it, so the next sign-in sees it. POST /api/auth/security/incidents/{id}/dismiss-notice
+                                         hides it; it never changes the incident or the hold.
+  Previous address (decision 7):  `previous_addresses` lists the addresses the account had before an email change in
+                                         the last 14 days (migration 128 records them); security notices go there too.
+  Support release (decision 11):  `support_release` lifts a hold for someone else, only from the founder action
+                                         (rafii_control.founder_actions, fresh founder MFA, preview/confirm), after the
+                                         person's identity was verified out of band. It records how (SUPPORT_METHODS and
+                                         a case reference), resolves every open incident as `support_verified`, releases
+                                         the hold through security_holds.release (one epoch bump), writes the ledger and
+                                         the audit `security.hold_released_by_support`, which also notifies the person.
 """
 from __future__ import annotations
 
@@ -39,6 +51,11 @@ from . import device_trust, security_holds, security_policy
 
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 RESOLVES_PER_HOUR = 5
+PREVIOUS_ADDRESS_DAYS = 14
+# How support verified the person out of band before lifting a hold (decision 11). Never an email code or link to the
+# account's own inbox: whoever took over the account may hold that inbox too.
+SUPPORT_METHODS = ("video_call_id_match", "government_id_document", "existing_factor_on_call", "payment_record_match", "known_contact_callback")
+_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#-]{2,119}$")  # a support case id: no '@', no prose
 RECOVERY_REQUESTS_PER_HOUR = 3
 
 
@@ -258,6 +275,135 @@ class SecurityCenter:
             audit(cur, None, principal, "security.incident_resolved", incident_id, {"holdReleased": released, "holdEpoch": epoch, "method": fresh})
         return {"incidentId": incident_id, "state": "resolved", "resolvedAt": _iso(resolved_at), "accountHold": active, "holdEpoch": epoch,
                 "holdReleased": released, "otherOpenIncidents": others}
+
+
+# --- decision 7: the previous address, for 14 days ---------------------------------------------------------------------
+def previous_addresses(connection_factory, user_id, current):
+    """Distinct addresses `user_id` had before an email change in the last 14 days, other than `current`; [] while the
+    flag is off, before migration 128, or on any error (a copy is never worth failing the notice for)."""
+    if not security_holds.enabled() or not user_id:
+        return []
+    try:
+        with connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT previous_email FROM public.pr_security_contact_changes WHERE user_id=%s AND changed_at > now() - make_interval(days => %s)"
+                        " ORDER BY changed_at DESC LIMIT 3", (str(user_id), PREVIOUS_ADDRESS_DAYS))
+            rows = cur.fetchall()
+    except Exception:  # noqa: BLE001
+        return []
+    seen, out = {str(current or "").strip().lower()}, []
+    for (address,) in rows:
+        key = str(address or "").strip().lower()
+        if key and "@" in key and key not in seen:
+            seen.add(key)
+            out.append(str(address).strip())
+    return out
+
+
+# --- decision 5: the incident banner at the next sign-in -------------------------------------------------------------------
+def incident_notice(cur, principal, session_id):
+    """The banner for GET /api/me: the newest undismissed "This wasn't me" report, unless this session filed it; None
+    while the flag is off, when there is none, or before migration 128 (read under a savepoint, never failing /api/me)."""
+    if not security_holds.enabled():
+        return None
+    cur.execute("SAVEPOINT rapv2_incident_notice")
+    try:
+        cur.execute("SELECT i.id,i.created_at,i.state,coalesce(c.hold_active,false) FROM public.pr_security_incidents i"
+                    " LEFT JOIN public.pr_security_account_controls c ON c.user_id=i.user_id"
+                    " WHERE i.user_id=%s AND i.summary_code='not_me' AND i.notice_dismissed_at IS NULL AND i.reported_session_id IS DISTINCT FROM %s"
+                    " ORDER BY i.created_at DESC LIMIT 1", (principal, session_id or ""))
+        row = cur.fetchone()
+        cur.execute("RELEASE SAVEPOINT rapv2_incident_notice")
+    except Exception:  # noqa: BLE001
+        cur.execute("ROLLBACK TO SAVEPOINT rapv2_incident_notice")
+        return None
+    if not row:
+        return None
+    return {"kind": "incident_reported", "incidentId": str(row[0]), "reportedAt": _iso(row[1]), "state": row[2], "accountHold": bool(row[3]),
+            "href": "/app/account/profile#security"}
+
+
+def dismiss_notice(service, token, incident_id):
+    """POST /api/auth/security/incidents/{id}/dismiss-notice: hide the banner for this incident. Idempotent."""
+    if not security_holds.enabled():
+        raise unavailable_route()
+    from .api_tokens import is_api_token
+    if is_api_token(token):
+        raise AlphaError("Use your signed-in Rafii session for account security.", 403, code="token_scope_denied")
+    principal = service.verify_session(token)
+    if not isinstance(incident_id, str) or not _UUID.match(incident_id):
+        raise not_found()
+    with service.connection_factory() as db, db.cursor() as cur:
+        cur.execute("UPDATE public.pr_security_incidents SET notice_dismissed_at=coalesce(notice_dismissed_at,now()) WHERE user_id=%s AND id=%s RETURNING notice_dismissed_at",
+                    (principal, incident_id))
+        row = cur.fetchone()
+    if not row:
+        raise not_found()  # Unknown or another person's: the same answer.
+    return {"incidentId": incident_id, "dismissedAt": _iso(row[0])}
+
+
+# --- decision 11: support (founder) release -------------------------------------------------------------------------------
+def support_hold_snapshot(cur, user_id, *, lock=False):
+    """{userId, hold: {active, epoch, placedAt, reason}, openIncidents: [{incidentId, state, reportedAt}]} or None for an
+    unknown account. Read inside the founder action's own consumer transaction (lock=True at execution)."""
+    cur.execute("SELECT EXISTS(SELECT 1 FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL)", (str(user_id),))
+    if not cur.fetchone()[0]:
+        return None
+    cur.execute("SELECT hold_active,hold_epoch,extract(epoch from placed_at),hold_reason FROM public.pr_security_account_controls WHERE user_id=%s"
+                + (" FOR UPDATE" if lock else ""), (str(user_id),))
+    row = cur.fetchone()
+    cur.execute("SELECT id::text,state,created_at FROM public.pr_security_incidents WHERE user_id=%s AND state<>'resolved' ORDER BY created_at,id", (str(user_id),))
+    incidents = [{"incidentId": i, "state": state, "reportedAt": _iso(created)} for i, state, created in cur.fetchall()]
+    hold = {"active": bool(row[0]), "epoch": int(row[1]), "placedAt": float(row[2]) if row[2] is not None else None, "reason": row[3]} if row else \
+        {"active": False, "epoch": 0, "placedAt": None, "reason": None}
+    return {"userId": str(user_id), "hold": hold, "openIncidents": incidents}
+
+
+def validate_support_verification(method, reference):
+    """(method, reference) or AlphaError 400: how identity was verified out of band, and the support case it is on."""
+    if method not in SUPPORT_METHODS:
+        raise AlphaError("Choose how the person's identity was verified.", 400, code="verification_method_required")
+    if not isinstance(reference, str) or not _REFERENCE.match(reference.strip()):
+        raise AlphaError("Enter the support case reference.", 400, code="verification_reference_required")
+    return method, reference.strip()
+
+
+def support_release_recorded(cur, user_id, action_id):
+    """Whether the founder action `action_id` already released this hold (its ledger row exists)."""
+    cur.execute("SELECT 1 FROM public.pr_security_login_events WHERE user_id=%s AND event_key=%s", (str(user_id), f"account.hold_released:support:{action_id}"))
+    return cur.fetchone() is not None
+
+
+def support_release(cur, user_id, *, method, reference, operator_id, action_id):
+    """Lift `user_id`'s hold for support; idempotent on `action_id`. Raises 404 for an unknown account and 409 when there
+    is no active hold. Returns what changed."""
+    from .hosted import audit
+    method, reference = validate_support_verification(method, reference)
+    key = f"account.hold_released:support:{action_id}"
+    cur.execute("SELECT details FROM public.pr_security_login_events WHERE user_id=%s AND event_key=%s", (str(user_id), key))
+    done = cur.fetchone()
+    if done:
+        details = done[0] if isinstance(done[0], dict) else {}
+        return {"userId": str(user_id), "holdReleased": True, "holdEpoch": details.get("holdEpoch"), "incidentsResolved": details.get("incidentsResolved", 0),
+                "duplicate": True, "consumerAudit": "security.hold_released_by_support"}
+    snapshot = support_hold_snapshot(cur, user_id, lock=True)
+    if snapshot is None:
+        raise AlphaError("That account isn't available.", 404, code="account_not_found")
+    if not snapshot["hold"]["active"]:
+        raise AlphaError("This account has no active security hold.", 409, code="not_held")
+    cur.execute("UPDATE public.pr_security_incidents SET state='resolved',resolution_code='support_verified',confirmed_at=coalesce(confirmed_at,now()),resolved_at=now()"
+                " WHERE user_id=%s AND state<>'resolved' RETURNING id::text", (str(user_id),))
+    resolved = [row[0] for row in cur.fetchall()]
+    epoch = security_holds.release(cur, user_id, "support.verified")
+    verification = {"method": method, "reference": reference, "operatorId": str(operator_id), "actionId": str(action_id)}
+    device_trust.record(cur, str(user_id), "account.hold_released", key,
+                        details={"by": "support", "holdEpoch": epoch, "incidentsResolved": len(resolved), **verification})
+    for incident_id in resolved:
+        device_trust.record(cur, str(user_id), "incident.resolved", f"incident.resolved:{incident_id}",
+                            details={"incidentId": incident_id, "by": "support", "holdReleased": True, "holdEpoch": epoch, "method": method})
+    # The person's own security history (actor = the person, as for every security.* event) carries who and how.
+    audit(cur, None, str(user_id), "security.hold_released_by_support", str(action_id), {**verification, "holdEpoch": epoch, "incidentsResolved": len(resolved)})
+    return {"userId": str(user_id), "holdReleased": True, "holdEpoch": epoch, "incidentsResolved": len(resolved), "resolvedIncidentIds": resolved,
+            "verificationMethod": method, "consumerAudit": "security.hold_released_by_support"}
 
 
 def assert_enrolment_allowed(service, principal):

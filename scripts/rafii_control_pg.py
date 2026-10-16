@@ -36,6 +36,8 @@ def main():
             founder = [path for path in sorted((ROOT / 'migrations/postriff').glob('0[5-9][0-9]_*.sql')) if int(path.name[:3]) >= 54]
             files = [ROOT / 'tests/phase2/rls.sql', migration, migration, workflow, workflow, ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/052_rafii_control_investigations.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql', ROOT/'migrations/postriff/053_rafii_control_business_workspace.sql']
             files += [path for path in founder for _ in (0, 1)]  # Reapplication must be safe.
+            # RAPv2 owner decision 11: the founder security-hold release kind (consumer 128 is in rls.sql).
+            files += [ROOT / 'migrations/postriff/129_founder_security_hold_release.sql'] * 2
             for file in files:
                 subprocess.run([str(PG / 'psql'), env['RAFII_CONTROL_TEST_DSN'], '-v', 'ON_ERROR_STOP=1', '-q', '-f', str(file)], check=True, stdout=subprocess.DEVNULL, env=env)
             # --pattern 'test_founder_revenue*.py' runs one slice's tests against the same freshly migrated database.

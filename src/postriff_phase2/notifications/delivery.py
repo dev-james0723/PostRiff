@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 
@@ -144,14 +145,22 @@ class DeliveryWorker:
         token = unsubscribe_token(self.signing_key, row["userId"], row["workspaceId"] or "*", category, now=row.get("createdAt") or self.clock())
         return f"{self.base_url.rstrip('/')}/api/notifications/unsubscribe?token={token}"
 
-    def render(self, row, ctx):
+    def render(self, row, ctx, previous_address=False):
         spec = catalog.spec(ctx["type"])
         payload = ctx["payload"]
+        title, details = payload.get("title") or "", self._sign_in_details(ctx)
+        if spec["template"] == "security_alert":
+            labels = email_render.catalogue()["locales"][email_render.resolve_locale(ctx["locale"])]["templates"]["security_alert"]
+            # A security headline in the person's language when the event names one (`titleKey`); English otherwise.
+            title = labels.get(payload.get("titleKey") or "", "") or title
+            if previous_address:
+                # Owner decision 7: the copy to the address the account had before a change in the last 14 days says why.
+                details = (details or []) + [(labels.get("detailPreviousAddress", "Why this address"), labels.get("previousAddressNote", ""))]
         values = {**payload, "workspace": ctx["workspaceName"], "recipe": payload.get("recipeName") or "Your automation",
-                  "title": payload.get("title") or "", "reason": payload.get("reason") or "", "count": payload.get("count") or 1}
+                  "title": title, "reason": payload.get("reason") or "", "count": payload.get("count") or 1}
         return email_render.render(spec["template"], locale=ctx["locale"], values=values, base_url=self.base_url, href=self._ack_path(payload.get("href"), row),
                                    workspace_name=ctx["workspaceName"], unsubscribe_url=self._unsubscribe_url(row, spec["category"]),
-                                   transactional=catalog.transactional(ctx["type"]), metrics=payload.get("metrics"), details=self._sign_in_details(ctx))
+                                   transactional=catalog.transactional(ctx["type"]), metrics=payload.get("metrics"), details=details)
 
     @staticmethod
     def _sign_in_details(ctx):
@@ -214,7 +223,29 @@ class DeliveryWorker:
             return {"state": "permanent" if permanent else "transient", "detail": f"the email service did not accept the message ({status or 'error'})"}
         if not isinstance(receipt, dict) or not receipt.get("id") or receipt.get("delivered") is False:
             return {"state": "config", "detail": "the configured email transport does not deliver (not confirmed)"}
+        if catalog.spec(ctx["type"])["category"] == "security":
+            self._send_previous_address(row, ctx, address, dispatch)
         return {"state": "sent", "provider": "resend", "providerRef": receipt["id"], "templateVersion": message["templateVersion"]}
+
+    def _send_previous_address(self, row, ctx, current, sent):
+        """Owner decision 7 (RAFII_SECURITY_INCIDENT_HOLD): a security notice also goes to each address the account had
+        before an email change in the last 14 days. Best effort after the notice reached the current address: a failure
+        here is logged and never changes that delivery. Each copy has its own idempotency key, so a retry of the row
+        never sends one twice."""
+        from .. import security_center
+        for previous in security_center.previous_addresses(self.connection_factory, row["userId"], current):
+            try:
+                message = self.render(row, ctx, previous_address=True)
+                copy = {**sent, "to": previous, "subject": message["subject"], "text": message["text"], "html": message["html"], "headers": message["headers"],
+                        "idempotencyKey": f"{row['key']}:previous:{hashlib.sha256(previous.lower().encode()).hexdigest()[:16]}",
+                        "tags": sent["tags"] + [{"name": "recipient", "value": "previous_address"}]}
+                if getattr(self.email_transport, 'requires_cutover', False):
+                    from .cutover import admit
+                    if admit(self.connection_factory, [row], [ctx], copy, now=self.clock()):
+                        continue
+                self.email_transport.send(copy)
+            except Exception as error:  # noqa: BLE001 - the address is never logged
+                logging.getLogger("postriff.notifications").warning(json.dumps({"event": "security.previous_address_failed", "deliveryId": row["id"], "error": type(error).__name__}))
 
     def _subscriptions(self, user_id):
         with self.connection_factory() as db, db.cursor() as cur:

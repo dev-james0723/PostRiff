@@ -4,7 +4,7 @@ create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
 create schema auth;
-create table auth.users(id uuid primary key);
+create table auth.users(id uuid primary key, email text);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema auth to authenticated,service_role;
 grant execute on function auth.uid() to authenticated,service_role;
@@ -195,3 +195,6 @@ end $$;
 
 -- RAPv2 RAP-137: retention for session-security records (dry-run first; incidents preserved).
 \ir ../../migrations/postriff/127_rapv2_security_retention.sql
+
+-- RAPv2 owner decisions (2026-10-16): incident banner, step-up notices, previous address for 14 days.
+\ir ../../migrations/postriff/128_rapv2_owner_decisions.sql

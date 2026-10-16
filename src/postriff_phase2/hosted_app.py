@@ -939,6 +939,11 @@ class HostedApplication:
                     return self._json(start_response, 201, center.request_recovery(token, self._body(environ)))
                 if len(segments) == 6 and segments[3] == "incidents" and segments[5] == "resolve" and method == "POST":
                     return self._json(start_response, 200, center.resolve(token, segments[4], self._body(environ)))
+                if len(segments) == 6 and segments[3] == "incidents" and segments[5] == "dismiss-notice" and method == "POST":
+                    # Decision 5: hide the incident banner (RAFII_SECURITY_INCIDENT_HOLD; 404 while off).
+                    from .security_center import dismiss_notice
+                    self._body(environ)
+                    return self._json(start_response, 200, dismiss_notice(service, token, segments[4]))
             if path == "/api/auth/sessions/revoke-others" and method == "POST":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_other_sessions(token))
