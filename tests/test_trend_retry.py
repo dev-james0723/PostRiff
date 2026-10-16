@@ -6,6 +6,7 @@ import uuid
 
 from test_trend_contracts import OfflineTest, NOW, SCOPE
 from test_trend_planner import FakeStore, PostgresFixture, PG_DSN, CAP
+from postriff_phase2.growth.trends.planner import schedule_controls
 from postriff_phase2.growth.trends.retry import decide, retry_after, fail_attempt
 from postriff_phase2.growth.trends import quarantine
 from postriff_phase2.growth.trends.contracts import digest
@@ -112,6 +113,49 @@ class RetryTests(OfflineTest):
                          dispatched=False, status=503, now=NOW)
             health.assert_not_called()
 
+    def terminal(self, store, **kwargs):
+        args = dict(status=None, dispatched=True, proven_unbilled=True, now=NOW)
+        args.update(kwargs)
+        with patch('postriff_phase2.growth.trends.retry.TrendJobs') as jobs, \
+             patch('postriff_phase2.growth.trends.retry.source_health.record') as health:
+            jobs.return_value.fail.return_value = {'state': 'failed_terminal'}
+            result = fail_attempt(store, dict(scope_key=SCOPE, provider_id='fixture', attempts=3, max_attempts=3), **args)
+        return result, health.call_args.kwargs
+
+    def test_terminal_exhaustion_sets_escalating_cooldown_not_null(self):
+        # Production: provider_attempts_exhausted wrote next_allowed_at=NULL, so
+        # the planner/frontier created 576 failing jobs a day. Terminal provider
+        # failures now open the breaker: 15m, 1h, 6h, then capped at 24h.
+        from datetime import timedelta
+        from postriff_phase2.growth.trends.contracts import instant, iso
+        for trips, seconds in ((1, 900), (2, 3600), (3, 21600), (4, 86400), (40, 86400)):
+            with self.subTest(trips=trips):
+                store = FakeStore(); store.trips = trips
+                with self.assertLogs('postriff.trends', level='WARNING') as logs:
+                    result, health = self.terminal(store)
+                self.assertEqual(result['decision'].code, 'provider_attempts_exhausted')
+                self.assertEqual(health['next_allowed_at'], iso(instant(NOW) + timedelta(seconds=seconds)))
+                self.assertEqual(health['status'], 'unavailable')
+                self.assertEqual(logs.output, ['WARNING:postriff.trends:trend.circuit_open provider=fixture '
+                                               'reason=provider_attempts_exhausted cooldown_seconds=%d' % seconds])
+        store = FakeStore(); store.trips = 2
+        with self.assertLogs('postriff.trends', level='WARNING'):
+            _, health = self.terminal(store, status=400)
+        self.assertEqual(health['reason_code'], 'provider_request_terminal')
+        self.assertEqual(health['next_allowed_at'], iso(instant(NOW) + timedelta(seconds=3600)))
+
+    def test_transient_and_predispatch_failures_do_not_open_breaker(self):
+        store = FakeStore()
+        with patch('postriff_phase2.growth.trends.retry.TrendJobs'), \
+             patch('postriff_phase2.growth.trends.retry.source_health.record') as health:
+            fail_attempt(store, dict(scope_key=SCOPE, provider_id='fixture', attempts=1, max_attempts=3),
+                         dispatched=True, proven_unbilled=True, status=503, now=NOW, jitter=1)
+        self.assertEqual(health.call_args.kwargs['next_allowed_at'], '2026-09-27T12:00:05Z')
+        self.assertFalse(any('pr_trend_ingestion_batches' in sql for sql in store.sql))
+        # Never contacted the provider: a local terminal failure is no provider evidence.
+        _, kwargs = self.terminal(FakeStore(), dispatched=False)
+        self.assertIsNone(kwargs['next_allowed_at'])
+
 
 def receipt(**changes):
     value = dict(schema_version=quarantine.SCHEMA, job_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -154,6 +198,21 @@ class QuarantineTests(OfflineTest):
         value = quarantine.sanitize_receipt(receipt(entries=[{'index': 0, 'reason_code': 'private_source_text_123'}]))
         self.assertEqual(value['entries'][0]['reason_code'], 'invalid_record')
         self.assertNotIn('private_source_text', str(value))
+
+    def test_record_level_codes_survive_receipt_sanitization(self):
+        # Production collapsed every Jetstream record failure to invalid_record,
+        # hiding the poison frame's real cause. Each code the fold can raise for
+        # a record (not envelope) failure must remain diagnosable.
+        codes = ('timestamp_must_be_utc', 'invalid_timestamp', 'invalid_text_field', 'payload_limit',
+                 'invalid_observation_fields', 'raw_storage_not_permitted',
+                 'invalid_knowledge_or_retention_time', 'jetstream_invalid_marker', 'unsupported_language_tag')
+        entries = [{'index': n, 'reason_code': code} for n, code in enumerate(codes)]
+        value = quarantine.sanitize_receipt(receipt(quarantined_count=len(entries), entries=entries))
+        self.assertEqual([e['reason_code'] for e in value['entries']], list(codes))
+
+    def test_every_bluesky_fold_code_is_a_known_receipt_reason(self):
+        from postriff_phase2.growth.trends.providers import bluesky
+        self.assertLessEqual(set(bluesky.QUARANTINE_CODES), quarantine.REASONS)
 
     def test_raw_fields_cannot_hide_at_top_or_nested_level(self):
         self.reject(quarantine.sanitize_receipt, receipt(raw_response='private'))
@@ -302,6 +361,56 @@ class RetryQuarantinePostgresTests(PostgresFixture):
         next_event = self.commit_quarantine(replayed)
         self.reject(quarantine.replay, self.store, self.planner, self.scope, next_event['event_id'])
         self.assertEqual(self.jobs.get_cursor(self.scope, 'fixture', self.partition)['coverage_state'], 'gap')
+
+    def probe(self, key):
+        payload = self.planner.payload(self.p, schedule_controls({'schedule': self.controls}), key)
+        job = self.jobs.enqueue(self.scope, 'trend.ingest', payload, idempotency_key=key, provider_id='fixture',
+                                source_policy_version=CAP.version, max_attempts=3)
+        return job
+
+    def health_row(self):
+        return self.fetch('''SELECT status,notes_code,extract(epoch FROM next_allowed_at-observed_at)::int
+            FROM public.pr_trend_source_health WHERE scope_key=%s AND provider_id='fixture' ''', (self.scope,))
+
+    def test_terminal_failures_escalate_cooldown_half_open_probe_and_only_a_batch_clears(self):
+        from postriff_phase2.growth.trends import source_health
+        with self.assertLogs('postriff.trends', level='WARNING'):
+            fail_attempt(self.store, self.start(), status=400, dispatched=True, proven_unbilled=True, now=NOW)
+        self.assertEqual(self.health_row(), ('unavailable', 'provider_request_terminal', 900))
+        with self.assertRaisesRegex(ValueError, 'source_paused'):
+            self.plan()
+        # Neither a later transient backoff nor a NULL write may shorten/clear the pause.
+        source_health.record(self.store, self.scope, 'fixture', status='unavailable', reason_code='provider_transient',
+                             observed_at='2026-09-27T12:00:01Z', next_allowed_at='2026-09-27T12:00:06Z')
+        source_health.record(self.store, self.scope, 'fixture', status='unavailable', reason_code='provider_transient',
+                             observed_at='2026-09-27T12:00:02Z')
+        self.assertEqual(self.fetch("SELECT next_allowed_at=%s::timestamptz FROM public.pr_trend_source_health WHERE scope_key=%s",
+                                    ('2026-09-27T12:15:00Z', self.scope))[0], True)
+        # Half-open after the cooldown: one in-flight probe blocks any further slot.
+        self.planner.clock = lambda: '2026-09-27T12:16:00Z'
+        second = self.probe('probe-2')
+        with self.assertRaisesRegex(ValueError, 'source_probe_in_flight'):
+            self.plan()
+        # A failed probe in a later cooldown window escalates 15m -> 1h.
+        with self.connect() as db:
+            db.execute("UPDATE public.pr_trend_jobs SET due_at=due_at-interval '20 minutes' WHERE scope_key=%s AND state='failed_terminal'", (self.scope,))
+        with self.assertLogs('postriff.trends', level='WARNING'):
+            fail_attempt(self.store, self.start(second), status=400, dispatched=True, proven_unbilled=True,
+                         now='2026-09-27T12:00:03Z')
+        self.assertEqual(self.health_row(), ('unavailable', 'provider_request_terminal', 3600))
+        # Only a committed batch clears the breaker and resets escalation.
+        third = self.start(self.probe('probe-3'))
+        with self.store.transaction() as cur:
+            self.jobs.complete_batch(third, partition_key=self.partition, expected_generation=0,
+                batch_key=digest([third['job_id'], third['lease_generation']]), observations=[],
+                cursor_value={}, coverage_state='partial', actual_micro_usd=0, cursor=cur)
+            source_health.record(self.store, self.scope, 'fixture', status='partial', reason_code='bounded_sample',
+                                 observed_at='2026-09-27T12:00:04Z', clear_pause=True, cursor=cur)
+        self.assertEqual(self.health_row(), ('partial', 'bounded_sample', None))
+        with self.assertLogs('postriff.trends', level='WARNING'):
+            fail_attempt(self.store, self.start(self.probe('probe-4')), status=400, dispatched=True,
+                         proven_unbilled=True, now='2026-09-27T12:00:05Z')
+        self.assertEqual(self.health_row(), ('unavailable', 'provider_request_terminal', 900))
 
     def test_unknown_cost_committed_batch_cannot_trigger_additional_paid_replay(self):
         event = self.commit_quarantine(actual=None)
