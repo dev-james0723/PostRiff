@@ -17,20 +17,23 @@
 
 **CI.** The release also carries #155, which pins the `document-runtime` builder and Lambda images by digest. That change affects CI only.
 
-## Known-good production before this release
+## Known-good production before this release (re-observed 2026-10-15)
 
 | | |
 |---|---|
-| Deployment | `dpl_4mAFnvUjrhzZVcYNir4TMXxvfHCH` (Vercel project `postriff-phase2-private`, target production, `isRollbackCandidate: true`) |
-| Source | `de4e5907281e13638654bc027c7d22006ca715c1` (merge of #138) |
-| Observed | 2026-10-10 ~00:00Z: `https://rafii.io/api/health` → `sourceRevision=de4e5907…`; `www.rafii.io` 308 → `rafii.io` |
-| Projection baseline | 2026-10-10 00:16:26Z refresh:<br>• facebook ok/read_verified 1<br>• instagram ok/publish_verified 1<br>• instagram ok/read_verified 1<br>• linkedin blocked/reauthorization_required 2<br>• youtube expired/token_expired 1 |
+| Deployment | `dpl_F43BZHmsguya3y8umoPMxMcqTtHK` (Vercel project `postriff-phase2-private`, target production, READY, `isRollbackCandidate: true`) |
+| Source | `8df7afeaef7f6cc0c1f082db6671b5d1e633b64e` (merge of #199) |
+| Observed | 2026-10-15: `https://rafii.io/api/health` reported `sourceRevision=8df7afea…` |
+| Projection baseline | 2026-10-15 23:49:25Z refresh:<br>• facebook ok/read_verified 1<br>• instagram ok/publish_verified 1<br>• instagram ok/read_verified 1<br>• linkedin blocked/reauthorization_required 2<br>• linkedin ok/publish_verified 1<br>• telegram ok/read_verified 1<br>• x expired/token_expired 1<br>• youtube expired/token_expired 1 |
+| Vault | 1 active YouTube credential with a retained refresh grant and `refresh_supported=false` (`client_binding_missing`); 1 revoked |
+
+The earlier target `dpl_4mAFnvUjrhzZVcYNir4TMXxvfHCH` (de4e5907, 2026-10-10) is superseded. Rolling back to it would also remove everything merged since.
 
 ## Rollback steps
 
-1. **Instant rollback (preferred).** Roll production back to `dpl_4mAFnvUjrhzZVcYNir4TMXxvfHCH`, using the Vercel dashboard "Instant Rollback" or `vercel rollback dpl_4mAFnvUjrhzZVcYNir4TMXxvfHCH`.
+1. **Instant rollback (preferred).** Roll production back to `dpl_F43BZHmsguya3y8umoPMxMcqTtHK`, using the Vercel dashboard "Instant Rollback" or `vercel rollback dpl_F43BZHmsguya3y8umoPMxMcqTtHK`.
    - This re-points `rafii.io` and `www.rafii.io` to the previous build. Nothing is rebuilt.
-   - Verify that `https://rafii.io/api/health` reports `sourceRevision=de4e5907…`.
+   - Verify that `https://rafii.io/api/health` reports `sourceRevision=8df7afea…`.
    - Note: after an instant rollback, Vercel stops auto-assigning production domains to new Git deployments until a deployment is promoted again.
 2. **Durable revert.** Revert the merge commit on `consumer-saas` in a PR. Its Git production deployment then replaces the rolled-back state.
 3. **Projection catch-up.** The next hourly `connection_health` run (within one hour) rewrites `public.pr_connection_health` with the old classification.

@@ -144,3 +144,32 @@ At 87d82bd3, agent-ui-browser failed once with WebKit "Target page, context or b
 
 Recorded in RELEASE-GATE-MATRIX.json (`G-PROD-*`) when it happens.
 
+
+## 10. Re-reconciliation on 2026-10-15
+
+The release didn't happen on 2026-10-10. The session resumed on 2026-10-15, and by then the base had moved by 231 commits.
+
+**Base and production**
+- `origin/consumer-saas` is now `8df7afea` (#199).
+- Production `dpl_F43BZHmsguya3y8umoPMxMcqTtHK` serves `sourceRevision=8df7afea`.
+
+**Re-merge (`6975fe6d`)**
+- Conflicts were only additive: `slices.py` and `secret-allowlist.json`, with both sides kept.
+- `channels.py` upstream only added the `ATTENTION_STATES` constant. `connection_state` is unchanged.
+- The new customer `connection_health.py` is a separate, flag-gated feature.
+- The PR diff against the new base is exactly the PR's 21 files.
+
+**Digests**
+- Both ECR tags had moved, so the pins were refreshed deliberately in #155 (`345cfe26`) and merged in at `6ec23315`.
+- Accepted in run 38828192471, job 116740509646.
+
+**CI on merge candidate `6ec23315`**
+- All workflows pass: runs listed under `G-CI-MERGE-CANDIDATE` in RELEASE-GATE-MATRIX.json.
+- Library Chromium+WebKit job 116740509416 passes without #161.
+
+**Production baseline (23:49:25Z refresh)**
+- YouTube is still `expired/token_expired`.
+- The vault still holds the one `client_binding_missing` credential.
+
+**Library repair**
+- #161 is still open as a draft for the Library owner. It isn't bundled.
