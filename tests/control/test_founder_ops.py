@@ -714,6 +714,73 @@ class StageTests(unittest.TestCase):
             ('w3', 'c-unverified', 'identity'): ('mastodon', 'unknown', 'blocked', 'identity_known')})
         self.assertEqual(rows[('w1', 'c-ok', 'identity')][8], now - 100)
 
+    def test_projection_overlays_youtube_vault_facts_like_the_channels_card(self):
+        """An expired hourly access token with a working refresh grant is a connected channel, not an expired one; a retained
+        but disabled refresh grant needs new consent (client_binding_missing -> blocked). Without vault facts nothing changes."""
+        from postriff_phase2.channels import connection_state
+        now = NOW_EPOCH
+        channels = [('w1', 'yt-refresh', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w1', 'yt-binding', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w2', 'yt-none', 'YouTube', True, False, True, True, now - 60, 3, False, None),
+                    ('w2', 'li', 'LinkedIn', True, False, True, True, now - 60, 3, False, None)]
+        status = {('w1', 'yt-refresh'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': now - 60, 'revoked': False},
+                  ('w1', 'yt-binding'): {'refreshSupported': False, 'refreshBindingRequired': True, 'accessTokenExpiresAt': now - 60, 'revoked': False}}
+        rows = ops.project_connections(channels, {}, now, connection_state, status)
+        got = {key[1]: (row[5], row[6]) for key, row in rows.items()}
+        self.assertEqual(got, {'yt-refresh': ('ok', 'read_verified'), 'yt-binding': ('blocked', 'reauthorization_required'),
+                               'yt-none': ('expired', 'token_expired'), 'li': ('expired', 'token_expired')})
+        revoked = ops.project_connections([('w3', 'yt-revoked', 'YouTube', True, False, True, True, now + 3600, 3, False, None)], {}, now, connection_state,
+                                          {('w3', 'yt-revoked'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': now + 3600, 'revoked': True}})
+        self.assertEqual([(r[5], r[6]) for r in revoked.values()], [('blocked', 'reauthorization_required')], 'a vault-revoked grant needs reauthorization')
+        soon = now + 2 * 86400
+        near = ops.project_connections([('w4', 'yt-r', 'YouTube', True, False, True, True, soon, 3, False, None),
+                                        ('w4', 'yt-n', 'YouTube', True, False, True, True, now + 30 * 86400, 3, False, None)], {}, now, connection_state,
+                                       {('w4', 'yt-r'): {'refreshSupported': True, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False},
+                                        ('w4', 'yt-n'): {'refreshSupported': False, 'refreshBindingRequired': False, 'accessTokenExpiresAt': soon, 'revoked': False}})
+        self.assertEqual({k[1]: (r[5], r[7]) for k, r in near.items()}, {'yt-r': ('ok', None), 'yt-n': ('expiring', soon)},
+                         'refreshable grants never read expiring and store no grant deadline; a non-refreshable one uses the vault deadline')
+        legacy = ops.project_connections(channels, {}, now, connection_state)
+        self.assertEqual({key[1]: row[5] for key, row in legacy.items()}, {'yt-refresh': 'expired', 'yt-binding': 'expired', 'yt-none': 'expired', 'li': 'expired'})
+
+    def test_every_stored_connection_state_satisfies_the_060_check(self):
+        """public.pr_connection_health.connection_state has a CHECK list (060). Every state the Channels card can classify must be
+        stored inside it, or the single multi-row upsert fails and the hourly refresh aborts for every customer."""
+        import inspect
+        import pathlib
+        import re as _re
+        from postriff_phase2.channels import connection_state
+        sql = (pathlib.Path(__file__).resolve().parents[2] / 'migrations/postriff/060_founder_reliability.sql').read_text()
+        allowed = set(_re.findall(r"'([a-z_]+)'", _re.search(r'connection_state text not null check \(connection_state in \(([^)]*)\)\)', sql).group(1)))
+        self.assertEqual(set(ops.STORED_CONNECTION_STATES), allowed)
+        returned = {name for line in inspect.getsource(connection_state).splitlines() if 'return' in line for name in _re.findall(r'"([a-z_]+)"', line)}
+        self.assertIn('client_binding_missing', returned)
+        for raw in returned - {'disconnected'}:
+            self.assertIn(ops.STORED_AS.get(raw, raw), allowed, raw)
+            self.assertIn(raw, set(ops.HEALTH) | {'read_verified', 'publish_verified'}, f'{raw} has an explicit health mapping')
+
+    def test_youtube_overlay_failure_never_aborts_the_refresh(self):
+        """The optional vault overlay runs in a savepoint: a privilege error rolls back to it and the refresh still commits
+        with the plain channel classification; on success the overlay reaches the projection."""
+        now = local_epoch('2026-10-01T08:05:30')
+        wid = '11111111-1111-1111-1111-111111111111'
+        channels = [(wid, 'yt', 'YouTube', True, False, True, True, now - 60, 3, False, None)]
+        script = [('max(refreshed_at)', [(None,)]), ('pg_try_advisory_xact_lock', [(True,)]), ('FROM public.pr_workspaces w CROSS JOIN LATERAL', channels),
+                  ('FROM public.pr_encrypted_credentials', [(wid, 'yt', True, True, now - 60, False)])]
+        tables = {'public.pr_connection_health', 'public.pr_encrypted_credentials'}
+        failing = ScriptedDB(script, tables=tables, fail=('FROM public.pr_encrypted_credentials', psycopg.errors.InsufficientPrivilege('denied')))
+        result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: failing), {}, now)
+        self.assertEqual((result['status'], result['rows'], failing.commits), ('ok', 1, 1))
+        self.assertTrue(any(sql == 'ROLLBACK TO SAVEPOINT youtube_overlay' for sql, _ in failing.statements))
+        self.assertEqual(result['youtubeOverlay'], 'unavailable', 'the fallback is reported, not silent')
+        upsert = next(params for sql, params in failing.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
+        self.assertEqual(upsert[6], ['expired'], 'without vault facts the classification is the previous one')
+        working = ScriptedDB(script, tables=tables)
+        ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: working), {}, now)
+        upsert = next(params for sql, params in working.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
+        self.assertEqual((upsert[6], upsert[7]), (['ok'], ['read_verified']), 'a refreshable YouTube grant is not an expired connection')
+        self.assertTrue(any(sql == 'RELEASE SAVEPOINT youtube_overlay' for sql, _ in working.statements))
+        self.assertEqual(ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: ScriptedDB(script, tables=tables)), {}, now)['youtubeOverlay'], 'applied')
+
     def test_connection_health_refreshes_hourly_and_removes_vanished_connections(self):
         now = local_epoch('2026-10-01T08:05:30')
         channels = [('11111111-1111-1111-1111-111111111111', 'c-ok', 'LinkedIn', True, False, True, True, now + 30 * 86400, 2, True, now - 100)]
@@ -724,7 +791,7 @@ class StageTests(unittest.TestCase):
                               tables={'public.pr_connection_health', 'public.pr_channel_capabilities'}, deleted=2)
         fresh = db()
         result = ops.connection_health_stage(None, types.SimpleNamespace(connection_factory=lambda: fresh), {}, now)
-        self.assertEqual(result, {'status': 'ok', 'connections': 1, 'rows': 1, 'removed': 2, 'truncated': False})
+        self.assertEqual(result, {'status': 'ok', 'connections': 1, 'rows': 1, 'removed': 2, 'truncated': False, 'youtubeOverlay': 'not_needed'})
         sql, params = next((sql, params) for sql, params in fresh.statements if sql.startswith('INSERT INTO public.pr_connection_health'))
         self.assertEqual(params[0], now)
         self.assertEqual([column[0] for column in params[1:]], ['11111111-1111-1111-1111-111111111111', 'c-ok', 'publish', 'linkedin', 'Direct', 'ok', 'publish_verified',

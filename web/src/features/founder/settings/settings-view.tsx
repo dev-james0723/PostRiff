@@ -14,6 +14,7 @@ import { NotificationsTab } from './notifications-tab';
 import { OpsWorkspacePanel } from './ops-workspace-panel';
 import { ReportsTab } from './reports-tab';
 import { ReadinessPanel } from './readiness-panel';
+import { ConnectionsAttentionPanel } from './connections-attention-panel';
 import { FounderPolicyForm } from './founder-policy-form';
 
 /**
@@ -82,6 +83,7 @@ export function SettingsView() {
           </Panel>
           <OpsWorkspacePanel />
           <ReadinessPanel />
+          <ConnectionsAttentionPanel />
         </TabsContent>
         <TabsContent value='reports' className='pt-4'>
           <ReportsTab />
