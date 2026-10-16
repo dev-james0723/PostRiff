@@ -519,7 +519,20 @@ class RecoveryApprovalGuards(unittest.TestCase):
         worker = PostgresWorker.__new__(PostgresWorker)
         worker.clock = lambda: 1000
         worker.commands = SimpleNamespace(engine=SimpleNamespace(current=lambda *_: True, channel_state=lambda *_: 'Ready for posting'))
-        cur = SimpleNamespace(execute=lambda *_: None, fetchone=lambda: ('owner', True))
+        from postriff_phase2 import security_holds
+        from postriff_phase2.coworker import flags
+        saved, installed = flags._values, dict(security_holds._INSTALLED)
+        self.addCleanup(flags.attach, saved)
+        self.addCleanup(security_holds._INSTALLED.update, installed)
+        flags.attach({})
+        security_holds._INSTALLED.update(readable=False, checked=float('-inf'))
+        # The RAPv2 approver hold check runs first: the controls table exists and the owner has no hold row.
+        rows = {"SELECT CASE WHEN to_regclass('public.pr_security_account_controls')": (True,),
+                'SELECT hold_active FROM public.pr_security_account_controls': None,
+                'SELECT m.role,m.can_publish': ('owner', True)}
+        last = []
+        cur = SimpleNamespace(execute=lambda sql, *_: last.append(next(rows[key] for key in rows if sql.startswith(key))),
+                              fetchone=lambda: last[-1])
         state = {'phase2': {'channels': [{'id': 'conn'}]}}
         manifest = {'platform': 'YouTube', 'channelId': 'conn', 'actor': 'owner', 'expiresAt': 999}
         job = {'manifest': manifest, 'approvedBy': 'owner', 'approvalDigest': digest(manifest)}
