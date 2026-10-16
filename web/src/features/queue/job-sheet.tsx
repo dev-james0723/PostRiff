@@ -1,5 +1,6 @@
 'use client';
 import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
+import { BlueskyManifestDetails } from './bluesky-manifest-details';
 
 import { PublicationReceipt } from './publication-receipt';
 
@@ -101,6 +102,7 @@ function Approved({ job, jobs }: { job: QueueJob; jobs: QueueJob[] }) {
       <div className='flex flex-col gap-4'>
         <ManifestPreview manifest={manifest} scale={0.6} />
         <YouTubeManifestDetails manifest={manifest} />
+        <BlueskyManifestDetails manifest={manifest} />
         <dl className='flex flex-col'>
           <Row label='Time'>
             <span title={`${manifest.timing.local.replace('T', ' ')} (${manifest.timing.timeZone})`}>{manifest.platform === 'YouTube' && manifest.publishOptions?.publicationMode === 'now' ? 'After upload and verified processing' : formatDateTime(epochOf(manifest.timing.utc))}</span>

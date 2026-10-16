@@ -371,6 +371,7 @@ export function createApi(getToken: TokenSource) {
     channelDestinations: (w: string, id: string) =>
       get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
     /** TikTok's current creator settings, read fresh each time the composer shows them. */
+    blueskyProfile: (w: string, id: string) => get<import('@/lib/channels/bluesky-profile').BlueskyProfileResponse>(`${ws(w)}/channels/${encodeURIComponent(id)}/bluesky-profile`),
     creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>
       send<{ connectionId: string; destinationId: string }>('POST', `${ws(w)}/channels/${encodeURIComponent(id)}/destination`, { destinationId }),

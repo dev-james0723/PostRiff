@@ -45,6 +45,7 @@ import { formatDate, relativeTime } from '@/lib/time';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { cn } from '@/lib/utils';
 import { CapabilityChips } from './capability-chips';
+import { BlueskyProfileSheet } from './bluesky-profile-sheet';
 import { ChannelHistorySheet } from './channel-history-sheet';
 import { HistoryImportControl } from './history-import-control';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
@@ -231,6 +232,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
   const [verifying, setVerifying] = useState(false);
   const [probing, setProbing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [verifyOutcome, flashVerifyOutcome] = useFlash<{ state: 'success' | 'error'; label: string }>();
 
   const held = activity?.held ?? 0;
@@ -444,6 +446,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
             Run analytics test
           </StatefulButton>
         )}
+        {canManage && !disconnected && channel.platform === 'Bluesky' && <Button variant='quiet' className={CONTROL_44} onClick={() => setProfileOpen(true)}>Public profile</Button>}
         <HistoryImportControl channel={channel} provider={provider} canManage={canManage} />
         {canManage && !disconnected && (
           <StatefulButton
@@ -470,6 +473,7 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
         {canManage && !disconnected && <DisconnectButton platform={channel.platform} account={channel.account} disabled={busy} onConfirm={disconnect} />}
         {canManage && channel.platform.toLowerCase() === 'youtube' && <GoogleAuthorizationControl disabled={busy} />}
       </div>
+      {canManage && !disconnected && channel.platform === 'Bluesky' && <BlueskyProfileSheet connectionId={channel.id} open={profileOpen} onOpenChange={setProfileOpen} />}
       <ChannelHistorySheet channel={channel} open={historyOpen} onOpenChange={setHistoryOpen} />
     </Surface>
   );

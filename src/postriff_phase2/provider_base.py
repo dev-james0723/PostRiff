@@ -110,6 +110,10 @@ class OAuthProvider:
     def capability_scopes(self, capability):
         return list(self.SCOPES.get(capability, []))
 
+    def grants_capability(self, capability, granted):
+        required = set(self.capability_scopes(capability))
+        return bool(required) and required <= set(granted or [])
+
     def explain(self, capability):
         return self.EXPLAIN.get(capability, "Rafii will act on this account only when you approve an exact action.")
 

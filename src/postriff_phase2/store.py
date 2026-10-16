@@ -98,7 +98,7 @@ class Phase2Store(Store):
         A worker must refresh and verify this exact vault grant before applying
         channel_state and the immutable approval checks again.
         """
-        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') == 'YouTube'
+        return bool(getattr(self, 'hosted_entitlements', False) and c.get('platform') in ('YouTube', 'Bluesky')
                     and c.get('configured') and not c.get('revoked')
                     and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
                     and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
@@ -419,6 +419,11 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
+        if 'images' in p:
+            from .bluesky_media import approved_images
+            if c['platform'] != 'Bluesky' or p.get('assetId'):
+                raise AlphaError("Multiple image selection is available for Bluesky; choose one media input.", 400)
+            media = approved_images(data['assets'], p['images'], p.get('rightsConfirmed'))
         if p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
@@ -439,6 +444,9 @@ class Phase2Store(Store):
                     raise AlphaError("This post needs a verified video.", 409)
                 if not asset_kinds.is_postable_image(a) or not p.get("rightsConfirmed") or not clean(p.get("alt", ""), 1000):
                     raise AlphaError("Decoded media, alt text and rights confirmation are required.")
+                if c['platform'] == 'Bluesky':
+                    from .bluesky_media import approved_images
+                    approved_images(data['assets'], [{'assetId': a['id'], 'alt': p.get('alt')}], p.get('rightsConfirmed'))
                 if c["platform"] == "Instagram" and not 0.8 <= a["width"]/a["height"] <= 1.91:
                     raise AlphaError("Instagram images must have an aspect ratio between 4:5 and 1.91:1.")
                 media = [{key: a[key] for key in ("id", "hash", "sourceHash", "mime", "bytes", "width", "height", "duration")}
