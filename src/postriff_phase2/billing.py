@@ -16,7 +16,7 @@ from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .credit_meter import POLICY_VERSION
 from .credit_wallet import CreditBook, project_credit_wallet
-from .developer_usage import ai_usage_exempt
+from .developer_usage import ai_usage_exempt, workspace_plan_exempt
 
 USD = 1_000_000  # micro-dollars
 
@@ -154,7 +154,10 @@ class Ledger:
         cur.execute("SELECT plan_terms_id,writing_batches_remaining,media_credits_remaining,connected_accounts,members,storage_mb,extract(epoch from resets_at),source,version FROM public.pr_entitlements WHERE workspace_id=%s FOR UPDATE", (workspace_id,))
         row = cur.fetchone()
         if row:
-            return {"planTermsId": row[0], "writingBatchesRemaining": row[1], "mediaCreditsRemaining": row[2], "connectedAccounts": row[3], "members": row[4], "storageMb": row[5], "resetsAt": float(row[6]) if row[6] else None, "source": row[7], "version": row[8]}
+            entitlement = {"planTermsId": row[0], "writingBatchesRemaining": row[1], "mediaCreditsRemaining": row[2], "connectedAccounts": row[3], "members": row[4], "storageMb": row[5], "resetsAt": float(row[6]) if row[6] else None, "source": row[7], "version": row[8]}
+            if workspace_plan_exempt(cur, workspace_id):
+                entitlement.update(source="founder", unlimited=True)
+            return entitlement
         # First use: derive from the trial terms (the only entitlement a workspace has before a live subscription).
         cur.execute("SELECT id,entitlements FROM public.pr_plan_terms WHERE plan='trial' ORDER BY version DESC LIMIT 1")
         terms_id, ent = cur.fetchone()
@@ -182,10 +185,11 @@ class Ledger:
             if (existing[2] or {}).get("fingerprint") != fingerprint:
                 raise AlphaError("This usage key belongs to a different operation.", 409)
             return {"reservationId": existing[1] or existing[0], "duplicate": True}
+        founder_unlimited = bool(not ops and workspace_plan_exempt(cur, workspace_id))
         policy = active_budget_policy() if estimated_usd_micro > 0 and not ops else None
         if estimated_usd_micro > 0 and ai_paused():
             raise AlphaError("AI requests that cost money are paused by the operator. Nothing was sent or charged; drafts, edits and publishing still work.", 503)
-        exempt = ai_usage_exempt(member_id)
+        exempt = ai_usage_exempt(member_id) or founder_unlimited
         limits, founder_spend = None, None
         if ops:
             # Re-read under the workspace lock: a concurrent settings change
@@ -203,18 +207,19 @@ class Ledger:
             raise AlphaError(f"This request could cost up to US${estimated_usd_micro / USD:.2f} of provider time, over the US${policy['requestMax'] / USD:.2f} "
                              "limit for one request. Nothing was sent; select fewer sources, a lighter model or quicker reasoning.", 402)
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
-        if not ops and not exempt and self.credits is None and (charge_batch or estimated_usd_micro > 0):
+        plan_unlimited = entitlement.get("unlimited") is True
+        if not ops and not exempt and not plan_unlimited and self.credits is None and (charge_batch or estimated_usd_micro > 0):
             cur.execute("SELECT entitlements->>'creditPolicy' FROM public.pr_plan_terms WHERE id=%s", (entitlement["planTermsId"],))
             plan_policy = cur.fetchone()
             if plan_policy and plan_policy[0]:
                 raise AlphaError("Credit billing is paused; no provider request was made.", 503)
-        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if not ops and not exempt and self.credits and (charge_batch or estimated_usd_micro > 0) else None
-        if credit or exempt or ops: charge_batch = False
+        credit = self.credits.prepare(cur, workspace_id, member_id, estimated_usd_micro, model, provider, credit_authority) if not ops and not exempt and not plan_unlimited and self.credits and (charge_batch or estimated_usd_micro > 0) else None
+        if credit or exempt or ops or plan_unlimited: charge_batch = False
         cur.execute("SELECT count(*) FROM public.pr_usage_ledger r WHERE r.workspace_id=%s AND r.kind='reserve' AND r.charge_batch AND NOT EXISTS (SELECT 1 FROM public.pr_usage_ledger s WHERE s.workspace_id=r.workspace_id AND s.reservation_id=r.id AND s.cost_state IN ('actual','released'))", (workspace_id,))
         pending_batches = cur.fetchone()[0]
-        if charge_batch and entitlement["writingBatchesRemaining"] <= pending_batches:
+        if not plan_unlimited and charge_batch and entitlement["writingBatchesRemaining"] <= pending_batches:
             raise AlphaError("No writing allowance left in this plan. Drafts, exports and reviews remain available; overage is not charged silently.", 402)
-        if not ops and not exempt and not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
+        if not ops and not exempt and not plan_unlimited and not credit and dimension == "image_generation" and entitlement["mediaCreditsRemaining"] <= 0:
             raise AlphaError("No media credits left in this plan.", 402)
         if not ops and policy and member_id and not exempt:
             used = self._person_day(cur, member_id)
@@ -345,7 +350,7 @@ class Ledger:
     def usage_view(self, cur, workspace_id, member_id=None):
         entitlement = self.ensure_entitlement(cur, workspace_id, None)
         credits = None
-        if not ai_usage_exempt(member_id) and self.credits and self.credits.policy(cur, workspace_id):
+        if not entitlement.get("unlimited") and not ai_usage_exempt(member_id) and self.credits and self.credits.policy(cur, workspace_id):
             wallet = self.credits.view(cur, workspace_id)
             credits = {k:v for k,v in wallet.items() if k != "lots"}
             credits.update(mode="credits", quoteType="spending_limit", textOnly=True)
@@ -359,7 +364,7 @@ class Ledger:
         return {
             "entitlement": entitlement,
             "credits": credits,
-            "aiUsageExempt": ai_usage_exempt(member_id),
+            "aiUsageExempt": ai_usage_exempt(member_id) or entitlement.get("unlimited") is True,
             "subscription": None if not sub else {"planTermsId": sub[0], "provider": sub[1], "status": sub[2], "currentPeriodEnd": float(sub[3]) if sub[3] else None, "cancelAtPeriodEnd": sub[4], "graceUntil": float(sub[5]) if sub[5] else None, "plan": sub[6], "label": plan_display_label(sub[7]), "priceCents": sub[8], "currency": sub[9], "priceStatus": sub[10], "termsVersion": sub[11], "live": sub[1] != "fixture"},
             "budget": None if ws_budget is None else {"windowKind": ws_budget["windowKind"], "spentUsdMicro": ws_budget["spent"], "reservedUsdMicro": ws_budget["reserved"], "warnUsdMicro": ws_budget["warn"], "stopUsdMicro": ws_budget["stop"], "status": ws_budget["status"]},
             "overage": "stop",
@@ -677,7 +682,7 @@ def require_plan_capacity(cur, workspace_id, dimension, connection_id=None):
 
 
 def require_publishing(cur, workspace_id, now):
-    if ops_metadata(cur, workspace_id):
+    if ops_metadata(cur, workspace_id) or workspace_plan_exempt(cur, workspace_id):
         return
     if not Billing().lifecycle(cur, workspace_id, now).get("canPublish", False):
         raise AlphaError("Publishing is paused because this trial or subscription has ended. Drafts and exports remain available.", 402, code="publishing_plan_inactive")
