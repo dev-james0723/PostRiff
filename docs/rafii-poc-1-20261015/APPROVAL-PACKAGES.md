@@ -1,6 +1,6 @@
 # Rafii POC-1 — open gates and precise approval packages
 
-State: **CANDIDATE ONLY**. AP-1 executed; AP-2 decided on James's delegation; AP-4 parameters decided, awaiting yes. Each package is independent; approving one does not
+State: **CANDIDATE ONLY**. AP-1 executed; AP-2 decided on James's delegation; AP-4 executed (production env + same-commit redeploy); founder publication pending. Each package is independent; approving one does not
 approve another.
 
 ## AP-1 Commit and open a draft PR (no merge, no deploy) — APPROVED by James 2026-10-15, executed
@@ -26,7 +26,17 @@ approve another.
   No takeover was attempted; the canonical checkout and its dirty files were not touched.
 - Decision needed only if the candidate must live under the canonical root: coordinate with that session's owner.
 
-## AP-4 POC-2: one native read-only check on a real, already-authorized account — PARAMETERS DECIDED, needs James's yes
+## AP-4 POC-2: one native read-only check on a real, already-authorized account — APPROVED by James 2026-10-15, executed
+**Receipt (2026-10-16 UTC):**
+- **Env vars.** `POSTRIFF_METRIC_READS` and `POSTRIFF_METRIC_WORKSPACE_ALLOWLIST` (Production only, type Secret) were updated through `vercel env update`, to `1` and to the founder workspace UUID only.
+  Both variables already existed, created about 4 October; their previous secret values could not be read.
+- **Redeploy.** The production deployment `dpl_Em37A47dpiKuqxk9BQagi729zgpY` (commit `8df7afea`, PR #199 merge) was redeployed as `dpl_F43BZHmsguya3y8umoPMxMcqTtHK`. It is READY and serves rafii.io and www.rafii.io.
+- **Health check.** `/`, `/api/health` and `/api/catalog` all returned 200, and `sourceRevision` is `8df7afea`.
+- **Scheduler check.** `metric_reads.tick` logs every minute on the new deployment (status ok, nothing due yet), with no error or fatal logs in the first 10 minutes.
+- **Not changed.** No PR #201 code, no migration, no OAuth, scope or token refresh.
+- **Rollback.** Redeploy `dpl_Em37A47dpiKuqxk9BQagi729zgpY` for the previous build and env snapshot, or unset both variables and redeploy.
+  Because the previous secret values were unknown, this rollback restores the build but not those exact values.
+
 Preflight done read-only (see POC2-PREFLIGHT.md): the only eligible account is the founder's own Instagram (valid grant
 with insights scopes, analytics Direct); it has 0 Rafii-verified posts and production has never run a scheduled read,
 so the question cannot be answered from stored data.

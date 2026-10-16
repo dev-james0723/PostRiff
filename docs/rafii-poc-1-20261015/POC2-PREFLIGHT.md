@@ -22,7 +22,8 @@ This preflight used **read-only** SQL aggregates on the production and staging d
 The question **cannot be answered from stored data**. Two independent facts block it:
 
 1. **No Rafii-verified posts on the account.** Scheduled 24h reads are created only when Rafii verifies a publication (`on_post_verified`). The account has never had one, so no 24h reading can exist.
-2. **No scheduled reads have ever run in production.** None has ever been recorded for any workspace. Metric-read admission is evidently not active for this workspace in production.
+2. ~~**No scheduled reads have ever run in production.** Metric-read admission is evidently not active for this workspace.~~
+   **Corrected during AP-4 execution, same day.** Admission *was* active. Production logs show `metric_reads.tick` every minute; `POSTRIFF_METRIC_READS` and `POSTRIFF_METRIC_WORKSPACE_ALLOWLIST` have existed in Production since about 4 October; and the 8 October Growth/Trends launch record calls the founder's *second* workspace the "non-allowlisted" one. Scheduled reads simply never had a verified Rafii post to read. This is the same blocker that launch record logged as P1-6, "One publish-linked Instagram proof post".
 
 **Positive evidence.** On 2026-10-04 the platform returned all six native metrics for this account, under the current definition. This shows that the fields exist. It does not show that values are comparable at a fixed age.
 
@@ -34,7 +35,7 @@ Answer POC-2 with three steps, in order:
 2. **James publishes.** James publishes 3 ordinary Instagram posts through Rafii's existing review and approval, as normal use. Claude never publishes.
 3. **Read-only check.** After 24–27 hours, run the read-only qualification query below.
 
-That path needs one production configuration change, and that change needs a **redeploy**. AP-4 asks for both.
+AP-4 was approved and executed (receipt in APPROVAL-PACKAGES.md). It sets the allowlist to exactly the founder workspace and redeploys the same production commit, so admission is now guaranteed rather than inferred.
 
 ## Read-only qualification query (to run after the readings exist)
 Same window rule as POC-1:
