@@ -19,6 +19,7 @@
 --
 -- Rollback, in one transaction:
 --   drop trigger rapv2_contact_change on auth.users;
+--   drop function postriff_private.rapv2_install_contact_change_trigger();
 --   drop function postriff_private.rapv2_record_contact_change();
 --   restore public.pr_security_purge exactly as migration 122 defines it;
 --   drop table public.pr_security_contact_changes;
@@ -69,9 +70,22 @@ begin
   return new;
 end $$;
 revoke all on function postriff_private.rapv2_record_contact_change() from public, anon, authenticated, service_role;
-drop trigger if exists rapv2_contact_change on auth.users;
-create trigger rapv2_contact_change after update of email on auth.users
-  for each row execute function postriff_private.rapv2_record_contact_change();
+
+-- Installs the trigger where auth.users has its email column (always, on Supabase). The disposable test harness's
+-- auth.users stub has only `id`; its check adds the column and calls this again.
+create or replace function postriff_private.rapv2_install_contact_change_trigger() returns boolean
+language plpgsql set search_path = '' as $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'auth' and table_name = 'users' and column_name = 'email') then
+    return false;
+  end if;
+  drop trigger if exists rapv2_contact_change on auth.users;
+  create trigger rapv2_contact_change after update of email on auth.users
+    for each row execute function postriff_private.rapv2_record_contact_change();
+  return true;
+end $$;
+revoke all on function postriff_private.rapv2_install_contact_change_trigger() from public, anon, authenticated, service_role;
+select postriff_private.rapv2_install_contact_change_trigger();
 
 create or replace function public.pr_security_purge(p_user uuid) returns void
 language plpgsql security definer set search_path = '' as $$

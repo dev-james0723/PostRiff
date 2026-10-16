@@ -2023,7 +2023,8 @@ def confirm_screen_contract():
     p1(mode="enforce")
     user, workspace = person()
     _, _, _, session = browse(user)
-    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta) VALUES(%s,'mfa.disabled','','{}')", user)
+    # Two minutes ago: a proof made before the factor was removed is void, so the fresh one below must be later.
+    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta,at) VALUES(%s,'mfa.disabled','','{}',now()-interval '2 minutes')", user)
     status, body = call("GET", f"/api/workspaces/{workspace}", token(user, session), headers=SAME_ORIGIN)
     assert status == 403 and body.get("code") == "security_step_up_required", (status, body)
     assert body.get("nextAction") in ("complete_mfa", "enroll_mfa") and body["security"]["riskLevel"] == "high", body
@@ -2033,7 +2034,8 @@ def confirm_screen_contract():
         assert body.get("nextAction") == "complete_mfa", body
         # A fresh second factor from this session opens the workspace again.
         fresh = token(user, session, aal="aal2", amr=amr("totp"))
-        assert call("GET", f"/api/workspaces/{workspace}", fresh, headers=SAME_ORIGIN)[0] == 200
+        opened = call("GET", f"/api/workspaces/{workspace}", fresh, headers=SAME_ORIGIN)
+        assert opened[0] == 200, opened
     finally:
         FACTORS.discard(user)
 
@@ -2113,6 +2115,9 @@ def previous_address_notices():
     transport = Transport()
     decision_flags(RAFII_NOTIFICATIONS_V2_ENABLED="1")
     _, notifications = v2_service(transport)
+    # The harness auth.users stub has only `id`: add Supabase's email column and install migration 128's trigger.
+    sql("ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text")
+    assert sql("SELECT postriff_private.rapv2_install_contact_change_trigger()")[0][0] is True
     user, _ = person()
     current = f"{user[:8]}@example.invalid"
     sql("UPDATE auth.users SET email=%s WHERE id=%s", f"Old-{user[:8]}@example.invalid", user)

@@ -51,9 +51,6 @@ class LegacyMailPostgresTests(unittest.TestCase):
             db.execute('DELETE FROM public.pr_transactional_mail WHERE user_id=%s', (self.user,))
             db.execute("DELETE FROM public.pr_notification_provider_events WHERE event_id LIKE 'legacy-%%' OR event_id LIKE 'synthetic-legacy-%%'")
             if self.added_email: db.execute('ALTER TABLE auth.users DROP COLUMN email')
-            # The harness stub keeps the column (RAPv2 migration 128's trigger): clear this test's address so the next
-            # test's lookup by address finds only its own user.
-            else: db.execute('UPDATE auth.users SET email=NULL WHERE id=%s', (self.user,))
         from control.test_founder_ops_workspace import OpsWorkspacePostgresTests
         OpsWorkspacePostgresTests.tearDown(self)
 
