@@ -1,0 +1,8 @@
+{"base":"5f93f37519e13c1ef4ffe2629576156b588875ed","patchSha256":"85415a3cf029b5d11104c7747edae98f7f0a80f2301c34a0bd9ea60dc80c27ac","worktree":"/Users/ouxianxing/Documents/.agent-worktrees/rafii-poc1-candidate-20261015","branch":"claude/rafii-poc1-candidate-20261015",
+ "run1":{"runId":"vp5kcw6596","exitCode":0,"url":"https://depot.dev/orgs/jf34f85hr0/workflows/vp5kcw6596","elapsedSeconds":281.593,
+   "stages":"targeted unit 92 OK; PG postgres_rafii_poc1/channels/growth_loop/growth_metric_reads exit 0; full Python discovery 5244 OK (378 skipped, 1 expected failure)"},
+ "run2":{"runId":"n0cd7hj8n5","exitCode":0,"url":"https://depot.dev/orgs/jf34f85hr0/workflows/n0cd7hj8n5","elapsedSeconds":546.15,
+   "stages":"every tests/phase2/postgres_*.py group: 133 results, 0 failed"},
+ "cost":{"estimateUsd":0.33,"basis":"(281.6 s + 546.2 s) x USD 0.024/min published depot-ubuntu-24.04-8 rate; elapsed includes queueing, so this is an upper-bound estimate; provider invoice not read","capUsd":10},
+ "gates":["POC-2 native read-only check on a real authorized Instagram/Threads account (AP-4)","ordinary-user (non-developer) behaviour","platform app review / approval status (recorded as unknown)","on-screen report UI and real PDF print (AP-5)","stored-observation purge/retention after disconnect (existing history_import purge not exercised)","commit/PR/merge/deploy and flag enablement (AP-1)","PR #126/#142 integration ownership (AP-2)","independent Codex review (AP-6, not run: paid LLM excluded)"],
+ "rollback":"Keep RAFII_REVIEW_SNAPSHOTS_ENABLED off (default); revert the metric_schedule window-bound and attach_draft hunks if unwanted; no migration; raw observations never rewritten; discard the uncommitted worktree changes to remove the candidate."}

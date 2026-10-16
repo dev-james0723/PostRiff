@@ -186,6 +186,57 @@ def planning_context(state, slot, now=None):
             "approvedStrategyPreferences": preferences[:5], "constraints": "Recipe goals and user constraints win. Review and Queue approval remain required."}
 
 
+MAX_DRAFTS = 20
+
+
+def _text_digest(variant):
+    return hashlib.sha256(json.dumps([variant.get("text") or "", variant.get("language")], ensure_ascii=False).encode()).hexdigest()
+
+
+def attach_draft(state, experiment, payload, actor, now):
+    """Link an existing versioned draft (a Composer/Ideas variant) to an accepted experiment. Nothing is generated,
+    reviewed, approved, scheduled or published here; the draft keeps its own review and approval lifecycle, and a
+    later edit makes this link stale instead of following the new text."""
+    if experiment["status"] not in ("preparing", "running"):
+        raise AlphaError("Accept and prepare the experiment before attaching a draft.", 409)
+    variant = next((v for v in state.get("variants") or [] if isinstance(v, dict) and v.get("id") == payload.get("variantId")), None)
+    if variant is None:
+        raise AlphaError("Draft not found in this workspace.", 404)
+    if type(payload.get("variantRevision")) is not int or payload["variantRevision"] != variant.get("revision"):
+        raise AlphaError("This draft changed. Review its current revision before attaching it.", 409)
+    if variant.get("rejected"):
+        raise AlphaError("A rejected draft cannot be attached.", 409)
+    cohort = experiment.get("cohort") or {}
+    from .. import locales
+    if (str(variant.get("platform", "")).lower() != cohort.get("provider")
+            or (locales.canonical(variant.get("language")) or variant.get("language")) != cohort.get("language")):
+        raise AlphaError("Attach a draft for the experiment's platform and language.", 409)
+    bindings = experiment.setdefault("draftBindings", [])
+    existing = next((b for b in bindings if b["variantId"] == variant["id"] and b["revision"] == variant["revision"]), None)
+    if existing:
+        return existing
+    if len(bindings) >= MAX_DRAFTS:
+        raise AlphaError("This experiment already has the maximum number of attached drafts.", 409)
+    binding = {"variantId": variant["id"], "revision": variant["revision"], "textDigest": _text_digest(variant),
+               "attachedAt": now, "attachedBy": actor, "reviewSnapshot": copy.deepcopy(experiment.get("reviewSnapshot")),
+               "takeawayId": experiment.get("takeawayId")}
+    bindings.append(binding)
+    if variant["id"] not in experiment["generatedVariantIds"]:
+        experiment["generatedVariantIds"].append(variant["id"])
+    return binding
+
+
+def draft_state(state, experiment):
+    variants = {v.get("id"): v for v in state.get("variants") or [] if isinstance(v, dict)}
+    out = []
+    for b in experiment.get("draftBindings") or []:
+        v = variants.get(b["variantId"])
+        status = ("removed" if v is None else "current" if v.get("revision") == b["revision"] and _text_digest(v) == b["textDigest"]
+                  else "revision_changed")
+        out.append({"variantId": b["variantId"], "revision": b["revision"], "state": status})
+    return out
+
+
 def transition(experiment, target, actor, now):
     if target == experiment["status"]:
         return experiment
@@ -286,8 +337,10 @@ class GrowthLoop:
         from .service import _event
         _event(cur, workspace_id, principal, event, {"recordId": record_id}, f"{event}:{record_id}:{principal}")
 
-    def _save(self, workspace_id, token, mutate, event, record_id):
+    def _save(self, workspace_id, token, mutate, event, record_id, *, check=None):
         def after(cur, state, principal):
+            if check:
+                check(cur, state, principal)
             actual_event = event
             if event == "growth_experiment.completed":
                 experiment = next(e for e in view(state)["experiments"] if e["id"] == record_id)
@@ -307,7 +360,8 @@ class GrowthLoop:
             goals = [goal_progress(g, posts, state, now) for g in view(state)["goals"]]
             weekly = weekly_operator.view(state)
             return {"goal": next((g for g in goals if g["status"] == "active"), goals[-1] if goals else None), "goals": goals,
-                    "experiments": view(state)["experiments"], "proofs": view(state)["proofs"],
+                    "experiments": [{**e, "draftState": draft_state(state, e)} if e.get("draftBindings") else e for e in view(state)["experiments"]],
+                    "proofs": view(state)["proofs"],
                     "weekly": {"activeRecipes": sum(r.get("status") == "active" for r in weekly["recipes"]),
                                "nextAction": "Review the weekly plan" if weekly["weeks"] else "Set up Weekly Operator", "href": "/app/weekly"},
                     "metricOptions": GOAL_METRICS}
@@ -330,16 +384,56 @@ class GrowthLoop:
             return goal
         return self._save(workspace_id, token, change, "growth_goal.status_changed", record_id)
 
+    def _review_binding(self, cur, workspace_id, state, actor, payload, h):
+        """POC-1: a proposal made from a saved weekly report must still match that report. The report must pass its
+        current-rights and integrity checks, today's projection of its fixed scope must equal the evidence it froze,
+        the takeaway must be in it and point at this hypothesis, and the hypothesis must still qualify. None when the
+        proposal names no report (the existing Performance path)."""
+        ref = payload.get("reviewSnapshot")
+        if ref is None:
+            return None
+        from . import review
+        self.service._require(review.FLAG)
+        if (not isinstance(ref, dict) or set(ref) != {"snapshotId", "version", "takeawayId"} or not isinstance(ref["snapshotId"], str)
+                or type(ref["version"]) is not int or not isinstance(ref["takeawayId"], str)):
+            raise AlphaError("Name the saved report version and the takeaway this test comes from.", 400)
+        service = self.service.review
+        snapshot = service.stored_snapshot(state, ref["snapshotId"], ref["version"])
+        service._snapshot_current(cur, workspace_id, state, actor, snapshot)
+        projection = service._project(cur, workspace_id, state, actor, review.context_input(snapshot["resolvedContext"]))
+        if projection["contextDigest"] != snapshot["contextDigest"] or projection["basisDigest"] != snapshot["basisDigest"]:
+            raise AlphaError("The evidence in this report changed. Save a new report version before proposing a test.", 409)
+        takeaway = next((t for t in snapshot["takeaways"] if t["id"] == ref["takeawayId"]), None)
+        if takeaway is None or (takeaway.get("nextStep") or {}).get("hypothesisId") != payload.get("hypothesisId"):
+            raise AlphaError("This takeaway does not propose that test.", 409)
+        candidate = {"cohort": h[1], "metric": h[2], "dimension": h[3], "sample_a": h[10], "sample_b": h[11],
+                     "evidence_ids": h[8], "counter_evidence_ids": h[9], "expiresAt": float(h[7])}
+        if not review.review_hypothesis_eligible(state, projection, candidate, self.service.clock()):
+            raise AlphaError("This hypothesis lacks five qualified posts per arm in the report's scope.", 409)
+        return {"reviewScope": review.context_input(snapshot["resolvedContext"]), "reviewContextDigest": snapshot["contextDigest"],
+                "reviewBasisDigest": snapshot["basisDigest"],
+                "reviewSnapshot": {"snapshotId": snapshot["snapshotId"], "version": snapshot["version"], "payloadDigest": snapshot["payloadDigest"]},
+                "takeawayId": takeaway["id"]}
+
+    def _review_current(self, cur, workspace_id, state, actor, experiment):
+        """The bound report evidence and current rights still hold for an experiment proposed from a report."""
+        if not experiment.get("reviewScope"):
+            return
+        projection = self.service.review._project(cur, workspace_id, state, actor, experiment["reviewScope"])
+        if projection["contextDigest"] != experiment["reviewContextDigest"] or projection["basisDigest"] != experiment["reviewBasisDigest"]:
+            raise AlphaError("The bound review evidence is no longer current. Review a new proposal.", 409)
+
     def propose(self, workspace_id, token, payload):
         request_key = key(payload)
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             from ..permissions import require
             require(self.service.hosted.ideas._member(row), "owner")
-            cur.execute("""SELECT revision,cohort,metric,dimension,arm_a,arm_b,statement,extract(epoch from expires_at),evidence_ids,counter_evidence_ids
+            cur.execute("""SELECT revision,cohort,metric,dimension,arm_a,arm_b,statement,extract(epoch from expires_at),evidence_ids,counter_evidence_ids,sample_a,sample_b
                            FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND id::text=%s AND causal=false AND status IN ('candidate','experiment','supported')""", (workspace_id, str(payload.get("hypothesisId") or "")))
             h = cur.fetchone()
             if h is None:
                 raise AlphaError("An eligible hypothesis is required in this workspace.", 404)
+            binding = self._review_binding(cur, workspace_id, self.service.hosted.ideas._state(row), principal, payload, h)
         now = self.service.clock()
         if float(h[7]) <= now:
             raise AlphaError("This hypothesis has expired. Collect fresh evidence first.", 409)
@@ -354,7 +448,8 @@ class GrowthLoop:
         def change(state, actor):
             existing = next((e for e in view(state)["experiments"] if e["id"] == record_id), None)
             if existing:
-                if existing["hypothesisId"] != payload["hypothesisId"] or existing["minimumPerArm"] != minimum or existing["windowDays"] != days:
+                if (existing["hypothesisId"] != payload["hypothesisId"] or existing["minimumPerArm"] != minimum or existing["windowDays"] != days
+                        or existing.get("reviewSnapshot") != (binding or {}).get("reviewSnapshot") or existing.get("takeawayId") != (binding or {}).get("takeawayId")):
                     raise AlphaError("This request key belongs to another experiment design.", 409)
                 return existing
             if len(root(state)["experiments"]) >= 80:
@@ -366,9 +461,19 @@ class GrowthLoop:
                     "generatedVariantIds": [], "publishingJobIds": [], "result": None, "causal": False, "limitations": list(LIMITATIONS),
                     "history": [{"status": "candidate", "at": now, "actor": actor}]}
             transition(item, "proposed", actor, now)
+            if binding:
+                item.update(copy.deepcopy(binding))
             root(state)["experiments"].append(item)
             return item
-        return self._save(workspace_id, token, change, "growth_experiment.proposed", record_id)
+        def recheck(cur, state, actor):
+            if binding:
+                self._review_binding(cur, workspace_id, state, actor, payload, h)
+                cur.execute("SELECT revision,status,extract(epoch from expires_at) FROM public.pr_strategy_hypotheses WHERE workspace_id=%s AND id::text=%s FOR SHARE",
+                            (workspace_id, payload["hypothesisId"]))
+                current = cur.fetchone()
+                if not current or current[0] != h[0] or current[1] not in ("candidate", "experiment", "supported") or float(current[2]) <= self.service.clock():
+                    raise AlphaError("The source hypothesis changed during proposal.", 409)
+        return self._save(workspace_id, token, change, "growth_experiment.proposed", record_id, check=recheck)
 
     def experiment_action(self, workspace_id, token, record_id, payload):
         action = payload.get("action")
@@ -404,6 +509,8 @@ class GrowthLoop:
                 if action == "apply" and (not experiment["result"].get("supportedFactor") or experiment["expiresAt"] <= now):
                     raise AlphaError("An inconclusive or expired result cannot become a planning preference.", 409)
                 experiment.update({"decision": {"apply": "applied", "keep": "hypothesis_only", "reject_result": "rejected", "revoke": "revoked"}[action], "decidedBy": actor, "decidedAt": now})
+            elif action == "attach_draft":
+                attach_draft(state, experiment, payload, actor, now)
             elif action == "not_now":
                 if experiment["status"] != "proposed":
                     raise AlphaError("Only a proposed experiment can be deferred.", 409)
@@ -419,8 +526,13 @@ class GrowthLoop:
                 raise AlphaError("Choose a supported experiment action.", 400)
             experiment["updatedAt"] = now
             return experiment
-        event = "growth_experiment." + {"start": "started", "measure": "completed", "apply": "applied", "dismiss": "dismissed"}.get(action, str(action))
-        return self._save(workspace_id, token, change, event, record_id)
+        event = "growth_experiment." + {"start": "started", "measure": "completed", "apply": "applied", "dismiss": "dismissed",
+                                        "attach_draft": "draft_attached"}.get(action, str(action))
+        def recheck(cur, state, actor):
+            experiment = next(e for e in view(state)["experiments"] if e["id"] == record_id)
+            if action in ("accept", "prepare", "start", "attach_draft", "measure", "apply"):
+                self._review_current(cur, workspace_id, state, actor, experiment)
+        return self._save(workspace_id, token, change, event, record_id, check=recheck)
 
     def generate_proof(self, workspace_id, token, frequency="weekly"):
         if frequency not in ("weekly", "monthly"):

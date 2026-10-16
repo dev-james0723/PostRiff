@@ -64,6 +64,8 @@ class CoworkerService:
             engine.trend_bindings_current = lambda state, bindings: queue_bindings_current(hosted.connection_factory, state, bindings, self.clock())
         from .growth_loop import GrowthLoop
         self.growth_loop = GrowthLoop(self)
+        from .review import ReviewService
+        self.review = ReviewService(self)
 
     # --- plumbing ----------------------------------------------------------------------------------------------------------
     @property
