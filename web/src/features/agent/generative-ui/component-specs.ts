@@ -19,7 +19,7 @@ import { markReactive, tagSchemaId } from '@openuidev/lang-core';
 import { z } from 'zod';
 
 /** Bumped when a component is added, removed or changes props; libraryHash is the exact identity. */
-export const LIBRARY_VERSION = 'rafii-components/1.0.0';
+export const LIBRARY_VERSION = 'rafii-components/1.1.0';
 export const ROOT_COMPONENT = 'RafiiRoot';
 
 /** OpenUI builtins and reserved calls (lang-core 0.3.2 BUILTINS + ACTION_NAMES + Query/Mutation). Never a component name. */
@@ -59,7 +59,7 @@ export interface JourneySpecModule {
   consumer: { specs: readonly RafiiComponentSpec[]; groups: readonly RafiiGroupSpec[] };
   founder: { specs: readonly RafiiComponentSpec[]; groups: readonly RafiiGroupSpec[] };
   /** Component groups (C's ids and E's ids) each journey prompt includes, in heading order. */
-  journeys: Readonly<Partial<Record<'J01' | 'J02' | 'J03' | 'J04' | 'J05' | 'J06' | 'J07' | 'J08' | 'J09', readonly string[]>>>;
+  journeys: Readonly<Partial<Record<'J01' | 'J02' | 'J03' | 'J04' | 'J05' | 'J06' | 'J07' | 'J08' | 'J09' | 'J10', readonly string[]>>>;
 }
 
 function spec(definition: RafiiComponentSpec): RafiiComponentSpec {
@@ -352,6 +352,59 @@ const Button = spec({
     variant: z.enum(['primary', 'secondary', 'quiet']).optional(),
   }),
 });
+// --- interactive tools (J10): purely local inputs and computed readouts ------------------------------------------------
+// Values live in this view's $variables only. Nothing here reads workspace data, calls the network or changes saved data;
+// a Readout re-evaluates its expression whenever a bound $variable changes (no model call, no request).
+const NumberField = spec({
+  name: 'NumberField',
+  description:
+    'A labelled number input. Bind value to a $variable declared with a starting number (for example $bill = 120) and use it in Readout expressions. min, max and step limit what can be entered; unit is a short suffix such as "kg" or "%".',
+  props: z.object({
+    name: z.string(),
+    label: shortText(),
+    value: bindable(z.number().optional()),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    step: z.number().optional(),
+    unit: z.string().optional(),
+  }),
+  fieldNameProp: 'name',
+});
+const Slider = spec({
+  name: 'Slider',
+  description:
+    'A labelled slider between min and max (step defaults to 1). Bind value to a $variable declared with a starting number; moving it updates every Readout that uses the $variable. unit is a short suffix such as "%" or "years".',
+  props: z.object({
+    name: z.string(),
+    label: shortText(),
+    min: z.number(),
+    max: z.number(),
+    value: bindable(z.number().optional()),
+    step: z.number().optional(),
+    unit: z.string().optional(),
+  }),
+  fieldNameProp: 'name',
+});
+const Toggle = spec({
+  name: 'Toggle',
+  description:
+    'A labelled on/off switch. Bind value to a $variable declared true or false and use it in a ternary, for example $roundUp ? @Ceil($share) : $share.',
+  props: z.object({ name: z.string(), label: shortText(), value: bindable(z.boolean().optional()) }),
+  fieldNameProp: 'name',
+});
+const Readout = spec({
+  name: 'Readout',
+  description:
+    'Shows one value computed from $variables with + - * / and ternaries, for example ($bill * (1 + $tip / 100)) / $people. format: number | currency (with a 3-letter currency code) | percent (a ratio: 0.15 shows 15%). A value that cannot be computed shows "—".',
+  props: z.object({
+    label: shortText(),
+    value: z.union([z.number(), z.string()]),
+    format: z.enum(['number', 'currency', 'percent']).optional(),
+    unit: z.string().optional(),
+    currency: z.string().optional(),
+  }),
+});
+
 const ActionButton = spec({
   name: 'ActionButton',
   description:
@@ -371,6 +424,7 @@ export const PRIMITIVE_SPECS: readonly RafiiComponentSpec[] = [
   ToolBoundTable, ToolBoundChart, Metric, Timeline, Comparison, TaskStatus, EvidenceLink,
   SelectionList, AssetPreview,
   Form, TextField, Select, DateRange, Button,
+  NumberField, Slider, Toggle, Readout,
   ActionButton,
 ];
 
@@ -399,6 +453,20 @@ export const PRIMITIVE_GROUPS: readonly RafiiGroupSpec[] = [
     notes: ['Inputs only change this view. Bind them to $variables and use those in Query arguments.'],
   },
   {
+    id: 'tool_inputs',
+    name: 'Tool inputs',
+    components: ['NumberField', 'Slider', 'Toggle'],
+    notes: ['Declare each input’s $variable with a sensible starting value from the request, for example $people = 4. Inputs only change this view.'],
+  },
+  {
+    id: 'tool_readouts',
+    name: 'Computed readouts',
+    components: ['Readout'],
+    notes: [
+      'A Readout value is an expression over $variables (+ - * /, comparisons, ternaries, @Round, @Ceil, @Floor). Guard a division with a ternary, for example $people > 0 ? $total / $people : null.',
+    ],
+  },
+  {
     id: 'actions',
     name: 'Registered actions',
     components: ['ActionButton'],
@@ -409,9 +477,15 @@ export const PRIMITIVE_GROUPS: readonly RafiiGroupSpec[] = [
 /** Groups every consumer journey prompt starts from; E's journey groups are appended per journey. */
 export const CORE_GROUP_IDS: readonly string[] = ['layout', 'states', 'data', 'selection', 'inputs', 'actions'];
 
+/**
+ * The interactive-tool journey (J10) composes local inputs and computed readouts only: no bound data, no selection of
+ * records and no registered actions. The server also refuses any Query, @Run or action id in a J10 program (localOnly policy).
+ */
+export const TOOL_CORE_GROUP_IDS: readonly string[] = ['layout', 'states', 'inputs', 'tool_inputs', 'tool_readouts'];
+
 /** The founder library is read-only in this release: no form submission and no registered actions (D-A22). */
 export const FOUNDER_PRIMITIVE_NAMES: readonly string[] = PRIMITIVE_SPECS.map((s) => s.name).filter(
-  (name) => !['ActionButton', 'Form', 'AssetPreview'].includes(name),
+  (name) => !['ActionButton', 'Form', 'AssetPreview', 'NumberField', 'Slider', 'Toggle', 'Readout'].includes(name),
 );
 export const FOUNDER_CORE_GROUP_IDS: readonly string[] = ['layout', 'states', 'data', 'selection', 'inputs'];
 

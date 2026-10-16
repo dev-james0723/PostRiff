@@ -2,7 +2,7 @@
   "contractVersion": "rafii-genui/1",
   "language": "openui-lang",
   "languageVersion": "0.3.2",
-  "libraryVersion": "rafii-components/1.0.0",
+  "libraryVersion": "rafii-components/1.1.0",
   "packages": {
     "@openuidev/lang-core": "0.3.2",
     "@openuidev/react-lang": "0.3.2"
@@ -12,8 +12,10 @@
   "libraries": {
     "consumer": {
       "id": "rafii-consumer",
-      "libraryHash": "bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48",
-      "compatibleLibraryHashes": [],
+      "libraryHash": "98384bd606f7359636de453596f799fcfe9ae318d4d015036258f60ffe3edccf",
+      "compatibleLibraryHashes": [
+        "bd5dfc59920f00b7694ff230ee4dbfb375a01bbf2750329fe314aabd47991b48"
+      ],
       "root": "RafiiRoot",
       "components": [
         "RafiiRoot",
@@ -43,6 +45,10 @@
         "Select",
         "DateRange",
         "Button",
+        "NumberField",
+        "Slider",
+        "Toggle",
+        "Readout",
         "ActionButton",
         "Commentary",
         "TaskProgress",
@@ -127,6 +133,14 @@
           "Select",
           "DateRange",
           "Button"
+        ],
+        "tool_inputs": [
+          "NumberField",
+          "Slider",
+          "Toggle"
+        ],
+        "tool_readouts": [
+          "Readout"
         ],
         "actions": [
           "ActionButton"
@@ -217,6 +231,9 @@
         "TextField": "name",
         "Select": "name",
         "DateRange": "name",
+        "NumberField": "name",
+        "Slider": "name",
+        "Toggle": "name",
         "DraftEditor": "name",
         "VoiceSampleImport": "name",
         "CampaignBriefForm": "name",
@@ -427,6 +444,10 @@
         "Select": [],
         "DateRange": [],
         "Button": [],
+        "NumberField": [],
+        "Slider": [],
+        "Toggle": [],
+        "Readout": [],
         "ActionButton": [],
         "Commentary": [],
         "TaskProgress": [],
@@ -773,12 +794,22 @@
         "inputs",
         "founder"
       ]
+    },
+    "J10": {
+      "library": "consumer",
+      "groups": [
+        "layout",
+        "states",
+        "inputs",
+        "tool_inputs",
+        "tool_readouts"
+      ]
     }
   },
   "prompts": {
     "consumer:all:generate": {
       "file": "prompts/consumer-all-generate.txt",
-      "promptHash": "4f9267ceff3817a1971f8b98d61950bf0a2fea5422ea869604c12efc2edfcd9d",
+      "promptHash": "131f2c1846dfabfb2dc82d2d299780721e7877bb3283f2e846ea080d9685b8fe",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -807,6 +838,10 @@
         "Select",
         "DateRange",
         "Button",
+        "NumberField",
+        "Slider",
+        "Toggle",
+        "Readout",
         "ActionButton",
         "Commentary",
         "TaskProgress",
@@ -857,7 +892,7 @@
     },
     "consumer:all:patch": {
       "file": "prompts/consumer-all-patch.txt",
-      "promptHash": "5c9063a8d5b7d41a82604901f8b1c4f447e282df8d3594b0ac45a830d8c1150b",
+      "promptHash": "325d99d45bc51e82820fbbc818b6d57e5ed3872cbe5f91e1ab86a1d5f5bbeb05",
       "components": [
         "RafiiRoot",
         "Stack",
@@ -886,6 +921,10 @@
         "Select",
         "DateRange",
         "Button",
+        "NumberField",
+        "Slider",
+        "Toggle",
+        "Readout",
         "ActionButton",
         "Commentary",
         "TaskProgress",
@@ -1608,6 +1647,62 @@
         "QueueStatus",
         "ProposalList",
         "TaskProgress"
+      ]
+    },
+    "consumer:J10:generate": {
+      "file": "prompts/consumer-J10-generate.txt",
+      "promptHash": "1f021608b5e69f940437c648abbdedc1ed83c237fb599cfbf81b72bf8ca22522",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "NumberField",
+        "Slider",
+        "Toggle",
+        "Readout"
+      ]
+    },
+    "consumer:J10:patch": {
+      "file": "prompts/consumer-J10-patch.txt",
+      "promptHash": "3cc1e8a032d28f95b096fdf1b521b010a105a76d487bb5ebc51e28620b0a399d",
+      "components": [
+        "RafiiRoot",
+        "Stack",
+        "Grid",
+        "Section",
+        "Card",
+        "Tabs",
+        "TabItem",
+        "Accordion",
+        "AccordionItem",
+        "Text",
+        "EmptyState",
+        "LoadingState",
+        "ErrorState",
+        "Form",
+        "TextField",
+        "Select",
+        "DateRange",
+        "Button",
+        "NumberField",
+        "Slider",
+        "Toggle",
+        "Readout"
       ]
     },
     "founder:all:generate": {

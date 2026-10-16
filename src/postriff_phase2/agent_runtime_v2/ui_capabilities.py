@@ -110,7 +110,11 @@ def tool_ok(name: str | None, *, scope: str, effect: str) -> bool:
 def _journeys(projection: dict, scope: str) -> list[str]:
     allowed = ui_contracts.FOUNDER_JOURNEYS if scope == "founder" else ui_contracts.CONSUMER_JOURNEYS
     raw = projection.get("journey_ids") or projection.get("journeyIds") or []
-    return [j for j in dict.fromkeys(raw) if j in allowed]
+    journeys = [j for j in dict.fromkeys(raw) if j in allowed]
+    if len(journeys) > 1:
+        # J10 (interactive tool) is never combined with a data journey: its manifest is always empty (no queries, no actions).
+        journeys = [j for j in journeys if j not in ui_contracts.TOOL_JOURNEYS]
+    return journeys
 
 
 def build_manifest(cur, auth, projection, *, scope='workspace', flags=None):

@@ -335,6 +335,10 @@ class AllowlistTest(unittest.TestCase):
     def test_every_consumer_journey_has_reads_and_the_catalog_is_complete(self):
         catalog = ui_domain.catalog()
         for journey in ui_contracts.JOURNEYS:
+            if journey in ui_contracts.TOOL_JOURNEYS:
+                # J10 interactive tools read nothing and change nothing.
+                self.assertEqual((catalog["journeys"][journey]["queries"], catalog["journeys"][journey]["actions"]), ([], []), journey)
+                continue
             self.assertTrue(catalog["journeys"][journey]["queries"], journey)
             for entry in catalog["journeys"][journey]["queries"]:
                 self.assertEqual(set(entry), {"name", "argsSchema", "dataShape"})

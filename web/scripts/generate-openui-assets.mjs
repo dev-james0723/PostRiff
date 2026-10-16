@@ -7,14 +7,14 @@
  *
  * Inputs (single source): web/src/features/agent/generative-ui/component-specs.ts + library-registry.ts (+ lane E's
  * journey specs through core/journey-module.ts), core/prompt-text.ts, and lane E's journey examples under
- * src/postriff_phase2/agent_runtime_v2/generated/journey-examples/: full programs <J0x>-*.openui (generate prompts) and
- * edits/<J0x>-*.patch.openui with their base named in journeys.json (patch prompts). Every example is checked by the
+ * src/postriff_phase2/agent_runtime_v2/generated/journey-examples/: full programs <Jxx>-*.openui (generate prompts) and
+ * edits/<Jxx>-*.patch.openui with their base named in journeys.json (patch prompts). Every example is checked by the
  * same trusted validator the presenter's output goes through; upstream prompt lines that contradict Rafii's grounding
  * rules are replaced (core/prompt-text.ts PROMPT_REWRITES) and a missing anchor fails the run.
  *
  * Outputs:
  *   src/postriff_phase2/agent_runtime_v2/generated/openui-assets.json
- *   src/postriff_phase2/agent_runtime_v2/generated/prompts/<library>-<J0x|all>-<generate|patch>.txt
+ *   src/postriff_phase2/agent_runtime_v2/generated/prompts/<library>-<Jxx|all>-<generate|patch>.txt
  *   src/postriff_phase2/agent_runtime_v2/generated/<library>.schema.json
  *   web/src/features/agent/generative-ui/generated/{openui-assets.json,<library>.schema.json}   (browser copy)
  *
@@ -79,12 +79,14 @@ const contracts = load(path.join(SRC, 'lib/agent-runtime/ui-contracts.ts'));
 const validator = load(path.join(SRC, 'lib/agent-runtime/ui-parser/index.ts'));
 const langCore = requireWeb('@openuidev/lang-core');
 
-/** Full-program journey examples: journey-examples/<J0x>-<name>.openui (subfolders such as edits/ and pending/ are not programs). */
+/** Full-program journey examples: journey-examples/<Jxx>-<name>.openui (subfolders such as edits/ and pending/ are not programs). */
+const JOURNEY_FILE = /^(J0[1-9]|J10)-[A-Za-z0-9_-]+\.openui$/;
+const EDIT_FILE = /^(J0[1-9]|J10)-[A-Za-z0-9_-]+\.patch\.openui$/;
 function journeyExamples() {
   const byJourney = {};
   if (!existsSync(EXAMPLES_DIR)) return byJourney;
   for (const name of readdirSync(EXAMPLES_DIR).sort()) {
-    const match = /^(J0[1-9])-[A-Za-z0-9_-]+\.openui$/.exec(name);
+    const match = JOURNEY_FILE.exec(name);
     if (!match || !statSync(path.join(EXAMPLES_DIR, name)).isFile()) continue;
     (byJourney[match[1]] ??= []).push({ name, source: readFileSync(path.join(EXAMPLES_DIR, name), 'utf8').trim() });
   }
@@ -113,7 +115,7 @@ function journeyEdits(problems) {
     visit(JSON.parse(readFileSync(catalog, 'utf8')));
   }
   for (const name of readdirSync(dir).sort()) {
-    const match = /^(J0[1-9])-[A-Za-z0-9_-]+\.patch\.openui$/.exec(name);
+    const match = EDIT_FILE.exec(name);
     if (!match) continue;
     const base = bases.get(name);
     if (!base || !existsSync(path.join(EXAMPLES_DIR, base))) {
@@ -152,10 +154,11 @@ function namesUsed(libraryName, source) {
 
 /**
  * An example goes through the same trusted validator the presenter's output does (generate mode, or patch mode on its
- * base), with a policy of this journey's components and the binding names the example itself uses.
+ * base), with a policy of this journey's components and the binding names the example itself uses. A tool journey (J10)
+ * is validated local-only, exactly as the presenter's J10 output is (no Query, @Run or action id).
  */
-function exampleProblems(libraryName, allowed, source, base = null) {
-  const used = namesUsed(libraryName, base ? `${base}\n${source}` : source);
+function exampleProblems(libraryName, allowed, source, base = null, localOnly = false) {
+  const used = localOnly ? { reads: [], actions: [] } : namesUsed(libraryName, base ? `${base}\n${source}` : source);
   const result = validator.validateAndMergeUi({
     v: 'v1',
     contractVersion: contracts.CONTRACT_VERSION,
@@ -163,16 +166,23 @@ function exampleProblems(libraryName, allowed, source, base = null) {
     baseSource: base,
     candidateSource: source,
     libraryHash: validator.validatorLibrary(libraryName).libraryHash,
-    policy: { rootName: 'RafiiRoot', allowedComponents: [...allowed], readBindings: used.reads, actionIds: used.actions, founder: libraryName === 'founder' },
+    policy: {
+      rootName: 'RafiiRoot',
+      allowedComponents: [...allowed],
+      readBindings: used.reads,
+      actionIds: used.actions,
+      founder: libraryName === 'founder',
+      ...(localOnly ? { localOnly: true } : {}),
+    },
     scope: { workspaceId: 'assets', artifactId: 'assets', attemptId: 'assets' },
   });
   return result.accepted ? [] : result.errors;
 }
 
 /** Replace upstream prompt lines that contradict Rafii grounding; a missing anchor is a problem (package drift). */
-function rewritePrompt(text, label, problems) {
+function rewritePrompt(text, label, problems, rewrites = prompts.PROMPT_REWRITES) {
   let out = text;
-  for (const { find, replace } of prompts.PROMPT_REWRITES) {
+  for (const { find, replace } of rewrites) {
     if (!out.includes(find)) {
       problems.push(`prompt_anchor_missing:${label}:${find.slice(0, 40)}`);
       continue;
@@ -235,7 +245,9 @@ function build() {
     journeys[journey] = { library: entry.library, groups: [...entry.groups] };
   }
 
-  const preambleFor = (mode) => (mode === 'patch' ? `${prompts.PRESENTER_PREAMBLE}\n${prompts.PATCH_RULES.join('\n')}` : prompts.PRESENTER_PREAMBLE);
+  const preambleFor = (mode, journey) =>
+    mode === 'patch' ? `${prompts.preambleFor(journey)}\n${prompts.PATCH_RULES.join('\n')}` : prompts.preambleFor(journey);
+  const toolJourney = (journey) => contracts.TOOL_JOURNEYS.includes(journey);
   const targets = [];
   for (const name of ['consumer', 'founder']) {
     const ids = contracts.JOURNEYS.filter((j) => journeys[j].library === name);
@@ -254,12 +266,12 @@ function build() {
     const editTexts = [];
     for (const journey of target.journeysCovered) {
       for (const example of examples[journey] ?? []) {
-        const issues = exampleProblems(target.library, allowed, example.source);
+        const issues = exampleProblems(target.library, allowed, example.source, null, toolJourney(journey));
         if (issues.length) problems.push(`example:${example.name}:${issues.slice(0, 5).join(',')}`);
         exampleTexts.push(example.source);
       }
       for (const edit of edits[journey] ?? []) {
-        const issues = exampleProblems(target.library, allowed, edit.patch, edit.base);
+        const issues = exampleProblems(target.library, allowed, edit.patch, edit.base, toolJourney(journey));
         if (issues.length) problems.push(`edit:${edit.name}:${issues.slice(0, 5).join(',')}`);
         editTexts.push(edit.patch);
       }
@@ -288,12 +300,12 @@ function build() {
           toolCalls: false,
           bindings: true,
           editMode: mode === 'patch',
-          preamble: preambleFor(mode),
+          preamble: preambleFor(mode, target.journey),
           examples: shown,
-          additionalRules: prompts.rulesFor(target.library),
+          additionalRules: prompts.rulesFor(target.library, target.journey),
         },
       });
-      const rewritten = rewritePrompt(generated, label, problems);
+      const rewritten = rewritePrompt(generated, label, problems, prompts.rewritesFor(target.journey));
       const text = rewritten.endsWith('\n') ? rewritten : `${rewritten}\n`;
       if (/mock data/i.test(text)) problems.push(`prompt_mock_data:${label}`);
       if (/\bMutation\(/.test(text.replace(/Never write Mutation/g, ''))) problems.push(`prompt_mutation_section:${label}`);
