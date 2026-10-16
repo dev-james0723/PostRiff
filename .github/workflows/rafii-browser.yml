@@ -120,6 +120,8 @@ jobs:
         run: node web/tests/rafii-attachments.cjs
       - name: Theme bars (header and phone tab bar match light and dark under any stored theme)
         run: node web/tests/rafii-theme-bars.cjs
+      - name: RAPv2 Security Center, Chromium (sign-in method, browser count, 375px, keyboard, axe, reduced motion, revoke-others count, not-me preview, 503 state)
+        run: node web/tests/rapv2-security-center-browser.cjs --browser=chromium --out=docs/rapv2/evidence/security-center-chromium
       - name: UI simplification (first-run empty states own one action; shared connection status words)
         run: node web/tests/ui-simplification-browser.cjs
       - name: Home with a synthetic API (composer, Writing Voice, Automations link, suggestions)
@@ -213,6 +215,7 @@ jobs:
             docs/design/rafii-v9/evidence/workflow/
             docs/design/rafii-v9/evidence/attachments/
             docs/design/rafii-v9/evidence/theme-bars/
+            docs/rapv2/evidence/security-center-chromium/
             docs/design/site-agent/evidence/ci-browser-chromium/
             docs/design/site-agent/evidence/ci-browser-webkit/
             docs/design/rafii-live-agent/evidence/ci-startup/
