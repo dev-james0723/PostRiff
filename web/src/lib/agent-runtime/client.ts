@@ -3,6 +3,7 @@
  * the app's request-guard header on every call; errors become `ApiError` with the server's message. No OpenAI credential
  * ever exists in the browser: Voice Mode sends its WebRTC offer to Rafii's server, which creates the GPT-Live session.
  */
+import type { LensPreview } from '@/features/site-agent/context-lens/model';
 import { APP_GUARD_HEADER, ApiError, type TokenSource } from '@/lib/api/client';
 import type { AgentActiveRun, AgentRunEvents, AgentStatus, AgentTurnRequest, AgentTurnResponse, ConversationState, DecideResponse, VoiceSessionStart } from './types';
 
@@ -65,6 +66,8 @@ export function createAgentApi(getToken: TokenSource) {
       post<DecideResponse>(`${base(w)}/approvals/decide`, body),
     attach: (w: string, body: { conversationId: string; data?: string; assetId?: string }) =>
       post<{ assetId: string; index: number | null; href: string }>(`${base(w)}/attachments`, body),
+    /** Context Lens preview: what the next typed message would use (only when the lens is on for this workspace). */
+    contextLens: (w: string, body: Record<string, unknown>, signal?: AbortSignal) => post<LensPreview>(`${base(w)}/context-lens`, body, signal),
     voiceStart: (w: string, body: { sdp: string; conversationId?: string | null; locale?: string; voice?: string }) =>
       post<VoiceSessionStart>(`${base(w)}/voice/sessions`, body),
     voiceTranscript: (w: string, voiceSessionId: string, turns: { role: 'user' | 'assistant'; text: string; startMs?: number }[]) =>

@@ -38,4 +38,36 @@ class LibraryStorageTests(unittest.TestCase):
  def test_invalid_file_object_name_fails_closed(self):
   s,_=self.make([])
   with self.assertRaises(Exception):s.object_info(WS,"file","../evil.pdf")
+ def test_delete_absent_object_with_wrapped_storage_404_is_success(self):
+  body=b'{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}'
+  s,h=self.make([(400,{"Content-Type":"application/json"},body)])
+  self.assertIsNone(s.delete(WS,"file",OBJ))
+  self.assertEqual(len(h.requests),1)
+  self.assertEqual(h.requests[0][0],"DELETE")
+  self.assertIn("/postriff-library/",h.requests[0][1])
+ def test_delete_existing_object_preserves_normal_success(self):
+  s,h=self.make([(204,{},b"")])
+  self.assertIsNone(s.delete(WS,"file",OBJ))
+  self.assertEqual(len(h.requests),1)
+ def test_delete_other_400_responses_fail_closed(self):
+  cases=(
+   b'{"code":"NoSuchBucket","message":"Bucket not found","statusCode":"404"}',
+   b'{"code":"InvalidRequest","message":"Malformed object path","statusCode":"400"}',
+   b'{"code":"NoSuchKey","message":"Unknown failure","statusCode":"404"}',
+   b'{"error":"not_found","message":"Object not found","statusCode":"404"}',
+   b'{"code":"NoSuchKey","message":""}',
+   b'not-json',
+   b'',
+  )
+  for body in cases:
+   with self.subTest(body=body):
+    s,h=self.make([(400,{"Content-Type":"application/json"},body)])
+    with self.assertRaisesRegex(Exception,"Private storage could not delete this object"):
+     s.delete(WS,"file",OBJ)
+    self.assertEqual(len(h.requests),1)
+ def test_delete_other_status_with_no_such_key_body_still_fails(self):
+  body=b'{"code":"NoSuchKey","message":"Object not found"}'
+  s,_=self.make([(403,{"Content-Type":"application/json"},body)])
+  with self.assertRaisesRegex(Exception,"Private storage could not delete this object"):
+   s.delete(WS,"file",OBJ)
 if __name__=="__main__":unittest.main()

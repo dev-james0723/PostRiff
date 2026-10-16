@@ -15,6 +15,16 @@ def is_api_token(raw):
     return isinstance(raw, str) and raw.startswith("prt_")
 
 
+# Runs of the Rafii Agent Runtime (agent turns, tasks, voice sessions) and of the site-agent panel share
+# pr_agent_runs with writing runs. A token's read scope covers writing runs only: it has no agent or site-agent
+# scope, so the generic run-events route answers for these as for a missing run.
+AGENT_RUN_KEY_PREFIXES = ("agent:", "task:", "voice:", "site:")
+
+
+def is_agent_run_key(key):
+    return isinstance(key, str) and key.startswith(AGENT_RUN_KEY_PREFIXES)
+
+
 def route_scope(method, parts):
     """Explicit allowlist, never blanket GET or action access. Unknown future routes stay closed."""
     if len(parts) < 3 or parts[:2] != ["api", "workspaces"]:
@@ -116,6 +126,9 @@ class ApiTokens:
         from .operator_actions import account_blocked, blocked_error
         if account_blocked(cur, user_id=row[2], workspace_id=row[1]):
             raise blocked_error()
+        # RAPv2 security hold on the token's creator (RAFII_SECURITY_INCIDENT_HOLD); fails closed, no-op when off.
+        from . import security_holds
+        security_holds.assert_clear(cur, row[2])
         return {"tokenId": row[0], "workspaceId": row[1], "createdBy": row[2], "scopes": row[3], "membership": Membership.from_row(*row[4:9])}
 
     def resolve(self, raw, workspace_id=None):

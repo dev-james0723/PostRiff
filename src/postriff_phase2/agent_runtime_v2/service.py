@@ -24,11 +24,11 @@ import time
 
 from postriff_alpha.domain import AlphaError, clean, uid
 
-from .. import asset_kinds, attachment_rows, intent as writing_intent, media_consent, turn_references as chip_refs
+from .. import agent_observability, asset_kinds, attachment_rows, intent as writing_intent, media_consent, turn_references as chip_refs
 from ..agent_runtime import safe_event
 from ..contracts import digest
 from ..permissions import require
-from . import answer_policy, approvals, commands, config as runtime_config, contracts, creative, domain_tools, followups, style as agent_style, task_state
+from . import answer_policy, approvals, commands, config as runtime_config, context_lens, contracts, creative, domain_tools, followups, style as agent_style, task_state
 from .context import RafiiRunContext, screen_outline
 
 KEY_PREFIX = "agent:"
@@ -41,6 +41,7 @@ SUPERSEDE_WINDOW_SECONDS = 180
 # An agent turn still "running" this long after it last changed was killed (Vercel stops a function at 300 s).
 STALE_TURN_SECONDS = 600
 HISTORY_MESSAGES = 12
+HELD_BACK_SPOKEN = "The answer is in the panel. It uses memory your workspace keeps out of cloud models, so I won't read it aloud."
 RUNTIME_VERSION = "agent-runtime-1"
 # Extensions add blocks to a run's trace (e.g. the skill provenance of the turn): fn(ctx=..., routes=...) -> dict.
 TRACE_HOOKS: list = []
@@ -49,6 +50,10 @@ TRACE_HOOKS: list = []
 def register_trace_hook(fn) -> None:
     if fn not in TRACE_HOOKS:
         TRACE_HOOKS.append(fn)
+
+
+# Context Lens (P0.6/P1.1): records the lens a turn used; adds nothing to a turn without it (flag off).
+register_trace_hook(context_lens.trace_hook)
 EPOCH = digest({"runtime": RUNTIME_VERSION})
 log = logging.getLogger("postriff.agent_runtime")
 _IMAGE_ORDINAL = re.compile(r"\b(?:the\s+)?(first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th)\s+(?:image|picture|photo|pic|one\s+you\s+made)\b"
@@ -61,6 +66,7 @@ class AgentRuntimeService:
     def __init__(self, service, cfg: runtime_config.RuntimeConfig | None = None, *, model_factory=None, image_studio=None, vision=None, live_transport=None, clock=None):
         self.service = service
         self.cfg = cfg or runtime_config.RuntimeConfig.from_environment()
+        service.agent_permissions_config = self.cfg
         self.model_factory = model_factory
         self.image_studio = image_studio
         self.vision = vision
@@ -69,28 +75,50 @@ class AgentRuntimeService:
         # makes no provider call unless a test sets one.
         self.followup_transport = None
         self.clock = clock or getattr(service, "clock", None) or time.time
+        if getattr(self.cfg, "permissions_gate_reader", None) is None and model_factory is None and callable(getattr(service, "connection_factory", None)):
+            from . import release_gates
+            self.cfg.permissions_gate_reader = release_gates.reader(service.connection_factory, self.cfg, clock=self.clock)
         domain_tools.ensure_registered()
+        from .task_engine import approvals as task_approvals
+        task_approvals.install()
 
     # --- public status -----------------------------------------------------------------------------------------------
     def status(self, workspace_id, token) -> dict:
         with self.service.repository.transaction(token, workspace_id) as (_cur, row, _principal):
             member = self.service.ideas._member(row)
             require(member, "read")
+        from .task_engine import flags as task_flags
         voice = self.cfg.route("voice_front_end", reason="status")
         manager = self.cfg.route("standard_reasoning", reason="status")
-        return {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
+        out = {"runtime": RUNTIME_VERSION, **self.cfg.public(), "canUseModel": member.allows("edit"),
                 # Voice delegates every request to the agent runtime, so it needs both flags.
                 "voice": {"available": voice.available and self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") and member.allows("edit"),
                           "blocker": voice.blocker if not voice.available else
                           (None if self.cfg.enabled("RAFII_VOICE_ENABLED") and self.cfg.enabled("RAFII_AGENT_V2_ENABLED") else "Voice Mode is not enabled on this deployment.")},
                 "manager": {"available": (manager.available or self.model_factory is not None) and self.cfg.enabled("RAFII_AGENT_V2_ENABLED"), "blocker": manager.blocker},
-                "genui": self.cfg.genui_for(workspace_id)}
+                "genui": self.cfg.genui_for(workspace_id), "tasks": {"enabled": task_flags.enabled_for(workspace_id, self.cfg)}}
+        lens = context_lens.status_block(self, workspace_id)   # only when on: the body is unchanged when off
+        if lens is not None:
+            out["contextLens"] = lens
+        return out
 
     # --- turn --------------------------------------------------------------------------------------------------------
+    @agent_observability.instrument_turn   # telemetry only: request/response phases, latency; arguments and result untouched
     def turn(self, workspace_id, token, payload) -> dict:
+        from .task_engine import turns
+        with turns.admit(self, workspace_id, token, payload):
+            return self._turn(workspace_id, token, payload)
+
+    def _turn(self, workspace_id, token, payload) -> dict:
         if not isinstance(payload, dict):
             raise AlphaError("Send a structured turn.", 400)
         from ..site_agent import contracts as site_contracts
+        lens_excluded = frozenset()
+        if context_lens.scope_for(self, workspace_id).enabled:
+            # Context Lens: what the person removed leaves the payload before anything reads it (front door, commands,
+            # Manager, site-agent fallback, writing pipeline). Off: the payload is untouched.
+            lens_excluded = context_lens.exclusions(payload)
+            payload = context_lens.filter_payload(payload, lens_excluded)
         text = clean(payload.get("message", ""), MAX_MESSAGE)
         modality = payload.get("modality") if payload.get("modality") in contracts.MODALITIES else "text"
         # Chat-context SPEC §9: each attachment has a role for this turn; role-less means `reference` (the panel's images).
@@ -113,6 +141,8 @@ class AgentRuntimeService:
             cur.execute("SELECT id::text FROM public.pr_agent_runs WHERE workspace_id=%s AND idempotency_key=%s", (workspace_id, run_key))
             prior = cur.fetchone()
             if prior:
+                if _engine_on(workspace_id):
+                    _same_turn_request(cur, workspace_id, prior[0], principal, text)
                 return self._stored(cur, workspace_id, prior[0])
             conversation_id = payload.get("conversationId")
             if conversation_id:
@@ -129,6 +159,10 @@ class AgentRuntimeService:
             with repo.transaction(token, workspace_id) as (cur, row, principal):
                 attachments = self._attach(cur, ideas._state(row), workspace_id, conversation_id, principal, attachments_in, ideas._member(row))
         if decision["mode"] in ("confirm", "reject", "choose"):
+            if decision["mode"] != "reject" and context_lens.excluded_attachment_ids(lens_excluded):
+                # A saved continuation already contains its old model input; never claim we removed an image from it.
+                raise AlphaError("Start a new message to continue without the removed photo; this approval keeps its saved context.",
+                                 409, code="context_lens_saved_context")
             return self._decide_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id, decision, zone, attachments)
         if decision["mode"] == "cancel":
             return self._cancel_turn(workspace_id, token, conversation_id, text, modality, run_key, trace_id)
@@ -228,8 +262,14 @@ class AgentRuntimeService:
             result = site.compose(workspace_id, token, result["runId"])
         message = result.get("message") or {}
         answer = message.get("text") or ""
+        spoken = answer
+        from ..site_agent.contracts import cloud_withheld
+        if modality == "voice" and cloud_withheld(message):
+            # Voice Mode hands speakableSummary to the cloud Live session; an answer built from memory or sources kept out of
+            # cloud models is shown in the panel only.
+            spoken = HELD_BACK_SPOKEN
         out = contracts.empty_result(trace_id, modality)
-        out.update({"answerText": answer, "speakableSummary": contracts.speakable(answer) or ("I've started that; it will appear in the panel." if result.get("delegated") else ""),
+        out.update({"answerText": answer, "speakableSummary": contracts.speakable(spoken) or ("I've started that; it will appear in the panel." if result.get("delegated") else ""),
                     "blocks": ((message.get("siteAgent") or {}).get("blocks") or []), "composedBy": "site_agent",
                     "references": ((message.get("siteAgent") or {}).get("refs") or []), "citations": ((message.get("siteAgent") or {}).get("citations") or []),
                     "pendingApprovals": [{"proposalId": p.get("id"), "messageId": result.get("messageId"), "type": p.get("type"), "summary": p.get("summary"),
@@ -304,6 +344,10 @@ class AgentRuntimeService:
         else:
             answer = f"Left it: {summary}. Nothing was changed." if wants == "dismiss" else f"It wasn't applied (it is {decided['outcome']}). Nothing was changed."
             spoken = answer
+        if _engine_on(workspace_id):
+            from .task_engine import approvals as engine_approvals
+            engine_approvals.record_proposal_decision(self, workspace_id, token, item["proposalId"], decided, wants=wants,
+                                                      surface="voice" if modality == "voice" else "text")
         # A Manager run paused on this proposal is taken off its task first: resolving the step may finish the task, and a
         # finished task keeps no paused model state.
         claimed = self._claim_pending_run(workspace_id, token, conversation_id, item["proposalId"]) if decided["outcome"] == "applied" else None
@@ -320,13 +364,16 @@ class AgentRuntimeService:
         if claimed is not None:
             resumed = self._resume_pending_run(workspace_id, token, conversation_id, item["proposalId"], claimed, run_id=run_id, trace_id=trace_id, modality=modality,
                                                zone=zone, approved=result["changedEntities"])
+            if (claimed[1] or {}).get("_checkpointId"):
+                from .task_engine import checkpoints as engine_checkpoints
+                engine_checkpoints.finish(self.service, self.service.ideas, workspace_id, claimed[0], claimed[1]["_checkpointId"], ok=resumed is not None)
             if resumed is not None:
                 return resumed
         return self._finish_simple(workspace_id, token, conversation_id, run_id, trace_id, result, blocks, trace_extra=approval_trace, ask=self._chips_for(text, modality))
 
     def _resolve_task_steps(self, workspace_id, token, conversation_id, proposal_id, outcome, *, verified, outputs=(), reason=None):
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-            plan = task_state.active(cur, workspace_id, conversation_id)
+            plan = _task_waiting_on(cur, workspace_id, conversation_id, proposal_id) if _engine_on(workspace_id) else task_state.active(cur, workspace_id, conversation_id)
             if plan is None:
                 return
             touched = plan.resolve_approval(proposal_id, outcome, self.clock(), verified=verified, outputs=[o for o in outputs if o.get("id")], reason=reason)
@@ -339,7 +386,7 @@ class AgentRuntimeService:
         cancelled_runs = self.cancel_running(workspace_id, token, conversation_id, reason="You asked to cancel.")
         steps = []
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
-            plan = task_state.active(cur, workspace_id, conversation_id)
+            plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas)
             cur.execute("SELECT actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", ((plan.task_id if plan else None), workspace_id))
             owner = (cur.fetchone() or [None])[0]
             if plan is not None and owner == principal:
@@ -347,6 +394,9 @@ class AgentRuntimeService:
                 steps = plan.cancel_open("You asked to cancel.", self.clock())
                 if steps:
                     task_state.save(cur, self.service.ideas, workspace_id, plan)
+                if _engine_on(workspace_id):
+                    from .task_engine import actions as engine_actions
+                    engine_actions.cancel_in_tx(cur, self.service.ideas, workspace_id, plan.task_id, principal, "You asked to cancel.")
             bound = approvals.bind(cur, workspace_id, conversation_id, self.clock())
         dismissed, not_dismissed = None, None
         if "bind" in bound:
@@ -447,34 +497,54 @@ class AgentRuntimeService:
 
         from . import manager as manager_mod
 
+        lens = context_lens.ManagerTurn.start(self, workspace_id, payload)   # None when the Context Lens is off
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
             state = self.service.ideas._state(row)
-            focus, refs_note = self._resolve(cur, state, workspace_id, conversation_id, text, page)
+            if lens is not None:
+                page = lens.check_page(cur, state, member, principal, page)
+            excluded_assets = context_lens.excluded_attachment_ids(lens.excluded) if lens is not None else frozenset()
+            focus, refs_note = (None, []) if lens is not None else self._resolve(cur, state, workspace_id, conversation_id, text, page)
             chips = chip_refs.parse({"references": payload.get("references")})
             resolved_chips = chip_refs.resolved_ids(state, {"references": chips["references"], "attachments": []}) + \
                 [{"kind": a.get("kind") or "image", "id": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]
             focus = self._chip_focus(focus, resolved_chips)
-            plan = task_state.active(cur, workspace_id, conversation_id)
-            images = creative.conversation_images(cur, state, workspace_id, conversation_id)
+            plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas)
+            images = creative.conversation_images(cur, state, workspace_id, conversation_id, excluded=excluded_assets)
             if plan is not None and _sync_task(self, cur, workspace_id, plan, state):
                 task_state.save(cur, self.service.ideas, workspace_id, plan)
                 plan = plan if plan.status == "running" else None
-            last = task_state.latest(cur, workspace_id, conversation_id) if plan is None else None
+            last = task_state.latest(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, principal), ideas=self.service.ideas) if plan is None else None
             open_items = approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())
-            history = self._history(cur, workspace_id, conversation_id)
+            history = self._history(cur, workspace_id, conversation_id, principal=principal, member=member, state=state)
             from .live import recent_transcript
             spoken = recent_transcript(cur, workspace_id, conversation_id)
             style = agent_style.load(cur, principal)
             ui_context, ui_selection = ui_turn_context(self.cfg, cur, workspace_id, principal, member, payload.get("uiContext"))
+            if lens is not None:
+                ui_selection = context_lens.effective_ui_selection(ui_selection, excluded_assets)
+                def resolve_final_page(final_page):
+                    final_focus, final_notes = self._resolve(cur, state, workspace_id, conversation_id, text, final_page, excluded_assets=excluded_assets)
+                    return self._chip_focus(final_focus, resolved_chips), final_notes
+
+                refs_note, ui_selection, style = lens.finish(cur, state, member, principal, page, text=text, focus=focus, references=chips["references"],
+                                                             resolved=resolved_chips, attachments=attachments, conversation_id=conversation_id, history=history,
+                                                             images=images, plan=plan, last=last, open_items=open_items, style=style, ui_context=ui_context,
+                                                             ui_selection=ui_selection, refs_note=refs_note, resolve_focus=resolve_final_page)
+                page, focus = lens.effective_page, lens.focus
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, page=page, zone=zone, locale=payload.get("locale") if isinstance(payload.get("locale"), str) else None,
                               writer_model=payload.get("model") if isinstance(payload.get("model"), str) and payload.get("model") else None, attachments=attachments,
                               conversation_assets=images, focus=focus, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text=text, page_raw=payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
+                              vision=self.vision, request_text=text,
+                              page_raw=context_lens.effective_raw_page(payload.get("pageContext"), page) if lens is not None else
+                                  payload.get("pageContext") if isinstance(payload.get("pageContext"), dict) else None,
                               style=style, command=commands.parse(payload.get("command")), ui_context=ui_context, ui_selection=ui_selection,
                               voice_choice=voice_choice(payload))
+        from . import authz
+        authz.bind_context(ctx)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
+        ctx.context_lens = lens.lens if lens is not None else None
         ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
         ctx.thinking_emit = lambda event: self._emit_thinking(workspace_id, token, run_id, event)
         ctx.thinking("working", "run", "run_open")
@@ -488,7 +558,8 @@ class AgentRuntimeService:
         ctx.chip_refs = resolved_chips
         ctx.chip_fields = {**({"references": payload["references"]} if isinstance(payload.get("references"), list) and payload["references"] else {}),
                            **({"attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments]} if attachments else {})}
-        items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last)
+        items = self._assemble(ctx, text, history, refs_note, open_items, images, superseded, spoken, last,
+                               extra_state=lens.app_state(ctx.page) if lens is not None else None)
         manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
         collector = manager_mod.collector(self.cfg)
         run_config = RunConfig(workflow_name="rafii.turn", trace_id=trace_id, group_id=conversation_id, trace_metadata={"modality": modality, "runtime": RUNTIME_VERSION},
@@ -563,7 +634,7 @@ class AgentRuntimeService:
             return {"type": "draft", "id": posts[0]["id"]}
         return focus
 
-    def _resolve(self, cur, state, workspace_id, conversation_id, text, page):
+    def _resolve(self, cur, state, workspace_id, conversation_id, text, page, *, excluded_assets=frozenset()):
         """Deterministic references before any model reasoning (spec §3.5): the page item, "that draft", ordinals, "the second image"."""
         from ..site_agent import references
         cur.execute("SELECT body->'siteAgent'->'refs' FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s AND role='assistant' AND body ? 'siteAgent' ORDER BY seq DESC LIMIT 4",
@@ -578,21 +649,30 @@ class AgentRuntimeService:
         match = _IMAGE_ORDINAL.search(text)
         if match:
             from .creative import conversation_images
-            images = conversation_images(cur, state, workspace_id, conversation_id)
+            images = conversation_images(cur, state, workspace_id, conversation_id, excluded=excluded_assets)
             index = _ORDINALS.get((match.group(1) or match.group(2) or "").lower())
-            if index is not None and images and -len(images) <= index <= len(images) and index != 0:
-                chosen = images[index - 1] if index > 0 else images[index]
+            chosen = creative._image_at(images, index) if index is not None else None
+            if chosen is not None:
                 notes.append({"phrase": match.group(0), "resolvedTo": {"type": "asset", "id": chosen["assetId"], "index": chosen["index"]}, "source": "conversation images"})
             else:
                 notes.append({"phrase": match.group(0), "resolvedTo": None, "note": f"this conversation has {len(images)} image(s)"})
         return resolved.get("entity"), notes
 
-    def _history(self, cur, workspace_id, conversation_id) -> list[dict]:
+    def _history(self, cur, workspace_id, conversation_id, *, principal=None, member=None, state=None) -> list[dict]:
+        from ..site_agent.contracts import cloud_withheld
         from ..youtube.agent_context import history_eligible
         cur.execute("SELECT role,body FROM public.pr_messages WHERE conversation_id::text=%s AND workspace_id=%s ORDER BY seq DESC LIMIT %s", (conversation_id, workspace_id, HISTORY_MESSAGES))
+        rows = cur.fetchall()
+        from . import authz
+        from types import SimpleNamespace
+        history_ctx = SimpleNamespace(config=self.cfg, workspace_id=workspace_id, principal=principal, membership=member, now=self.clock)
+        if authz.mode_for(self.cfg, workspace_id) != "off":
+            authz.bind_context(history_ctx, cur=cur, state=state, member=member)
         out = []
-        for role, body in reversed(cur.fetchall()):
-            if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body):
+        for role, body in reversed(rows):
+            if not isinstance(body, dict) or role not in ("user", "assistant") or not history_eligible(role, body) or cloud_withheld(body):
+                continue
+            if not authz.history_eligible(cur, history_ctx, role, body):
                 continue
             words = (body.get("text") or "").strip()
             if not words:
@@ -601,9 +681,12 @@ class AgentRuntimeService:
             out.append({"role": role, "text": words[:1200], **({"modality": modality} if modality else {})})
         return out[:-1] if out and out[-1]["role"] == "user" else out
 
-    def _assemble(self, ctx: RafiiRunContext, text, history, refs_note, open_items, images, superseded, spoken=(), last=None) -> list[dict]:
-        """Bounded, labelled context (spec §15). Exact ids stay in machine context; every block says what kind of data it is."""
+    def _assemble(self, ctx: RafiiRunContext, text, history, refs_note, open_items, images, superseded, spoken=(), last=None, extra_state=None) -> list[dict]:
+        """Bounded, labelled context (spec §15). Exact ids stay in machine context; every block says what kind of data it is.
+        `extra_state` holds the Context Lens keys (None when it is off: byte-identical to before, tests/test_context_lens.py)."""
         from ..site_agent import contracts as site_contracts
+        from . import authz
+        authz.filter_context(ctx)
         app_state = {"kind": "APP_STATE", "page": site_contracts.page_summary(ctx.page), "timeZone": ctx.zone, "now": site_contracts.iso(ctx.now()),
                      "modality": ctx.modality, "member": ctx.membership.summary(), "resolvedReferences": refs_note,
                      "activeTask": ctx.task.view() if ctx.task is not None else None,
@@ -622,6 +705,10 @@ class AgentRuntimeService:
         screen = screen_outline(ctx.page)   # Contract 3: visible labels only, re-validated; untrusted data
         if screen:
             app_state["screen"] = screen
+        if extra_state:
+            app_state.update(extra_state)
+        from . import authz
+        app_state = authz.filter_app_state(ctx, app_state)
         for asset_id in app_state["attachedThisTurn"]:
             ctx.ledger.known_ids.add(asset_id.lower())
         for item in images:
@@ -660,6 +747,8 @@ class AgentRuntimeService:
                         "VALUES(%s,%s,%s,'running',%s,%s,%s,%s,%s) RETURNING id::text",
                         (conversation_id, workspace_id, principal, model, "deep" if reserve_for == "deep_reasoning" else "standard", digest(context), EPOCH, run_key))
             run_id = cur.fetchone()[0]
+            from .task_engine import turns
+            turns.record(cur, run_id)
             body = {"text": text, "agent": {"modality": modality, "attachments": [{"assetId": a["assetId"], "role": a.get("role") or "reference"} for a in attachments], "traceId": trace_id,
                                             **({"delegationId": str(delegation_id)[:120]} if delegation_id else {}), **({"voiceSessionId": str(live_session)[:80]} if live_session else {})},
                     "siteAgent": {"role": "question", "runId": run_id}}
@@ -687,6 +776,8 @@ class AgentRuntimeService:
                     # The combined plan did not fit a budget stop: admit the turn alone; its view then follows the original rule.
                     reservation = reserve(estimate, None)
                 reservation = {**reservation, "estimateUsdMicro": estimate}   # the turn's own ceiling (follow-up chips fit inside it)
+        from .task_engine import turns
+        turns.release()
         return run_id, reservation
 
     def _presentation_allowance(self, workspace_id, text, modality, delegation_id):
@@ -784,7 +875,7 @@ class AgentRuntimeService:
         reservation = None
         try:
             with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
-                work = followups.open_work(task_state.active(cur, workspace_id, conversation_id),
+                work = followups.open_work(task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, _principal), ideas=self.service.ideas),
                                            [{"summary": p.get("summary"), "type": p.get("type")} for p in approvals.open_proposals(cur, workspace_id, conversation_id, self.clock())])
             planned = followups.plan(self.cfg, message=ask, answer=result["answerText"], work=work, language=result.get("language"))
             if planned is None:
@@ -864,6 +955,9 @@ class AgentRuntimeService:
                        "changedEntities": ledger.changed[:20], "generatedAssets": ledger.assets[:8], "warnings": ledger.warnings[:6], "errors": ledger.errors[:6],
                        "routes": routes, "usage": {"modelRequests": ledger.model_requests, **usage_tokens, "costUsdMicro": cost, "route": manager_route.get("model"),
                                                    "billing": "metered" if reservation else ("scripted" if self.model_factory else None)}})
+        from . import library_browse
+        # The Library ids library_browse listed (up to 25, the J03 binding's limit), apart from references (capped at 20 above).
+        result.update(library_browse.result_fields(ledger))
         if ledger.youtube_provider_context:
             from ..youtube.agent_context import KEY
             result[KEY] = list(ledger.youtube_provider_context)
@@ -883,17 +977,24 @@ class AgentRuntimeService:
                 extra = {"traceHookError": getattr(hook, "__name__", "hook")}
             if isinstance(extra, dict):
                 trace.update({k: v for k, v in extra.items() if k not in trace})
+        from . import authz
+        permission_trace = authz.trace_for(ctx)
+        if permission_trace is not None:
+            trace["authz"] = permission_trace
         if ledger.research:
             # rafii-genui/1 J07: the pages this turn's research returned, for a generated view's research_results binding.
             pages = [page for item in ledger.research for page in item.get("pages") or []][:12]
             result["research"] = {"state": "available" if pages else "empty", "query": ledger.research[-1].get("query"), "pages": pages,
                                   "warnings": [w for item in ledger.research for w in item.get("warnings") or []][:5]}
-        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality)
+        # Scope comes from the authenticated server context, never the model's result or a client page hint.
+        from .tool_adapter import founder_scope
+        ui_scope = "founder" if founder_scope(ctx) is not None else "workspace"
+        result["ui"] = ui_handoff(self.cfg, ctx.workspace_id, result, ctx.request_text, ctx.modality, scope=ui_scope)
         with self.service.repository.transaction(ctx.token, ctx.workspace_id) as (cur, _row, _principal):
             status = self._run_status(cur, ctx.workspace_id, run_id)
             final_status = "cancelled" if status == "cancelled" else "completed"
             if reservation is not None:
-                self.service.ledger.settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
+                getattr(ctx, "continuation_ledger", self.service.ledger).settle(cur, ctx.workspace_id, reservation["reservationId"], "completed" if cost is not None else "unknown", cost)
             # This turn's provider attempts as pr_ai_call_events rows (Founder Admin §8.B), under a savepoint: never fails the settle.
             from .manager import record_calls
             record_calls(cur, ctx, reservation)
@@ -964,8 +1065,10 @@ class AgentRuntimeService:
             ideas._insert_event(cur, workspace_id, run_id, safe_event("run.completed" if status != "cancelled" else "run.cancelled",
                                                                       **({"usage": {k: usage.get(k) for k in ("provenance", "modelRequests", "costUsd", "billing")}} if status != "cancelled" else {"message": "Stopped."})))
         artifact = {"version": 1, "result": result, "trace": trace}
-        cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb,updated_at=now() WHERE id::text=%s",
+        cur.execute("UPDATE public.pr_agent_runs SET status=%s,artifact=%s::jsonb,artifact_hash=%s,usage=%s::jsonb || CASE WHEN usage ? 'request' THEN jsonb_build_object('request',usage->'request') ELSE '{}'::jsonb END,updated_at=now() WHERE id::text=%s",
                     (status, json.dumps(artifact, ensure_ascii=False, default=str), digest(json.loads(json.dumps(artifact, default=str))), json.dumps(usage, default=str), run_id))
+        # Verify phase (P0.7): codes and counts of what was just stored; never raises, writes nothing.
+        agent_observability.run_persisted(self, run_id=run_id, status=status, result=result, trace=trace)
 
     def _stored(self, cur, workspace_id, run_id) -> dict:
         cur.execute("SELECT status,conversation_id::text,artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
@@ -1063,6 +1166,15 @@ class AgentRuntimeService:
     def _store_pending_run(self, cur, workspace_id, task_id, state_json, interruptions, writer_model=None, youtube_provider_context=()):
         if youtube_provider_context:
             return False
+        if _engine_on(workspace_id):
+            # CF-3 §11: the paused run goes to a service-only checkpoint, never to the member-readable run artifact.
+            from .task_engine import checkpoints as engine_checkpoints, store as engine_store
+            task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
+            if task is not None:
+                engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, _interrupted_proposals(interruptions), writer_model=writer_model,
+                                             stored_at=self.clock(), config=self.cfg)
+                return None
+            raise AlphaError("Task checkpoint unavailable.", 503)
         cur.execute("SELECT artifact FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (task_id, workspace_id))
         row = cur.fetchone()
         artifact = row[0] or {} if row else {}
@@ -1077,9 +1189,22 @@ class AgentRuntimeService:
         # The writer the person chose travels with the paused run, so drafting after an approval uses it too.
         artifact["pendingRun"] = {"state": state_json, "proposalIds": proposal_ids, "storedAt": self.clock(), "writerModel": writer_model}
         cur.execute("UPDATE public.pr_agent_runs SET artifact=%s::jsonb WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False, default=str), task_id))
+        from .task_engine import flags as engine_flags, checkpoints as engine_checkpoints, store as engine_store
+        if engine_flags.shadow_for(workspace_id, self.cfg):
+            cur.execute("SAVEPOINT shadow_checkpoint")
+            try:
+                task = engine_store.lock_task(cur, self.service.ideas, workspace_id, task_id)
+                if task is not None:
+                    engine_checkpoints.store_run(cur, self.service.ideas, task, state_json, proposal_ids, writer_model=writer_model, stored_at=self.clock(), config=self.cfg)
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT shadow_checkpoint")
+            finally:
+                cur.execute("RELEASE SAVEPOINT shadow_checkpoint")
 
     def _claim_pending_run(self, workspace_id, token, conversation_id, proposal_id):
         """Take the Manager run paused on this proposal off its task: (task id, paused state), or None."""
+        if _engine_on(workspace_id):
+            return _claim_checkpoint(self, workspace_id, token, conversation_id, proposal_id)
         with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
             cur.execute("SELECT id::text,artifact FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
                         "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
@@ -1106,6 +1231,14 @@ class AgentRuntimeService:
         from ..youtube.agent_context import KEY
         if pending.get(KEY):
             return None
+        continuation = None
+        continuation_ledger = self.service.ledger
+        if _engine_on(workspace_id):
+            from .task_engine import continuations
+            continuation = continuations.begin(self, workspace_id, token, task_id, run_id, trace_id)
+            if continuation is None:
+                return None
+            continuation_binding, continuation_ledger = continuation
         workload = "standard_reasoning"
         reservation = None
         if self.model_factory is None:
@@ -1113,15 +1246,20 @@ class AgentRuntimeService:
             route = self.cfg.route(workload, reason="resume after approval")
             estimate = self.cfg.estimate_usd_micro(route.model or "", 24_000, 4_000)
             if estimate is None:
+                if continuation:
+                    continuations.finish(self, continuation_binding, ok=False, code="price_unknown")
                 return None
             try:
                 with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
                     authority, extra_meta = self._reservation_approval(cur, workspace_id, principal, row[0], estimate, route, run_id)
-                    reservation = self.service.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
+                    reservation = continuation_ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"agent-resume:{run_id}", charge_batch=False,
                                                               provider=route.provider or "", model=route.model or "", run_id=run_id, credit_authority=authority,
                                                               meta={"via": "rafii_agent_resume", "traceId": trace_id, **extra_meta})
                     reservation = {**reservation, "estimateUsdMicro": estimate}
-            except AlphaError:
+            except AlphaError as error:
+                if continuation:
+                    continuations.finish(self, continuation_binding, ok=False, code=error.code,
+                                         spend_limit=getattr(error, "required_budget_ceiling_usd_micro", None))
                 return None
         with self.service.repository.transaction(token, workspace_id) as (cur, row, principal):
             member = self.service.ideas._member(row)
@@ -1129,10 +1267,14 @@ class AgentRuntimeService:
             style = agent_style.load(cur, principal)
         ctx = RafiiRunContext(service=self.service, workspace_id=workspace_id, token=token, principal=principal, membership=member, conversation_id=conversation_id,
                               trace_id=trace_id, modality=modality, zone=zone, task=plan, run_id=run_id, now=self.clock, config=self.cfg, image_studio=self.image_studio,
-                              vision=self.vision, request_text="(approved)", style=style,
+                              vision=self.vision, request_text="", style=style,
                               writer_model=pending.get("writerModel") if isinstance(pending.get("writerModel"), str) and pending.get("writerModel") else None)
+        from . import authz
+        authz.bind_context(ctx)
         ctx.cancelled = lambda: self._is_cancelled(workspace_id, token, run_id)
-        ctx.deadline = time.monotonic() + TURN_BUDGET_SECONDS
+        ctx.continuation_ledger = continuation_ledger
+        resume_budget = 200 if continuation else TURN_BUDGET_SECONDS
+        ctx.deadline = time.monotonic() + resume_budget
         ctx.ledger.changed.extend(dict(change) for change in approved)  # the approval the application applied and verified
         try:
             manager, routes = manager_mod.build(ctx, model_factory=self.model_factory, workload=workload)
@@ -1154,23 +1296,28 @@ class AgentRuntimeService:
                 return await Runner.run(manager, state, context=ctx, max_turns=8, run_config=RunConfig(workflow_name="rafii.turn.resume", trace_id=trace_id,
                                                                                                       group_id=conversation_id, trace_include_sensitive_data=False))
             try:
-                result = asyncio.run(manager_mod.drive(ctx, resume(), TURN_BUDGET_SECONDS))
+                result = asyncio.run(manager_mod.drive(ctx, resume(), resume_budget))
                 reply = result.final_output if not result.interruptions else None
             except Exception as error:  # noqa: BLE001 — the approval stands; only the Manager's wording is lost
                 fallback_reason = getattr(error, "code", None) or type(error).__name__
                 note = "Your approval was applied and checked."
-            return self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
+            response = self._finalize(ctx, run_id, reservation, reply=reply, note=note, fallback_reason=fallback_reason, interruptions=[], state_json=None, routes=routes,
                                   workload=workload, why="resume after approval", spans=collector.take(trace_id), elapsed_ms=round((time.monotonic() - started) * 1000),
                                   superseded=[])
+            if continuation:
+                continuations.finish(self, continuation_binding, ok=fallback_reason is None, code=fallback_reason)
+            return response
         except Exception as error:  # noqa: BLE001 — the approval stands: settle what the resume spent, answer deterministically
+            if continuation:
+                continuations.finish(self, continuation_binding, ok=False, code="resume_failed")
             log.error(json.dumps({"event": "agent_resume.failed", "errorClass": type(error).__name__, "traceId": trace_id}))
             if reservation is not None:
                 with self.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
                     spent = self._spend(ctx.ledger, None)
                     if not ctx.ledger.spans:
-                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
+                        continuation_ledger.settle(cur, workspace_id, reservation["reservationId"], "failed", 0)
                     else:
-                        self.service.ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
+                        continuation_ledger.settle(cur, workspace_id, reservation["reservationId"], "completed" if spent is not None else "unknown", spent)
                     from .manager import record_calls
                     record_calls(cur, ctx, reservation)   # pr_ai_call_events, under a savepoint (Founder Admin §8.B)
             return None
@@ -1228,6 +1375,10 @@ def run_events(runtime: "AgentRuntimeService", workspace_id, token, run_id, curs
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
         found = ideas._events_for(cur, workspace_id, run_id, cursor)
+        if _engine_on(workspace_id):
+            from .task_engine import store
+            if store.load_task(cur, workspace_id, run_id) is not None:
+                found["events"] = _task_events(found["events"])
     return {
         "runId": found["runId"],
         "conversationId": found["conversationId"],
@@ -1243,11 +1394,24 @@ def task_view(runtime: "AgentRuntimeService", workspace_id, token, task_id, curs
     ideas = runtime.service.ideas
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
-        plan = task_state.load(cur, workspace_id, task_id, lock=True)
-        if plan.status == "running" and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
+        plan = task_state.load(cur, workspace_id, task_id, lock=True, ideas=ideas)
+        if not _engine_on(workspace_id) and plan.status == "running" and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
             task_state.save(cur, ideas, workspace_id, plan)
         events = ideas._events_for(cur, workspace_id, task_id, cursor)
-    return {"task": plan.view(), "events": events["events"], "cursor": events["cursor"]}
+        engine = None
+        if _engine_on(workspace_id):
+            from .task_engine import http as engine_http
+            engine = engine_http.engine_block(runtime, cur, workspace_id, task_id, _principal, ideas._member(row))
+            events["events"] = _task_events(events["events"])
+        legacy_view = plan.view()
+        if _engine_on(workspace_id) and plan.created_by != _principal and not ideas._member(row).allows("owner"):
+            for step in legacy_view.get("steps", []):
+                for key in ("outputs", "entities", "approvals", "reason"):
+                    step.pop(key, None)
+    out = {"task": legacy_view, "events": events["events"], "cursor": events["cursor"]}
+    if engine is not None:
+        out["engine"] = engine
+    return out
 
 
 def conversation_task(runtime: "AgentRuntimeService", workspace_id, token, conversation_id) -> dict:
@@ -1255,7 +1419,7 @@ def conversation_task(runtime: "AgentRuntimeService", workspace_id, token, conve
     with runtime.service.repository.transaction(token, workspace_id) as (cur, row, _principal):
         require(ideas._member(row), "read")
         ideas._conversation(cur, workspace_id, conversation_id)
-        plan = task_state.active(cur, workspace_id, conversation_id)
+        plan = task_state.active(cur, workspace_id, conversation_id, actor=_task_actor(workspace_id, _principal), ideas=ideas)
         if plan is not None and _sync_task(runtime, cur, workspace_id, plan, ideas._state(row)):
             task_state.save(cur, ideas, workspace_id, plan)
         images = creative.conversation_images(cur, ideas._state(row), workspace_id, conversation_id)
@@ -1274,12 +1438,23 @@ def decide(runtime: "AgentRuntimeService", workspace_id, token, payload) -> dict
         raise AlphaError("Name the proposal and the decision.", 400)
     decided = approvals.decide(runtime.service, workspace_id, token, conversation_id=payload["conversationId"], message_id=payload["messageId"],
                                proposal_id=payload["proposalId"], digest=payload["digest"], decision=payload["decision"], zone=payload.get("timeZone"))
+    if _engine_on(workspace_id):
+        from .task_engine import approvals as engine_approvals
+        engine_approvals.record_proposal_decision(runtime, workspace_id, token, payload["proposalId"], decided, wants=payload["decision"], surface="panel")
     runtime._resolve_task_steps(workspace_id, token, payload["conversationId"], payload["proposalId"],
                                 decided["outcome"] if payload["decision"] == "apply" else "dismissed", verified=decided["verified"])
     spoken = ("Done, and I checked it in your workspace." if decided["outcome"] == "applied" and decided["verified"]
               else "I applied it, but the check didn't fully match. Please look at the panel." if decided["outcome"] == "applied"
               else "Okay, I left it. Nothing was changed.")
-    return {**{k: v for k, v in decided.items() if k != "revision"}, "speakableSummary": spoken}
+    continuation = {"resumed": "none"}
+    if _engine_on(workspace_id) and decided.get("outcome") == "applied" and decided.get("verified"):
+        from .task_engine import approvals as engine_approvals, store as engine_store
+        with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, _principal):
+            record = engine_store.approval_by_proposal(cur, workspace_id, payload["proposalId"])
+        if record:
+            continuation = engine_approvals.continue_after_decision(runtime, workspace_id, token, record["taskId"], payload["proposalId"] + ":" + payload["digest"])
+    return {**{k: v for k, v in decided.items() if k != "revision"}, "speakableSummary": spoken,
+            **({"resumed": continuation["resumed"]} if _engine_on(workspace_id) else {})}
 
 
 def attach_upload(runtime: "AgentRuntimeService", workspace_id, token, payload) -> dict:
@@ -1347,15 +1522,15 @@ def evidence_blocks(ledger, text: str, language: str | None) -> list[dict]:
 _NOT_ELIGIBLE = {"eligible": False, "slot": "main", "reason": "not_eligible", "journeyIds": []}
 
 
-def ui_handoff(cfg, workspace_id, result, request_text, modality) -> dict:
+def ui_handoff(cfg, workspace_id, result, request_text, modality, *, scope="workspace") -> dict:
     """result.ui: whether this completed Manager turn may get a generated view (deterministic predicate in ui_projection).
     A failure here never fails the turn; the answer stays native."""
-    flags = cfg.genui_for(workspace_id)
+    flags = cfg.genui_for(workspace_id, founder=scope == "founder")
     if not flags.get("enabled"):
         return {**_NOT_ELIGIBLE, "reason": "disabled"}
     try:
         from . import ui_projection
-        decided = ui_projection.eligibility(result, request_text, modality, flags=flags)
+        decided = ui_projection.eligibility(result, request_text, modality, flags=flags, scope=scope)
     except Exception:  # noqa: BLE001 — presentation is optional; the business answer is already complete
         return {**_NOT_ELIGIBLE, "reason": "not_eligible"}
     if not isinstance(decided, dict):
@@ -1395,3 +1570,94 @@ def voice_choice(payload) -> dict | None:
     if ids is not None and (not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(i, str) and 0 < len(i) <= 80 for i in ids)):
         ids = None
     return {"mode": mode, "sourceIds": list(ids or [])} if (mode or ids) else None
+
+
+# --- durable task engine seams (CF-3; every helper is a no-op unless RAFII_AGENT_TASKS_ENABLED covers the workspace) ----------
+def _engine_on(workspace_id) -> bool:
+    from .task_engine import flags as engine_flags
+    return engine_flags.enabled_for(workspace_id)
+
+
+def _task_actor(workspace_id, principal):
+    """With the engine on, a person's request sees only their own open task (correction 1); off: today's newest task."""
+    return principal if _engine_on(workspace_id) else None
+
+
+def _same_turn_request(cur, workspace_id, run_id, principal, text) -> None:
+    """L1 for turns: a turn key replayed by the same person with the same message returns the stored turn; another person's
+    reuse, or another message, is 409 idempotency_conflict that reveals nothing about the other turn."""
+    from .task_engine import errors as engine_errors
+    from .task_engine import turns
+    cur.execute("SELECT r.actor::text,r.usage->'request',(SELECT m.body->>'text' FROM public.pr_messages m WHERE m.run_id=r.id AND m.role='user' ORDER BY m.seq LIMIT 1) "
+                "FROM public.pr_agent_runs r WHERE r.id::text=%s AND r.workspace_id=%s", (run_id, workspace_id))
+    row = cur.fetchone()
+    if (not row or row[0] != principal or (row[1] is not None and row[1] != turns.fingerprint())
+            or (row[1] is None and row[2] is not None and row[2] != text)):
+        raise engine_errors.error("idempotency_conflict")
+
+
+
+def _interrupted_proposals(interruptions) -> list:
+    ids = []
+    for item in interruptions or []:
+        try:
+            args = json.loads(getattr(item, "arguments", "") or "{}")
+        except ValueError:
+            args = {}
+        if args.get("proposalId"):
+            ids.append(args["proposalId"])
+    return ids
+
+
+def _task_waiting_on(cur, workspace_id, conversation_id, proposal_id):
+    """The running task whose step waits on this proposal, whoever created it (the approval knows its task, fix 11)."""
+    from .task_engine import store
+    approval = store.approval_by_proposal(cur, workspace_id, proposal_id)
+    task = store.load_task(cur, workspace_id, approval["taskId"]) if approval else None
+    return task_state.load(cur, workspace_id, task["taskId"]) if task and task["conversationId"] == conversation_id else None
+
+
+def _claim_checkpoint(runtime: "AgentRuntimeService", workspace_id, token, conversation_id, proposal_id):
+    """The paused run's checkpoint, claimed only by the task creator's own request (correction 2). Another member's decision
+    never resumes the creator's run (the creator gets Continue instead). A legacy pendingRun on the artifact (stored before the
+    engine was on) is adopted the same way: only its own person can take it."""
+    from .task_engine import checkpoints as engine_checkpoints
+    with runtime.service.repository.transaction(token, workspace_id) as (cur, _row, principal):
+        task_id = engine_checkpoints.find_task_for_proposal(cur, workspace_id, conversation_id, proposal_id)
+        if task_id is not None:
+            claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id, config=runtime.cfg)
+            if claimed is None:
+                return None
+            checkpoint_id, payload = claimed
+            from ..youtube.agent_context import KEY
+            if not payload.get("state") or payload.get(KEY):
+                engine_checkpoints.discard(cur, checkpoint_id, "not_resumable")
+                return None
+            return task_id, {**payload, "_checkpointId": checkpoint_id}
+        cur.execute("SELECT id::text,artifact,actor::text FROM public.pr_agent_runs WHERE workspace_id=%s AND conversation_id::text=%s AND idempotency_key LIKE 'task:%%' "
+                    "AND artifact->'pendingRun'->'proposalIds' ? %s ORDER BY created_at DESC LIMIT 1 FOR UPDATE", (workspace_id, conversation_id, proposal_id))
+        found = cur.fetchone()
+        if not found or found[2] != principal:
+            return None
+        task_id, artifact = found[0], found[1] or {}
+        from .task_engine import bridge
+        task = bridge.adopt(cur, runtime.service.ideas, workspace_id, task_id)
+        if task is None:
+            return None
+        claimed = engine_checkpoints.claim(cur, workspace_id, task_id, principal, "req:" + uid(), proposal_id=proposal_id, config=runtime.cfg)
+        if claimed is None:
+            return None
+        checkpoint_id, pending = claimed
+        from ..youtube.agent_context import KEY, sources
+        if not pending.get("state") or pending.get(KEY) or sources(artifact.get("result")):
+            engine_checkpoints.discard(cur, checkpoint_id, "not_resumable")
+            return None
+        return task_id, {**pending, "_checkpointId": checkpoint_id}
+
+
+
+
+def _task_events(events):
+    """Task polling exposes progress only, including events written before adoption."""
+    allowed = {"id", "seq", "type", "stage", "taskId", "stepId", "stepKey", "label", "state", "at", "attempt", "executor", "verdict", "reasonCode", "partial", "version", "origin"}
+    return [{k: v for k, v in event.items() if k in allowed} for event in events]

@@ -117,11 +117,17 @@ export function reduceArtifact(state: ArtifactViewState, action: ArtifactAction)
       const phase = phaseOf(safeView);
       // A first generation still streaming keeps its preview; anything else drops it (the snapshot is authoritative).
       const keepCandidate = phase === 'pending' && state.candidate && safeView.attempt?.attemptId === state.candidate.attemptId;
+      // The snapshot read right after a failed edit confirms that failure (its current attempt failed for the same reason): the
+      // notice stays, so "That change couldn't be made" (or why: no allowance, paid AI paused) is still there to read. A reload
+      // starts without a notice, so an old failure is never reported again.
+      const attempt = safeView.attempt;
+      const failed = state.notice && state.notice.kind === 'failed' ? state.notice : null;
+      const confirmed = Boolean(failed && attempt && !attempt.live && attempt.state === 'failed' && attempt.reason === failed.reason);
       return {
         ...state, artifactId: view.artifact.artifactId, view: safeView, phase, needsSnapshot: false,
         candidate: keepCandidate ? state.candidate : null, lastSeq: Math.max(state.lastSeq, view.lastSeq),
         notice: unsupported || safeView.display.reason === 'library_unsupported' ? { kind: 'unsupported', reason: 'library_unsupported' }
-          : phase === 'fallback' ? { kind: 'failed', reason: safeView.display.reason } : state.notice && phase !== 'ready' ? state.notice : null
+          : phase === 'fallback' ? { kind: 'failed', reason: safeView.display.reason } : state.notice && (phase !== 'ready' || confirmed) ? state.notice : null
       };
     }
     case 'event': {

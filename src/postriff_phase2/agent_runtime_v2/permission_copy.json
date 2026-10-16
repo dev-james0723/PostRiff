@@ -1,0 +1,66 @@
+{
+  "consentVersion": "agent-permissions/1",
+  "language": "en",
+  "status": "draft: wording, launch languages and legal review are DP-6",
+  "intro": "Choose what Rafii may do for you in this workspace. Your role still decides what you can do; these choices can only narrow it.",
+  "modes": {
+    "ask": "Asks first",
+    "assist": "Does it, then shows you",
+    "off": "Off"
+  },
+  "categories": {
+    "read_analyze": {"title": "Read and summarize", "summary": "Look at drafts, campaigns, the calendar, your Library and other workspace records to answer you."},
+    "navigate_interact": {"title": "Find your way around", "summary": "Open pages, point at buttons and walk you through steps."},
+    "create_edit": {"title": "Create and edit drafts", "summary": "Write drafts, edit them, make images and add drafts to campaigns."},
+    "manage_settings": {"title": "Change settings", "summary": "Change workspace and voice settings when you ask."},
+    "manage_connected_services": {"title": "Connected accounts", "summary": "Rafii never connects or disconnects accounts. It can take you to the page where you do."},
+    "execute_automations": {"title": "Schedules and automations", "summary": "Prepare schedules and automation changes for you to approve. Nothing is posted until you approve it."}
+  },
+  "domains": {
+    "web": "Public web pages",
+    "account": "Your account settings",
+    "screen": "What is on your screen",
+    "content": "Drafts, posts and the calendar",
+    "campaigns": "Campaigns",
+    "library": "Your Library",
+    "memory_brand": "Brand and voice notes",
+    "connections": "Connected accounts",
+    "analytics": "Post performance",
+    "growth_trends": "Trends you follow",
+    "notifications": "Your notifications",
+    "usage_billing": "Usage and plan",
+    "members": "Member activity",
+    "agent_activity": "Rafii's own tasks",
+    "automations": "Automations"
+  },
+  "presets": {
+    "recommended": {"title": "Recommended", "summary": "Rafii reads, finds things and drafts for you. Settings, accounts, schedules and automations always ask first. Paid work asks first."},
+    "full": {"title": "Full", "summary": "Rafii does everything your role allows without asking, except posting, approving and anything that needs your own confirmation. You sign in again to choose this."},
+    "custom": {"title": "Custom", "summary": "Choose each area yourself."},
+    "none": {"title": "Off", "summary": "Rafii only answers help questions and shows you around."},
+    "legacy": {"title": "Current (before permissions)", "summary": "Rafii works the way it always has until you choose."}
+  },
+  "spend": {
+    "none": "Spends credits without asking (your plan limits still apply)",
+    "media": "Asks before spending credits on images",
+    "all": "Asks before any paid work"
+  },
+  "revoke": {
+    "title": "Turn off Rafii's access",
+    "summary": "Rafii stops using everything at once. Help and navigation still work.",
+    "confirm": "Hold to turn off"
+  },
+  "notRecallable": {
+    "sent_to_model_provider": "What Rafii already read was sent to its AI model and can't be called back.",
+    "visible_in_past_answers": "Earlier answers in your conversations stay as they are.",
+    "already_applied_changes": "Changes Rafii already made stay. You can undo them yourself."
+  },
+  "reminder": {
+    "title": "Choose what Rafii may do",
+    "summary": "Rafii works as it always has. You can choose what it may do for you now, or later.",
+    "save": "Save",
+    "notNow": "Not now"
+  },
+  "shadow": "Preview: these choices are saved but not enforced yet.",
+  "enforce": "These choices are in effect."
+}

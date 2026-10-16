@@ -3,6 +3,8 @@
  * Ported from the founder alpha client (`studio/web/src/founder/cloud-api.ts`)
  * and kept in one place so every page reads the same shapes.
  */
+
+import type { CreationCatalog, NativeDraft } from '@/lib/creation/capabilities';
 import type { WorkspacePlan, WorkspaceRole } from '@/types';
 import type { AgentStyle, AgentStylePatch } from '@/lib/agent-runtime/style';
 
@@ -266,6 +268,9 @@ export interface SnapshotVariant {
   needsReview: boolean;
   blockedByRetraction: boolean;
   contentTypeId?: string;
+  /** Native format and structured draft saved with the variant (creation projection). */
+  format?: string;
+  native?: NativeDraft | null;
   customized?: boolean;
   /** Which Ideas run produced this variant (set by `apply`). */
   provenance?: { runId?: string; contextDigest?: string; policyEpoch?: number; model?: string; derivedFrom?: string };
@@ -361,6 +366,9 @@ export interface SnapshotSource {
   routeGrants?: string[];
   useGrants?: { purpose: 'analysis' | 'generation'; route: string }[];
   cleanupStatus?: string;
+  authorshipConfirmed?: boolean;
+  retentionConfirmed?: boolean;
+  lastAnalysis?: { route: string; model: string | null; provider: string | null; at: number; contentHash: string };
 }
 
 /** A saved account group (Rafii v9 Channel Bloom): a batch-selection shortcut keyed by connection ids. */
@@ -389,16 +397,19 @@ export interface Phase2State {
 }
 
 export interface VoiceProfile {
+  /** Proposed canonical context; committed only by owner activation. */
+  brandContext?: { mode?: string; purpose?: string; audience?: string; subject?: string; speaker?: string; layers?: string[] };
   packageSchema?: string;
   fields?: Record<string, unknown>[];
-  tone: 'warm' | 'direct' | 'reflective' | null;
+  tone: string | null;
   writingExample: string;
   observations: string[];
   unknowns: string[];
-  status?: 'proposed' | 'stale';
+  status?: 'proposed' | 'reviewing' | 'stale' | 'approved';
+  workflow?: 'brand_brain';
   staleReason?: string;
   analysisRoute?: string;
-  analysisMethod?: 'local-rules' | 'ai';
+  analysisMethod?: 'local-rules' | 'ai' | 'user-authored';
   analysisModel?: string;
   analysisProvider?: string;
   evidenceSourceIds?: string[];
@@ -408,7 +419,9 @@ export interface VoiceProfile {
     support: string[];
     counterEvidence: string[];
     quotes?: { sourceId: string; text: string }[];
-    evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient';
+    evidenceLevel: 'limited' | 'supported' | 'conflicting' | 'insufficient' | 'user-defined';
+    decision?: 'accept' | 'edit' | 'reject';
+    userAuthored?: boolean;
   }[];
 }
 
@@ -803,6 +816,10 @@ export interface RunVariant {
   warnings?: string[];
   candidateOnly?: boolean;
   media?: RunMedia[];
+  /** The native format the destination asked for (absent for the platform default on older runs). */
+  format?: string;
+  /** Structured native draft (`rafii.native-draft.v1`): format, skill route, media and publish readiness. */
+  native?: NativeDraft | null;
 }
 
 export interface GeneratedImage {
@@ -829,6 +846,8 @@ export interface Destination {
   platform: string;
   language: LocaleTag;
   channelId?: string;
+  /** Native format id from the creation facet (e.g. `facebook.reel`); omitted = the platform's default format. */
+  format?: string;
 }
 
 export interface SchedulePlan {
@@ -1088,6 +1107,8 @@ export interface ModelCatalog {
   };
   /** Chat attachments (SPEC §5.11). Every limit the UI shows comes from here. Absent = feature off. */
   attachments?: AttachmentsCatalog;
+  /** Creation-capability facet (`rafii.creation-capabilities.v1`); null/absent = offer the original five only. */
+  creation?: CreationCatalog | null;
 }
 
 export interface MediaProcessor {
@@ -1865,7 +1886,7 @@ export interface MyChannel {
 
 /**
  * One line of the person's account history (`GET /api/me/security-events`): their own security
- * actions, first sign-ins per device (`session.started`), and changes others made to their
+ * actions, first sign-ins per session (`session.observed`, or `session.started` before it existed), and changes others made to their
  * memberships. Newest first.
  */
 export interface SecurityEvent {
@@ -1876,6 +1897,24 @@ export interface SecurityEvent {
   meta: Record<string, unknown>;
   workspaceId: string | null;
   workspaceName: string;
+}
+
+/** A "This wasn't me" report (`GET/POST /api/auth/security/incidents`, RAPv2; 404 while the feature is off). */
+export interface SecurityIncident {
+  incidentId: string;
+  state: 'open' | 'user_confirmed' | 'recovering' | 'resolved';
+  accountHold: boolean;
+  holdEpoch: number;
+  createdAt: string | null;
+  resolvedAt: string | null;
+}
+
+/** What a report protected, and what it did not touch. */
+export interface SecurityIncidentReport extends SecurityIncident {
+  sessions: { rafiiApiRevoked: number; providerRefreshState: 'confirmed' | 'partial' | 'unknown' | 'unsupported' };
+  agents: { newSensitiveActions: string; alreadyExecutedActions: string };
+  connectedAccounts: 'not_disconnected';
+  nextAction: string;
 }
 
 /** An invitation addressed to the person's verified email (`GET /api/me/invitations`). */

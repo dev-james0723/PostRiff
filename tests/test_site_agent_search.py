@@ -33,7 +33,7 @@ def workspace(tag="one"):
             {"id": f"v-rejected-{tag}", "text": "春 rejected", "platform": "X", "language": "en", "rejected": True},
         ],
         "sources": [
-            {"id": f"s-notes-{tag}", "kind": "text", "title": "Programme notes", "active": True, "sourcePolicy": "public_quote", "facts": [{"id": "f1", "approved": True}, {"id": "f2", "approved": False}]},
+            {"id": f"s-notes-{tag}", "kind": "text", "title": "Programme notes", "active": True, "sourcePolicy": "public_quote", "egressConsent": ["cloud"], "facts": [{"id": "f1", "approved": True}, {"id": "f2", "approved": False}]},
             {"id": f"s-voice-{tag}", "kind": "voice_sample", "title": "Programme voice", "active": True, "sourcePolicy": "public_quote", "facts": []},
             {"id": f"s-gone-{tag}", "kind": "text", "title": "Programme old", "active": False, "sourcePolicy": "public_quote", "facts": []},
             {"id": f"s-banned-{tag}", "kind": "text", "title": "Programme banned", "active": True, "sourcePolicy": "prohibited", "facts": []},
@@ -100,6 +100,16 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(data["sources"], [{"kind": "source", "id": "s-notes-one", "label": "Programme notes", "sublabel": "1 approved fact"}])
         self.assertEqual(ids(result, "library"), [A1, A2])
         self.assertEqual(data["library"][1], {"kind": "video", "id": A2, "label": "Video", "href": f"/api/workspaces/w-one/media/{A2}", "duration": 42.4})
+
+    def test_source_labels_require_current_cloud_consent(self):
+        state = workspace()
+        state["sources"][0]["egressConsent"] = []
+        _, result = search(state, query="programme")
+        self.assertEqual(ids(result, "sources"), [])
+        self.assertNotIn("Programme notes", json.dumps(result))
+        state["sources"][0]["egressConsent"] = ["cloud"]
+        _, result = search(state, query="programme")
+        self.assertEqual(ids(result, "sources"), ["s-notes-one"])
 
     def test_cjk_single_character_and_labels(self):
         _, result = search(query="@春")

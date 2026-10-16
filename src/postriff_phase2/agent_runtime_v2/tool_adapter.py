@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from postriff_alpha.domain import AlphaError
 
-from . import contracts
+from . import authz, contracts
 from .context import RafiiRunContext, untrusted
 
 MAX_TOOL_OUTPUT = 14_000
@@ -119,29 +119,67 @@ def execute(ctx: RafiiRunContext, tool: Tool, args: Any, *, scope: frozenset | N
         if spec.effect != contracts.READ:
             ctx.check_cancelled()
         _check_schema(tool.schema, args)
+        from .task_engine.bridge import dispatch_bound
+        dispatched = dispatch_bound(ctx, tool, args)
+        if dispatched is not None:
+            return dispatched
+        # Rafii agent permissions (CF-2 E1): nothing is read in off mode, nothing changes in shadow mode; enforce refuses here.
+        refused = authz.tool_gate(ctx, tool, args, started=started, agent=agent)
+        if refused is not None:
+            return refused
         from . import thinking_state
         op = thinking_state.tool_op(spec.name)
         if op:
             ctx.thinking(op, "tool", spec.name)
-        result = tool.executor(ctx, args)
+        with authz.in_tool(), authz.active_tool(ctx, spec, args, agent):
+            result = tool.executor(ctx, args)
     except AlphaError as error:
         code = error.code or ("not_found" if error.status == 404 else "forbidden" if error.status == 403 else "conflict" if error.status == 409 else "failed")
         status = "blocked" if code in ("tool_input", "tool_forbidden", "forbidden", "run_cancelled") else "failed"
         ctx.activity(spec.name, tool.label, spec.effect, status, started, code=code)
         if status == "failed":
             ctx.ledger.error(code, str(error)[:300])
-        return {"ok": False, "code": code, "error": str(error)}
+        result = {"ok": False, "code": code, "error": str(error)}
+        if code == "budget_ceiling" and getattr(error, "required_budget_ceiling_usd_micro", None):
+            result["requiredBudgetCeilingUsdMicro"] = error.required_budget_ceiling_usd_micro
+        return result
     except Exception as error:  # noqa: BLE001 — a broken tool is a failed step, never a crashed turn
         log.error(json.dumps({"event": "agent_tool.failed", "tool": spec.name, "errorClass": type(error).__name__, "traceId": ctx.trace_id}))
         ctx.activity(spec.name, tool.label, spec.effect, "failed", started, code="tool_error")
         return {"ok": False, "code": "tool_error", "error": "The tool failed. Nothing was reported as done."}
     status = "verified" if result.get("verified", result.get("ok", True)) else ("unverified" if result.get("ok", True) else "failed")
     # A refusal keeps its code in the trace (why a step did not happen), never its free text.
-    ctx.activity(spec.name, tool.label, spec.effect, status, started, **({"code": str(result["code"])[:60]} if result.get("code") else {}))
+    extra = {"code": str(result["code"])[:60]} if result.get("code") else {}
+    runs = run_ids_read(spec.name, result) if status == "verified" else []
+    if runs:
+        extra["runIds"] = runs
+    ctx.activity(spec.name, tool.label, spec.effect, status, started, **extra)
     if not result.get("ok", True) and not result.get("needsUser") and result.get("error"):
         # The app's own reason (a user-facing message) is what the answer reports when the Manager's words can't be used.
         ctx.ledger.error(str(result.get("code") or "failed")[:60], str(result["error"])[:300])
     return result
+
+
+# D-A52: which automation runs a verified automation read covered (opaque occurrence ids only, never their text), so the
+# presentation eligibility (ui_projection.eligibility) offers a run-history view on what was read, not on wording alone.
+RUN_READS = {"automation_get": "runs", "automation_explain": "runId"}
+MAX_RUN_IDS = 10
+_RUN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
+
+
+def run_ids_read(tool: str, result: Any) -> list[str]:
+    data = result.get("data") if isinstance(result, dict) else None
+    if tool not in RUN_READS or not isinstance(data, dict):
+        return []
+    if tool == "automation_get":
+        found = [run.get("occurrenceId") for run in data.get("runs") if isinstance(run, dict)] if isinstance(data.get("runs"), list) else []
+    else:
+        found = [data.get("runId")]
+    out: list[str] = []
+    for ident in found:
+        if isinstance(ident, str) and _RUN_ID.match(ident) and ident not in out:
+            out.append(ident)
+    return out[:MAX_RUN_IDS]
 
 
 def _blocked(ctx, tool, started, code, message):
@@ -215,8 +253,9 @@ def sdk_tools(names, *, scope_name: str | None = None) -> list:
                 return model_output(result)
 
             needs = _approval_gate(tool) if tool.spec.approval and tool.spec.name == "proposal_apply" else False
+            # The timeout is the capability's declared one (CF-1 ToolSpec.timeout_seconds, default 150 s = what every tool had).
             return FunctionTool(name=tool.name, description=tool.spec.description, params_json_schema=tool.schema, on_invoke_tool=invoke,
-                                strict_json_schema=False, needs_approval=needs, timeout_seconds=150.0)
+                                strict_json_schema=False, needs_approval=needs, timeout_seconds=tool.spec.timeout_seconds)
         tools.append(make())
     return tools
 

@@ -1,7 +1,9 @@
+import type { LibraryMetadataHistory, LibraryMetadataReceipt, LibraryMetadataSelection } from './library-metadata';
 import type { YouTubeOverview, YouTubeActionReview, YouTubeActionReceipt, YouTubeData, YouTubeAgentOverview, YouTubeAgentDraft, YouTubeAgentPolicy, YouTubeAgentMutation, YouTubePolicyStatus, YouTubeAgentPageOptions, YouTubeAgentHistory, YouTubeAgentArchiveResult } from '@/lib/youtube/types';
 import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-types';
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
+import type { ConnectionHealth } from '@/lib/channels/health';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -60,6 +62,8 @@ import type {
   VideoUploadTicket,
   VideoResumeTicket,
   SecurityEvent,
+  SecurityIncident,
+  SecurityIncidentReport,
   SessionInfo,
   Snapshot,
   ActiveTimeBeat,
@@ -202,6 +206,10 @@ export function createApi(getToken: TokenSource) {
     disableMfa: () => send<{ enforced: boolean; enforcedAt: number | null }>('DELETE', '/api/auth/mfa'),
     revokeOtherSessions: () =>
       send<{ revoked: number; refreshRevoked: boolean; current: string }>('POST', '/api/auth/sessions/revoke-others'),
+    securityIncidents: () => get<{ incidents: SecurityIncident[] }>('/api/auth/security/incidents'),
+    /** "This wasn't me": the confirmation is explicit in the body; the server also wants a sign-in from the last 10 minutes. */
+    reportNotMe: (revokeOtherSessions: boolean, sourceEventId: string | null = null) =>
+      send<SecurityIncidentReport>('POST', '/api/auth/security/incidents', { type: 'not_me', confirmed: true, revokeOtherSessions, sourceEventId }),
 
     /* snapshot + single mutation channel */
     snapshot: (w: string) => get<Snapshot>(ws(w)),
@@ -235,7 +243,9 @@ export function createApi(getToken: TokenSource) {
       send<{ url: string }>('POST', `${ws(w)}/billing/portal`, { returnPath }),
 
     /* channels */
-    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[] }>(`${ws(w)}/channels`),
+    /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
+    channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
+    connectionHealth: (w: string) => get<ConnectionHealth>(`${ws(w)}/connection-health`),
     youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
     acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
       send<YouTubePolicyStatus>('POST', `${ws(w)}/youtube-policy`, body),
@@ -437,6 +447,11 @@ export function createApi(getToken: TokenSource) {
     deleteLibraryFile: (w: string, assetId: string) =>
       send<{ assetId: string; status: string }>('DELETE', `${ws(w)}/library/files/${encodeURIComponent(assetId)}`),
 
+    previewLibraryMetadata: (w: string, changes: LibraryMetadataSelection[]) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/preview`, { changes }),
+    libraryMetadataHistory: (w: string) => get<LibraryMetadataHistory>(`${ws(w)}/library/metadata/changes`),
+    libraryMetadataReceipt: (w: string, id: string) => get<LibraryMetadataReceipt>(`${ws(w)}/library/metadata/changes/${encodeURIComponent(id)}`),
+    applyLibraryMetadata: (w: string, receiptId: string) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/apply`, { receiptId }),
+    undoLibraryMetadata: (w: string, receiptId: string) => send<LibraryMetadataReceipt>('POST', `${ws(w)}/library/metadata/undo`, { receiptId }),
     libraryCollections: (w: string) => get<{ collections: { id: string; name: string; count: number }[] }>(`${ws(w)}/library/collections`),
     createLibraryCollection: (w: string, name: string) => send('POST', `${ws(w)}/library/collections`, { name }),
     deleteLibraryCollection: (w: string, id: string) => send('DELETE', `${ws(w)}/library/collections/${encodeURIComponent(id)}`),

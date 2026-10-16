@@ -38,7 +38,7 @@ export function OpportunityCard({
   function ask() {
     if (!source) return;
     panelStore.register(chatKey, { selectedEntity: { type: 'source', id: source }, visibleState: { trendId: op.trend_id, opportunityRevision: op.revision, receiptId: op.trust_receipt_id } });
-    panelStore.ask(`Help me develop the selected original angle from Ideas source ${source}. Check its current trend receipt ${op.trust_receipt_id}, my goal, destination and required facts. Explain uncertainty; do not copy examples or invent personal experience.`);
+    panelStore.ask(`Help me develop the selected original angle from Ideas source ${source}. Check its current trend receipt ${op.trust_receipt_id}, my goal, destination and required facts. Explain uncertainty; do not copy examples or invent personal experience.`, w);
   }
   const request = useRef<{
     fingerprint: string;

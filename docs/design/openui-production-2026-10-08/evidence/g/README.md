@@ -6,7 +6,7 @@ text, canonical source or private record content. Every writer passes `tests/age
 | Path | What | Written by |
 |---|---|---|
 | `results/*.json` | gate-level evidence records `{records: [...]}` that `release` mode reads | A copies CI `gate-records.json`; `agent_ui_live.py ingest` |
-| `live-<sha>-<timestamp>.json` | one live browser-mode run: 30 + 9 cases, verdicts, budget, declared time origins | `agent_ui_live.py ingest` |
+| `live-<sha>-<timestamp>.json` | one live browser-mode run: the fixed 60-case G03 corpus (D-A53) + 9 edits, verdicts, budget, declared time origins | `agent_ui_live.py ingest` |
 | `concurrency-<sha>.json` | 1 / 5 / 20 session run against the loopback harness (fixture provider) | `agent_ui_live.py concurrency` |
 | `matrix.md` | the acceptance matrix with the latest status per gate, SHA and evidence paths | G, from the records |
 | `review-focus.md` | how review-focus items 1–5 are tested | G |

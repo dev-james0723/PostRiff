@@ -37,14 +37,16 @@ export interface GeneratedRendererProps {
   onNavigate?: (path: string) => void;
   /** The native answer stays in the native layer above; pass it only where the surface has no other native rendering. */
   nativeResult?: ReactNode;
+  /** C reports when the revision on screen is older than the latest (the dirty-field warning); F turns editing off then. */
+  onOlderRevision?: (state: 'choosing' | 'kept' | null) => void;
 }
 
-export function GeneratedRenderer({ render, view, transport, surface, status, active, onContinue, onRetry, onExpand, onNavigate, nativeResult }: GeneratedRendererProps): ReactNode {
+export function GeneratedRenderer({ render, view, transport, surface, status, active, onContinue, onRetry, onExpand, onNavigate, nativeResult, onOlderRevision }: GeneratedRendererProps): ReactNode {
   const artifact = render.mode === 'generated' ? render.artifact : render.mode === 'preview' ? render.artifact : (view?.artifact ?? null);
   const manifest: UiPublicManifestV1 | null = view?.manifest ?? null;
   return (
     <RafiiGenerativeMessage artifact={artifact} manifest={manifest} render={render} status={status} historical={Boolean(view?.access?.historical)} active={active}
       surface={surface} transport={transport} onContinue={onContinue} onRetry={onRetry ?? null} onExpand={onExpand ?? null} onNavigate={onNavigate}
-      nativeResult={nativeResult} />
+      nativeResult={nativeResult} onOlderRevision={onOlderRevision} />
   );
 }

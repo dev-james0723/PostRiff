@@ -26,7 +26,7 @@ export interface PanelState {
   page: Pick<SiteAgentPageContext, 'selectedEntity' | 'visibleState'> | null;
   live: Record<string, LiveRun>;
   busy: Record<string, boolean>;
-  prefill: string | null;
+  prefill: { text: string; workspaceId: string } | null;
 }
 
 const OPEN_KEY = 'rafii.panel.open';
@@ -87,14 +87,15 @@ export const panelStore = {
     if (above !== state.above) set({ above });
   },
   /** Open with a question typed in (for "Ask Rafii about this" links); the person still sends it. */
-  ask(text: string) {
-    set({ prefill: text });
+  ask(text: string, workspaceId: string | null) {
+    if (!workspaceId || !text.trim()) return;
+    set({ prefill: { text, workspaceId } });
     panelStore.setOpen(true);
   },
-  takePrefill(): string | null {
+  takePrefill(workspaceId: string | null): string | null {
     const value = state.prefill;
     if (value !== null) set({ prefill: null });
-    return value;
+    return value?.workspaceId === workspaceId ? value.text : null;
   },
   /** Read the conversation this tab was continuing in a workspace (once per workspace). */
   load(workspaceId: string) {

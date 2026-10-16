@@ -315,7 +315,9 @@ class DetectorTest(unittest.TestCase):
 
     def test_reviews_reconnects_and_weeks(self):
         state = self.state("scheduled")
-        state["phase2"]["channels"].append({"id": "c2", "platform": "Threads", "connectionState": "token_expired"})
+        # A real stored record whose access expired (connectionState is computed for views, never stored).
+        state["phase2"]["channels"].append({"id": "c2", "platform": "Threads", "account": "@studio", "configured": True, "revoked": False, "identityVerified": True,
+                                            "expiresAt": 500, "scopes": ["threads_basic"]})
         state["coworker"] = {"weekly": {"weeks": [{"id": "wk1", "state": "ready_for_review", "weekOf": "2026-09-28", "slots": [{}, {}]}]}}
         kinds = {e["event_type"] for e in detector.from_state("ws", state, 1_000)}
         self.assertTrue({"campaign.approval_required", "channel.reconnect_required", "campaign.week_ready"} <= kinds)

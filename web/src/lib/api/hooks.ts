@@ -14,6 +14,7 @@ export const keys = {
   snapshot: (w: string) => ['snapshot', w] as const,
   usage: (w: string) => ['usage', w] as const,
   channels: (w: string) => ['channels', w] as const,
+  connectionHealth: (w: string) => ['channels', w, 'health'] as const,
   analytics: (w: string) => ['analytics', w] as const,
   timeSavings: (w: string, range: string) => ['time-savings', w, range] as const,
   audience: (w: string) => ['audience', w] as const,
@@ -29,6 +30,7 @@ export const keys = {
   me: ['me'] as const,
   myChannels: ['me', 'channels'] as const,
   securityEvents: ['me', 'security-events'] as const,
+  securityIncidents: ['me', 'security-incidents'] as const,
   myInvitations: ['me', 'invitations'] as const,
   tools: ['tools'] as const,
   models: ['models'] as const,
@@ -59,6 +61,12 @@ export function useUsage() {
 export function useChannels() {
   const { api, w, enabled } = useScoped();
   return useQuery({ queryKey: keys.channels(w), queryFn: () => api.channels(w), enabled });
+}
+
+/** Connection Health Center: only requested where the Channels response said this workspace may open it. */
+export function useConnectionHealth(options: { enabled?: boolean } = {}) {
+  const { api, w, enabled } = useScoped();
+  return useQuery({ queryKey: keys.connectionHealth(w), queryFn: () => api.connectionHealth(w), enabled: enabled && options.enabled !== false, retry: false });
 }
 
 export function useAnalytics() {
@@ -149,6 +157,12 @@ export function useMyChannels() {
 export function useSecurityEvents() {
   const { api } = useWorkspace();
   return useQuery({ queryKey: keys.securityEvents, queryFn: () => api.securityEvents() });
+}
+
+/** "This wasn't me" reports. The route answers 404 while the feature is off, so no retry: the section stays hidden. */
+export function useSecurityIncidents() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.securityIncidents, queryFn: () => api.securityIncidents(), retry: false });
 }
 
 /** Invitations waiting for the person's verified email. */

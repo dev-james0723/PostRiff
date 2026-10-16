@@ -1,0 +1,3710 @@
+{
+ "schema": "rafii.creation-capabilities.v1",
+ "revision": "cap_2dbc7a389abbd30d1e25",
+ "registryRelease": "reg_aa5574904814285fa01d8ccf",
+ "rollout": {
+  "waves": [
+   "RAFII_CREATION_PROJECTION_ENABLED"
+  ]
+ },
+ "originalPlatforms": [
+  "LinkedIn",
+  "Instagram",
+  "Threads",
+  "X",
+  "Xiaohongshu"
+ ],
+ "draftable": [
+  "LinkedIn",
+  "Instagram",
+  "Threads",
+  "Facebook",
+  "X",
+  "Xiaohongshu"
+ ],
+ "platforms": [
+  {
+   "platform": "LinkedIn",
+   "id": "linkedin",
+   "labelKey": "platform.LinkedIn",
+   "original": true,
+   "skill": {
+    "id": "postriff-channel-linkedin",
+    "version": "1.1.0",
+    "sha256": "78da00ea9e1451280c5109c77ac22e3e56c8e86f819c0d6468dbf76bc439f867",
+    "registryVersion": "1.1.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-linkedin"
+    ]
+   },
+   "formats": [
+    {
+     "id": "linkedin.post",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "linkedin.document",
+     "mediaKind": "document",
+     "nativeFields": [
+      "title"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "slides",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "document_input_required",
+      "detail": "Needs a document file you supply."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "linkedin.post",
+   "limits": {
+    "verified": true,
+    "characters": 3000,
+    "title": null,
+    "version": "local-conservative-2026-09-14",
+    "operation": "member_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to LinkedIn is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Instagram",
+   "id": "instagram",
+   "labelKey": "platform.Instagram",
+   "original": true,
+   "skill": {
+    "id": "postriff-channel-instagram",
+    "version": "1.0.0",
+    "sha256": "5122a895206b2ac3f90917e5b021cac958c236bf5b6f003fbec8f50cb1464697",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-instagram"
+    ]
+   },
+   "formats": [
+    {
+     "id": "instagram.post",
+     "mediaKind": "image",
+     "nativeFields": [],
+     "draftFields": [
+      "caption",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "instagram.carousel",
+     "mediaKind": "image",
+     "nativeFields": [],
+     "draftFields": [
+      "caption",
+      "slides",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "instagram.story",
+     "mediaKind": "image",
+     "nativeFields": [],
+     "draftFields": [
+      "caption",
+      "frames",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "instagram.reel",
+     "mediaKind": "video",
+     "nativeFields": [],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "instagram.post",
+   "limits": {
+    "verified": true,
+    "characters": 2200,
+    "title": null,
+    "version": "local-conservative-2026-09-14",
+    "operation": "professional_image"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Instagram is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Threads",
+   "id": "threads",
+   "labelKey": "platform.Threads",
+   "original": true,
+   "skill": {
+    "id": "postriff-channel-threads",
+    "version": "1.0.0",
+    "sha256": "98744b1a972d078ae1ff63546d7d7752f42598479dfc467369701a6a160c4b43",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-threads"
+    ]
+   },
+   "formats": [
+    {
+     "id": "threads.post",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "threads.reply",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "parent_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "parent_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "threads.post",
+   "limits": {
+    "verified": true,
+    "characters": 500,
+    "title": null,
+    "version": "hosted-2026-09-16",
+    "operation": "text_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Threads is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Facebook",
+   "id": "facebook",
+   "labelKey": "platform.Facebook",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-facebook",
+    "version": "1.0.0",
+    "sha256": "aaf7fa129ebb65aa5770943e1e80ee488f9f102b96bd1c729a3a0977de51cd5e",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-facebook"
+    ]
+   },
+   "formats": [
+    {
+     "id": "facebook.page_post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "page_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "page_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "facebook.story",
+     "mediaKind": "image",
+     "nativeFields": [
+      "page_ref"
+     ],
+     "draftFields": [
+      "caption",
+      "frames",
+      "altText"
+     ],
+     "bindingFields": [
+      "page_ref"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "facebook.reel",
+     "mediaKind": "video",
+     "nativeFields": [
+      "page_ref"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "page_ref"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "facebook.page_post",
+   "limits": {
+    "verified": true,
+    "characters": 63206,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "page_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Facebook is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "X",
+   "id": "x",
+   "labelKey": "platform.X",
+   "original": true,
+   "skill": {
+    "id": "postriff-channel-x",
+    "version": "1.0.1",
+    "sha256": "2cb02eca92fe4f0558d5b5e2a35aef55da2096f843eb56b37788702e2876a51d",
+    "registryVersion": "1.0.1",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-x"
+    ]
+   },
+   "formats": [
+    {
+     "id": "x.post",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "x.thread",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "sequence"
+     ],
+     "draftFields": [
+      "caption",
+      "sequence",
+      "segments"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "x.post",
+   "limits": {
+    "verified": true,
+    "characters": 280,
+    "title": null,
+    "version": "local-conservative-2026-09-24",
+    "operation": "post"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to X is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "TikTok",
+   "id": "tiktok",
+   "labelKey": "platform.TikTok",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-tiktok",
+    "version": "1.0.0",
+    "sha256": "ede5b9ce1841322e3391005a2b80e32b512031cf286e100bb824b471a4734dc5",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-tiktok"
+    ]
+   },
+   "formats": [
+    {
+     "id": "tiktok.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "cover_ref",
+      "sound_rights"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "cover_ref",
+      "sound_rights"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "tiktok.video",
+   "limits": {
+    "verified": true,
+    "characters": 2200,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "video_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "TikTok drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to TikTok is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "YouTube",
+   "id": "youtube",
+   "labelKey": "platform.YouTube",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-youtube",
+    "version": "1.0.0",
+    "sha256": "819468bcf1a01aadadb41d85094d548c2a1fbcce0b55960436227293067f4680",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-youtube"
+    ]
+   },
+   "formats": [
+    {
+     "id": "youtube.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "title",
+      "description"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "description",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "youtube.short",
+     "mediaKind": "video",
+     "nativeFields": [
+      "title"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "youtube.community_post",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "youtube.video",
+   "limits": {
+    "verified": true,
+    "characters": 5000,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "video_upload"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "YouTube drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to YouTube is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Xiaohongshu",
+   "id": "xiaohongshu",
+   "labelKey": "platform.Xiaohongshu",
+   "original": true,
+   "skill": {
+    "id": "postriff-channel-xiaohongshu",
+    "version": "1.1.0",
+    "sha256": "bba3e3dfd25c9ee02345d31ea7c3c070854f8b20a287cb6fa1041f59bfd6f903",
+    "registryVersion": "1.1.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-xiaohongshu"
+    ]
+   },
+   "formats": [
+    {
+     "id": "xiaohongshu.note",
+     "mediaKind": "image",
+     "nativeFields": [
+      "title",
+      "originality"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "slides",
+      "altText"
+     ],
+     "bindingFields": [
+      "originality"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "xiaohongshu.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "title",
+      "originality"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "originality"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "xiaohongshu.note",
+   "limits": {
+    "verified": true,
+    "characters": 1000,
+    "title": 20,
+    "version": "wave4c-draft-2026-09-28",
+    "operation": "draft_note"
+   },
+   "operations": {
+    "draft": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Rafii writes native drafts for review, copy and export."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "ready",
+     "reason": "ok",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Xiaohongshu publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Bilibili",
+   "id": "bilibili",
+   "labelKey": "platform.Bilibili",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-bilibili",
+    "version": "1.1.0",
+    "sha256": "733420e3acd0fbcef1d7e32d4d73864b9b6ffdba76a906267203e9c49b509f05",
+    "registryVersion": "1.1.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-bilibili"
+    ]
+   },
+   "formats": [
+    {
+     "id": "bilibili.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "title",
+      "description",
+      "cover_ref",
+      "category"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "description",
+      "category",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "cover_ref"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "bilibili.video",
+   "limits": {
+    "verified": true,
+    "characters": 2000,
+    "title": null,
+    "version": "wave4a-draft-2026-09-28",
+    "operation": "draft_video_or_article"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Bilibili drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Bilibili publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Zhihu",
+   "id": "zhihu",
+   "labelKey": "platform.Zhihu",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-zhihu",
+    "version": "1.0.0",
+    "sha256": "d288a5997c3a2adc8df0c5f2aed3855ae219f6934c0eb3ac1c29381fe998628a",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-zhihu"
+    ]
+   },
+   "formats": [
+    {
+     "id": "zhihu.answer",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "question_ref",
+      "promotion_disclosure"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "question_ref",
+      "promotion_disclosure"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "zhihu.article",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "title"
+     ],
+     "draftFields": [
+      "caption",
+      "title"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "zhihu.idea",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "zhihu.answer",
+   "limits": {
+    "verified": true,
+    "characters": 20000,
+    "title": null,
+    "version": "wave4b-draft-2026-09-28",
+    "operation": "draft_answer_or_article"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Zhihu drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Zhihu publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Weibo",
+   "id": "weibo",
+   "labelKey": "platform.Weibo",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-weibo",
+    "version": "1.0.0",
+    "sha256": "3f362c9ed4b35329e43c2019f1434b9b1ceeb418276e44b4c1d620f0eaeca807",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-weibo"
+    ]
+   },
+   "formats": [
+    {
+     "id": "weibo.post",
+     "mediaKind": "optional",
+     "nativeFields": [],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "weibo.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "title"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "weibo.post",
+   "limits": {
+    "verified": true,
+    "characters": 2000,
+    "title": null,
+    "version": "wave4a-draft-2026-09-28",
+    "operation": "draft_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Weibo drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Weibo publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Douyin",
+   "id": "douyin",
+   "labelKey": "platform.Douyin",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-douyin",
+    "version": "1.0.0",
+    "sha256": "f3fe0c9be39d27db1ce0a5761693b919838d4d345c52d09cab1cf6fd14d89ffd",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-douyin"
+    ]
+   },
+   "formats": [
+    {
+     "id": "douyin.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "cover_ref",
+      "sound_rights"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "cover_ref",
+      "sound_rights"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "douyin.video",
+   "limits": {
+    "verified": true,
+    "characters": 1000,
+    "title": null,
+    "version": "wave4a-hosted-2026-09-28",
+    "operation": "video_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Douyin drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Douyin is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "WeChat Channels",
+   "id": "wechat-channels",
+   "labelKey": "platform.WeChat Channels",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-wechat-channels",
+    "version": "1.0.0",
+    "sha256": "0faba2a8d774007d3e88e7da6aacdd122131c2f9e08ed6cacdcd97b02c5a8b66",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-wechat-channels"
+    ]
+   },
+   "formats": [
+    {
+     "id": "wechat-channels.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "cover_ref",
+      "title"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "cover_ref"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "wechat-channels.video",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "WeChat Channels drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no WeChat Channels publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Pinterest",
+   "id": "pinterest",
+   "labelKey": "platform.Pinterest",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-pinterest",
+    "version": "1.0.0",
+    "sha256": "359c33e750379124e6803e1d4aa0f0af83f64d098335fe36e87e85439f7dde4a",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-pinterest"
+    ]
+   },
+   "formats": [
+    {
+     "id": "pinterest.pin",
+     "mediaKind": "image",
+     "nativeFields": [
+      "title",
+      "board_ref",
+      "destination_url"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "altText"
+     ],
+     "bindingFields": [
+      "board_ref",
+      "destination_url"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "pinterest.pin",
+   "limits": {
+    "verified": true,
+    "characters": 800,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "image_pin"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Pinterest drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Pinterest is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Reddit",
+   "id": "reddit",
+   "labelKey": "platform.Reddit",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-reddit",
+    "version": "1.0.0",
+    "sha256": "74e011f9f4af7d2806ca71eda91b3a875461006a6d61c3a4124a3cc7b81fba88",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-reddit"
+    ]
+   },
+   "formats": [
+    {
+     "id": "reddit.post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "subreddit",
+      "title",
+      "rules_ref",
+      "flair",
+      "promotion_disclosure"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "flair"
+     ],
+     "bindingFields": [
+      "subreddit",
+      "rules_ref",
+      "promotion_disclosure"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "reddit.post",
+   "limits": {
+    "verified": true,
+    "characters": 40000,
+    "title": null,
+    "version": "wave4b-draft-2026-09-28",
+    "operation": "draft_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Reddit drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Reddit publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Bluesky",
+   "id": "bluesky",
+   "labelKey": "platform.Bluesky",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-bluesky",
+    "version": "1.0.0",
+    "sha256": "e46f5b02c7c6054e81cbd8c02a22cd5edeb7c9389117ee1935fd95e814a87cb5",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-bluesky"
+    ]
+   },
+   "formats": [
+    {
+     "id": "bluesky.post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "did",
+      "pds",
+      "facets"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "did",
+      "pds",
+      "facets"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "bluesky.post",
+   "limits": {
+    "verified": true,
+    "characters": 300,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Bluesky drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Bluesky is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Telegram",
+   "id": "telegram",
+   "labelKey": "platform.Telegram",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-telegram",
+    "version": "1.0.0",
+    "sha256": "34bde780cabefb07f2239c3e0d891eceb3a20ab480019fd34edb938f1d9a963e",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-telegram"
+    ]
+   },
+   "formats": [
+    {
+     "id": "telegram.message",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "chat_ref",
+      "parse_mode",
+      "notification_mode"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "chat_ref",
+      "parse_mode",
+      "notification_mode"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "telegram.poll",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "chat_ref",
+      "question",
+      "options"
+     ],
+     "draftFields": [
+      "caption",
+      "question",
+      "options"
+     ],
+     "bindingFields": [
+      "chat_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "telegram.message",
+   "limits": {
+    "verified": true,
+    "characters": 4096,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "channel_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Telegram drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Telegram is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Mastodon",
+   "id": "mastodon",
+   "labelKey": "platform.Mastodon",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-mastodon",
+    "version": "1.0.0",
+    "sha256": "d9ab486c3cbc45099677fd1671c5ac812156afd8e65d96f73a106cea699167d9",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-mastodon"
+    ]
+   },
+   "formats": [
+    {
+     "id": "mastodon.status",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "instance_ref",
+      "visibility",
+      "content_warning"
+     ],
+     "draftFields": [
+      "caption",
+      "content_warning"
+     ],
+     "bindingFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "mastodon.poll",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "instance_ref",
+      "visibility",
+      "question",
+      "options"
+     ],
+     "draftFields": [
+      "caption",
+      "question",
+      "options"
+     ],
+     "bindingFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "mastodon.status",
+   "limits": {
+    "verified": true,
+    "characters": 500,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "status"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Mastodon drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Mastodon is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Snapchat",
+   "id": "snapchat",
+   "labelKey": "platform.Snapchat",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-snapchat",
+    "version": "1.0.0",
+    "sha256": "ed1d364f110af9cf26587adaddfd9ee484a611ad582761bea02d036bade199df",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-snapchat"
+    ]
+   },
+   "formats": [
+    {
+     "id": "snapchat.story",
+     "mediaKind": "video",
+     "nativeFields": [
+      "public_profile_ref",
+      "sound_rights"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "frames",
+      "altText"
+     ],
+     "bindingFields": [
+      "public_profile_ref",
+      "sound_rights"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "snapchat.spotlight",
+     "mediaKind": "video",
+     "nativeFields": [
+      "public_profile_ref",
+      "sound_rights"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "public_profile_ref",
+      "sound_rights"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "snapchat.story",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Snapchat drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Snapchat publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Discord",
+   "id": "discord",
+   "labelKey": "platform.Discord",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-discord",
+    "version": "1.0.0",
+    "sha256": "c478a3a4e275f28d0cf3bf31c06ba88153c1fc9be6d9900f2484b5c93aa56518",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-discord"
+    ]
+   },
+   "formats": [
+    {
+     "id": "discord.message",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "guild_ref",
+      "channel_ref",
+      "allowed_mentions"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "guild_ref",
+      "channel_ref",
+      "allowed_mentions"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "discord.forum_post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "guild_ref",
+      "channel_ref",
+      "title",
+      "allowed_mentions"
+     ],
+     "draftFields": [
+      "caption",
+      "title"
+     ],
+     "bindingFields": [
+      "guild_ref",
+      "channel_ref",
+      "allowed_mentions"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "discord.message",
+   "limits": {
+    "verified": true,
+    "characters": 2000,
+    "title": null,
+    "version": "hosted-2026-09-25",
+    "operation": "channel_message"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Discord drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Discord is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Dcard",
+   "id": "dcard",
+   "labelKey": "platform.Dcard",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-dcard",
+    "version": "1.0.0",
+    "sha256": "52b383f4a271c177c5e02f6d077dec3d914652a9856162746950cc35b5cbe7a5",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-dcard"
+    ]
+   },
+   "formats": [
+    {
+     "id": "dcard.post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "board_ref",
+      "title",
+      "rules_ref",
+      "identity_mode",
+      "affiliation_disclosure"
+     ],
+     "draftFields": [
+      "caption",
+      "title"
+     ],
+     "bindingFields": [
+      "board_ref",
+      "rules_ref",
+      "identity_mode",
+      "affiliation_disclosure"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "dcard.post",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Dcard drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Dcard publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Feishu / Lark",
+   "id": "feishu-lark",
+   "labelKey": "platform.Feishu / Lark",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-feishu-lark",
+    "version": "1.0.0",
+    "sha256": "a491d4df0267d85ad7b22159de4a7f20375b52e8a5eed28ed8bdfa1a9c1d17a0",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-feishu-lark"
+    ]
+   },
+   "formats": [
+    {
+     "id": "feishu-lark.message",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "region",
+      "tenant_ref",
+      "chat_ref",
+      "message_type"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "region",
+      "tenant_ref",
+      "chat_ref",
+      "message_type"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "feishu-lark.message",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Feishu / Lark drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Feishu / Lark publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Google Business Profile",
+   "id": "google-business-profile",
+   "labelKey": "platform.Google Business Profile",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-google-business-profile",
+    "version": "1.0.0",
+    "sha256": "1c06c4268e97c67fcb07d98a3689d3e88fc70e9d8207adbde29f5a306780cd56",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-google-business-profile"
+    ]
+   },
+   "formats": [
+    {
+     "id": "google-business-profile.update",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "location_ref",
+      "cta"
+     ],
+     "draftFields": [
+      "caption",
+      "cta"
+     ],
+     "bindingFields": [
+      "location_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "google-business-profile.event",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "location_ref",
+      "title",
+      "start",
+      "end"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "start",
+      "end"
+     ],
+     "bindingFields": [
+      "location_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "google-business-profile.offer",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "location_ref",
+      "title",
+      "start",
+      "end",
+      "terms"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "start",
+      "end",
+      "terms"
+     ],
+     "bindingFields": [
+      "location_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "google-business-profile.update",
+   "limits": {
+    "verified": true,
+    "characters": 1500,
+    "title": null,
+    "version": "wave4a-hosted-2026-09-28",
+    "operation": "local_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Google Business Profile drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Google Business Profile is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "KakaoTalk Channel",
+   "id": "kakaotalk-channel",
+   "labelKey": "platform.KakaoTalk Channel",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-kakaotalk-channel",
+    "version": "1.0.0",
+    "sha256": "349b7285e27b7804bc2e73a1456fdcec04201b2e931b4d79b97b5a9e148cf7af",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-kakaotalk-channel"
+    ]
+   },
+   "formats": [
+    {
+     "id": "kakaotalk-channel.message",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "business_channel_ref",
+      "sender_profile_ref",
+      "template_ref",
+      "consented_audience_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "business_channel_ref",
+      "sender_profile_ref",
+      "template_ref",
+      "consented_audience_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "kakaotalk-channel.message",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "KakaoTalk Channel drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no KakaoTalk Channel publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Kuaishou",
+   "id": "kuaishou",
+   "labelKey": "platform.Kuaishou",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-kuaishou",
+    "version": "1.0.0",
+    "sha256": "72eef2477f76daaadeed1f835823d50249b099131f5e001880e0d246eb1c7905",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-kuaishou"
+    ]
+   },
+   "formats": [
+    {
+     "id": "kuaishou.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "creator_ref",
+      "cover_ref",
+      "sound_rights"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "creator_ref",
+      "cover_ref",
+      "sound_rights"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "kuaishou.video",
+   "limits": {
+    "verified": true,
+    "characters": 500,
+    "title": null,
+    "version": "wave4a-hosted-2026-09-28",
+    "operation": "video_post"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Kuaishou drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Kuaishou is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "LINE Official Account",
+   "id": "line-official-account",
+   "labelKey": "platform.LINE Official Account",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-line-official-account",
+    "version": "1.0.0",
+    "sha256": "e990a4bf4439caba15ec3e1ef7f2261f0ecec40a5dd8157d45a50a258f974b00",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-line-official-account"
+    ]
+   },
+   "formats": [
+    {
+     "id": "line-official-account.broadcast",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "official_account_ref",
+      "consented_audience_ref",
+      "quota_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "official_account_ref",
+      "consented_audience_ref",
+      "quota_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "line-official-account.broadcast",
+   "limits": {
+    "verified": true,
+    "characters": 2000,
+    "title": null,
+    "version": "wave4b-draft-2026-09-28",
+    "operation": "draft_message"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "LINE Official Account drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no LINE Official Account publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Moj",
+   "id": "moj",
+   "labelKey": "platform.Moj",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-moj",
+    "version": "1.0.0",
+    "sha256": "7686aafd2b3fcf7b9be60b4df5cb6bceb8fe208517744e51a85213ebc643bd68",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-moj"
+    ]
+   },
+   "formats": [
+    {
+     "id": "moj.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "region",
+      "language_review_ref",
+      "sound_rights",
+      "cover_ref"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "region",
+      "language_review_ref",
+      "sound_rights",
+      "cover_ref"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "moj.video",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Moj drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Moj publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Naver Blog",
+   "id": "naver-blog",
+   "labelKey": "platform.Naver Blog",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-naver-blog",
+    "version": "1.0.0",
+    "sha256": "93b04ce333e15add986b7282928c1b992eeeaa7f9bcd507eb11d2f1cd9b12104",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-naver-blog"
+    ]
+   },
+   "formats": [
+    {
+     "id": "naver-blog.article",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "blog_ref",
+      "title",
+      "category"
+     ],
+     "draftFields": [
+      "caption",
+      "title",
+      "category"
+     ],
+     "bindingFields": [
+      "blog_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "naver-blog.article",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Naver Blog drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Naver Blog publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "note",
+   "id": "note",
+   "labelKey": "platform.note",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-note-jp",
+    "version": "1.0.0",
+    "sha256": "6915d17bba03573c6e58439c01082b2d8c8b8906329709fdeebd8f99323d3189",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-note-jp"
+    ]
+   },
+   "formats": [
+    {
+     "id": "note.article",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "title",
+      "monetization_state"
+     ],
+     "draftFields": [
+      "caption",
+      "title"
+     ],
+     "bindingFields": [
+      "monetization_state"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "note.article",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "note drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no note publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Pixelfed",
+   "id": "pixelfed",
+   "labelKey": "platform.Pixelfed",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-pixelfed",
+    "version": "1.0.0",
+    "sha256": "1dd9b65e3f2a4bf91808461c3d46d0d735e068032d04bdec2c6b3f7dbb7493a5",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-pixelfed"
+    ]
+   },
+   "formats": [
+    {
+     "id": "pixelfed.photo",
+     "mediaKind": "image",
+     "nativeFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "draftFields": [
+      "caption",
+      "altText"
+     ],
+     "bindingFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "pixelfed.album",
+     "mediaKind": "image",
+     "nativeFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "draftFields": [
+      "caption",
+      "slides",
+      "altText"
+     ],
+     "bindingFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "image_input_required",
+      "detail": "Needs an image from your Library or an approved image generation."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "pixelfed.video",
+     "mediaKind": "video",
+     "nativeFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "draftFields": [
+      "caption",
+      "spokenScript",
+      "onScreenText",
+      "altText"
+     ],
+     "bindingFields": [
+      "instance_ref",
+      "visibility"
+     ],
+     "media": {
+      "state": "needs_input",
+      "reason": "video_input_required",
+      "detail": "Needs a real video. Rafii writes the script and on-screen text; a script is not a finished video."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "pixelfed.photo",
+   "limits": {
+    "verified": true,
+    "characters": 500,
+    "title": null,
+    "version": "wave4c-hosted-2026-09-28",
+    "operation": "image_status"
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Pixelfed drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "needs_input",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "needs_input",
+     "reason": "live_check_required",
+     "detail": "Publishing to Pixelfed is decided when you ask to publish: provider review, a verified connected account, your plan and an approval of the exact content."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "ShareChat",
+   "id": "sharechat",
+   "labelKey": "platform.ShareChat",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-sharechat",
+    "version": "1.0.0",
+    "sha256": "2f3b28ce04ab29116ec0369e2499bef8f2ee5df4fcb246d2826eb94151e75f52",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-sharechat"
+    ]
+   },
+   "formats": [
+    {
+     "id": "sharechat.post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "region",
+      "language_review_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "region",
+      "language_review_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "sharechat.post",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "ShareChat drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no ShareChat publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "Tencent QQ",
+   "id": "tencent-qq",
+   "labelKey": "platform.Tencent QQ",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-tencent-qq",
+    "version": "1.0.0",
+    "sha256": "4b97ec641816462024b1521a3ad94683d82379f8ff5ad2376f4878192b5753ba",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-tencent-qq"
+    ]
+   },
+   "formats": [
+    {
+     "id": "qq.community_message",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "group_ref",
+      "bot_ref",
+      "allowed_mentions"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "group_ref",
+      "bot_ref",
+      "allowed_mentions"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    },
+    {
+     "id": "qzone.post",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "profile_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "profile_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "qq.community_message",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Tencent QQ drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no Tencent QQ publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  },
+  {
+   "platform": "WhatsApp Channels",
+   "id": "whatsapp-channels",
+   "labelKey": "platform.WhatsApp Channels",
+   "original": false,
+   "skill": {
+    "id": "postriff-channel-whatsapp-channels",
+    "version": "1.0.0",
+    "sha256": "f37b1d1d6e5039e9f098b2288f3615449739aa034786811c74f7d27d49e382c0",
+    "registryVersion": "1.0.0",
+    "required": [
+     "postriff-content-craft",
+     "postriff-adapter-contract",
+     "postriff-channel-whatsapp-channels"
+    ]
+   },
+   "formats": [
+    {
+     "id": "whatsapp-channels.update",
+     "mediaKind": "optional",
+     "nativeFields": [
+      "channel_ref"
+     ],
+     "draftFields": [
+      "caption"
+     ],
+     "bindingFields": [
+      "channel_ref"
+     ],
+     "media": {
+      "state": "ready",
+      "reason": "media_optional",
+      "detail": "Text works on its own; media is optional."
+     },
+     "constraints": {
+      "verified": false,
+      "note": "Platform constraints for this format are unverified; Rafii never truncates to an assumed limit."
+     }
+    }
+   ],
+   "defaultFormat": "whatsapp-channels.update",
+   "limits": {
+    "verified": false,
+    "characters": null,
+    "version": null,
+    "note": "No versioned limit is recorded; drafts are not checked against a length."
+   },
+   "operations": {
+    "draft": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "WhatsApp Channels drafting isn't switched on for this deployment yet."
+    },
+    "media": {
+     "state": "ready",
+     "reason": "per_format",
+     "detail": "See each format's media requirement."
+    },
+    "export": {
+     "state": "unavailable",
+     "reason": "rollout_not_enabled",
+     "detail": "Copy or download the draft with a manifest; this is not a publication receipt."
+    },
+    "connect": {
+     "state": "unknown",
+     "reason": "checked_per_workspace",
+     "detail": "Connections are shown on the Channels page for this workspace."
+    },
+    "publish": {
+     "state": "unavailable",
+     "reason": "no_publisher",
+     "detail": "Rafii has no WhatsApp Channels publisher; export the draft and post it yourself."
+    },
+    "analytics": {
+     "state": "unknown",
+     "reason": "provider_and_consent_dependent",
+     "detail": "Results appear only from an authorized, verified post; a missing metric is unavailable, never zero."
+    },
+    "learning": {
+     "state": "needs_input",
+     "reason": "user_approval_required",
+     "detail": "Rafii proposes changes you can preview, accept, reject or undo."
+    }
+   },
+   "qualification": {
+    "code": "deterministic_tests",
+    "modelRoute": "unverified",
+    "production": "unverified",
+    "evidence": "tests/test_rafii_creation_capabilities.py"
+   }
+  }
+ ]
+}

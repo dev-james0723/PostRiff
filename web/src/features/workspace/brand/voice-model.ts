@@ -52,11 +52,11 @@ export function activeProfile(state: SnapshotState | undefined): VoiceProfile | 
 }
 
 /**
- * The profile download (`GET /profile-export`) only succeeds for a voice approved field by field
- * (`packageSchema`, hosted.export_profile). A voice from the setup on this page never carries one.
+ * Legacy field packages retain their export contract. Brand Brain exports are read-only
+ * archives of an approved, nonstale active voice; the server rechecks evidence and permissions.
  */
 export function canExportPackage(profile: VoiceProfile | null) {
-  return Boolean(profile && profile.packageSchema);
+  return Boolean(profile && (profile.packageSchema || (profile.workflow === 'brand_brain' && profile.status === 'approved')));
 }
 
 export interface VoiceCounts {

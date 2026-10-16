@@ -15,7 +15,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2 import ai_call_events
 from postriff_phase2.agent_runtime_v2 import ui_capabilities, ui_contracts as contracts, ui_projection, ui_store, ui_stream, ui_validator
 
-from test_agent_ui_stream_fakes import (GOOD_PROGRAM, ME, OTHER_TOKEN, PRIVATE_CONTEXT_TEXT, TOKEN, WS, FakeDB, FakeRuntime, FakeStore, FakeValidator,
+from test_agent_ui_stream_fakes import (GOOD_PROGRAM, ME, OTHER, OTHER_TOKEN, PRIVATE_CONTEXT_TEXT, TOKEN, WS, FakeDB, FakeRuntime, FakeStore, FakeValidator,
                                         ScriptTransport, Started, StatusError, fake_current, fake_manifest, fake_projection, frame_ids, make_assets, make_cfg,
                                         parse, program_in_pieces, usage_final)
 
@@ -407,6 +407,24 @@ class Failures(Base):
         for leaked in ("title", "root", "mydraftsecret", "s1"):
             self.assertNotIn(leaked, json.dumps(record["codes"]) + record["kind"])
 
+    def test_every_validator_code_is_in_the_log_vocabulary(self):
+        # D-A48/D-A52: a code validate.ts can emit never logs as "other"; the D-A52 codes are counted by name and get a repair note.
+        import os
+        import re as _re
+        from postriff_phase2.agent_runtime_v2 import ui_presenter, ui_stream as stream
+        path = os.path.join(os.path.dirname(__file__), "..", "web", "src", "lib", "agent-runtime", "ui-parser", "validate.ts")
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        emitted = set(_re.findall(r"errors\.push\([`']([a-z_-]+)[:`']", source)) | set(_re.findall(r"rejected\(\[['`]([a-z_-]+)['`]\]", source))
+        self.assertTrue({"unreachable_statement", "query_as_child", "query_arg_placeholder"} <= emitted, emitted)
+        self.assertEqual(sorted(emitted - stream.REJECTION_CODES), [])
+        with self.assertLogs("postriff.agent_ui", level="INFO") as logs:
+            stream._log_rejected("generate", ["query_as_child:automations", *[f"unreachable_statement:s{i}" for i in range(5)], "query_arg_placeholder:cal"])
+        self.assertEqual(json.loads(logs.records[-1].getMessage())["codes"], {"query_arg_placeholder": 1, "query_as_child": 1, "unreachable_statement": 5})
+        for code in ("unreachable_statement", "query_as_child", "query_arg_placeholder"):
+            self.assertNotIn(code, stream.NOT_REPAIRABLE, "a first-pass failure that goes to the one automatic repair")
+            self.assertIn(code, ui_presenter._REPAIR_GUIDE)
+
     def test_repair_is_budget_checked(self):
         self.validator.verdicts = ["reject"]
         self.transport.scripts.append([("delta", GOOD_PROGRAM), ("final", usage_final(1200, 16_000))])   # the first attempt costs ~8.1k
@@ -512,6 +530,20 @@ class Edits(Base):
         edit_reservation = self.db.ui_reservations()[-1]
         self.assertTrue(edit_reservation["meta"]["chain"].startswith("edit:"))
         self.assertEqual(self.db.revisions[(artifact_id, 1)], GOOD_PROGRAM.strip(), "the previous revision stays recoverable")
+
+    def test_co_member_who_is_not_the_actor_is_refused_before_any_spend(self):
+        """HF-3: the server matches access.canEdit (actor only); an editor of the same workspace who did not ask is a 403."""
+        _, artifact_id = self.ready_artifact()
+        head = dict(self.db.artifacts[artifact_id])
+        calls, reservations, attempts = len(self.transport.calls), len(self.db.ui_reservations()), len(self.db.attempts)
+        request = contracts.validate_patch({"baseRevision": 1, "baseSourceHash": head["sourceHash"], "instruction": "Add a chart",
+                                            "idempotencyKey": "edit-key-co-member-0001"})
+        self.assertEqual(self.db.members[(WS, OTHER)], "editor")
+        with self.assertRaises(AlphaError) as raised:
+            ui_stream.create_edit(self.runtime, {}, Started(), WS, OTHER_TOKEN, artifact_id, request)
+        self.assertEqual((raised.exception.status, raised.exception.code), (403, "ui_forbidden"))
+        self.assertEqual((len(self.transport.calls), len(self.db.ui_reservations()), len(self.db.attempts)), (calls, reservations, attempts))
+        self.assertEqual(self.db.artifacts[artifact_id]["revision"], head["revision"])
 
     def test_edit_while_another_attempt_is_live_is_refused(self):
         _, artifact_id = self.ready_artifact()

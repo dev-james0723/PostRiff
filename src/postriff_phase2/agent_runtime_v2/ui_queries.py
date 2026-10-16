@@ -97,6 +97,9 @@ def run_binding(dctx: common.DomainContext, binding, inputs: dict, cursor: str |
 def query_ui_binding(cur, auth, artifact, manifest, request, *, runtime=None, now=None, founder=None, supported=None):
     """`founder` is the verified founder scope dict (only the founder route passes it; consumer requests never have one)."""
     started = time.monotonic()
+    issued = ui_capabilities.query_binding(manifest, request.get("bindingId"))
+    if issued is not None and not ui_capabilities.permission_allows(auth, issued["binding"], kind="query"):
+        raise AlphaError("Rafii is not allowed to read this with your current permissions.", 403, code="agent_permission_denied")
     effective = ui_capabilities.current(cur, auth, manifest)
     ui_capabilities.require_drawable(artifact, supported)   # NC18: no live data on a view this build can't draw
     ui_capabilities.require_accepted(artifact, int(request.get("artifactRevision") or 0))

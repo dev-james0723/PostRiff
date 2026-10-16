@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import time
 
-RECONNECT_STATES = ("token_expired", "reauthorization_required", "scope_missing")
+from ..channels import ATTENTION_STATES, connection_state
+
+# The computed connection states that need a reconnect (channels.connection_state; a stored record has no state field).
+RECONNECT_STATES = ATTENTION_STATES
 QUEUE_HREF = "/app/queue"
 TIMELY_APPROVAL_WINDOW = 24 * 3600
 
@@ -30,6 +33,14 @@ def approval_timing(deadline, now):
 
 def _channel(state, channel_id):
     return next((c for c in ((state.get("phase2") or {}).get("channels") or []) if c.get("id") == channel_id), {}) or {}
+
+
+def _connection(channel, now):
+    """The channel's computed connection state, or None for a record too malformed to judge (the scan never stops)."""
+    try:
+        return connection_state(channel, now)
+    except (TypeError, ValueError):
+        return None
 
 
 def _last_message(job):
@@ -67,10 +78,15 @@ def from_state(workspace_id, state, now=None):
             out.append({"event_type": "campaign.approval_required", "dedupe_key": f"approval_required:{review['id']}{suffix}", "entity_type": "review", **timing,
                         "entity_id": review["id"], "payload": {"platform": channel.get("platform"), "account": channel.get("account"), "href": QUEUE_HREF}})
     for channel in phase2.get("channels") or []:
-        connection = channel.get("connectionState")
-        expired = channel.get("configured") and not channel.get("revoked") and isinstance(channel.get("expiresAt"), (int, float)) and 0 < channel["expiresAt"] < now
+        if not isinstance(channel, dict) or not channel.get("configured") or channel.get("revoked"):
+            # Never connected, or disconnected: a deliberate disconnect and a provider revocation look the same in
+            # state, and neither is announced as "reconnect required" from here.
+            continue
+        connection = _connection(channel, now)
+        expired = isinstance(channel.get("expiresAt"), (int, float)) and 0 < channel["expiresAt"] < now
         if connection in RECONNECT_STATES or expired:
-            marker = connection or f"expired:{int(channel['expiresAt'])}"
+            # An expiry keeps its dedupe key (expired:<time>), so a notice already sent is not sent again.
+            marker = f"expired:{int(channel['expiresAt'])}" if expired else connection
             out.append({"event_type": "channel.reconnect_required", "dedupe_key": f"reconnect:{channel.get('id')}:{marker}", "entity_type": "channel",
                         "entity_id": channel.get("id"), "payload": {"platform": channel.get("platform"), "account": channel.get("account"), "href": "/app/channels"}})
     planning = ((state.get("raffi") or {}).get("campaignPlanning") or {})
@@ -193,14 +209,46 @@ def from_database(cur, workspace_id, now=None):
 
 
 def security_events(cur, since_seconds=86400):
-    """Person-level security events from the audit log (no workspace): new devices and account changes."""
-    cur.execute("""SELECT a.id::text, a.actor::text, a.kind FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
-                   WHERE a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others')
+    """Person-level security events from the audit log (no workspace): new sign-ins and account changes.
+
+    A new sign-in comes from `session.observed` (RAPv2, recorded for every first sighting whatever the preference)
+    or, before that event existed, from the legacy `session.alerted` attempt. The new-sign-in notice itself stays
+    governed by the person's alert preference (owner decision D-1, 2026-10-14) as it stood at the first sighting,
+    recorded on the event (`meta.alert`), so the new session cannot cancel its own notice by switching alerts off
+    before this scan; rows written before that field existed fall back to the current preference. When both rows
+    exist for one session only `session.observed` produces the notice, so nobody is told twice.
+
+    A "This wasn't me" report (`security.incident_reported`, RAPv2) is a mandatory account-change notice: like every
+    `security.account_change` it is transactional, so no routine alert preference can switch it off.
+
+    `legacy_sent` says whether the legacy mailer already delivered this alert; the service's very first run
+    baselines (does not resend) only those."""
+    cur.execute("""SELECT a.id::text, a.actor::text, a.kind, extract(epoch from a.at), coalesce(a.meta->>'client',''),
+                          CASE a.kind
+                            WHEN 'session.alerted' THEN coalesce(a.meta->>'sent','') = 'true'
+                            WHEN 'session.observed' THEN EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=a.actor AND s.kind='session.alerted'
+                                                                AND s.subject=a.subject AND s.meta->>'sent'='true')
+                            ELSE true END
+                   FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
+                   WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others','security.incident_reported')
+                          OR (a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'
+                                                                   ELSE coalesce(p.alert_new_device, false) END))
+                   AND NOT (a.kind = 'session.alerted' AND a.subject <> '' AND EXISTS(SELECT 1 FROM public.pr_audit_events o
+                            WHERE o.actor=a.actor AND o.kind='session.observed' AND o.subject=a.subject))
                    AND a.at > now() - make_interval(secs => %s) AND a.actor IS NOT NULL ORDER BY a.at DESC LIMIT 500""", (since_seconds,))
+    titles = {"session.alerted": "A new device signed in", "session.observed": "New sign-in to your account", "mfa.enabled": "Two-step sign-in was turned on",
+              "mfa.disabled": "Two-step sign-in was turned off", "session.revoked_others": "Other sessions were signed out",
+              "security.incident_reported": "You reported a sign-in that wasn't you: your account is on a security hold"}
     out = []
-    for audit_id, actor, kind in cur.fetchall():
-        event_type = "security.new_device" if kind == "session.alerted" else "security.account_change"
-        out.append({"event_type": event_type, "dedupe_key": f"{event_type}:{audit_id}", "user_id": actor, "entity_type": "audit_event", "entity_id": audit_id,
-                    "payload": {"title": {"session.alerted": "A new device signed in", "mfa.enabled": "Two-step sign-in was turned on", "mfa.disabled": "Two-step sign-in was turned off",
-                                          "session.revoked_others": "Other sessions were signed out"}[kind], "href": "/app/account/profile"}})
+    for audit_id, actor, kind, *rest in cur.fetchall():
+        sign_in = kind in ("session.alerted", "session.observed")
+        event_type = "security.new_device" if sign_in else "security.account_change"
+        event = {"event_type": event_type, "dedupe_key": f"{event_type}:{audit_id}", "user_id": actor, "entity_type": "audit_event", "entity_id": audit_id,
+                 "payload": {"title": titles[kind], "href": "/app/account/profile"}, "legacy_sent": bool(rest[2]) if len(rest) >= 3 else True}
+        if kind == "session.observed" and len(rest) >= 2:
+            # Server-recorded facts only: when the session was first seen and its coarse browser label.
+            event["occurred_at"] = float(rest[0])
+            if rest[1]:
+                event["payload"]["device"] = rest[1][:40]
+        out.append(event)
     return out

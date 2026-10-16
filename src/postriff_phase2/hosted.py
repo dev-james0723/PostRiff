@@ -22,7 +22,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -37,6 +37,10 @@ WORKSPACE_SUMMARY_COLUMNS = (
     "(SELECT coalesce(op.display_name,'') FROM public.pr_memberships o JOIN public.pr_profiles op ON op.user_id=o.user_id WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
     "(SELECT coalesce(jsonb_object_agg(c.role,c.n),'{}'::jsonb) FROM (SELECT role,count(*) AS n FROM public.pr_memberships WHERE workspace_id=w.id AND status='active' GROUP BY role) c)"
 )
+# New-sign-in emails (RAP-133): at most CAP sent per person per WINDOW seconds; the cron sends BATCH per run.
+SIGN_IN_ALERT_CAP = 5
+SIGN_IN_ALERT_WINDOW = 3600
+SIGN_IN_ALERT_BATCH = 50
 INVITATION_TTL = 7 * 86400
 MAX_PENDING_INVITATIONS = 25
 PROFILE_NAME_MAX = 80
@@ -98,6 +102,33 @@ def audit(cur, workspace_id, actor, kind, subject="", meta=None):
     cur.execute("INSERT INTO public.pr_audit_events(workspace_id,actor,kind,subject,meta) VALUES(%s,%s,%s,%s,%s::jsonb)", (workspace_id, actor, kind, subject[:200], json.dumps(meta or {})))
 
 
+def observe_session(cur, principal, session_id, client_label=""):
+    """(first sighting?, alert eligible?) for this session. Eligibility is the person's alert preference at the
+    first sighting, stored on the `session.observed` event (RAPv2 observe mode): a preference change made later,
+    even by this same new session, governs later sign-ins only and cannot cancel this one's notice. The one code path
+    for the session routes (HostedWorkspaceService._observe_session) and the token verifier (hosted_app)."""
+    if not session_id:
+        return False, False
+    # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
+    cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
+    row = cur.fetchone()
+    fresh = bool(row and row[0])
+    alert = False
+    if fresh and account_protection.observing():
+        # RAPv2 P0: the first sighting is an account event of its own, committed with the session row, so the
+        # history never depends on the email setting; the setting is only read to record whether to notify.
+        cur.execute("SELECT coalesce(alert_new_device,false) FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+        setting = cur.fetchone()
+        alert = bool(setting and setting[0])
+        audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+    from . import device_trust
+    if device_trust.active():
+        # RAPv2 P1 device registry (RAFII_DEVICE_TRUST_V2): the browser behind this session and the ledger events
+        # that tell a new session apart from a new browser, in this same transaction.
+        device_trust.observe(cur, principal, session_id, client_label, fresh)
+    return fresh, alert
+
+
 class PostgresWorkspaceRepository:
     def __init__(self, connection_factory, verify_session, commands=None, clock=time.time):
         self.connection_factory = connection_factory
@@ -130,6 +161,8 @@ class PostgresWorkspaceRepository:
                     raise blocked_error()
                 if api_grant:
                     self.api_tokens.validate(cur, token, workspace_id)  # Lock the live grant through this transaction.
+                from .agent_runtime_v2 import authz
+                authz.recheck_transaction(cur, workspace_id, principal, row)
                 yield cur, row, principal
 
     def assert_fresh(self, token, principal):
@@ -182,6 +215,8 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
+        if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
+            audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after = None
         if action == media_consent.ACTION:
             # Chat-context SPEC §8.1: the owner's decision is audited with the processors it names, and turning it off
@@ -225,7 +260,9 @@ class HostedPhase2Commands:
         self.engine.images = FixtureImages()
 
     def present(self, state, revision):
-        return self.engine._present(state, revision)
+        shown = self.engine._present(state, revision)
+        shown['state']['brandBrain'] = brand_brain.projection(state)
+        return shown
 
     def __call__(self, state, principal, action, payload):
         if not isinstance(action, str) or not isinstance(payload, dict):
@@ -239,6 +276,9 @@ class HostedPhase2Commands:
             self.engine.invalidate(state)
             return state
         if memory.apply_memory_action(state, action, payload, principal, self.clock()):
+            if action in ('brand_brain_identity', 'brand_brain_boundaries'):
+                self.engine._mark_stale(state)
+                self.engine.invalidate(state)
             return state
         if media_consent.apply_action(state, action, payload, principal, self.clock(), processors=self.media_processors()):
             return state
@@ -250,6 +290,15 @@ class HostedPhase2Commands:
             return state
         if writer_defaults.apply_action(state, action, payload, principal, self.clock(), self.writers):
             return state
+        if brand_brain.apply_action(state, action, payload, principal, self.clock(), self.engine):
+            source_policy.stamp(state)
+            return state
+        if action in ('profile_decide', 'you_restore_voice'):
+            profile = state.get('speaker', {}).get('provisional') if action == 'profile_decide' else next((r['profile'] for r in state.get('speaker', {}).get('revisions', []) if r['revision'] == payload.get('revision')), None)
+            if profile and profile.get('analysisMethod'):
+                brand_brain.validate_profile(state, profile)
+            if profile and profile.get('workflow') == 'brand_brain':
+                raise AlphaError('Review the current Brand Brain proposal and impact before approving or restoring.', 409)
         if voice_analysis.apply_action(state, action, payload, principal, self.clock()):
             self.engine.invalidate(state)
             return state
@@ -432,6 +481,9 @@ class HostedWorkspaceService:
         # Product taxonomy (PRD §8.6): the journey and adoption events a command implies, ids/enums only, each batch behind
         # its own savepoint; it never fails the command.
         self.repository.effects.append(product_events.capture)
+        from .agent_runtime_v2 import agent_permissions, authz
+        self.repository.effects.append(lambda cur, wid, before, after, actor: agent_permissions.consent_effect(
+            cur, wid, before, after, actor, config=authz.runtime_config_for(self), now=self.clock()))
         self.ideas.learning = self.learning
         from .site_agent.service import SiteAgentService
         # The site-wide Rafii panel: the same conversations, runs, events and approval paths as Home (site agent spec §4.2).
@@ -710,27 +762,72 @@ class HostedWorkspaceService:
 
     def _touch_session(self, cur, principal, session_id, client_label=""):
         """Record the session; True when this is its first sighting (a sign-in on a device we had not seen)."""
-        if not session_id:
-            return False
-        # xmax is 0 on a freshly inserted row and non-zero on the version an ON CONFLICT update wrote.
-        cur.execute("INSERT INTO public.pr_sessions(user_id,session_id,client_label) VALUES(%s,%s,%s) ON CONFLICT(user_id,session_id) DO UPDATE SET last_seen=now(), client_label=CASE WHEN excluded.client_label='' THEN public.pr_sessions.client_label ELSE excluded.client_label END RETURNING (xmax = 0)", (principal, session_id, (client_label or "")[:40]))
-        row = cur.fetchone()
-        return bool(row and row[0])
+        return self._observe_session(cur, principal, session_id, client_label)[0]
 
-    def _alert_new_device(self, principal, session_id, client_label):
+    def _observe_session(self, cur, principal, session_id, client_label=""):
+        """(first sighting?, alert eligible?) for this session; see observe_session."""
+        return observe_session(cur, principal, session_id, client_label)
+
+    def _alert_new_device(self, principal, session_id, client_label, eligible=None):
         """After a session's first sighting: one email, only if the person turned the alert on. The
-        audit line records the attempt either way, so the account history shows it."""
-        if not self.public_base_url:
+        audit line records the attempt either way, so the account history shows it. `eligible` is the decision
+        already recorded at the first sighting (RAPv2 observe mode); otherwise the current preference decides.
+
+        In observe mode the request never sends (RAP-143): the decision is already durable on `session.observed`,
+        and the cron worker delivers it through deliver_sign_in_alerts, capped per person (RAP-133)."""
+        if not self.public_base_url or account_protection.observing():
             return
         with self.connection_factory() as db:
             with db.cursor() as cur:
-                cur.execute("SELECT alert_new_device FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
+                cur.execute("SELECT alert_new_device,coalesce(time_zone,'') FROM public.pr_profiles WHERE user_id=%s AND deleted_at IS NULL", (principal,))
                 row = cur.fetchone()
-                if not row or not row[0]:
+                if not row or not (row[0] if eligible is None else eligible):
                     return
                 address = self._email_for(principal)
-                outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile") if address else {"sent": False}
+                outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile", time_zone=row[1]) if address else {"sent": False}
                 audit(cur, None, principal, "session.alerted", session_id or "", {"sent": bool(outcome.get("sent"))})
+
+    def deliver_sign_in_alerts(self, limit=SIGN_IN_ALERT_BATCH, max_seconds=10):
+        """Cron step (observe mode): one new-sign-in email per `session.observed` whose recorded decision was to
+        notify and that has no `session.alerted` yet. At most SIGN_IN_ALERT_CAP sent per person per window; the rest
+        are recorded as suppressed, so the history still lists every sign-in and nothing is retried later. Each row
+        is its own transaction under a per-person advisory lock, so overlapping runs cannot email anyone twice."""
+        if not self.public_base_url or not account_protection.observing():
+            return {"status": "disabled"}
+        started, sent, suppressed = self.clock(), 0, 0
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT o.actor::text,o.subject FROM public.pr_audit_events o JOIN public.pr_profiles p ON p.user_id=o.actor AND p.deleted_at IS NULL "
+                            "WHERE o.kind='session.observed' AND o.meta->>'alert'='true' AND o.at > now() - interval '1 day' "
+                            "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=o.actor AND s.kind='session.alerted' AND s.subject=o.subject) "
+                            "ORDER BY o.at LIMIT %s", (limit,))
+                pending = cur.fetchall()
+        for principal, session_id in pending:
+            if self.clock() - started > max_seconds:
+                break
+            with self.connection_factory() as db:
+                with db.cursor() as cur:
+                    cur.execute("SELECT pg_try_advisory_xact_lock(hashtext('rafii-sign-in-alert:' || %s))", (principal,))
+                    if not cur.fetchone()[0]:
+                        continue  # another run holds this person; it or the next run takes the row
+                    cur.execute("SELECT extract(epoch from o.at),coalesce(o.meta->>'client',''),coalesce(p.time_zone,'') FROM public.pr_audit_events o "
+                                "JOIN public.pr_profiles p ON p.user_id=o.actor AND p.deleted_at IS NULL WHERE o.actor=%s AND o.kind='session.observed' AND o.subject=%s "
+                                "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=o.actor AND s.kind='session.alerted' AND s.subject=o.subject) LIMIT 1",
+                                (principal, session_id))
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+                    cur.execute("SELECT count(*) FROM public.pr_audit_events WHERE actor=%s AND kind='session.alerted' AND meta->>'sent'='true' "
+                                "AND at > now() - make_interval(secs => %s)", (principal, SIGN_IN_ALERT_WINDOW))
+                    if cur.fetchone()[0] >= SIGN_IN_ALERT_CAP:
+                        audit(cur, None, principal, "session.alerted", session_id, {"sent": False, "reason": "rate_limited"})
+                        suppressed += 1
+                        continue
+                    address = self._email_for(principal)
+                    outcome = self.mailer.new_device(address, row[1] or "an unrecognised device", float(row[0]), f"{self.public_base_url}/app/account/profile", time_zone=row[2]) if address else {"sent": False}
+                    audit(cur, None, principal, "session.alerted", session_id, {"sent": bool(outcome.get("sent"))})
+                    sent += bool(outcome.get("sent"))
+        return {"status": "ok", "pending": len(pending), "sent": sent, "suppressed": suppressed}
 
     def _present(self, saved):
         shown = self.commands.present(saved["state"], saved["revision"])
@@ -764,7 +861,11 @@ class HostedWorkspaceService:
                     # Product taxonomy (PRD §8.6): the signup milestone, ids/enums only, behind its own savepoint.
                     product_events.record(cur, workspace_id, principal, "workspace.created", workspace_id, 1, {"plan": saved_plan})
                     created = True
-                self._touch_session(cur, principal, self._session_id(token, principal), client_label)
+                session_id = self._session_id(token, principal)
+                fresh = self._touch_session(cur, principal, session_id, client_label)
+        if fresh and account_protection.observing():
+            # The first request of a new sign-in can be this one; /api/me would then find the session already seen.
+            self._alert_new_device(principal, session_id, client_label)
         if created and self.public_base_url:
             address = self._email_for(principal)
             if address:
@@ -778,9 +879,14 @@ class HostedWorkspaceService:
     def mutate(self, workspace_id, token, revision, action, payload):
         if action in ('p2_review', 'p2_approve', 'p2_approve_many'):
             self.oauth.refresh_for_composer(workspace_id, token, revision, action, payload)
-        if action == 'voice_profile_analyze' and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
+        if action == 'brand_brain_preview' and isinstance(payload, dict) and payload.get('model'):
+            return brand_brain.HostedPreview(self).run(workspace_id, token, revision, payload)
+        if action == 'brand_brain_quote':
             from .voice_ai import HostedVoiceAnalysis
-            return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload)
+            return HostedVoiceAnalysis(self).quote(workspace_id, token, revision, payload)
+        if action in ('voice_profile_analyze', 'brand_brain_analyze') and isinstance(payload, dict) and payload.get('route', 'local-rules') != 'local-rules':
+            from .voice_ai import HostedVoiceAnalysis
+            return HostedVoiceAnalysis(self).run(workspace_id, token, revision, payload, require_quote=action == 'brand_brain_analyze')
         return self._present(self.repository.mutate(workspace_id, token, revision, action, payload))
 
     # --- Workspaces, members, invitations, sessions, audit (architecture spec 8, 9, 21) ---
@@ -801,6 +907,8 @@ class HostedWorkspaceService:
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s AND status='active'", (workspace_id, principal))
             if cur.rowcount != 1:
                 raise AlphaError("Workspace unavailable.", 403)
+            from .agent_runtime_v2 import agent_permissions, authz
+            agent_permissions.on_membership_ended(cur, workspace_id, principal, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
             audit(cur, workspace_id, principal, "member.left")
         return {"workspaceId": workspace_id, "status": "left"}
 
@@ -831,7 +939,7 @@ class HostedWorkspaceService:
             "preferences": {"timeZone": time_zone, "locale": locale, "alertNewDevice": bool(alert_new_device), "agentStyle": style},
         }
 
-    def update_profile(self, token, changes):
+    def update_profile(self, token, changes, client_label=""):
         """PATCH /api/me: the display name and person-level preferences. Only the keys present change."""
         if not isinstance(changes, dict):
             raise AlphaError("Nothing to update.")
@@ -861,8 +969,14 @@ class HostedWorkspaceService:
             raise AlphaError("Nothing to update.")
         principal = self.verify_session(token)
         style = None
+        observed = (False, False)
         with self.connection_factory() as db:
             with db.cursor() as cur:
+                if account_protection.observing():
+                    # A brand-new session is observed before it can change the alert setting, so turning alerts off
+                    # from that session cannot cancel the notice about its own sign-in.
+                    session_id = self._session_id(token, principal)
+                    observed = self._observe_session(cur, principal, session_id, client_label)
                 if style_change is not None:
                     style = agent_style.merge(self._saved_agent_style(cur, principal), style_change)
                     columns["agent_style"] = json.dumps(style)
@@ -874,6 +988,8 @@ class HostedWorkspaceService:
                     style = agent_style.load(cur, principal)
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
+        if observed[0]:
+            self._alert_new_device(principal, session_id, client_label, eligible=observed[1])
         return {"displayName": row[0], "preferences": {"timeZone": row[1], "locale": row[2], "alertNewDevice": bool(row[3]), "agentStyle": style}}
 
     @staticmethod
@@ -921,7 +1037,9 @@ class HostedWorkspaceService:
 
     # The account history a person may see about themselves: what they did to the account, and what
     # others did to their memberships. Workspace content activity stays in the workspace audit log.
-    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics")
+    SECURITY_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked", "session.revoked_others", "session.alerted", "session.observed", "member.left", "invitation.accepted", "invitation.declined", "workspace.created", "data.exported", "data.diagnostics",
+                      # Rafii agent permissions (CF-2 §14): a person's own consent changes are part of their account history.
+                      "agent.permission.preset_applied", "agent.permission.changed", "agent.permission.revoked", "agent.permission.revoked_all")
     ABOUT_ME_KINDS = ("member.updated", "member.removed")
 
     def security_events(self, token, limit=50):
@@ -933,7 +1051,9 @@ class HostedWorkspaceService:
                 events = [{"id": item[0], "kind": item[1], "subject": item[2], "at": float(item[3]), "meta": item[4] if isinstance(item[4], dict) else {}, "workspaceId": item[5], "workspaceName": item[6]} for item in cur.fetchall()]
                 # A session's first sighting is the sign-in on that device; nothing else records it.
                 cur.execute("SELECT session_id,client_label,extract(epoch from first_seen) FROM public.pr_sessions WHERE user_id=%s ORDER BY first_seen DESC LIMIT %s", (principal, limit))
-                events.extend({"id": "session:" + item[0], "kind": "session.started", "subject": item[0], "at": float(item[2]), "meta": {"client": item[1]}, "workspaceId": None, "workspaceName": ""} for item in cur.fetchall())
+                # A session with a recorded `session.observed` event (RAPv2) is already in the list once.
+                observed = {event["subject"] for event in events if event["kind"] == "session.observed"}
+                events.extend({"id": "session:" + item[0], "kind": "session.started", "subject": item[0], "at": float(item[2]), "meta": {"client": item[1]}, "workspaceId": None, "workspaceName": ""} for item in cur.fetchall() if item[0] not in observed)
         events.sort(key=lambda event: event["at"], reverse=True)
         return {"events": events[:limit]}
 
@@ -1031,6 +1151,8 @@ class HostedWorkspaceService:
             if current[0] == "owner":
                 raise AlphaError("The owner cannot be removed.", 409)
             cur.execute("UPDATE public.pr_memberships SET status='revoked',updated_at=now() WHERE workspace_id=%s AND user_id=%s", (workspace_id, user_id))
+            from .agent_runtime_v2 import agent_permissions, authz
+            agent_permissions.on_membership_ended(cur, workspace_id, user_id, actor=principal, now=self.clock(), mode=authz.mode_for(authz.runtime_config_for(self), workspace_id))
             audit(cur, workspace_id, principal, "member.removed", user_id)
             return {"userId": user_id, "status": "revoked", "note": "Jobs this member approved are held at the next worker claim until re-approved."}
 
@@ -1083,7 +1205,7 @@ class HostedWorkspaceService:
             audit(cur, workspace_id, principal, "invitation.revoked", invitation_id)
             return {"invitationId": invitation_id, "state": "revoked"}
 
-    def accept_invitation(self, token, raw, client=None):
+    def accept_invitation(self, token, raw, client=None, client_label=""):
         if not isinstance(raw, str) or not 20 <= len(raw) <= 128:
             raise AlphaError("Invitation unavailable.", 404)
         if client:
@@ -1098,11 +1220,16 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                return self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation, client_label)
+        # Alert only once the membership and the session row have committed.
+        alert = joined.pop("_alertSession", None)
+        if alert:
+            self._alert_new_device(*alert)
+        return joined
 
     INVITATION_COLUMNS = "id::text,workspace_id::text,role,permissions"
 
-    def _join(self, cur, token, principal, invitation):
+    def _join(self, cur, token, principal, invitation, client_label=""):
         """Turn a locked pending invitation row (INVITATION_COLUMNS) into an active membership."""
         invitation_id, workspace_id, role, granted = invitation
         cur.execute("INSERT INTO public.pr_profiles(user_id) VALUES(%s) ON CONFLICT DO NOTHING", (principal,))
@@ -1119,8 +1246,9 @@ class HostedWorkspaceService:
             cur.execute("INSERT INTO public.pr_memberships(workspace_id,user_id,role,status,can_publish,can_reply,can_moderate,can_manage_connections) VALUES(%s,%s,%s,'active',%s,%s,%s,%s)", (workspace_id, principal, values[0], *values[1:]))
         cur.execute("UPDATE public.pr_invitations SET accepted_by=%s,accepted_at=now() WHERE id::text=%s", (principal, invitation_id))
         audit(cur, workspace_id, principal, "invitation.accepted", invitation_id, {"role": role})
-        self._touch_session(cur, principal, self._session_id(token, principal))
-        return {"workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
+        session_id = self._session_id(token, principal)
+        fresh, alert = self._observe_session(cur, principal, session_id, client_label)
+        return {"_alertSession": (principal, session_id, client_label, alert) if fresh and account_protection.observing() else None, "workspaceId": workspace_id, "role": role, **{key: granted.get(key, False) for key in ("can_publish", "can_reply", "can_moderate", "can_manage_connections")}}
 
     # --- invitations addressed to the signed-in person's verified email -----------------------
     # The emailed link works for anyone holding it; these routes instead match the invitation's
@@ -1145,7 +1273,7 @@ class HostedWorkspaceService:
             raise AlphaError("Your sign-in email could not be confirmed, so this invitation cannot be matched to you.", 409)
         return email
 
-    def accept_my_invitation(self, token, invitation_id):
+    def accept_my_invitation(self, token, invitation_id, client_label=""):
         if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
             raise AlphaError("Invitation unavailable.", 404)
         principal = self.verify_session(token)
@@ -1159,7 +1287,12 @@ class HostedWorkspaceService:
                 invitation = cur.fetchone()
                 if not invitation:
                     raise AlphaError("Invitation unavailable.", 404)
-                return self._join(cur, token, principal, invitation)
+                joined = self._join(cur, token, principal, invitation, client_label)
+        # Alert only once the membership and the session row have committed.
+        alert = joined.pop("_alertSession", None)
+        if alert:
+            self._alert_new_device(*alert)
+        return joined
 
     def decline_my_invitation(self, token, invitation_id):
         if not isinstance(invitation_id, str) or not 1 <= len(invitation_id) <= 64:
@@ -1198,7 +1331,10 @@ class HostedWorkspaceService:
                 if not cur.fetchone():
                     raise AlphaError("Session unavailable.", 404)
                 cur.execute("INSERT INTO public.pr_session_revocations(user_id,session_id) VALUES(%s,%s) ON CONFLICT DO NOTHING", (principal, session_id))
-                audit(cur, None, principal, "session.revoked", "")
+                # Which session: the person's own history must say what was signed out (it already lists session ids).
+                # Idempotent (RAP-051): a repeat on an already revoked session answers the same but writes nothing.
+                if cur.rowcount:
+                    audit(cur, None, principal, "session.revoked", session_id)
         return {"sessionId": session_id, "revoked": True, "current": session_id == self._session_id(token, principal)}
 
     def revoke_other_sessions(self, token):
@@ -1275,6 +1411,19 @@ class HostedWorkspaceService:
             return self.assets.storage.get(workspace_id, "media", poster["objectName"]), "image/jpeg"
         return self.assets.storage.get(workspace_id, "media", asset["objectName"]), asset.get("mime", "application/octet-stream")
 
+    def export_drafts(self, workspace_id, token, variant_ids):
+        """Copy/export fidelity (spec §12): exact text, native fields in order, Unicode and attribution per chosen draft,
+        plus a manifest with sha256 per file. Private production notes never leave; `published` is always False."""
+        from .creation_capabilities import export_package
+        if not isinstance(variant_ids, list) or not variant_ids or len(variant_ids) > 50 or not all(isinstance(v, str) for v in variant_ids):
+            raise AlphaError("Choose 1–50 drafts to export.", 400, code="export_selection")
+        state = self.get(workspace_id, token)["state"]
+        by_id = {v.get("id"): v for v in state.get("variants") or [] if isinstance(v, dict)}
+        missing = [v for v in variant_ids if v not in by_id]
+        if missing:
+            raise AlphaError("Some drafts aren't in this workspace.", 404, code="not_found")
+        return export_package([by_id[v] for v in dict.fromkeys(variant_ids)], created_at=self.clock())
+
     def export(self, workspace_id, token):
         from .learning_service import export_files
         snapshot = self.get(workspace_id, token)
@@ -1292,6 +1441,41 @@ class HostedWorkspaceService:
         snapshot = self.get(workspace_id, token)
         state = snapshot["state"]
         profile = self.commands.engine._profile(state)
+        active = memory.active_profile(state) or {}
+        if (profile and active.get('activationSource') == 'brand_brain' and active.get('approvedBy')):
+            if active.get('stale') or profile.get('status') != 'approved':
+                raise AlphaError('Review current voice evidence before exporting this profile.', 409)
+            brand_brain.validate_profile(state, profile)
+            # A portable snapshot is not a provider grant or a field-level package.
+            # Derive it from current canonical Memory, never the pending proposal,
+            # and omit retained examples and restricted boundary values.
+            portable = copy.deepcopy(state)
+            memory.active_profile(portable)['profile']['writingExample'] = ''
+            files = {item['name']: item['body'] for item in memory.render_files(portable, shareable=memory.CLOUD_SHAREABLE)}
+            files['profile.json'] = json.dumps({
+                'schema': 'rafii.brand-brain.voice-snapshot.v1', 'status': 'user_approved',
+                'revision': active['revision'], 'tone': profile.get('tone'),
+                'observations': profile.get('observations', []), 'unknowns': profile.get('unknowns', []),
+            }, ensure_ascii=False, indent=2)
+            files['README.txt'] = ('Brand Brain approved voice and current canonical Memory snapshot.\n'
+                'Private/local-only/excluded/unlabelled boundary values, retained writing samples, evidence quotes and pending proposals are omitted.\n'
+                'This is a read-only export, not a field-level Personal Voice Package import or a model prompt authorization.\n'
+                'No installation, memory mutation, account connection, external send or publication is authorized.\n')
+            files['manifest.json'] = json.dumps({
+                'schema': 'rafii.brand-brain.export.v1', 'status': 'user_approved',
+                'createdAt': self.clock(), 'workspaceId': workspace_id,
+                'workspaceRevision': snapshot['revision'], 'profileRevision': active['revision'],
+                'rendererVersion': memory.RENDER_VERSION,
+                'boundaryPrivacyIncluded': list(memory.CLOUD_SHAREABLE),
+                'retainedSamplesIncluded': False, 'pendingProposalsIncluded': False,
+                'files': {name: hashlib.sha256(body.encode()).hexdigest() for name, body in files.items()},
+                'permissions': {name: False for name in ('globalInstallation', 'memoryMutation', 'accountConnection', 'externalSend', 'publication')},
+            }, ensure_ascii=False, indent=2)
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for name, body in files.items():
+                    archive.writestr(name, body)
+            return output.getvalue()
         if not profile or not profile.get("packageSchema"):
             raise AlphaError("Approve the field-level Personal Voice Package before exporting it.")
         files = profiles.portable_files(state, profile)

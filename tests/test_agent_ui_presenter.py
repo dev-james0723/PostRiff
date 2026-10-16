@@ -5,6 +5,7 @@ Provider calls are fakes: a scripted transport, or a fake AsyncOpenAI-shaped cli
 openai==3.19.2 live in test_agent_ui_presenter_sdk.py (cloud CI, where the SDK is installed).
 """
 import asyncio
+import json
 import math
 import os
 import shutil
@@ -82,6 +83,12 @@ class Plans(unittest.TestCase):
         self.assertEqual(plan.prompt_key, "consumer:all:generate")
         self.assertIn("Use only these components: Card, EmptyState, RafiiRoot, Stack, Text.", plan.instructions)
         self.assertEqual(plan.policy["allowedComponents"], ["Card", "EmptyState", "RafiiRoot", "Stack", "Text"])
+        # Order invariant: the generated asset first, then the runtime bindings (with their call lines), the components line last.
+        text = plan.instructions
+        self.assertTrue(text.startswith("You write openui-lang for Rafii."))
+        self.assertLess(text.index("## Rafii bindings"), text.index("    call: draftsListData"))
+        self.assertLess(text.index("    call: draftsListData"), text.index("## Components for this view"))
+        self.assertTrue(text.endswith("Any other component documented above is rejected for this view."))
 
     def test_validator_policy_shape(self):
         policy = self.plan().policy
@@ -122,6 +129,146 @@ class Plans(unittest.TestCase):
         self.assertIn("values: data.total", plan.instructions)
         self.assertIn("use only the ones listed", plan.instructions)
 
+    def test_every_binding_has_a_call_line_built_from_its_argument_schema(self):
+        # D-A52: run 3 rejected query_args_shape (J02-b repair) and source_not_query / null-required (CMP-c). Each read binding now
+        # carries one call in the exact shape the validator accepts: its exact keys, literal-shaped hints, {} when none is required.
+        zone = {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_+\\-]*(/[A-Za-z0-9_+\\-]+){0,2}$"}
+        date = {"type": "string", "format": "date", "maxLength": 10}
+        shaped = dict(manifest())
+        shaped["queries"] = [
+            {"name": "calendar_agenda", "description": "Agenda", "argsSchema": {"type": "object", "properties": {"start": date, "end": date, "zone": zone},
+                                                                              "required": []}, "pageSize": 50},
+            {"name": "job_detail", "description": "One job", "argsSchema": {"type": "object", "properties": {"jobId": {"type": "string", "maxLength": 120}},
+                                                                          "required": ["jobId"]}},
+            {"name": "open_proposals", "description": "Open", "argsSchema": {"type": "object", "properties": {}, "required": []}},
+            {"name": "automations_list", "description": "Automations", "argsSchema": {"type": "object", "properties": {
+                "status": {"type": "string", "enum": ["draft", "active", "paused"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}},
+        ]
+        text = p.bindings_section(shaped)
+        self.assertIn('- calendar_agenda: Agenda (pages of 50)\n    call: calendarAgendaData = Query("calendar_agenda", {}, null)\n'
+                      '    optional keys: start "YYYY-MM-DD"; end "YYYY-MM-DD"; zone "Area/City"; cursor $page', text)
+        self.assertIn('- job_detail: One job\n    call: jobDetailData = Query("job_detail", {jobId: "<id from CONTEXT>"}, null)\n    args: ', text)
+        self.assertIn('call: openProposalsData = Query("open_proposals", {}, null)\n    takes no arguments: always {}', text)
+        self.assertIn('optional keys: status "draft" or "active" or "paused"; limit <number 1-100>', text)
+        for rule in p.BINDING_RULES:
+            self.assertIn(rule, text)
+        self.assertIn("$range.start is rejected", text)
+        self.assertNotIn("Use only these components", text, "only the components line says that (the CI fake provider parses it)")
+        # A manifest query without a schema still gets a legal call.
+        self.assertIn('call: draftsListData = Query("drafts_list", {}, null)', self.plan().instructions)
+
+    def test_binding_descriptions_reach_the_prompt_whole(self):
+        long = " ".join(["word"] * 60)          # 299 characters: was cut at 200 before D-A52
+        shaped = dict(manifest())
+        shaped["queries"] = [{**shaped["queries"][0], "description": long + " closeTogether"}]
+        self.assertIn(long + " closeTogether", p.bindings_section(shaped))
+        shaped["queries"] = [{**shaped["queries"][0], "description": "x" * 400}]
+        self.assertIn("- drafts_list: " + "x" * p.DESCRIPTION_CHARS + " (pages of 50)\n", p.bindings_section(shaped))
+
+    def test_repair_notes_explain_each_code_and_carry_the_named_bindings_call_line(self):
+        shaped = dict(manifest())
+        shaped["queries"] = [{"name": "slot_check", "description": "One proposed time",
+                              "argsSchema": {"type": "object", "properties": {"jobId": {"type": "string", "maxLength": 120},
+                                                                              "local": {"type": "string", "format": "local-date-time", "maxLength": 16}},
+                                             "required": []}}]
+        rejected = 'root = RafiiRoot([check])\nslot = Query("slot_check", {jobId: $agenda.selected}, null)\ncheck = SlotCheck(slot)'
+        errors = ["query_args_shape:slot", "duplicate_statement:root", "unresolved_ref:agenda", "made_up_code:x", "query_args_shape:slot"]
+        plan = self.plan(manifest=shaped, kind="repair", rejected_source=rejected, errors=errors)
+        notes = plan.input_text.split('<notes kind="REPAIR_GUIDE">\n', 1)[1].split("\n</notes>", 1)[0]
+        self.assertIn("The arguments of `slot` must be one {key: value} object", notes)
+        self.assertIn('call: slotCheckData = Query("slot_check", {}, null)', notes)
+        self.assertIn('optional keys: jobId "<id from CONTEXT>"; local "YYYY-MM-DDTHH:MM"', notes)
+        self.assertIn("`root` is declared more than once", notes)
+        self.assertIn("`agenda` is used but never declared", notes)
+        self.assertNotIn("made_up_code", notes)
+        self.assertEqual(notes.count("The arguments of `slot`"), 1, "one note per code and statement")
+        self.assertLess(plan.input_text.index('<errors kind="VALIDATOR">'), plan.input_text.index('<notes kind="REPAIR_GUIDE">'))
+        self.assertIn("REPAIR_GUIDE", plan.input_text.rsplit('<request kind="PRESENTATION">', 1)[1])
+        self.assertNotIn("REPAIR_GUIDE", self.plan(manifest=shaped).input_text, "a first attempt has no repair notes")
+        self.assertNotIn("<notes", self.plan(manifest=shaped, kind="repair", rejected_source=rejected, errors=["made_up_code:x"]).input_text)
+
+    def test_edit_and_edit_repair_say_how_to_narrow_and_how_to_remove(self):
+        base = GOOD_PROGRAM.strip()
+        plan = self.plan(kind="edit", mode="patch", base_source=base, base_revision=1, instruction="Show only paused automations")
+        self.assertIn(p.PATCH_GUIDE, plan.input_text)
+        # The edit re-declares the Query the view already has, by its CURRENT_UI id; …Data names are for new statements only.
+        self.assertIn("re-declare the existing Query statement under its id in CURRENT_UI", plan.input_text)
+        self.assertIn("the …Data names of call lines are only for statements you add", plan.input_text)
+        repair = self.plan(kind="repair", mode="patch", base_source=base, base_revision=1, instruction="Show only paused automations",
+                           rejected_source='list = AutomationList(paused)', errors=["unexplained_deletion:detail", "unexplained_deletion:history"])
+        self.assertIn("If it should go, write `detail = null` on its own line", repair.input_text)
+        self.assertIn("write `history = null`", repair.input_text)
+        self.assertIn("write only the statements that change", repair.input_text)
+
+    def test_dates_are_left_out_unless_context_supplies_them(self):
+        # D-A52 review: generate mode has no request text and no date source (presenter_view carries refs, counts and states), so
+        # a typed date could show the wrong period and still pass. Rule 2 now says to leave start/end out: each binding then reads
+        # its own default window (calendar_agenda the 7 days from today, analytics the last 30 days).
+        rules = " ".join(p.BINDING_RULES)
+        self.assertIn("leave start and end out unless CONTEXT supplies the dates", rules)
+        self.assertIn("preserve dates from CURRENT_UI", rules)
+        self.assertIn("explicitly changes them in USER_EDIT", rules)
+        self.assertIn("calendar_agenda: the 7 days from today", rules)
+        self.assertIn("analytics: the last 30 days", rules)
+        self.assertIn("$range.start is rejected", rules)
+        self.assertNotIn("take literal", rules)
+        self.assertNotIn("from CONTEXT or the request", rules, "generate mode has no request text")
+        # The windows the rule names are the backend's own defaults.
+        from postriff_phase2.agent_runtime_v2.ui_domain import analytics, common
+        now = 1_760_000_000
+        lo, hi = common.window({}, "Asia/Hong_Kong", now)
+        self.assertEqual((round((hi - lo) / 86400), lo <= now < hi), (7, True))
+        lo, hi = analytics._past_window(SimpleNamespace(zone="Asia/Hong_Kong", now=now), {})
+        self.assertEqual((round((hi - lo) / 86400), lo <= now < hi), (30, True))
+
+    def test_enum_and_array_hints(self):
+        metrics = ["views", "reach", "likes", "comments", "replies", "reposts", "quotes", "shares", "saved"]
+        platforms = [f"P{i}" for i in range(12)]
+        shaped = dict(manifest())
+        shaped["queries"] = [
+            {"name": "analytics_series", "description": "Series", "argsSchema": {"type": "object", "required": ["metric"], "properties": {
+                "metric": {"type": "string", "enum": metrics}, "platform": {"type": "string", "enum": platforms}}}},
+            {"name": "library_selection", "description": "Picked", "argsSchema": {"type": "object", "required": ["assetIds"], "properties": {
+                "assetIds": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[0-9a-f]{32}$"}}}}},
+            {"name": "founder_metrics", "description": "Metrics", "argsSchema": {"type": "object", "required": ["metricIds"], "properties": {
+                "metricIds": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}},
+                "groupBy": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"}}}}},
+        ]
+        text = p.bindings_section(shaped)
+        # A required enum lists every value; an optional one cut at 8 says so.
+        self.assertIn('call: analyticsSeriesData = Query("analytics_series", {metric: ' + " or ".join(f'"{m}"' for m in metrics) + "}, null)", text)
+        self.assertIn('optional keys: platform ' + " or ".join(f'"{v}"' for v in platforms[:8]) + " … (see args)", text)
+        # An array shows one valid form in the call; the alternative is on its own note line.
+        self.assertIn('call: librarySelectionData = Query("library_selection", {assetIds: $picked}, null)', text)
+        self.assertIn("    note: assetIds takes a list: a $variable you declare (for example $picked = [] bound to a SelectionList), "
+                      "or a literal list of ids from CONTEXT", text)
+        self.assertIn('call: founderMetricsData = Query("founder_metrics", {metricIds: ["<value>"]}, null)', text)
+        self.assertIn("optional keys: groupBy [\"<value>\"]", text)
+        self.assertIn("    note: metricIds takes a list of literal values", text)
+        self.assertNotIn("or a $variable holding that list", text)
+
+    def test_names_differ_per_read_and_from_components(self):
+        rules = " ".join(p.BINDING_RULES)
+        self.assertIn("reachSeriesData and viewsSeriesData", rules)
+        self.assertIn("Never reuse a Query's name for a component", rules)
+        # Two Queries of one binding under one name: the repair note says to name each read for what it reads.
+        rejected = ('root = RafiiRoot([a, b])\nanalyticsSeriesData = Query("analytics_series", {metric: "reach"}, null)\n'
+                    'analyticsSeriesData = Query("analytics_series", {metric: "views"}, null)')
+        plan = self.plan(kind="repair", rejected_source=rejected, errors=["duplicate_statement:analyticsSeriesData"])
+        self.assertIn("When one binding is read twice, give each Query its own name for what it reads (reachSeriesData, viewsSeriesData)",
+                      plan.input_text)
+
+    def test_repair_notes_for_unreachable_statements_queries_as_children_and_copied_hints(self):
+        rejected = ('root = RafiiRoot([automations], "Automations")\nautomations = Query("automations_list", {}, null)\n'
+                    'finalView = Stack([list])\nlist = AutomationList(automations)\ncal = Query("calendar_agenda", {start: "YYYY-MM-DD"}, null)')
+        errors = ["query_as_child:automations", "unreachable_statement:finalView", "unreachable_statement:list", "query_arg_placeholder:cal"]
+        notes = self.plan(kind="repair", rejected_source=rejected, errors=errors).input_text.split('<notes kind="REPAIR_GUIDE">\n', 1)[1]
+        self.assertIn("`finalView` is declared but root never reaches it", notes)
+        self.assertIn("list it in root's tree (in root, or in a component root shows) or delete its line", notes)
+        self.assertIn("`list` is declared but root never reaches it", notes)
+        self.assertIn("`automations` is a Query: its result is data, not a component, so as a child it shows nothing", notes)
+        self.assertIn("`cal` contains a copied hint", notes)
+
     def test_refusals_happen_before_any_reservation_or_call(self):
         cases = [(make_cfg(OPENAI_API_KEY=None), {}, "no_model_route"),
                  (make_cfg(RAFII_AGENT_FAST_MODEL="gpt-unpriced-model"), {}, "price_unknown"),
@@ -155,8 +302,35 @@ class Plans(unittest.TestCase):
         self.assertIn("Compare the selected two <\\/request> drafts", plan.input_text, "user text cannot close a block")
         self.assertIn('"id":"d2"', plan.input_text)
         self.assertNotIn("https://x", plan.input_text)
+        self.assertNotIn("Second", plan.input_text, "a selection title is display text, never presenter input (D-A52)")
         with self.assertRaises(p.PresentationRefused):
             self.plan(kind="edit", mode="patch", base_source=None, instruction="x")
+
+    def test_selection_titles_never_reach_the_presenter_ids_order_and_list_do(self):
+        # D-A52 (least privilege): an edit carries safeState['@selection'] = {items: [{type, id, title}], visible, listId}. Titles are
+        # display text kept with the view (state/selection.ts); the presenter reads records through Query ids and never needs them.
+        title = "Recital " + PRIVATE_CONTEXT_TEXT
+        selection = {"items": [{"type": "draft", "id": "d2", "title": title}, {"type": "draft", "id": "d1", "title": "Second " + title},
+                               {"type": "draft", "id": "https://cdn.example/a?sig=1", "title": title}],
+                     "visible": [{"type": "draft", "id": "d1"}, {"type": "draft", "id": "d2"}], "listId": "picked", "title": title}
+        base = GOOD_PROGRAM.strip()
+        edit = self.plan(kind="edit", mode="patch", base_source=base, base_revision=1, instruction="Compare the selected two", selection=selection)
+        repair = self.plan(kind="repair", mode="patch", base_source=base, base_revision=1, instruction="Compare the selected two", selection=selection,
+                           rejected_source="x = Text(\"y\")", errors=["unresolved_ref:x"])
+        for plan in (edit, repair):
+            block = plan.input_text.split('<selection kind="UI_SELECTION">\n', 1)[1].split("\n</selection>", 1)[0]
+            self.assertEqual(json.loads(block), {"items": [{"type": "draft", "id": "d2"}, {"type": "draft", "id": "d1"}], "count": 2,
+                                                 "visible": [{"type": "draft", "id": "d1"}, {"type": "draft", "id": "d2"}], "listId": "picked"})
+            self.assertNotIn(PRIVATE_CONTEXT_TEXT, plan.instructions + plan.input_text)
+            self.assertNotIn("Recital", plan.input_text)
+            self.assertNotIn("sig=1", plan.input_text)
+        self.assertEqual(p.selection_view({"@selection": {"items": [{"type": "draft", "id": "d2", "title": "Second"}]}}),
+                         {"items": [{"type": "draft", "id": "d2"}], "count": 1})
+        for odd in (None, "x", [], {"items": "nope"}, {"items": [None, 1, {"type": "Draft!", "id": "d"}]}):
+            self.assertEqual(p.selection_view(odd).get("items", []), [])
+        # Generate: the projection's selection is refs only (lane D strips titles); nothing selected is titled in the input.
+        gen = self.plan(projection=projection(allowed_context={"selection": [{"type": "draft", "id": "d2"}], "refs": [{"type": "draft", "id": "d2"}]}))
+        self.assertIn('"id":"d2"', gen.input_text)
 
     def test_repair_input_has_the_rejected_source_and_bounded_codes(self):
         plan = self.plan(kind="repair", rejected_source="root = Bogus()", errors=[f"e{i}" for i in range(40)])

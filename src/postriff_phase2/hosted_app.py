@@ -2,8 +2,11 @@
 
 It initializes lazily so build and health checks do not require credentials.
 """
+import contextvars
 import hmac
 import logging
+import threading
+from collections import OrderedDict
 import json
 import re
 import os
@@ -24,6 +27,7 @@ from .hosted_identity import (
     SupabaseIdentityAdmin,
     verified_aal,
     verified_auth_time,
+    verified_method_time,
     verified_passkey_time,
     verified_session_id,
 )
@@ -31,7 +35,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import tools
+from . import agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -72,18 +76,65 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
             # A founder account block (operator_actions, migration 062) is folded into this one statement; it is
             # skipped, never an error, while the block table is not installed.
             from .operator_actions import blocked_error, session_flags
+            observed = None
             with connection_factory() as db:
                 with db.cursor() as cur:
                     (deleted, revoked, mfa_required), blocked = session_flags(db, cur, "SELECT EXISTS(SELECT 1 FROM public.pr_account_tombstones WHERE user_id=%s), EXISTS(SELECT 1 FROM public.pr_session_revocations WHERE user_id=%s AND session_id=%s), EXISTS(SELECT 1 FROM public.pr_mfa_enforcement WHERE user_id=%s)", (principal, principal, session_id, principal), principal, 3)
+                    # Someone who turned on two-factor authentication must present it on every session:
+                    # the UI hides nothing the API would not also refuse.
+                    refused = deleted or revoked or blocked or (enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2")
+                    if not refused and enforce_mfa:
+                        observed = _observe(db, cur, access_token, principal, session_id)
             if deleted or revoked:
                 raise AlphaError("This session expired or was revoked. Sign in again.", 401)
             if blocked:
                 raise blocked_error()
-            # Someone who turned on two-factor authentication must present it on every session:
-            # the UI hides nothing the API would not also refuse.
-            if enforce_mfa and mfa_required and verified_aal(access_token, principal) != "aal2":
+            if refused:
                 raise AlphaError("Two-factor verification required.", 403, code="mfa_required")
+            if observed:
+                _after_observed(*observed)
         return principal
+
+    def _observe(db, cur, access_token, principal, session_id):
+        """RAPv2 A1: every interactive session is observed here, at the one boundary all signed-in routes share, not
+        only on the four session routes. Observe mode only; inside an HTTP request only (its browser label is bound by
+        HostedApplication); at most once per session per process (`seen`). Never fails the request: the checks above
+        have already run, and an observation error rolls back nothing but itself."""
+        from .api_tokens import is_api_token
+        label = _REQUEST_LABEL.get()
+        if label is None or not session_id or is_api_token(access_token):
+            return None
+        from . import account_protection
+        if not account_protection.observing():
+            return None
+        from . import device_trust
+        marker = device_trust.seen_marker()
+        key = (principal, session_id) if marker is None else (principal, session_id, marker)
+        if seen.has(key):
+            return None
+        from .hosted import observe_session
+        try:
+            fresh, alert = observe_session(cur, principal, session_id, label)
+            # Commit here, so a failed commit is this observation's failure and never the request's.
+            db.commit()
+        except Exception as error:
+            _quiet(db.rollback)
+            logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "session.observe_failed", "error": type(error).__name__}))
+            return None
+        seen.add(key)
+        return (principal, session_id, label, alert) if fresh else None
+
+    def _after_observed(principal, session_id, label, alert):
+        """The notice for a first sighting, after its commit, under the existing _alert_new_device rules."""
+        notify = getattr(verify, "on_first_sighting", None)
+        if notify is None:
+            return
+        try:
+            notify(principal, session_id, label, alert)
+        except Exception as error:
+            logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "session.alert_failed", "error": type(error).__name__}))
+
+    seen = SeenSessions()
 
     def verify(access_token):
         return validate(access_token, enforce_mfa=True)
@@ -96,7 +147,49 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     # bearer.  This lets TOTP-enforced accounts use a separate, ephemeral passkey session as proof.
     verify.proof = lambda access_token: validate(access_token, enforce_mfa=False)
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
+    # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
+    verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
+    # RAPv2 A1: runtime_from_environment points this at HostedWorkspaceService._alert_new_device.
+    verify.on_first_sighting = None
+    verify.seen = seen
     return verify
+
+
+def _quiet(call):
+    try:
+        call()
+    except Exception:
+        pass
+
+
+# The browser label of the HTTP request being served, bound by HostedApplication.__call__. None outside a request
+# (workers, cron, scripts), where the verifier never observes a session.
+_REQUEST_LABEL = contextvars.ContextVar("postriff_request_client_label", default=None)
+
+
+class SeenSessions:
+    """Bounded, thread-safe LRU of (user_id, session_id) keys this process has already observed, so a session's
+    steady-state requests add no statement. A miss (cold instance, eviction) costs one idempotent upsert, never a
+    second event: ON CONFLICT(user_id, session_id) decides first sightings in the database, not here."""
+
+    def __init__(self, limit=4096):
+        self.limit = limit
+        self._keys = OrderedDict()
+        self._lock = threading.Lock()
+
+    def has(self, key):
+        with self._lock:
+            if key in self._keys:
+                self._keys.move_to_end(key)
+                return True
+            return False
+
+    def add(self, key):
+        with self._lock:
+            self._keys[key] = True
+            self._keys.move_to_end(key)
+            while len(self._keys) > self.limit:
+                self._keys.popitem(last=False)
 
 
 def client_address(environ):
@@ -107,10 +200,10 @@ def client_address(environ):
 
 
 def client_label(environ):
-    """Coarse, non-identifying product token from the User-Agent for the device list."""
-    agent = environ.get("HTTP_USER_AGENT", "")
-    label = "".join(ch for ch in agent.split("/")[0] if ch.isalnum() or ch in " .-_")[:40].strip()
-    return label or "unknown"
+    """Coarse browser and OS family from the User-Agent for the session list ("Safari on iPhone"); never a device
+    model, and built from fixed names only, so no header text reaches storage or email."""
+    from .account_protection import browser_label
+    return browser_label(environ.get("HTTP_USER_AGENT", ""))
 
 
 # Legacy alpha actions that wrote drafts with the template writer directly; refused on the hosted HTTP route.
@@ -207,6 +300,7 @@ def runtime_from_environment(environ=None):
     billing_provider, mailer = billing_from_environment(values)
     from .image_runtime import from_environment as image_runtime_from_environment
     service = HostedWorkspaceService(database, verify, storage, identity=identity, vault=CredentialVault(values.get("POSTRIFF_CREDENTIAL_KEY")), providers=providers, public_base_url=values.get("POSTRIFF_PUBLIC_BASE_URL"), billing_provider=billing_provider, mailer=mailer, audience_transport=http_transport, ideas_runtime=ideas_runtime_from_environment(values), image_runtime=image_runtime_from_environment(values), credits_enabled=values.get("POSTRIFF_CREDITS_ENABLED") == "1", credit_purchases_enabled=values.get("POSTRIFF_CREDIT_PURCHASES_ENABLED") == "1", chat_media=chat_media_from_environment(values), productivity_providers=productivity_providers(values), productivity_flags=productivity_flags(values), reply_sender_enabled=values.get("POSTRIFF_REPLY_SENDING_ENABLED") == "1", youtube_public_base_url=OAuthService.youtube_origin_from_environment(values))
+    verify.on_first_sighting = lambda principal, session_id, label, eligible: service._alert_new_device(principal, session_id, label, eligible=eligible)
     if getattr(mailer.transport, 'requires_cutover', False):
         from .notifications.legacy_outbox import LegacyMailOutbox
         service.legacy_mail_outbox = LegacyMailOutbox(database, mailer, service.oauth.vault, values, service.ledger, service.clock)
@@ -471,6 +565,12 @@ class HostedApplication:
     def __call__(self, environ, start_response):
         request_id = uuid.uuid4().hex
         environ['postriff.request_id'] = request_id
+        # Agent observability (P0.7): agent events emitted while this request runs carry its id. Telemetry only.
+        correlation = agent_observability.bind_request(request_id)
+        # RAPv2 A1: the token verifier labels a session it observes with this request's browser (never header text).
+        label_binding = _REQUEST_LABEL.set(client_label(environ))
+        # RAPv2 P1: the browser's device cookie, and the new one the device registry may issue after verification.
+        device_binding = device_trust.bind(environ)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -478,6 +578,9 @@ class HostedApplication:
             status_code = int(status.split()[0])
             headers = [(key,value) for key,value in headers if key.lower() != 'x-request-id']
             headers.append(('X-Request-ID', request_id))
+            issued = device_trust.set_cookie_header()
+            if issued is not None:
+                headers.append(issued)
             return start_response(status, headers, exc_info) if exc_info else start_response(status, headers)
         try:
             return self._handle(environ, respond)
@@ -500,6 +603,9 @@ class HostedApplication:
                 observe_request(self, method, environ.get('PATH_INFO', '/'), status_code, time.monotonic() - started)
             except Exception:
                 pass
+            agent_observability.release_request(correlation)
+            _REQUEST_LABEL.reset(label_binding)
+            device_trust.reset(device_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -653,6 +759,13 @@ class HostedApplication:
                     location = OAuthService.callback_redirect(callback_base, provider_id, query)
                 start_response("302 Found", [("Location", location), ("Cache-Control", "no-store"), ("Referrer-Policy", "no-referrer"), ("Content-Length", "0")])
                 return [b""]
+            if path == "/api/cron/agent-tasks" and method == "GET":
+                expected = self.cron_secret if self.cron_secret is not None else os.environ.get("CRON_SECRET", "")
+                supplied = environ.get("HTTP_AUTHORIZATION", "")
+                if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
+                    raise AlphaError("Cron authorization failed.", 401)
+                from .agent_runtime_v2.task_engine import cron as task_cron
+                return self._json(start_response, 200, task_cron.tick(self._runtime()))
             if path == "/api/cron/worker" and method == "GET":
                 service = self._runtime()
                 expected = self.cron_secret or ""
@@ -660,6 +773,12 @@ class HostedApplication:
                 if len(expected) < 16 or not hmac.compare_digest(supplied, "Bearer " + expected):
                     raise AlphaError("Cron authorization failed.", 401)
                 result = self.worker.tick()
+                sign_in_alerts = getattr(service, 'deliver_sign_in_alerts', None)
+                if sign_in_alerts is not None:   # RAP-143: new-sign-in mail leaves the request path in observe mode
+                    try:
+                        result['signInAlerts'] = sign_in_alerts()
+                    except Exception as exc:
+                        result['signInAlerts'] = {'status': 'unavailable', 'error': type(exc).__name__}
                 history = getattr(service, 'history_import', None)
                 if history is not None:   # before readings, so posts it finds are read in the same minute
                     result['historyImport'] = history.tick()
@@ -685,6 +804,10 @@ class HostedApplication:
                             result['uiRecovery'] = ui_store.reap_all(repository.connection_factory, ledger=getattr(service, 'ledger', None))
                         except Exception as exc:
                             result['uiRecovery'] = {'status': 'unavailable', 'error': type(exc).__name__}
+                        from .agent_runtime_v2.task_engine import cron as task_cron
+                        task_recovery = task_cron.recover_for_worker(service)
+                        if task_recovery is not None:
+                            result['agentTaskRecovery'] = task_recovery
                         # Holds of terminal attempts nobody settled (canceled, then the producer died): booked unknown, never zero.
                         try:
                             from .agent_runtime_v2 import ui_metering
@@ -762,6 +885,11 @@ class HostedApplication:
                 self._origin(environ, mutation)
             service = self._runtime()
             token = self._token(environ)
+            # RAPv2 P1: a sensitive capability from a risky session needs fresh independent proof. Enforce mode only;
+            # in every other mode require() returns at once and runs nothing.
+            capability = security_gate.capability_for(method, path.strip("/").split("/"))
+            if capability is not None:
+                security_gate.require(service, token, capability)
             if path == "/api/ideas/models/rescan" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, service.ideas.rescan_models(body.get("workspaceId"), token))
@@ -776,6 +904,14 @@ class HostedApplication:
                 return self._json(start_response, 200, service.logout(token))
             if path == "/api/auth/sessions" and method == "GET":
                 return self._json(start_response, 200, service.sessions(token, client_label=client_label(environ)))
+            if path == "/api/auth/security/incidents" and method in ("GET", "POST"):
+                # RAPv2 "This wasn't me" (RAFII_SECURITY_INCIDENT_HOLD; 404 while off). GET never changes anything.
+                from .security_incidents import SecurityIncidents
+                incidents = SecurityIncidents(service)
+                if method == "GET":
+                    return self._json(start_response, 200, incidents.list(token))
+                reported = incidents.report(token, self._body(environ), environ.get("HTTP_IDEMPOTENCY_KEY"))
+                return self._json(start_response, 200 if reported.pop("replayed", False) else 201, reported)
             if path == "/api/auth/sessions/revoke-others" and method == "POST":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_other_sessions(token))
@@ -785,7 +921,7 @@ class HostedApplication:
             if path == "/api/me" and method == "GET":
                 return self._json(start_response, 200, service.me(token, client_label=client_label(environ)))
             if path == "/api/me" and method == "PATCH":
-                return self._json(start_response, 200, service.update_profile(token, self._body(environ)))
+                return self._json(start_response, 200, service.update_profile(token, self._body(environ), client_label=client_label(environ)))
             if path == "/api/me/channels" and method == "GET":
                 return self._json(start_response, 200, service.my_channels(token))
             if path == "/api/me/security-events" and method == "GET":
@@ -796,7 +932,7 @@ class HostedApplication:
                 return self._json(start_response, 200, service.workspaces(token))
             if path == "/api/invitations/accept" and method == "POST":
                 body = self._body(environ)
-                return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ)))
+                return self._json(start_response, 200, service.accept_invitation(token, body.get("token"), client=client_address(environ), client_label=client_label(environ)))
             parts = path.strip("/").split("/")
             if len(parts) in (4, 5) and parts[:2] == ["api", "workspaces"] and parts[3] == "tokens":
                 tokens = service.repository.api_tokens
@@ -808,8 +944,9 @@ class HostedApplication:
                     return self._json(start_response, 200, tokens.revoke(parts[2], token, parts[4]))
             if len(parts) == 5 and parts[:3] == ["api", "me", "invitations"] and parts[4] in ("accept", "decline") and method == "POST":
                 self._body(environ)
-                settle = service.accept_my_invitation if parts[4] == "accept" else service.decline_my_invitation
-                return self._json(start_response, 200, settle(token, parts[3]))
+                if parts[4] == "accept":
+                    return self._json(start_response, 200, service.accept_my_invitation(token, parts[3], client_label=client_label(environ)))
+                return self._json(start_response, 200, service.decline_my_invitation(token, parts[3]))
             if len(parts) == 4 and parts[:2] == ["api", "tools"] and parts[3] == "invoke" and method == "POST":
                 body = self._body(environ)
                 return self._json(start_response, 200, tools.invoke(parts[2], body.get("version"), body.get("input", {})))
@@ -905,10 +1042,17 @@ class HostedApplication:
             if len(parts) >= 5 and parts[:2] == ['api', 'workspaces'] and parts[3] == 'youtube':
                 from .youtube.http import handle as youtube_handle
                 return youtube_handle(self, environ, start_response, service, token, method, parts)
+            if len(parts) == 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "connection-health" and method == "GET":
+                # Connection Health Center (connection_health.py). With RAFII_CONNECTION_HEALTH_ENABLED off this branch is
+                # never taken, so the request reaches the same 404 as any unknown route.
+                from . import connection_health
+                if connection_health.deployment_enabled(connection_health.environment(service)):
+                    return self._json(start_response, 200, connection_health.ConnectionHealth(service).read(parts[2], token))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
-                    return self._json(start_response, 200, oauth.channels(parts[2], token))
+                    from .connection_health import annotate_channels, environment
+                    return self._json(start_response, 200, annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service)))
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
                     extra = {"inputs": body["input"]} if body.get("input") is not None else {}
@@ -962,6 +1106,14 @@ class HostedApplication:
                     from urllib.parse import parse_qs
                     query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
                     return self._json(start_response, 200, library.list(workspace_id, token, query.get("q", [""])[0], query.get("limit", ["100"])[0], query.get("offset", ["0"])[0], kind=query.get("kind",["all"])[0], tag=query.get("tag",[""])[0], collection=query.get("collection",[""])[0], sort=query.get("sort",["newest"])[0]))
+                if len(parts) in (6, 7) and parts[4:6] == ["metadata", "changes"] and method == "GET":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, changes.history(workspace_id, token) if len(parts) == 6 else changes.read(workspace_id, token, parts[6]))
+                if len(parts) == 6 and parts[4] == "metadata" and parts[5] in ("preview", "apply", "undo") and method == "POST":
+                    from .library_metadata import LibraryMetadataChanges
+                    changes = LibraryMetadataChanges(library)
+                    return self._json(start_response, 200, getattr(changes, parts[5])(workspace_id, token, self._body(environ)))
                 if len(parts) == 5 and parts[4] == "collections" and method in ("GET", "POST"):
                     return self._json(start_response, 200, library.collections(workspace_id, token, self._body(environ) if method == "POST" else None))
                 if len(parts) == 6 and parts[4] == "collections" and method == "DELETE":
@@ -1080,6 +1232,10 @@ class HostedApplication:
                     raw = service.export(workspace_id, token)
                     start_response("200 OK", [("Content-Type", "application/zip"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("Content-Disposition", 'attachment; filename="postriff-private-drafts.zip"'), ("X-Content-Type-Options", "nosniff")])
                     return [raw]
+                if len(parts) == 5 and parts[3] == "drafts" and parts[4] == "export" and method == "POST":
+                    # Content Skills Integration: a manual-handoff package (files + manifest) for chosen drafts. Not a
+                    # publication receipt; nothing leaves the workspace except the response to this member.
+                    return self._json(start_response, 200, service.export_drafts(workspace_id, token, self._body(environ).get("variantIds")))
                 if len(parts) == 4 and parts[3] == "profile-export" and method == "GET":
                     raw = service.export_profile(workspace_id, token)
                     start_response("200 OK", [("Content-Type", "application/zip"), ("Content-Length", str(len(raw))), ("Cache-Control", "no-store"), ("Content-Disposition", 'attachment; filename="postriff-personal-voice.zip"'), ("X-Content-Type-Options", "nosniff")])
@@ -1098,12 +1254,12 @@ class HostedApplication:
                 suffix = '/' + parts[-1] if len(parts) == 8 and parts[-1] in {'end', 'transcript'} else ''
                 environ['postriff.failure'] = {'errorCode': error.code if error.code in safe_codes else 'other',
                                               'routePattern': '/api/workspaces/:id/agent/voice/sessions' + ('/:id' + suffix if suffix else '')}
-            return self._json(start_response, error.status, {"error": str(error), "code": error.code})
+            return self._json(start_response, error.status, {"error": str(error), "code": error.code, **getattr(error, "public_fields", {})})
         except Exception as error:
             # Exception text/tracebacks may contain third-party payloads or credentials: only the class and a
             # route pattern with identifiers masked are kept for correlation.
             environ["postriff.failure"] = {"exceptionType": type(error).__name__, "routePattern": route_pattern(path)}
-            if path == "/api/cron/worker" or path.startswith('/api/cron/youtube/'):
+            if path in ("/api/cron/worker", "/api/cron/agent-tasks") or path.startswith('/api/cron/youtube/'):
                 # Source locations only: never format exception text, source lines, locals or payloads.
                 frame = error.__traceback__
                 while frame is not None:

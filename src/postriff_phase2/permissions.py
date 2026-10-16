@@ -23,8 +23,11 @@ CLASSES = {
     "owner": {"roles": ("owner",), "flag": None},
 }
 
-# Hosted actions that are not plain editorial edits. Anything absent is "edit".
+# Hosted actions that are not plain editorial edits. Every other hosted action is listed in EDIT_ACTIONS below; an
+# action named in neither table is unknown and fails closed (classify raises).
 ACTION_CLASSES = {
+    "agent_permissions_set": "read", "agent_permissions_revoke": "read", "agent_permissions_remind": "read",
+    "agent_autopilot_enable": "read", "agent_workspace_ceiling": "owner",
     "p2_review": "approve", "p2_approve": "approve", "p2_approve_many": "approve", "p2_cancel": "approve",
     "p2_channel_add": "manage_connections", "p2_channel_verify": "manage_connections",
     "p2_channel_disconnect": "manage_connections",
@@ -41,8 +44,11 @@ ACTION_CLASSES = {
     # Accepting or undoing a learned preference changes how every member's drafts read (design decision D);
     # approving the voice profile itself changes them just as much, so it is an owner decision too.
     "preference": "owner", "learning_settings": "owner", "learning_reset": "owner", "profile_decide": "owner", "you_restore_voice": "owner",
+    "profile_finish": "owner", "import_decide": "owner",
     # This is the durable privacy boundary for analysis/generation routes.
     "voice_sample_grant": "owner",
+    "brand_brain_approve": "owner", "brand_brain_restore": "owner", "brand_brain_quote": "owner",
+    "brand_brain_identity": "owner", "brand_brain_boundaries": "owner",
     "raffi_recurrence_activate": "owner", "raffi_recurrence_pause": "owner",
     "raffi_recurrence_resume": "owner", "raffi_recurrence_cancel": "owner",
     # Deciding on an automation's drafted post is a publication decision, like approving in Queue; the worker
@@ -52,6 +58,28 @@ ACTION_CLASSES = {
     "raffi_recurrence_watch": "read",
     "refresh": "read", "p2_refresh": "read",
 }
+
+# Hosted actions that are plain editorial edits ("edit"): exactly the names the hosted command dispatcher
+# (HostedPhase2Commands and the handlers it calls) handles that are not in ACTION_CLASSES. They are the actions that
+# fell back to "edit" before classification failed closed; tests/test_r0_hotfixes.py enumerates the dispatcher and keeps
+# this list exact. A new hosted action is added here or to ACTION_CLASSES, or it is refused.
+EDIT_ACTIONS = frozenset({
+    "brand_brain_import", "brand_brain_analyze", "brand_brain_review", "brand_brain_preview", "brand_brain_discard", "brand_brain_feedback", "brand_brain_clean_restore", "brand_brain_manual",
+    "accept_update", "adapt", "approve_source", "context", "generate", "idea", "import_propose", "language_settings", "mode",
+    "opening", "p2_art_delete", "p2_art_generate", "p2_art_select", "p2_content_context", "p2_content_format", "p2_content_install_pack",
+    "p2_content_interview_answer", "p2_content_interview_start", "p2_content_proposal_edit", "p2_content_proposal_save", "p2_content_proposal_test",
+    "p2_content_select", "p2_content_suggest", "p2_delete_account", "p2_folder_delete", "p2_folder_move", "p2_folder_save", "p2_link_identity",
+    "p2_logout", "p2_media_delete", "p2_media_upload", "p2_revoke_device", "p2_template_archive", "p2_template_create", "p2_template_duplicate",
+    "p2_template_edit", "p2_unlink_identity", "p2_variant_feedback", "p2_variant_review", "preview_update", "profile_approve_stated", "profile_back",
+    "profile_field", "profile_guided", "profile_import", "profile_inspect", "profile_job", "profile_propose",
+    "profile_relationship", "profile_review_open", "profile_scope", "profile_transfer", "profile_use_guided", "raffi_campaign_create",
+    "raffi_campaign_link", "raffi_campaign_unlink", "raffi_campaign_update", "raffi_recurrence_preview", "raffi_recurrence_save",
+    "raffi_recurrence_seen", "raffi_suggestion_accept", "raffi_suggestion_dismiss", "raffi_suggestion_refresh", "raffi_suggestion_snooze",
+    "retract_source", "runtime", "save", "source", "source_done", "source_policy", "source_use_approve", "step", "template_config",
+    "template_refresh", "variant_edit", "voice_profile_analyze", "voice_sample_exclude", "voice_sample_revoke", "voice_sample_select",
+    "voice_samples_import", "you_art_refresh", "you_art_remove", "you_art_scope", "you_identity",
+})
+assert not EDIT_ACTIONS & set(ACTION_CLASSES), "an action has one requirement class"
 
 # Actions that additionally require a recently verified sign-in (step-up).
 STEP_UP_ACTIONS = {"p2_channel_disconnect", "delete_account", "member_update", "member_remove", "invitation_create", "session_revoke"}
@@ -84,9 +112,15 @@ class Membership:
 
 
 def classify(action):
+    """The requirement class of a hosted action. An action no table names is refused before any workspace is read
+    (the same answer for every caller, member or not), never treated as an edit."""
     if not isinstance(action, str) or not action:
         raise AlphaError("Expected a structured command.")
-    return ACTION_CLASSES.get(action, "edit")
+    if action in ACTION_CLASSES:
+        return ACTION_CLASSES[action]
+    if action in EDIT_ACTIONS:
+        return "edit"
+    raise AlphaError("This action is unavailable.", 404, code="action_unknown")
 
 
 def require(membership, requirement):

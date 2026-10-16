@@ -221,6 +221,8 @@
           "status": "success"
         },
         "security_alert": {
+          "detailBrowser": "Browser",
+          "detailTime": "Time",
           "subject": "Security notice for your Rafii account",
           "preheader": "Review this activity on your account.",
           "context": "Security",
@@ -477,6 +479,8 @@
           "status": "success"
         },
         "security_alert": {
+          "detailBrowser": "瀏覽器",
+          "detailTime": "時間",
           "subject": "你的 Rafii 帳戶安全通知",
           "preheader": "請檢查帳戶上的這項活動。",
           "context": "帳戶安全",
@@ -607,6 +611,8 @@
           "status": "info"
         },
         "security_alert": {
+          "detailBrowser": "瀏覽器",
+          "detailTime": "時間",
           "subject": "你的 Rafii 帳號安全通知",
           "preheader": "請檢查帳號上的這項活動。",
           "context": "帳號安全",
@@ -863,6 +869,8 @@
           "status": "info"
         },
         "security_alert": {
+          "detailBrowser": "浏览器",
+          "detailTime": "时间",
           "subject": "你的 Rafii 账户安全通知",
           "preheader": "请检查账户上的这项活动。",
           "context": "账户安全",

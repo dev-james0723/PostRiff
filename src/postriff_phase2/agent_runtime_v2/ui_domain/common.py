@@ -67,9 +67,11 @@ class DomainContext:
         return self.state
 
     def site_context(self):
+        # The member reads these results: binding queries and actions (ui_queries, ui_actions) answer the member's own
+        # browser and call no model, and ui_presenter/ui_projection read only the bindings' schemas, never their data.
         from ...site_agent import tools as site_tools
         return site_tools.Context(state=self.state, membership=self.member, principal=self.principal, workspace_id=self.workspace_id, cur=self.cur,
-                                  service=self.service, now=self.now, page={}, model_id=None, zone=self.zone)
+                                  service=self.service, now=self.now, page={}, model_id=None, zone=self.zone, egress="local")
 
 
 def bind(service, cur, principal: str, workspace_id: str):
@@ -88,6 +90,8 @@ def bind(service, cur, principal: str, workspace_id: str):
         row = cur.fetchone()
         if not row:
             raise AlphaError("Workspace unavailable.", 403)
+        from .. import authz
+        authz.recheck_transaction(cur, workspace_id, principal, row)
         yield cur, row, principal
 
     def assert_fresh(_token, _principal):

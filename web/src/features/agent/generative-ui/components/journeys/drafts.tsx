@@ -1,4 +1,5 @@
 'use client';
+import { EvidenceDetails } from '../primitives/evidence';
 /**
  * J01 — Draft and platform studio (lane E). Lists, side-by-side comparison, a platform preview, evidence and the edit
  * form of an unscheduled draft, all from lane D's draft bindings (drafts_list, draft_read, draft_evidence).
@@ -256,15 +257,18 @@ export function DraftDetail({ props }: JourneyRendererProps) {
 }
 
 export function DraftEvidence({ props }: JourneyRendererProps) {
-  const { copy } = useJourneyEnvironment();
+  const { copy, language } = useJourneyEnvironment();
   return (
     <QueryFrame value={props.data} binding='draft_evidence' label={copy.drafts.evidenceTitle} title={copy.drafts.evidenceTitle}>
       {(evidence) => (
         <div className='flex flex-col gap-3 text-sm'>
+          {evidence.claimsTruncated ? <p className='text-muted-foreground text-xs'>{language.startsWith('zh') ? '此處只顯示首 30 項證據關係，並非全部證據。' : 'Only the first 30 evidence relationships are shown here; this is not the complete evidence.'}</p> : null}
           {evidence.sources.length > 0 ? (
             <ul className='flex flex-col gap-1.5'>
               {evidence.sources.map((source) => (
                 <li key={source.sourceId} className='flex flex-col gap-0.5 rounded-md border p-2'>
+                  <EvidenceDetails value={source.evidence} workspaceId={evidence.workspaceId} />
+                  {source.claims?.map((claim, i) => <EvidenceDetails key={`${claim.claimId}:${i}`} value={claim.evidence} workspaceId={evidence.workspaceId} />)}
                   {source.available ? (
                     <>
                       <span className='font-medium break-words'>{source.title || <Missing />}</span>

@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -78,7 +79,12 @@ _SECRETISH = re.compile(r"(pass(word)?|secret|token|api[_-]?key|authorization|co
 _SIGNED_URL = re.compile(r"(x-amz-signature|x-goog-signature|[?&](token|sig|signature)=|bearer\s+[a-z0-9._-]{12,})", re.I)
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ASSETS = Path(__file__).resolve().parent / "generated" / "openui-assets.json"
-LIBRARY_REF_TYPES = ("library_asset", "library_item", "document", "file")
+# Library files (pr_library_assets rows; `library_file` is the ref the J03 bindings and the Library selection chips emit, ids are
+# the Library's 32-hex form of the uuid) and media items (legacy photos/videos and generated images in state.phase2.assets).
+# A media ref is live while either store holds it: tool_adapter.harvest() labels every `assetId` `asset`, Library files included.
+LIBRARY_REF_TYPES = ("library_file", "library_asset", "library_item", "document", "file")
+MEDIA_REF_TYPES = ("media", "asset", "image")
+_LIBRARY_GONE_STATES = ("deleting", "duplicate")       # being removed; the Library no longer lists them either
 # Selection types → the chip kind the Manager's APP_STATE reads (service._assemble uses `kind`; a draft chip is a 'post').
 _CHIP_KIND = {"draft": "post", "variant": "post", "post": "post"}
 
@@ -306,9 +312,18 @@ def state_ids(state: dict) -> dict:
     def ids(items, keep=lambda _x: True):
         return {str(i.get("id")) for i in items or [] if isinstance(i, dict) and i.get("id") and keep(i)}
     drafts = ids(state.get("variants"))
+    # A photo/video/generated image counts while it is neither deleted nor pending deletion (the Library's own rule).
+    media = ids(phase2.get("assets"), lambda a: not a.get("deleted") and not a.get("deletionPending"))
     return {"draft": drafts, "variant": drafts, "post": drafts, "job": ids(phase2.get("jobs")), "review": ids(phase2.get("reviews")),
             "campaign": ids(planning.get("campaigns")), "automation": ids(planning.get("recurringTasks")),
-            "source": ids(state.get("sources"), lambda s: s.get("active") is not False and not s.get("retracted") and not s.get("retractedAt"))}
+            "source": ids(state.get("sources"), lambda s: s.get("active") is not False and not s.get("retracted") and not s.get("retractedAt")),
+            **{kind: media for kind in MEDIA_REF_TYPES}}
+
+
+def _library_key(ident: str) -> str | None:
+    """The Library's 32-hex id for a uuid given with or without dashes; None for anything else (it cannot name a file)."""
+    value = ident.replace("-", "").lower() if contracts.valid_uuid(ident) else ident.lower()
+    return value if re.fullmatch(r"[0-9a-f]{32}", value) else None
 
 
 def revoked_refs(cur, auth, manifest: dict) -> list[str]:
@@ -326,19 +341,27 @@ def revoked_refs(cur, auth, manifest: dict) -> list[str]:
         except ValueError:
             state = {}
     known = state_ids(state)
-    library = sorted({i.lower() for k, i in pairs if k in LIBRARY_REF_TYPES and contracts.valid_uuid(i)})
+    media_live = known["media"]
+
+    def library_candidate(kind, ident):
+        if kind in LIBRARY_REF_TYPES or (kind in MEDIA_REF_TYPES and ident not in media_live):
+            return _library_key(ident)
+        return None
+    library = sorted({key for k, i in pairs if (key := library_candidate(k, i))})
     library_ok = set()
     if library:
-        cur.execute("SELECT id::text FROM public.pr_library_assets WHERE workspace_id=%s AND id::text = ANY(%s) AND processing_status <> 'deleting'",
-                    (auth.workspace_id, library))
+        cur.execute("SELECT replace(id::text, '-', '') FROM public.pr_library_assets WHERE workspace_id=%s AND id = ANY(%s::uuid[]) "
+                    "AND processing_status <> ALL(%s)", (auth.workspace_id, [str(uuid.UUID(hex=k)) for k in library], list(_LIBRARY_GONE_STATES)))
         library_ok = {r[0] for r in cur.fetchall()}
     tables = {"conversation": "pr_conversations", "message": "pr_messages", "run": "pr_agent_runs"}
     revoked = []
     for kind, ident in pairs:
-        if kind in known:
+        if kind in MEDIA_REF_TYPES:
+            gone = ident not in media_live and _library_key(ident) not in library_ok
+        elif kind in known:
             gone = ident not in known[kind]
         elif kind in LIBRARY_REF_TYPES:
-            gone = ident.lower() not in library_ok
+            gone = _library_key(ident) not in library_ok
         elif kind in tables:
             gone = True
             if contracts.valid_uuid(ident):
@@ -697,10 +720,24 @@ def checkpoint(conn_or_cur, attempt_id, source, *, lease_owner):
         commit()
 
 
+
+def permission_revoked(auth, manifest):
+    """One read-time boundary shared by source replay, snapshots and selections."""
+    if getattr(auth, "authz_mode", "off") != "enforce":
+        return False
+    from . import ui_capabilities, ui_domain
+    return any(binding is None or not ui_capabilities.permission_allows(auth, binding, kind=kind)
+               for kind, key, ident, registry in (("query", "queries", "name", ui_domain.QUERIES), ("action", "actions", "actionId", ui_domain.ACTIONS))
+               for entry in manifest.get(key) or []
+               for binding in [registry.get(entry.get(ident)) if isinstance(entry, dict) else None])
+
+
 def events_after(cur, auth, artifact_id, after, limit):
     """Authorized bounded replay: events with seq > after, oldest first (at most BOUNDS.replayPageEvents). Compacted deltas of
     finished attempts leave seq gaps; a client accepts them (the server is authoritative) and reads the snapshot on a terminal."""
     record = _load(cur, auth, artifact_id)
+    if permission_revoked(auth, record["manifest"]):
+        return []
     after = int(after) if type(after) is int and after >= 0 else 0
     limit = max(1, min(int(limit or contracts.BOUNDS["replayPageEvents"]), contracts.BOUNDS["replayPageEvents"]))
     cur.execute("SELECT seq, attempt_id::text, revision, kind, payload, at FROM public.pr_ui_events WHERE artifact_id::text=%s AND workspace_id=%s AND seq > %s "
@@ -1034,6 +1071,8 @@ def persist_ui_state(cur, auth, artifact_id, expected_state_revision, patch):
     if not isinstance(patch, dict):
         raise AlphaError("patch must be an object.", 400, code="ui_state_patch")
     record = _load(cur, auth, artifact_id, lock=True)
+    if permission_revoked(auth, record["manifest"]):
+        raise AlphaError("Rafii's permission for this view changed.", 403, code="agent_permission_revoked")
     if record["revision"] < 1 or record["validationState"] != "accepted":
         raise AlphaError("This view is not ready yet.", 409, code="ui_not_ready")
     if not compatibility(record)["supported"]:
@@ -1096,7 +1135,7 @@ def selection_context(cur, auth, ui_context):
         record = _load(cur, auth, ui_context["artifactId"])
     except AlphaError:
         return None
-    if record["revision"] < 1:
+    if record["revision"] < 1 or permission_revoked(auth, record["manifest"]):
         return None
     wanted = ui_context.get("stateRevision")
     selection = _selection_at(cur, record, wanted if type(wanted) is int and wanted >= 0 else record["stateRevision"])
@@ -1154,7 +1193,8 @@ def access_for(record: dict, auth, flags: dict, compat: dict, revoked: list, dis
     return {"role": getattr(auth, "role", "") or "", "isActor": is_actor, "enabled": enabled, "live": enabled and renderable,
             "canQuery": enabled and renderable,
             "canAct": enabled and generated and bool(flags.get("actions")) and editor and not founder and not expired,
-            "canEdit": enabled and generated and bool(flags.get("edits")) and editor and record["revision"] >= 1,
+            # Only the person who asked may change the view (HF-3; the edit route refuses anyone else with ui_forbidden).
+            "canEdit": enabled and generated and bool(flags.get("edits")) and editor and is_actor and record["revision"] >= 1,
             "canRetry": enabled and renderable and editor,
             "canPersistState": enabled and generated and editor,
             "fallback": fallback, "manifestExpired": expired, "historical": expired, "revokedRefs": revoked}
@@ -1184,10 +1224,17 @@ def snapshot(cur, auth, artifact_id, *, flags=None, supported=None) -> dict:
     revisions = [{"revision": r, "kind": k, "sourceHash": h, "attemptId": a, "libraryVersion": v or "", "createdAt": _iso(c)} for r, k, h, a, v, c in cur.fetchall()]
     artifact = contracts.public_artifact(record)
     display = display_for(record, attempt, compat, revoked)
+    revoked_by_permission = permission_revoked(auth, record["manifest"])
+    if revoked_by_permission:
+        display = {"mode": "fallback", "reason": "agent_permission_revoked", "updating": False}
+
     if display["mode"] != "generated":
         artifact["canonicalSource"] = None          # an old library or unfinished source is never rendered: native fallback
     manifest = contracts.public_manifest(record["manifest"])
     access = access_for(record, auth, flags, compat, revoked, display)
+    if revoked_by_permission:
+        access.update(canQuery=False, canAct=False, canEdit=False, canRetry=False, canPersistState=False, live=False, fallback=True, revokedByPermission=True)
+        manifest["queries"] = []
     if not access["canAct"]:
         # No write control is offered where writes are off, expired, not allowed, or the view falls back natively.
         manifest["actions"] = []
@@ -1227,6 +1274,10 @@ def replay_view(cur, auth, artifact_id, after, limit=None) -> dict:
     """ext: events after `after` plus the current attempt and whether anything more can arrive: what a reconnecting client (or the
     founder's polling transport) needs to resume without any provider call."""
     record = _load(cur, auth, artifact_id)
+    if permission_revoked(auth, record["manifest"]):
+        last = max(0, record["nextSeq"] - 1)
+        return {"artifactId": record["artifactId"], "events": [], "cursor": last, "lastSeq": last,
+                "done": True, "attempt": None, "revokedByPermission": True}
     events = events_after(cur, auth, artifact_id, after, limit or contracts.BOUNDS["replayPageEvents"])
     attempt = _attempt(cur, record.get("generationAttemptId"))
     live = attempt is not None and attempt["state"] in LIVE_STATES

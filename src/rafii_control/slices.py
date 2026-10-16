@@ -24,6 +24,7 @@ SLICES = (
     'founder_policy',            # approved, configurable entitlement and provider spend defaults
     'founder_activation',        # full-activation gates and bounded telemetry health
     'founder_connections',       # Connections attention queue and provider approval registry (read-only)
+    'founder_agent_observability',  # P0.7 Rafii agent traces/metrics summary (read-only, content-free)
 )
 STATE = {'loaded': False, 'failed': {}}
 

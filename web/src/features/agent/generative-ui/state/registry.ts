@@ -104,6 +104,7 @@ export function noteUiInteraction(artifactId: string) {
   if (!entry) return;
   entry.at = Date.now();
   inUse.set(`${entry.scopeKey}|${entry.conversationId ?? ''}`, entry);
+  notify();
 }
 
 /** `uiContext` for the next turn of this conversation in this scope, or undefined. */
@@ -127,6 +128,7 @@ export function clearUiContext(artifactId: string) {
   byArtifact.delete(artifactId);
   const key = `${entry.scopeKey}|${entry.conversationId ?? ''}`;
   if (inUse.get(key) === entry) inUse.delete(key);
+  notify();
 }
 
 /**

@@ -13,6 +13,7 @@ import time
 import math
 import uuid
 import binascii
+from datetime import datetime, timezone
 from postriff_alpha import learning
 from postriff_alpha.domain import AlphaError, clean, uid
 from postriff_alpha.generation import MATERIAL_LABEL  # noqa: F401 (legacy callers import it from here)
@@ -31,6 +32,8 @@ VOICE_FALLBACK_NOTE = "Your writing samples were not available to this writer, s
 MAX_TEXT = 6000
 IDEA_LIMIT = 3000
 MAX_EVENTS = 2000
+# The Rafii Agent Runtime's rows in pr_agent_runs (agent turns, tasks, voice sessions); recover_stalled skips the same keys.
+RUNTIME_RUN_KEY_PREFIXES = ("agent:", "task:", "voice:")
 DEFAULT_DESTINATIONS = ({"platform": "LinkedIn", "language": "en"}, {"platform": "Instagram", "language": "zh-Hant"})
 
 
@@ -48,7 +51,15 @@ def same_slot(variant, candidate):
     """A draft refreshes in place only when it is the same account (or platform-level draft) in the
     same language: two accounts on one platform never overwrite each other's drafts."""
     return (variant.get("platform") == candidate.get("platform") and locales.same(variant.get("language"), candidate.get("language"))
-            and (variant.get("channelId") or None) == (candidate.get("channelId") or None))
+            and (variant.get("channelId") or None) == (candidate.get("channelId") or None)
+            # Two native formats on one platform (a Page post and a Reel) are two drafts; a draft without a format is
+            # the platform's default format, so older drafts still refresh in place.
+            and _native_format(variant) == _native_format(candidate))
+
+
+def _native_format(item):
+    from .creation_capabilities import DEFAULT_FORMATS
+    return item.get("format") or DEFAULT_FORMATS.get(item.get("platform"))
 
 
 def usd_micro(cost_usd):
@@ -287,7 +298,19 @@ class IdeasService:
                 "detail": "Uses one managed media credit and the approved image budget, independently of the selected writing model or local CLI." if image_available else "Configure the managed image route and private media storage to generate images in chat.",
             },
             "attachments": self.attachments_catalog(),
+            "creation": self.creation_catalog(),
         }
+
+    @staticmethod
+    def creation_catalog():
+        """The versioned creation-capability facet (creation_capabilities.SCHEMA): which platforms and native formats the
+        composer may offer, with independent draft/media/export/connect/publish/analytics/learning states. The server
+        validates every turn against the same projection; this facet never authorizes anything by itself."""
+        from .creation_capabilities import projection
+        try:
+            return projection().public()
+        except Exception:  # noqa: BLE001 - a failed load offers the original five only (client fallback), never more
+            return None
 
     def attachments_catalog(self):
         """Chat attachments (chat-context SPEC §5.11): every limit and number the UI shows, and which parts are on."""
@@ -394,7 +417,11 @@ class IdeasService:
             state = self._state(row)
             learned = {**(self.learning.summary(state) if self.learning else learning.summary(state)), "pendingProposals": len(pending_proposals(cur, workspace_id))}
             from . import media_consent
-            return {"files": memory.render_files(state), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned,
+            shareable = None if self._member(row).role == "owner" else memory.CLOUD_SHAREABLE
+            return {"files": memory.render_files(state, shareable=shareable), "egress": memory.egress_summary(state), "research": research.consent_summary(state), "learning": learned,
+                    "snapshot": memory.snapshot(state, row[0], shareable=shareable),
+                    "routeViews": {"local": memory.diagnostic_projection(state, "local", owner=shareable is None, voice_route="local-cli"),
+                                   "cloud": memory.projection(state, "cloud")},
                     "media": media_consent.summary(state, self.media_consent_current())}
 
     def _read_request(self, workspace_id, token, text, zone, runtime):
@@ -980,6 +1007,7 @@ class IdeasService:
         if current['sources'] != previous['sources']:
             raise AlphaError("Selected sources or their permissions changed while writing. Review a new candidate.", 409)
         voice_sources.validate_bindings(current_state, outcome.get("voiceContext") or {})
+        memory.validate_receipt(current_state, outcome.get("memoryReceipt"), outcome.get("voiceContext"))
         cost_known = "costUsd" in usage and usage.get("costUsd") is not None
         settlement = self.ledger.settle(
             cur,
@@ -1024,8 +1052,16 @@ class IdeasService:
                 if outcome.get("contentType"):
                     variant.update({k: outcome["contentType"].get(k) for k in ("contentTypeId", "contentTypeVersion", "formatId")})
         artifact["voiceContext"] = {key: (outcome.get("voiceContext") or {}).get(key) for key in ("mode", "bindings", "digest", "route")}
+        if outcome.get("memoryReceipt"):
+            artifact["memoryReceipt"] = {**outcome["memoryReceipt"], "workspaceId": workspace_id, "runId": run_id,
+                                         "generatedAt": datetime.fromtimestamp(self.clock(), timezone.utc).isoformat(),
+                                         "execution": "fixture" if outcome.get("memoryExecution") == "fixture" or usage.get("provenance") in ("fixture", "fake") else "completed"}
+        # Structured native drafts (creation projection): public fields in their own slots, bindings and private notes
+        # apart, media and constraint states explicit. `text` is untouched, so every existing reader sees the same copy.
+        from .creation_capabilities import attach_native
+        attach_native(artifact["variants"], bindings=outcome.get("skillBindings") or [], omissions=outcome.get("skillOmissions") or [])
         artifact_hash = digest(artifact)
-        usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
+        usage = {**usage, "billing": usage.get("billing") or settlement.get("state"), "ledgerCostState": settlement.get("state"), "skillBindings": outcome.get("skillBindings", []), "skillOmissions": outcome.get("skillOmissions", []), "memoryBindings": outcome.get("memoryBindings"), "memoryReceipt": artifact.get("memoryReceipt"), "voiceBindings": artifact["voiceContext"].get("bindings", [])}
         if references is not None:
             usage.update({"references": references, "media": artifact.get("media", [])})
         cur.execute("UPDATE public.pr_agent_runs SET status='completed',artifact=%s::jsonb,artifact_hash=%s,usage=usage || %s::jsonb,updated_at=now() WHERE id::text=%s", (json.dumps(artifact, ensure_ascii=False), artifact_hash, json.dumps(usage), run_id))
@@ -1366,6 +1402,9 @@ class IdeasService:
         chip_destinations = ahead["destinations"] if ahead else []
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), payload.get("language"), DEFAULT_DESTINATIONS,
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        self._check_capability_revision(payload, destinations)
+        if callable(getattr(runtime, "refuse_native_formats", None)):
+            runtime.refuse_native_formats(destinations)   # before any reservation or writing
         plan = intent.build_plan(parsed, destinations)
         if text and not recurring and not reworking and not chips:
             # Staged automations, answers to Rafii's questions, edits and "why?" questions (orchestration §7).
@@ -1461,7 +1500,7 @@ class IdeasService:
                 raise AlphaError(f"This run could cost up to US${estimate / 1_000_000:.2f}, over this automation's US${recurring['maxCostUsdMicro'] / 1_000_000:.2f} limit per run. "
                                  f"Raise the limit to at least US${estimate / 1_000_000:.2f} to let it write.", 402, code="automation_cost_limit")
             reservation = self.ledger.reserve(cur, workspace_id, principal, "text_model", estimate, f"run:{run_id}", charge_batch=paid, provider=runtime.provider, model=model_id, run_id=run_id, credit_authority=credit_authority)
-            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "voiceContext": voice_context, "paid": paid, "actor": principal}
+            outcome = {"parsed": parsed, "plan": plan, "destinations": destinations, "context": context, "reservationId": reservation["reservationId"], "model": model_id, "skillBindings": bound["bindings"], "skillOmissions": bound.get("omitted", []), "research": researched, "memoryBindings": shared.get("learned"), "memoryReceipt": projected.get("memoryReceipt"), "memoryExecution": "fixture" if isinstance(runtime, FixtureAgentRuntime) else "completed", "voiceContext": voice_context, "paid": paid, "actor": principal}
             if "references" in projected:
                 # What the chips did, the post media and the per-message content type (chat-context SPEC §5.10).
                 outcome.update({"references": projected["references"], "media": projected["media"], "contentType": projected["contentType"], "derivedSourceIds": projected["derivedSourceIds"]})
@@ -1546,6 +1585,18 @@ class IdeasService:
         if dispatch:
             # Only after the run row is committed can a background thread or device see it.
             runtime, run_id, request, sink = dispatch
+            # Re-check consent at the dispatch boundary after the reservation transaction
+            # committed. A concurrent revocation must not become a fresh provider request.
+            try:
+                # Use the normal transaction contract, including a recurring worker's
+                # bound authority. The UI read helper also permits deletion readback.
+                with self.repository.transaction(token, workspace_id) as (_, dispatch_row, _):
+                    dispatch_state = self._state(dispatch_row)
+                    memory.validate_receipt(dispatch_state, sink.outcome.get("memoryReceipt"), sink.outcome.get("voiceContext"))
+                    voice_sources.validate_bindings(dispatch_state, sink.outcome.get("voiceContext") or {})
+            except AlphaError as error:
+                sink.fail(str(error), known_cost_usd=0.0)
+                raise
             if runtime.asynchronous:
                 runtime.dispatch(run_id, request, sink)
             else:
@@ -1664,20 +1715,23 @@ class IdeasService:
             except AlphaError as error:
                 if not recurring and error.status not in (404, 409):
                     raise   # a malformed request, not a missing or disallowed sample
-            if not (voice_projection or {}).get("samples"):
+            if not (voice_projection or {}).get("samples") and not memory.manual_profile_available(state, provider_class):
                 # No chosen sample may be used by this writer right now (none selected, removed, or not allowed for
                 # this route): every caller (Home, a conversation, Rafii, an automation) still gets its draft, in a
                 # neutral voice that says so, never a refusal.
                 voice_mode, voice_projection = "neutral", None
                 reminders.append(VOICE_FALLBACK_NOTE)
-        shared = memory.projection(state, provider_class, destinations, content_type_id if content_type_id != "unclassified" else None, voice_route=voice_route if voice_mode == 'personalized' else None)
         if voice_projection:
             voice_context = {"mode": "personalized", "route": voice_route, "bindings": voice_projection["bindings"], "digest": voice_projection["digest"]}
             style_directives = voice_sources.style_directives(voice_projection)
         else:
-            voice_context = {"mode": "neutral", "route": None, "bindings": [], "digest": None}
+            voice_context = {"mode": voice_mode, "route": voice_route if voice_mode == "personalized" else None, "bindings": [], "digest": None}
             style_directives = {}
-        request = {"context": context, "idea": idea, "tone": self._tone(state), "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
+        from .model_runtime import MAX_MEMORY_BYTES
+        shared, memory_receipt = memory.prepare_writer(state, provider_class, voice_route, destinations=destinations,
+            content_type_id=content_type_id if content_type_id != "unclassified" else None, voice_mode=voice_mode,
+            max_bytes=MAX_MEMORY_BYTES if provider_class == "cloud" else None, voice_context=voice_context)
+        request = {"context": context, "idea": idea, "tone": self._tone(state) if memory_receipt["effectiveVoiceMode"] == "approved" else "neutral", "destinations": destinations, "reasoning": reasoning, "model": model_id, "memory": shared["files"], "voiceContext": voice_context, "styleDirectives": style_directives}
         if level is not None:
             request["level"] = level   # the managed writer's reasoning level (translate_reasoning); `reasoning` keeps the pass
         report = None
@@ -1709,7 +1763,7 @@ class IdeasService:
                                      content_type_id if content_type_id != "unclassified" else None,
                                      max_chars=budget_for(runtime.cost_class), explicit=(resolved or {}).get("skillIds") or ())
         request["skills"] = bound
-        projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
+        projected = {"destinations": destinations, "sourceIds": source_ids, "context": context, "shared": shared, "memoryReceipt": memory_receipt, "voiceContext": voice_context, "request": request, "bound": bound, "reminders": reminders}
         if resolved:
             used_types = selection if resolved["contentType"] and selection.get("contentTypeId") != "unclassified" else None
             projected.update({"references": report, "media": resolved["media"], "materialRef": resolved["materialRef"], "reworkOf": resolved["reworkOf"],
@@ -1785,6 +1839,14 @@ class IdeasService:
         return runtime, model_id, request
 
     @staticmethod
+    def _check_capability_revision(payload, destinations):
+        """Every route's destinations are checked against the live creation projection before any writing or spending
+        (CLI and subscription routes included); a composer that sent its facet revision gets a stale or forged list
+        refused with `schema_revision_mismatch`. The browser never decides what is draftable."""
+        from .creation_capabilities import validate_destinations
+        validate_destinations(destinations, revision=payload["capabilityRevision"] if isinstance(payload.get("capabilityRevision"), str) else None)
+
+    @staticmethod
     def _with_chip_destinations(requested, chip_destinations):
         """The payload's destinations, joined by chip destinations when there are any (a chip-less request is unchanged)."""
         return (turn_references.merge_destinations(requested, chip_destinations) or None) if chip_destinations else requested
@@ -1825,7 +1887,14 @@ class IdeasService:
     def events(self, workspace_id, token, run_id, cursor=0):
         if type(cursor) is not int or cursor < 0:
             raise AlphaError("Invalid event cursor.", 400)
+        from .api_tokens import is_agent_run_key, is_api_token
         with self.repository.transaction(token, workspace_id) as (cur, _, _):
+            if is_api_token(token):
+                cur.execute("SELECT idempotency_key FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s", (run_id, workspace_id))
+                found = cur.fetchone()
+                if found and is_agent_run_key(found[0]):
+                    # A token reads writing runs only (api_tokens.AGENT_RUN_KEY_PREFIXES): the same answer as a missing run.
+                    raise AlphaError("Run unavailable.", 404)
             return self._events_for(cur, workspace_id, run_id, cursor)
 
     def recover_stalled(self, max_runs=25):
@@ -1850,12 +1919,15 @@ class IdeasService:
         return {'recovered': recovered, 'providerRequests': 0}
 
     def cancel(self, workspace_id, token, run_id):
-        with self.repository.transaction(token, workspace_id) as (cur, row, _):
+        from .api_tokens import is_agent_run_key, is_api_token
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(self._member(row), "edit")
             self._lock_run_events(cur, workspace_id, run_id)
-            cur.execute("SELECT status FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
+            cur.execute("SELECT status,idempotency_key,actor::text FROM public.pr_agent_runs WHERE id::text=%s AND workspace_id=%s FOR UPDATE", (run_id, workspace_id))
             run = cur.fetchone()
-            if not run:
+            if not run or (is_api_token(token) and is_agent_run_key(run[1])) or (str(run[1]).startswith(RUNTIME_RUN_KEY_PREFIXES) and run[2] != principal):
+                # An Agent Runtime turn, task or voice session is stopped only by the person who started it (as the
+                # runtime's own cancel route does); for anyone else it is the same answer as a missing run.
                 raise AlphaError("Run unavailable.", 404)
             if run[0] == "running":
                 cur.execute("SELECT id::text,estimated_usd_micro FROM public.pr_usage_ledger WHERE workspace_id=%s AND run_id::text=%s AND kind='reserve'", (workspace_id, run_id))
@@ -1900,6 +1972,7 @@ class IdeasService:
             if current["policyEpoch"] != epoch or current_bindings != original_bindings or current["excluded"]:
                 raise AlphaError("Sources or their policies changed. Preserve the candidate and draft again from current context.", 409)
             voice_sources.validate_bindings(state, artifact.get("voiceContext") or {})
+            memory.validate_receipt(state, artifact.get("memoryReceipt"), artifact.get("voiceContext"))
             if artifact.get("trendLineage"):
                 from .growth.trends.opportunities import validate_lineage as validate_trend_lineage
                 validate_trend_lineage(state, artifact["trendLineage"], self.clock())
@@ -1929,8 +2002,8 @@ class IdeasService:
                 live_assets = {a.get("id") for a in (state.get("phase2") or {}).get("assets", []) if isinstance(a, dict) and not a.get("deleted")}
                 media = [m for m in candidate.get("media") or artifact.get("media") or [] if m.get("assetId") in live_assets]
                 media_lost = len(candidate.get("media") or artifact.get("media") or []) > len(media)
-                content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId") if candidate.get(k) is not None}
-                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id}
+                content = {k: candidate[k] for k in ("contentTypeId", "contentTypeVersion", "formatId", "format", "native", "nativeFields") if candidate.get(k) is not None}
+                values = {"text": candidate["text"], "sourceIds": list(dict.fromkeys(list(candidate["sourceIds"]) + list(artifact.get("derivedSourceIds") or []))), "voiceSourceIds": [item["id"] for item in (artifact.get("voiceContext") or {}).get("bindings", [])], "voiceBindings": (artifact.get("voiceContext") or {}).get("bindings", []), "unknowns": candidate["unknowns"], "warnings": candidate.get("warnings", []) + (["Rewritten-source candidate: approve public use before publishing."] if candidate.get("candidateOnly") else []), "openings": [], "voiceRevision": state["speaker"].get("activeRevision"), "styleRevision": learning.revision(state), "briefRevision": state["brief"]["revision"], "runId": run_id, "memoryReceipt": copy.deepcopy(artifact.get("memoryReceipt"))}
                 if media or media_lost or "media" in candidate:
                     values["media"] = media
                 if media_lost:
@@ -1943,6 +2016,8 @@ class IdeasService:
                 if old:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
+                    if values.get("memoryReceipt"):
+                        values["memoryReceipt"]["draftId"] = old["id"]
                     old["proposedUpdate"] = {**values, "baseVariantRevision": old["revision"]}
                     old["needsReview"] = True
                     # Keeps the link to this run after the proposal is accepted or edited, so reopening the
@@ -1953,6 +2028,8 @@ class IdeasService:
                     if artifact.get("scoutLineage"):
                         values["scoutLineage"] = [b for b in artifact["scoutLineage"] if b["executionPlan"]["platform"] == candidate["platform"] and b["executionPlan"]["account"] == candidate.get("channelId")]
                     variant = {**values, "id": uid(), "revision": 1, "platform": candidate["platform"], "language": candidate["language"], **({"channelId": candidate["channelId"]} if candidate.get("channelId") else {}), "speakerId": state["speaker"].get("id"), "customized": False, "needsReview": True, "blockedByRetraction": False, "selectedOpening": 0, "localPreferences": {}, "revisions": [{"revision": 1, "text": candidate["text"], "origin": "ideas-candidate"}], "provenance": {"runId": run_id, "contextDigest": context_digest, "policyEpoch": epoch, "model": run_model}}
+                    if variant.get("memoryReceipt"):
+                        variant["memoryReceipt"]["draftId"] = variant["id"]
                     if tag:
                         variant["automation"] = dict(tag)
                     if rework:
@@ -2018,6 +2095,9 @@ class IdeasService:
         language = locales.canonical(payload.get("language"))
         destinations = intent.resolve_destinations(parsed, self._with_chip_destinations(payload.get("destinations"), chip_destinations), language, [{"platform": "LinkedIn", "language": language or parsed["language"]}],
                                                    settings=lambda: self.repository.get(workspace_id, token)["state"])
+        self._check_capability_revision(payload, destinations)
+        if callable(getattr(runtime, "refuse_native_formats", None)):
+            runtime.refuse_native_formats(destinations)   # before any reservation or writing
         if text and not chips and self._may_orchestrate(workspace_id, token, text, parsed, reading):
             # Home is the primary place to create, change or ask about automations (orchestration §7).
             conversation = self.create_conversation(workspace_id, token, clean(text[:60], 60))

@@ -85,7 +85,9 @@ assert worker.tick()['state']=='held'; assert paid.calls==0
 act('raffi_recurrence_pause', {'taskId':task['id']})
 task=new_task(paid.model, 50_000)
 paid.during=lambda:act('raffi_recurrence_cancel', {'taskId':task['id'],'confirmed':True})
-assert worker.tick()=={'cancelled':True}; assert paid.calls==1
+cancelled = worker.tick()
+assert cancelled=={'cancelled':True}, cancelled
+assert paid.calls==1, 'dispatch preflight must use the worker-bound transaction before in-flight cancellation'
 with connection() as db:
     assert db.execute('SELECT count(*) FROM pr_agent_runs WHERE workspace_id=%s AND model=%s AND artifact IS NOT NULL', (workspace,paid.model)).fetchone()[0]==0
 # Crash after provider completion, before attaching the occurrence: retry only reconciles the same run.

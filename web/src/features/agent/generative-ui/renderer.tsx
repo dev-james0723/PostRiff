@@ -88,6 +88,11 @@ export interface RafiiGenerativeMessageProps {
   onRetry?: (() => void) | null;
   /** Open the same artifact in the expanded surface (desktop/tablet). */
   onExpand?: (() => void) | null;
+  /**
+   * Told when the revision on screen is older than the latest accepted one: `choosing` while the dirty-field warning asks,
+   * `kept` after "Keep the earlier view", null otherwise (F turns "Change this view" off, since an edit applies to the latest).
+   */
+  onOlderRevision?: (state: 'choosing' | 'kept' | null) => void;
   className?: string;
 }
 
@@ -288,6 +293,16 @@ function GenerativeMessage(props: RafiiGenerativeMessageProps): JSX.Element {
     setKept(conflict.revision);
     setConflict(null);
   }, [conflict]);
+  const older: 'choosing' | 'kept' | null = conflict
+    ? 'choosing'
+    : kept !== null && shown && incoming && incoming.revision > shown.revision
+      ? 'kept'
+      : null;
+  const onOlderRef = useRef(props.onOlderRevision);
+  onOlderRef.current = props.onOlderRevision;
+  useEffect(() => {
+    onOlderRef.current?.(older);
+  }, [older]);
 
   /* ---- what the Renderer gets ---- */
   const previewSource = draw.mode === 'preview' && !shown ? draw.source : null;

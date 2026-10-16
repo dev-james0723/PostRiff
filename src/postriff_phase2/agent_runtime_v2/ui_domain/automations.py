@@ -130,7 +130,8 @@ def connections_status(dctx, _inputs, _cursor):
                          "items": [{k: i.get(k) for k in ("kind", "severity", "title", "href", "audience", "subject")} for i in items if isinstance(i, dict)][:20]}
         except Exception:  # noqa: BLE001 — a missing reader is unavailable, never empty
             attention = {"state": "unavailable", "reason": "reader_unavailable", "items": []}
-    rows = [{**a, "ref": common.ref("connection", a.get("connectionId")), "needsReconnect": a.get("connectionState") in ("expired", "revoked", "reconnect_required")
+    from ...channels import ATTENTION_STATES   # the computed connection states, as the Channels page reads them
+    rows = [{**a, "ref": common.ref("connection", a.get("connectionId")), "needsReconnect": a.get("connectionState") in ATTENTION_STATES
              or bool(a.get("revoked"))} for a in accounts.get("accounts") or []]
     data = {"accounts": rows, "publishingLive": accounts.get("publishingLive"), "attention": attention,
             "recovery": {"guideId": "connect_account", "href": "/app/channels"}, "rule": "levels come from each account's verified capability record"}

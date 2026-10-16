@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { useSnapshot, keys } from '@/lib/api/hooks';
+import { LibraryMetadataPreview } from './library-metadata-preview';
 import type { LibraryAsset } from './use-library';
 
 export function useLibraryCollections() {
@@ -72,6 +73,7 @@ export function AssetOrganizer({ asset, canEdit }: { asset: LibraryAsset; canEdi
         </label>;
       })}</div></fieldset> : null}
       <Button type='submit' variant='glass' disabled={busy}>Save details</Button>
+      <LibraryMetadataPreview changes={[{ assetId: asset.id, changes: { ...(title.trim() ? { title } : {}), tags: tags.split(',').map(t => t.trim()).filter(Boolean), collections: selected } }]} disabled={busy} />
     </form>
     {normalized && (asset.canRetryProcessing || ['failed','queued'].includes(asset.processing ?? '')) ? <Button variant='glass' disabled={busy} onClick={() => void change(() => api.retryLibraryFile(workspaceId, asset.id))}>{asset.processing === 'unsupported' ? 'Index document' : 'Retry processing'}</Button> : null}
     {asset.assetKind === 'audio' && ready ? <details><summary className='rafii-focus cursor-pointer text-sm'>Add or replace transcript</summary>
