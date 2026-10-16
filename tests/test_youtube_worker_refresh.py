@@ -7,7 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from postriff_alpha.domain import AlphaError
+from postriff_phase2 import security_holds
 from postriff_phase2.contracts import digest
+from postriff_phase2.coworker import flags
 from postriff_phase2.hosted_worker import PostgresWorker, configured_worker_limits
 from postriff_phase2.store import Phase2Store
 
@@ -20,6 +22,8 @@ class WorkerDatabase:
         self.depth, self.result, self.rowcount = 0, None, 1
         self.capacity_ready, self.tenant_dispatches = capacity_ready, 0
         self.member_role = 'owner'
+        # RAPv2 security hold on the approver (migration 121), read by the worker at claim and before dispatch.
+        self.hold_active, self.holds_readable = False, True
         self.youtube_generation = 'synthetic-consent-generation'
         self.state = {'phase2': {'channels': [], 'reviews': [], 'jobs': []}}
         for index in range(channels):
@@ -59,6 +63,16 @@ class WorkerDatabase:
         elif sql.startswith('INSERT INTO public.pr_worker_tenants'):
             assert self.capacity_ready
             self.tenant_dispatches += 1
+        elif sql.startswith("SELECT CASE WHEN to_regclass('public.pr_security_account_controls')"):
+            self.result = (self.holds_readable,)
+        elif sql.startswith('SELECT hold_active FROM public.pr_security_account_controls'):
+            assert params == ('owner',)
+            self.result = (True,) if self.hold_active else None
+        elif sql.startswith('SELECT hold_active,hold_epoch,extract(epoch from placed_at) FROM public.pr_security_account_controls'):
+            assert params == ('owner',)
+            if not self.holds_readable:
+                raise RuntimeError('Synthetic unreadable security controls')
+            self.result = (self.hold_active, 1, None)
         elif sql.startswith('SELECT m.role,m.can_publish'):
             self.result = (self.member_role, True)
         elif sql.startswith('SELECT authorization_generation::text FROM public.pr_encrypted_credentials'):
@@ -115,6 +129,15 @@ def worker_for(channels=2):
 
 
 class YouTubeWorkerRefreshTests(unittest.TestCase):
+    def setUp(self):
+        # The hold flag and the hold-table probe cache are process-wide; pin both so suite order cannot change them.
+        saved = flags._values
+        self.addCleanup(flags.attach, saved)
+        flags.attach({})
+        installed = dict(security_holds._INSTALLED)
+        self.addCleanup(security_holds._INSTALLED.update, installed)
+        security_holds._INSTALLED.update(readable=False, checked=float('-inf'))
+
     def test_server_worker_budget_tuning_preserves_defaults_and_hard_bounds(self):
         self.assertEqual(configured_worker_limits({}), (10, 20))
         self.assertEqual(configured_worker_limits({'POSTRIFF_WORKER_MAX_JOBS': '25', 'POSTRIFF_WORKER_MAX_SECONDS': '45'}), (25, 45))
@@ -251,7 +274,7 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
 
     @patch('postriff_phase2.billing.require_publishing')
     def test_revoked_grant_identity_scope_digest_and_approval_changes_block(self, _billing):
-        for failure in ('revoked', 'identity', 'scopes', 'digest', 'approval_expired', 'account_block'):
+        for failure in ('revoked', 'identity', 'scopes', 'digest', 'approval_expired', 'account_block', 'security_hold'):
             with self.subTest(failure=failure):
                 worker, db, now, _, reverify = worker_for(1)
 
@@ -266,6 +289,8 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
                         channel.update(scopes=[], capabilityVerified=False)
                     elif failure == 'account_block':
                         db.state['accountBlock'] = {'reason': 'Synthetic founder block after claim'}
+                    elif failure == 'security_hold':
+                        db.hold_active = True
                     elif failure == 'digest':
                         job['approvalDigest'] = 'changed-after-claim'
                     else:
@@ -281,6 +306,29 @@ class YouTubeWorkerRefreshTests(unittest.TestCase):
                 self.assertEqual(db.state['phase2']['jobs'][0]['attempts'], [])
                 worker.social.submit.assert_not_called()
                 worker.social.reconcile.assert_not_called()
+
+    @patch('postriff_phase2.billing.require_publishing')
+    def test_approver_security_hold_or_unreadable_controls_block_before_any_attempt(self, _billing):
+        # RAPv2: a held approver stops the job with the flag off; with it on, unreadable controls fail closed too.
+        for case, flag, held, readable in (('held, flag off', {}, True, True),
+                                           ('held, flag on', {'RAFII_SECURITY_INCIDENT_HOLD': '1'}, True, True),
+                                           ('unreadable, flag on', {'RAFII_SECURITY_INCIDENT_HOLD': '1'}, False, False)):
+            with self.subTest(case=case):
+                flags.attach(flag)
+                security_holds._INSTALLED.update(readable=False, checked=float('-inf'))
+                worker, db, _, _, _ = worker_for(1)
+                db.hold_active, db.holds_readable = held, readable
+                worker.step()
+                self.assertEqual(db.state['phase2']['jobs'][0]['state'], 'held')
+                self.assertEqual(db.state['phase2']['jobs'][0]['attempts'], [])
+                worker.social.submit.assert_not_called()
+                worker.social.reconcile.assert_not_called()
+        # A clear approver with the flag on still dispatches: the hold check never blocks an unheld account.
+        flags.attach({'RAFII_SECURITY_INCIDENT_HOLD': '1'})
+        worker, db, _, _, _ = worker_for(1)
+        self.assertTrue(worker.step())
+        self.assertEqual(len(db.state['phase2']['jobs'][0]['attempts']), 1)
+        worker.social.submit.assert_called_once()
 
     @patch('postriff_phase2.billing.require_publishing')
     def test_reconciliation_and_existing_native_schedule_cancellation_are_reverified(self, _billing):
