@@ -38,6 +38,8 @@ class SupportRefundPostgresTests(unittest.TestCase):
                 db.execute('DROP TABLE public.pr_credit_refunds')
             if self._created_email_column:
                 db.execute('ALTER TABLE auth.users DROP COLUMN email')
+            else:
+                db.execute('UPDATE auth.users SET email=NULL WHERE id=%s', (self.user,))
         from control.test_founder_ops_workspace import OpsWorkspacePostgresTests
         OpsWorkspacePostgresTests.tearDown(self)
 
