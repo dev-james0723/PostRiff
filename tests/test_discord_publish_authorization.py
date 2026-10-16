@@ -128,14 +128,20 @@ class SyntheticGrants:
 
 
 class SyntheticDatabase:
-    def __init__(self, state): self.state, self.revision, self.queries = state, 1, []
+    def __init__(self, state):
+        self.state, self.revision, self.queries = state, 1, []
+        self.security_hold = False
     @contextmanager
     def connection(self): yield self
     @contextmanager
     def cursor(self): yield self
     def execute(self, sql, params=()):
         self.queries.append(sql)
-        if sql.startswith('SELECT revision,state'): self.result = (self.revision, copy.deepcopy(self.state))
+        from postriff_phase2 import security_holds
+        if sql == security_holds._PROBE:self.result = (True,)
+        elif sql.startswith('SELECT hold_active FROM public.pr_security_account_controls WHERE user_id='):
+            self.result = (self.security_hold,)
+        elif sql.startswith('SELECT revision,state'): self.result = (self.revision, copy.deepcopy(self.state))
         elif sql.startswith('SELECT state'): self.result = (copy.deepcopy(self.state),)
         elif sql.startswith('SELECT m.role'): self.result = ('owner', True)
         elif sql.startswith('UPDATE public.pr_workspaces'):
@@ -162,6 +168,11 @@ def claimed_job(job):
 
 
 class DiscordP0(unittest.TestCase):
+    def setUp(self):
+        from postriff_phase2 import security_holds
+        cache=patch.dict(security_holds._INSTALLED,{'readable':True,'checked':float('-inf')})
+        cache.start();self.addCleanup(cache.stop)
+
     def test_aged_server_bot_installation_keeps_frozen_approval_and_fresh_permission_check(self):
         engine, state, channel, variant = fixture()
         channel.update(discordConnectionKind='installation', qualification='server_verified',

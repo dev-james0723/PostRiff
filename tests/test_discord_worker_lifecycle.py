@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from postriff_alpha.domain import AlphaError
 from postriff_phase2.discord import worker as policy
+from postriff_phase2 import security_holds
 from postriff_phase2.hosted_social import HostedSocial
 from postriff_phase2.hosted_worker import PostgresWorker, due_workspaces_sql
 from postriff_phase2.social_connectors import DiscordProvider
@@ -26,6 +27,7 @@ class MemoryDatabase:
         self.state, self.now, self.revision = copy.deepcopy(state), NOW + 301, 1
         self.queries, self.cursor_ready, self.member = [], True, ('owner', True)
         self.projection_ready = False
+        self.security_hold = False
 
     @contextmanager
     def connection(self):
@@ -38,7 +40,11 @@ class MemoryDatabase:
     def execute(self, sql, params=()):
         self.queries.append((sql, params))
         self.rows, self.rowcount = [], 1
-        if sql.startswith('SELECT extract(epoch from clock_timestamp()'):
+        if sql == security_holds._PROBE:
+            self.rows = [(True,)]
+        elif sql.startswith('SELECT hold_active FROM public.pr_security_account_controls WHERE user_id='):
+            self.rows = [(self.security_hold,)]
+        elif sql.startswith('SELECT extract(epoch from clock_timestamp()'):
             self.rows = [(self.now,)]
         elif sql.startswith('SELECT pg_try_advisory'):
             self.rows = [(True,)]
@@ -88,6 +94,10 @@ class MemoryDatabase:
 
 class WorkerLifecycle(unittest.TestCase):
     def setUp(self):
+        # Model the installed core-hold table; never mock the production hold
+        # check or leak its process-wide availability cache between tests.
+        self.hold_cache=patch.dict(security_holds._INSTALLED,{'readable':True,'checked':float('-inf')})
+        self.hold_cache.start();self.addCleanup(self.hold_cache.stop)
         engine, state, channel, variant = fixture()
         self.original = copy.deepcopy(approve(engine, state, review(engine, state, channel, variant)))
         self.db, self.wire, self.grants = MemoryDatabase(state), SyntheticWire(), SyntheticGrants()
@@ -109,6 +119,23 @@ class WorkerLifecycle(unittest.TestCase):
         value = self.worker.claim(discord_only=True)
         self.assertIsNotNone(value)
         return value
+
+    def test_active_core_account_hold_blocks_discord_claim_with_feature_flag_off(self):
+        self.db.security_hold=True
+        with patch.object(security_holds,'enabled',return_value=False):
+            self.assertIsNone(self.worker.claim(discord_only=True))
+        self.assertEqual(self.job()['state'],'held')
+        self.assertFalse(self.job().get('attempts'))
+        self.assertFalse(any(call[0]=='POST' for call in self.wire.calls))
+
+    def test_core_hold_placed_after_claim_blocks_discord_handoff_with_flag_off(self):
+        claimed=self.claim()
+        claimed['discordPrepared']=self.social.prepare_discord_dispatch(claimed['job']['manifest'])
+        self.db.security_hold=True
+        with patch.object(security_holds,'enabled',return_value=False):
+            self.assertFalse(self.worker.authorize_dispatch(claimed))
+        self.assertFalse(self.job().get('discordDispatchIntents'))
+        self.assertFalse(any(call[0]=='POST' for call in self.wire.calls))
 
     def seal(self, claimed):
         claimed['discordPrepared'] = self.social.prepare_discord_dispatch(claimed['job']['manifest'])
