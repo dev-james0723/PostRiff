@@ -11,7 +11,7 @@ import { randomKey, signInHref } from '@/lib/founder/api';
 import { whenDateTime } from '../customers/kit/format';
 import { postAction, useActionRefresh } from './api';
 import { ActionSummary } from './facts';
-import { BLOCKER_COPY, KIND_LABEL, PREVIEW_MINUTES, STATE_LABEL, TYPED_BLOCK, actionFailure, confirmBody, confirmPath, typedConfirmationOk, type ActionFailure } from './model';
+import { BLOCKER_COPY, KIND_LABEL, PREVIEW_MINUTES, STATE_LABEL, actionFailure, confirmBody, confirmPath, typedConfirmationOk, typedWord, type ActionFailure } from './model';
 import type { ActionKind, FounderAction, RequestCheck } from './types';
 
 /**
@@ -149,7 +149,7 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
   const stage = done ? 'done' : preview ? 'review' : 'form';
   const confirmable = preview !== null && preview.execution.allowed && confirmPath(preview) !== null;
   const stillOpen = preview?.state === 'previewed';
-  const needsTyped = kind === 'account_block' || kind === 'refund_intent';
+  const needsTyped = typedWord(kind) !== null;
   const canConfirm = confirmable && stillOpen && typedConfirmationOk(kind, typed) && busy === null && !failure?.previewAgain;
 
   return (
@@ -178,10 +178,14 @@ function ActionFlow({ open, onOpenChange, kind, title, intro, form, check, confi
             )}
             {confirmable && stillOpen && needsTyped && (
               <div className='flex flex-col gap-2'>
-                <Label htmlFor={typedId}>Type {kind === 'refund_intent' ? 'REFUND' : TYPED_BLOCK} to confirm</Label>
+                <Label htmlFor={typedId}>Type {typedWord(kind)} to confirm</Label>
                 <Input id={typedId} value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete='off' spellCheck={false} aria-describedby={typedHelpId} className={`${FIELD_CLASS} font-mono`} />
                 <p id={typedHelpId} className='text-muted-foreground text-xs'>
-                  {kind === 'refund_intent' ? 'This confirmation submits the exact refund shown above to Stripe. An uncertain submission is reconciled before another action.' : 'The customer is refused from their next request on. Nothing is deleted; lifting the block restores everything.'}
+                  {kind === 'refund_intent'
+                    ? 'This confirmation submits the exact refund shown above to Stripe. An uncertain submission is reconciled before another action.'
+                    : kind === 'security_hold_release'
+                      ? 'Only after you verified who they are outside Rafii. Their automations, Agent tasks and API tokens can run again; they get a security email saying support lifted the hold.'
+                      : 'The customer is refused from their next request on. Nothing is deleted; lifting the block restores everything.'}
                 </p>
               </div>
             )}

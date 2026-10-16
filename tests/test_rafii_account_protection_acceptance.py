@@ -267,7 +267,7 @@ class P1Boundaries(unittest.TestCase):
 
     def test_rap092_every_p1_migration_documents_its_rollback(self):
         for name in ("120_rapv2_device_registry.sql", "121_rapv2_account_holds.sql", "122_rapv2_security_incidents.sql", "123_rapv2_session_history_erasure.sql",
-                     "127_rapv2_security_retention.sql"):
+                     "127_rapv2_security_retention.sql", "129_rapv2_owner_decisions.sql", "130_founder_security_hold_release.sql"):
             with self.subTest(migration=name):
                 header = (ROOT / "migrations" / "postriff" / name).read_text().split("begin;", 1)[0].split("BEGIN;", 1)[0]
                 self.assertRegex(header.lower(), r"roll ?back|to undo|reversible")

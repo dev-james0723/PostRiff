@@ -1889,6 +1889,20 @@ export interface Me {
     /** How Rafii talks to this person, in text and voice. Read it through `useAgentStyle`, which normalises it. */
     agentStyle: AgentStyle;
   };
+  /**
+   * RAPv2 decision 5: the newest "This wasn't me" report not yet dismissed, shown as a banner at the next sign-in
+   * (never on the session that filed it). Null or absent while the feature is off.
+   */
+  securityNotice?: SecurityNotice | null;
+}
+
+export interface SecurityNotice {
+  kind: 'incident_reported';
+  incidentId: string;
+  reportedAt: string | null;
+  state: SecurityIncident['state'];
+  accountHold: boolean;
+  href: string;
 }
 
 /** Body of `PATCH /api/me`; only the keys present change. */

@@ -6,6 +6,8 @@
  *   RAP-120 reduced motion: the incident dialog is complete with no running animation
  *   RAP-121 "1 recognized browser · 2 sessions"   RAP-126 revoke-others dialog: exact count, explicit confirm/cancel
  *   RAP-127 "This wasn't me" preview: actions and irreversible effects   RAP-128 503: retry/support, never "secure"
+ *   DEC-03 (owner decision 3) a workspace read refused at high risk shows "Confirm it's you", never a generic error
+ *   DEC-05 (owner decision 5) the "This wasn't me" banner at the next sign-in, until dismissed
  *   node web/tests/rapv2-security-center-browser.cjs [--browser=webkit] [--out=DIR]   (RAFII_WEB_URL defaults to http://localhost:3100)
  * Writes DIR/results.json ({"rows": {"RAP-xxx": {"status", "checks"}}}) and one screenshot per scene.
  */
@@ -55,7 +57,7 @@ function check(row, name, ok, detail) {
   process.stdout.write(`${ok ? 'ok  ' : 'FAIL'} [${row}] ${name}${!ok && detail !== undefined ? ` — ${JSON.stringify(detail).slice(0, 400)}` : ''}\n`);
 }
 
-async function open(browser, { width = 1280, height = 900, reducedMotion = 'no-preference', sessions = json(SESSIONS) } = {}) {
+async function prepare(browser, { width = 1280, height = 900, reducedMotion = 'no-preference' } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, reducedMotion });
   await context.addCookies([
     { name: 'postriff_dev', value: '1', url: base },
@@ -72,19 +74,29 @@ async function open(browser, { width = 1280, height = 900, reducedMotion = 'no-p
     if (url.pathname.startsWith('/api/')) seen.push(`${request.method()} ${url.pathname}`);
   });
   page.on('pageerror', (error) => seen.push(`pageerror ${error.message.slice(0, 200)}`));
+  return { context, page };
+}
+
+async function enterDev(page, url, ready) {
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 400000 });
+  const enter = page.getByRole('button', { name: 'Enter dev workspace' });
+  await ready.or(enter).first().waitFor({ timeout: 400000 });
+  if (await enter.isVisible().catch(() => false)) {
+    await enter.click();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 400000 });
+  }
+  await ready.waitFor({ timeout: 300000 });
+}
+
+async function open(browser, { width = 1280, height = 900, reducedMotion = 'no-preference', sessions = json(SESSIONS), me = null } = {}) {
+  const { context, page } = await prepare(browser, { width, height, reducedMotion });
+  if (me) await page.route('**/api/me', async (route) => (route.request().method() === 'GET' ? route.fulfill(json(await me(route))) : route.continue()));
   await page.route('**/api/auth/sessions', (route) => route.fulfill(sessions));
   await page.route('**/api/auth/devices', (route) => route.fulfill(json(DEVICES)));
   await page.route('**/api/auth/security/incidents', (route) => route.fulfill(json({ incidents: [] })));
   await page.route('**/api/me/security-events', (route) => route.fulfill(json({ events: [] })));
-  await page.goto(`${base}/app/account/profile`, { waitUntil: 'domcontentloaded', timeout: 400000 });
-  const enter = page.getByRole('button', { name: 'Enter dev workspace' });
   const section = page.locator(SECTION);
-  await section.or(enter).first().waitFor({ timeout: 400000 });
-  if (await enter.isVisible().catch(() => false)) {
-    await enter.click();
-    await page.goto(`${base}/app/account/profile`, { waitUntil: 'domcontentloaded', timeout: 400000 });
-  }
-  await section.waitFor({ timeout: 300000 });
+  await enterDev(page, `${base}/app/account/profile`, section);
   await section.scrollIntoViewIfNeeded();
   await page.waitForTimeout(800);
   return { context, page, section };
@@ -224,9 +236,77 @@ async function shot(page, name) {
       await shot(page, 'sessions-503');
       await context.close();
     }
+
+    // --- DEC-05: the "This wasn't me" banner at the next sign-in, until dismissed ------------------------------------
+    {
+      const INCIDENT = '22222222-2222-4222-8222-222222222222';
+      let dismissed = 0;
+      const notice = { kind: 'incident_reported', incidentId: INCIDENT, reportedAt: iso(now - 3600), state: 'user_confirmed', accountHold: true, href: '/app/account/profile' };
+      const { context, page } = await open(browser, {
+        me: async (route) => ({ ...(await (await route.fetch()).json()), securityNotice: dismissed ? null : notice })
+      });
+      await page.route(`**/api/auth/security/incidents/${INCIDENT}/dismiss-notice`, (route) => {
+        dismissed += 1;
+        return route.fulfill(json({ incidentId: INCIDENT, dismissedAt: iso(now) }));
+      });
+      const banner = page.getByTestId('security-notice-banner');
+      await banner.waitFor({ timeout: 60000 });
+      const text = (await banner.innerText()).replace(/\s+/g, ' ');
+      check('DEC-05', 'the banner says a sign-in was reported and the account is on a security hold', /You reported a sign-in that wasn’t you/.test(text) && /security hold/.test(text), text);
+      check('DEC-05', 'it says what is paused and that an email was sent too', /Scheduled posts, automations, Agent tasks and API tokens are paused/.test(text) && /We also sent you an email/.test(text), text);
+      check('DEC-05', 'it is a labelled region with a Review security link', (await page.getByRole('region', { name: /You reported a sign-in/ }).count()) === 1 && (await banner.getByRole('link', { name: 'Review security' }).count()) === 1);
+      await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+      const violations = await page.evaluate(async () => {
+        const result = await window.axe.run(document.querySelector('[data-testid="security-notice-banner"]'), { resultTypes: ['violations'] });
+        return result.violations.filter((v) => ['serious', 'critical'].includes(v.impact)).map((v) => ({ id: v.id, impact: v.impact }));
+      });
+      check('DEC-05', 'axe finds no serious or critical issue in the banner', violations.length === 0, violations);
+      await shot(page, 'decision-5-incident-banner');
+      await banner.getByRole('button', { name: 'Dismiss' }).click();
+      await banner.waitFor({ state: 'hidden', timeout: 15000 });
+      check('DEC-05', 'Dismiss sends one request and the banner goes away', dismissed === 1, dismissed);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator(SECTION).waitFor({ timeout: 120000 });
+      await page.waitForTimeout(800);
+      check('DEC-05', 'after dismissing, a reload shows no banner', (await page.getByTestId('security-notice-banner').count()) === 0);
+      await context.close();
+    }
+
+    // --- DEC-03: a workspace read refused at high risk asks "Confirm it's you" -----------------------------------------
+    {
+      const { context, page } = await prepare(browser);
+      let next = 'enroll_mfa';
+      let refuse = true;
+      await page.route(/\/api\/workspaces\/[^/?]+(\/[^?]*)?(\?.*)?$/, (route) => {
+        if (!refuse || route.request().method() !== 'GET') return route.continue();
+        return route.fulfill(json({ error: 'Set up an authenticator app or security key, then confirm it’s you to continue.', code: 'security_step_up_required', nextAction: next,
+                                    security: { outcome: 'step_up', riskLevel: 'high', reasonCodes: ['unknown_device', 'recent_account_change'], policyVersion: 2 } }, 403));
+      });
+      const screen = page.getByTestId('security-step-up');
+      await enterDev(page, `${base}/app`, screen);
+      const text = (await screen.innerText()).replace(/\s+/g, ' ');
+      check('DEC-03', 'the refused read shows "Confirm it’s you", not a generic error', /Confirm it’s you/.test(text) && !/Couldn’t load your workspace/.test(await page.innerText('body')), text);
+      check('DEC-03', 'without a second factor it says to set one up first and links there', /Set up an authenticator app or a passkey first/.test(text) && (await screen.getByRole('link', { name: 'Set up two-step sign-in' }).count()) === 1, text);
+      check('DEC-03', 'it says nothing was changed and offers Try again and Sign out', /nothing was changed/.test(text) && (await screen.getByRole('button', { name: 'Try again' }).count()) === 1 && (await screen.getByRole('button', { name: 'Sign out' }).count()) === 1, text);
+      check('DEC-03', 'the step-up is announced (role=alert)', (await screen.locator('[role="alert"]').count()) >= 1);
+      await shot(page, 'decision-3-confirm-its-you-enroll');
+      await screen.getByRole('link', { name: 'Set up two-step sign-in' }).click();
+      await page.locator(SECTION).waitFor({ timeout: 120000 });
+      check('DEC-03', 'account security stays reachable so a second factor can be set up', (await page.getByTestId('security-step-up').count()) === 0);
+      next = 'complete_mfa';
+      await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
+      await screen.waitFor({ timeout: 120000 });
+      check('DEC-03', 'with a second factor it asks for the authenticator or passkey', /authenticator app or passkey/.test(await screen.innerText()), await screen.innerText());
+      refuse = false;
+      await screen.getByRole('button', { name: 'Try again' }).click();
+      await screen.waitFor({ state: 'hidden', timeout: 60000 });
+      check('DEC-03', 'once the server allows the read again, Try again opens the workspace', (await page.getByTestId('security-step-up').count()) === 0);
+      await context.close();
+    }
   } finally {
     await browser.close();
   }
+
   const summary = { suite: 'rapv2-security-center-browser', browser: browserName, failures, rows };
   fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(summary, null, 1) + '\n');
   process.stdout.write(JSON.stringify({ suite: summary.suite, browser: browserName, failures, rows: Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v.status])) }) + '\n');

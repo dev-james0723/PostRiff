@@ -211,6 +211,57 @@ class FounderActionsPostgresTests(unittest.TestCase):
         status, listing = self.request('/actions', method='GET')
         self.assertNotIn(self.customer, [b['userId'] for b in listing['data']['activeBlocks']])
 
+    # --- RAPv2 owner decision 11: security-hold release -------------------------------------------------------------------
+    def test_security_hold_release_records_out_of_band_verification_and_is_audited_once(self):
+        with psycopg.connect(self.dsn, autocommit=True) as con:
+            epoch = con.execute("SELECT public.pr_security_set_hold(%s,true,'incident.not_me')", (self.customer,)).fetchone()[0]
+            incident = con.execute("INSERT INTO public.pr_security_incidents(user_id,state,summary_code,confirmed_at,hold_epoch) VALUES(%s,'recovering','not_me',now(),%s) RETURNING id::text",
+                                   (self.customer, epoch)).fetchone()[0]
+            con.execute("SELECT public.pr_security_set_hold(%s,true,'incident.not_me')", (self.other,))
+        held = lambda user: self.query('SELECT hold_active,hold_epoch FROM public.pr_security_account_controls WHERE user_id=%s', (user,))[0]
+        path = f'/actions/accounts/{self.customer}/security-hold/release'
+        # How identity was verified is required, from the fixed list, with a support case reference.
+        for body in ({'requestId': str(uuid.uuid4()), 'verificationRef': 'case-2041'},
+                     {'requestId': str(uuid.uuid4()), 'verificationMethod': 'email_code', 'verificationRef': 'case-2041'},
+                     {'requestId': str(uuid.uuid4()), 'verificationMethod': 'video_call_id_match', 'verificationRef': 'person@example.com'}):
+            status, refused = self.request(path + '/preview', body=body)
+            self.assertEqual(status, 400, refused)
+        status, preview = self.request(path + '/preview', body={'requestId': str(uuid.uuid4()), 'verificationMethod': 'video_call_id_match', 'verificationRef': 'case-2041'})
+        self.assertEqual(status, 200, preview)
+        action = preview['data']['action']
+        self.assertEqual((action['kind'], action['current']['securityHold'], [i['incidentId'] for i in action['current']['openIncidents']]),
+                         ('security_hold_release', True, [incident]))
+        self.assertEqual((action['effect']['incidentsResolved'], action['effect']['verificationMethod'], action['confirm']['typedConfirmation']),
+                         (1, 'video_call_id_match', 'RELEASE'))
+        self.assertEqual(held(self.customer), (True, epoch))   # a preview changes nothing
+        status, untyped = self.request(path + '/confirm', body=self.confirm(preview))
+        self.assertEqual(status, 400, untyped)
+        body = self.confirm(preview, confirmation='RELEASE')
+        status, done = self.request(path + '/confirm', body=body)
+        self.assertEqual((status, done['data']['action']['state']), (200, 'executed'), done)
+        self.assertEqual(held(self.customer), (False, epoch + 1))
+        self.assertEqual(held(self.other), (True, 1))           # another held account is untouched
+        self.assertEqual(self.query('SELECT state,resolution_code FROM public.pr_security_incidents WHERE id=%s', (incident,)), [('resolved', 'support_verified')])
+        audit = self.query("SELECT actor::text,subject,meta FROM public.pr_audit_events WHERE kind='security.hold_released_by_support' AND actor=%s", (self.customer,))
+        self.assertEqual(len(audit), 1)
+        self.assertEqual((audit[0][1], audit[0][2]['method'], audit[0][2]['reference'], audit[0][2]['operatorId'], audit[0][2]['holdEpoch']),
+                         (action['previewId'], 'video_call_id_match', 'case-2041', self.operator, epoch + 1))
+        ledger = self.query("SELECT event_type,details->>'by' FROM public.pr_security_login_events WHERE user_id=%s ORDER BY event_type", (self.customer,))
+        self.assertEqual(ledger, [('account.hold_released', 'support'), ('incident.resolved', 'support')])
+        control = self.query('SELECT action,result FROM rafii_control.admin_audit_log WHERE request_id=%s', (done['requestId'],))
+        self.assertEqual(sorted(control), [('accounts.block', 'allowed'), ('accounts.block', 'succeeded')])
+        # The person is told (a transactional security notice), and a repeat changes nothing.
+        from postriff_phase2.notifications import detector
+        with psycopg.connect(self.dsn) as con:
+            notices = [e for e in detector.security_events(con.cursor()) if e['user_id'] == self.customer]
+        self.assertEqual([(e['event_type'], e['payload'].get('titleKey')) for e in notices], [('security.account_change', 'titleHoldReleasedBySupport')])
+        status, again = self.request(path + '/confirm', body=body)
+        self.assertEqual((status, again['data']['replayed']), (200, True))
+        self.assertEqual(held(self.customer), (False, epoch + 1))
+        # Nothing left to release: a new preview is refused.
+        status, none = self.request(path + '/preview', body={'requestId': str(uuid.uuid4()), 'verificationMethod': 'video_call_id_match', 'verificationRef': 'case-2042'})
+        self.assertEqual((status, none.get('blocker')), (409, 'not_held'), none)
+
     def test_workspace_block_freezes_only_that_workspace(self):
         verify = supabase_verifier('https://project.supabase.co', 'p' * 24, self.consumer, get_user=get_user)
         path = f'/actions/accounts/{self.other_ws}'

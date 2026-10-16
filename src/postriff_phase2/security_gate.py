@@ -21,6 +21,13 @@ fresh the proof, and with 503 when the session has no security record although t
 observation failed, so nothing about this session is known). Private workspace reads (`private_data`) are gated only at
 high risk and fail open: an unreadable security state never takes a person's own drafts away.
 
+Security notices for step-ups (owner decision 6, 2026-10-16): a successful, self-initiated step-up stays quiet (its
+`session.step_up_verified` ledger row only). A notice is queued, through the transactional `security.account_change`
+event, only when a step-up fails repeatedly (STEP_UP_FAILURES challenges of one session within STEP_UP_FAILURE_SECONDS
+with no fresh proof since; at most one notice per session per hour) or a risky sign-in is blocked (a high or critical
+risk session refused; once per session). Each challenge is recorded as `session.step_up_challenged` (at most one row per
+session, capability and minute) so failures can be counted.
+
 Sensitive capabilities fail closed: if the security state cannot be read (database error, migration 120 missing) the capability answers
 503 `security_state_unavailable`; nothing else in the app is affected. `capability_for` maps the hosted routes onto
 three of the sensitive capabilities; the fourth, widening Agent permissions, is checked by agent_permissions.apply_decision
@@ -38,6 +45,9 @@ from . import account_protection, device_trust, security_holds, security_policy
 
 # Account events that make the next sensitive action riskier (pr_audit_events kinds, actor = the person).
 RECENT_CHANGE_KINDS = ("mfa.enabled", "mfa.disabled", "session.revoked_others")
+# Decision 6: how many challenges without a fresh proof count as a failed step-up, and within how long.
+STEP_UP_FAILURES = 3
+STEP_UP_FAILURE_SECONDS = 1800
 
 
 def capability_for(method, parts):
@@ -138,6 +148,8 @@ def require(service, token, capability):
                 decision = security_policy.evaluate(signals, proof, now, capability)
                 if sensitive or decision.outcome != "allow":
                     _persist(cur, principal, session_id, decision, proof)
+                if decision.outcome == "step_up" and session_id:
+                    _challenged(cur, principal, session_id, decision, capability, now)
     except AlphaError:
         raise
     except Exception as error:
@@ -165,3 +177,43 @@ def _persist(cur, principal, session_id, decision, proof):
         device_trust.record(cur, principal, "session.step_up_verified", f"session.step_up_verified:{session_id}:{int(proof.at)}",
                             session_id=session_id, details={"method": decision.step_up_method, "policyVersion": decision.policy_version},
                             risk_level=decision.risk_level)
+
+
+def _record_once(cur, principal, session_id, event_type, event_key, details, risk_level):
+    """One ledger row; True only when this call wrote it (a repeat of the key is a no-op)."""
+    cur.execute("INSERT INTO public.pr_security_login_events(user_id,session_id,event_type,event_key,details,risk_level) VALUES(%s,%s,%s,%s,%s::jsonb,%s)"
+                " ON CONFLICT DO NOTHING RETURNING id", (principal, session_id, event_type, event_key[:180], json.dumps(details), risk_level))
+    return cur.fetchone() is not None
+
+
+def _challenged(cur, principal, session_id, decision, capability, now):
+    """Decision 6: record the challenge, then queue a security notice only for a blocked risky sign-in or a repeatedly
+    failed step-up. Same transaction as the decision; a successful step-up never reaches here."""
+    cur.execute("SAVEPOINT rapv2_step_up_notice")
+    try:
+        _notice_if_due(cur, principal, session_id, decision, capability, now)
+        cur.execute("RELEASE SAVEPOINT rapv2_step_up_notice")
+    except Exception as error:  # noqa: BLE001 - a notice never changes the decision (e.g. migration 129 not applied yet)
+        cur.execute("ROLLBACK TO SAVEPOINT rapv2_step_up_notice")
+        logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "security_gate.notice_unavailable", "error": type(error).__name__}))
+
+
+def _notice_if_due(cur, principal, session_id, decision, capability, now):
+    from .hosted import audit
+    details = {"capability": capability, "riskLevel": decision.risk_level, "reasonCodes": list(decision.reasons), "policyVersion": decision.policy_version}
+    _record_once(cur, principal, session_id, "session.step_up_challenged", f"session.step_up_challenged:{session_id}:{capability}:{int(now // 60)}",
+                 details, decision.risk_level)
+    if decision.risk_level in ("high", "critical"):
+        if _record_once(cur, principal, session_id, "session.sign_in_blocked", f"session.sign_in_blocked:{session_id}", details, decision.risk_level):
+            audit(cur, None, principal, "security.sign_in_blocked", session_id, {"riskLevel": decision.risk_level, "reasonCodes": list(decision.reasons)})
+        return
+    # Challenges of this session in the window that no fresh proof has answered since.
+    cur.execute("SELECT count(*) FROM public.pr_security_login_events c WHERE c.user_id=%s AND c.session_id=%s AND c.event_type='session.step_up_challenged'"
+                " AND c.occurred_at > now() - make_interval(secs => %s)"
+                " AND c.occurred_at > coalesce((SELECT max(v.occurred_at) FROM public.pr_security_login_events v WHERE v.user_id=%s AND v.session_id=%s"
+                "   AND v.event_type='session.step_up_verified'), '-infinity'::timestamptz)",
+                (principal, session_id, STEP_UP_FAILURE_SECONDS, principal, session_id))
+    if int(cur.fetchone()[0]) < STEP_UP_FAILURES:
+        return
+    if _record_once(cur, principal, session_id, "session.step_up_failed", f"session.step_up_failed:{session_id}:{int(now // 3600)}", details, decision.risk_level):
+        audit(cur, None, principal, "security.step_up_failed", session_id, {"riskLevel": decision.risk_level, "reasonCodes": list(decision.reasons)})

@@ -1755,9 +1755,10 @@ def founder_boundary():
         assert call("GET", path, token(user, session, aal="aal2"))[0] in (403, 404), path
 
 
-@check("RAP-092", "the P1 migrations (120-123, and 127 retention) apply to a disposable database: every table and function exists, RLS forced")
+@check("RAP-092", "the P1 migrations (120-123, 127 retention and 129 owner decisions) apply to a disposable database: every table and function exists, RLS forced")
 def migrations_dry_run():
-    tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents", "pr_security_retention_runs")
+    tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents", "pr_security_retention_runs",
+              "pr_security_contact_changes")
     rows = sql("SELECT relname, relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname = ANY(%s)", list(tables))
     assert sorted(rows) == sorted((t, True) for t in tables), rows
     for function in ("public.pr_security_purge(uuid)", "public.pr_security_set_hold(uuid,boolean,text)", "public.pr_erase_session_history(uuid)", "public.pr_security_retention_purge(integer,boolean,integer)"):
@@ -2003,6 +2004,163 @@ def retention_purge():
         except psycopg.Error:
             continue
         raise AssertionError(f"not refused: {statement}")
+
+
+# --- James's decisions of 2026-10-16 (rows DEC-nn; not in the 150-row matrix, so build_acceptance_results ignores them) ----
+
+def decision_flags(**extra):
+    flags.attach({"RAFII_ACCOUNT_PROTECTION_V2_MODE": "observe", "RAFII_DEVICE_TRUST_V2": "1", "RAFII_DEVICE_COOKIE_KEYS": DEVICE_KEYS,
+                  "RAFII_SECURITY_INCIDENT_HOLD": "1", **extra})
+    verify.seen.__init__()
+
+
+def audits(user, kind):
+    return sql("SELECT subject,meta FROM public.pr_audit_events WHERE actor=%s AND kind=%s", user, kind)
+
+
+@check("DEC-03", "decision 3: a workspace read refused at high risk answers the machine fields the 'Confirm it's you' screen needs")
+def confirm_screen_contract():
+    p1(mode="enforce")
+    user, workspace = person()
+    _, _, _, session = browse(user)
+    # Two minutes ago: a proof made before the factor was removed is void, so the fresh one below must be later.
+    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta,at) VALUES(%s,'mfa.disabled','','{}',now()-interval '2 minutes')", user)
+    status, body = call("GET", f"/api/workspaces/{workspace}", token(user, session), headers=SAME_ORIGIN)
+    assert status == 403 and body.get("code") == "security_step_up_required", (status, body)
+    assert body.get("nextAction") in ("complete_mfa", "enroll_mfa") and body["security"]["riskLevel"] == "high", body
+    FACTORS.add(user)
+    try:
+        status, body = call("GET", f"/api/workspaces/{workspace}", token(user, session), headers=SAME_ORIGIN)
+        assert body.get("nextAction") == "complete_mfa", body
+        # A fresh second factor from this session opens the workspace again.
+        fresh = token(user, session, aal="aal2", amr=amr("totp"))
+        opened = call("GET", f"/api/workspaces/{workspace}", fresh, headers=SAME_ORIGIN)
+        assert opened[0] == 200, opened
+    finally:
+        FACTORS.discard(user)
+
+
+@check("DEC-05", "decision 5: the incident banner shows at the next sign-in (never on the reporting session) until dismissed; off with the flag")
+def incident_banner():
+    decision_flags()
+    user, _ = person()
+    reporter = signed_in(user)
+    assert report(user, reporter)[0] == 201
+    assert call("GET", "/api/me", token(user, reporter))[1].get("securityNotice") is None
+    later = signed_in(user)
+    notice = call("GET", "/api/me", token(user, later))[1]["securityNotice"]
+    assert notice and notice["kind"] == "incident_reported" and notice["accountHold"] is True, notice
+    stranger, _ = person()
+    assert call("POST", f"/api/auth/security/incidents/{notice['incidentId']}/dismiss-notice", token(stranger, signed_in(stranger)), {})[0] == 404
+    status, body = call("POST", f"/api/auth/security/incidents/{notice['incidentId']}/dismiss-notice", token(user, later), {})
+    assert status == 200 and body["dismissedAt"], (status, body)
+    assert call("GET", "/api/me", token(user, signed_in(user)))[1]["securityNotice"] is None
+    assert hold_row(user)[0][0] is True  # dismissing the banner never touches the hold
+    other, _ = person()
+    assert report(other, signed_in(other))[0] == 201
+    p1()  # RAFII_SECURITY_INCIDENT_HOLD off: no banner, and the dismiss route is not there
+    session = signed_in(other)
+    assert call("GET", "/api/me", token(other, session))[1].get("securityNotice") is None
+    assert call("POST", f"/api/auth/security/incidents/{uuid.uuid4()}/dismiss-notice", token(other, session), {})[0] == 404
+
+
+@check("DEC-06", "decision 6: a successful step-up stays quiet; a blocked risky sign-in and a repeatedly failed step-up each queue one notice")
+def step_up_notices():
+    p1(mode="enforce")
+    quiet, _ = person()
+    FACTORS.add(quiet)
+    try:
+        _, _, _, session = browse(quiet)
+        assert export(quiet, session, aal="aal2", method="totp")[0] == 200
+    finally:
+        FACTORS.discard(quiet)
+    assert not audits(quiet, "security.step_up_failed") and not audits(quiet, "security.sign_in_blocked")
+
+    blocked, workspace = person()
+    _, _, _, session = browse(blocked)
+    sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta) VALUES(%s,'mfa.disabled','','{}')", blocked)
+    for _ in range(2):
+        assert step_up(call("GET", f"/api/workspaces/{workspace}", token(blocked, session), headers=SAME_ORIGIN))
+    assert [subject for subject, _ in audits(blocked, "security.sign_in_blocked")] == [session]
+
+    failing, _ = person()
+    _, _, _, session = browse(failing)
+    for minutes in (3, 2):
+        sql("INSERT INTO public.pr_security_login_events(user_id,session_id,event_type,event_key,occurred_at) VALUES(%s,%s,'session.step_up_challenged',%s,now()-make_interval(mins=>%s))",
+            failing, session, f"session.step_up_challenged:{session}:exports:old{minutes}", minutes)
+    assert step_up(export(failing, session))
+    assert step_up(export(failing, session))
+    assert [subject for subject, _ in audits(failing, "security.step_up_failed")] == [session], audits(failing, "security.step_up_failed")
+
+    answered, _ = person()
+    _, _, _, session = browse(answered)
+    for minutes in (4, 3):
+        sql("INSERT INTO public.pr_security_login_events(user_id,session_id,event_type,event_key,occurred_at) VALUES(%s,%s,'session.step_up_challenged',%s,now()-make_interval(mins=>%s))",
+            answered, session, f"session.step_up_challenged:{session}:exports:old{minutes}", minutes)
+    sql("INSERT INTO public.pr_security_login_events(user_id,session_id,event_type,event_key,occurred_at) VALUES(%s,%s,'session.step_up_verified',%s,now()-interval '1 minute')",
+        answered, session, f"session.step_up_verified:{session}:earlier")
+    assert step_up(export(answered, session))
+    assert not audits(answered, "security.step_up_failed")
+
+    from postriff_phase2.notifications import detector
+    with connection() as db:
+        events = {e["user_id"]: e for e in detector.security_events(db.cursor()) if e["user_id"] in (blocked, failing, quiet) and e["payload"].get("titleKey")}
+    assert set(events) == {blocked, failing}, sorted(events)
+    assert (events[blocked]["event_type"], events[blocked]["payload"]["titleKey"]) == ("security.account_change", "titleSignInBlocked")
+    assert (events[failing]["event_type"], events[failing]["payload"]["titleKey"]) == ("security.account_change", "titleStepUpFailed")
+
+
+@check("DEC-07", "decision 7: for 14 days after an email change, security notices also go to the previous address (once, with a reason line)")
+def previous_address_notices():
+    transport = Transport()
+    decision_flags(RAFII_NOTIFICATIONS_V2_ENABLED="1")
+    _, notifications = v2_service(transport)
+    # The harness auth.users stub has only `id`: add Supabase's email column and install migration 129's trigger.
+    sql("ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text")
+    assert sql("SELECT postriff_private.rapv2_install_contact_change_trigger()")[0][0] is True
+    user, _ = person()
+    current = f"{user[:8]}@example.invalid"
+    sql("UPDATE auth.users SET email=%s WHERE id=%s", f"Old-{user[:8]}@example.invalid", user)
+    sql("UPDATE auth.users SET email=%s WHERE id=%s", f"old-{user[:8]}@example.invalid", user)  # case only: not a change
+    sql("UPDATE auth.users SET email=%s WHERE id=%s", current, user)
+    assert [r[0] for r in sql("SELECT previous_email FROM public.pr_security_contact_changes WHERE user_id=%s", user)] == [f"old-{user[:8]}@example.invalid"]
+    for role in ("anon", "authenticated"):
+        assert not sql("SELECT has_table_privilege(%s,'public.pr_security_contact_changes','SELECT')", role)[0][0], role
+    assert not sql("SELECT has_table_privilege('service_role','public.pr_security_contact_changes','INSERT')")[0][0]
+
+    def notice_and_deliver():
+        sql("INSERT INTO public.pr_audit_events(actor,kind,subject,meta) VALUES(%s,'mfa.disabled','','{}')", user)
+        emit_security(notifications)
+        due(user)
+        worker = notifications.worker()
+        worker.tick()
+        worker.tick()
+
+    notice_and_deliver()
+    to_user = [m for m in transport.sent if m["to"].lower() in (current, f"old-{user[:8]}@example.invalid")]
+    assert sorted(m["to"].lower() for m in to_user) == sorted([current, f"old-{user[:8]}@example.invalid"]), [m["to"] for m in to_user]
+    copy = next(m for m in to_user if m["to"].lower().startswith("old-"))
+    assert "14 days" in copy["text"] and copy["idempotencyKey"] != next(m for m in to_user if m is not copy)["idempotencyKey"]
+    # Past 14 days the old address is no longer told.
+    sql("UPDATE public.pr_security_contact_changes SET changed_at=now()-interval '15 days' WHERE user_id=%s", user)
+    # Expired even though no email changes again: the notification cron's expiry step (migration 129).
+    from postriff_phase2 import security_center
+    expired = security_center.expire_contact_changes(connection)
+    assert expired["status"] == "ok" and expired["removed"] >= 1, expired
+    assert sql("SELECT count(*) FROM public.pr_security_contact_changes WHERE user_id=%s", user)[0][0] == 0
+    assert sql("SELECT has_function_privilege('authenticated','public.pr_security_contact_changes_expire()','EXECUTE')")[0][0] is False
+    before = len(transport.sent)
+    notice_and_deliver()
+    assert [m["to"] for m in transport.sent[before:]] == [current], transport.sent[before:]
+
+
+@check("DEC-08", "decision 8: RAFII_SIGN_IN_DETAILS=city records country, region and city from Vercel's edge headers only")
+def city_granularity():
+    from postriff_phase2 import account_protection
+    environ = {"HTTP_X_VERCEL_IP_COUNTRY": "HK", "HTTP_X_VERCEL_IP_COUNTRY_REGION": "KKC", "HTTP_X_VERCEL_IP_CITY": "Kowloon"}
+    found = account_protection.coarse_location(environ, account_protection.detail_level({"RAFII_SIGN_IN_DETAILS": "city"}), {"VERCEL": "1"})
+    assert found == {"country": "HK", "region": "KKC", "city": "Kowloon"} and account_protection.location_text(found) == "Kowloon, KKC, HK", found
+    assert account_protection.coarse_location(environ, "city", {}) is None  # never off Vercel
 
 
 # --- Verdict ---------------------------------------------------------------------------------------------------------

@@ -219,7 +219,11 @@ def security_events(cur, since_seconds=86400):
     exist for one session only `session.observed` produces the notice, so nobody is told twice.
 
     A "This wasn't me" report (`security.incident_reported`, RAPv2) is a mandatory account-change notice: like every
-    `security.account_change` it is transactional, so no routine alert preference can switch it off.
+    `security.account_change` it is transactional, so no routine alert preference can switch it off. So are the step-up
+    notices of owner decision 6 (2026-10-16), written by security_gate only for a repeatedly failed step-up
+    (`security.step_up_failed`) or a blocked risky sign-in (`security.sign_in_blocked`), never for a successful one, and
+    the notice that support lifted a hold (`security.hold_released_by_support`, decision 11). `titleKey` names the
+    localized headline (email_locales.json security_alert); `title` stays the English fallback.
 
     `legacy_sent` says whether the legacy mailer already delivered this alert; the service's very first run
     baselines (does not resend) only those."""
@@ -231,7 +235,8 @@ def security_events(cur, since_seconds=86400):
                             ELSE true END,
                           a.meta ? 'location', a.meta->'location'
                    FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
-                   WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others','security.incident_reported')
+                   WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others','security.incident_reported',
+                                        'security.step_up_failed','security.sign_in_blocked','security.hold_released_by_support')
                           OR (a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'
                                                                    ELSE coalesce(p.alert_new_device, false) END))
                    AND NOT (a.kind = 'session.alerted' AND a.subject <> '' AND EXISTS(SELECT 1 FROM public.pr_audit_events o
@@ -239,13 +244,20 @@ def security_events(cur, since_seconds=86400):
                    AND a.at > now() - make_interval(secs => %s) AND a.actor IS NOT NULL ORDER BY a.at DESC LIMIT 500""", (since_seconds,))
     titles = {"session.alerted": "A new device signed in", "session.observed": "New sign-in to your account", "mfa.enabled": "Two-step sign-in was turned on",
               "mfa.disabled": "Two-step sign-in was turned off", "session.revoked_others": "Other sessions were signed out",
-              "security.incident_reported": "You reported a sign-in that wasn't you: your account is on a security hold"}
+              "security.incident_reported": "You reported a sign-in that wasn't you: your account is on a security hold",
+              "security.step_up_failed": "Someone tried several times to confirm it's you and didn't succeed",
+              "security.sign_in_blocked": "We stopped a risky sign-in from opening your account",
+              "security.hold_released_by_support": "Rafii support lifted the security hold on your account"}
+    title_keys = {"security.incident_reported": "titleIncidentReported", "security.step_up_failed": "titleStepUpFailed",
+                  "security.sign_in_blocked": "titleSignInBlocked", "security.hold_released_by_support": "titleHoldReleasedBySupport"}
     out = []
     for audit_id, actor, kind, *rest in cur.fetchall():
         sign_in = kind in ("session.alerted", "session.observed")
         event_type = "security.new_device" if sign_in else "security.account_change"
         event = {"event_type": event_type, "dedupe_key": f"{event_type}:{audit_id}", "user_id": actor, "entity_type": "audit_event", "entity_id": audit_id,
                  "payload": {"title": titles[kind], "href": "/app/account/profile"}, "legacy_sent": bool(rest[2]) if len(rest) >= 3 else True}
+        if kind in title_keys:
+            event["payload"]["titleKey"] = title_keys[kind]
         if kind == "session.observed" and len(rest) >= 2:
             # Server-recorded facts only: when the session was first seen and its coarse browser label.
             event["occurred_at"] = float(rest[0])
