@@ -38,6 +38,12 @@ RESOURCE_PLANS={
         'pipeline':'c77a644efe881ef8a0d2aaf192cd7f6157b18cae5f074fbf50b4bc26ee776c05',
         'planFile':'P8-STAGE-B-RESOURCE-PLAN-PARENT16-V4.json','flag':'--stage-b-workers16-parent16-v4',
         'workflowName':'Rafii Discord Stage B workers16 parent16 v4'},
+    'workers16-api12-v5':{'workflow':Path('.depot/workflows/discord-capacity-stage-b-workers16-api12-v5.yml'),
+        'stageA':'7c6b59ce388ba905bc58c32b953a50a872d9b69235fcc13faa36a09074dccd0b',
+        'stageB':'3979e3fac0e2f939be77922d3dc552d13cf3219dc1c46f4b8611c8e5713738e3',
+        'pipeline':'c35cf3d859973627e56ee869e2fd7d93cb4c0125f23846b7ea83cccd94b05c00',
+        'planFile':'P8-STAGE-B-RESOURCE-PLAN-API12-V5.json','flag':'--stage-b-workers16-api12-v5',
+        'workflowName':'Rafii Discord Stage B workers16 API12 v5'},
 }
 
 
@@ -86,9 +92,21 @@ def completed_native_prerequisite(run, receipt, controller, status, metrics, con
                 or observed['status']!='finished' or observed['conclusion']!='success'
                 or receipt['nativeJobConclusion']!='success' or receipt['nativeAttemptConclusion']!='success'
                 or type(receipt['nativeRemoteExitCode']) is not int or receipt['nativeRemoteExitCode']!=0):return False
+        native_submit=controller.get('controllerMode')=='native-submit-no-follow'
+        if native_submit:
+            helper=runpy.run_path(str(EVIDENCE/'recover-stage-b-run.py'))
+            rows=[json.loads(line) for line in controller_log.decode('utf-8').splitlines() if line.strip()]
+            _artifacts,proof=helper['recovered_artifacts'](rows)
+            if (controller.get('execution')!='native Depot CI using JCB secret-filtered remote_patch snapshot'
+                    or type(controller.get('submissionExitCode')) is not int or controller['submissionExitCode']!=0
+                    or type(controller.get('exitCode')) is not int or controller['exitCode']!=0
+                    or controller.get('remoteExitCode') is not None or receipt.get('controllerExit')!=0
+                    or receipt.get('controllerLogSha256')!=hashlib.sha256(controller_log).hexdigest()):return False
         for key in ('sourceHead','sourceFingerprint','includedFileCount'):
             value=receipt['sourceProof'][key]
-            if value is None or value!=controller['snapshot'][key] or value!=controller['transport']['remoteSource'][key]:return False
+            if (value is None or value!=controller['snapshot'][key]
+                    or value!=(proof[key] if native_submit else controller['transport']['remoteSource'][key])):return False
+        if native_submit:return True
         code=controller['exitCode']
         if type(code) is not int or type(receipt['controllerExit']) is not int or receipt['controllerExit']!=code:return False
         if code==0:return type(controller.get('remoteExitCode')) is int and controller['remoteExitCode']==0
@@ -139,6 +157,10 @@ def qualified(path, stage, users, profile, frozen_root):
     actual_profile=hashlib.sha256(json.dumps(result['profile'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
     phases=result['phases'];fixture=result.get('fixtureAccounting',{});observed=phases.get('fixture',{}).get('observed',{})
     expected_jobs=3217 if stage=='a' else 47
+    if result['profile'].get('resourcePlan')=='workers16-api12-v5':
+        verifier=runpy.run_path(str(EVIDENCE/'recover-stage-b-run.py'))
+        if not verifier['capacity_pass'](result,stage,users,profile,expected_jobs):
+            raise SystemExit('Full v5 phase, safety and all API/worker process proofs are required.')
     if (actual_profile!=result.get('profileSha256')
             or set(phases)!={'fixture','comparison-1','comparison-4','burst','sustained','safety'}
             or not fixture.get('complete') or fixture.get('completed')!=users
@@ -265,7 +287,7 @@ def setup(plan_name='workers16-v3'):
         raise SystemExit('Unexpected extended workflow shape.')
     workflow=workflow.replace('name: James Cloud Build','name: '+plan['workflowName'])
     workflow=workflow.replace('    timeout-minutes: 45','    timeout-minutes: 225')
-    if plan_name=='workers16-parent16-v4':
+    if plan_name in ('workers16-parent16-v4','workers16-api12-v5'):
         workflow=runner_local_capacity_cache(workflow)
     return jcb,cfg,workflow
 
@@ -363,6 +385,15 @@ def controlled_main(args):
         # worktree. Reject subset manifests and altered pipeline profiles.
         approvals['stageA']=qualified(args.stage_a_evidence,'a',1000,binding['stageA'],snapshot.path)
         approvals['pipeline']=qualified(args.pipeline_evidence,'pipeline-qualification',32,binding['pipeline'],snapshot.path)
+        if plan_name=='workers16-api12-v5':
+            critical=runpy.run_path(str(snapshot.path/'scripts/discord_capacity_sources.py'))['source_paths'](snapshot.path)
+            if len(critical)!=679:raise SystemExit('Reviewed v5 requires679 complete source paths.')
+            files={name:hashlib.sha256((snapshot.path/name).read_bytes()).hexdigest() for name in critical}
+            files[str(workflow_path)]=record['workflowSha256']
+            source_path=args.journal.with_suffix('.source.json')
+            write_record(source_path,{**record,**snapshot.manifest,'head':snapshot.manifest['sourceHead'],
+                'criticalSourceFiles':sorted(critical),'files':files,'status':'FROZEN_FOR_SINGLE_SUBMISSION'})
+            record['sourceManifest']=str(source_path)
         record.update(status='SUBMISSION_IN_PROGRESS',snapshot=snapshot.manifest,
             journal=str(args.journal.resolve()),prerequisiteEvidence=approvals,
             previousAttempt=({'runId':canonical.get('runId'),'journal':canonical.get('journal'),
@@ -384,6 +415,8 @@ def controlled_main(args):
         run=evidence.get('runId')
         record.update(status='SUBMITTED' if run else 'SUBMISSION_UNKNOWN',runId=run,
             submissionExitCode=code,transport=evidence)
+        if plan_name=='workers16-api12-v5':
+            record.update(controllerMode='native-submit-no-follow',orgId=ORG,exitCode=code,remoteExitCode=None)
         write_record(STATE,record);write_record(args.journal,record)
         args.journal.with_suffix('.submission.log').write_text(output)
         print(json.dumps({'status':record['status'],'runId':run,'submissionExitCode':code}))

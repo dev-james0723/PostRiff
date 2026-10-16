@@ -654,7 +654,11 @@ with patch('postriff_phase2.billing.require_publishing',return_value=None),patch
                         with base['connection']() as db:
                             db.execute("UPDATE public.pr_encrypted_credentials SET revoked_at=clock_timestamp() WHERE workspace_id=%s AND connection_id=%s AND provider='discord'",(f.workspace,f.connection_id))
                     elif change=='expired-replaced-lease':
-                        prior['change_job'](f,leaseId='synthetic-replaced-lease')
+                        # A valid newer worker rotates the durable marker with
+                        # its lease. A legacy mismatched claim is now DB-denied.
+                        marker=copy.deepcopy(prior['job_of'](f)['discordWorker'])
+                        marker['leaseId']='synthetic-replaced-lease'
+                        prior['change_job'](f,leaseId=marker['leaseId'],discordWorker=marker)
                 if change=='expired-unsent':
                     def recover_once():
                         try:return w.release_discord_expired_permit(claimed,signal)

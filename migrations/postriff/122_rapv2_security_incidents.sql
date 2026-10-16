@@ -7,6 +7,11 @@
 -- Server-only: FORCE RLS, no anon/authenticated access, service_role only.
 --
 -- Additive. Nothing reads or writes it unless RAFII_SECURITY_INCIDENT_HOLD is on (default off).
+--
+-- Rollback: turn RAFII_SECURITY_INCIDENT_HOLD off (the incident route answers 404 and nothing reads the table). The
+-- table can stay: incidents are security evidence, so dropping it is a separate, reviewed decision. If it must go, in
+-- one transaction: restore pr_security_purge from migration 121 (this file only adds the incident delete to it), then
+-- drop table public.pr_security_incidents and function postriff_private.rapv2_incidents_guard().
 begin;
 
 create table public.pr_security_incidents (

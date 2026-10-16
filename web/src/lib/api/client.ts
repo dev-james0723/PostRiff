@@ -64,7 +64,9 @@ import type {
   VideoResumeTicket,
   SecurityEvent,
   SecurityIncident,
+  SecurityDevices,
   SecurityIncidentReport,
+  SecurityRecovery,
   SessionInfo,
   Snapshot,
   ActiveTimeBeat,
@@ -208,6 +210,15 @@ export function createApi(getToken: TokenSource) {
     revokeOtherSessions: () =>
       send<{ revoked: number; refreshRevoked: boolean; current: string }>('POST', '/api/auth/sessions/revoke-others'),
     securityIncidents: () => get<{ incidents: SecurityIncident[] }>('/api/auth/security/incidents'),
+    /** The person's browsers (RAPv2 device registry; 404 while it is off). */
+    devices: () => get<SecurityDevices>('/api/auth/devices'),
+    revokeDevice: (deviceId: string) =>
+      send<{ deviceId: string; revoked: boolean; sessionsRevoked: number }>('POST', `/api/auth/devices/${encodeURIComponent(deviceId)}/revoke`),
+    securityRecovery: () => get<SecurityRecovery>('/api/auth/security/recovery'),
+    requestRecovery: () => send<{ path: 'support'; reference: string | null }>('POST', '/api/auth/security/recovery', { confirmed: true }),
+    /** End an incident; needs a fresh code from a factor enrolled before the report. Releases the hold once. */
+    resolveIncident: (incidentId: string) =>
+      send<SecurityIncident & { holdReleased: boolean }>('POST', `/api/auth/security/incidents/${encodeURIComponent(incidentId)}/resolve`, { confirmed: true }),
     /** "This wasn't me": the confirmation is explicit in the body; the server also wants a sign-in from the last 10 minutes. */
     reportNotMe: (revokeOtherSessions: boolean, sourceEventId: string | null = null) =>
       send<SecurityIncidentReport>('POST', '/api/auth/security/incidents', { type: 'not_me', confirmed: true, revokeOtherSessions, sourceEventId }),

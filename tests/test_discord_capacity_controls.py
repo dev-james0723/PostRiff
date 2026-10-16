@@ -24,11 +24,244 @@ from phase2.postgres_discord_capacity import (
     SpawnMockTransport, Telemetry, absorb_worker_metrics, combined_transport_fence,
     send_worker_message, receive_worker_message, validate_worker_summary,
     reap_owned_workers, start_owned_worker,
-    selected_profile, validate_worker_budget, planned_worker_groups,
+    selected_profile, validate_worker_budget, planned_worker_groups,planned_api_groups,
+    admission_diagnostic_profile, admission_margin, sql_statement_category, _sql_statement_category,
+    api_fixture,api_preview,api_result,api_event,valid_api_request,combined_api_fence,
 )
 
 
 class CapacityControls(unittest.TestCase):
+    def test_full_api_resource_plan_preserves_targets_and_requires_all_process_proofs(self):
+        expected={'a':'7c6b59ce388ba905bc58c32b953a50a872d9b69235fcc13faa36a09074dccd0b',
+            'pipeline-qualification':'c35cf3d859973627e56ee869e2fd7d93cb4c0125f23846b7ea83cccd94b05c00',
+            'b':'3979e3fac0e2f939be77922d3dc552d13cf3219dc1c46f4b8611c8e5713738e3'}
+        resources={'version','resourcePlan','resourceChange','parentPoolSize','aggregateConnectionCap',
+            'apiReplicas','apiPoolSize','runnerSize','cpu','memoryGiB','computeUsdPerSecond','jobTimeoutMinutes'}
+        for stage,digest in expected.items():
+            p=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':
+                'b-extended-workers16-api12-v5' if stage=='b' else 'workers16-api12-v5'})
+            historical=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':
+                'b-extended-workers16-parent16-v4' if stage=='b' else 'workers16-parent16-v4'})
+            self.assertEqual(fingerprint(p),digest)
+            self.assertEqual({k:v for k,v in p.items() if k not in resources},
+                {k:v for k,v in historical.items() if k not in resources})
+            self.assertEqual(validate_worker_budget(p),1)
+            self.assertEqual(planned_worker_groups(p),[('comparison-1',1),('comparison-4',4),('burst',16),('sustained',16)])
+            self.assertEqual(planned_api_groups(p),[(phase,12) for phase in ('comparison-1','comparison-4','burst','sustained')])
+            for key,value in [('apiReplicas',13),('apiPoolSize',2),('parentPoolSize',5),('aggregateConnectionCap',33),('stage','safety')]:
+                bad=copy.deepcopy(p);bad[key]=value
+                with self.assertRaises(Incomplete):validate_worker_budget(bad)
+        template=SimpleNamespace(p=admission_diagnostic_profile(api=True),api_summaries=[],api_child_fences=[])
+        for phase,_ in planned_api_groups(p):
+            workers=[{'pid':n+1,'status':'PASS','error':None,'poolStats':{'closed':True,'maxConnections':1},
+                'transportFence':{'unexpectedAttempts':0,'expectedSelfCheckDenials':4}} for n in range(12)]
+            template.api_summaries.append({'phase':phase,'replicas':12,'status':'PASS','parentConnectionCap':4,
+                'aggregateConnectionCap':32,'perReplicaConnectionCap':1,'workers':workers,
+                'cleanup':{'forcedCount':0,'killCount':0,'survivingPids':[],'unfinishedBrokers':0,'errors':[]}})
+            template.api_child_fences.extend({'phase':phase,'pid':n+1,'unexpectedAttempts':0,'expectedSelfCheckDenials':4} for n in range(12))
+        template.p=p
+        self.assertEqual(combined_api_fence(template)['expectedApiProcesses'],48)
+        self.assertEqual(combined_api_fence(template)['status'],'PASS')
+        for mutate in (lambda r:r.api_summaries.pop(),lambda r:r.api_child_fences.pop(),
+                lambda r:r.api_summaries[3]['workers'][0]['poolStats'].update(closed=False),
+                lambda r:r.api_summaries[3]['cleanup'].update(forcedCount=1)):
+            bad=copy.deepcopy(template);mutate(bad)
+            self.assertEqual(combined_api_fence(bad)['status'],'FAIL')
+
+    def test_api_process_boundaries_and_complete_evidence(self):
+        p=admission_diagnostic_profile(api=True)
+        self.assertEqual((p['apiReplicas'],p['apiPoolSize'],p['parentPoolSize'],p['workerPoolSize'],p['aggregateConnectionCap']),
+            (12,1,4,1,32))
+        self.assertEqual(validate_worker_budget(p),1)
+        self.assertEqual(planned_worker_groups(p),[('admission-smoke',16),('admission-burst',16)])
+        for key,value in [('apiReplicas',13),('apiReplicas',True),('apiPoolSize',2),('parentPoolSize',5),('aggregateConnectionCap',33),('stage','b')]:
+            changed=copy.deepcopy(p);changed[key]=value
+            with self.assertRaises(Incomplete):validate_worker_budget(changed)
+        f={'index':0,'workspace':'workspace-a','user':'user-a','token':'synthetic-session',
+            'destinations':[('connection-a','guild-a','channel-a')]*6,'service':object(),'lock':object()}
+        packed=api_fixture(f)
+        self.assertEqual(set(packed),{'index','workspace','user','token','destinations'})
+        packed['destinations'].append(('other','other','other'));self.assertEqual(len(f['destinations']),6)
+        request={'index':0,'alias':'admission-burst-0','due':100.,'phase':'admission-burst',
+            'arrival':80.,'destination':0,'submittedAt':80.}
+        self.assertTrue(valid_api_request(request,'admission-burst',{0}))
+        for key,value in [('index',1),('index',True),('destination',True),('destination',6),('due',float('nan')),
+                ('phase','other'),('token','private-input'),('alias','invalid / alias')]:
+            bad=copy.deepcopy(request);bad[key]=value
+            self.assertFalse(valid_api_request(bad,'admission-burst',{0}))
+        manifest={'workspaceId':'workspace-a','actor':'user-a','platform':'Discord','channelId':'connection-a',
+            'idempotencyKey':'synthetic-idempotency','timing':{'timestamp':100.},
+            'discord':{'publicationId':'job-a','target':{'guildId':'guild-a','channelId':'channel-a',
+                'applicationId':'718000000000000001','botUserId':'718000000000000002','linkedUserId':'720000000000000000'}}}
+        record={'alias':'admission-burst-0','phase':'admission-burst','fixture':f,'due':100.,'frozen':None}
+        nonce=hashlib.sha256(manifest['idempotencyKey'].encode()).hexdigest()[:25]
+        preview={'alias':record['alias'],'nonce':nonce,'manifest':manifest,'expectedJobId':'job-a'}
+        self.assertEqual(api_preview(record,preview,0),(nonce,manifest,'job-a'))
+        mutations=[lambda v:v.update(alias='other'),lambda v:v.update(nonce='other'),lambda v:v.update(expectedJobId='other'),
+            lambda v:v['manifest'].update(workspaceId='foreign'),lambda v:v['manifest'].update(actor='foreign'),
+            lambda v:v['manifest'].update(channelId='other'),lambda v:v['manifest']['timing'].update(timestamp=101.)]
+        for key in ('guildId','channelId','applicationId','botUserId','linkedUserId'):
+            mutations.append(lambda v,key=key:v['manifest']['discord']['target'].update({key:'foreign'}))
+        for mutate in mutations:
+            bad=copy.deepcopy(preview);mutate(bad)
+            with self.assertRaises(Incomplete):api_preview(record,bad,0)
+        registered={**record,'manifest':manifest,'expectedJobId':'job-a'}
+        with self.assertRaises(Incomplete):api_preview(registered,preview,0)
+        completed={'alias':record['alias'],'jobId':'job-a','approvedAt':90.,'frozen':{'digest':'a'*64},'processing':.2,'error':None}
+        self.assertEqual(api_result(registered,completed)['jobId'],'job-a')
+        for key,value in [('alias','other'),('jobId','other'),('approvedAt',True),('processing',float('nan')),('frozen',None),('error','RuntimeError')]:
+            bad=copy.deepcopy(completed);bad[key]=value
+            with self.assertRaises(Incomplete):api_result(registered,bad)
+        observed={**registered,'frozen':{'digest':'b'*64}}
+        with self.assertRaises(Incomplete):api_result(observed,completed)
+        failed={'alias':record['alias'],'jobId':None,'approvedAt':None,'frozen':None,'processing':None,'error':'AlphaError'}
+        self.assertIsNone(api_result(registered,failed)['jobId'])
+        with self.assertRaises(Incomplete):api_result(observed,failed)
+        event={'name':'approval','fields':{'alias':record['alias'],'phase':record['phase'],
+            'payloadHash':'a'*64,'authorizationHash':'b'*64}}
+        self.assertEqual(api_event(record,event,record['phase'])[0],'approval')
+        bad=copy.deepcopy(event);bad['fields']['payloadHash']='private-input'
+        with self.assertRaises(Incomplete):api_event(record,bad,record['phase'])
+        failed_event={'name':'approval-failed','fields':{'alias':record['alias'],'phase':record['phase'],
+            'error':{'type':'RuntimeError','frames':[{'file':'api.py','line':1,'function':'run'}]}}}
+        self.assertEqual(api_event(record,failed_event,record['phase'])[0],'approval-failed')
+        failed_event['fields']['error']['message']='private-input'
+        with self.assertRaises(Incomplete):api_event(record,failed_event,record['phase'])
+        groups=[];fences=[]
+        for phase in ('admission-smoke','admission-burst'):
+            workers=[{'pid':n+1,'status':'PASS','error':None,'poolStats':{'closed':True,'maxConnections':1},
+                'transportFence':{'unexpectedAttempts':0,'expectedSelfCheckDenials':4}} for n in range(12)]
+            groups.append({'phase':phase,'replicas':12,'status':'PASS','parentConnectionCap':4,
+                'aggregateConnectionCap':32,'perReplicaConnectionCap':1,'workers':workers,
+                'cleanup':{'forcedCount':0,'killCount':0,'survivingPids':[],'unfinishedBrokers':0,'errors':[]}})
+            fences.extend({'phase':phase,'pid':n+1,'unexpectedAttempts':0,'expectedSelfCheckDenials':4} for n in range(12))
+        runtime=SimpleNamespace(p=p,api_summaries=groups,api_child_fences=fences)
+        self.assertEqual(combined_api_fence(runtime)['status'],'PASS')
+        for mutate in [lambda r:r.api_summaries.pop(),lambda r:r.api_child_fences.pop(),
+                lambda r:r.api_summaries[0]['cleanup'].update(forcedCount=1),
+                lambda r:r.api_summaries[0]['workers'][0]['poolStats'].update(closed=False),
+                lambda r:r.api_summaries[0]['workers'][0]['poolStats'].update(maxConnections=2),
+                lambda r:r.api_summaries[0]['workers'][0].update(pid=2),
+                lambda r:r.api_child_fences[0].update(unexpectedAttempts=1)]:
+            bad=copy.deepcopy(runtime);mutate(bad)
+            self.assertEqual(combined_api_fence(bad)['status'],'FAIL')
+
+    def test_cached_sql_categories_keep_each_invocations_expiry_and_error(self):
+        observed=[]
+        def fail(*args,**kwargs):raise RuntimeError('private parameter must not enter evidence')
+        metrics=SimpleNamespace(count=lambda *a:None,timing=lambda *a:None,
+            sql_failure=lambda error,operation,start,expiry:observed.append((operation,expiry)))
+        cursor=TimedCursor(SimpleNamespace(execute=fail),metrics)
+        query='WITH scope_store AS (SELECT 1), inserted_admission AS (SELECT 1) SELECT 1'
+        _sql_statement_category.cache_clear()
+        for expiry in (42.,43.,float('nan'),True):
+            with self.assertRaises(RuntimeError):cursor.execute(query,('private-token',expiry))
+        self.assertEqual(observed,[('reservation_commit_batch',42.),('reservation_commit_batch',43.),
+            ('reservation_commit_batch',None),('reservation_commit_batch',None)])
+        self.assertGreaterEqual(_sql_statement_category.cache_info().hits,3)
+        self.assertNotIn('private',str(observed))
+
+    def test_sql_template_cache_has_fixed_entry_and_byte_bounds(self):
+        _sql_statement_category.cache_clear()
+        sql_statement_category('SELECT '+(' ' * 17000))
+        self.assertEqual(_sql_statement_category.cache_info().currsize,0)
+        for n in range(300):self.assertEqual(sql_statement_category('SELECT '+str(n)),'other')
+        self.assertEqual(_sql_statement_category.cache_info().currsize,256)
+
+    def test_atomic_sql_observer_preserves_concurrent_denominators_and_failures(self):
+        metrics=Telemetry(capture_events=False)
+        errors=[]
+        def work():
+            try:
+                def execute(_query,index):
+                    if index==0:raise RuntimeError('private SQL/parameter')
+                cursor=TimedCursor(SimpleNamespace(execute=execute),metrics)
+                for n in range(50):
+                    try:cursor.execute('SELECT observer_control',n)
+                    except RuntimeError:pass
+            except BaseException as error:errors.append(type(error).__name__)
+        threads=[threading.Thread(target=work) for _ in range(8)]
+        for thread in threads:thread.start()
+        for thread in threads:thread.join(timeout=2)
+        self.assertFalse(errors or any(thread.is_alive() for thread in threads))
+        self.assertEqual(metrics.counters['sqlStatements'],400)
+        self.assertEqual(metrics.counters['sqlOperation.other'],400)
+        self.assertEqual(metrics.counters['sqlErrors.RuntimeError'],8)
+        self.assertEqual(len(metrics.timings['sqlExecuteSeconds']),400)
+        self.assertEqual(metrics.sql_operation_seconds['other']['count'],400)
+        self.assertEqual(metrics.phase_sql_operation_seconds['fixture']['other']['count'],400)
+        self.assertEqual(len(metrics.sql_failures),8)
+        self.assertNotIn('private',json.dumps(metrics.summary()))
+
+    def test_pool_reset_is_an_observed_statement_without_dropped_cost(self):
+        runtime=SimpleNamespace(m=Telemetry(capture_events=False))
+        Runtime.pool_statement(runtime,'pool_reset',.25,None)
+        self.assertEqual(runtime.m.counters['sqlStatements'],1)
+        self.assertEqual(runtime.m.timings['sqlExecuteSeconds'],[.25])
+        self.assertEqual(runtime.m.phase_sql_operation_seconds['fixture']['pool_reset'],
+            {'count':1,'totalSeconds':.25,'maxSeconds':.25})
+
+    def test_admission_probe_cannot_substitute_for_full_geometry_or_profiles(self):
+        env={'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'workers16-parent16-v4'}
+        before={stage:fingerprint(selected_profile(stage,env)) for stage in ('a','pipeline-qualification')}
+        b=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-workers16-parent16-v4'})
+        p=admission_diagnostic_profile()
+        self.assertEqual((p['stage'],p['users'],p['burstJobs']),('admission-diagnostic',1000,10000))
+        self.assertEqual((p['burstScheduleLeadSeconds'],p['burstSubmissionSeconds'],p['burstDrainSeconds']),
+            (b['burstScheduleLeadSeconds'],b['burstSubmissionSeconds'],b['burstDrainSeconds']))
+        self.assertEqual(p['mock'],b['mock']);self.assertEqual(p['targets'],b['targets'])
+        self.assertEqual(p['minimumApprovalMarginSeconds'],15)
+        self.assertEqual(planned_worker_groups(p),[('admission-burst',16)])
+        self.assertNotEqual(fingerprint(p),fingerprint(b))
+        self.assertEqual(before,{stage:fingerprint(selected_profile(stage,env)) for stage in before})
+        self.assertIn('NOT_RUN',p['purpose'])
+
+    def test_approval_margin_keeps_missing_and_late_work_in_denominator(self):
+        records=[{'jobId':'a','due':60.,'approvedAt':40.},{'jobId':'b','due':60.,'approvedAt':44.}]
+        self.assertEqual(admission_margin(records,2),16.)
+        self.assertIsNone(admission_margin(records,3))
+        for bad in (None,float('nan'),True):
+            changed=copy.deepcopy(records);changed[1]['approvedAt']=bad
+            self.assertIsNone(admission_margin(changed,2))
+        records[1]['approvedAt']=65.
+        self.assertEqual(admission_margin(records,2),-5.)
+        records[1]['jobId']=None
+        self.assertIsNone(admission_margin(records,2))
+
+    def test_admission_burst_enforces_original_latency_drain_and_submission_gates(self):
+        runtime=Runtime.__new__(Runtime)
+        runtime.p=admission_diagnostic_profile();runtime.m=SimpleNamespace(event=lambda *args,**kwargs:None)
+        records=[{'alias':str(n),'jobId':str(n),'due':100.,'postAt':101.,
+            'approvedAt':80.,'requestedAt':70.,'submittedAt':float(n),'processing':.1}
+            for n in range(2)]
+        states={str(n):'verified' for n in range(2)}
+        def observe(now):
+            with patch('phase2.postgres_discord_capacity.time.time',return_value=now):
+                return Runtime.cohort_result(runtime,'admission-burst',records,states,400.,16,True)
+        result=observe(102.)
+        self.assertEqual(result['status'],'PASS')
+        self.assertEqual(set(result['gates']),{'accountingAndEligibleDelivery',
+            'dispatchP95','dispatchP99','drain','submissionWindow'})
+        for limit in (10.,11.):
+            records[1]['submittedAt']=limit
+            result=observe(102.)
+            self.assertFalse(result['gates']['submissionWindow'])
+            self.assertEqual(result['status'],'FAIL')
+        records[1]['submittedAt']=1.
+        for now in (400.,401.):
+            result=observe(now)
+            self.assertFalse(result['gates']['drain'])
+            self.assertEqual(result['status'],'FAIL')
+        records[1]['postAt']=341.
+        result=observe(102.)
+        self.assertFalse(result['gates']['dispatchP95'])
+        self.assertFalse(result['gates']['dispatchP99'])
+        self.assertEqual(result['status'],'FAIL')
+
+    def test_full_burst_cannot_reuse_a_smaller_fixture(self):
+        runtime=SimpleNamespace(fixtures=[object()],p={'seed':1,'stage':'b'})
+        with self.assertRaises(Incomplete):Runtime.burst(runtime,16,'burst',2)
+
     def test_compact_state_observation_preserves_missing_and_unrequested_jobs(self):
         runtime=Runtime.__new__(Runtime);runtime.m=Telemetry(capture_events=False)
         calls=[]

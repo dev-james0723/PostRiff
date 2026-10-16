@@ -167,6 +167,9 @@ class DeliveryWorker:
             details.append((labels.get("detailBrowser", "Browser"), payload["device"]))
         if ctx.get("occurredAt"):
             details.append((labels.get("detailTime", "Time"), security_time(ctx["occurredAt"], ctx.get("timeZone") or "", numeric=True)))
+        if "location" in payload:
+            # Only what the network edge reported at the sign-in; never a guessed place (RAP-076).
+            details.append((labels.get("detailLocation", "Approximate location"), payload["location"] or labels.get("locationUnavailable", "unavailable")))
         return details
 
     # --- channels ------------------------------------------------------------------------------------------------------------

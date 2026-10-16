@@ -11,6 +11,10 @@ Every configured key is tried on read; a match under an older key is re-hashed u
 success), so a key can be retired once its devices have been seen again. The hash includes the user id, so one browser
 used by two accounts is two unrelated records, and a cookie seen for one person says nothing about another.
 
+A browser unused for INACTIVE_SECONDS (180 days) expires: when it comes back its old record is revoked
+(`revoke_reason` 'inactive', a `device.revoked` ledger event) and it is registered again as a new browser, so a long
+idle cookie never silently reads as known.
+
 Off unless `RAFII_DEVICE_TRUST_V2` is on, a valid key is configured and RAFII_ACCOUNT_PROTECTION_V2_MODE observes. Off
 means no statement, no cookie and no header: the legacy behaviour byte for byte.
 """
@@ -26,6 +30,8 @@ import secrets
 COOKIE = "__Host-rafii_device"
 # 400 days, the longest lifetime browsers keep; the value is a hint, so a lost cookie only means "unknown browser".
 MAX_AGE = 400 * 24 * 3600
+# A browser not seen for this long is no longer known (RAP-138).
+INACTIVE_SECONDS = 180 * 24 * 3600
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 _ON = ("1", "on", "true")
 
@@ -126,8 +132,14 @@ def register(cur, principal, session_id, label=""):
     raw = request.issued or request.presented()
     if raw is not None:
         candidates = [(version, token_hash(secret, principal, raw)) for version, secret in configured]
-        cur.execute("SELECT id,hmac_key_version,state FROM public.pr_security_devices WHERE user_id=%s AND token_hash = ANY(%s) ORDER BY hmac_key_version DESC LIMIT 1", (principal, [digest for _, digest in candidates]))
+        cur.execute("SELECT id,hmac_key_version,state,last_seen_at < now() - make_interval(secs => %s) FROM public.pr_security_devices"
+                    " WHERE user_id=%s AND token_hash = ANY(%s) ORDER BY hmac_key_version DESC LIMIT 1", (INACTIVE_SECONDS, principal, [digest for _, digest in candidates]))
         row = cur.fetchone()
+        if row and row[2] != "revoked" and row[3]:
+            # Idle too long: expire the old record (kept as evidence) and register this browser afresh below.
+            cur.execute("UPDATE public.pr_security_devices SET state='revoked',revoked_at=now(),revoke_reason='inactive',updated_at=now() WHERE user_id=%s AND id=%s", (principal, row[0]))
+            record(cur, principal, "device.revoked", f"device.revoked:{row[0]}:inactive", session_id=session_id, device_id=row[0], details={"reason": "inactive"})
+            row = (row[0], row[1], "revoked", False)
         if row and row[2] != "revoked":
             version, digest = candidates[0]
             if int(row[1]) != version:

@@ -133,6 +133,37 @@ class SecurityEmail(unittest.TestCase):
                 self.assertNotIn(place, mail["text"].replace("America/Los_Angeles", ""))
 
 
+class SignInDetails(unittest.TestCase):
+    """RAP-016 / RAP-076 pure parts: the method comes from the signed amr only; the place only from Vercel's edge."""
+
+    def test_rap016_no_amr_is_unknown_and_no_factor_is_invented(self):
+        for amr in (None, [], "password", [{"method": 7}], [{"method": "carrier-pigeon", "timestamp": 1}]):
+            self.assertEqual(account_protection.sign_in_method(amr), {"method": "unknown", "secondFactor": None})
+        both = [{"method": "oauth", "timestamp": 10}, {"method": "totp", "timestamp": 20}]
+        self.assertEqual(account_protection.sign_in_method(both), {"method": "oauth", "secondFactor": "authenticator_app"})
+
+    def test_rap076_location_only_from_vercel_and_only_codes(self):
+        environ = {"HTTP_X_VERCEL_IP_COUNTRY": "HK", "HTTP_X_VERCEL_IP_COUNTRY_REGION": "KKC", "HTTP_X_VERCEL_IP_CITY": "Kowloon%20City"}
+        on = {"VERCEL": "1"}
+        self.assertIsNone(account_protection.coarse_location(environ, "city", {}))          # not on Vercel: ignored
+        self.assertIsNone(account_protection.coarse_location(environ, "method", on))        # level without a place
+        self.assertEqual(account_protection.coarse_location(environ, "country", on), {"country": "HK"})
+        self.assertEqual(account_protection.coarse_location(environ, "city", on), {"country": "HK", "region": "KKC", "city": "Kowloon City"})
+        self.assertIsNone(account_protection.coarse_location({"HTTP_X_VERCEL_IP_COUNTRY": "<script>"}, "city", on))
+        self.assertEqual(account_protection.location_text({"country": "HK", "region": "KKC"}), "KKC, HK")
+        self.assertIsNone(account_protection.location_text(None))
+
+    def test_rap076_notices_say_unavailable_and_never_invent_a_place(self):
+        transport = NullTransport()
+        mailer = Mailer(transport, "Rafii <security@rafii.example>", BASE)
+        mailer.new_device("person@example.invalid", "Safari on iPhone", AT, f"{BASE}/app/account/profile", time_zone="America/Los_Angeles", location=None)
+        mailer.new_device("person@example.invalid", "Safari on iPhone", AT, f"{BASE}/app/account/profile", location="KKC, HK")
+        unavailable, placed = transport.sent
+        self.assertIn("Approximate location unavailable.", unavailable["text"])
+        self.assertIn("Approximate location: KKC, HK", placed["text"])
+        self.assertNotIn("Approximate location", legacy_alert()["text"])  # the flag off: no line at all
+
+
 class Hygiene(unittest.TestCase):
     def app(self):
         def get_user(url, access_token):
@@ -218,7 +249,9 @@ class RevokeOthersCoverage(unittest.TestCase):
 class P1Boundaries(unittest.TestCase):
     """RAPv2 P1 rows answered by the code's own boundaries (no database needed)."""
     SRC = ROOT / "src" / "postriff_phase2"
-    SECURITY_WRITERS = {"account_deletion.py", "device_trust.py", "hosted.py", "security_gate.py", "security_holds.py", "security_incidents.py", "security_policy.py"}  # security_policy: names the table in prose only (pure, no I/O)
+    SECURITY_WRITERS = {"account_deletion.py", "device_trust.py", "hosted.py", "security_gate.py", "security_holds.py", "security_incidents.py", "security_policy.py",
+                        # RAPv2 Security Center (device revoke, incident resolution) and the retention worker.
+                        "security_center.py", "security_retention.py"}  # security_policy: names the table in prose only (pure, no I/O)
 
     def test_rap103_no_agent_or_tool_code_can_write_risk_trust_or_hold_state(self):
         pattern = re.compile(r"pr_security_|pr_session_security|security_holds\.(place|release)|pr_security_set_hold|device_trust\.(record|register|observe)")
@@ -232,11 +265,9 @@ class P1Boundaries(unittest.TestCase):
         source = (self.SRC / "productivity_connectors.py").read_text()
         self.assertNotRegex(source, r"gmail\.send|gmail\.compose|gmail\.modify|messages/send|Mail\.Send")
 
-    @unittest.expectedFailure
     def test_rap092_every_p1_migration_documents_its_rollback(self):
-        # Known gap: 120 and 121 say how to roll back; 122 does not, and 123 still says "Candidate only: not applied
-        # anywhere" although it is applied.
-        for name in ("120_rapv2_device_registry.sql", "121_rapv2_account_holds.sql", "122_rapv2_security_incidents.sql", "123_rapv2_session_history_erasure.sql"):
+        for name in ("120_rapv2_device_registry.sql", "121_rapv2_account_holds.sql", "122_rapv2_security_incidents.sql", "123_rapv2_session_history_erasure.sql",
+                     "127_rapv2_security_retention.sql"):
             with self.subTest(migration=name):
                 header = (ROOT / "migrations" / "postriff" / name).read_text().split("begin;", 1)[0].split("BEGIN;", 1)[0]
                 self.assertRegex(header.lower(), r"roll ?back|to undo|reversible")

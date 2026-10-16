@@ -1872,6 +1872,43 @@ export interface SessionInfo {
   client: string;
   revoked: boolean;
   current: boolean;
+  /** How it signed in, as its token or first sighting recorded it; `unknown` when nothing did (never guessed). */
+  signInMethod?: SignInMethod;
+  /** Approximate place from the network edge at its first sighting, e.g. "KKC, HK"; null when none was recorded. */
+  location?: string | null;
+}
+
+export type SignInMethod = 'password' | 'email_code' | 'email_link' | 'oauth' | 'passkey' | 'sso' | 'anonymous' | 'unknown';
+
+/** A browser this person used (`GET /api/auth/devices`, RAPv2; 404 while the registry is off). */
+export interface SecurityDevice {
+  deviceId: string;
+  label: string;
+  state: 'observed' | 'trusted' | 'revoked';
+  surface: string;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  current: boolean;
+  sessions: number;
+  activeSessions: number;
+}
+
+export interface SecurityDevices {
+  devices: SecurityDevice[];
+  summary: { recognizedBrowsers: number; activeSessions: number };
+}
+
+/** How to get a held account back (`GET /api/auth/security/recovery`). */
+export interface SecurityRecovery {
+  accountHold: boolean;
+  openIncident: string | null;
+  path: 'verify_factor' | 'support';
+  factorsBeforeIncident: number;
+  identityAvailable: boolean;
+  emailCodeAccepted: false;
+  steps: string[];
 }
 
 /** The signed-in person (`GET /api/me`). Name, email and avatar come from the auth provider. */
@@ -1887,6 +1924,8 @@ export interface Me {
     enforcedAt: number | null;
     aal: 'aal1' | 'aal2' | null;
   };
+  /** How this session signed in, from its signed token only (RAPv2). */
+  signIn?: { method: SignInMethod; secondFactor: 'authenticator_app' | 'security_key' | 'phone_code' | null };
   /** Person-level preferences; empty strings mean "follow this device". */
   preferences: {
     timeZone: string;

@@ -5,6 +5,7 @@ The imported harness fences loopback, database identity, synthetic auth/users,
 and provider transport. No production database or actual Discord is accepted.
 """
 import copy
+import hashlib
 import json
 import os
 import runpy
@@ -102,6 +103,62 @@ def denied_or_false(action):
     except AlphaError:
         pass
 
+
+# The exact deployed claim implementation is retained as inert source. Invoke
+# only its claim transaction, never step()/provider I/O, in this owned cluster.
+legacy_path=Path(__file__).with_name('fixtures')/'discord_legacy_worker_claim_5f93f375.py.txt'
+legacy_source=legacy_path.read_bytes()
+assert hashlib.sha256(legacy_source).hexdigest()=='cf8eb336fffe7bd168043e39581c0eea30a5b556dba1cef77222378fbf34f33e'
+import postriff_phase2.hosted_worker as current_worker
+legacy_namespace=dict(vars(current_worker))
+exec(compile(legacy_source,str(legacy_path),'exec'),legacy_namespace)
+legacy_claim=legacy_namespace['claim']
+
+with patch('postriff_phase2.billing.require_publishing',return_value=None), patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
+    f=Fixture();original=f.job();legacy=worker(f,'legacy-positive-control')
+    claimed=legacy_claim(legacy)
+    assert claimed and claimed['workspaceId']==f.workspace
+    assert claimed['job']['leaseId'] and not policy.managed(claimed['job'])
+    no_posts(f);frozen(f,original);finish_fixture(f)
+checks.append('exact deployed legacy claim acquires an unmanaged Discord lease without the DB fence;zero provider POST')
+
+with connection() as db:
+    db.execute((Path(__file__).resolve().parents[2]/'migrations/postriff/128_discord_lease_protocol_fence.sql').read_text())
+
+with patch('postriff_phase2.billing.require_publishing',return_value=None), patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
+    f=Fixture();original=f.job();before=state_of(f)
+    try:
+        legacy_claim(worker(f,'legacy-must-not-dispatch'))
+    except base['psycopg'].errors.CheckViolation as error:
+        assert error.sqlstate=='23514'
+    else:raise AssertionError('Legacy worker acquired a Discord lease after protocol fence')
+    assert state_of(f)==before
+    modern=worker(f,'modern-protocol-owner');claimed=exact_claim(f,modern,original);assert claimed
+    expire(f);before=state_of(f)
+    try:
+        legacy_claim(worker(f,'legacy-stale-marker'))
+    except base['psycopg'].errors.CheckViolation:
+        pass
+    else:raise AssertionError('Legacy recovery reused a stale managed marker')
+    assert state_of(f)==before
+    no_posts(f);frozen(f,original);finish_fixture(f)
+checks.append('protocol fence atomically rejects actual legacy first claim and stale-marker recovery;modern claim succeeds;zero provider POST')
+
+with patch('postriff_phase2.billing.require_publishing',return_value=None), patch('postriff_phase2.billing.require_plan_capacity',return_value=None), connection() as db:
+    for role in ('anon','authenticated','service_role'):
+        assert not db.execute("SELECT has_function_privilege(%s,'public.pr_discord_lease_protocol_guard()','EXECUTE')",(role,)).fetchone()[0]
+    f=Fixture();f.job();before=state_of(f)
+    state=copy.deepcopy(before)
+    # Only the platform and acquired-lease fields change. This deliberately
+    # lacks a Discord worker marker; non-Discord compatibility stays intact.
+    state['phase2']['jobs'][0]['manifest']['platform']='LinkedIn'
+    state['phase2']['jobs'][0].update(leaseOwner='synthetic-legacy-other-provider',leaseId='other-provider-lease')
+    db.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s',(json.dumps(state),f.workspace))
+    assert db.execute('SELECT state FROM public.pr_workspaces WHERE id=%s',(f.workspace,)).fetchone()[0]==state
+    db.rollback()
+assert state_of(f)==before
+no_posts(f);finish_fixture(f)
+checks.append('protocol guard has no browser/service direct execute grant;non-Discord legacy lease update succeeds and explicit rollback restores exact source')
 
 with patch('postriff_phase2.billing.require_publishing', return_value=None), patch('postriff_phase2.billing.require_plan_capacity', return_value=None):
     # Independent rows progress while a peer holds its short claim transaction.

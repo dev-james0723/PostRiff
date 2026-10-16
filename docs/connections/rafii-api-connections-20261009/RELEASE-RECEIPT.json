@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "rafii-api-connections-20261009-founder-attention",
+  "observedAt": "2026-10-09T22:30:00Z",
+  "status": "READY_FOR_APPROVAL",
+  "statusMeaning": "Ready for human code review only. Not release-eligible: final-head CI pending, document-runtime blocked (Library/CI owner), merge/deploy not authorized, no production readback. See RELEASE-GATE-MATRIX.json.",
+  "releaseRestriction": "James 2026-10-09 (latest): NO merge or deploy, even after green CI; no provider grants, real posts, purchases or new scope",
+  "scope": {
+    "provider": "all (Founder control plane)",
+    "product": "founder_connections",
+    "operations": [
+      "attention_queue_read",
+      "approval_registry_read",
+      "connection_health_projection"
+    ],
+    "media": []
+  },
+  "source": {
+    "commit": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
+    "merged": false,
+    "branch": "claude/rafii-api-connections-20261009",
+    "base": "26d7e901d1b7bd2bbb25d98c34d5989bad3f8559",
+    "prUrls": [
+      "https://github.com/dev-james0723/PostRiff/pull/150"
+    ]
+  },
+  "independentReview": {
+    "reviewer": "independent Claude subagent (fresh context, read-only)",
+    "critical": 0,
+    "high": 0,
+    "medium": 2,
+    "mediumFixed": [
+      "per-capability truncation biased against late providers -> SELECT DISTINCT per connection, no provider ordering",
+      "one connection-health read error could fail the Live route -> isolated P3 unavailable item"
+    ],
+    "lowFixed": [
+      "rows query missing after coverage looked like all-clear",
+      "recorded scopes could narrow adapter request",
+      "malformed registry row failed the route",
+      "YouTube overlay SELECT could abort the hourly stage (savepoint)",
+      "partial coverage rendered as Current",
+      "comment accuracy on ciphertext presence"
+    ],
+    "fixCommit": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
+    "secondReview": {
+      "critical": 0,
+      "high": 0,
+      "medium": 2,
+      "low": 9,
+      "fixCommit": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
+      "detail": "FINAL-ACCEPTANCE-REVIEW.md"
+    }
+  },
+  "productionEvidencePreDeploy": {
+    "observedAt": "2026-10-09T20:25Z",
+    "method": "read-only counts via Supabase SQL on the production projection; no identifiers",
+    "customerConnections": 7,
+    "projectionAgeSeconds": 2705,
+    "flagged": {
+      "linkedin.reauthorization_required": 2,
+      "youtube.reauthorization_required": 1,
+      "youtube.token_expired": 1
+    },
+    "finding": "the youtube token_expired connection has refresh_supported=false, refresh grant present, not revoked: the Channels card calls this client_binding_missing; this PR classifies it the same way (blocked) after deploy",
+    "anonymousProbe": {
+      "/api/control/v2/connections/attention": 404,
+      "/api/control/v2/session": 401,
+      "/api/control/v2/activation/readiness": 401
+    }
+  },
+  "ci": [
+    {
+      "runUrl": "depot run dwldkz8xdj (org jf34f85hr0)",
+      "task": "jcb typecheck (tsc --noEmit)",
+      "sourceSha": "working tree on 26d7e901 (patch e5f62ce2868cf254)",
+      "status": "PASS",
+      "synthetic": true
+    },
+    {
+      "runUrl": "depot run v86p7brpkz (org jf34f85hr0)",
+      "task": "jcb lint (0 errors; 23 pre-existing warnings, none in changed files)",
+      "sourceSha": "working tree on 26d7e901",
+      "status": "PASS",
+      "synthetic": true
+    },
+    {
+      "runUrl": "https://github.com/dev-james0723/PostRiff/pull/150/checks",
+      "task": "GitHub checks on head 19564282: Control foundation 37986228842, Founder admin browser 37986228758, scenes 37986228760, Generative UI 37986228843, Growth 37986228761, local release gates 37986228831 all PASS; Library 37986228759 FAIL (WebKit 1440 /preview, pre-existing intermittent; see LIBRARY-CI-DIAGNOSIS.md) then rerun",
+      "sourceSha": "1956428296f43dfa4550bbcd111a4b47670e6f7d",
+      "status": "PASS on 19564282 (Library attempt 2); final-head CI for 94f15668 PENDING - see RELEASE-GATE-MATRIX.json",
+      "synthetic": true
+    },
+    {
+      "runUrl": "depot runs snb3h8w0pd (typecheck) / 356kd038v2 (lint, 0 errors) on review-fix code",
+      "task": "jcb typecheck + lint",
+      "sourceSha": "19564282 working tree",
+      "status": "PASS",
+      "synthetic": true
+    },
+    {
+      "runUrl": "https://github.com/dev-james0723/PostRiff/actions/runs/37980587459",
+      "task": "GitHub Rafii Control foundation (control unit + disposable PostgreSQL)",
+      "sourceSha": "5c2394d8 (superseded)",
+      "status": "PASS",
+      "synthetic": true
+    },
+    {
+      "runUrl": null,
+      "task": "local targeted unittest: test_founder_connections, test_founder_ops, test_founder_slices, test_boundary (114 tests at 94f15668; 109 at 19564282)",
+      "sourceSha": "94f156681b9e6e8dc0830d3c63f6ac3acc0b2e7f",
+      "status": "PASS",
+      "synthetic": true
+    }
+  ],
+  "deployment": null,
+  "schema": {
+    "migrations": [],
+    "rlsEvidenceRef": null
+  },
+  "authorizationRefs": [
+    "James voice instruction 2026-10-09: scoped code/test implementation; external gates retained"
+  ],
+  "providerApprovalEvidenceRefs": [],
+  "acceptance": [
+    {
+      "id": "A01",
+      "status": "PASS",
+      "evidenceRef": "docs/connections/rafii-api-connections-20261009/OWNER-INVENTORY.md",
+      "execution": "read_only_inventory",
+      "note": "Owner/path inventory from open PRs and worktrees; base 26d7e901 = origin/consumer-saas after fetch"
+    },
+    {
+      "id": "A02",
+      "status": "BLOCKED_PROVIDER",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "No provider decision receipts recorded; the registry reports check_required for every requirement"
+    },
+    {
+      "id": "A03",
+      "status": "PASS",
+      "evidenceRef": "tests/control/test_founder_connections.py (EndToEndAuthorizationTests)",
+      "execution": "synthetic_integration",
+      "note": "Founder-only boundary through real Boundary/ControlApplication: anonymous 401, missing control.read 403, inactive operator denied, unknown mode 400; workspace/connection ids never leave the queue (synthetic). Production: anonymous probe on deployed routes only; new route not deployed"
+    },
+    {
+      "id": "A04",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A05",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A06",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A07",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A08",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A09",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A10",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A11",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A12",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A13",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A14",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A15",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A16",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A17",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A18",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A19",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A20",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A21",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A22",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A23",
+      "status": "PASS",
+      "evidenceRef": "tests/control/test_founder_connections.py",
+      "execution": "synthetic_unit",
+      "note": "Read-only route with control.read; fixed statements read no credential columns; workspace ids never leave the queue"
+    },
+    {
+      "id": "A24",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A25",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "Consent -> job -> receipt correlation is not in this slice"
+    },
+    {
+      "id": "A26",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A27",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A28",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A29",
+      "status": "PASS",
+      "evidenceRef": "tests/control/test_founder_connections.py",
+      "execution": "synthetic_unit",
+      "note": "Distinct-tenant union, unknown never 0, priority/launch-blocker order, ack stays visible, unassigned explicit. Live readback NOT_RUN"
+    },
+    {
+      "id": "A30",
+      "status": "PASS",
+      "evidenceRef": "tests/control/test_founder_connections.py",
+      "execution": "synthetic_unit",
+      "note": "Missing/skewed/stale/partial observations never green; missing projection and failed incident store become unknown items. Live stop/recovery drill NOT_RUN"
+    },
+    {
+      "id": "A31",
+      "status": "PASS",
+      "evidenceRef": "tests/control/test_founder_connections.py",
+      "execution": "synthetic_unit",
+      "note": "Brand approved but scope pending, testing-only audience, wrong environment, scope gap, stale check, bad receipt ref and expired approval each judged separately; no all-green"
+    },
+    {
+      "id": "A32",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A33",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A34",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A35",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    },
+    {
+      "id": "A36",
+      "status": "NOT_RUN",
+      "evidenceRef": null,
+      "execution": "not_executed",
+      "note": "outside the selected scope (Founder attention queue + approval registry); owned by another lane or needs a live gate"
+    }
+  ],
+  "providerEffects": {
+    "createCount": 0,
+    "providerCalls": 0,
+    "resourceRefs": [],
+    "duplicateCount": "NOT_APPLICABLE (no write path)"
+  },
+  "cost": {
+    "actualUsdMicro": null,
+    "estimatedUsdMicro": null,
+    "unknownHolds": 0,
+    "note": "no AI or paid provider calls; Depot runner cost unknown"
+  },
+  "rollback": {
+    "priorSourceSha": "26d7e901d1b7bd2bbb25d98c34d5989bad3f8559",
+    "rehearsalEvidenceRef": null,
+    "doc": "docs/connections/rafii-api-connections-20261009/ROLLBACK.md"
+  },
+  "ownerSignoff": null,
+  "remainingBlockers": [
+    "Library WebKit 1440 /preview intermittent failure: owner = Library lane (#144); root cause not established",
+    "James: merge and deploy approval (G6) - currently restricted to NO merge/deploy",
+    "Provider app owners: decision receipts per requirement (YouTube read-only launch scope recorded; all requirements check_required)",
+    "After an approved deploy: authorized Founder (MFA) session readback of /connections/attention; anonymous 401 probe; next hourly refresh shows youtube client_binding_missing",
+    "Token Pilot durable store over 256 items (repair lane); interim memory in PR/docs/project memory file",
+    "Launcher session-id mismatch reconciliation"
+  ]
+}

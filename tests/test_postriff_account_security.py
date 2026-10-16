@@ -705,14 +705,14 @@ class IdentityAdmin(unittest.TestCase):
 
         def fetch(method, url, headers):
             fetched.append((method, url, headers))
-            return 200, {"id": PRINCIPAL, "factors": [{"id": "f1", "factor_type": "totp", "friendly_name": "Phone", "status": "verified", "secret": "never"}, {"id": "f2", "factor_type": "totp", "status": "unverified"}]}
+            return 200, {"id": PRINCIPAL, "factors": [{"id": "f1", "factor_type": "totp", "friendly_name": "Phone", "status": "verified", "secret": "never", "created_at": "2026-09-01T00:00:00Z"}, {"id": "f2", "factor_type": "totp", "status": "unverified"}]}
 
         def send(method, url, headers, body):
             sent.append((method, url, headers))
             return 204
 
         admin = SupabaseIdentityAdmin("https://project.supabase.co", "public-key", "service-secret", send=send, fetch=fetch)
-        self.assertEqual(admin.verified_factors(PRINCIPAL), [{"id": "f1", "type": "totp", "name": "Phone"}])
+        self.assertEqual(admin.verified_factors(PRINCIPAL), [{"id": "f1", "type": "totp", "name": "Phone", "createdAt": "2026-09-01T00:00:00Z"}])
         self.assertEqual(fetched[0][1], f"https://project.supabase.co/auth/v1/admin/users/{PRINCIPAL}")
         self.assertTrue(admin.logout_others("user-token"))
         self.assertEqual(sent[0][1], "https://project.supabase.co/auth/v1/logout?scope=others")

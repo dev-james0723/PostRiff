@@ -218,6 +218,9 @@ def security_events(cur, since_seconds=86400):
     before this scan; rows written before that field existed fall back to the current preference. When both rows
     exist for one session only `session.observed` produces the notice, so nobody is told twice.
 
+    A "This wasn't me" report (`security.incident_reported`, RAPv2) is a mandatory account-change notice: like every
+    `security.account_change` it is transactional, so no routine alert preference can switch it off.
+
     `legacy_sent` says whether the legacy mailer already delivered this alert; the service's very first run
     baselines (does not resend) only those."""
     cur.execute("""SELECT a.id::text, a.actor::text, a.kind, extract(epoch from a.at), coalesce(a.meta->>'client',''),
@@ -225,16 +228,18 @@ def security_events(cur, since_seconds=86400):
                             WHEN 'session.alerted' THEN coalesce(a.meta->>'sent','') = 'true'
                             WHEN 'session.observed' THEN EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=a.actor AND s.kind='session.alerted'
                                                                 AND s.subject=a.subject AND s.meta->>'sent'='true')
-                            ELSE true END
+                            ELSE true END,
+                          a.meta ? 'location', a.meta->'location'
                    FROM public.pr_audit_events a JOIN public.pr_profiles p ON p.user_id = a.actor AND p.deleted_at IS NULL
-                   WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others')
+                   WHERE (a.kind IN ('session.alerted','mfa.enabled','mfa.disabled','session.revoked_others','security.incident_reported')
                           OR (a.kind = 'session.observed' AND CASE WHEN a.meta->>'alert' IS NOT NULL THEN a.meta->>'alert' = 'true'
                                                                    ELSE coalesce(p.alert_new_device, false) END))
                    AND NOT (a.kind = 'session.alerted' AND a.subject <> '' AND EXISTS(SELECT 1 FROM public.pr_audit_events o
                             WHERE o.actor=a.actor AND o.kind='session.observed' AND o.subject=a.subject))
                    AND a.at > now() - make_interval(secs => %s) AND a.actor IS NOT NULL ORDER BY a.at DESC LIMIT 500""", (since_seconds,))
     titles = {"session.alerted": "A new device signed in", "session.observed": "New sign-in to your account", "mfa.enabled": "Two-step sign-in was turned on",
-              "mfa.disabled": "Two-step sign-in was turned off", "session.revoked_others": "Other sessions were signed out"}
+              "mfa.disabled": "Two-step sign-in was turned off", "session.revoked_others": "Other sessions were signed out",
+              "security.incident_reported": "You reported a sign-in that wasn't you: your account is on a security hold"}
     out = []
     for audit_id, actor, kind, *rest in cur.fetchall():
         sign_in = kind in ("session.alerted", "session.observed")
@@ -246,5 +251,9 @@ def security_events(cur, since_seconds=86400):
             event["occurred_at"] = float(rest[0])
             if rest[1]:
                 event["payload"]["device"] = rest[1][:40]
+            if len(rest) >= 5 and rest[3]:
+                # RAFII_SIGN_IN_DETAILS location levels: the recorded approximate location, or "" when none was known.
+                from ..account_protection import location_text
+                event["payload"]["location"] = location_text(rest[4]) or ""
         out.append(event)
     return out

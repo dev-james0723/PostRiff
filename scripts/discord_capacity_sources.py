@@ -13,6 +13,7 @@ def source_paths(root):
         'tests/phase2/discord_p4_schema_fixture.sql', 'tests/phase2/postgres_discord_capacity.py',
         'tests/phase2/postgres_discord_authorization.py', 'tests/phase2/postgres_discord_connections.py',
         'tests/phase2/postgres_discord_worker.py', 'tests/phase2/postgres_discord_rate_limits.py',
+        'tests/phase2/fixtures/discord_legacy_worker_claim_5f93f375.py.txt',
         'tests/test_discord_rate_limits.py', 'tests/test_discord_worker_lifecycle.py',
         'tests/test_discord_oauth_lifecycle.py', 'tests/test_discord_destinations.py',
         'tests/test_discord_publish_authorization.py', 'tests/test_discord_capacity_controls.py',

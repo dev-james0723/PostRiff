@@ -20,11 +20,30 @@ case "$1" in
   --stage-a-workers16-parent16-v4)
     export RAFII_DISCORD_CAPACITY_STAGE=a
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-parent16-v4 ;;
+  --stage-a-workers16-api12-v5)
+    export RAFII_DISCORD_CAPACITY_STAGE=a
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-api12-v5
+    discord_coordinator_qualification=1 ;;
+  --pipeline-workers16-api12-v5)
+    export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-api12-v5
+    discord_coordinator_qualification=1
+    discord_owned_deadline=9m ;;
   --pipeline-workers16-parent16-v4)
     export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-parent16-v4
     discord_coordinator_qualification=1
     discord_owned_deadline=9m ;;
+  --admission-workers16-parent16-v4)
+    export RAFII_DISCORD_CAPACITY_STAGE=admission-diagnostic
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-parent16-v4
+    discord_coordinator_qualification=1
+    discord_owned_deadline=21m ;;
+  --admission-api-workers16-v1)
+    export RAFII_DISCORD_CAPACITY_STAGE=admission-api-diagnostic
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=admission-api-replicas-v1
+    discord_coordinator_qualification=1
+    discord_owned_deadline=21m ;;
   --pipeline-workers16-v3)
     export RAFII_DISCORD_CAPACITY_STAGE=pipeline-qualification
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=workers16-v3
@@ -67,6 +86,11 @@ case "$1" in
   --stage-b-workers16-parent16-v4)
     export RAFII_DISCORD_CAPACITY_STAGE=b
     export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-workers16-parent16-v4
+    discord_coordinator_qualification=1
+    discord_owned_deadline=201m ;;
+  --stage-b-workers16-api12-v5)
+    export RAFII_DISCORD_CAPACITY_STAGE=b
+    export RAFII_DISCORD_CAPACITY_RESOURCE_PLAN=b-extended-workers16-api12-v5
     discord_coordinator_qualification=1
     discord_owned_deadline=201m ;;
   --connection-diagnostic) export RAFII_DISCORD_CAPACITY_STAGE=connection-diagnostic ;;
@@ -119,9 +143,10 @@ PY
 PYTHONPATH="$discord_capacity_root/tests" python - <<'PY'
 import json
 import os
-from phase2.postgres_discord_capacity import budget_lower_bound, connection_diagnostic_profile, fingerprint, profile, selected_profile
+from phase2.postgres_discord_capacity import admission_diagnostic_profile, budget_lower_bound, connection_diagnostic_profile, fingerprint, profile, selected_profile
 stage = os.environ['RAFII_DISCORD_CAPACITY_STAGE']
-p = connection_diagnostic_profile() if stage == 'connection-diagnostic' else selected_profile(stage)
+p = (connection_diagnostic_profile() if stage == 'connection-diagnostic' else
+     admission_diagnostic_profile(api=stage=='admission-api-diagnostic') if stage in ('admission-diagnostic','admission-api-diagnostic') else selected_profile(stage))
 result = {'status': 'PASS', 'meaning': 'connection diagnostic only; capacity NOT_RUN'} if stage == 'connection-diagnostic' else budget_lower_bound(p)
 print('RAFII_DISCORD_CAPACITY_PREFLIGHT ' + json.dumps({'stage': p['stage'], 'profileSha256': fingerprint(p), **result}), flush=True)
 if result['status'] == 'BLOCKED':

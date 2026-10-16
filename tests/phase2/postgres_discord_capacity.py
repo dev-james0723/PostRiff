@@ -23,6 +23,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, ExitStack
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
@@ -295,6 +296,18 @@ def selected_profile(stage, environment=None):
     """Preserve historical profiles; name every resource change before execution."""
     environment=os.environ if environment is None else environment
     plan=environment.get('RAFII_DISCORD_CAPACITY_RESOURCE_PLAN','')
+    if plan in ('workers16-api12-v5','b-extended-workers16-api12-v5'):
+        if ((plan=='workers16-api12-v5' and stage not in ('a','pipeline-qualification'))
+                or (plan=='b-extended-workers16-api12-v5' and stage!='b')):
+            raise Incomplete('Unknown full API capacity stage')
+        base='b-extended-workers16-parent16-v4' if stage=='b' else 'workers16-parent16-v4'
+        p=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':base})
+        p.update(version=5,resourcePlan=plan,parentPoolSize=4,apiReplicas=12,apiPoolSize=1,
+            aggregateConnectionCap=32,runnerSize='depot-ubuntu-24.04-32',cpu=32,memoryGiB=128,
+            computeUsdPerSecond=.0016,jobTimeoutMinutes=225 if stage=='b' else 45,
+            resourceChange='12 one-connection API replicas plus4 parent and16 one-connection worker replicas; aggregate32; original workloads, timing, quotas and targets unchanged')
+        validate_worker_budget(p)
+        return p
     if plan in ('workers16-parent16-v4','b-extended-workers16-parent16-v4'):
         base='b-extended-workers16-v3' if plan.startswith('b-extended-') else 'workers16-v3'
         p=selected_profile(stage,{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':base})
@@ -348,14 +361,22 @@ def validate_worker_budget(p, replicas=None):
     reference,pool=p['referenceReplicas'],p.get('workerPoolSize',2)
     parent,cap=p.get('parentPoolSize',4),p.get('aggregateConnectionCap',20)
     expanded=p.get('resourcePlan') in ('workers16-parent16-v4','b-extended-workers16-parent16-v4')
+    api=p.get('resourcePlan') in ('admission-api-replicas-v1','workers16-api12-v5','b-extended-workers16-api12-v5')
+    api_stage={'admission-api-replicas-v1':('admission-api-diagnostic',),
+        'workers16-api12-v5':('a','pipeline-qualification'),'b-extended-workers16-api12-v5':('b',)}
+    api_count,api_pool=p.get('apiReplicas',0),p.get('apiPoolSize',0)
     if (any(type(value) is not int for value in (reference,pool,parent,cap))
             or not 1<=reference<=16 or pool not in (1,2)
+            or (api and (p.get('stage') not in api_stage[p['resourcePlan']] or p.get('version')!=5
+                or any(type(v) is not int for v in (api_count,api_pool))
+                or (reference,pool,parent,cap,api_count,api_pool)!=(16,1,4,32,12,1)))
+            or (not api and (api_count!=0 or api_pool!=0))
             or (expanded and (p.get('version')!=4 or (reference,pool,parent,cap)!=(16,1,16,32)))
-            or (not expanded and (parent,cap)!=(4,20))
-            or parent+reference*pool>cap):
+            or (not expanded and not api and (parent,cap)!=(4,20))
+            or parent+reference*pool+api_count*api_pool>cap):
         raise Incomplete('Fixed worker/database connection budget exceeded')
     if replicas is not None and (type(replicas) is not int or not 1<=replicas<=reference
-                                or parent+replicas*pool>cap):
+                                or parent+replicas*pool+api_count*api_pool>cap):
         raise Incomplete('Fixed worker-process budget exceeded')
     return pool
 
@@ -363,10 +384,134 @@ def validate_worker_budget(p, replicas=None):
 def planned_worker_groups(p):
     if p['stage']=='connection-diagnostic':return []
     validate_worker_budget(p)
+    if p['stage'] in ('admission-diagnostic','admission-api-diagnostic'):
+        if (p['comparisonReplicas']!=[] or p['users']!=1000 or p['burstJobs']!=10000
+                or p['producerConcurrency']!=16 or p['referenceReplicas']!=16
+                or p['stage']=='admission-api-diagnostic' and p.get('apiSmokeJobs')!=48):
+            raise Incomplete('Unknown admission diagnostic workload')
+        return ([('admission-smoke',16)] if p['stage']=='admission-api-diagnostic' else [])+[('admission-burst',16)]
     if p['comparisonReplicas']!=[1,4] or any(type(n) is not int for n in p['comparisonReplicas']):
         raise Incomplete('Unknown comparison worker plan')
     return [('comparison-1',1),('comparison-4',4),
             ('burst',p['referenceReplicas']),('sustained',p['referenceReplicas'])]
+
+
+def admission_diagnostic_profile(api=False):
+    """A deliberately nonqualifying multi-post stress probe before full A/B."""
+    p=selected_profile('b',{'RAFII_DISCORD_CAPACITY_RESOURCE_PLAN':'b-extended-workers16-parent16-v4'})
+    p.update(stage='admission-diagnostic',users=1000,comparisonReplicas=[],comparisonJobsEach=0,
+        rampSeconds=0,steadySeconds=0,plannedSafetyJobRequests=0,
+        setupDeadlineSeconds=600,totalHarnessDeadlineSeconds=1200,policyLifetimeSeconds=1500,
+        jobTimeoutMinutes=45,minimumApprovalMarginSeconds=15,
+        purpose='1000 connected tenants/10000 actual approval jobs; diagnostic only, full capacity A/B NOT_RUN',
+        workloadAndTargets='Separate diagnostic; full A/B profiles remain unchanged')
+    p.pop('originalVersionOneStatus',None)
+    if api:
+        p.update(version=5,stage='admission-api-diagnostic',resourcePlan='admission-api-replicas-v1',
+            parentPoolSize=4,apiReplicas=12,apiPoolSize=1,apiSmokeJobs=48,
+            purpose='1000 connected tenants/10000 approval jobs plus48 API-smoke jobs; diagnostic only,full capacity A/B NOT_RUN',
+            resourceChange='12 owned one-connection API replicas plus4 parent and16 worker connections; aggregate32 and32CPU unchanged')
+    planned_worker_groups(p)
+    return p
+
+
+def planned_api_groups(p):
+    validate_worker_budget(p)
+    if not p.get('apiReplicas'):return []
+    return [(phase,p['apiReplicas']) for phase,_ in planned_worker_groups(p)]
+
+
+def admission_margin(records,planned):
+    if type(planned) is not int or planned<1 or len(records)!=planned:return None
+    margins=[]
+    for record in records:
+        due,approved=record.get('due'),record.get('approvedAt')
+        if (not record.get('jobId') or any(type(v) not in (int,float) or not math.isfinite(v)
+                for v in (due,approved))):return None
+        margins.append(due-approved)
+    return min(margins)
+
+
+def api_fixture(f):
+    return {key:copy.deepcopy(f[key]) for key in ('index','user','token','workspace','destinations')}
+
+
+def valid_api_request(value,phase,indices):
+    return (isinstance(value,dict)
+        and set(value)=={'index','alias','due','phase','arrival','destination','submittedAt'}
+        and value['phase']==phase and type(value['index']) is int and value['index'] in indices
+        and type(value['destination']) is int and 0<=value['destination']<6
+        and type(value['alias']) is str and re.fullmatch('[a-z0-9-]{1,100}',value['alias']) is not None
+        and all(type(value[k]) in (int,float) and math.isfinite(value[k]) for k in ('due','arrival','submittedAt')))
+
+
+def api_event(record,value,phase):
+    if (record is None or not isinstance(value,dict) or set(value)!={'name','fields'}
+            or value['name'] not in ('approval','approval-failed') or not isinstance(value['fields'],dict)
+            or value['fields'].get('alias')!=record['alias'] or value['fields'].get('phase')!=phase):
+        raise Incomplete('Unexpected API event')
+    name,fields=value['name'],value['fields']
+    if name=='approval':
+        valid=(set(fields)=={'alias','phase','payloadHash','authorizationHash'}
+            and all(type(fields[k]) is str and re.fullmatch('[a-f0-9]{64}',fields[k]) for k in ('payloadHash','authorizationHash')))
+    else:
+        error=fields.get('error');valid=(set(fields)=={'alias','phase','error'} and isinstance(error,dict)
+            and {'type','frames'}<=set(error)<={'type','frames','code','sqlstate','status'}
+            and type(error['type']) is str and re.fullmatch('[A-Za-z][A-Za-z0-9_]{0,80}',error['type'])
+            and isinstance(error['frames'],list) and len(error['frames'])<=8)
+        if valid:
+            valid=all(isinstance(f,dict) and set(f)=={'file','line','function'}
+                and type(f['line']) is int and f['line']>0
+                and type(f['file']) is str and re.fullmatch('[A-Za-z0-9_.-]{1,100}',f['file'])
+                and type(f['function']) is str and re.fullmatch('[A-Za-z_<>][A-Za-z0-9_<>]{0,100}',f['function'])
+                for f in error['frames'])
+            for key,pattern in (('code','[a-z][a-z0-9_]{0,63}'),('sqlstate','[A-Z0-9]{5}')):
+                if key in error:valid=valid and type(error[key]) is str and re.fullmatch(pattern,error[key]) is not None
+            if 'status' in error:valid=valid and type(error['status']) is int and 100<=error['status']<=599
+    if not valid:raise Incomplete('Unsafe API event fields')
+    return name,fields
+
+
+def api_preview(record,value,destination):
+    """An IPC preview is an oracle registration, never publishing authority."""
+    if (not isinstance(value,dict) or set(value)!={'alias','nonce','expectedJobId','manifest'}
+            or value['alias']!=record['alias'] or record.get('manifest') is not None):
+        raise Incomplete('Duplicate or mismatched API preview')
+    f=record['fixture'];manifest=value['manifest']
+    try:
+        connection,guild,channel=f['destinations'][destination]
+        target=manifest['discord']['target']
+        valid=(manifest['workspaceId']==f['workspace'] and manifest['actor']==f['user']
+            and manifest['platform']=='Discord' and manifest['channelId']==connection
+            and (target['guildId'],target['channelId'])==(guild,channel)
+            and target['applicationId']==APP and target['botUserId']==BOT
+            and target['linkedUserId']==str(720000000000000000+f['index'])
+            and type(manifest['timing']['timestamp']) in (int,float)
+            and math.isfinite(manifest['timing']['timestamp'])
+            and abs(manifest['timing']['timestamp']-record['due'])<.00001
+            and type(value['expectedJobId']) is str and 0<len(value['expectedJobId'])<256
+            and value['expectedJobId']==manifest['discord']['publicationId']
+            and value['nonce']==hashlib.sha256(manifest['idempotencyKey'].encode()).hexdigest()[:25])
+    except (KeyError,TypeError,ValueError,IndexError,AttributeError):valid=False
+    if not valid:raise Incomplete('API preview differs from the requested tenant or destination')
+    return value['nonce'],copy.deepcopy(manifest),value['expectedJobId']
+
+
+def api_result(record,value):
+    if (not isinstance(value,dict) or set(value)!={'alias','jobId','approvedAt','frozen','processing','error'}
+            or value['alias']!=record['alias']):raise Incomplete('Mismatched API completion')
+    if value['jobId'] is None:
+        if (record.get('frozen') is not None or any(value[key] is not None for key in ('approvedAt','frozen','processing'))
+                or type(value['error']) is not str or not re.fullmatch('[A-Za-z][A-Za-z0-9_.]{0,80}',value['error'])):
+            raise Incomplete('Invalid failed API completion')
+    elif (value['error'] is not None or value['jobId']!=record.get('expectedJobId')
+            or not isinstance(value['frozen'],dict)
+            or any(type(value[key]) not in (int,float) or not math.isfinite(value[key]) or value[key]<0
+                for key in ('approvedAt','processing'))
+            or record.get('manifest') is None
+            or record.get('frozen') is not None and record['frozen']!=value['frozen']):
+        raise Incomplete('API completion differs from the registered approval')
+    return {key:copy.deepcopy(value[key]) for key in ('jobId','approvedAt','frozen','processing','error')}
 
 
 def connection_diagnostic_profile():
@@ -492,6 +637,17 @@ class Telemetry:
                 row=stats.setdefault(operation,{'count':0,'totalSeconds':0.,'maxSeconds':0.})
                 row['count']+=1;row['totalSeconds']+=elapsed;row['maxSeconds']=max(row['maxSeconds'],elapsed)
 
+    def observe_sql(self, operation, elapsed):
+        # Count every statement and retain every timing. Observer contention
+        # must not serialize otherwise independent approval requests.
+        with self.lock:
+            self.counters['sqlStatements']+=1
+            self.counters['sqlOperation.'+operation]+=1
+            self.timings.setdefault('sqlExecuteSeconds',[]).append(elapsed)
+            for stats in (self.sql_operation_seconds,self.phase_sql_operation_seconds.setdefault(self.phase,{})):
+                row=stats.setdefault(operation,{'count':0,'totalSeconds':0.,'maxSeconds':0.})
+                row['count']+=1;row['totalSeconds']+=elapsed;row['maxSeconds']=max(row['maxSeconds'],elapsed)
+
     @contextmanager
     def running(self, key):
         with self.lock:
@@ -546,8 +702,45 @@ class Telemetry:
                     'latencies': {k: distribution(v, self.counters['mockHttpAttempts'] if k == 'mockHttpSeconds' else len(v))
                                   for k, v in self.timings.items()},
                     'resourceSamples': self.samples, 'sqlFailureExamples': list(self.sql_failures),
+                    'sqlObserver':{'templateCache':_sql_statement_category.cache_info()._asdict(),
+                        'scope':'Process-local template categories only; no parameters,expiry,authorization or results cached',
+                        'timing':'SQL execute elapsed ends before observer counter updates; dispatch wall clocks unchanged'},
                     'sqlOperationSeconds': copy.deepcopy(self.sql_operation_seconds),
                     'phaseSqlOperationSeconds':copy.deepcopy(self.phase_sql_operation_seconds)}
+
+
+@lru_cache(maxsize=256)
+def _sql_statement_category(query):
+    """Cache a template's category only; no parameters, expiry or results."""
+    if re.match(r'\s*WITH scope_store\b',query) and 'inserted_admission AS (' in query:
+        return 'reservation_commit_batch'
+    if re.match(r'\s*WITH scope_store\b',query) and 'observed_admission AS (' in query:
+        return 'observation_commit_batch'
+    if (re.match(r'\s*INSERT INTO public\.pr_discord_request_admissions\b',query)
+            or re.match(r'\s*WITH reservation_clock AS MATERIALIZED\b',query)
+            and re.search(r'\bINSERT INTO public\.pr_discord_request_admissions\b',query)):
+        return 'admission_insert'
+    if re.match(r'\s*WITH locked_alias AS MATERIALIZED\b',query):return 'alias_pending_lock'
+    if re.match(r'\s*WITH locked_pending AS MATERIALIZED\b',query):return 'pending_lock'
+    batch=re.match(r'\s*WITH scope_(seed|lock|store)\b',query)
+    if batch:return 'scope_'+batch.group(1)+'_batch'
+    if 'FROM public.pr_workspaces w' in query and 'SKIP LOCKED' in query:return 'worker_due_selection'
+    if re.match(r'\s*SELECT .* FROM public\.pr_workspaces WHERE id=',query,re.S):return 'workspace_snapshot'
+    if re.match(r'\s*UPDATE public\.pr_workspaces SET state=',query):return 'workspace_state_write'
+    if ('FROM public.pr_discord_route_buckets' in query
+            or re.match(r'\s*INSERT INTO public\.pr_discord_route_buckets\b',query)):
+        return 'route_mapping_lock'
+    if 'FROM public.pr_discord_request_admissions' in query:return 'admission_read'
+    if 'UPDATE public.pr_discord_request_admissions' in query:return 'admission_write'
+    if 'clock_timestamp()' in query:return 'database_clock'
+    return 'other'
+
+
+def sql_statement_category(query):
+    # Bound retained template bytes as well as entry count. Unknown/oversized
+    # inputs still receive exactly the same classification without caching.
+    if type(query) is str and len(query)<=16384:return _sql_statement_category(query)
+    return _sql_statement_category.__wrapped__(query)
 
 
 class TimedCursor:
@@ -569,45 +762,13 @@ class TimedCursor:
         # Inspect ONLY a known statement category and its expiry number. Never
         # emit SQL, arguments, epochs, credential identifiers or PG messages.
         query = args[0] if args and isinstance(args[0], str) else ''
-        operation, expiry = 'other', None
-        if re.match(r'\s*WITH scope_store\b',query) and 'inserted_admission AS (' in query:
-            operation='reservation_commit_batch'
-            values=args[1] if len(args)>1 else None
-            if isinstance(values,(tuple,list)) and values and type(values[-1]) in (int,float) and math.isfinite(values[-1]):expiry=values[-1]
-        elif re.match(r'\s*WITH scope_store\b',query) and 'observed_admission AS (' in query:
-            operation='observation_commit_batch'
-        elif (re.match(r'\s*INSERT INTO public\.pr_discord_request_admissions\b', query)
-                or re.match(r'\s*WITH reservation_clock AS MATERIALIZED\b', query)
-                and re.search(r'\bINSERT INTO public\.pr_discord_request_admissions\b', query)):
-            operation = 'admission_insert'
+        operation,expiry=sql_statement_category(query),None
+        if operation in ('reservation_commit_batch','admission_insert'):
             values = args[1] if len(args) > 1 else None
             if isinstance(values, (tuple, list)) and values:
                 candidate = values[-1]
                 if type(candidate) in (int, float) and math.isfinite(candidate):
                     expiry = candidate
-        elif re.match(r'\s*WITH locked_alias AS MATERIALIZED\b',query):
-            operation = 'alias_pending_lock'
-        elif re.match(r'\s*WITH locked_pending AS MATERIALIZED\b',query):
-            operation = 'pending_lock'
-        else:
-            batch = re.match(r'\s*WITH scope_(seed|lock|store)\b',query)
-            if batch:
-                operation = 'scope_' + batch.group(1) + '_batch'
-            elif 'FROM public.pr_workspaces w' in query and 'SKIP LOCKED' in query:
-                operation='worker_due_selection'
-            elif re.match(r'\s*SELECT .* FROM public\.pr_workspaces WHERE id=',query,re.S):
-                operation='workspace_snapshot'
-            elif re.match(r'\s*UPDATE public\.pr_workspaces SET state=',query):
-                operation='workspace_state_write'
-            elif ('FROM public.pr_discord_route_buckets' in query
-                    or re.match(r'\s*INSERT INTO public\.pr_discord_route_buckets\b',query)):
-                operation='route_mapping_lock'
-            elif 'FROM public.pr_discord_request_admissions' in query:
-                operation='admission_read'
-            elif 'UPDATE public.pr_discord_request_admissions' in query:
-                operation='admission_write'
-            elif 'clock_timestamp()' in query:
-                operation='database_clock'
         try:
             self.raw.execute(*args, **kwargs)
             return self
@@ -620,11 +781,14 @@ class TimedCursor:
                 self.metrics.sql_failure(error, operation, started, expiry)
             raise
         finally:
-            self.metrics.count('sqlStatements')
-            self.metrics.count('sqlOperation.' + operation)
-            self.metrics.timing('sqlExecuteSeconds', time.monotonic() - started)
-            if callable(getattr(self.metrics,'sql_timing',None)):
-                self.metrics.sql_timing(operation,time.monotonic()-started)
+            elapsed=time.monotonic()-started
+            observe=getattr(self.metrics,'observe_sql',None)
+            if callable(observe):observe(operation,elapsed)
+            else:
+                self.metrics.count('sqlStatements')
+                self.metrics.count('sqlOperation.' + operation)
+                self.metrics.timing('sqlExecuteSeconds',elapsed)
+                if callable(getattr(self.metrics,'sql_timing',None)):self.metrics.sql_timing(operation,elapsed)
 
 
 class TimedDatabase:
@@ -692,7 +856,7 @@ class MockDiscord:
         if (method == 'GET' and path in ('/oauth2/@me','/users/@me')
                 and kwargs.get('headers',{}).get('Authorization','').startswith('Bearer ')):
             phase=getattr(self.r,'progress_phase','unknown')
-            if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety'):
+            if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety','admission-smoke','admission-burst'):
                 phase='unknown'
             kind='authorization' if path=='/oauth2/@me' else 'profile'
             self.r.m.count('mockBearerReads.'+kind+'.'+phase)
@@ -887,6 +1051,7 @@ class Runtime:
         self.progress_phase,self.next_progress='fixture',self.started
         self.tokens, self.discord_users, self.fixtures, self.nonces = {}, {}, [], {}
         self.observed_claims, self.worker_summaries = {}, []
+        self.api_summaries,self.api_child_fences,self.api_process_ids=[],[],set()
         self.worker_failure = threading.Event()
         self.worker_processes, self.reported_worker_pids = {}, set()
         self.finished_worker_cpu = 0.
@@ -920,6 +1085,7 @@ class Runtime:
                 raise Incomplete('Qualified worker grant migration drift')
             db.execute(grants.read_text())
             db.execute((ROOT/'migrations/postriff/126_discord_worker_projection.sql').read_text())
+            db.execute((ROOT/'migrations/postriff/128_discord_lease_protocol_fence.sql').read_text())
         now = time.time()
         self.policy = {'version': 1, 'revision': 'synthetic-p8-' + p['stage'],
                        'issued_at': now - 1, 'expires_at': now + p.get('policyLifetimeSeconds',3600),
@@ -951,10 +1117,7 @@ class Runtime:
     def pool_statement(self, operation, elapsed, error):
         # These explicit reset statements execute outside TimedCursor. Include
         # their work rather than making connection reuse look artificially free.
-        self.m.count('sqlStatements')
-        self.m.count('sqlOperation.pool_reset')
-        self.m.timing('sqlExecuteSeconds', elapsed)
-        self.m.sql_timing('pool_reset',elapsed)
+        self.m.observe_sql('pool_reset',elapsed)
         if error is not None:
             self.m.count('sqlErrors.' + error)
             with self.m.lock:
@@ -1252,14 +1415,17 @@ class Runtime:
         return self.Worker(self.connection, f['social'], worker_id='p8-' + phase + '-' + str(replica), discord_workers=True)
 
     @contextmanager
-    def workers(self, replicas, phase):
-        pool_size=validate_worker_budget(self.p,replicas)
-        if (phase,replicas) not in planned_worker_groups(self.p):
+    def workers(self, replicas, phase, *, api=False):
+        validate_worker_budget(self.p)
+        pool_size=self.p['apiPoolSize'] if api else validate_worker_budget(self.p,replicas)
+        if (api and ((phase,replicas) not in planned_api_groups(self.p) or pool_size!=1)
+                or not api and (phase,replicas) not in planned_worker_groups(self.p)):
             raise Incomplete('Unplanned worker process group')
         context = multiprocessing.get_context('spawn')
         stop = context.Event()
         summaries, processes, brokers, channels, ready = [], [], [], [], []
-        def broker(channel, process, started):
+        slots=[{'lock':threading.Lock(),'done':threading.Event(),'record':None,'destination':None} for _ in range(replicas)]
+        def broker(channel, process, started, slot):
             active = False
             received = False
             request_id = 0
@@ -1292,6 +1458,25 @@ class Runtime:
                         if started.is_set() or value != process.pid:
                             raise Incomplete('Invalid child readiness')
                         started.set()
+                    elif kind == 'api-preview' and api:
+                        record=slot['record']
+                        if not started.is_set() or record is None:raise Incomplete('Unexpected API preview')
+                        nonce,manifest,job_id=api_preview(record,value,slot['destination'])
+                        with self.lock:
+                            if nonce in self.nonces:raise Incomplete('Duplicate global API nonce')
+                            record.update(manifest=manifest,expectedJobId=job_id)
+                            self.nonces[nonce]=record
+                        send_worker_message(channel,'api-preview-ack',{'alias':record['alias']})
+                    elif kind == 'api-event' and api:
+                        name,fields=api_event(slot['record'],value,phase)
+                        self.m.event(name,**fields)
+                    elif kind == 'api-result' and api:
+                        record=slot['record']
+                        if record is None or slot['done'].is_set():raise Incomplete('Duplicate API completion')
+                        changes=api_result(record,value)
+                        if changes['jobId'] is not None:changes['approvedAt']=time.time()
+                        with self.lock:record.update(changes)
+                        slot['done'].set()
                     elif kind in ('step-start', 'step-finish'):
                         if not started.is_set() or active == (kind == 'step-start'):
                             raise Incomplete('Invalid child step lifecycle')
@@ -1300,14 +1485,15 @@ class Runtime:
                             self.m.active['workerSteps'] += 1 if active else -1
                             self.m.peak['workerSteps'] = max(self.m.peak['workerSteps'], self.m.active['workerSteps'])
                     elif kind == 'summary':
-                        if active:
+                        if active or api and slot['record'] is not None and not slot['done'].is_set():
                             raise Incomplete('Child finished with active work')
                         validate_worker_summary(value, process.pid,pool_size)
                         absorb_worker_metrics(self.m, value.pop('metrics'), phase)
                         with self.lock:
                             self.reported_worker_pids.add(process.pid)
                             self.finished_worker_cpu += value['cpuSeconds']
-                            self.child_fences.append({'phase':phase,'pid':process.pid,**value['transportFence']})
+                            fences=self.api_child_fences if api else self.child_fences
+                            fences.append({'phase':phase,'pid':process.pid,**value['transportFence']})
                             summaries.append(value)
                         received = True
                         if value['status'] != 'PASS':
@@ -1327,14 +1513,18 @@ class Runtime:
             for index in range(replicas):
                 parent, child = context.Pipe(duplex=True)
                 channels.append(parent)
-                worker_id = 'p8-' + phase + '-' + str(index)
-                process = context.Process(target=process_worker, name=worker_id,
-                    args=(child, stop, worker_id, self.policy, self.synthetic_vault_key,
-                          self.database, self.started + self.p['totalHarnessDeadlineSeconds'],pool_size))
-                start_owned_worker(process, child, processes, self.worker_processes, self.lock, self.reported_worker_pids)
+                worker_id = 'p8-' + ('api-' if api else '') + phase + '-' + str(index)
+                arguments=(child,stop,worker_id,self.policy,self.synthetic_vault_key,
+                    self.database,self.started+self.p['totalHarnessDeadlineSeconds'],pool_size)
+                if api:arguments+=(self.p,phase,[api_fixture(f) for f in self.fixtures if f['index']%replicas==index])
+                process = context.Process(target=process_api if api else process_worker,name=worker_id,args=arguments)
+                try:start_owned_worker(process,child,processes,self.worker_processes,self.lock,self.reported_worker_pids)
+                finally:
+                    if api and process.pid is not None:
+                        with self.lock:self.api_process_ids.add(process.pid)
                 started = threading.Event()
                 ready.append(started)
-                thread = threading.Thread(target=broker, args=(parent, process, started), name=worker_id + '-mock', daemon=True)
+                thread = threading.Thread(target=broker,args=(parent,process,started,slots[index]),name=worker_id+'-mock',daemon=True)
                 brokers.append(thread)
                 thread.start()
             readiness_deadline = time.monotonic() + 30
@@ -1343,8 +1533,34 @@ class Runtime:
                 if time.monotonic() >= readiness_deadline:
                     raise Incomplete('Worker process readiness deadline exceeded')
                 stop.wait(.02)
-            yield processes
+            def approve(f,alias,due,selected_phase,arrival=None,destination=0,submitted_at=None):
+                self.guard()
+                if selected_phase!=phase:raise Incomplete('API request crossed workload phases')
+                slot=slots[f['index']%replicas]
+                while not slot['lock'].acquire(timeout=.1):self.guard()
+                try:
+                    self.guard()
+                    requested=time.time() if arrival is None else arrival
+                    record={'alias':alias,'phase':phase,'requestedAt':requested,'due':due,
+                        'submittedAt':requested if submitted_at is None else submitted_at,
+                        'fixture':f,'jobId':None,'approvedAt':None,'postAt':None}
+                    with self.lock:
+                        if alias in self.m.records:raise Incomplete('Duplicate API request alias')
+                        self.m.records[alias]=record
+                    slot.update(record=record,destination=destination);slot['done'].clear()
+                    with self.m.running('apiRequests'):
+                        send_worker_message(channels[f['index']%replicas],'api-approve',{'index':f['index'],
+                            'alias':alias,'due':due,'phase':phase,'arrival':requested,'destination':destination,'submittedAt':record['submittedAt']})
+                        while not slot['done'].wait(.1):self.guard()
+                    return record
+                finally:
+                    slot['record']=None
+                    slot['lock'].release()
+            yield approve if api else processes
             self.guard()
+        except BaseException:
+            self.worker_failure.set()
+            raise
         finally:
             stop.set()
             # Brokers remain alive until in-flight mock I/O and result collection
@@ -1355,11 +1571,13 @@ class Runtime:
                 for process in processes:
                     if process.pid not in cleanup['survivingPids']:
                         self.worker_processes.pop(process.pid, None)
+                        if api:self.api_process_ids.discard(process.pid)
             complete = (len(summaries) == replicas and not cleanup['forcedCount']
                         and not cleanup['survivingPids'] and not cleanup['unfinishedBrokers'] and not cleanup['errors']
                         and all(p.exitcode == 0 for p in processes)
                         and all(s['status'] == 'PASS' for s in summaries))
-            self.worker_summaries.append({'phase': phase, 'replicas': replicas,
+            groups=self.api_summaries if api else self.worker_summaries
+            groups.append({'phase': phase, 'replicas': replicas,
                 'execution': 'spawned-processes', 'aggregateConnectionCap': self.p.get('aggregateConnectionCap',20),
                 'parentConnectionCap': self.p.get('parentPoolSize',4), 'perReplicaConnectionCap': pool_size,
                 'status': 'PASS' if complete else 'FAIL', 'cleanup': cleanup, 'workers': summaries})
@@ -1424,7 +1642,7 @@ class Runtime:
                 gates['dispatch' + q.upper()] = delays[q] is not None and delays[q] < target and delays['undefined'] == 0
                 if phase == 'steady':
                     gates['processing' + q.upper()] = processing[q] is not None and processing[q] < self.p['targets']['processing' + q.upper()] and processing['undefined'] == 0
-            if phase == 'burst':
+            if phase in ('burst', 'admission-burst'):
                 gates['drain'] = elapsed < self.p['burstDrainSeconds']
                 gates['submissionWindow'] = max(r['submittedAt'] for r in records) - min(r['submittedAt'] for r in records) < self.p['burstSubmissionSeconds']
         result = {'phase': phase, 'replicas': replicas, 'referencePerformanceGates': reference,
@@ -1464,18 +1682,23 @@ class Runtime:
     def burst(self, replicas, phase, count, comparison=False):
         selected = list(self.fixtures)
         random.Random(self.p['seed'] + replicas).shuffle(selected)
-        selected = selected[:count]
+        if count>len(selected):
+            if self.p['stage'] not in ('admission-diagnostic','admission-api-diagnostic'):
+                raise Incomplete('Full workload exceeds distinct planned fixtures')
+            selected=(selected*math.ceil(count/len(selected)))[:count]
+        else:selected=selected[:count]
         duration = self.p['burstSubmissionSeconds'] if not comparison else 1
         drain = self.p['comparisonDrainSeconds'] if comparison else self.p['burstDrainSeconds']
         records = []
-        with self.workers(replicas, phase), ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool:
+        with self.workers(replicas,phase),ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool,ExitStack() as actors:
+            approve=actors.enter_context(self.workers(self.p['apiReplicas'],phase,api=True)) if self.p.get('apiReplicas') else self.approve
             started = time.time()
             due = started + (self.p['burstScheduleLeadSeconds'] if not comparison else self.p['comparisonScheduleLeadSeconds'])
             futures = []
             for index, f in enumerate(selected):
                 arrival = started + index * duration / count
                 time.sleep(max(0, arrival - time.time()))
-                futures.append(pool.submit(self.approve, f, phase + '-' + str(index), due, phase, arrival, submitted_at=time.time()))
+                futures.append(pool.submit(approve,f,phase+'-'+str(index),due,phase,arrival,submitted_at=time.time()))
             records = [future.result() for future in futures]
             if not comparison:
                 # Reproduce the default-channel exploit against already approved
@@ -1488,7 +1711,7 @@ class Runtime:
                         raise Incomplete('Default edit changed frozen approval')
                 list(pool.map(edit_default, [r for r in records[:64] if r['jobId']]))
                 self.m.count('approvedDefaultsChanged', sum(r['jobId'] is not None for r in records[:64]))
-                self.selector_probe(due,count)
+                self.selector_probe(due,len({r['fixture']['workspace'] for r in records if r['jobId']}))
             states = self.wait_records(records, due + drain)
         return self.cohort_result(phase, records, states, due + drain, replicas, not comparison)
 
@@ -1498,7 +1721,8 @@ class Runtime:
         offsets = arrivals(self.p)
         selected = list(self.fixtures)
         random.Random(self.p['seed']).shuffle(selected)
-        with self.workers(self.p['referenceReplicas'], 'sustained'), ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool:
+        with self.workers(self.p['referenceReplicas'], 'sustained'), ThreadPoolExecutor(max_workers=self.p['producerConcurrency']) as pool,ExitStack() as actors:
+            approve=actors.enter_context(self.workers(self.p['apiReplicas'],'sustained',api=True)) if self.p.get('apiReplicas') else self.approve
             started = time.time()
             futures = []
             for index, offset in enumerate(offsets):
@@ -1506,7 +1730,7 @@ class Runtime:
                 arrival = started + offset
                 time.sleep(max(0, arrival - time.time()))
                 f = selected[index % len(selected)]
-                futures.append(pool.submit(self.approve, f, 'sustained-' + str(index), arrival + 2, 'sustained', arrival, index % 6, submitted_at=time.time()))
+                futures.append(pool.submit(approve, f, 'sustained-' + str(index), arrival + 2, 'sustained', arrival, index % 6, submitted_at=time.time()))
             # Retain the full declared steady interval even if all work finished.
             time.sleep(max(0, started + duration - time.time()))
             records = [future.result() for future in futures]
@@ -1842,7 +2066,7 @@ class Runtime:
 
     def emit_progress(self, sample):
         phase=self.progress_phase
-        if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety','cleanup'):
+        if phase not in ('fixture','comparison-1','comparison-4','burst','sustained','safety','cleanup','admission-smoke','admission-burst'):
             phase='unknown'
         with self.m.lock:
             progress={'phase':phase,'elapsedSeconds':round(time.monotonic()-self.started,3),
@@ -1903,6 +2127,7 @@ class Runtime:
         own = processes.get(os.getpid())
         with self.lock:
             replica_ids = set(self.worker_processes)
+            api_ids=set(getattr(self,'api_process_ids',set()))
             reported = set(self.reported_worker_pids)
             finished_cpu = self.finished_worker_cpu
         replicas = [v for pid, v in processes.items() if pid in replica_ids and v[0] == os.getpid()]
@@ -1910,7 +2135,9 @@ class Runtime:
         database = [v for pid, v in processes.items() if pid in owned]
         return {'workerProcessCpuSeconds': own[1] + finished_cpu + active_cpu if own else None,
                 'workerProcessRssBytes': own[2] + sum(v[2] for v in replicas) if own else None,
-                'controlPlaneCpuSeconds': own[1] if own else None, 'liveWorkerReplicas': len(replicas),
+                'controlPlaneCpuSeconds': own[1] if own else None,
+                'liveWorkerReplicas':sum(pid not in api_ids for pid in replica_ids if pid in processes and processes[pid][0]==os.getpid()),
+                'liveApiReplicas':sum(pid in api_ids for pid in replica_ids if pid in processes and processes[pid][0]==os.getpid()),
                 'databaseProcesses': len(database), 'databaseCpuSeconds': sum(v[1] for v in database) if database else None,
                 'databaseRssBytes': sum(v[2] for v in database) if database else None,
                 'rssMethod': 'sum of owned parent/replica or PostgreSQL process RSS; shared pages can be counted twice',
@@ -2058,6 +2285,106 @@ class SpawnMockTransport:
         return value['response']
 
 
+def process_api(channel,stop,worker_id,policy,synthetic_vault_key,expected_database,deadline,pool_size,p,phase,fixtures):
+    """One independently fenced API process/pool, using the same real commands."""
+    signal.pthread_sigmask(signal.SIG_UNBLOCK,WORKER_SIGNALS)
+    validate_fence(sys.platform,os.environ)
+    import sitecustomize
+    sitecustomize.self_check()
+    replica=None;error=None;stack=ExitStack()
+    class ApiMetrics(Telemetry):
+        def event(self,name,**fields):
+            if name not in ('approval','approval-failed'):raise Incomplete('Unscoped API event')
+            send_worker_message(channel,'api-event',{'name':name,'fields':fields})
+    metrics=ApiMetrics(capture_events=False);metrics.phase=phase
+    try:
+        if pool_size!=1 or (phase,p.get('apiReplicas')) not in planned_api_groups(p):
+            raise Incomplete('Unknown API process budget')
+        validate_worker_budget(p)
+        sys.path[:0]=[str(ROOT/'src')]
+        from postriff_alpha.domain import AlphaError
+        from postriff_phase2.hosted import HostedWorkspaceService
+        from postriff_phase2.oauth import CredentialVault
+        from postriff_phase2.social_connectors import DiscordProvider
+        from postriff_phase2.postgres_pool import PooledPostgresFactory
+        from postriff_phase2.discord import authorization
+        from unittest.mock import patch
+        stack.enter_context(patch('postriff_phase2.billing.require_publishing',return_value=None))
+        stack.enter_context(patch('postriff_phase2.billing.require_plan_capacity',return_value=None))
+        class Replica:
+            connection=Runtime.connection
+            pool_statement=Runtime.pool_statement
+            approve=Runtime.approve
+            command=Runtime.command
+            change=Runtime.change
+            state=Runtime.state
+            def guard(self):
+                if stop.is_set() or time.monotonic()>=deadline:
+                    raise Incomplete('Owned API stopped or fixed deadline exceeded')
+        replica=Replica();replica.m=metrics;replica.Error=AlphaError;replica.auth=authorization
+        replica.lock=threading.RLock()
+        replica.database_factory=PooledPostgresFactory(DSN,max_size=1,max_waiting=8,
+            options='-c statement_timeout=10000 -c lock_timeout=8000',observer=replica.pool_statement)
+        with replica.connection() as db:
+            row=db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_user,current_setting('data_directory'),current_setting('server_version_num')").fetchone()
+            columns=db.execute("SELECT array_agg(column_name::text ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='auth' AND table_name='users'").fetchone()[0]
+            database={'host':row[0],'port':row[1],'name':row[2],'user':row[3],
+                'directory':row[4],'authColumns':columns,'majorVersion':int(row[5])//10000}
+            validate_fence(sys.platform,os.environ,database)
+            if database!=expected_database:raise Incomplete('API database differs from owned parent')
+        by_index={f['index']:f for f in fixtures}
+        if len(by_index)!=len(fixtures):raise Incomplete('Duplicate API fixture ownership')
+        tokens={f['token']:f['user'] for f in fixtures}
+        if len(tokens)!=len(fixtures):raise Incomplete('Duplicate API principal mapping')
+        def verify(token):return tokens[token]
+        verify.session_id=lambda token,principal:'synthetic-'+principal
+        verify.auth_time=lambda token,principal:time.time()
+        transport=SpawnMockTransport(channel,metrics)
+        provider=configure_candidate_provider(DiscordProvider(APP,'synthetic-client-secret','synthetic-shared-bot',
+            'https://rafii.example.invalid',transport=transport,production_reviewed=True),policy)
+        service=HostedWorkspaceService(replica.connection,verify,clock=time.time,
+            vault=CredentialVault(synthetic_vault_key),providers={'discord':provider},public_base_url='https://rafii.example.invalid')
+        class Nonces(dict):
+            def __setitem__(self,nonce,record):
+                send_worker_message(channel,'api-preview',{'alias':record['alias'],'nonce':nonce,
+                    'manifest':record['manifest'],'expectedJobId':record['expectedJobId']})
+                if not channel.poll(15):raise Incomplete('API preview acknowledgement missing')
+                kind,value=receive_worker_message(channel)
+                if kind!='api-preview-ack' or value!={'alias':record['alias']}:
+                    raise Incomplete('API preview acknowledgement differs')
+                super().__setitem__(nonce,record)
+        replica.nonces=Nonces()
+        for f in fixtures:f.update(service=service,lock=threading.Lock())
+        send_worker_message(channel,'ready',os.getpid())
+        while not stop.is_set():
+            if time.monotonic()>=deadline:raise Incomplete('Fixed API deadline exceeded')
+            if not channel.poll(.1):continue
+            if stop.is_set():break
+            kind,value=receive_worker_message(channel)
+            if kind!='api-approve' or not valid_api_request(value,phase,by_index):
+                raise Incomplete('Unscoped API approval request')
+            record=replica.approve(by_index[value['index']],value['alias'],value['due'],phase,
+                value['arrival'],value['destination'],submitted_at=value['submittedAt'])
+            send_worker_message(channel,'api-result',{'alias':record['alias'],
+                **{key:record.get(key) for key in ('jobId','approvedAt','frozen','processing','error')}})
+    except BaseException as failure:
+        error=diagnostic(failure);stop.set()
+    finally:
+        pool={}
+        if replica is not None:
+            try:
+                if metrics.active['databaseConnections']:raise Incomplete('API database checkout remains active')
+                replica.database_factory.close();pool=replica.database_factory.stats()
+            except BaseException as failure:error=diagnostic(failure)
+        summary={'pid':os.getpid(),'worker':worker_id,'status':'FAIL' if error else 'PASS',
+            'cpuSeconds':time.process_time(),'counters':{},'poolStats':pool,
+            'transportFence':{'unexpectedAttempts':getattr(sitecustomize,'_unexpected',None),
+                'expectedSelfCheckDenials':getattr(sitecustomize,'_expected',None)},
+            'metrics':worker_metric_payload(metrics),'error':error,'perProcessPeakConcurrency':dict(metrics.peak)}
+        send_worker_message(channel,'summary',summary)
+        channel.close();stack.close()
+
+
 def process_worker(channel, stop, worker_id, policy, synthetic_vault_key, expected_database, deadline, pool_size=2):
     """Spawn target: constructs every application/DB object in this process."""
     signal.pthread_sigmask(signal.SIG_UNBLOCK, WORKER_SIGNALS)
@@ -2186,6 +2513,34 @@ def combined_transport_fence(runtime, parent_fence):
             'expectedReplicaProcesses': expected, 'observedReplicaProofs': len(children),
             'replicaProofsComplete': complete,
             'replicaExpectedSelfCheckDenials': sum(row['expectedSelfCheckDenials'] for row in children) if complete else None}
+
+
+def combined_api_fence(runtime):
+    expected=planned_api_groups(runtime.p)
+    expected_count=sum(replicas for _,replicas in expected)
+    groups=runtime.api_summaries;children=runtime.api_child_fences
+    identities=[(g.get('phase'),w.get('pid')) for g in groups for w in g.get('workers',[])]
+    complete=(bool(expected) and len(groups)==len(expected) and len(children)==expected_count
+        and len(identities)==expected_count and len(set(identities))==expected_count
+        and set(identities)=={(f.get('phase'),f.get('pid')) for f in children}
+        and all(type(pid) is int and pid>0 for _,pid in identities)
+        and all(g.get('phase')==phase and g.get('replicas')==replicas and g.get('status')=='PASS'
+            and g.get('parentConnectionCap')==4 and g.get('aggregateConnectionCap')==32
+            and g.get('perReplicaConnectionCap')==1 and len(g.get('workers',[]))==replicas
+            and g.get('cleanup',{}).get('forcedCount')==0 and g['cleanup'].get('killCount')==0
+            and g['cleanup'].get('survivingPids')==[] and g['cleanup'].get('unfinishedBrokers')==0
+            and g['cleanup'].get('errors')==[]
+            and all(w.get('status')=='PASS' and w.get('error') is None
+                and w.get('poolStats',{}).get('closed') is True and w['poolStats'].get('maxConnections')==1
+                and w.get('transportFence',{}).get('unexpectedAttempts')==0
+                and w['transportFence'].get('expectedSelfCheckDenials')==4 for w in g['workers'])
+            for g,(phase,replicas) in zip(groups,expected))
+        and all(type(f.get('unexpectedAttempts')) is int and f['unexpectedAttempts']==0
+            and type(f.get('expectedSelfCheckDenials')) is int and f['expectedSelfCheckDenials']==4 for f in children))
+    return {'status':'PASS' if complete else 'FAIL','expectedApiProcesses':expected_count,'observedApiProofs':len(children),
+        'proofsComplete':complete,'unexpectedAttempts':sum(f['unexpectedAttempts'] for f in children) if complete else None,
+        'expectedSelfCheckDenials':expected_count*4 if complete else None,'aggregateConfiguredConnections':32,
+        'roles':{'parent':4,'api':12,'worker':16}}
 
 
 def close_pool(runtime, result):
@@ -2353,9 +2708,108 @@ def run_connection_diagnostic():
     return 0 if result['status'] == 'PASS' else 1
 
 
+def run_admission_diagnostic(api=False):
+    """Measure the observed approval bottleneck, never qualify full A/B."""
+    validate_fence(sys.platform,os.environ)
+    p=admission_diagnostic_profile(api)
+    planned_jobs=p['burstJobs']+p.get('apiSmokeJobs',0)
+    result={'status':'NOT_RUN','execution':'disposable-cloud-postgres-mocked-discord',
+        'profile':p,'profileSha256':fingerprint(p),'phases':{},'plannedJobRequests':planned_jobs,
+        'capacityAcceptance':'NOT_RUN','fullSafetyAcceptance':'NOT_RUN',
+        'realDiscordAcceptance':'NOT_RUN','productionReady':'NO','diagnosticOnly':True,
+        'cost':{'actualCost':'UNKNOWN','comparisonBaseline':None,'savings':'UNKNOWN'}}
+    RESULT.parent.mkdir(parents=True,exist_ok=True)
+    metrics,runtime=None,None
+    started=time.monotonic()
+    try:
+        import sitecustomize
+        sitecustomize.self_check()
+        from unittest.mock import patch
+        metrics=Telemetry()
+        runtime=Runtime(p,metrics)
+        critical=runpy.run_path(str(ROOT/'scripts/discord_capacity_sources.py'))['source_paths'](ROOT)
+        result['sourceSha256']={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in critical}
+        with patch('postriff_phase2.billing.require_publishing',return_value=None),patch('postriff_phase2.billing.require_plan_capacity',return_value=None):
+            setup_started=time.monotonic()
+            runtime.setup_deadline=setup_started+p['setupDeadlineSeconds']
+            runtime.fixtures.append(build_tracked_fixture(runtime,0))
+            collect_fixture_cohort(runtime,range(1,p['users']))
+            runtime.setup_deadline=None
+            runtime.fixtures.sort(key=lambda f:f['index'])
+            result['phases']['fixture']={'status':'PASS','observed':runtime.fixture_counts(),
+                'setupSeconds':time.monotonic()-setup_started,'logicalOutcomeAccounting':runtime.fixture_ledger.summary()}
+            if api:
+                runtime.progress_phase=metrics.phase='admission-smoke'
+                smoke=runtime.burst(p['referenceReplicas'],'admission-smoke',p['apiSmokeJobs'],comparison=True)
+                result['phases']['admission-smoke']=smoke
+                if smoke['status']!='PASS':raise Incomplete('API process smoke failed; full diagnostic not started')
+            runtime.progress_phase=metrics.phase='admission-burst'
+            burst=runtime.burst(p['referenceReplicas'],'admission-burst',p['burstJobs'])
+            result['phases']['admission-burst']=burst
+            records=[r for r in metrics.records.values() if r['phase']=='admission-burst']
+            result['minimumObservedApprovalMarginSeconds']=admission_margin(records,p['burstJobs'])
+            result['approvalMarginGate']=(result['minimumObservedApprovalMarginSeconds'] is not None
+                and result['minimumObservedApprovalMarginSeconds']>=p['minimumApprovalMarginSeconds'])
+            result['status']='PASS' if burst['status']=='PASS' and result['approvalMarginGate'] else 'FAIL'
+    except BaseException as error:
+        result.update(status='FAIL',error=diagnostic(error))
+    finally:
+        if runtime:
+            runtime.progress_phase='cleanup'
+            runtime.fixture_ledger.cancel_queued()
+            result['fixtureAccounting']=runtime.fixture_ledger.summary()
+            try:runtime.close()
+            except Exception as error:result.update(status='FAIL',cleanupError=diagnostic(error))
+            # Full negative/safety coverage is deliberately NOT_RUN. Preserve
+            # independently observed delivery counters without claiming it ran.
+            safety=runtime.final_safety()
+            keys=('unsafeCreates','unsafeCreateAttempts','duplicateCreates','repeatPostAttempts',
+                'acceptedClaimCollisions','unexpectedTransport','workerShutdownUnfinished',
+                'sharedCreateLimitBypass','sharedRequestLimitBypass')
+            result['deliverySafetyCounters']={key:safety[key] for key in keys}
+            result['workers']=runtime.worker_summaries
+            if api:
+                result['apiWorkers']=runtime.api_summaries
+                result['apiTransportFence']=combined_api_fence(runtime)
+                if result['apiTransportFence']['status']!='PASS':result['status']='FAIL'
+            records=list(metrics.records.values())
+            try:states=list(runtime.job_states(records).values())
+            except Exception:
+                states=[]
+                metrics.count('finalJobReadErrors')
+            result['totalJobAccounting']=accounting(len(records),sum(bool(r['jobId']) for r in records),states)
+            if (len(records)!=planned_jobs or not result['totalJobAccounting']['complete']
+                    or any(result['deliverySafetyCounters'].values())
+                    or not result['fixtureAccounting']['complete']):result['status']='FAIL'
+        for required in (('fixture','admission-smoke','admission-burst') if api else ('fixture','admission-burst')):
+            if required not in result['phases']:
+                result['phases'][required]={'status':'NOT_RUN','reason':'Prior failure; diagnostic incomplete'}
+                result['status']='FAIL'
+        if runtime:close_pool(runtime,result)
+        if metrics:
+            result['transportFence']=combined_transport_fence(runtime,sys.modules.get('sitecustomize'))
+            if result['transportFence']['unexpectedAttempts']!=0 or not metrics.samples:
+                result['status']='FAIL'
+            result['metrics']=metrics.summary()
+            metrics.events.close()
+            result['eventsSha256']=hashlib.sha256(EVENTS.read_bytes()).hexdigest()
+        result['elapsedSeconds']=time.monotonic()-started
+        result['cost']['computeTimingProxyUsd']=result['elapsedSeconds']*p['computeUsdPerSecond']
+        RESULT.write_text(json.dumps(result,indent=2)+'\n')
+        print('RAFII_DISCORD_CAPACITY_RESULT '+canonical({'status':result['status'],
+            'stage':p['stage'],'profileSha256':result['profileSha256'],
+            'elapsedSeconds':result['elapsedSeconds'],'capacityAcceptance':'NOT_RUN',
+            'fullSafetyAcceptance':'NOT_RUN','productionReady':'NO'}),flush=True)
+    return 0 if result['status']=='PASS' else 1
+
+
 def run(stage):
     if stage == 'connection-diagnostic':
         return run_connection_diagnostic()
+    if stage == 'admission-diagnostic':
+        return run_admission_diagnostic()
+    if stage == 'admission-api-diagnostic':
+        return run_admission_diagnostic(api=True)
     validate_fence(sys.platform, os.environ)  # Refuse before any output/fixture creation.
     p = selected_profile(stage)
     result = {'status': 'NOT_RUN', 'execution': 'disposable-cloud-postgres-mocked-discord',
@@ -2436,6 +2890,10 @@ def run(stage):
                 result.update(status='FAIL', cleanupError=type(error).__name__)
             result['safetyAccounting'] = runtime.final_safety()
             result['workers'] = runtime.worker_summaries
+            if p.get('apiReplicas'):
+                result['apiWorkers']=runtime.api_summaries
+                result['apiTransportFence']=combined_api_fence(runtime)
+                if result['apiTransportFence']['status']!='PASS':result['status']='FAIL'
             result['selectorPlans'] = runtime.selector_plans
             if result['safetyAccounting']['status'] != 'PASS':
                 result['status'] = 'FAIL'
@@ -2480,5 +2938,8 @@ if __name__ == '__main__':
         raise HarnessInterrupted('Harness deadline or cancellation: ' + str(signum))
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGALRM, terminate)
-    signal.alarm(480 if os.environ.get('RAFII_DISCORD_CAPACITY_STAGE') == 'connection-diagnostic' else selected_profile(os.environ.get('RAFII_DISCORD_CAPACITY_STAGE',''))['totalHarnessDeadlineSeconds'])
+    stage=os.environ.get('RAFII_DISCORD_CAPACITY_STAGE','')
+    signal.alarm(480 if stage=='connection-diagnostic' else
+        admission_diagnostic_profile(api=stage=='admission-api-diagnostic')['totalHarnessDeadlineSeconds'] if stage in ('admission-diagnostic','admission-api-diagnostic') else
+        selected_profile(stage)['totalHarnessDeadlineSeconds'])
     sys.exit(run(os.environ.get('RAFII_DISCORD_CAPACITY_STAGE', '')))

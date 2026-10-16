@@ -50,17 +50,9 @@ from postriff_phase2.notifications.service import NotificationService  # noqa: E
 
 # Rows whose expected result the shipped code does not meet (recorded FAIL, see the module docstring).
 KNOWN_GAPS = {
-    # RAPv2 P1 as shipped (5e4f4e13) against the matrix; product decisions, not fixed in this tests-only PR.
-    "RAP-013": "an unrecordable security state refuses the protected capability with 403 step-up, not 503",
-    "RAP-021": "a copied device cookie plus an AAL1 bearer reads as a known browser: sensitive capabilities need no fresh proof",
-    "RAP-033": "only four capabilities are gated (tokens, connections, Agent grants, exports); private drafts stay readable",
-    "RAP-039": "the step-up gate does not consult account holds: a held account's interactive session can still export",
-    "RAP-045": "an account with no second factor is told to complete MFA it cannot complete (no enrolment/recovery next step)",
-    "RAP-046": "a fresh TOTP proof from before the factor was removed still satisfies step-up",
-    "RAP-064": "risk decisions and incidents queue no mandatory notice",
-    "RAP-104": "turning RAFII_SECURITY_INCIDENT_HOLD off stops enforcing existing holds",
-    "RAP-114": "an incident report sends no notice to any contact channel",
-    "RAP-138": "a browser idle for 200 days still reads as known (no inactivity expiry)",
+    # Empty: the eleven P1 gaps of the 2026-10-15 re-run (RAP-013, 021, 033, 039, 045, 046, 064, 104, 114, 138, and the
+    # migration-header row RAP-092 in the unit suite) were closed by the follow-up fix PR. A new gap is added here with
+    # the reason the code does not meet the row.
 }
 
 results = {}
@@ -123,8 +115,8 @@ class FakeMailer:
     def __init__(self):
         self.calls = []
 
-    def new_device(self, to, device_label, at, profile_url, time_zone=""):
-        self.calls.append({"to": to, "device": device_label, "url": profile_url, "thread": threading.current_thread().name})
+    def new_device(self, to, device_label, at, profile_url, time_zone="", **location):
+        self.calls.append({"to": to, "device": device_label, "url": profile_url, "thread": threading.current_thread().name, **location})
         return {"sent": True}
 
     def __getattr__(self, kind):
@@ -157,7 +149,12 @@ class IdentityAdmin:
         return True
 
     def verified_factors(self, principal):
-        return []
+        # People given a second factor by a check (FACTORS); everyone else has none (RAP-045).
+        return [{"id": "factor-acceptance", "type": "totp", "name": "", "createdAt": FACTOR_CREATED.get(principal, "2026-01-01T00:00:00Z")}] if principal in FACTORS else []
+
+
+FACTORS = set()
+FACTOR_CREATED = {}  # principal -> when its factor was enrolled (default: long before any check runs)
 
 
 service = HostedWorkspaceService(connection, verify, public_base_url="https://app.rafii.example", mailer=mailer, identity=IdentityAdmin(),
@@ -167,11 +164,11 @@ app = HostedApplication(service, None, {"provider": "supabase"}, "c" * 24)
 SAFARI = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
 
-def call(method, path, access_token=None, body=None, agent=SAFARI, headers=None):
+def call(method, path, access_token=None, body=None, agent=SAFARI, headers=None, query=""):
     raw = json.dumps(body).encode() if body is not None else b""
     environ = {"REQUEST_METHOD": method, "PATH_INFO": path, "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(raw)),
                "wsgi.input": io.BytesIO(raw), "wsgi.url_scheme": "https", "HTTP_HOST": "app.rafii.example", "HTTP_ORIGIN": "https://app.rafii.example",
-               "HTTP_X_POSTRIFF_REQUEST": "founder-alpha", "HTTP_USER_AGENT": agent}
+               "HTTP_X_POSTRIFF_REQUEST": "founder-alpha", "HTTP_USER_AGENT": agent, "QUERY_STRING": query}
     if access_token:
         environ["HTTP_AUTHORIZATION"] = "Bearer " + access_token
     for key, value in (headers or {}).items():
@@ -1224,6 +1221,7 @@ def known_low_risk():
 def unknown_low():
     p1(mode="enforce")
     user, workspace = person()
+    FACTORS.add(user)  # someone who can complete the MFA prompt
     _, _, _, session = browse(user)
     for path in ("/api/me", "/api/auth/sessions", "/api/me/security-events", f"/api/workspaces/{workspace}"):
         assert call("GET", path, token(user, session), headers=SAME_ORIGIN)[0] == 200, path
@@ -1757,13 +1755,254 @@ def founder_boundary():
         assert call("GET", path, token(user, session, aal="aal2"))[0] in (403, 404), path
 
 
-@check("RAP-092", "the P1 migrations (120-123) apply to a disposable database: every table and function exists, RLS forced")
+@check("RAP-092", "the P1 migrations (120-123, and 127 retention) apply to a disposable database: every table and function exists, RLS forced")
 def migrations_dry_run():
-    tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents")
+    tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents", "pr_security_retention_runs")
     rows = sql("SELECT relname, relrowsecurity AND relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname = ANY(%s)", list(tables))
     assert sorted(rows) == sorted((t, True) for t in tables), rows
-    for function in ("public.pr_security_purge(uuid)", "public.pr_security_set_hold(uuid,boolean,text)", "public.pr_erase_session_history(uuid)"):
+    for function in ("public.pr_security_purge(uuid)", "public.pr_security_set_hold(uuid,boolean,text)", "public.pr_erase_session_history(uuid)", "public.pr_security_retention_purge(integer,boolean,integer)"):
         assert sql("SELECT to_regprocedure(%s) IS NOT NULL", function)[0][0], function
+
+
+# --- Features built for the nine BLOCKED rows (claude/rapv2-blocked-features) ----------------------------------------
+# RAFII_SIGN_IN_DETAILS, RAFII_SECURITY_RETENTION and VERCEL are set here only, per check.
+
+from datetime import datetime as _dt, timezone as _tz  # noqa: E402
+
+from postriff_phase2 import security_retention  # noqa: E402
+
+
+def details_mode(level, v2=False, vercel=True, **extra):
+    values = {"RAFII_ACCOUNT_PROTECTION_V2_MODE": "observe", "RAFII_SIGN_IN_DETAILS": level, **extra}
+    if vercel:
+        values["VERCEL"] = "1"
+    if v2:
+        values["RAFII_NOTIFICATIONS_V2_ENABLED"] = "1"
+    flags.attach(values)
+    verify.seen.__init__()
+
+
+@check("RAP-016", "a session without amr reads sign-in method 'unknown' and no second factor (aal2 alone proves none); a recorded one reads its method")
+def sign_in_method_unknown():
+    observe_mode()
+    user, _ = person()
+    legacy = new_session()
+    status, body = call("GET", "/api/me", token(user, legacy, aal="aal1"))
+    assert status == 200 and body["signIn"] == {"method": "unknown", "secondFactor": None}, body
+    assert call("GET", "/api/me", token(user, new_session(), aal="aal2"))[1]["signIn"] == {"method": "unknown", "secondFactor": None}
+    details_mode("method")
+    passkey, mfa = new_session(), new_session()
+    assert call("GET", "/api/me", token(user, passkey, amr=amr("passkey")))[0] == 200
+    status, body = call("GET", "/api/me", token(user, mfa, aal="aal2", amr=amr("password") + amr("totp")))
+    assert body["signIn"] == {"method": "password", "secondFactor": "authenticator_app"}, body
+    rows = {s["sessionId"]: s for s in call("GET", "/api/auth/sessions", token(user, legacy))[1]["sessions"]}
+    assert rows[passkey]["signInMethod"] == "passkey" and rows[legacy]["signInMethod"] == "unknown", rows
+    assert all(row["location"] is None for row in rows.values()), rows  # `method` level records no place
+
+
+@check("RAP-076", "no geo signal: the first sighting records location unavailable and both notices say 'Approximate location unavailable', never a place")
+def location_unavailable():
+    transport = Transport()
+    v2_hosted, notifications = v2_service(transport)
+    verify.on_first_sighting = lambda p, s, label, alert: v2_hosted._alert_new_device(p, s, label, alert)
+    places = ("Los Angeles", "California", "United States", "Hong Kong", "near ")
+    try:
+        # Legacy mailer path.
+        details_mode("city")
+        user, _ = person(alerts=True)
+        session = new_session()
+        assert call("GET", "/api/me", token(user, session, amr=amr("password")))[0] == 200  # no x-vercel-ip-* headers
+        meta = sql("SELECT meta FROM public.pr_audit_events WHERE actor=%s AND kind='session.observed' AND subject=%s", user, session)[0][0]
+        assert "location" in meta and meta["location"] is None and meta["method"] == "password", meta
+        cron_alerts(v2_hosted)
+        [mail] = [m for m in transport.sent if m["to"].startswith(user[:8])]
+        assert "Approximate location unavailable." in mail["text"] and not any(p in mail["text"] for p in places), mail["text"]
+        # Notification V2 path.
+        details_mode("city", v2=True)
+        v2_user, _ = person(alerts=True)
+        assert call("GET", "/api/me", token(v2_user, new_session(), amr=amr("otp")))[0] == 200
+        emit_security(notifications)
+        due(v2_user)
+        notifications.worker().tick()
+        [mail] = [m for m in transport.sent if m["to"].startswith(v2_user[:8])]
+        assert "Approximate location" in mail["text"] and "unavailable" in mail["text"] and not any(p in mail["text"] for p in places), mail["text"]
+        # With the edge's geo headers the place is what they said (codes only); off Vercel the same headers are ignored.
+        details_mode("region")
+        geo = {"X-Vercel-IP-Country": "HK", "X-Vercel-IP-Country-Region": "KKC", "X-Vercel-IP-City": "Kowloon"}
+        placed, spoofed = person()[0], person()[0]
+        call("GET", "/api/me", token(placed, new_session(), amr=amr("password")), headers=geo)
+        details_mode("region", vercel=False)
+        call("GET", "/api/me", token(spoofed, new_session(), amr=amr("password")), headers=geo)
+        located = lambda who: sql("SELECT meta->'location' FROM public.pr_audit_events WHERE actor=%s AND kind='session.observed'", who)[0][0]
+        assert located(placed) == {"country": "HK", "region": "KKC"} and located(spoofed) is None, (located(placed), located(spoofed))
+    finally:
+        verify.on_first_sighting = lambda p, s, label, alert: service._alert_new_device(p, s, label, alert)
+
+
+def device_list(user, session, cookie=None, query=""):
+    return call("GET", "/api/auth/devices", token(user, session), headers={**SAME_ORIGIN, **({"Cookie": f"{device_trust.COOKIE}={cookie}"} if cookie else {})}, query=query)
+
+
+@check("RAP-084", "GET /api/auth/devices names another person in the query, header or path: only the caller's browsers come back; their browser cannot be revoked")
+def device_list_cross_user():
+    p1()
+    a, _ = person()
+    b, _ = person()
+    _, _, cookie, session = browse(a)
+    browse(b)
+    browse(b)
+    mine = {row[0] for row in devices(a)}
+    theirs = {row[0] for row in devices(b)}
+    assert mine and len(theirs) == 2 and not mine & theirs
+    for query, extra in ((f"user={b}", {}), (f"userId={b}&user_id={b}", {}), ("", {"X-User-Id": b})):
+        status, body = call("GET", "/api/auth/devices", token(a, session), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}", **extra}, query=query)
+        assert status == 200 and {d["deviceId"] for d in body["devices"]} == mine, (query, body)
+    other = sorted(theirs)[0]
+    assert call("POST", f"/api/auth/devices/{other}/revoke", token(a, session), {})[0] == 404
+    assert {row[1] for row in devices(b)} == {"observed"}
+    p1(device=False)
+    assert call("GET", "/api/auth/devices", token(a, session))[0] == 404  # off: the route does not exist
+
+
+@check("RAP-121", "two sessions in one browser: the list reports 1 recognized browser and 2 sessions; revoking another browser ends its sessions")
+def device_session_counts():
+    p1()
+    user, _ = person()
+    _, _, cookie, first = browse(user)
+    status, _, _, second = browse(user, cookie=cookie)
+    assert status == 200
+    status, body = device_list(user, first, cookie)
+    assert status == 200 and body["summary"] == {"recognizedBrowsers": 1, "activeSessions": 2}, body
+    [device] = body["devices"]
+    assert device["current"] and device["sessions"] == 2 and device["activeSessions"] == 2, device
+    _, _, phone_cookie, phone = browse(user)
+    phone_id = next(d["deviceId"] for d in device_list(user, first, cookie)[1]["devices"] if not d["current"])
+    assert call("POST", f"/api/auth/devices/{device['deviceId']}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1]["code"] == "current_device_revocation_requires_logout"
+    status, body = call("POST", f"/api/auth/devices/{phone_id}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})
+    assert status == 200 and body["sessionsRevoked"] == 1, body
+    assert call("POST", f"/api/auth/devices/{phone_id}/revoke", token(user, first), {}, headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={cookie}"})[1].get("replayed") is True
+    assert call("GET", "/api/me", token(user, phone), headers={**SAME_ORIGIN, "Cookie": f"{device_trust.COOKIE}={phone_cookie}"})[0] == 401
+    assert device_list(user, first, cookie)[1]["summary"] == {"recognizedBrowsers": 1, "activeSessions": 2}
+    assert len(ledger(user, "device.revoked")) == 1
+
+
+def incident_of(user):
+    return sql("SELECT id::text,state FROM public.pr_security_incidents WHERE user_id=%s ORDER BY created_at DESC LIMIT 1", user)[0]
+
+
+def resolve(user, incident, session, **claims):
+    return call("POST", f"/api/auth/security/incidents/{incident}/resolve", token(user, session, **claims), {"confirmed": True})
+
+
+@check("RAP-111", "no factor: the recovery route offers the support path only; an email code, or a factor enrolled after the report, never lifts the hold")
+def recovery_without_factor():
+    p1(hold=True)
+    user, _ = person()
+    current = signed_in(user)
+    assert report(user, current)[0] == 201
+    incident, _ = incident_of(user)
+    status, body = call("GET", "/api/auth/security/recovery", token(user, current))
+    assert status == 200 and body["path"] == "support" and body["emailCodeAccepted"] is False and body["accountHold"] is True, body
+    status, body = resolve(user, incident, current, amr=amr("otp"))
+    assert status == 403 and body["code"] == "security_recovery_support_required" and body["nextAction"] == "contact_support", body
+    FACTORS.add(user)
+    FACTOR_CREATED[user] = _dt.fromtimestamp(time.time() + 2, _tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # enrolled after the report
+    status, body = resolve(user, incident, current, aal="aal2", amr=amr("totp", time.time() + 1))
+    assert status == 403 and body["code"] == "security_recovery_support_required", body
+    assert call("POST", "/api/auth/mfa", token(user, current, aal="aal2"), {})[1].get("code") == "security_account_hold"
+    status, body = call("POST", "/api/auth/security/recovery", token(user, current), {"confirmed": True})
+    assert status == 201 and body["path"] == "support" and body["accountHold"] == "unchanged", body
+    assert incident_of(user)[1] == "recovering" and hold_row(user) == [(True, 1)]
+    p1(hold=False)
+    assert call("GET", "/api/auth/security/recovery", token(user, current))[0] == 404
+
+
+@check("RAP-112", "resolve with stale or weak proof (old TOTP, a proof older than the report, AAL1 email code): 403 step-up, hold retained")
+def resolve_stale_proof():
+    p1(hold=True)
+    user, _ = person()
+    FACTORS.add(user)
+    current = signed_in(user)
+    reported_at = time.time()
+    assert report(user, current)[0] == 201
+    incident, _ = incident_of(user)
+    for claims in ({"aal": "aal2", "amr": amr("totp", reported_at - 3600)}, {"aal": "aal2", "amr": amr("totp", reported_at - 30)}, {"amr": amr("otp", time.time() + 1)}):
+        status, body = resolve(user, incident, current, **claims)
+        assert status == 403 and body["code"] == "security_step_up_required" and body["accountHold"] == "retained", (claims, body)
+    assert hold_row(user) == [(True, 1)] and incident_of(user)[1] == "user_confirmed"
+    assert not ledger(user, "account.hold_released")
+
+
+@check("RAP-113", "resolve with fresh proof from a factor enrolled before the report: the hold is released once (epoch +1); repeats and races change nothing")
+def resolve_fresh_proof():
+    p1(hold=True)
+    user, _ = person()
+    FACTORS.add(user)
+    current = signed_in(user)
+    assert report(user, current)[0] == 201
+    incident, _ = incident_of(user)
+    status, body = resolve(user, incident, current, aal="aal2", amr=amr("totp", time.time() + 1))
+    assert status == 200 and body["holdReleased"] is True and body["holdEpoch"] == 2 and body["accountHold"] is False, body
+    status, body = resolve(user, incident, current, aal="aal2", amr=amr("totp", time.time() + 1))
+    assert status == 200 and body.get("replayed") is True and body["holdEpoch"] == 2, body
+    assert hold_row(user) == [(False, 2)] and len(ledger(user, "account.hold_released")) == 1 and len(ledger(user, "incident.resolved")) == 1
+    assert sql("SELECT count(*) FROM public.pr_audit_events WHERE actor=%s AND kind='security.incident_resolved'", user)[0][0] == 1
+    # Four concurrent resolves of one incident: exactly one release.
+    racer, _ = person()
+    FACTORS.add(racer)
+    racing = signed_in(racer)
+    assert report(racer, racing)[0] == 201
+    race_incident, _ = incident_of(racer)
+    outcomes = []
+    threads = [threading.Thread(target=lambda: outcomes.append(resolve(racer, race_incident, racing, aal="aal2", amr=amr("totp", time.time() + 1)))) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert sorted(b.get("holdReleased") for s, b in outcomes if s == 200) == [False, False, False, True], outcomes
+    assert hold_row(racer) == [(False, 2)]
+
+
+@check("RAP-137", "retention dry run deletes nothing; the real run removes only records past the approved age, keeping incidents and everything of a held account")
+def retention_purge():
+    p1(hold=True)
+    assert security_retention.run(connection, values={}) == {"status": "off"}
+    aged, held, cited = person()[0], person()[0], person()[0]
+    old = "now() - interval '500 days'"
+    rows = {}
+    for who in (aged, held, cited):
+        device = sql(f"INSERT INTO public.pr_security_devices(user_id,token_hash,hmac_key_version,state,revoked_at,first_seen_at,last_seen_at) VALUES(%s,%s,2,'revoked',{old},{old},{old}) RETURNING id::text", who, uuid.uuid4().hex * 2)[0][0]
+        event = sql(f"INSERT INTO public.pr_security_login_events(user_id,device_id,event_type,event_key,occurred_at) VALUES(%s,%s,'device.first_observed',%s,{old}) RETURNING id::text", who, device, f"device.first_observed:{device}")[0][0]
+        recent = sql("INSERT INTO public.pr_security_login_events(user_id,event_type,event_key) VALUES(%s,'session.risk_reassessed',%s) RETURNING id::text", who, f"recent:{uuid.uuid4().hex}")[0][0]
+        session = new_session()
+        sql("INSERT INTO public.pr_sessions(user_id,session_id) VALUES(%s,%s)", who, session)
+        sql(f"INSERT INTO public.pr_session_security(user_id,session_id,last_evaluated_at) VALUES(%s,%s,{old})", who, session)
+        rows[who] = (device, event, recent, session)
+    assert report(held, signed_in(held))[0] == 201  # an open incident preserves everything of this person
+    sql("INSERT INTO public.pr_security_incidents(user_id,source_event_id,state,summary_code,confirmed_at,resolved_at) VALUES(%s,%s,'resolved','not_me',now(),now())", cited, rows[cited][1])
+
+    def present(who):
+        device, event, recent, session = rows[who]
+        return (bool(sql("SELECT 1 FROM public.pr_security_devices WHERE id=%s", device)), bool(sql("SELECT 1 FROM public.pr_security_login_events WHERE id=%s", event)),
+                bool(sql("SELECT 1 FROM public.pr_security_login_events WHERE id=%s", recent)), bool(sql("SELECT 1 FROM public.pr_session_security WHERE user_id=%s AND session_id=%s", who, session)))
+
+    incidents = sql("SELECT count(*) FROM public.pr_security_incidents")[0][0]
+    dry = security_retention.run(connection, values={"RAFII_SECURITY_RETENTION": "dry_run"})
+    assert dry["status"] == "ok" and dry["dryRun"] is True and dry["loginEvents"] >= 1 and dry["devices"] >= 1, dry
+    assert all(present(who) == (True, True, True, True) for who in rows), {who: present(who) for who in rows}
+    done = security_retention.run(connection, values={"RAFII_SECURITY_RETENTION": "on", "RAFII_SECURITY_RETENTION_DAYS": "400"})
+    assert done["status"] == "ok" and done["dryRun"] is False and done["incidents"] == 0, done
+    assert present(aged) == (False, False, True, False), present(aged)    # only what is past 400 days
+    assert present(held) == (True, True, True, True), present(held)      # open incident: preserved
+    assert present(cited) == (True, True, True, False), present(cited)   # cited by an incident: kept (and its browser)
+    assert sql("SELECT count(*) FROM public.pr_security_incidents")[0][0] == incidents
+    assert [r[0] for r in sql("SELECT dry_run FROM public.pr_security_retention_runs ORDER BY ran_at DESC LIMIT 2")] == [False, True]
+    for statement in ("DELETE FROM public.pr_security_login_events WHERE user_id=%s", "SELECT public.pr_security_retention_purge(30, false, 10)"):
+        try:
+            sql(statement, *((held,) if "%s" in statement else ()))
+        except psycopg.Error:
+            continue
+        raise AssertionError(f"not refused: {statement}")
 
 
 # --- Verdict ---------------------------------------------------------------------------------------------------------
