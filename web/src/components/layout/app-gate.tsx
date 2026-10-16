@@ -7,6 +7,8 @@ import { StateMessage, type StateKind } from '@/components/rafii';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { verifyHref } from '@/lib/auth/navigation';
+import { useStepUp } from '@/lib/auth/security-step-up';
+import { StepUpScreen } from '@/components/auth/step-up-screen';
 import { devSignIn, useAuth } from '@/lib/auth/session';
 import { useWorkspace } from '@/lib/workspace/provider';
 import { siteConfig } from '@/config/site';
@@ -88,6 +90,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
+  const stepUp = useStepUp();
 
   const signInHref = `${siteConfig.links.signIn}?next=${encodeURIComponent(
     `${pathname}${search.size ? `?${search.toString()}` : ''}`
@@ -173,6 +176,10 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   }
 
   if (workspace.status !== 'ready' || !workspace.workspaceId) return <ShellSkeleton />;
+
+  // RAPv2 decision 3: a workspace read refused at high risk asks the person to confirm it's them. Account pages stay
+  // reachable so someone without a second factor can set one up.
+  if (stepUp && !pathname.startsWith('/app/account')) return <StepUpScreen request={stepUp} />;
 
   return <>{children}</>;
 }

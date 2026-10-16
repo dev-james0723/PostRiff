@@ -319,7 +319,7 @@ def incident_notice(cur, principal, session_id):
     if not row:
         return None
     return {"kind": "incident_reported", "incidentId": str(row[0]), "reportedAt": _iso(row[1]), "state": row[2], "accountHold": bool(row[3]),
-            "href": "/app/account/profile#security"}
+            "href": "/app/account/profile"}
 
 
 def dismiss_notice(service, token, incident_id):

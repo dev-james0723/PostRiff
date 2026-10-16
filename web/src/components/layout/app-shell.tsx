@@ -19,6 +19,7 @@ import { GuideMount } from '@/features/rafii-guide/guide-mount';
 import { PostApprovalCalibration } from '@/features/time-back/post-approval-calibration';
 import { DeepLinkAcknowledgement } from '@/features/coworker/notifications/deep-link-acknowledgement';
 import { NowPlayingBar } from '@/features/now-playing/now-playing-bar';
+import { SecurityNoticeBanner } from '@/features/account/security-notice-banner';
 
 /**
  * Client shell for /app/*: session → workspace → gate → sidebar + Cmd+K +
@@ -44,6 +45,8 @@ export function AppShell({ defaultOpen, children, initial }: { defaultOpen: bool
                 <SidebarInset id='main-content' tabIndex={-1} className='relative isolate min-w-0 scroll-mt-16 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0'>
                   <div aria-hidden data-extent='viewport' className='rafii-ambient' />
                   <Header />
+                  {/* RAPv2 decision 5: the "This wasn't me" banner at the next sign-in, until dismissed. */}
+                  <SecurityNoticeBanner />
                   <InfobarProvider defaultOpen={false}>
                     {children}
                     <InfoSidebar side='right' />

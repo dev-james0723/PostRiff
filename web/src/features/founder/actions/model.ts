@@ -16,16 +16,19 @@ import type {
   FactValue,
   Facts,
   FounderAction,
+  HoldReleaseInput,
   LiftReason,
   PreviewRequest,
   ReconcileInput,
   RefundInput,
   RefundReason,
   RequestCheck,
-  UnblockInput
+  UnblockInput,
+  VerificationMethod
 } from './types';
 
 export const TYPED_BLOCK = 'BLOCK';
+export const TYPED_RELEASE = 'RELEASE';
 export const PREVIEW_MINUTES = 5;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -44,7 +47,8 @@ export const CAPABILITY: Record<ActionKind, string> = {
   credits_adjust: 'credits.adjust',
   account_block: 'accounts.block',
   account_unblock: 'accounts.block',
-  refund_intent: 'refunds.prepare'
+  refund_intent: 'refunds.prepare',
+  security_hold_release: 'accounts.block'
 };
 
 export const KIND_LABEL: Record<ActionKind, string> = {
@@ -52,7 +56,8 @@ export const KIND_LABEL: Record<ActionKind, string> = {
   credits_adjust: 'Adjust credits',
   account_block: 'Block account',
   account_unblock: 'Unblock account',
-  refund_intent: 'Refund intent'
+  refund_intent: 'Refund intent',
+  security_hold_release: 'Lift security hold'
 };
 
 export const STATE_LABEL: Record<string, string> = {
@@ -94,6 +99,15 @@ export const REFUND_REASONS: { value: RefundReason; label: string }[] = [
   { value: 'other', label: 'Other' }
 ];
 
+/** Never an email code or link: whoever took over the account may hold that inbox too. */
+export const VERIFICATION_METHODS: { value: VerificationMethod; label: string }[] = [
+  { value: 'video_call_id_match', label: 'Video call, face matched to photo ID' },
+  { value: 'government_id_document', label: 'Government ID document checked' },
+  { value: 'existing_factor_on_call', label: 'Their existing two-step factor, on a call' },
+  { value: 'payment_record_match', label: 'Payment record matched' },
+  { value: 'known_contact_callback', label: 'Call back on a contact on file before the report' }
+];
+
 export const GRANT_EXPIRY_DAYS = [30, 90, 180, 365] as const;
 
 export function isUuid(value: unknown): value is string {
@@ -105,7 +119,7 @@ export function isUuid(value: unknown): value is string {
 /** Every action write names Live explicitly; Demo never sends one. */
 const LIVE = '?mode=live';
 
-function accountPath(targetId: string, verb: 'block' | 'unblock', step: 'preview' | 'confirm'): string {
+function accountPath(targetId: string, verb: 'block' | 'unblock' | 'security-hold/release', step: 'preview' | 'confirm'): string {
   return `/actions/accounts/${encodeURIComponent(targetId)}/${verb}/${step}${LIVE}`;
 }
 
@@ -114,7 +128,8 @@ const PREVIEW_ROUTE: Record<ActionKind, (targetId: string) => string> = {
   credits_adjust: () => `/actions/credits/preview${LIVE}`,
   account_block: (targetId) => accountPath(targetId, 'block', 'preview'),
   account_unblock: (targetId) => accountPath(targetId, 'unblock', 'preview'),
-  refund_intent: () => `/actions/refunds/preview${LIVE}`
+  refund_intent: () => `/actions/refunds/preview${LIVE}`,
+  security_hold_release: (targetId) => accountPath(targetId, 'security-hold/release', 'preview')
 };
 
 /** Refund execution requires the server to offer an explicit financial confirmation. */
@@ -123,7 +138,8 @@ const CONFIRM_ROUTE: Record<ActionKind, ((targetId: string) => string) | null> =
   credits_adjust: () => `/actions/credits/confirm${LIVE}`,
   account_block: (targetId) => accountPath(targetId, 'block', 'confirm'),
   account_unblock: (targetId) => accountPath(targetId, 'unblock', 'confirm'),
-  refund_intent: () => `/actions/refunds/confirm${LIVE}`
+  refund_intent: () => `/actions/refunds/confirm${LIVE}`,
+  security_hold_release: (targetId) => accountPath(targetId, 'security-hold/release', 'confirm')
 };
 
 export function previewPath(kind: ActionKind, targetId = ''): string {
@@ -140,12 +156,18 @@ export function confirmPath(action: Pick<FounderAction, 'kind' | 'targetId'> & P
 /** The confirm body: the preview id and revision the founder saw, a request id, and the typed word for blocks. */
 export function confirmBody(action: Pick<FounderAction, 'kind' | 'previewId' | 'revision'>, requestId: string, typed?: string): Record<string, string> {
   const body: Record<string, string> = { previewId: action.previewId, revision: action.revision, requestId };
-  if (action.kind === 'account_block' || action.kind === 'refund_intent') body.confirmation = (typed ?? '').trim();
+  if (typedWord(action.kind)) body.confirmation = (typed ?? '').trim();
   return body;
 }
 
+/** The word a confirm needs typed, or null when it needs none. */
+export function typedWord(kind: ActionKind): string | null {
+  return kind === 'account_block' ? TYPED_BLOCK : kind === 'refund_intent' ? 'REFUND' : kind === 'security_hold_release' ? TYPED_RELEASE : null;
+}
+
 export function typedConfirmationOk(kind: ActionKind, typed: string): boolean {
-  return kind === 'refund_intent' ? typed.trim() === 'REFUND' : kind !== 'account_block' || typed.trim() === TYPED_BLOCK;
+  const word = typedWord(kind);
+  return word === null || typed.trim() === word;
 }
 
 /* ---------- input parsing (what the founder typed → the integers the server takes) ---------- */
@@ -236,6 +258,14 @@ export function unblockRequest(input: Partial<UnblockInput>): RequestCheck {
   return ready(previewPath('account_unblock', input.targetId), { targetType: input.targetType, reasonCode: input.reasonCode });
 }
 
+export function holdReleaseRequest(input: Partial<HoldReleaseInput>): RequestCheck {
+  if (!isUuid(input.targetId)) return invalid('Choose the account whose hold is lifted.');
+  if (!input.verificationMethod || !VERIFICATION_METHODS.some((method) => method.value === input.verificationMethod)) return invalid(BLOCKER_COPY.invalid_verification_method);
+  const reference = (input.verificationRef ?? '').trim();
+  if (reference.length < 3 || !APPROVAL_REF.test(reference)) return invalid(BLOCKER_COPY.invalid_verification_ref);
+  return ready(previewPath('security_hold_release', input.targetId), { verificationMethod: input.verificationMethod, verificationRef: reference });
+}
+
 export function refundRequest(input: Partial<RefundInput> & { amountText?: string }): RequestCheck {
   if (!isUuid(input.workspaceId)) return invalid('Choose the workspace that paid.');
   const payment = (input.paymentIntentId ?? '').trim();
@@ -298,6 +328,9 @@ export const BLOCKER_COPY: Record<string, string> = {
   outcome_unknown_retry_same_request: 'The connection dropped before the result came back. Retry the same confirmation: it runs at most once.',
   already_blocked: 'This account is already blocked.',
   not_blocked: 'This account is not blocked.',
+  not_held: 'This account has no active security hold.',
+  invalid_verification_method: 'Choose how you verified the person’s identity outside Rafii.',
+  invalid_verification_ref: 'Add the support case reference, such as case-2041 (letters, digits and . _ : / # -, no names or messages).',
   cannot_block_operator: 'Your own founder account cannot be blocked.',
   cannot_block_ops_workspace: 'The founder ops workspace cannot be blocked.',
   too_many_workspaces: 'This person owns more than 100 workspaces. Block the workspaces one at a time.',
