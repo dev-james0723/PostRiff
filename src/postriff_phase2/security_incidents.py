@@ -150,7 +150,7 @@ class SecurityIncidents:
             audit(cur, None, principal, "security.incident_reported", str(incident_id), {"sessionsRevoked": len(revoked), "holdEpoch": epoch})
             if current:
                 # Owner decision 5: the banner shows at the next sign-in, never on the session that filed the report.
-                # Migration 128's column; before it is applied the report still files (and the banner shows everywhere).
+                # Migration 129's column; before it is applied the report still files (and the banner shows everywhere).
                 cur.execute("SAVEPOINT rapv2_reporter")
                 try:
                     cur.execute("UPDATE public.pr_security_incidents SET reported_session_id=%s WHERE user_id=%s AND id=%s", (current, principal, incident_id))

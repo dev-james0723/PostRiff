@@ -175,6 +175,9 @@ class NotificationService:
             result["security"] = {"created": made}
         except Exception as error:  # noqa: BLE001
             result["security"] = {"error": type(error).__name__}
+        # RAPv2 decision 7: previous addresses never outlive 14 days, even when no email changes again.
+        from .. import security_center
+        result["contactChangesExpired"] = security_center.expire_contact_changes(factory)
         worker = self.worker()
         legacy = getattr(self.hosted, 'legacy_mail_outbox', None)
         if legacy is not None:

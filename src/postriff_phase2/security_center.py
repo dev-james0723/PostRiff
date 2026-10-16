@@ -32,7 +32,7 @@ Owner decisions of 2026-10-16 (docs/rapv2/blocked-features-decisions-2026-10-15.
                                          filed it, so the next sign-in sees it. POST /api/auth/security/incidents/{id}/dismiss-notice
                                          hides it; it never changes the incident or the hold.
   Previous address (decision 7):  `previous_addresses` lists the addresses the account had before an email change in
-                                         the last 14 days (migration 128 records them); security notices go there too.
+                                         the last 14 days (migration 129 records them); security notices go there too.
   Support release (decision 11):  `support_release` lifts a hold for someone else, only from the founder action
                                          (rafii_control.founder_actions, fresh founder MFA, preview/confirm), after the
                                          person's identity was verified out of band. It records how (SUPPORT_METHODS and
@@ -280,7 +280,7 @@ class SecurityCenter:
 # --- decision 7: the previous address, for 14 days ---------------------------------------------------------------------
 def previous_addresses(connection_factory, user_id, current):
     """Distinct addresses `user_id` had before an email change in the last 14 days, other than `current`; [] while the
-    flag is off, before migration 128, or on any error (a copy is never worth failing the notice for)."""
+    flag is off, before migration 129, or on any error (a copy is never worth failing the notice for)."""
     if not security_holds.enabled() or not user_id:
         return []
     try:
@@ -299,10 +299,27 @@ def previous_addresses(connection_factory, user_id, current):
     return out
 
 
+def expire_contact_changes(connection_factory):
+    """Delete previous addresses older than 14 days (migration 129's pr_security_contact_changes_expire). The
+    notification cron runs it every tick, flag or not, so an old address never lingers when no email changes again.
+    Before migration 129 the function is absent: nothing to expire, never an error."""
+    try:
+        with connection_factory() as db, db.cursor() as cur:
+            cur.execute("SELECT to_regprocedure('public.pr_security_contact_changes_expire()') IS NOT NULL")
+            if not cur.fetchone()[0]:
+                return {"status": "not_installed"}
+            cur.execute("SELECT public.pr_security_contact_changes_expire()")
+            removed = int(cur.fetchone()[0] or 0)
+            db.commit()
+        return {"status": "ok", "removed": removed}
+    except Exception as error:  # noqa: BLE001
+        return {"status": "unavailable", "error": type(error).__name__}
+
+
 # --- decision 5: the incident banner at the next sign-in -------------------------------------------------------------------
 def incident_notice(cur, principal, session_id):
     """The banner for GET /api/me: the newest undismissed "This wasn't me" report, unless this session filed it; None
-    while the flag is off, when there is none, or before migration 128 (read under a savepoint, never failing /api/me)."""
+    while the flag is off, when there is none, or before migration 129 (read under a savepoint, never failing /api/me)."""
     if not security_holds.enabled():
         return None
     cur.execute("SAVEPOINT rapv2_incident_notice")

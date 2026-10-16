@@ -17,7 +17,7 @@ Every action is a preview -> confirm pair, executed at most once through the emb
   IDEMPOTENCY_CONFLICT. An expired, used or foreign preview, a wrong revision, a moved target, a missing step-up
   (Boundary) or Demo mode (http.py) is refused before any consumer write.
 
-Security-hold release (RAPv2 owner decision 11, 2026-10-16; kind `security_hold_release`, migration 129): lifts a RAPv2
+Security-hold release (RAPv2 owner decision 11, 2026-10-16; kind `security_hold_release`, migration 130): lifts a RAPv2
 account hold after support verified the person's identity out of band. The founder records how (one of
 security_center.SUPPORT_METHODS) and the support case reference; the preview shows the hold and the open incidents;
 the confirm needs the typed word RELEASE and a fresh second factor. The consumer side is security_center.support_release

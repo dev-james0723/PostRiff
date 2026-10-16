@@ -69,6 +69,12 @@ class Flags(unittest.TestCase):
 class PreviousAddress(Flags):
     """Decision 7: for 14 days after an email change, security notices also go to the previous address."""
 
+    def test_expiry_is_safe_before_the_migration_and_on_errors(self):
+        missing = base.FakeCursor([((False,), 1)])
+        factory = lambda: base.FakeDB(missing)
+        self.assertEqual(security_center.expire_contact_changes(factory), {"status": "not_installed"})
+        self.assertEqual(security_center.expire_contact_changes(Rows(fail=True))["status"], "unavailable")
+
     def test_off_with_the_flag_and_fails_safe(self):
         flags.attach({})
         factory = Rows([("old@example.invalid",)])
@@ -150,7 +156,7 @@ class StepUpNotices(Flags):
         class Partly(base.FakeCursor):
             def execute(self, sql, params=None):
                 if "session.step_up_challenged" in str(params):
-                    raise RuntimeError("new row violates check constraint")  # migration 128 not applied yet
+                    raise RuntimeError("new row violates check constraint")  # migration 129 not applied yet
                 super().execute(sql, params)
         with self.assertRaises(AlphaError) as raised:
             security_gate.require(_service(Partly([((False, "new", True, 0, True), 1), (None, 1)])), "t" * 40, "private_data")

@@ -193,7 +193,7 @@ def _challenged(cur, principal, session_id, decision, capability, now):
     try:
         _notice_if_due(cur, principal, session_id, decision, capability, now)
         cur.execute("RELEASE SAVEPOINT rapv2_step_up_notice")
-    except Exception as error:  # noqa: BLE001 - a notice never changes the decision (e.g. migration 128 not applied yet)
+    except Exception as error:  # noqa: BLE001 - a notice never changes the decision (e.g. migration 129 not applied yet)
         cur.execute("ROLLBACK TO SAVEPOINT rapv2_step_up_notice")
         logging.getLogger("postriff.account_protection").warning(json.dumps({"event": "security_gate.notice_unavailable", "error": type(error).__name__}))
 

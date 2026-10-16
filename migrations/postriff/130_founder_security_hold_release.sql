@@ -1,4 +1,5 @@
 -- Founder Admin: the security-hold release action (RAPv2 owner decision 11, 2026-10-16).
+-- Numbered 130: 128 is the Discord release branch's and 129 is this release's consumer migration.
 --
 -- rafii_control.founder_action_requests (068) may now record kind 'security_hold_release': a founder lifts a RAPv2
 -- account hold after verifying the person's identity out of band. The preview/confirm protocol, fresh second factor,

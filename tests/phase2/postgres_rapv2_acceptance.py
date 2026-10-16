@@ -1755,7 +1755,7 @@ def founder_boundary():
         assert call("GET", path, token(user, session, aal="aal2"))[0] in (403, 404), path
 
 
-@check("RAP-092", "the P1 migrations (120-123, 127 retention and 128 owner decisions) apply to a disposable database: every table and function exists, RLS forced")
+@check("RAP-092", "the P1 migrations (120-123, 127 retention and 129 owner decisions) apply to a disposable database: every table and function exists, RLS forced")
 def migrations_dry_run():
     tables = ("pr_security_devices", "pr_session_security", "pr_security_login_events", "pr_security_account_controls", "pr_security_incidents", "pr_security_retention_runs",
               "pr_security_contact_changes")
@@ -2115,7 +2115,7 @@ def previous_address_notices():
     transport = Transport()
     decision_flags(RAFII_NOTIFICATIONS_V2_ENABLED="1")
     _, notifications = v2_service(transport)
-    # The harness auth.users stub has only `id`: add Supabase's email column and install migration 128's trigger.
+    # The harness auth.users stub has only `id`: add Supabase's email column and install migration 129's trigger.
     sql("ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email text")
     assert sql("SELECT postriff_private.rapv2_install_contact_change_trigger()")[0][0] is True
     user, _ = person()
@@ -2143,6 +2143,12 @@ def previous_address_notices():
     assert "14 days" in copy["text"] and copy["idempotencyKey"] != next(m for m in to_user if m is not copy)["idempotencyKey"]
     # Past 14 days the old address is no longer told.
     sql("UPDATE public.pr_security_contact_changes SET changed_at=now()-interval '15 days' WHERE user_id=%s", user)
+    # Expired even though no email changes again: the notification cron's expiry step (migration 129).
+    from postriff_phase2 import security_center
+    expired = security_center.expire_contact_changes(connection)
+    assert expired["status"] == "ok" and expired["removed"] >= 1, expired
+    assert sql("SELECT count(*) FROM public.pr_security_contact_changes WHERE user_id=%s", user)[0][0] == 0
+    assert sql("SELECT has_function_privilege('authenticated','public.pr_security_contact_changes_expire()','EXECUTE')")[0][0] is False
     before = len(transport.sent)
     notice_and_deliver()
     assert [m["to"] for m in transport.sent[before:]] == [current], transport.sent[before:]

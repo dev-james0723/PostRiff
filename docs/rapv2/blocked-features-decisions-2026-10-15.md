@@ -28,7 +28,7 @@ Rows still needing a person stay NOT_RUN: RAP-077 and RAP-123 (Cantonese review)
 
 James answered all twelve open RAPv2 decisions on 2026-10-16: the seven from PR #199 (P1 gaps) and the five above from
 PR #200. Six stay as built; five needed building and one is a flag value. The five builds are in branch
-`claude/rapv2-decisions-20261016` (migrations 128 and 129, **not applied anywhere**). Every new behaviour stays off until
+`claude/rapv2-decisions-20261016` (migrations 129 and 130, **not applied anywhere**; 128 belongs to the Discord release). Every new behaviour stays off until
 `RAFII_SECURITY_INCIDENT_HOLD`, `RAFII_DEVICE_TRUST_V2`, `RAFII_SIGN_IN_DETAILS` or enforce mode is set; all are unset in production.
 
 | # | Decision | Answer | What it means |
@@ -37,13 +37,13 @@ PR #200. Six stay as built; five needed building and one is a flag value. The fi
 | 2 | Known browser on AAL1 (RAP-021, #199 item 6) | **Keep as built** | A known browser without fresh MFA must give a fresh 2FA code for sensitive actions. |
 | 3 | Private-data gating (RAP-033, #199 item 7) | **Keep the block, build a screen** | Built: when a workspace read is refused at high risk, the web app shows a "Confirm it's you" step-up screen instead of a generic error (`web/src/components/auth/step-up-screen.tsx`, AppGate). With a factor the person confirms there and the workspace loads again; without one they are sent to set one up (account pages stay reachable). |
 | 4 | Inactivity expiry (RAP-138, #199 item 4) | **Keep as built** | A browser counts as unknown again after 180 days idle. |
-| 5 | Incident notice channel (RAP-064/114, #199 item 1) | **Email plus an in-app banner** | Built: the email through Notification V2 as before, plus a banner at the next sign-in until dismissed (`GET /api/me` `securityNotice`, `POST /api/auth/security/incidents/{id}/dismiss-notice`; migration 128 adds `reported_session_id` and `notice_dismissed_at`). The reporting session never gets the banner. |
+| 5 | Incident notice channel (RAP-064/114, #199 item 1) | **Email plus an in-app banner** | Built: the email through Notification V2 as before, plus a banner at the next sign-in until dismissed (`GET /api/me` `securityNotice`, `POST /api/auth/security/incidents/{id}/dismiss-notice`; migration 129 adds `reported_session_id` and `notice_dismissed_at`). The reporting session never gets the banner. |
 | 6 | Risk-decision notices (RAP-064, #199 item 2) | **Notify only failed or blocked step-ups** | Built in `security_gate.py` (enforce mode only): a blocked risky sign-in (high or critical risk refused; once per session) and a repeatedly failed step-up (3 challenges of one session within 30 minutes without fresh proof; at most one per session per hour) each send a transactional security notice. A successful, self-initiated step-up stays quiet. |
-| 7 | Old contact channel (RAP-114, #199 item 3) | **Previous address for 14 days** | Built: a trigger on `auth.users` (migration 128) records the address an account had before an email change; for 14 days every security notice also goes there, with a line saying why. Never fails the email change; rows older than 14 days are deleted on each change and on account deletion. |
+| 7 | Old contact channel (RAP-114, #199 item 3) | **Previous address for 14 days** | Built: a trigger on `auth.users` (migration 129) records the address an account had before an email change; for 14 days every security notice also goes there, with a line saying why. Never fails the email change; rows older than 14 days are deleted on each change and on account deletion. |
 | 8 | Location granularity (RAP-076, #200 item 1) | **City** | Set `RAFII_SIGN_IN_DETAILS=city` when the flag is turned on (country, region and city from Vercel's edge headers). Already supported; tests added. Overrides the recommended `region`. |
 | 9 | Retention periods (RAP-137, #200 item 2) | **Keep as built** | 400 days, with `RAFII_SECURITY_RETENTION=dry_run` for at least a week before `on`. |
 | 10 | Recovery flow (RAP-111, #200 item 3) | **Keep as built** | A held account is recovered with a factor enrolled before the report, otherwise through support. Email codes never work. |
-| 11 | Who may release a hold (RAP-113, #200 item 4) | **Build the founder/support release** | Built: Founder Admin → Customer 360 → "Lift security hold" (`/api/control/v2/actions/accounts/{id}/security-hold/release/preview|confirm`, capability `accounts.block`, fresh second factor, typed `RELEASE`). The founder must record how identity was verified out of band (one of five methods, never an email code) and a support case reference. It reuses `security_holds.release`, resolves open incidents as `support_verified`, writes the ledger, the consumer audit `security.hold_released_by_support` and the Control audit, and emails the person. Migration 129 adds the action kind. |
+| 11 | Who may release a hold (RAP-113, #200 item 4) | **Build the founder/support release** | Built: Founder Admin → Customer 360 → "Lift security hold" (`/api/control/v2/actions/accounts/{id}/security-hold/release/preview|confirm`, capability `accounts.block`, fresh second factor, typed `RELEASE`). The founder must record how identity was verified out of band (one of five methods, never an email code) and a support case reference. It reuses `security_holds.release`, resolves open incidents as `support_verified`, writes the ledger, the consumer audit `security.hold_released_by_support` and the Control audit, and emails the person. Migration 130 adds the action kind. |
 | 12 | Device revoke freshness (#200 item 5) | **Keep as built** | Revoking a browser needs a recent sign-in (`assert_fresh`), not a 2FA code. |
 
 ### Wording for James to approve
@@ -57,7 +57,7 @@ English-only, like the rest of the app.
 
 ### Before turning the flags on
 
-Apply migration 128 (consumer) and 129 (Control) first. With `RAFII_SECURITY_INCIDENT_HOLD` on and 128 missing, the
+Apply migration 129 (consumer) and 130 (Control) first. With `RAFII_SECURITY_INCIDENT_HOLD` on and 129 missing, the
 banner and the previous-address copy are skipped (never an error), and the step-up notices skip themselves under a
 savepoint in enforce mode.
 

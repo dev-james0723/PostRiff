@@ -197,4 +197,4 @@ end $$;
 \ir ../../migrations/postriff/127_rapv2_security_retention.sql
 
 -- RAPv2 owner decisions (2026-10-16): incident banner, step-up notices, previous address for 14 days.
-\ir ../../migrations/postriff/128_rapv2_owner_decisions.sql
+\ir ../../migrations/postriff/129_rapv2_owner_decisions.sql

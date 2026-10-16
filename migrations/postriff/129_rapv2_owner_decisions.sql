@@ -1,5 +1,6 @@
 -- Rafii Account Protection v2: the schema for James's decisions of 2026-10-16 (docs/rapv2/blocked-features-decisions-2026-10-15.md).
--- Numbered 128: 124-126 are taken by the Discord release branch and 127 is RAPv2 retention.
+-- Numbered 129: 124-126 and 128 are taken by the Discord release branch (128 = discord_lease_protocol_fence, already in
+-- production's ledger) and 127 is RAPv2 retention. Written as 128 first; renumbered before any apply.
 --
 -- 1. Decision 5, the incident banner. pr_security_incidents gains reported_session_id (the session that filed the
 --    report, which never needs the banner) and notice_dismissed_at (when the person dismissed the in-app banner shown at
@@ -11,7 +12,9 @@
 -- 3. Decision 7, notices to the previous address. pr_security_contact_changes keeps the address an account had before an
 --    email change, for 14 days, so security notices can also go there. A trigger on auth.users records it when the
 --    confirmed address changes; it never raises (an email change must never fail because of this table) and it deletes
---    every row older than 14 days on each write. The account deletion purge removes a person's rows.
+--    every row older than 14 days on each write. public.pr_security_contact_changes_expire() deletes them too, and the
+--    notification cron calls it on every tick, so an old address never lingers when nobody changes an email again.
+--    The account deletion purge removes a person's rows.
 --
 -- Nothing here changes behaviour on its own: the routes and notices that use these columns are off until
 -- RAFII_SECURITY_INCIDENT_HOLD (banner, previous address) or RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce (step-up notices).
@@ -22,6 +25,7 @@
 --   drop function postriff_private.rapv2_install_contact_change_trigger();
 --   drop function postriff_private.rapv2_record_contact_change();
 --   restore public.pr_security_purge exactly as migration 122 defines it;
+--   drop function public.pr_security_contact_changes_expire();
 --   drop table public.pr_security_contact_changes;
 --   restore the pr_security_login_events event_type check from migration 120 (first delete or keep any rows of the
 --     three new types: the check cannot be re-added while they exist; they are security evidence, so keeping the wider
@@ -86,6 +90,18 @@ begin
 end $$;
 revoke all on function postriff_private.rapv2_install_contact_change_trigger() from public, anon, authenticated, service_role;
 select postriff_private.rapv2_install_contact_change_trigger();
+
+-- The 14-day limit, enforced whether or not anyone changes an email again (the notification cron runs it every tick).
+create or replace function public.pr_security_contact_changes_expire() returns integer
+language plpgsql security definer set search_path = '' as $$
+declare removed integer;
+begin
+  delete from public.pr_security_contact_changes where changed_at < now() - interval '14 days';
+  get diagnostics removed = row_count;
+  return removed;
+end $$;
+revoke all on function public.pr_security_contact_changes_expire() from public, anon, authenticated, service_role;
+grant execute on function public.pr_security_contact_changes_expire() to service_role;
 
 create or replace function public.pr_security_purge(p_user uuid) returns void
 language plpgsql security definer set search_path = '' as $$
