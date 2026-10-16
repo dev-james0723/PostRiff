@@ -184,7 +184,9 @@ class ScopeBatchRegression(unittest.TestCase):
         ordered=self.db.scope_calls[0][1]
         self.assertEqual(len(ordered),7)
         self.assertEqual(ordered,tuple(sorted(ordered)))
-        self.assertTrue(all(keys==ordered for _,keys in self.db.scope_calls))
+        self.assertEqual(self.db.scope_calls[1][1],ordered)
+        stored=self.db.scope_calls[2][1]
+        self.assertEqual(stored,tuple(key for key in ordered if self.db.states[key]['kind'] in ('policy','invalid','discovery','route')))
         for row in self.db.states.values():
             if row['kind'] in ('global','credential','resource'):
                 self.assertEqual((row['cap'],row['left'],row['window']),(None,None,None))

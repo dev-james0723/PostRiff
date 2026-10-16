@@ -863,6 +863,30 @@ for suppress in (False,True):
             db.execute('DROP FUNCTION public.pr_discord_test_scope_write()')
 checks.append('real UPDATE trigger delay expires frozen permit after storage;missing UPDATE row fails closed;both fully roll back scopes,mapping,admission')
 
+# Stable reservation reads every guard under the same locks but must not create
+# new heap/index versions for unchanged guards. Renewals and holds still apply.
+limiter,identity,path,policy=setup()
+learn(limiter,identity,path,cap=100)
+guard_keys=['10:'+identity.auth_key,'11:'+identity.credential_key,'40:'+route_identity('GET',path)[1]]
+def guard_versions():
+    with connection() as db:
+        return db.execute('SELECT scope_key,revision,updated_at,policy_revision,policy_expires_at FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(guard_keys,)).fetchall()
+before=guard_versions()
+limiter.reserve_read('GET',path,identity=identity)
+assert guard_versions()==before,'Unchanged guard versions were rewritten'
+from postriff_phase2.discord.rate_limits import SafetyPolicy
+renewed={**policy,'revision':'synthetic-scope-renewal','expires_at':policy['expires_at']+1}
+limiter.policy=SafetyPolicy.parse(renewed)
+limiter.reserve_read('GET',path,identity=identity)
+after=guard_versions()
+assert all(new[1]==old[1]+1 and new[3]=='synthetic-scope-renewal' and new[4]>old[4] for old,new in zip(before,after))
+with connection() as db:
+    db.execute('UPDATE public.pr_discord_rate_state SET manual_hold=true WHERE scope_key=%s',(guard_keys[0],))
+before=coordinator_snapshot(limiter,identity,path)
+expect_denied(lambda:limiter.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable)
+assert coordinator_snapshot(limiter,identity,path)==before,'Guard hold bypassed or committed a reservation'
+checks[-1]+=';unchanged guard versions retained,policy renewal stored,held guard blocks without writes'
+
 limiter,identity,path,policy=setup()
 learn(limiter,identity,path,cap=6)
 sent=limiter.reserve_read('GET',path,identity=identity)

@@ -7,6 +7,27 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
 fi
 discord_gate_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd -- "$discord_gate_root"
+discord_sql_script=tests/phase2/postgres_discord_rate_limits.py
+unset RAFII_DISCORD_WARM_SEED_PROBE RAFII_DISCORD_LOCKED_CLOCK_PROBE RAFII_DISCORD_SCOPE_STORE_PROBE
+case "${1:-}" in
+  '') [ "$#" -eq 0 ] || exit 64 ;;
+  --admission-index-probe)
+    [ "$#" -eq 1 ] || exit 64
+    discord_sql_script=tests/phase2/postgres_discord_admission_index_probe.py ;;
+  --warm-seed-probe)
+    [ "$#" -eq 1 ] || exit 64
+    export RAFII_DISCORD_WARM_SEED_PROBE=1
+    discord_sql_script=tests/phase2/postgres_discord_admission_index_probe.py ;;
+  --locked-clock-probe)
+    [ "$#" -eq 1 ] || exit 64
+    export RAFII_DISCORD_LOCKED_CLOCK_PROBE=1
+    discord_sql_script=tests/phase2/postgres_discord_admission_index_probe.py ;;
+  --scope-store-probe)
+    [ "$#" -eq 1 ] || exit 64
+    export RAFII_DISCORD_SCOPE_STORE_PROBE=1
+    discord_sql_script=tests/phase2/postgres_discord_admission_index_probe.py ;;
+  *) exit 64 ;;
+esac
 discord_pg_bin=/usr/lib/postgresql/17/bin
 if [ ! -x "$discord_pg_bin/postgres" ]; then
   # Official PGDG installation, inside the separately authorized ephemeral CI
@@ -48,7 +69,7 @@ discord_validation_gate python python -m unittest test_discord_rate_limits test_
   test_hosted_wave3_connectors test_youtube_identity_fence \
   test_youtube_worker_refresh test_youtube_oauth_binding test_discord_presend_retry \
   test_postgres_pool_controls test_discord_capacity_approval_receipt test_rafii_account_holds
-discord_validation_gate sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_rate_limits.py
+discord_validation_gate sql python scripts/postriff_disposable_postgres.py "$discord_sql_script"
 python - <<'PY_EVIDENCE'
 import json
 from pathlib import Path
@@ -58,5 +79,17 @@ d=json.loads(p.read_text())
 assert d['status']=='PASS' and d['exactScopedDispatchRegression'] is True
 print('RAFII_DISCORD_ACTUAL_SQL_REGRESSIONS '+json.dumps({'status':d['status'],'rateGroups':len(d['checks']),'workerGroups':len(d['workerChecks']),'exactScopedDispatchRegression':True,'realDiscordRequests':d['realDiscordRequests'],'productionDatabaseWrites':d['productionDatabaseWrites']}))
 PY_EVIDENCE
+if [ "$discord_sql_script" = tests/phase2/postgres_discord_admission_index_probe.py ]; then
+  python - <<'PY_INDEX_EVIDENCE'
+import hashlib,json
+from pathlib import Path
+p=Path('.depot/discord-admission-index-probe.json')
+if not p.is_file():raise SystemExit('Admission-index diagnostic evidence is missing')
+raw=p.read_bytes();data=raw.decode();parts=[data[i:i+2500] for i in range(0,len(data),2500)]
+for i,part in enumerate(parts):
+    print('RAFII_DISCORD_INDEX_EVIDENCE '+json.dumps({'file':p.name,'index':i,'parts':len(parts),
+        'sha256':hashlib.sha256(raw).hexdigest(),'text':part}),flush=True)
+PY_INDEX_EVIDENCE
+fi
 discord_validation_gate fixture python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
 exit "$discord_validation_status"

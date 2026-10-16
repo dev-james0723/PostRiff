@@ -432,12 +432,32 @@ class SharedPostgresBudget:
             raise RateCoordinatorUnavailable()
         return rows
 
-    def _store_batch(self, cur, rows, *, locked_keys, forward=True):
+    def _store_batch(self, cur, rows, *, locked_keys, forward=True, previous=None):
         ordered = sorted(locked_keys)
         # Both callers pass the unchanged key set used by _locked in this same
         # transaction. A missing/extra state must not turn into an unlocked write.
         if not ordered or sorted(rows) != ordered:
             raise RateCoordinatorUnavailable()
+        if previous is not None:
+            if sorted(previous) != ordered:
+                raise RateCoordinatorUnavailable()
+            # Reservation still locks and validates every scope. Avoid rewriting
+            # unchanged guards (and their updated_at index) while holding app00.
+            # Compare all stored fields, including policy renewal; never infer
+            # immutability merely from a scope's kind or nullable capacity.
+            fields = ('cap','left','window','reset','blocked','circuit','streak',
+                      'hold','seq','policy','policyExpires','learned','freshAfter')
+            changed = []
+            for key in ordered:
+                effective = dict(rows[key])
+                if forward:
+                    effective['policy'] = self.policy.revision
+                    effective['policyExpires'] = max(effective['policyExpires'],self.policy.expires_at)
+                if any(effective[field] != previous[key][field] for field in fields):
+                    changed.append(key)
+            ordered = changed
+            if not ordered:
+                return
         parameters = []
         for key in ordered:
             row = rows[key]
@@ -565,6 +585,7 @@ class SharedPostgresBudget:
             bucket, _seq = self._map(cur,identity,route,major)
             keys = self._keys(identity,route,major,bucket)
             rows = self._locked(cur,keys)
+            previous = {key:dict(row) for key,row in rows.items()}
             now = self._policy(cur)  # wall time after lock waits
             wait, wait_scope = 0.0, 'unknown'
             for key,row in rows.items():
@@ -594,7 +615,7 @@ class SharedPostgresBudget:
             for key,row in rows.items():
                 if row['cap'] is not None and row['kind'] != 'invalid':
                     row['left'] -= 1
-            self._store_batch(cur,rows,locked_keys=keys)
+            self._store_batch(cur,rows,locked_keys=keys,previous=previous)
             permit = Permit(str(uuid.uuid4()),self.application_key,method,_digest(path),identity,binding_hash(binding),expiry)
             self._insert(cur,permit,route,major,bucket,keys,binding,read_sent=read_sent)
         return permit
