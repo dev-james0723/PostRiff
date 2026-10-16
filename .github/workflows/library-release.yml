@@ -72,12 +72,12 @@ jobs:
       # index digest so every run uses the same bytes. Refresh deliberately (for
       # example monthly or for an AL2023/Lambda security update): resolve the new
       # index digest, confirm the amd64 manifest, and re-run this job. Never float.
-      # Resolved 2026-10-09 through the anonymous ECR Public registry API:
-      #   amazonlinux:2023 -> amd64 manifest sha256:3552faf41b70d5b123fc33d4429a259baa2bcf9aa6ab15c70ad6da40fd63d247,
-      #     one rootfs layer sha256:7234d0a9b6ba1270c7bb653ee62a443a1dbb6fdfa833336edd3c0691c2524d1f, built 2026-09-29
-      #   lambda/python:3.12 -> amd64 manifest sha256:9531d39617b0966d2238cd30328087d53803110d50948feca99d29437422cffa, built 2026-10-09
-      BUILDER_IMAGE: public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:12052e9b5d3fd85769abbdd863dd038e1890c9ace31d5fdbe1afa78eda97d061
-      LAMBDA_IMAGE: public.ecr.aws/lambda/python:3.12@sha256:145350008f3f67d82c0bc6ecd34d9eb0c95aecf11f9b69db6bab7de3d5d3cc61
+      # Resolved 2026-10-15 through the anonymous ECR Public registry API:
+      #   amazonlinux:2023 -> amd64 manifest sha256:b5690f6432fbeb6bb19a68d82c1f4cce968d8eeb9fa245c797701e0f46ce7877,
+      #     one rootfs layer sha256:44e8be4b90708873c9aa0b007240dcafa71ef3887f3fa5c7c7577c48afe96e34, built 2026-10-14
+      #   lambda/python:3.12 -> amd64 manifest sha256:421461c9beb60e17329a5614e38df95282259b13addeb14d7048711f0486c380, built 2026-10-15
+      BUILDER_IMAGE: public.ecr.aws/amazonlinux/amazonlinux:2023@sha256:18c71e6a20f8b0834b002b6002156a84eea76162d5adea72d2ea8b86800eaf91
+      LAMBDA_IMAGE: public.ecr.aws/lambda/python:3.12@sha256:3856536f53e945debf4c90d0ff301cbaa837c07a4ab9b0e2c102c6e54ceb9762
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Pull the pinned images and record their digests
