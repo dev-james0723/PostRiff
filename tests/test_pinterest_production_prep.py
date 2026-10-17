@@ -252,14 +252,14 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
     def setUp(self):
         from postriff_phase2.coworker import flags
         self.addCleanup(flags.attach, flags._values)
-        flags.attach({'RAFII_ACCOUNT_PROTECTION_V2_MODE': 'enforce'})
+        flags.attach({'RAFII_ACCOUNT_PROTECTION_V2_MODE': 'enforce', 'RAFII_SECURITY_INCIDENT_HOLD': '1'})
 
-    def app(self, *, fresh_proof=False):
+    def app(self, *, fresh_proof=False, held=False):
         import test_postriff_account_security as security
         from postriff_phase2.hosted_app import HostedApplication
         from unittest.mock import Mock
         now = 1_800_000_000.0
-        cursor = security.FakeCursor([((False, None, False), 1), (None, 1), (None, 1)])
+        cursor = security.FakeCursor([((held, 0, None), 1), ((False, None, False, 0, True), 1), (None, 1), (None, 1)])
         def verify(token): return security.PRINCIPAL
         verify.session_id = lambda token, principal: 'synthetic-pinterest-security-session'
         verify.method_time = lambda token, principal: ('totp', now - 1) if fresh_proof else (None, 0)
@@ -282,7 +282,19 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
                 oauth.start.assert_not_called()
                 oauth.complete.assert_not_called()
 
-    def test_fresh_independent_proof_allows_profile_and_boards_connection(self):
+    def test_existing_hold_still_blocks_connection_after_incident_feature_is_paused(self):
+        import test_postriff_account_security as security
+        from postriff_phase2 import security_holds
+        from postriff_phase2.coworker import flags
+        flags.attach({'RAFII_ACCOUNT_PROTECTION_V2_MODE': 'enforce'})
+        app, oauth, _ = self.app(held=True)
+        with patch.dict(security_holds._INSTALLED, {'readable': True, 'checked': float('inf')}):
+            status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/pinterest/oauth/start',
+                                           body={'capability': 'boards_read'}, headers=security.AUTH)
+        self.assertEqual((status, body['code']), (403, 'security_account_hold'))
+        oauth.start.assert_not_called()
+
+
         import test_postriff_account_security as security
         app, oauth, _ = self.app(fresh_proof=True)
         status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/pinterest/oauth/start',
@@ -294,7 +306,7 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
 
     def test_disconnect_stays_available_while_browser_needs_step_up(self):
         import test_postriff_account_security as security
-        app, oauth, cursor = self.app()
+        app, oauth, cursor = self.app(held=True)
         status, body = security.invoke(app, 'DELETE', f'/api/workspaces/{security.WORKSPACE}/channels/synthetic-pinterest-connection',
                                        body={}, headers=security.AUTH)
         self.assertEqual((status, body.get('disconnected')), (200, True))
