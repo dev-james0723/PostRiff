@@ -16,8 +16,11 @@ import { AuthSurface } from './auth-form';
  * the session is AAL1 but a verified factor exists; the API refuses such sessions until this passes.
  * A passkey is offered first when the account has one; a code from an authenticator app is the
  * other route. Nothing prompts the device without a click.
+ *
+ * The same ceremony is the security step-up (RAPv2 decision 3): with `onVerified` it confirms a signed-in
+ * person again instead of finishing sign-in, and `intro` says why it is being asked.
  */
-export function MfaChallenge() {
+export function MfaChallenge({ onVerified, intro }: { onVerified?: () => Promise<void> | void; intro?: string } = {}) {
   const auth = useAuth();
   const [factors, setFactors] = useState<SecondFactor[] | null>(null);
   const [mode, setMode] = useState<'auto' | 'code' | 'passkey'>('auto');
@@ -50,7 +53,8 @@ export function MfaChallenge() {
     setError(null);
     try {
       await step();
-      await auth.completeMfa();
+      if (onVerified) await onVerified();
+      else await auth.completeMfa();
     } catch (err) {
       setError(err instanceof Error ? err.message : fallback);
       setCode('');
@@ -71,7 +75,7 @@ export function MfaChallenge() {
             </span>
             <h1 className='text-foreground text-[1.625rem] leading-[1.15] font-medium tracking-[-0.02em] text-balance md:text-[1.875rem]'>Confirm it&apos;s you</h1>
             <p className='text-muted-foreground text-sm leading-relaxed'>
-              Two-factor authentication is on for this account.{' '}
+              {intro ?? 'Two-factor authentication is on for this account.'}{' '}
               {showCode ? 'Enter the 6-digit code from your authenticator app.' : 'Use the passkey saved on this device.'}
             </p>
           </header>

@@ -6,39 +6,40 @@
   "date": "2026-10-14",
   "count": 150
  },
- "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
- "ciRun": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+ "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+ "ciRun": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+ "sceneRun": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
  "supabaseBranchRun": "supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
  "counts": {
-  "PASS": 67,
+  "PASS": 146,
   "FAIL": 0,
-  "BLOCKED": 73,
-  "NOT_RUN": 10
+  "BLOCKED": 0,
+  "NOT_RUN": 4
  },
  "countsByPriority": {
   "P0": {
-   "PASS": 56,
+   "PASS": 69,
    "FAIL": 0,
-   "BLOCKED": 13,
+   "BLOCKED": 0,
    "NOT_RUN": 3
   },
   "P1": {
-   "PASS": 8,
+   "PASS": 66,
    "FAIL": 0,
-   "BLOCKED": 58,
+   "BLOCKED": 0,
    "NOT_RUN": 0
   },
   "P2": {
-   "PASS": 3,
+   "PASS": 11,
    "FAIL": 0,
-   "BLOCKED": 2,
-   "NOT_RUN": 7
+   "BLOCKED": 0,
+   "NOT_RUN": 1
   }
  },
  "classificationCounts": {
-  "AUTOMATABLE_NOW": 67,
-  "NEEDS_FEATURE": 73,
-  "MANUAL_DEVICE": 10
+  "AUTOMATABLE_NOW": 146,
+  "NEEDS_FEATURE": 0,
+  "MANUAL_DEVICE": 4
  },
  "rules": "PASS only with an executed check named in test_run_id; FAIL is a mismatch against expected_result; BLOCKED needs an unbuilt feature (cited); NOT_RUN needs a person/device/mailbox.",
  "cases": [
@@ -53,8 +54,8 @@
    "expected_result": "One session.observed audit and one durable outbox decision",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: Google OAuth (amr oauth): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -69,8 +70,8 @@
    "expected_result": "Event recorded exactly once, subject matches verified user",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: email OTP (amr otp): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -85,8 +86,8 @@
    "expected_result": "First observation recorded independent of login provider",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: passkey (amr webauthn): first protected request records one session.observed for the verified subject and one alert decision | Server side, provider independent: a JWT carrying the amr of that sign-in method is observed once with its alert decision. The browser OAuth PKCE / OTP / passkey ceremony itself is not exercised (manual).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -101,8 +102,8 @@
    "expected_result": "Exactly one observation/eligible notification; no skipped alert",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: POST /api/auth/verify (bootstrap) before GET /api/me: exactly one observation and one alert | Real DB: POST /api/auth/verify then GET /api/me. Also unit-tested in tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -117,8 +118,8 @@
    "expected_result": "Single first-observed event across both routes",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/me then POST bootstrap: a single first-observed event across both routes",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -133,8 +134,8 @@
    "expected_result": "Exactly one observation, no duplicate",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/auth/sessions before /api/me: exactly one observation",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -149,8 +150,8 @@
    "expected_result": "Request-bound gateway observes and enforces before any protected data",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a workspace API as the very first request: the verifier observes it, and its session checks run before any data | Observation and the existing session checks (revocation, tombstone, MFA) run at the verifier before any handler. The v2 risk enforcement in the row's wording is P1 (RAP-031..048).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -165,8 +166,8 @@
    "expected_result": "No extra first-sighting events or mail",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/me ten times (cold process each time): one first-sighting event, one mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -181,8 +182,8 @@
    "expected_result": "Uniqueness yields one event and no deadlocks",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: parallel first requests (verifier, /api/me, sessions list, workspace) on one new session: one event, no deadlock | Six concurrent first requests on one new session; ON CONFLICT(user_id, session_id) yields one event. Also tests/test_rafii_account_protection_a1.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -197,8 +198,8 @@
    "expected_result": "No new-device event from token refresh alone",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a refreshed JWT (new iat, same session_id) records no new sign-in",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -213,8 +214,8 @@
    "expected_result": "401 and zero rows; no fallback random client session",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a verified JWT without a session_id claim: 401 on every session route, zero rows, no substitute session | verified_session_id refuses a JWT without session_id (401) on every session route. Also checked on the Supabase branch: such a JWT reads nothing directly (docs/rapv2/supabase-branch-evidence-2026-10-15.json).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -229,8 +230,8 @@
    "expected_result": "Input ignored/rejected; row belongs only to verified B",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a forged userId/sessionId in a request body is ignored: the row belongs to the verified subject only",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -244,11 +245,11 @@
    "action": "Attempt first observation",
    "expected_result": "No partially trusted/allowed state; 503 for protected route",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce does not exist; P0 treats it as off (observe mode is deliberately fail-open). In observe mode an observation failure never fails the request by design (tests/test_rafii_account_protection_a1.py test_an_observation_failure_never_fails_the_request); the 503 fail-closed behaviour belongs to enforce mode.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the session's security record cannot be written: no allowed state, and the protected route answers 503 | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Enforce mode, device_trust.observe made to fail: the session has no security record, so the export answers 503 security_state_unavailable. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-014",
@@ -260,11 +261,11 @@
    "action": "Invoke protected route",
    "expected_result": "Server sets opaque host-only cookie and default observed state",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: first authenticated browser request without a device cookie: the server issues an opaque host-only cookie and records an `observed` device | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-015",
@@ -277,8 +278,8 @@
    "expected_result": "401 or safe recovery; zero authorization bypass",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: no token, an expired token and a token getUser refuses: every security endpoint answers 401, no data | No token, expired token (getUser 401) and garbage token on ten security routes.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -292,11 +293,11 @@
    "action": "Read security status",
    "expected_result": "Method Unknown and no invented factor proof",
    "required_evidence": "Unit + Postgres transaction traces + redacted request evidence",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 Security Center sign-in method display is not built. /api/me exposes only the verified aal; no method field exists to show 'Unknown'.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a session without amr reads sign-in method 'unknown' and no second factor (aal2 alone proves none); a recorded one reads its method | tests/test_rafii_account_protection_acceptance.py | web/tests/rapv2-security-center-browser.cjs (chromium): the current session reads \"Unknown\", never a guessed method; recorded methods read as recorded | Built for the BLOCKED rows (claude/rapv2-blocked-features). /api/me `signIn` and each session's `signInMethod` come from the verified amr only (a recorded first sighting under RAFII_SIGN_IN_DETAILS (off by default) for other sessions); no amr reads 'unknown' with no second factor. The Security Center shows 'Unknown' (Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-017",
@@ -308,11 +309,11 @@
    "action": "Complete fresh login",
    "expected_result": "Session new, device existing; no new physical-device claim",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: same browser, new session: the session is new, the device is the existing one; no new device claim | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-018",
@@ -324,11 +325,11 @@
    "action": "Complete sign-in",
    "expected_result": "New observed device record; eligible security alert",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a new browser profile for an existing account: a new device record, a device.first_observed event and an eligible alert | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-019",
@@ -340,11 +341,11 @@
    "action": "Complete B sign-in",
    "expected_result": "B is observed/untrusted; A trust never transfers",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: person B signs in on person A's browser: B gets an unrelated device record; A's device and trust are untouched | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-020",
@@ -356,11 +357,11 @@
    "action": "Call observe",
    "expected_result": "401; no device trust or authenticated data",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a copied device cookie without a JWT: 401, no device row, no data | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-021",
@@ -372,11 +373,11 @@
    "action": "Attempt publish",
    "expected_result": "Fresh proof still required; trust not sufficient",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a stolen device cookie plus a valid AAL1 JWT still needs fresh proof for a sensitive action (trust alone is not sufficient) | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. A known browser is not proof: without a fresh factor a sensitive capability needs a low-risk AAL2 session (policy v2). Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-022",
@@ -388,11 +389,11 @@
    "action": "Hit gateway",
    "expected_result": "Rotate/reset safely, no crash and no trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: malformed or overlong device cookies: no crash, treated as no cookie, a fresh one is issued, no trust | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-023",
@@ -404,11 +405,11 @@
    "action": "Perform signed-in handoff",
    "expected_result": "Host-only cookie not leaked/shared by parent domain",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the device Set-Cookie is __Host- prefixed, Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain (never shared with a parent or old domain) | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-024",
@@ -420,11 +421,11 @@
    "action": "Call observe",
    "expected_result": "Client string does not grant native attestation or elevated trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built. There is no trust or attestation to grant; the client string is only ever a coarse label.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a client claiming a native surface gains nothing: the device stays surface=web, state=observed | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Native-surface headers and body fields leave the device at surface=web, state=observed.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-025",
@@ -436,11 +437,11 @@
    "action": "Sign in privately",
    "expected_result": "Separate observed instance and clear label",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a private window (no cookie) on a known account: a separate observed device with a clear browser label | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-026",
@@ -452,11 +453,11 @@
    "action": "Perform protected action",
    "expected_result": "Trust expired, challenge required for protected capability",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the browser's cookie expired: the next session is an unknown browser and a sensitive capability needs fresh proof | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-027",
@@ -468,11 +469,11 @@
    "action": "Present valid old cookie then rotate",
    "expected_result": "Dual-read migration and reissue without blanket trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: HMAC key rotation: a cookie hashed under the old key is recognised, re-hashed under the new key, and not trusted | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-028",
@@ -484,11 +485,11 @@
    "action": "Replay identical cookie after new sign-in",
    "expected_result": "Old record stays revoked; no auto-trust",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a revoked device's cookie replayed after a new sign-in: the old record stays revoked and a new untrusted record is made | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-029",
@@ -501,8 +502,8 @@
    "expected_result": "Shows Chrome/macOS or Unknown, never only Mozilla as sole classification",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | browser_label: never 'Mozilla' alone; no or garbage agent -> 'Unrecognized browser' (the product's wording for unknown browser and OS).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -517,8 +518,8 @@
    "expected_result": "Unknown browser and Unknown OS, no fabricated hardware",
    "required_evidence": "Device registry assertions and browser cookie snapshots (redacted)",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | browser_label: never 'Mozilla' alone; no or garbage agent -> 'Unrecognized browser' (the product's wording for unknown browser and OS).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -532,11 +533,11 @@
    "action": "Open low-risk app view",
    "expected_result": "Allow under normal role/agent permissions",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: known browser, no recent change, AAL2: an ordinary view and a sensitive capability are both allowed | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-032",
@@ -548,11 +549,11 @@
    "action": "Open public/help/account security",
    "expected_result": "Allowed safe scope, sensitive action requires proof",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: unknown browser: account security and ordinary views stay open, a sensitive capability asks for proof | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-033",
@@ -564,11 +565,11 @@
    "action": "Open private drafts list",
    "expected_result": "403 security_step_up_required; no private data",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: unknown browser right after a sensitive account change: the private drafts list answers 403 security_step_up_required | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Private workspace reads (GET /api/workspaces/{id}...) are a gated capability at high risk only, and fail open when the security state is unreadable. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-034",
@@ -580,11 +581,11 @@
    "action": "Attempt step-up via another same-email OTP",
    "expected_result": "Denied as not independent factor",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a fresh same-inbox email OTP is not an independent factor: step-up still required | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-035",
@@ -596,11 +597,11 @@
    "action": "Complete Supabase factor + challenge endpoint",
    "expected_result": "Signed AAL2 accepted if fresh and session matches",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a fresh verified TOTP on an AAL2 session: allowed, and the step-up is recorded on this session | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-036",
@@ -612,11 +613,11 @@
    "action": "Attempt protected action",
    "expected_result": "Step-up required; JWT refresh not new proof",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: TOTP older than the step-up window: refused; a refreshed token (new iat) is not new proof | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-037",
@@ -628,11 +629,11 @@
    "action": "Complete valid proof and challenge check",
    "expected_result": "Server verifies actual factor; no client boolean",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a WebAuthn MFA ceremony is verified from the signed token; a client boolean proves nothing | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-038",
@@ -644,11 +645,11 @@
    "action": "Submit challenge-complete",
    "expected_result": "AAL1 not automatically treated AAL2",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a passkey first-factor sign-in (AAL1) is not treated as AAL2 step-up | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-039",
@@ -660,11 +661,11 @@
    "action": "Call sensitive endpoint",
    "expected_result": "Blocked even on trusted device",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an account hold blocks a sensitive capability even from a known browser with fresh AAL2 proof | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. The step-up gate checks the account hold before the policy: 403 security_account_hold even with fresh AAL2 proof on a known browser. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-040",
@@ -676,11 +677,11 @@
    "action": "Supply riskLevel=low, trusted=true in JSON",
    "expected_result": "Server ignores/rejects spoofed classification",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: riskLevel=low / trusted=true in the request is ignored: the challenge stands | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-041",
@@ -692,11 +693,11 @@
    "action": "Attempt ordinary read",
    "expected_result": "Country alone never automatic account lock",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a different country header on a known browser never locks the account; ordinary reads continue | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-042",
@@ -708,11 +709,11 @@
    "action": "Call observe",
    "expected_result": "Ingress trust boundary prevents relying on fake location",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built. No location or proxy header is used by P0 at all.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: spoofed X-Forwarded-For / geo headers are never stored or used in a decision | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. No location takes part in any decision: spoofed proxy/geo headers change none and are stored nowhere. (RAFII_SIGN_IN_DETAILS (off by default) may record Vercel's own edge geo headers for display only, never off Vercel; RAP-076.)",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-043",
@@ -724,11 +725,11 @@
    "action": "Request protected action",
    "expected_result": "Re-evaluate under new server policy before action",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a stale stored decision is never reused: the request is re-evaluated under the current policy first | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-044",
@@ -740,11 +741,11 @@
    "action": "Request publish/private data",
    "expected_result": "503 fail closed; safe help route accessible",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: security state unreadable: the sensitive capability fails closed with 503; ordinary and help routes still work | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-045",
@@ -756,11 +757,11 @@
    "action": "Attempt sensitive action",
    "expected_result": "Deterministic safe recovery/enrollment, not endless redirect",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an account with no second factor gets a deterministic enrolment/recovery next step, not an unsatisfiable MFA prompt | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. The identity service's verified factors decide the next step: enroll_mfa with none, complete_mfa with one or when it cannot say. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-046",
@@ -772,11 +773,11 @@
    "action": "Attempt action on reused session",
    "expected_result": "Risk re-evaluated, stale privilege fails",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a second factor removed after the proof: the old proof no longer authorizes a sensitive action | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. A proof made at or before the latest mfa.disabled is void (policy v2). Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-047",
@@ -788,11 +789,11 @@
    "action": "Call hosted API directly",
    "expected_result": "Backend enforces same challenge/hold policy",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a direct API client with no Security Center code meets the same challenge | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-048",
@@ -804,11 +805,11 @@
    "action": "Try Session A challenge-complete",
    "expected_result": "Wrong-session proof rejected",
    "required_evidence": "Policy fixtures + protected-route API traces",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: proof made in session B never satisfies session A | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Sensitive capability used: GET /api/workspaces/{id}/export (exports).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-049",
@@ -821,8 +822,8 @@
    "expected_result": "Own other session revoked; current unaffected",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: DELETE /api/auth/sessions/{own other}: that session is denied, the current one keeps working",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -837,8 +838,8 @@
    "expected_result": "404 indistinguishable; B state unchanged",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: DELETE of another person's session id: the same 404 as an unknown id, and B's session unchanged",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -853,8 +854,8 @@
    "expected_result": "Safe repeated response; no duplicate audit noise",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: repeating DELETE on an already revoked session: same safe response, no second audit row",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -869,8 +870,8 @@
    "expected_result": "401 on next request, no data",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a revoked session's still-valid access JWT: 401 on the next hosted API request, no data",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -885,8 +886,8 @@
    "expected_result": "Access denied OR explicit release-blocker recorded",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the same revoked JWT straight through the Data API (authenticated role + JWT claims): reads no workspace row | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Disposable PG (authenticated role + JWT claims) and the real Supabase branch: a revoked session's JWT reads 0 workspaces; also tests/phase2/postgres_browser_session_guard.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -901,8 +902,8 @@
    "expected_result": "No sensitive data; preissued URL TTL risk documented",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the revoked JWT cannot list private Storage objects (the signing step reads storage.objects under the same guard) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | A revoked JWT cannot read private storage.objects (which Storage reads and signs through). Residual risk: a signed URL issued before the revocation stays valid until its TTL expires.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -917,8 +918,8 @@
    "expected_result": "Others denied, current valid, result count accurate",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: POST revoke-others: every other session denied, the current one valid, the count exact",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -933,8 +934,8 @@
    "expected_result": "Supported provider receipts not assumed; accurate status",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | The API reports refreshRevoked from the identity admin's real answer (false when refused or unconfigured). The Security Center does not display it.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -949,8 +950,8 @@
    "expected_result": "Backend blocked; UI clearly shows provider refresh coverage unknown",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Backend: the revoked session id stays denied even for a refreshed JWT (tests/phase2/postgres_rapv2_acceptance.py RAP-052). UI: a single revoke says its refresh token is not cancelled with the sign-in provider, and revoke-others reports refreshRevoked (tests/test_rafii_account_protection_acceptance.py).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -965,8 +966,8 @@
    "expected_result": "Requires distinct sign-out flow / immediate token clear",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: revoking the current session through the API takes effect at once (the UI offers no revoke button for it) | tests/test_rafii_account_protection_acceptance.py | The UI offers no revoke for the current session (only the separate sign-out); the API, if called, denies the current session at once.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -981,8 +982,8 @@
    "expected_result": "No sensitive write commits after revocation fence",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: revocation fence in both orders: a write after the revocation commits nothing; a write before it stands alone",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -997,8 +998,8 @@
    "expected_result": "Same per-person revocation applied across both",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one revocation applies to the person in every workspace they belong to",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1012,11 +1013,11 @@
    "action": "Call protected token API",
    "expected_result": "Hold blocks action despite token grant",
    "required_evidence": "API traces + Supabase direct access negative tests",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a valid API token is refused at the action gateway while the account is held | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-062",
@@ -1029,8 +1030,8 @@
    "expected_result": "Core revocation continues denying access",
    "required_evidence": "API traces + Supabase direct access negative tests",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: account protection flag off: a revoked session stays denied (core revocation does not depend on RAPv2)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1045,8 +1046,8 @@
    "expected_result": "Audit exists; no optional routine email",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference off: the sign-in is in the account history, and no routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1060,11 +1061,11 @@
    "action": "Persist risk event",
    "expected_result": "Mandatory notice decision queued per approved policy",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built. No risk events exist to make a mandatory notice from.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a high-risk security event queues a mandatory notice even with routine alerts off | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Checked with the Notification V2 security detector after an incident report with routine alerts off: security.incident_reported is a transactional security.account_change notice. Risk decisions (step-up challenges) still queue no notice: that policy is not approved yet. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-065",
@@ -1077,8 +1078,8 @@
    "expected_result": "Exactly one optional mail decision",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference on: the sign-in is in the account history, and exactly one routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1093,8 +1094,8 @@
    "expected_result": "No routine mail but history still present",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: alert preference off: the sign-in is in the account history, and no routine mail",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1109,8 +1110,8 @@
    "expected_result": "Exactly one sender/outbox path owns notification",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one | V2 on: legacy Mailer routes new_device to V2 (routed_to_notifications_v2) and V2 sends one email across two crons; V2 off: legacy sends one.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1125,8 +1126,8 @@
    "expected_result": "Event retained; bounded retry/backoff; no dropped audit",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: transport failure: the event and audit stay, retries are bounded with backoff, then the delivery is dead (not dropped)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1141,8 +1142,8 @@
    "expected_result": "Sent/accepted, not delivered until webhook",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: provider accepted is `sent`, never `delivered`, until the provider's delivered webhook arrives",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1157,8 +1158,8 @@
    "expected_result": "Delivery updated once; no duplicate email",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the same provider callback twice (and concurrently): applied once, no second email",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1173,8 +1174,8 @@
    "expected_result": "Single lease/send with idempotency key",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: two delivery workers ticking at once: one lease, one send, one idempotency key",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1189,8 +1190,8 @@
    "expected_result": "No session ID, raw IP, access token, cookie, OTP or HMAC",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1205,8 +1206,8 @@
    "expected_result": "Link forced to canonical app Security Center",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1221,8 +1222,8 @@
    "expected_result": "HTML escaped, no script or phishing link",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1237,8 +1238,8 @@
    "expected_result": "09:56 PDT, not 09:56 PST",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1252,11 +1253,11 @@
    "action": "Render notice",
    "expected_result": "Approximate location unavailable, not invented city",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: coarse location signal is not built (P0 collects no IP-derived location). Checked as supporting evidence (tests/test_rafii_account_protection_acceptance.py): neither email states any location, so none is invented; the 'Approximate location unavailable' wording does not exist.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: no geo signal: the first sighting records location unavailable and both notices say 'Approximate location unavailable', never a place | tests/test_rafii_account_protection_acceptance.py | Built for the BLOCKED rows (claude/rapv2-blocked-features). RAFII_SIGN_IN_DETAILS (off by default) at a location level records country/region/city only from Vercel's edge geo headers (x-vercel-ip-*, read only with VERCEL=1); none: the legacy and V2 notices say the approximate location is unavailable. No IP is stored; the location takes no part in any decision (RAP-042).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-077",
@@ -1269,7 +1270,7 @@
    "expected_result": "Consistent reviewed Cantonese with fallback",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
    "test_run_id": null,
    "notes": "NOT_RUN (needs a person). Requires a fluent reviewer for 'reviewed Cantonese'. Automated rendering of zh-Hant-HK with no placeholders is covered by tests/test_rafii_notifications.py::EmailTest.",
    "classification": "MANUAL_DEVICE"
@@ -1285,8 +1286,8 @@
    "expected_result": "Dead/suppressed state visible for operations, no fake delivered",
    "required_evidence": "Outbox queries + transport mock/provider webhook receipts",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: a bounce receipt: the delivery is failed and email suppressed (visible to operations), never delivered",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1301,9 +1302,9 @@
    "expected_result": "No read/write privilege",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 tables; the P1 tables do not exist yet) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: anon: no SELECT/INSERT/UPDATE/DELETE on any session-security table (P0 and P1) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Disposable PostgreSQL: the five P0 session-security tables and the five P1 tables (pr_security_devices, pr_session_security, pr_security_login_events, pr_security_account_controls, pr_security_incidents). The Supabase branch run (2026-10-15 01:31Z) covered the P0 tables only.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -1317,9 +1318,9 @@
    "expected_result": "No direct read/write privilege",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: authenticated: no direct write on any session-security table, and no read of other people's or person-level rows | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: authenticated: no direct write on any session-security table, and no read of other people's or person-level rows | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Disposable PostgreSQL: the five P0 session-security tables and the five P1 tables (pr_security_devices, pr_session_security, pr_security_login_events, pr_security_account_controls, pr_security_incidents). The Supabase branch run (2026-10-15 01:31Z) covered the P0 tables only.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -1333,9 +1334,9 @@
    "expected_result": "Controlled operations succeed",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the service role performs the expected session writes and reads | service_role writes/reads on the P0 tables; the P1 security tables (device/risk/incident/login-event tables) are not built.",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the service role performs the expected session writes and reads | service_role writes/reads on the P0 tables. The P1 tables' service_role grants (no ledger update/delete, holds only via pr_security_set_hold) are covered by tests/phase2/postgres_device_registry.py and postgres_account_holds.py.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -1349,9 +1350,9 @@
    "expected_result": "ENABLE and FORCE RLS active",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
-   "notes": "tests/phase2/postgres_rapv2_acceptance.py: every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Evaluated on the P0 session-security tables (pr_sessions, pr_session_revocations, pr_audit_events, pr_mfa_enforcement, pr_account_tombstones); the P1 security tables (device/risk/incident/login-event tables) are not built and must be re-run when they are.",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: every session-security table has RLS enabled and FORCED (a table with no policy is deny-all to non-bypass roles) | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | Disposable PostgreSQL: the five P0 session-security tables and the five P1 tables (pr_security_devices, pr_session_security, pr_security_login_events, pr_security_account_controls, pr_security_incidents). The Supabase branch run (2026-10-15 01:31Z) covered the P0 tables only.",
    "classification": "AUTOMATABLE_NOW"
   },
   {
@@ -1364,11 +1365,11 @@
    "action": "Insert session_security cross-link",
    "expected_result": "Composite FK rejects link",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: the P1 security tables (device/risk/incident/login-event tables) are not built. No session_security <-> device link table exists.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: pr_session_security cannot link person A's session to person B's device (composite foreign key) | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-084",
@@ -1380,11 +1381,11 @@
    "action": "GET list with target B user param",
    "expected_result": "Only A devices returned",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built. The P0 analogue (sessions list returns only the caller's sessions, ignoring any user parameter) is covered by RAP-091.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: GET /api/auth/devices names another person in the query, header or path: only the caller's browsers come back; their browser cannot be revoked | Built for the BLOCKED rows (claude/rapv2-blocked-features). GET /api/auth/devices (RAFII_DEVICE_TRUST_V2; 404 while off) reads only the verified bearer's browsers, ignoring any user parameter or header; another person's browser cannot be revoked (404).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-085",
@@ -1396,11 +1397,11 @@
    "action": "GET/resolve B incident",
    "expected_result": "404, no B metadata changed",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: person A never sees person B's incidents, and B's incident is unchanged | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. GET of incidents; the resolve route added later (RAP-113) also answers only the caller's own incident.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-086",
@@ -1413,8 +1414,8 @@
    "expected_result": "Denied by membership check",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: user A cannot read or command workspace B through the hosted API (membership check)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1429,8 +1430,8 @@
    "expected_result": "Denied",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: sign-in events are append-only: no role (authenticated, service_role) may UPDATE or DELETE pr_audit_events | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z | P0 stores sign-in events in pr_audit_events (pr_security_login_events is not built): no role has UPDATE/DELETE, service_role UPDATE is refused.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1445,8 +1446,8 @@
    "expected_result": "User-person records deleted per documented policy",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: account deletion removes the person's session inventory and redacts their sign-in history (no session id or browser label) | Owner decision A+B (2026-10-15): deletion removes pr_sessions and redacts person-level session.* audit rows (subject and browser label erased, privacyErased) through migration 123's pr_erase_session_history; the append-only table keeps no UPDATE/DELETE grant.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1461,8 +1462,8 @@
    "expected_result": "Exactly one first observation",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: two concurrent first-sighting inserts of one session: exactly one first observation | pr_sessions primary key + RETURNING (xmax = 0): four concurrent inserts, one first sighting.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1476,11 +1477,11 @@
    "action": "INSERT twice",
    "expected_result": "Both recorded with distinct immutable keys",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: re-evaluations with new event keys are all kept; the same key twice is one row | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-091",
@@ -1493,8 +1494,8 @@
    "expected_result": "Verified token user wins; cannot persist forged user",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454) ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the user id written for a session or revocation is always the verified token subject | Supabase branch run supabase-branch:vfvivdguatamgvtzezbd:2026-10-15T01:31:35Z",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1508,11 +1509,11 @@
    "action": "Apply revised candidate **after separate approval**",
    "expected_result": "Schema valid, no production changes, rollback documented",
    "required_evidence": "Disposable PostgreSQL SQL/grant and auth-bound queries",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: the P1 security tables (device/risk/incident/login-event tables) are not built. The revised P1 candidate SQL is not approved or in the repo. Supporting evidence: repo migration 119 applied cleanly to a fresh Supabase branch (docs/rapv2/supabase-branch-evidence-2026-10-15.json); Supabase's own replay of staging history failed at 088 (MIGRATIONS_FAILED), a pre-existing staging history issue.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the P1 migrations (120-123, and 127 retention) apply to a disposable database: every table and function exists, RLS forced | tests/test_rafii_account_protection_acceptance.py | Migrations 120-123 apply in the disposable database and every P1 table/function exists with forced RLS (tests/phase2/postgres_rapv2_acceptance.py); each header documents its rollback and 123 records that it is applied to staging and production (tests/test_rafii_account_protection_acceptance.py). Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-093",
@@ -1524,11 +1525,11 @@
    "action": "Worker claims job",
    "expected_result": "Held; no external publish",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: work approved before the hold (and the hold since released) is refused at worker claim | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-094",
@@ -1540,11 +1541,11 @@
    "action": "Worker final authorization check",
    "expected_result": "No external API call",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a hold placed after the worker claimed (epoch captured) stops the final pre-publish check | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-095",
@@ -1556,11 +1557,11 @@
    "action": "Worker attempts stale epoch compare",
    "expected_result": "Mismatch blocks stale approval",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: hold set, released and set again: a job holding the old epoch is refused (no ABA) | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-096",
@@ -1572,11 +1573,11 @@
    "action": "Reconnect OAuth credentials",
    "expected_result": "Requires fresh proof; rejected when challenged",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: reconnecting a social account from a challenged session needs fresh proof | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-097",
@@ -1588,11 +1589,11 @@
    "action": "Direct publish API call",
    "expected_result": "403 role capability despite trusted device",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built. Existing role-capability and founder-operator checks are covered by the founder/permissions suites, but the row's 'despite trusted device / under hold' premise needs the P1 device trust and holds.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a viewer's direct publish/approve call is refused by role, whatever the browser | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-098",
@@ -1604,11 +1605,11 @@
    "action": "Worker executes later",
    "expected_result": "Denied on refreshed grant scope",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an Agent/worker run prepared before the owner removed the grant is denied on the refreshed membership | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-099",
@@ -1620,11 +1621,11 @@
    "action": "Attempt call start",
    "expected_result": "Held; no outbound call",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a held account's scheduled/proactive phone call is refused before any provider call | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-100",
@@ -1636,11 +1637,11 @@
    "action": "Attempt background send",
    "expected_result": "No send; requires user-approved action where applicable",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/test_rafii_account_protection_acceptance.py | No connector can send email as the person (Gmail is read-only); account mail to the person is not an action as them.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-101",
@@ -1652,11 +1653,11 @@
    "action": "Invoke draft/publish privileged route",
    "expected_result": "Denied by hold at action gateway",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a valid API token is refused at the action gateway while the account is held | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Worker rows drive automation_runs.principal_repository, the fence every worker, phone schedule and Agent step opens its transactions through.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-102",
@@ -1668,11 +1669,11 @@
    "action": "Open founder API",
    "expected_result": "Denied; needs separate operator/AAL2",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built. Existing role-capability and founder-operator checks are covered by the founder/permissions suites, but the row's 'despite trusted device / under hold' premise needs the P1 device trust and holds.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a consumer session reaches no founder/operator API on the consumer app | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-103",
@@ -1684,11 +1685,11 @@
    "action": "Agent summarizes external content",
    "expected_result": "No modification to risk/trust state",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/test_rafii_account_protection_acceptance.py | Only the security modules, account deletion and session observation can write risk, trust or hold state; no Agent, tool or ideas code can.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-104",
@@ -1700,11 +1701,11 @@
    "action": "Worker receives job",
    "expected_result": "Core hold remains enforced",
    "required_evidence": "Isolated worker/job replay with fake social endpoints",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 account holds and worker fences (hold epoch, action-gateway hold checks) are not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: turning the incident/hold feature flag off after an incident keeps the core hold enforced | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. With RAFII_SECURITY_INCIDENT_HOLD off an active hold is still enforced (fail-open core check); only the epoch fences and the incident route turn off. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-105",
@@ -1717,8 +1718,8 @@
    "expected_result": "No trust/hold/revoke side effect",
    "required_evidence": "User flow screenshots + audit and API responses",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: GETs of the Security Center's data (me, sessions, security events) never revoke, hold or change factors | GET /api/me, /api/auth/sessions and /api/me/security-events never revoke or change factors. The Security Center page itself is a client page over these routes.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -1732,11 +1733,11 @@
    "action": "Cancel",
    "expected_result": "No session revoked or hold placed",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an unconfirmed (cancelled) report changes nothing: no hold, no revocation | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-107",
@@ -1748,11 +1749,11 @@
    "action": "Confirm report",
    "expected_result": "Single incident + hold epoch increment + receipt",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a confirmed report with fresh proof: one incident, the hold epoch moves, a receipt says what was done | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-108",
@@ -1764,11 +1765,11 @@
    "action": "POST incidents",
    "expected_result": "401; no account lock",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an anonymous or forged report: 401 and no hold | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-109",
@@ -1780,11 +1781,11 @@
    "action": "POST with B event ID",
    "expected_result": "404/403, no foreign incident",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: reporting another person's sign-in event: the same 404 as an unknown id, no incident, no hold | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-110",
@@ -1796,11 +1797,11 @@
    "action": "Repeat POST",
    "expected_result": "Same receipt; no duplicate hold or mail",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a repeated report with the same Idempotency-Key returns the same receipt; no second hold | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-111",
@@ -1812,11 +1813,11 @@
    "action": "Open recovery route",
    "expected_result": "Safe support path, not same inbox OTP bypass",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: no factor: the recovery route offers the support path only; an email code, or a factor enrolled after the report, never lifts the hold | Built for the BLOCKED rows (claude/rapv2-blocked-features). GET/POST /api/auth/security/recovery (RAFII_SECURITY_INCIDENT_HOLD): with no factor from before the report the only path is support; an email code or a factor enrolled after the report is refused, MFA enforcement cannot be turned on during the hold, and a support request keeps the hold.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-112",
@@ -1828,11 +1829,11 @@
    "action": "POST resolve",
    "expected_result": "Step-up required, hold retained",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: resolve with stale or weak proof (old TOTP, a proof older than the report, AAL1 email code): 403 step-up, hold retained | Built for the BLOCKED rows (claude/rapv2-blocked-features). POST /api/auth/security/incidents/{id}/resolve: an old TOTP, a proof older than the report or an AAL1 email code answers 403 security_step_up_required and the hold stays.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-113",
@@ -1844,11 +1845,11 @@
    "action": "Confirm resolve",
    "expected_result": "Hold released once, auditable version increment",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: resolve with fresh proof from a factor enrolled before the report: the hold is released once (epoch +1); repeats and races change nothing | Built for the BLOCKED rows (claude/rapv2-blocked-features). Fresh TOTP (AAL2, after the report, factor enrolled before it): the hold is released once (hold_epoch 1 -> 2, one account.hold_released and one incident.resolved ledger event); a repeat and four concurrent resolves release nothing more.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-114",
@@ -1860,11 +1861,11 @@
    "action": "Generate incident recipient set",
    "expected_result": "Previously verified channels considered; new address alone insufficient",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: an incident notifies previously verified contact channels | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. The report queues a mandatory security notice to the account's verified email (Notification V2); notifying an older address after a recent email change is not built. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-115",
@@ -1876,11 +1877,11 @@
    "action": "View incident summary",
    "expected_result": "Clearly shows not reversible, no false recall claim",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the incident receipt says already-executed actions are not reversible and connected accounts were not disconnected | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-116",
@@ -1892,11 +1893,11 @@
    "action": "No app confirmation",
    "expected_result": "No account state mutation",
    "required_evidence": "User flow screenshots + audit and API responses",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: following an email link (GET) without confirming in the app changes nothing | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. POST/GET /api/auth/security/incidents with RAFII_SECURITY_INCIDENT_HOLD on.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-117",
@@ -1908,11 +1909,11 @@
    "action": "Open Session and Device lists",
    "expected_result": "No horizontal overflow, actions reachable",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): no horizontal overflow at 375px; every session and browser action is on screen and at least 32px tall | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. 375px CSS viewport: no horizontal overflow; every session and browser action is on screen and at least 32px tall. A real iPhone is not used.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-118",
@@ -1924,11 +1925,11 @@
    "action": "Open security center, revoke dialog",
    "expected_result": "Visible focus, Escape/cancel, no hidden actions",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): the focused trigger shows a visible focus indicator; focus moves into the dialog; Escape cancels and focus returns to the trigger; every visible action has a name and is in the tab order | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. Keyboard only: visible focus on the trigger, Enter opens the dialog with focus inside, Escape cancels and returns focus; every visible action is named and tabbable.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-119",
@@ -1940,11 +1941,11 @@
    "action": "Navigate alert and sign-in rows",
    "expected_result": "Semantic labels, status announced, not color-only",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): axe finds no serious or critical issue in the Security section; session and browser states are words (this device, revoked, this browser), not colour only; the browser list is a labelled list | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. axe-core finds no serious or critical issue in the Security section; states are words. VoiceOver itself is not run (manual supplement).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-120",
@@ -1956,11 +1957,11 @@
    "action": "Open incident state transition",
    "expected_result": "Information complete without animation",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): the browser reports reduced motion; the dialog is fully shown with every effect stated; no looping animation runs | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. prefers-reduced-motion: reduce: the incident dialog is fully shown with every effect stated and no looping animation.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-121",
@@ -1972,11 +1973,11 @@
    "action": "Inspect Security Center",
    "expected_result": "Displays 1 recognized browser, 2 sessions",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939 ; https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: two sessions in one browser: the list reports 1 recognized browser and 2 sessions; revoking another browser ends its sessions | web/tests/rapv2-security-center-browser.cjs (chromium): the Browsers view says 1 recognized browser and 2 sessions | Built for the BLOCKED rows (claude/rapv2-blocked-features). Two sessions in one browser: the API reports 1 recognized browser and 2 active sessions; the Security Center shows '1 recognized browser · 2 sessions'. Revoking another browser ends its sessions; this browser cannot be revoked.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-122",
@@ -1989,8 +1990,8 @@
    "expected_result": "Correct zone offset, no ambiguous PST",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | security_time renders EDT/EST with the zone name. The browser UI formats times with the device's Intl (not checked here).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2005,7 +2006,7 @@
    "expected_result": "Terminology reviewed, no broken interpolation",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
    "test_run_id": null,
    "notes": "NOT_RUN (needs a person). Terminology review needs a fluent reviewer; placeholder interpolation is covered by tests/test_rafii_notifications.py::EmailTest.",
    "classification": "MANUAL_DEVICE"
@@ -2021,8 +2022,8 @@
    "expected_result": "Correct localized copy or safe explicit fallback",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2037,8 +2038,8 @@
    "expected_result": "Unrecognized browser, not technical garbage",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2052,11 +2053,11 @@
    "action": "Open dialog",
    "expected_result": "Exact number of active others, explicit confirm/cancel",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): the dialog states the exact number of active other sessions (2, not the revoked one); explicit confirm and cancel buttons | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. 'Sign out others' with 2 active others and 1 revoked: the dialog says 2, with explicit 'Sign out others' and 'Keep them'.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-127",
@@ -2068,11 +2069,11 @@
    "action": "Inspect preview",
    "expected_result": "Actions and irreversible effects explained",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): preview names the security hold; preview lists what stops acting; preview says approvals must be given again; preview says published posts cannot be undone; preview says connected accounts stay connected; preview offers signing out other sessions; explicit confirm and cancel; opening and cancelling the preview sends nothing | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. The 'This wasn't me' dialog (added with P1) names the hold, what stops acting, renewed approvals, that published posts can't be undone and that connected accounts stay connected; cancelling sends nothing. The API receipt explains the same (RAP-115).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-128",
@@ -2084,11 +2085,11 @@
    "action": "Open Security Center",
    "expected_result": "Clear retry/support state without falsely saying secure",
    "required_evidence": "Playwright screenshots + keyboard/VoiceOver/manual test",
-   "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "NOT_RUN (real device / keyboard / VoiceOver review).",
-   "classification": "MANUAL_DEVICE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002752",
+   "notes": "web/tests/rapv2-security-center-browser.cjs (chromium): the error says sessions could not be loaded and offers Retry; it points to support and says it cannot tell whether anything is wrong; nothing claims the account is secure or safe; the error is announced (role=alert) | Playwright scene against the dev-harness web app with the account-security routes answered by fixed synthetic bodies. GET /api/auth/sessions answers 503: an announced error with Retry and a support pointer that says it cannot tell whether anything is wrong; nothing says the account is secure.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-129",
@@ -2101,8 +2102,8 @@
    "expected_result": "Neither secret in stdout/traces/telemetry",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | One authenticated /api/me with every logger at DEBUG: no token, JWT payload, session id or user id in the output. Traces/telemetry exporters are not exercised.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2117,8 +2118,8 @@
    "expected_result": "No token, email identifier or user ID in URL",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2133,8 +2134,8 @@
    "expected_result": "No canvas/audio fingerprint or cross-site tracking",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Source and dependency scan of web/ for canvas/audio/WebGL fingerprinting and third-party trackers. The built bundle and live network are not inspected.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2148,11 +2149,11 @@
    "action": "Probe device/incident routes",
    "expected_result": "Generic 404 and no timing/body enumeration",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built; P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built. The existing session route's enumeration resistance is RAP-050.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: probing the incident route with foreign or random ids gives one generic 404 body | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Routes taking an id (incidents; devices and incident resolution added later) answer another person's id with the same 404 (RAP-084, RAP-111..113).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-133",
@@ -2165,8 +2166,8 @@
    "expected_result": "Bounded notices and safe abuse response, events retained",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: 200 sign-ins in a burst with alerts on: notices are bounded, every event is retained | New-sign-in mail leaves the request in observe mode; the cron step (HostedWorkspaceService.deliver_sign_in_alerts) sends at most SIGN_IN_ALERT_CAP per person per hour and records the rest as suppressed. Also tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2180,11 +2181,11 @@
    "action": "POST trust/recovery",
    "expected_result": "Denied by origin+auth checks",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 'This wasn't me' incident flow (incidents, receipts, resolution, recovery) is not built. No trust/recovery cookie endpoints exist; Rafii's API uses bearer tokens plus the X-PostRiff-Request/Origin guard.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a report from a hostile Origin is refused by the origin guard before anything changes | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. The incident report is the only P1 recovery-type mutation; Rafii uses bearer tokens plus the Origin/X-PostRiff-Request guard.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-135",
@@ -2196,11 +2197,11 @@
    "action": "Inspect Cookie Set-Cookie headers",
    "expected_result": "Secure HttpOnly SameSite Lax Path / and no Domain",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: the device Set-Cookie is __Host- prefixed, Secure, HttpOnly, SameSite=Lax, Path=/ and has no Domain (never shared with a parent or old domain) | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-136",
@@ -2213,8 +2214,8 @@
    "expected_result": "Canonical URL only, no open redirect",
    "required_evidence": "Redacted log scans + abuse simulations",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py | Legacy Mailer.new_device and Notification V2 security_alert renders.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2228,11 +2229,11 @@
    "action": "Run dry-run retention worker",
    "expected_result": "Deletes only approved ages, respects incident preservation",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: no retention worker for session-security records is built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: retention dry run deletes nothing; the real run removes only records past the approved age, keeping incidents and everything of a held account | Built for the BLOCKED rows (claude/rapv2-blocked-features). public.pr_security_retention_purge (migration 127) via security_retention.py (RAFII_SECURITY_RETENTION off|dry_run|on, RAFII_SECURITY_RETENTION_DAYS default 400, floor 90): the dry run deletes nothing; the real run removes only ledger events, session state and browsers past 400 days; incidents, cited events and every record of a person with an open incident are kept.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-138",
@@ -2244,11 +2245,11 @@
    "action": "Visit after TTL",
    "expected_result": "No silent trust; new proof when required",
    "required_evidence": "Redacted log scans + abuse simulations",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 device registry (opaque host-only device cookie, device records, trust) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: a browser unused for more than 180 days is no longer silently known | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. A browser unseen for 180 days is expired on its return (old record revoked, reason inactive) and registered as new. Closed by the P1 gap fixes (claude/rapv2-close-p1-gaps).",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-139",
@@ -2261,8 +2262,8 @@
    "expected_result": "Legacy behaviour preserved, no unexpected MFA friction",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: flag absent (default off): legacy behaviour — sessions recorded as before, no session.observed, no new friction | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2277,8 +2278,8 @@
    "expected_result": "Events recorded without imposed v2 challenge; existing guards unchanged",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: observe mode: sign-ins are recorded and an ordinary read is not challenged; existing guards unchanged (AAL1 still refused under 2FA) | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2292,11 +2293,11 @@
    "action": "Invoke challenged route",
    "expected_result": "Security gate active for protected operations",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: RAFII_ACCOUNT_PROTECTION_V2_MODE=enforce does not exist; P0 treats it as off (observe mode is deliberately fail-open).",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: enforce mode turns the gate on for protected operations; observe mode leaves them as before | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-142",
@@ -2309,8 +2310,8 @@
    "expected_result": "Core revoked-session denial continues",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the experimental v2 flag turned off after the revocation: a revoked session stays denied (core revocation does not depend on RAPv2)",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2325,8 +2326,8 @@
    "expected_result": "Auth path not waiting on transport; durable queue exists",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: notification provider outage: the sign-in request does not wait on mail transport and the event is durable | The sign-in request only records session.observed with its alert decision; the /api/cron/worker step sends the mail on another thread/invocation. Also tests/test_rafii_account_protection_p0.py.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2340,11 +2341,11 @@
    "action": "Attempt connected publish",
    "expected_result": "Fail closed without external publish, support accessible",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
-   "status": "BLOCKED",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": null,
-   "notes": "BLOCKED: P1 risk engine / step-up (security_step_up_required, challenge-complete, AAL/AMR proof binding) is not built.",
-   "classification": "NEEDS_FEATURE"
+   "status": "PASS",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
+   "notes": "tests/phase2/postgres_rapv2_acceptance.py: security state unreadable: connecting an account (the step before any connected publish) fails closed with 503 | RAPv2 P1 as shipped (device registry 120, risk engine + step-up, holds 121, incidents 122); flags set in-test only. Connecting an account (oauth start) is the gated step before any connected publish.",
+   "classification": "AUTOMATABLE_NOW"
   },
   {
    "id": "RAP-145",
@@ -2357,8 +2358,8 @@
    "expected_result": "Existing fields unchanged; no crash",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/test_rafii_account_protection_acceptance.py",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2373,8 +2374,8 @@
    "expected_result": "Single controlled route, not zero or duplicate without reason",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: one eligible sign-in with Notification V2 on: the legacy mailer stands down and V2 sends exactly one email; with V2 off the legacy mailer sends exactly one | V2 on: legacy Mailer routes new_device to V2 (routed_to_notifications_v2) and V2 sends one email across two crons; V2 off: legacy sends one.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2389,8 +2390,8 @@
    "expected_result": "Refuses cleanup unless dedicated local test database verified",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: the harness refuses any target but the dedicated local disposable cluster | guard_target refuses every DSN but the disposable 127.0.0.1:55438/postgres cluster.",
    "classification": "AUTOMATABLE_NOW"
   },
@@ -2405,9 +2406,9 @@
    "expected_result": "No writes to prod/staging or push/merge/deploy/sends",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
    "test_run_id": null,
-   "notes": "NOT_RUN (release reviewer (G12)). Evidence for the reviewer: staging and production migration lists were read before and after the run and are unchanged; no statement ran on staging main or production; the only Supabase writes went to the deleted branch; the only push is this draft PR's branch (authorized by the task; it builds a Vercel preview), nothing merged, deployed or emailed.",
+   "notes": "NOT_RUN (release reviewer (G12)). Evidence for the reviewer. 2026-10-15 first run: staging and production migration lists were read before and after and are unchanged; the only Supabase writes went to a dev branch deleted after 2 minutes. P1 re-run: no Supabase branch, migration, flag, env or production action; the only push is the tests/docs PR branch (it builds a Vercel preview); nothing merged, deployed or emailed.",
    "classification": "MANUAL_DEVICE"
   },
   {
@@ -2421,7 +2422,7 @@
    "expected_result": "No silent RP ID change or existing credential invalidation",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "NOT_RUN",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
    "test_run_id": null,
    "notes": "NOT_RUN (config review). No RP ID change is planned; web/src/lib/auth/passkey-host.ts turns passkey sign-in off when NEXT_PUBLIC_PASSKEY_RP_ID does not match the host. Needs a human review of the deployment configuration plan.",
    "classification": "MANUAL_DEVICE"
@@ -2437,8 +2438,8 @@
    "expected_result": "No resurrected revoked session or lost audit event",
    "required_evidence": "Read-only flag diff + local dry-run/synthetic chaos evidence",
    "status": "PASS",
-   "source_sha": "78cd1a371a37fb5da7b20899582555b44203727b",
-   "test_run_id": "github-actions:38674266769 (https://github.com/dev-james0723/PostRiff/actions/runs/38674266769, PR merge ref 6d572454)",
+   "source_sha": "abaed4dd3fb902fba6a084129f2b9f08252aaa0a",
+   "test_run_id": "https://github.com/dev-james0723/PostRiff/actions/runs/38823002939",
    "notes": "tests/phase2/postgres_rapv2_acceptance.py: rollback (observe → off): revoked sessions stay revoked and recorded sign-ins stay in the history | Also tests/test_rafii_account_protection_p0.py (ModeFlag, off-mode tests).",
    "classification": "AUTOMATABLE_NOW"
   }

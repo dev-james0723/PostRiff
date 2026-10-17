@@ -63,7 +63,9 @@ import type {
   VideoResumeTicket,
   SecurityEvent,
   SecurityIncident,
+  SecurityDevices,
   SecurityIncidentReport,
+  SecurityRecovery,
   SessionInfo,
   Snapshot,
   ActiveTimeBeat,
@@ -87,6 +89,8 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   requestId?: string;
+  /** What the person can do next, when the server says (e.g. `complete_mfa` / `enroll_mfa` on a security step-up). */
+  nextAction?: string;
   constructor(message: string, status: number, code?: string, requestId?: string) {
     super(message);
     this.name = 'ApiError';
@@ -106,15 +110,19 @@ async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = 'The workspace could not complete that request.';
     let code: string | undefined;
+    let nextAction: string | undefined;
     try {
-      const body = (await res.json()) as { error?: unknown; code?: unknown };
+      const body = (await res.json()) as { error?: unknown; code?: unknown; nextAction?: unknown };
       if (typeof body?.error === 'string' && body.error) message = body.error;
       if (typeof body?.code === 'string') code = body.code;
+      if (typeof body?.nextAction === 'string') nextAction = body.nextAction;
     } catch {
       /* keep the generic message */
     }
     const requestId = res.headers.get('X-Request-ID') ?? undefined;
-    throw new ApiError(message, res.status, code, requestId && /^[a-f0-9]{32}$/.test(requestId) ? requestId : undefined);
+    const error = new ApiError(message, res.status, code, requestId && /^[a-f0-9]{32}$/.test(requestId) ? requestId : undefined);
+    if (nextAction) error.nextAction = nextAction;
+    throw error;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -207,9 +215,22 @@ export function createApi(getToken: TokenSource) {
     revokeOtherSessions: () =>
       send<{ revoked: number; refreshRevoked: boolean; current: string }>('POST', '/api/auth/sessions/revoke-others'),
     securityIncidents: () => get<{ incidents: SecurityIncident[] }>('/api/auth/security/incidents'),
+    /** The person's browsers (RAPv2 device registry; 404 while it is off). */
+    devices: () => get<SecurityDevices>('/api/auth/devices'),
+    revokeDevice: (deviceId: string) =>
+      send<{ deviceId: string; revoked: boolean; sessionsRevoked: number }>('POST', `/api/auth/devices/${encodeURIComponent(deviceId)}/revoke`),
+    securityRecovery: () => get<SecurityRecovery>('/api/auth/security/recovery'),
+    requestRecovery: () => send<{ path: 'support'; reference: string | null }>('POST', '/api/auth/security/recovery', { confirmed: true }),
+    /** End an incident; needs a fresh code from a factor enrolled before the report. Releases the hold once. */
+    resolveIncident: (incidentId: string) =>
+      send<SecurityIncident & { holdReleased: boolean }>('POST', `/api/auth/security/incidents/${encodeURIComponent(incidentId)}/resolve`, { confirmed: true }),
     /** "This wasn't me": the confirmation is explicit in the body; the server also wants a sign-in from the last 10 minutes. */
     reportNotMe: (revokeOtherSessions: boolean, sourceEventId: string | null = null) =>
       send<SecurityIncidentReport>('POST', '/api/auth/security/incidents', { type: 'not_me', confirmed: true, revokeOtherSessions, sourceEventId }),
+
+    /** Hide the "This wasn't me" banner shown at the next sign-in (RAPv2 decision 5; 404 while the feature is off). */
+    dismissSecurityNotice: (incidentId: string) =>
+      send<{ incidentId: string; dismissedAt: string }>('POST', `/api/auth/security/incidents/${encodeURIComponent(incidentId)}/dismiss-notice`, {}),
 
     /* snapshot + single mutation channel */
     snapshot: (w: string) => get<Snapshot>(ws(w)),

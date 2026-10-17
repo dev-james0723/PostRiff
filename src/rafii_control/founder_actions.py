@@ -17,6 +17,13 @@ Every action is a preview -> confirm pair, executed at most once through the emb
   IDEMPOTENCY_CONFLICT. An expired, used or foreign preview, a wrong revision, a moved target, a missing step-up
   (Boundary) or Demo mode (http.py) is refused before any consumer write.
 
+Security-hold release (RAPv2 owner decision 11, 2026-10-16; kind `security_hold_release`, migration 130): lifts a RAPv2
+account hold after support verified the person's identity out of band. The founder records how (one of
+security_center.SUPPORT_METHODS) and the support case reference; the preview shows the hold and the open incidents;
+the confirm needs the typed word RELEASE and a fresh second factor. The consumer side is security_center.support_release
+(security_holds.release, open incidents resolved as `support_verified`, ledger and the `security.hold_released_by_support`
+audit, which also sends the person a security notice). It never places a hold and never touches account blocks.
+
 Policy: credit adjustment answers 409 POLICY_DISABLED (credits_not_enabled) while the consumer runtime has credits off; a
 refund is an intent record only — execution stays blocked (refund_policy_not_decided) and no confirm route exists.
 None of this is a founder tool: the agent has no path to these routes (CONTRACTS §8.0 Agent).
@@ -46,7 +53,8 @@ MILLI_STEP = 100
 GRANT_EXPIRY_DAYS = (1, 366)                # goodwill grants always expire
 MAX_REFUND_MINOR = 100_000_000
 TYPED_BLOCK = 'BLOCK'
-KINDS = ('reconcile', 'credits_adjust', 'account_block', 'account_unblock', 'refund_intent')
+TYPED_RELEASE = 'RELEASE'
+KINDS = ('reconcile', 'credits_adjust', 'account_block', 'account_unblock', 'refund_intent', 'security_hold_release')
 STATUS = {'VALIDATION_FAILED': 400, 'STALE_PREVIEW': 409, 'IDEMPOTENCY_CONFLICT': 409, 'POLICY_DISABLED': 409, 'SCOPE_DENIED': 403,
           'SOURCE_UNAVAILABLE': 503}
 _UUID = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z')
@@ -187,6 +195,17 @@ def _unblock_params(body, match, ctx):
     target_type, target = _account_target(body, match, ctx)
     params = {'targetType': target_type, 'targetId': target, 'reasonCode': _choice(body['reasonCode'], operator_actions.LIFT_REASON_CODES, 'invalid_reason')}
     return params, target_type, target, target if target_type == 'workspace' else None
+
+
+def _hold_release_params(body, match, ctx):
+    from postriff_phase2 import security_center
+    _fields(body, ('requestId', 'verificationMethod', 'verificationRef'))
+    target = _uuid(match[0] if match else None, 'invalid_target')
+    method = _choice(body['verificationMethod'], security_center.SUPPORT_METHODS, 'invalid_verification_method')
+    reference = body['verificationRef'].strip() if isinstance(body['verificationRef'], str) else None
+    if not reference or not _APPROVAL.match(reference) or len(reference) < 3:
+        raise _invalid('invalid_verification_ref')
+    return {'targetType': 'user', 'targetId': target, 'verificationMethod': method, 'verificationRef': reference}, 'user', target, None
 
 
 def _refund_params(body, match, ctx):
@@ -441,6 +460,49 @@ class ConsumerActions:
                 raise ActionError('STALE_PREVIEW', 409, 'not_blocked')
             return result
 
+    # security-hold release (RAPv2 decision 11) ------------------------------------------------------------------------
+    @staticmethod
+    def _hold_core(snapshot):
+        hold = snapshot['hold']
+        return {'userId': snapshot['userId'], 'active': hold['active'], 'epoch': hold['epoch'], 'openIncidents': [i['incidentId'] for i in snapshot['openIncidents']]}
+
+    @staticmethod
+    def _hold_state(snapshot, *, stale):
+        code = 'STALE_PREVIEW' if stale else 'VALIDATION_FAILED'
+        if snapshot is None:
+            raise ActionError(code, 409 if stale else 404, 'account_not_found')
+        if not snapshot['hold']['active']:
+            raise ActionError(code, 409, 'not_held')
+
+    def hold_release_view(self, params, ctx):
+        from postriff_phase2 import security_center
+        with self.transaction() as cur:
+            snapshot = security_center.support_hold_snapshot(cur, params['targetId'])
+        self._hold_state(snapshot, stale=False)
+        hold = snapshot['hold']
+        display = {'target': {'type': 'user', 'id': params['targetId']},
+                   'current': {'securityHold': True, 'holdReason': hold['reason'], 'placedAt': stamp(hold['placedAt']), 'holdEpoch': hold['epoch'],
+                               'openIncidents': snapshot['openIncidents']},
+                   'effect': {'holdReleased': True, 'incidentsResolved': len(snapshot['openIncidents']), 'resolutionCode': 'support_verified',
+                              'verificationMethod': params['verificationMethod'], 'verificationRef': params['verificationRef'],
+                              'personNotified': True, 'sessionsRestored': False, 'connectedAccountsTouched': False,
+                              'consumerAudit': 'security.hold_released_by_support'}}
+        return self._hold_core(snapshot), display
+
+    def hold_release_execute(self, row, check):
+        from postriff_phase2 import security_center
+        params, action = row['params'], row['id']
+        with self.transaction() as cur:
+            if not security_center.support_release_recorded(cur, params['targetId'], action):
+                snapshot = security_center.support_hold_snapshot(cur, params['targetId'], lock=True)
+                self._hold_state(snapshot, stale=True)
+                check(self._hold_core(snapshot))
+            try:
+                return security_center.support_release(cur, params['targetId'], method=params['verificationMethod'], reference=params['verificationRef'],
+                                                       operator_id=row['operator_id'], action_id=action)
+            except AlphaError as error:
+                raise _from_alpha(error, getattr(error, 'code', None) or 'hold_release_refused') from None
+
     # refund intents -----------------------------------------------------------------------------------------------------
     def refund_view(self, params, ctx):
         with self.transaction() as cur:
@@ -648,6 +710,7 @@ RECONCILE = Spec('reconcile', _reconcile_params, 'reconcile_view', 'reconcile_ex
 CREDITS = Spec('credits_adjust', _credit_params, 'credits_view', 'credits_execute', ready='credits_book')
 BLOCK = Spec('account_block', _block_params, 'block_view', 'block_execute', path_target=True, typed=TYPED_BLOCK)
 UNBLOCK = Spec('account_unblock', _unblock_params, 'unblock_view', 'unblock_execute', path_target=True)
+HOLD_RELEASE = Spec('security_hold_release', _hold_release_params, 'hold_release_view', 'hold_release_execute', path_target=True, typed=TYPED_RELEASE)
 REFUND = Spec('refund_intent', _refund_params, 'refund_view', blocker='refund_policy_not_decided')
 REFUND_EXECUTION = Spec('refund_intent', _refund_params, 'refund_execution_view', 'refund_execute', typed='REFUND', ready='refund_provider')
 
@@ -667,6 +730,8 @@ def _confirm_path(row):
         return f"/api/control/v2/actions/accounts/{row['target_id']}/{'block' if row['kind'] == 'account_block' else 'unblock'}/confirm"
     if row['kind'] == 'refund_intent':
         return '/api/control/v2/actions/refunds/confirm'
+    if row['kind'] == 'security_hold_release':
+        return f"/api/control/v2/actions/accounts/{row['target_id']}/security-hold/release/confirm"
     return None
 
 
@@ -677,8 +742,9 @@ def public_action(row, now):
     confirm = None
     if not row['blocker'] and _confirm_path(row):
         confirm = {'method': 'POST', 'path': _confirm_path(row), 'expiresAt': stamp(row['expires_at']),
-                   'requires': ['fresh_second_factor'] + (['typed_confirmation'] if row['kind'] in ('account_block','refund_intent') else []),
-                   'typedConfirmation': TYPED_BLOCK if row['kind'] == 'account_block' else 'REFUND' if row['kind'] == 'refund_intent' else None}
+                   'requires': ['fresh_second_factor'] + (['typed_confirmation'] if row['kind'] in ('account_block','refund_intent','security_hold_release') else []),
+                   'typedConfirmation': TYPED_BLOCK if row['kind'] == 'account_block' else 'REFUND' if row['kind'] == 'refund_intent'
+                   else TYPED_RELEASE if row['kind'] == 'security_hold_release' else None}
     return {'previewId': row['id'], 'kind': row['kind'], 'state': state, 'revision': row['revision'], 'targetType': row['target_type'],
             'targetId': row['target_id'], 'workspaceId': row['workspace_id'], 'target': preview.get('target'), 'current': preview.get('current'),
             'effect': preview.get('effect'), 'result': row['result'] or None, 'errorCode': row['error_code'], 'blocker': row['blocker'],
@@ -814,6 +880,14 @@ def unblock_confirm(app, principal, request):
     return _confirm(app, principal, request, UNBLOCK)
 
 
+def hold_release_preview(app, principal, request):
+    return _preview(app, principal, request, HOLD_RELEASE)
+
+
+def hold_release_confirm(app, principal, request):
+    return _confirm(app, principal, request, HOLD_RELEASE)
+
+
 def refund_preview(app, principal, request):
     """Records a refund intent (refunds.prepare). Execution is blocked until the refund policy is decided."""
     return _preview(app, principal, request, REFUND)
@@ -906,6 +980,8 @@ http.register_route('POST', r'/actions/accounts/' + _ID_PATH + r'/block/confirm'
 http.register_route('POST', r'/actions/accounts/' + _ID_PATH + r'/unblock/preview', 'accounts.block', 'founder_actions', 'unblock_preview', **_ACTION)
 http.register_route('POST', r'/actions/accounts/' + _ID_PATH + r'/unblock/confirm', 'accounts.block', 'founder_actions', 'unblock_confirm', **_ACTION)
 http.register_route('POST', r'/actions/refunds/preview', 'refunds.prepare', 'founder_actions', 'refund_preview', **_ACTION)
+http.register_route('POST', r'/actions/accounts/' + _ID_PATH + r'/security-hold/release/preview', 'accounts.block', 'founder_actions', 'hold_release_preview', **_ACTION)
+http.register_route('POST', r'/actions/accounts/' + _ID_PATH + r'/security-hold/release/confirm', 'accounts.block', 'founder_actions', 'hold_release_confirm', **_ACTION)
 http.register_route('GET', r'/actions', 'audit.read', 'founder_actions', 'list_actions')
 
 try:

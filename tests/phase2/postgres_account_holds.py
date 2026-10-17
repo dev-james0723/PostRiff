@@ -95,7 +95,12 @@ checks.append('the purge removes a deleted account\'s controls only, and refuses
 
 flags.attach({})
 with connection() as db, db.cursor() as cur:
-    assert security_holds.assert_clear(cur, BOB) is None
-checks.append('with RAFII_SECURITY_INCIDENT_HOLD off even a held account is not read (no statement)')
+    try:
+        security_holds.assert_clear(cur, BOB)
+        raise AssertionError('a held account ran with the flag off')
+    except security_holds.AccountHeld as error:
+        assert error.code == 'security_account_hold', error.code
+    assert security_holds.assert_clear(cur, ALICE, expected_epoch=99) is None  # no fences with the flag off
+checks.append('with RAFII_SECURITY_INCIDENT_HOLD off an active hold is still enforced (RAP-104); the epoch fences are not')
 
 print(json.dumps({'status': 'pass', 'execution': 'disposable-local-postgres', 'checks': checks}, indent=2))

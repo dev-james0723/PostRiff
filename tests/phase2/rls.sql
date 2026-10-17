@@ -192,3 +192,9 @@ end $$;
 
 -- RAPv2 RAP-088: account deletion erases the session inventory and redacts sign-in history.
 \ir ../../migrations/postriff/123_rapv2_session_history_erasure.sql
+
+-- RAPv2 RAP-137: retention for session-security records (dry-run first; incidents preserved).
+\ir ../../migrations/postriff/127_rapv2_security_retention.sql
+
+-- RAPv2 owner decisions (2026-10-16): incident banner, step-up notices, previous address for 14 days.
+\ir ../../migrations/postriff/129_rapv2_owner_decisions.sql

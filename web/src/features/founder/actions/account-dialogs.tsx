@@ -8,8 +8,8 @@ import { FIELD_CLASS } from '@/features/workspace/rafii-parts';
 import { cn } from '@/lib/utils';
 import { stateLabel, whenDateTime } from '../customers/kit/format';
 import { ConfirmActionDialog } from './confirm-action-dialog';
-import { BLOCK_REASONS, CREDIT_REASONS, GRANT_EXPIRY_DAYS, LIFT_REASONS, REFUND_REASONS, blockRequest, creditsRequest, grantExpiry, refundRequest, unblockRequest } from './model';
-import type { ActiveBlock, BlockReason, CreditReason, FounderAction, LiftReason, RefundReason, RequestCheck } from './types';
+import { BLOCK_REASONS, CREDIT_REASONS, GRANT_EXPIRY_DAYS, LIFT_REASONS, REFUND_REASONS, VERIFICATION_METHODS, blockRequest, creditsRequest, grantExpiry, holdReleaseRequest, refundRequest, unblockRequest } from './model';
+import type { ActiveBlock, BlockReason, CreditReason, FounderAction, LiftReason, RefundReason, RequestCheck, VerificationMethod } from './types';
 
 /**
  * The Customer 360 action dialogs: block / lift a block, adjust credits, prepare a refund intent. Each only gathers the
@@ -145,6 +145,40 @@ export function UnblockAccountDialog({ open, onOpenChange, onExecuted, block }: 
       form={form}
       check={check}
       confirmLabel='Lift block'
+    />
+  );
+}
+
+/**
+ * RAPv2 owner decision 11: lift a security hold for someone who cannot end it themselves (no second factor from before
+ * their "This wasn't me" report). Only after verifying who they are outside Rafii; the method and case reference are
+ * kept in their security history and the audit log. Never an email code: whoever took the account may hold that inbox.
+ */
+export function ReleaseSecurityHoldDialog({ open, onOpenChange, onExecuted, customerId }: DialogProps & { customerId: string }) {
+  const [method, setMethod] = useState<VerificationMethod>('video_call_id_match');
+  const [reference, setReference] = useState('');
+  const check = holdReleaseRequest({ targetId: customerId, verificationMethod: method, verificationRef: reference });
+  const form = (
+    <div className='flex flex-col gap-4'>
+      <p className='text-muted-foreground text-xs leading-relaxed'>
+        Use this only when the person cannot end the hold themselves and you have verified their identity outside Rafii. An email code or a link to their inbox is never enough.
+      </p>
+      <FilterSelect label='How you verified their identity' value={method} onChange={(value) => setMethod(value as VerificationMethod)} options={VERIFICATION_METHODS} />
+      <TextField label='Support case reference' value={reference} onChange={setReference} placeholder='case-2041' help='Kept with the release: letters, digits and . _ : / # -, no names or messages.' mono />
+    </div>
+  );
+  return (
+    <ConfirmActionDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onExecuted={onExecuted}
+      kind='security_hold_release'
+      title='Lift the security hold'
+      intro='The preview shows the hold and the open reports it ends. Nothing changes until you confirm with a fresh second factor and type RELEASE.'
+      form={form}
+      check={check}
+      previewLabel='Preview release'
+      confirmLabel='Lift security hold'
     />
   );
 }

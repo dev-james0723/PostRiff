@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/features/workspace/rafii-parts';
 import { useFounderScope } from '../customers/kit/api';
 import { stateLabel, whenDate } from '../customers/kit/format';
-import { AdjustCreditsDialog, BlockAccountDialog, RefundIntentDialog, UnblockAccountDialog, type WorkspaceChoice } from './account-dialogs';
+import { AdjustCreditsDialog, BlockAccountDialog, RefundIntentDialog, ReleaseSecurityHoldDialog, UnblockAccountDialog, type WorkspaceChoice } from './account-dialogs';
 import { useFounderActions } from './api';
 import { activeBlockFor, unavailableReason } from './model';
 
-type DialogId = 'block' | 'unblock' | 'credits' | 'refund';
+type DialogId = 'block' | 'unblock' | 'credits' | 'refund' | 'hold';
 
 /**
  * Customer 360 founder actions (CONTRACTS §8.F): block or lift a block, adjust credits, prepare a refund intent. Each
@@ -32,7 +32,8 @@ export function CustomerActions({ customerId, workspaces }: { customerId: string
   const blockReason = unavailableReason({ ...base, kind: block ? 'account_unblock' : 'account_block' }) ?? (readsBlocks && listing.isPending ? 'Checking whether this account is blocked…' : null);
   const creditsReason = unavailableReason({ ...base, kind: 'credits_adjust' }) ?? (workspaces.length === 0 ? 'This customer has no workspace whose credits could change.' : null);
   const refundReason = unavailableReason({ ...base, kind: 'refund_intent' }) ?? (workspaces.length === 0 ? 'This customer has no workspace with a payment.' : null);
-  const reasons = [...new Set([blockReason, creditsReason, refundReason].filter((reason): reason is string => reason !== null))];
+  const holdReason = unavailableReason({ ...base, kind: 'security_hold_release' });
+  const reasons = [...new Set([blockReason, creditsReason, refundReason, holdReason].filter((reason): reason is string => reason !== null))];
 
   return (
     <section aria-labelledby={headingId} className='rafii-quiet flex flex-col gap-3 rounded-[var(--rafii-radius-card)] p-3'>
@@ -59,6 +60,10 @@ export function CustomerActions({ customerId, workspaces }: { customerId: string
         <Button variant='glass' size='sm' disabled={refundReason !== null} aria-describedby={refundReason ? reasonsId : undefined} onClick={() => setDialog('refund')}>
           <Icons.billing /> Prepare refund intent
         </Button>
+        {/* RAPv2 decision 11: the preview says whether there is a hold to lift. */}
+        <Button variant='glass' size='sm' disabled={holdReason !== null} aria-describedby={holdReason ? reasonsId : undefined} onClick={() => setDialog('hold')}>
+          <Icons.shieldCheck /> Lift security hold
+        </Button>
       </div>
       {reasons.length > 0 && (
         <ul id={reasonsId} className='text-muted-foreground flex flex-col gap-1 text-xs leading-relaxed'>
@@ -71,6 +76,7 @@ export function CustomerActions({ customerId, workspaces }: { customerId: string
       <UnblockAccountDialog open={dialog === 'unblock'} onOpenChange={(open) => setDialog(open ? 'unblock' : null)} block={block} />
       <AdjustCreditsDialog open={dialog === 'credits'} onOpenChange={(open) => setDialog(open ? 'credits' : null)} workspaces={workspaces} />
       <RefundIntentDialog open={dialog === 'refund'} onOpenChange={(open) => setDialog(open ? 'refund' : null)} workspaces={workspaces} />
+      <ReleaseSecurityHoldDialog open={dialog === 'hold'} onOpenChange={(open) => setDialog(open ? 'hold' : null)} customerId={customerId} />
     </section>
   );
 }

@@ -27,6 +27,7 @@ from .hosted_identity import (
     SupabaseIdentityAdmin,
     verified_aal,
     verified_auth_time,
+    verified_amr,
     verified_method_time,
     verified_passkey_time,
     verified_session_id,
@@ -35,7 +36,7 @@ from .hosted_worker import PostgresWorker
 from .provider_candidates import SupabaseSessionCandidate
 from .time_savings import with_time_back
 from .content_types import formats, public_catalog, public_packs
-from . import agent_observability, device_trust, security_gate, tools
+from . import account_protection, agent_observability, device_trust, security_gate, tools
 from .agent_runtime import FixtureAgentRuntime
 
 
@@ -72,6 +73,8 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     def validate(access_token, *, enforce_mfa):
         principal = candidate.verify(access_token)
         session_id = verified_session_id(access_token, principal)
+        # RAP-016: the sign-in method of a first sighting comes from this verified token only (RAFII_SIGN_IN_DETAILS).
+        account_protection.note_verified_amr(verified_amr(access_token, principal) if account_protection.detail_level() else None)
         if connection_factory is not None:
             # A founder account block (operator_actions, migration 062) is folded into this one statement; it is
             # skipped, never an error, while the block table is not installed.
@@ -149,6 +152,7 @@ def supabase_verifier(project_url, publishable_key, connection_factory=None, get
     verify.passkey_time = lambda access_token, principal: verified_passkey_time(access_token, principal)
     # Newest signed sign-in method (amr), for step-up windows that a refreshed token's iat must not satisfy (CF-2 §10).
     verify.method_time = lambda access_token, principal: verified_method_time(access_token, principal)
+    verify.amr = lambda access_token, principal: verified_amr(access_token, principal)
     # RAPv2 A1: runtime_from_environment points this at HostedWorkspaceService._alert_new_device.
     verify.on_first_sighting = None
     verify.seen = seen
@@ -571,6 +575,8 @@ class HostedApplication:
         label_binding = _REQUEST_LABEL.set(client_label(environ))
         # RAPv2 P1: the browser's device cookie, and the new one the device registry may issue after verification.
         device_binding = device_trust.bind(environ)
+        # RAP-016/076: the sign-in details a first sighting may record (RAFII_SIGN_IN_DETAILS; nothing while off).
+        details_binding = account_protection.bind_request(environ)
         started = time.monotonic()
         status_code = 500
         def respond(status, headers, exc_info=None):
@@ -606,6 +612,7 @@ class HostedApplication:
             agent_observability.release_request(correlation)
             _REQUEST_LABEL.reset(label_binding)
             device_trust.reset(device_binding)
+            account_protection.reset_request(details_binding)
 
     def _handle(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -855,6 +862,10 @@ class HostedApplication:
                 time_savings = getattr(service, "time_savings", None)
                 if time_savings is not None:
                     result["timeSavings"] = time_savings.maintain()
+                # RAPv2 RAP-137: session-security retention (RAFII_SECURITY_RETENTION; off by default, no statement).
+                from .security_retention import mode as retention_mode, run as retention_run
+                if retention_mode() != 'off':
+                    result['securityRetention'] = retention_run(service.repository.connection_factory)
                 if getattr(service, 'identity', None) is not None:
                     from .account_deletion import reconcile_identity
                     result['identityDeletion'] = reconcile_identity(service)
@@ -912,6 +923,27 @@ class HostedApplication:
                     return self._json(start_response, 200, incidents.list(token))
                 reported = incidents.report(token, self._body(environ), environ.get("HTTP_IDEMPOTENCY_KEY"))
                 return self._json(start_response, 200 if reported.pop("replayed", False) else 201, reported)
+            if path in ("/api/auth/devices", "/api/auth/security/recovery") or path.startswith(("/api/auth/devices/", "/api/auth/security/incidents/")):
+                # RAPv2 Security Center: devices (RAFII_DEVICE_TRUST_V2), recovery and incident resolution
+                # (RAFII_SECURITY_INCIDENT_HOLD). Each answers 404 while its flag is off.
+                from .security_center import SecurityCenter
+                center, segments = SecurityCenter(service), path.strip("/").split("/")
+                if path == "/api/auth/devices" and method == "GET":
+                    return self._json(start_response, 200, center.devices(token))
+                if len(segments) == 5 and segments[2] == "devices" and segments[4] == "revoke" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, center.revoke_device(token, segments[3]))
+                if path == "/api/auth/security/recovery" and method == "GET":
+                    return self._json(start_response, 200, center.recovery(token))
+                if path == "/api/auth/security/recovery" and method == "POST":
+                    return self._json(start_response, 201, center.request_recovery(token, self._body(environ)))
+                if len(segments) == 6 and segments[3] == "incidents" and segments[5] == "resolve" and method == "POST":
+                    return self._json(start_response, 200, center.resolve(token, segments[4], self._body(environ)))
+                if len(segments) == 6 and segments[3] == "incidents" and segments[5] == "dismiss-notice" and method == "POST":
+                    # Decision 5: hide the incident banner (RAFII_SECURITY_INCIDENT_HOLD; 404 while off).
+                    from .security_center import dismiss_notice
+                    self._body(environ)
+                    return self._json(start_response, 200, dismiss_notice(service, token, segments[4]))
             if path == "/api/auth/sessions/revoke-others" and method == "POST":
                 self._body(environ)
                 return self._json(start_response, 200, service.revoke_other_sessions(token))

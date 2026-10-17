@@ -279,13 +279,16 @@ class ActionRouteTests(unittest.TestCase):
         expected = {'/usage/reconcile/preview': 'usage.reconcile', '/usage/reconcile/confirm': 'usage.reconcile', '/actions/credits/preview': 'credits.adjust',
                     '/actions/credits/confirm': 'credits.adjust', '/actions/accounts/([A-Za-z0-9_-]{1,80})/block/preview': 'accounts.block',
                     '/actions/accounts/([A-Za-z0-9_-]{1,80})/block/confirm': 'accounts.block', '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/preview': 'accounts.block',
-                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/confirm': 'accounts.block', '/actions/refunds/preview': 'refunds.prepare', '/actions/refunds/execute/preview': 'refunds.prepare', '/actions/refunds/confirm': 'refunds.prepare'}
+                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/unblock/confirm': 'accounts.block', '/actions/refunds/preview': 'refunds.prepare', '/actions/refunds/execute/preview': 'refunds.prepare', '/actions/refunds/confirm': 'refunds.prepare',
+                    # RAPv2 owner decision 11: the security-hold release, behind the same capability as account blocks.
+                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/security-hold/release/preview': 'accounts.block',
+                    '/actions/accounts/([A-Za-z0-9_-]{1,80})/security-hold/release/confirm': 'accounts.block'}
         self.assertEqual({path: capability for (method, path), (capability, _) in routes.items() if method == 'POST'}, expected)
         for (method, path), (capability, options) in routes.items():
             if method == 'POST':
                 self.assertEqual(options, {'step_up': True, 'budget': 'founder.action'}, path)
         self.assertEqual(routes[('GET', '/actions')], ('audit.read', {}))
-        self.assertEqual(len(routes), 12)
+        self.assertEqual(len(routes), 14)
         self.assertIn(('POST', '/actions/refunds/confirm'), routes)  # financial confirmation remains protected
 
     # --- reconcile ------------------------------------------------------------------------------------------------------------

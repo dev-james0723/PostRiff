@@ -68,7 +68,8 @@ test('every preview and confirm path is a registered Live route with the action 
     ['reconcile', 'reconcile_preview', 'reconcile_confirm', ''],
     ['credits_adjust', 'credits_preview', 'credits_confirm', ''],
     ['account_block', 'block_preview', 'block_confirm', USER],
-    ['account_unblock', 'unblock_preview', 'unblock_confirm', USER]
+    ['account_unblock', 'unblock_preview', 'unblock_confirm', USER],
+    ['security_hold_release', 'hold_release_preview', 'hold_release_confirm', USER]
   ];
   for (const [kind, preview, confirm, target] of cases) {
     assert.match(strip(model.previewPath(kind, target)), routes[preview].regex, kind);
@@ -99,6 +100,15 @@ test('request bodies carry exactly the fields the server validates', () => {
   assert.deepEqual(block.request.body, { targetType: 'user', reasonCode: 'abuse', approvalRef: 'ticket-1042' });
   assert.deepEqual(model.unblockRequest({ targetType: 'workspace', targetId: WS, reasonCode: 'mistake' }).request.body, { targetType: 'workspace', reasonCode: 'mistake' });
 
+  // RAPv2 decision 11: how identity was verified out of band, and the support case it is on.
+  const release = model.holdReleaseRequest({ targetId: USER, verificationMethod: 'video_call_id_match', verificationRef: ' case-2041 ' });
+  assert.equal(release.request.path, `/actions/accounts/${USER}/security-hold/release/preview?mode=live`);
+  assert.deepEqual(release.request.body, { verificationMethod: 'video_call_id_match', verificationRef: 'case-2041' });
+  assert.match(SERVER, /_fields\(body, \('requestId', 'verificationMethod', 'verificationRef'\)\)/);
+  const center = fs.readFileSync(path.join(ROOT, 'src', 'postriff_phase2', 'security_center.py'), 'utf8');
+  const methods = /SUPPORT_METHODS = \(([^)]*)\)/.exec(center)[1].match(/"([a-z_]+)"/g).map((value) => value.slice(1, -1));
+  assert.deepEqual(model.VERIFICATION_METHODS.map((method) => method.value), methods, 'the dialog offers exactly the methods the server accepts');
+
   const refund = model.refundRequest({ workspaceId: WS, paymentIntentId: 'pi_fixture0001', amountText: '12.50', currency: 'USD', reasonCode: 'requested_by_customer' });
   assert.deepEqual(refund.request.body, { workspaceId: WS, paymentIntentId: 'pi_fixture0001', amountMinor: 1250, currency: 'usd', reasonCode: 'requested_by_customer' });
 
@@ -110,6 +120,8 @@ test('request bodies carry exactly the fields the server validates', () => {
     model.creditsRequest({ workspaceId: WS, operation: 'grant', creditsText: '0.05', expiresAt: 'x', reasonCode: 'goodwill' }),
     model.creditsRequest({ workspaceId: WS, operation: 'grant', creditsText: '1', reasonCode: 'goodwill' }),
     model.blockRequest({ targetType: 'user', targetId: USER, reasonCode: 'abuse', approvalRef: 'free text with spaces' }),
+    model.holdReleaseRequest({ targetId: USER, verificationMethod: 'email_code', verificationRef: 'case-2041' }),
+    model.holdReleaseRequest({ targetId: USER, verificationMethod: 'video_call_id_match', verificationRef: 'person@example.com' }),
     model.refundRequest({ workspaceId: WS, paymentIntentId: 'pi_1', amountText: '1.234', currency: 'usd', reasonCode: 'other' })
   ]) {
     assert.equal(check.ok, false);
@@ -145,6 +157,11 @@ test('blocks and confirmed refunds need their own typed word', () => {
     { previewId: 'p1', revision: '0123456789abcdef', requestId: 'r1', confirmation: 'REFUND' });
   assert.equal(model.confirmPath({ kind: 'refund_intent', targetId: 'pi_fixture0001', confirm: { path: '/api/control/v2/actions/refunds/confirm' } }), '/actions/refunds/confirm?mode=live');
   assert.match(SERVER, /TYPED_BLOCK = 'BLOCK'/);
+  assert.equal(model.typedConfirmationOk('security_hold_release', ''), false);
+  assert.equal(model.typedConfirmationOk('security_hold_release', ' RELEASE '), true);
+  assert.deepEqual(model.confirmBody({ ...action, kind: 'security_hold_release' }, 'r1', 'RELEASE'),
+    { previewId: 'p1', revision: '0123456789abcdef', requestId: 'r1', confirmation: 'RELEASE' });
+  assert.match(SERVER, /TYPED_RELEASE = 'RELEASE'/);
 });
 
 test('Demo, a missing capability and credits off disable an action with a reason', () => {

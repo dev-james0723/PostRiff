@@ -280,7 +280,8 @@ class ApiTokenBlocks(BlockTestCase):
         db.blocked_users.add(CUSTOMER)
         with self.assertLogs("postriff.account_blocks", "WARNING"):
             self.assertEqual(self.validate(db)["createdBy"], CUSTOMER)
-        statements = [sql.split(" ")[0] + (" " + sql.split(" ")[1] if sql.startswith("ROLLBACK") else "") for sql, _ in db.executed]
+        # The security hold's own check (security_holds.core_hold with its flag off) follows; it is not under test here.
+        statements = [sql.split(" ")[0] + (" " + sql.split(" ")[1] if sql.startswith("ROLLBACK") else "") for sql, _ in db.executed if "pr_security_account_controls" not in sql]
         self.assertEqual(statements[-3:], ["SAVEPOINT", "SELECT", "ROLLBACK TO"])
 
 

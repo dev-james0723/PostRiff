@@ -3,7 +3,7 @@
  * by agreement with the coordinator; every value is shown as the server sent it.
  */
 
-export type ActionKind = 'reconcile' | 'credits_adjust' | 'account_block' | 'account_unblock' | 'refund_intent';
+export type ActionKind = 'reconcile' | 'credits_adjust' | 'account_block' | 'account_unblock' | 'refund_intent' | 'security_hold_release';
 export type ActionState = 'previewed' | 'confirmed' | 'executed' | 'failed' | 'expired';
 export type ActionTargetType = 'reservation' | 'workspace' | 'user' | 'payment';
 
@@ -101,6 +101,16 @@ export interface UnblockInput {
   targetType: 'user' | 'workspace';
   targetId: string;
   reasonCode: LiftReason;
+}
+
+/** How support verified the person out of band before a security-hold release (security_center.SUPPORT_METHODS). */
+export type VerificationMethod = 'video_call_id_match' | 'government_id_document' | 'existing_factor_on_call' | 'payment_record_match' | 'known_contact_callback';
+
+/** RAPv2 owner decision 11: lift a security hold after out-of-band identity verification. */
+export interface HoldReleaseInput {
+  targetId: string;
+  verificationMethod: VerificationMethod;
+  verificationRef: string;
 }
 
 export interface RefundInput {

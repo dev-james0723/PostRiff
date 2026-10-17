@@ -1,0 +1,168 @@
+{
+ "suite": "rapv2-security-center-browser",
+ "browser": "chromium",
+ "failures": 0,
+ "rows": {
+  "RAP-016": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the current session reads \"Unknown\", never a guessed method",
+     "ok": true
+    },
+    {
+     "name": "recorded methods read as recorded",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-121": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the Browsers view says 1 recognized browser and 2 sessions",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-118": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the focused trigger shows a visible focus indicator",
+     "ok": true
+    },
+    {
+     "name": "focus moves into the dialog",
+     "ok": true
+    },
+    {
+     "name": "Escape cancels and focus returns to the trigger",
+     "ok": true
+    },
+    {
+     "name": "every visible action has a name and is in the tab order",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-126": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the dialog states the exact number of active other sessions (2, not the revoked one)",
+     "ok": true
+    },
+    {
+     "name": "explicit confirm and cancel buttons",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-127": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "preview names the security hold",
+     "ok": true
+    },
+    {
+     "name": "preview lists what stops acting",
+     "ok": true
+    },
+    {
+     "name": "preview says approvals must be given again",
+     "ok": true
+    },
+    {
+     "name": "preview says published posts cannot be undone",
+     "ok": true
+    },
+    {
+     "name": "preview says connected accounts stay connected",
+     "ok": true
+    },
+    {
+     "name": "preview offers signing out other sessions",
+     "ok": true
+    },
+    {
+     "name": "explicit confirm and cancel",
+     "ok": true
+    },
+    {
+     "name": "opening and cancelling the preview sends nothing",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-119": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "axe finds no serious or critical issue in the Security section",
+     "ok": true
+    },
+    {
+     "name": "session and browser states are words (this device, revoked, this browser), not colour only",
+     "ok": true
+    },
+    {
+     "name": "the browser list is a labelled list",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-117": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "no horizontal overflow at 375px",
+     "ok": true
+    },
+    {
+     "name": "every session and browser action is on screen and at least 32px tall",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-120": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the browser reports reduced motion",
+     "ok": true
+    },
+    {
+     "name": "the dialog is fully shown with every effect stated",
+     "ok": true
+    },
+    {
+     "name": "no looping animation runs",
+     "ok": true
+    }
+   ]
+  },
+  "RAP-128": {
+   "status": "PASS",
+   "checks": [
+    {
+     "name": "the error says sessions could not be loaded and offers Retry",
+     "ok": true
+    },
+    {
+     "name": "it points to support and says it cannot tell whether anything is wrong",
+     "ok": true
+    },
+    {
+     "name": "nothing claims the account is secure or safe",
+     "ok": true
+    },
+    {
+     "name": "the error is announced (role=alert)",
+     "ok": true
+    }
+   ]
+  }
+ }
+}

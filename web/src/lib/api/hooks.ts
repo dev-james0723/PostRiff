@@ -31,6 +31,8 @@ export const keys = {
   myChannels: ['me', 'channels'] as const,
   securityEvents: ['me', 'security-events'] as const,
   securityIncidents: ['me', 'security-incidents'] as const,
+  securityDevices: ['me', 'security-devices'] as const,
+  securityRecovery: ['me', 'security-recovery'] as const,
   myInvitations: ['me', 'invitations'] as const,
   tools: ['tools'] as const,
   models: ['models'] as const,
@@ -163,6 +165,17 @@ export function useSecurityEvents() {
 export function useSecurityIncidents() {
   const { api } = useWorkspace();
   return useQuery({ queryKey: keys.securityIncidents, queryFn: () => api.securityIncidents(), retry: false });
+}
+
+/** The person's browsers; an error (404 while the registry is off) hides the view. */
+export function useSecurityDevices() {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.securityDevices, queryFn: () => api.devices(), retry: false });
+}
+
+export function useSecurityRecovery(enabled: boolean) {
+  const { api } = useWorkspace();
+  return useQuery({ queryKey: keys.securityRecovery, queryFn: () => api.securityRecovery(), retry: false, enabled });
 }
 
 /** Invitations waiting for the person's verified email. */
