@@ -30,6 +30,7 @@ WORKSPACE_ALLOWLIST = "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST"
 NATIVE_ANALYTICS_SCOPES = {
     "threads": frozenset({"threads_basic", "threads_manage_insights"}),
     "instagram": frozenset({"instagram_business_basic", "instagram_business_manage_insights"}),
+    "mastodon": frozenset({"read:accounts", "read:statuses"}),
 }
 OFFSETS = (("t0", 0), ("1h", 3600), ("24h", 86400), ("7d", 7 * 86400))
 LEASE_SECONDS = 120            # token_for_worker plus one insights GET can take 40 s
@@ -251,6 +252,8 @@ class MetricScheduler:
             if not self.workspace_allowed(workspace_id):
                 return 0
             manifest = job.get("manifest") or {}
+            if manifest.get('platform') == 'Mastodon' and (manifest.get('publishOptions') or {}).get('visibility', 'public') not in ('public', 'unlisted'):
+                return 0
             provider = self.provider_for(manifest.get("platform"))
             reference, verification = job.get("providerReference"), job.get("verification") or {}
             if provider is None or not reference or not isinstance(verification.get("at"), (int, float)):
@@ -346,7 +349,8 @@ class MetricScheduler:
             if eligibility != "read":
                 return {"state": "cancelled", "failure": "not_eligible"}
             requested = True
-            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"])
+            kwargs = {'mastodon': self.oauth.providers.get('mastodon'), 'account_id': grant.get('providerAccountId')} if row['provider'] == 'mastodon' else {}
+            fetched = insights.fetch_post_insights(self.transport, grant["accessToken"], row["provider"], row["postId"], **kwargs)
         except AlphaError as error:
             status = getattr(error, "status", None)
             if status in (404, 409):            # revoked grant, or an attempted native request rejected by the transport
@@ -357,6 +361,8 @@ class MetricScheduler:
             _note("metric_reads.read_failed", error)
             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
         status = fetched["status"]
+        if fetched.get('privacyExcluded'):
+            return {'state': 'cancelled', 'failure': 'privacy_excluded', 'http': status, 'providerRead': True}
         if status == 200:
             return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True}
         if status in TERMINAL_HTTP:

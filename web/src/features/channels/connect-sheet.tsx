@@ -364,6 +364,9 @@ export function ConnectSheet({
                   force={capability !== 'identity' && capability !== 'posts_read'}
                   onAvailabilityChange={onPolicyAvailabilityChange} />
               )}
+              {providerId === 'mastodon' && (
+                <p className='text-muted-foreground text-xs leading-relaxed'>Your Mastodon server hosts your account. Enter its domain or @name@server. Each connected account keeps its own permissions and destination.</p>
+              )}
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading' data-tour='connect-capability'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do

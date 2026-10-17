@@ -30,3 +30,18 @@ test('actual PostgreSQL snapshot reaches the UI without losing receipt fields', 
   const html = renderToStaticMarkup(React.createElement(component(), {job:persisted}));
   for (const text of ['555','999','https://www.instagram.com/p/ABC/','provider lookup']) assert.ok(html.includes(text));
 });
+
+test('Mastodon verified links bind to the exact connected instance', () => {
+  const mastodon = {...job, providerReference:'123', manifest:{platform:'Mastodon',providerAccountId:'100@mastodon.social'},url:'https://mastodon.social/@owner/123'};
+  assert.ok(renderToStaticMarkup(React.createElement(component(), {job:mastodon})).includes('Open verified post'));
+  for (const url of ['https://mastodon.online/@owner/123','https://mastodon.social.evil.test/@owner/123','https://mastodon.social/@owner/123?access_token=SECRET','https://mastodon.social/@owner/123#fragment'])
+    assert.ok(!renderToStaticMarkup(React.createElement(component(), {job:{...mastodon,url}})).includes('<a '));
+});
+
+
+test('partial Mastodon threads show saved IDs without whole-thread verification', () => {
+  const partial = {...job, state:'processing', verification:null, providerReference:'100', manifest:{platform:'Mastodon',providerAccountId:'10@mastodon.social',payload:{threadParts:['Second','Third']}}, progress:{version:3,stage:'thread_wait',threadReferences:['100','101'],threadVerified:0}};
+  const html = renderToStaticMarkup(React.createElement(component(), {job:partial}));
+  for (const text of ['2 of 3','100','101','0 read back','complete thread is not verified']) assert.ok(html.includes(text));
+  assert.ok(!html.includes('<a '));
+});

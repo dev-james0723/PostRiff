@@ -370,6 +370,16 @@ export function createApi(getToken: TokenSource) {
       }),
     channelDestinations: (w: string, id: string) =>
       get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
+    mastodonRead: (w: string, id: string, resource: string) =>
+      get<Record<string, unknown>>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/${encodeURIComponent(resource)}`),
+    mastodonSavedPreview: (w: string, id: string, actionId: string) =>
+      get<{ actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown> } }>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/actions/${encodeURIComponent(actionId)}`),
+    mastodonPreview: (w: string, id: string, payload: Record<string, unknown>) =>
+      send<{ actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown> } }>(
+        'POST', `${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/actions`, payload),
+    mastodonApprove: (w: string, id: string, actionId: string, digest: string) =>
+      send<{ state: string; url?: string; reason?: string; publication?: string }>('POST',
+        `${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/actions/${encodeURIComponent(actionId)}/approve`, { digest, confirmed: true }),
     /** TikTok's current creator settings, read fresh each time the composer shows them. */
     creatorInfo: (w: string, id: string) => get<TikTokCreatorInfo>(`${ws(w)}/channels/${encodeURIComponent(id)}/creator-info`),
     chooseChannelDestination: (w: string, id: string, destinationId: string) =>

@@ -133,6 +133,7 @@ class FixtureAdapter:
             "Instagram": ["Something to pause for. 🌱", "Save a little room for a new idea.", "A small starting point, with room to grow."],
             "Threads": ["A thought to open up:", "What would you add to this?", "A small idea. A useful conversation."],
             "X": ["One point worth making:", "Worth a second look:", "Start with what holds up:"],
+            "Mastodon": ["A thought for the conversation:", "What would you add?", "An idea to discuss."],
             "Xiaohongshu": ["An idea worth saving", "Notes worth trying", "Start with what holds up"],
         }
         zh_openings = {
@@ -140,6 +141,7 @@ class FixtureAdapter:
             "Instagram": ["留一點時間，讓新想法發芽。🌱", "小小的起點，也可以慢慢生長。", "今天，給自己一個新的觀察。"],
             "Threads": ["想和大家聊聊這個點子：", "你會怎樣補充這個想法？", "從一個小問題開始聊起。"],
             "X": ["一個值得講清楚的重點：", "值得再看一眼：", "先講有根據的部分："],
+            "Mastodon": ["想和大家聊聊這個想法：", "你會怎樣補充？", "從一個小問題開始聊起。"],
             "Xiaohongshu": [zh("一個值得收藏的小點子", "一个值得收藏的小点子"), zh("記錄一個值得試試的想法", "记录一个值得试试的想法"), zh("先從有根據的資訊開始", "先从有根据的信息开始")],
         }
         for name in NATIVE_PLATFORMS:
@@ -159,6 +161,7 @@ class FixtureAdapter:
             "Instagram": "Keep this as a starting point. What would you like to explore?\n\n#Community #Learning",
             "Threads": "What is missing here? Add your perspective.",
             "X": "What would you add?",
+            "Mastodon": "What is your perspective?",
             "Xiaohongshu": "Save this for later. What would you try first?\n\n#NotesWorthSaving #LearningNotes",
         }
         zh_closing = {
@@ -166,6 +169,7 @@ class FixtureAdapter:
             "Instagram": "先收藏這個起點。你最想探索哪一部分？\n\n#社區 #一起學習",
             "Threads": "還缺少甚麼？想聽聽你的看法。",
             "X": "你會補充甚麼？",
+            "Mastodon": "想聽聽你的看法。",
             "Xiaohongshu": zh("先收藏起來。你會先試哪一個？\n\n#學習筆記 #值得收藏", "先收藏起来。你会先试哪一个？\n\n#学习笔记 #值得收藏"),
         }
         for name in NATIVE_PLATFORMS:
@@ -201,15 +205,16 @@ class FixtureAdapter:
         style = request.get("styleDirectives") or {}
         emoji = "✨ " if style.get("usesEmoji") else ""
         ending = (zh_closing if chinese else closing)[platform]
-        if platform == "X":
+        if platform in ("X", "Mastodon"):
             body = [line for line, _ in lines] or [placeholder]
             prefix = emoji if emoji and not any(char in "".join([topic, ending, *body]) for char in "🌱✨💡🎹🎬") else ""
-            text, kept, shortened = _fit_x(options, topic, body, ending, prefix)
+            limit = X_LIMIT if platform == "X" else 500
+            text, kept, shortened = _fit_x(options, topic, body, ending, prefix, measure=x_weight if platform == "X" else len, limit=limit)
             used = [fact for _, fact in lines[:kept] if fact.get("sourceId")] if lines else []
             if lines and kept < len(lines):
-                warnings.append(f"{len(lines) - kept} of {len(lines)} approved source notes were left out to keep this to one X post of {X_LIMIT} characters; choose what to keep before scheduling.")
+                warnings.append(f"{len(lines) - kept} of {len(lines)} approved source notes were left out to keep this to one {platform} post of {limit} characters; choose what to keep before scheduling.")
             if shortened:
-                warnings.append(f"The topic was shortened to fit one X post of {X_LIMIT} characters; check the wording before scheduling.")
+                warnings.append(f"The topic was shortened to fit one {platform} post of {limit} characters; check the wording before scheduling.")
         else:
             evidence = "\n".join(bullet + line for line, _ in lines) if lines else placeholder
             text = "\n\n".join(part for part in (options[0], topic, evidence, context, ending) if part)
@@ -227,21 +232,21 @@ def _title(value):
     return title if len(title) <= XIAOHONGSHU_TITLE_LIMIT else title[:XIAOHONGSHU_TITLE_LIMIT - 1] + "…"
 
 
-def _fit_x(options, topic, lines, closing, prefix=""):
-    """One X post within X_LIMIT. Evidence lines are dropped whole from the end (keeping the first), then the
+def _fit_x(options, topic, lines, closing, prefix="", *, measure=x_weight, limit=X_LIMIT):
+    """One bounded post; default arguments retain the exact existing X behavior. Evidence lines are dropped whole from the end (keeping the first), then the
     topic is shortened; when too little topic would be left beside that first line, the line goes instead.
     Measured with the longest opening, so choosing another opening later still fits.
     Returns (text, lines kept, whether the topic was shortened)."""
-    widest = max(options, key=x_weight)
+    widest = max(options, key=measure)
 
     def build(opening, topic_text, kept):
         return prefix + "\n\n".join(part for part in (opening, topic_text, "\n".join(kept), closing) if part)
 
     def fits(topic_text, kept):
-        return x_weight(build(widest, topic_text, kept)) <= X_LIMIT
+        return measure(build(widest, topic_text, kept)) <= limit
 
     def shorten(kept):
-        cut = topic[:X_LIMIT]
+        cut = topic[:limit]
         while cut.strip() and not fits(cut.rstrip() + "…", kept):
             cut = cut[:-1]
         return cut.rstrip() + "…" if cut.strip() else ""

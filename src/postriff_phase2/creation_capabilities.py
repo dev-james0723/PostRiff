@@ -48,7 +48,8 @@ _FORMAT_ROW = re.compile(r"^\|\s*`([a-z0-9._-]+)`\s*\|\s*([a-z]+)\s*\|\s*(.+?)\s
 _FIELD = re.compile(r"`([a-z0-9_]+)`")
 # The flag-off default format per original platform: what a request without `format` meant before this projection.
 DEFAULT_FORMATS = {"LinkedIn": "linkedin.post", "Instagram": "instagram.post", "Threads": "threads.post", "X": "x.post",
-                   "Xiaohongshu": "xiaohongshu.note", "Facebook": "facebook.page_post"}
+                   "Xiaohongshu": "xiaohongshu.note", "Facebook": "facebook.page_post",
+                   "Mastodon": "mastodon.status"}
 # Stable error codes for rejected requests (spec §3).
 ERRORS = {
     "unknown_platform": "Choose supported destinations.",

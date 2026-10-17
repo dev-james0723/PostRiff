@@ -419,10 +419,15 @@ class Phase2Store(Store):
         if sorted(acknowledged) != sorted(v["warnings"]):
             raise AlphaError("Acknowledge every displayed draft warning.")
         media = []
-        if p.get("assetId"):
+        if c['platform'] == 'Mastodon':
+            from .mastodon_media import review_media
+            media = review_media(s, p)
+        elif p.get('attachments'):
+            raise AlphaError('Multiple attachment reviews are available for Mastodon only.', 409)
+        elif p.get("assetId"):
             a = find(data["assets"], p["assetId"])
             if asset_kinds.kind_of(a) == "video":
-                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou"):
+                if c["platform"] not in ("YouTube", "TikTok", "Douyin", "Kuaishou", "Mastodon"):
                     raise AlphaError("This channel doesn't support video posts from Rafii.", 409)
                 if not asset_kinds.is_postable_video(a, c['platform']) or p.get("rightsConfirmed") is not True:
                     raise AlphaError("This post needs a verified video and rights confirmation.", 409)
@@ -447,13 +452,17 @@ class Phase2Store(Store):
         if c["platform"] in ("Instagram", "Pixelfed") and not media:
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
-        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text)
+        options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text, now=self.clock())
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
-        if immediate_youtube:
+        native_mastodon = c['platform'] == 'Mastodon' and bool((options or {}).get('scheduled_at'))
+        if immediate_youtube or native_mastodon:
             from datetime import datetime, timezone
             approved_at = int(self.clock() // 60 * 60 + 60)
             timing = resolve_time(datetime.fromtimestamp(approved_at, timezone.utc).strftime('%Y-%m-%dT%H:%M'), 'UTC', 0, self.clock())
             timing['mode'] = 'now'
+            if native_mastodon:
+                timing['nativeProvider'] = 'Mastodon'
+                timing['nativePublicationAt'] = options['scheduled_at']
         else:
             timing = resolve_time(p.get("localTime"), p.get("timeZone"), p.get("fold"), self.clock())
         if c["platform"] == "YouTube":
@@ -467,6 +476,11 @@ class Phase2Store(Store):
         evidence = c.get("evidenceSource", "synthetic")
         selection = ensure_content_state(s)["selection"]
         manifest = {"schema": "postriff.approval.v1", "workspaceId": s["workspace"]["id"], "actor": actor, "brandHubId": s["brandHub"]["id"], "brandDigest": digest(s["brandHub"]), "speakerId": s["speaker"]["id"], "voiceRevision": s["speaker"]["activeRevision"], "styleRevision": learning.revision(s), "channelId": c["id"], "account": c["account"], "platform": c["platform"], "operation": LIMITS[c["platform"]]["operation"], "variantId": v["id"], "contentRevision": v["revision"], "contentType": {"id": v.get("contentTypeId", selection["contentTypeId"]), "version": v.get("contentTypeVersion", selection["contentTypeVersion"]), "formatId": v.get("formatId", selection["formatId"]), "preflight": preflight, "skillRouteIds": v.get("contentSkillRouteIds", [])}, "payload": {"text": text, "language": v["language"]}, "payloadDigest": digest({"text": text, "language": v["language"], "media": media}), "media": media, "timing": timing, "capability": {"version": c["capabilityVersion"], "scopes": c["scopes"], "verifiedAt": c["verifiedAt"], "source": evidence}, "limitsVersion": LIMITS[c["platform"]]["version"], "acknowledgedWarnings": acknowledged, "expiresAt": timing["timestamp"]+3600, "execution": "synthetic" if evidence == "synthetic" else "hosted-live"}
+        if p.get('threadParts'):
+            from .mastodon_threads import parts
+            manifest['payload']['threadParts'] = copy.deepcopy(p['threadParts'])
+            parts({**manifest, 'publishOptions': options})
+            manifest['payloadDigest'] = digest({'payload': manifest['payload'], 'media': media})
         manifest["briefRevision"] = s["brief"]["revision"]
         manifest["sourceDigest"] = self.source_digest(s, v)
         manifest["voiceSourceDigest"] = self.voice_source_digest(s, v)
@@ -551,7 +565,9 @@ class Phase2Store(Store):
                     return False
             if m.get("trendLineage") and not getattr(self, "trend_bindings_current", lambda *_: False)(s, m["trendLineage"]):
                 return False
-            media_ok = all(not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"] for a in m["media"] + m.get('youtubeAssets', []))
+            media_ok = all((m['platform'] == 'Mastodon' and a.get('rightsConfirmed') is True) if a.get('normalizedLibrary') else
+                           not find(s["phase2"]["assets"], a["id"])["deleted"] and find(s["phase2"]["assets"], a["id"])["hash"] == a["hash"]
+                           for a in m["media"] + m.get('youtubeAssets', []))
             content_type_ok = m.get("contentType") == {"id": v.get("contentTypeId", "unclassified"), "version": v.get("contentTypeVersion", "legacy"), "formatId": v.get("formatId"), "preflight": content_preflight(s, v["sourceIds"]), "skillRouteIds": v.get("contentSkillRouteIds", [])}
             # styleRevision is recorded in the manifest but never compared: a learned preference shapes the
             # next draft and leaves approved text alone (design decision A1).
