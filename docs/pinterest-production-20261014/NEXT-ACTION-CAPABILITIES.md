@@ -1,6 +1,6 @@
 # Exact next approval — tested capability candidate, flags remain closed
 
-Prepared2026-10-17. **PENDING APPROVAL. No deployment/migration/activation is authorized by this document.**
+Prepared2026-10-17. **APPROVED by direct human APPROVE2026-10-17. One Vercel deployment executed; promotion stopped at the proposal's explicit configuration-drift condition. No migration/activation authorized.**
 
 Reviewed product source **e2e5169ff19ac268c0a0ad06994f67b41f69f949**, branch `codex/rafii-pinterest-production-prep-20261014`. [Diff](evidence/capabilities-candidate.patch) · [Cloud PASS](evidence/capabilities-validation-20261017.json) · [3302 input hashes](evidence/capabilities-source-hashes-20261017.json). JCB **qd2tzg2hn0**, remote/controller0,178.406s,463Python/51Node/7PG17.11 scripts/typecheck/lint36warnings0errors/build/synthetic browser. No full-project CI claim.
 
@@ -21,3 +21,7 @@ No hosted SQL, metric feature activation, new consent/scopes/account access, Pin
 ## Later separately reviewed analytics migration
 
 Forward `20261017_pinterest_metric_reads.sql` SHA256 **a01f47d11595c42665c7aa2f1bfec41b6f0a23935ca5b4d58e639577cba8dbd7**; rollback SHA256 **dd9ab063275b8b2f15ec09a3f55daf1379238c7e8967e837faa6255de8c2baa2**. Disposable application/reapplication/empty rollback and data-preservation refusal PASS. **NOT APPLIED to production and not included above.** Actual activation also needs provider/release/policy authorization, three native read scopes, non-read-only custody, metric global/workspace gates and validated schema. No public release before Standard and production acceptance.
+
+## Execution and stop receipt
+
+Deployment **dpl_2tFM29HomWyWcrzTqTtikWN6Pvti** is READY at the immutable gvudra5h2 URL, CLI0;2217source files match the tested candidate and health/configured pass. No domain promotion occurred. Fresh production metadata changed for `POSTRIFF_DISCORD_BOT_TOKEN`: updatedAt moved from2026-09-25T22:38:03.931Z to2026-10-17T20:11:17.511Z, after the first current-config check and before this20:12:30Z submission.172other production records match. **Actual token-value change is UNVERIFIED**; values were not decrypted or retained. Current rafii.io remains sFLeor. The conditional stop is enforced; do not deploy again or roll back another task's credential. [Receipt](evidence/capabilities-deployment-20261017.json) · [Exact disposition proposal](NEXT-ACTION-PROMOTION-CONFIG-DRIFT.md).
