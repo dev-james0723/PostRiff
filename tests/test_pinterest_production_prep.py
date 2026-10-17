@@ -266,7 +266,8 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
         verify.aal = lambda token, principal: 'aal2' if fresh_proof else 'aal1'
         oauth = SimpleNamespace(start=Mock(return_value={'authorizeUrl': 'https://www.pinterest.com/oauth/'}),
                                 complete=Mock(return_value={'connected': True}),
-                                disconnect=Mock(return_value={'disconnected': True}))
+                                disconnect=Mock(return_value={'disconnected': True}),
+                                refresh_pinterest_authorization=Mock(return_value={'authorizationRefreshed': True, 'identityVerified': True}))
         service = SimpleNamespace(repository=SimpleNamespace(verify_session=verify), oauth=oauth,
                                   connection_factory=lambda: security.FakeDB(cursor), clock=lambda: now)
         return HostedApplication(service, None, {'provider': 'supabase'}, 'c' * 24), oauth, cursor
@@ -303,6 +304,20 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
         self.assertEqual(body['authorizeUrl'], 'https://www.pinterest.com/oauth/')
         self.assertEqual(oauth.start.call_args.args[0::2], (security.WORKSPACE, 'pinterest'))
         self.assertEqual(oauth.start.call_args.args[-1], 'boards_read')
+
+    def test_pinterest_explicit_refresh_requires_independent_proof(self):
+        import test_postriff_account_security as security
+        for fresh in (False, True):
+            with self.subTest(fresh=fresh):
+                app, oauth, _ = self.app(fresh_proof=fresh)
+                status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/synthetic-connection/refresh-authorization',
+                                               body={}, headers=security.AUTH)
+                if fresh:
+                    self.assertEqual((status, body['authorizationRefreshed']), (200, True))
+                    oauth.refresh_pinterest_authorization.assert_called_once_with(security.WORKSPACE, security.AUTH['Authorization'][7:], 'synthetic-connection')
+                else:
+                    self.assertEqual((status, body['code']), (403, 'security_step_up_required'))
+                    oauth.refresh_pinterest_authorization.assert_not_called()
 
     def test_disconnect_stays_available_while_browser_needs_step_up(self):
         import test_postriff_account_security as security

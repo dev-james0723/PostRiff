@@ -1113,6 +1113,9 @@ class HostedApplication:
                     if method == "GET":
                         return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
                     return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 6 and parts[5] == "refresh-authorization" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))

@@ -159,7 +159,7 @@ class OAuthService:
                             **({'trialReadonly': bool(getattr(adapter, 'trial_readonly', False))} if pid == 'pinterest' else {}),
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
-                            'accountRequirement': ('Read-only Trial for the approved operator and Pinterest account; Sandbox boards are separate from live boards.'
+                            'accountRequirement': (f"Read-only Trial for the approved operator and Pinterest account, using the {'Sandbox' if adapter.sandbox else 'official production'} API."
                                                    if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False) else cls.account_requirement),
                             'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': feature_enabled,
                             'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
@@ -1109,9 +1109,10 @@ class OAuthService:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
         return {'channels': views, 'providers': catalog}
 
-    def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
+    def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):
         try:
-            return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required)
+            return self._token_for_worker(workspace_id, connection_id, youtube_policy_required=youtube_policy_required,
+                                          **({'pinterest_force_refresh': True} if pinterest_force_refresh else {}))
         except AlphaError as error:
             if error.code == 'youtube_revoked_oauth':
                 self.mark_youtube_revoked(workspace_id, connection_id,
@@ -1127,6 +1128,26 @@ class OAuthService:
                     with self.repository.connection_factory() as db, db.cursor() as cur:
                         cur.execute("UPDATE public.pr_encrypted_credentials SET refresh_supported=false,updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL AND access_ciphertext=%s AND authorization_generation::text=%s", (workspace_id, connection_id, expected, expected_generation))
             raise
+
+    def refresh_pinterest_authorization(self, workspace_id, token, connection_id):
+        """Explicit member action. Rotate under existing custody lock; never return credentials."""
+        from .hosted import _membership, audit
+        with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+            require(_membership(row), 'manage_connections')
+            self.repository.assert_fresh(token, principal)
+            cur.execute("SELECT provider,scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL", (workspace_id, connection_id))
+            stored = cur.fetchone()
+            if not stored or stored[0] != 'pinterest':
+                raise AlphaError('This Pinterest connection is unavailable.', 404)
+            self._assert_pinterest_context('pinterest', workspace_id, principal, scopes=stored[1])
+        grant = self.token_for_worker(workspace_id, connection_id, pinterest_force_refresh=True)
+        checked = self.verify(workspace_id, token, connection_id)
+        if not checked.get('identityVerified'):
+            raise AlphaError('Pinterest authorization changed. Reconnect the expected account.', 409, code='pinterest_reconnect_required')
+        with self.repository.transaction(token, workspace_id) as (cur, _, principal):
+            audit(cur, workspace_id, principal, 'oauth.authorization_refreshed', connection_id, {'provider': 'pinterest'})
+        return {'connectionId': connection_id, 'authorizationRefreshed': True,
+                'identityVerified': True, 'expiresAt': grant['expiresAt']}
 
     def mark_youtube_revoked(self, workspace_id, connection_id, *, expected_access_token=None, expected_ciphertext=None, expected_generation=None):
         from .hosted import audit
@@ -1187,7 +1208,7 @@ class OAuthService:
                 error.credential_revocation_generation = authorization_generation
             raise
 
-    def _token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False):
+    def _token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):
         """Server-only token custody. Instagram renews while valid, never after expiry."""
         with self.repository.connection_factory() as db:
             with db.cursor() as cur:
@@ -1253,7 +1274,7 @@ class OAuthService:
                     # X and Bluesky tokens are short-lived: renew within the adapter's margin, not after a failed call.
                     margin = getattr(type(adapter), "refresh_margin", 0) or 0
                     renew_soon = bool(margin and expires and 0 < expires - now <= margin and refresh_supported and refresh_ct)
-                    if expired or renew_instagram or renew_soon:
+                    if expired or renew_instagram or renew_soon or (pinterest_force_refresh and provider == 'pinterest'):
                         if refresh_binding_required:
                             error = AlphaError('Reconnect this YouTube channel once to enable securely bound background access.', 409, code='youtube_oauth_binding_required')
                             error.credential_binding_ciphertext = row[1]

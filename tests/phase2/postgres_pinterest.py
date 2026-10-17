@@ -108,6 +108,7 @@ with connection() as db:
 with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
     grants=list(pool.map(lambda _:service.oauth.token_for_worker(wid,cid),range(12)))
 assert refreshes==1,refreshes
+concurrent_refreshes=refreshes
 assert len({g['accessToken'] for g in grants})==1
 assert json.loads(grants[0]['accessToken'])['accountId']=='1234567'
 result=service.oauth.disconnect(wid,'p1',cid)
@@ -232,6 +233,20 @@ for action in [lambda:service.oauth.start(pilot_wid,'p2','pinterest','publish'),
     except AlphaError as error: assert error.status==403,error
     else: raise AssertionError('Official-API read-only Trial allowed publication')
 assert len(provider_calls)==before
+# Explicit read-only renewal uses the same locked custody; other owners cannot force it.
+before=len(provider_calls);before_refresh=refreshes
+try: service.oauth.refresh_pinterest_authorization(pilot_wid,'p1',pilot_cid)
+except AlphaError as error: assert error.code=='pinterest_trial_denied',error
+else: raise AssertionError('Other same-tenant owner forced pilot renewal')
+assert len(provider_calls)==before
+renewed=service.oauth.refresh_pinterest_authorization(pilot_wid,'p2',pilot_cid)
+assert renewed['authorizationRefreshed'] and renewed['identityVerified'] and renewed['connectionId']==pilot_cid
+assert 'accessToken' not in renewed and 'refreshToken' not in renewed
+assert refreshes-before_refresh==1,refreshes
+with connection() as db:
+    assert db.execute('SELECT rotated_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
+assert all(url.startswith('https://api.pinterest.com/v5/') for _,url in provider_calls[before:])
+manual_refreshes=refreshes-before_refresh
 with connection() as db:
     scopes=db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
     assert set(scopes)=={'user_accounts:read','boards:read'}
@@ -277,7 +292,7 @@ assert trial_reserve(1), 'Daily pilot budget did not recover'
 print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_synthetic_provider','oauthReplayDenied':True,
     'oauthHostAppBindingConsumed':True,'oauthHostAppBindingReplayNoNetwork':True,'pilotUsernameExpiryBindingNoNetwork':True,
     'explicitOfficialApiReadOnlyConnected':True,'oldSandboxCustodyDenied':True,'officialApiTrialWriteDenied':True,
-    'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':refreshes,
+    'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':concurrent_refreshes,'explicitManualProviderRefreshes':manual_refreshes,'manualRefreshOtherOwnerDenied':True,'manualRefreshReturnsNoCredentials':True,
     'disconnectCancelsClaimedCallback':True,'canceledCallbackNoNetwork':True,'freshExplicitReconnectPassed':True,
     'failedExchangeStateConsumed':True,'failedExchangeReplayNoNetwork':True,'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,
     'pilotTwoReadScopesConnected':True,'pilotExpiryStopsCustody':True,'pilotDisconnectAfterExpiry':True,

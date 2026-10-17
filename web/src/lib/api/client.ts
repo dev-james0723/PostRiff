@@ -389,6 +389,10 @@ export function createApi(getToken: TokenSource) {
         'POST',
         `${ws(w)}/channels/${encodeURIComponent(id)}/verify`
       ),
+    refreshPinterestAuthorization: (w: string, id: string) =>
+      send<{ connectionId: string; authorizationRefreshed: boolean; identityVerified: boolean; expiresAt: number }>(
+        'POST', `${ws(w)}/channels/${encodeURIComponent(id)}/refresh-authorization`
+      ),
     insightsCanary: (w: string, id: string) =>
       send<{ state: string; http?: number; providerRead?: boolean; found?: Record<string, number> }>(
         'POST',

@@ -51,6 +51,7 @@ import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import type { ConnectRequest } from './connect-sheet';
 import { DestinationPicker } from './destination-picker';
+import { PinterestBoardsSheet } from './pinterest-boards-sheet';
 import { CONTROL_44, DIALOG_ELEVATED, DIALOG_FOOTER_PLAIN, STATEFUL_GLASS } from './rafii-materials';
 
 /** Jobs for this account, counted from the workspace snapshot by the page. */
@@ -464,6 +465,9 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
           <Icons.history className='size-4' />
           History
         </Button>
+        {canManage && !disconnected && channel.platform === 'Pinterest' && channel.scopes?.includes('boards:read') && (
+          <PinterestBoardsSheet channelId={channel.id} account={channel.account} />
+        )}
         {canManage && !disconnected && provider?.hasDestinations && provider.destinationScope !== 'post' && (
           <DestinationPicker channelId={channel.id} platform={channel.platform} label={provider.destinationLabel ?? 'Channel'} disabled={busy} />
         )}
