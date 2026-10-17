@@ -67,18 +67,17 @@
     "json": "PASS; final documentation validation pending"
   },
   "cloud": {
-    "status": "BLOCKED",
-    "classification": "validation_unavailable",
+    "status": "PASS",
+    "classification": "REMOTE_SYNTHETIC_AND_DISPOSABLE_PASS",
     "doctor": "PASS with authorized existing network; earlier authentication error was sandbox DNS",
     "includedDepotCI": "29512/2000minutes; exhausted",
-    "paidRunStarted": false,
+    "paidRunStarted": true,
     "proposedJob": "one8vCPU,provider timeout45minutes,compute ceilingUSD1.08 plus possible other metering; no total/account hard dollarcap",
-    "newSourceRunId": null
+    "newSourceRunId": "v0czdxw6gg",
+    "completedEvidence": "private-trial-cloud-validation-20261017.json",
+    "historicalCostBlockResolved": true
   },
   "notRun": [
-    "complete62focusedpreparedPythoncases",
-    "actual new disposablePostgres journal/concurrency/RLS/rollback",
-    "Node/typecheck/lint/build/syntheticbrowser for newdelta",
     "real4scopeOAuth",
     "realPinID/readback/visibility",
     "actualscheduledPinexecution",

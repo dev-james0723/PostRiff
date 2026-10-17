@@ -30,7 +30,8 @@
       "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
       "standard-access-video/README.md",
       "evidence/standard-access-video-20261017.json",
-      "standard-access-video/StrictWindowRecorder.swift"
+      "standard-access-video/StrictWindowRecorder.swift",
+      "standard-access-video/native-compile-attempt-20261017.json"
     ],
     "unrelated_capture_retained_in_worktree": false
   },
@@ -120,7 +121,7 @@
     "native_20_to_60_fps_validation": "validation_unavailable: no exact surface/method recording probe approved by root in this investigation; metadata alone cannot verify actual fps or window isolation."
   },
   "strict_recorder_candidate": {
-    "status": "CANDIDATE_NOT_COMPILED_NOT_RUN",
+    "status": "CANDIDATE_COMPILE_TIMED_OUT_NOT_EXECUTED",
     "source": "standard-access-video/StrictWindowRecorder.swift",
     "sha256": "16206868d81127b39db5d1fb267ed368f13dff78bd249a5aa4f3088847facd5a",
     "native_api": "SCContentFilter(desktopIndependentWindow:) + SCRecordingOutput",
@@ -135,10 +136,13 @@
     "fallback": "None; no display capture, other-window fallback, UI automation or permission request",
     "limitations": [
       "Compile and runtime APIs unverified",
-      "Requires allowed macOS compile route; not performed",
       "Exact-title change aborts; short separate approved segments only, no continuous multi-title OAuth support",
       "No fresh OAuth or Pin operation authorized/executed",
-      "All-frame privacy and actual20–60fps must be verified after an approved run"
-    ]
+      "All-frame privacy and actual20–60fps must be verified after an approved run",
+      "Allowed bounded native-only compile attempted once; timed out without compiler diagnostics or binary; runtime remains NOT RUN."
+    ],
+    "compiler_validation": "validation_unavailable: exactly one bounded native-only compilation hit12swall budget (actual12.072s), processgroupSIGTERM/exit-15, no diagnostics, no binary. No source error identified; no blind retry.",
+    "compile_attempt": "standard-access-video/native-compile-attempt-20261017.json",
+    "policy_basis": "cloud-build-router SKILL lines22/49 allow narrow Mac-only native checks. Single10KB Swift file, existingSDK/compiler, -Onone/-j1, lowpriority,12swall/8sper-processCPU bound; no install, fullapp, JS build, recording or OS permission changes."
   }
 }

@@ -31,7 +31,7 @@ A candidate bounded command can be reviewed by the parent using a fresh verified
 The installed Apple SDK also documents a strict independent-window ScreenCaptureKit filter, configurable frame interval and native MP4 recording with system/microphone audio disabled. No helper was written, compiled or run. Actual 20–60fps acceptance remains `validation_unavailable` until an exact reviewed surface and method can be exercised and its real output inspected; metadata is not evidence of a compliant recording.
 
 
-## Strict native recorder source candidate — not compiled or run
+## Strict native recorder candidate — bounded compile timed out, not run
 
 [StrictWindowRecorder.swift](StrictWindowRecorder.swift) is a local, dependency-free macOS 15+ candidate. It requests native 30 fps through Apple's ScreenCaptureKit, uses H.264 MP4, disables microphone/system audio and cursor, preserves the selected window's proportions at no more than 960 pixels wide, and has no display or alternative-window capture path.
 
@@ -44,7 +44,7 @@ Source inspection and installed Apple SDK headers informed this candidate. **Com
 Before any run, the parent must:
 
 1. Review the source, the specific relevant browser window and the exact content to record, including actor/workspace where applicable. Exclude unrelated tabs/content and authentication codes/state from the approved surface.
-2. Establish an allowed macOS compilation path. No local compilation was performed under the cloud-first policy; no paid or cloud job was started. A bounded task-specific local compilation exception or an already authorized macOS compute route is needed where policy requires it.
+2. Review the actual bounded native-only compile attempt below. A narrow Mac-only check was allowed by the cloud-build-router exception, but did not complete within its resource budget. No paid/cloud job, full app build or dependency installation was started. A further attempt requires a concrete diagnosis and a reviewed permitted resource budget.
 3. After compilation, obtain a fresh exact window/PID/title observation and ensure the helper's own no-prompt preflight succeeds. Any denial stops the attempt; do not open settings, request permission, switch capture surface, or retry blind.
 4. Run only the reviewed short segment, then inspect every frame and verify actual media format. Do not upsample the existing 4 fps clip to claim native compliance. Reject a changed-title or contaminated capture.
 5. Keep full OAuth/live API work behind the exact renewed consent, live-action and recording-surface scope. Review the final complete video before any separately approved upload/submission.
@@ -70,3 +70,11 @@ Proposed run shape, **not executed**; placeholders must be replaced with a fresh
 ~~~
 
 After an approved successful run, use lightweight local media metadata/decode inspection to verify H.264, no audio, frame rate 20–60 fps, duration at most eight seconds, expected dimensions, and all-frame privacy. This candidate does not itself establish any of those output acceptance results.
+
+## Actual bounded native-only compile attempt
+
+The cloud-build-router skill permits narrow Mac-bound native checks (lines 22 and 49). Exactly one low-priority, single-worker, unoptimized compile of this 10KB helper was attempted using the existing Apple Swift 6.4 compiler and installed frameworks, with a 12-second wall budget and 8-second per-process CPU soft limit. This was not a full Swift app build, JS build or dependency installation.
+
+**Result: `validation_unavailable`**. The attempt reached its wall deadline at **12.072 seconds** and its own process group was terminated with SIGTERM (**exit -15**). Stdout/stderr were empty and no binary was created. No compiler source error was identified, so no speculative source repair or blind retry was made. The earlier compiler-version probe itself took 9.952 seconds under the current load; this is context, not proof of the precise compiler stall cause.
+
+[Exact command and actual attempt receipt](native-compile-attempt-20261017.json). Source SHA-256 remained `16206868d81127b39db5d1fb267ed368f13dff78bd249a5aa4f3088847facd5a`. The helper was not executed; no window was captured and no permission, provider or production operation occurred. This result does not diagnose an OS permission issue.

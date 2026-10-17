@@ -1,6 +1,6 @@
 # Candidate approval — one private-Trial cloud delta validation
 
-Prepared 2026-10-17. **REVIEWABLE CANDIDATE / NOT EXECUTED.** This document authorizes nothing by itself. Production remains on the separately verified e2e5169f release; this candidate covers cloud validation of the unpublished private-Trial changes only.
+Prepared 2026-10-17. **APPROVED ONCE / EXECUTED ONCE / PASS.** This document authorizes nothing by itself. Production remains on the separately verified e2e5169f release; this candidate covers cloud validation of the unpublished private-Trial changes only.
 
 ## Verified billing boundary
 
@@ -33,3 +33,7 @@ PASS requires the exact frozen source fingerprint remotely, all targeted tests a
 This proposed approval covers one sanitized source upload and one bounded **paid validation job only**. It excludes Production flags/deployment/SQL, OAuth consent/scopes, Pin/board writes, Standard submission, external publication, new resources/subscriptions, plan changes and Git push. These remain separate concrete approval items.
 
 **Still required:** the user's explicit approval of this one45minute/8vCPU paid run. Delta script includes all three private-Trial modules. No paid execution has occurred.
+
+## Executed result2026-10-17
+
+Direct human APPROVe approved this exact one-run boundary. One runv0czdxw6gg/job992xwthq3l/attempt1cqq92b3zg9 finished,submission/controller/remote0,183.484seconds controller elapsed.212Python/7PG17.11/12Node/types/lint36warnings0errors/build/3syntheticbrowsergroupsPASS. Exact3563-file fingerprint matched. Three mappings restored byte-for-byte. Approval1/1consumed; no rerun permission. Actual charge unavailable; US$1.08was the approved compute ceiling, not a bill. Earlier pending language above is historical proposal text, superseded by this execution result. See evidence/private-trial-cloud-validation-20261017.json. No production/provider changes included.

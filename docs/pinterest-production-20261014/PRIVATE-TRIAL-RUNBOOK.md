@@ -1,6 +1,6 @@
 # Private Trial candidate — four capabilities, creator-only evidence
 
-2026-10-17. Engineering candidate only. NOT DEPLOYED / NOT ENABLED / full cloud qualification NOT RUN. Canonical Rafii remains postriff-phase2-private/buoyhkbodnhzngaotoel. This mode does not assert Standard Access or public customer readiness.
+2026-10-17. Qualified engineering candidate only. NOT DEPLOYED / NOT ENABLED. Scoped cloud qualification730d0440/v0czdxw6gg PASS; real provider acceptance NOT RUN. Canonical Rafii remains postriff-phase2-private/buoyhkbodnhzngaotoel. This mode does not assert Standard Access or public customer readiness.
 
 ## Exact authority
 
@@ -28,7 +28,7 @@ Existing quota table is already applied. New private response journal migration2
 
 ## Review and activation sequence
 
-1. Qualify the frozen candidate through the disclosed one-run paid cloud proposal, or remain blocked without free-route substitution/local-heavy execution.
+1. COMPLETE:730d0440 qualified through the approved single paid v0czdxw6gg run. Grant1/1consumed; do not submit another run or imply production acceptance.
 2. Resolve the existing named empty PUBLIC board approval; read back its actual ID and current account eligibility. Existing public board usability for Trial must be measured, not assumed; if Pinterest rejects it, stop and present a separate creator-only API-board scope/create proposal, never silently broaden OAuth.
 3. Freeze codeSHA, both SQL checksums, exact board/asset IDs and time-bounded private configuration. Present one production-change bundle with drift check, impact to this account/workspace and rollback. No public admission, new organization, staging, resources or subscription.
 4. After that approval, install only reviewed additive SQL/config/exact tested deployment, verify current baseline and fields, then human official four-scope OAuth consent. Record actual identity/boards/refresh. Fresh actual20–60fps window footage remains required; native recorder helper is only an uncompiled candidate.

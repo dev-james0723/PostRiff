@@ -91,3 +91,16 @@ This is a separate private acceptance lane, not publicGO. The original read-only
 | Analytics | NO-GO | Candidate bypasses Standard only for exact private policy; full cloud/schema/deployment/native current-Pin data read NOT RUN. Confirmed zero/no-data remains legitimate Trial evidence, no fabricated engagement. |
 
 Prepared private-Trial tests and actual disposable-PG journal/RLS/concurrency cases are NOT RUN as a complete suite. Selected lightweight synthetic controls/static checks only are localPASS; see the new private-Trial delta receipt. Paid cloud qualification requires a new one-run budget; authentication is usable and included allowance is exhausted. Public Connect/Publish/Schedule/Analytics all remain NO-GO until their separate provider/customer/release gates pass.
+
+## Latest delta execution —730d0440,2026-10-17
+
+The paid approval was received and executed once. [v0czdxw6gg](https://depot.dev/orgs/jf34f85hr0/workflows/v0czdxw6gg) **PASS**:212Python,7actual disposablePG17.11scripts,12Node,typecheck/lint36warnings0errors/build and3synthetic actual-component browser groups; nativefinished/submission+controller+remote0. Product730d0440/receiptHEADbbe1f0c8,3563inputhashes/fingerprintmatch,487707bytepatch;3mappingfilesrestored. Prior cost-BLOCKED rows are now resolved for this exact candidate. [Receipt](evidence/private-trial-cloud-validation-20261017.json).
+
+| Feature | Scoped implementation acceptance | New live Trial acceptance |
+|---|---|---|
+| Connect | PASS — bound policy/scopes/account/refresh/tenant negatives; original owner read-only lifecycle realPASS retained | NOT RUN — new four-scope window/grant not activated |
+| Publish | PASS — immutable media/approval/lease/scopes/quota/knownIDjournal/read-back/uncertain-no-rePOST | NOT RUN — no approved exact board/Pin ID or provider read-back |
+| Schedule | PASS — timezone/DST/stale reverify/cancel/disconnect/lease/quota/recovery contracts | NOT RUN — no approved real scheduled due execution |
+| Analytics | PASS — native-response fixtures,zero/no_data/read_failed,tenant/schema/recordedPin/lease guards and actual disposableDB | NOT RUN — no current real Pin/native data read |
+
+All four public/newlive decisions remainNO-GO. Source qualification alone does not activate them. Full-project CI, real non-owner acceptance and compliant Standard demo remainNOTRUN. Canonical production still2tFM/e2e on fresh2026-10-17T22:07:21.583987+00:00read-onlyinspect; no source drift.
