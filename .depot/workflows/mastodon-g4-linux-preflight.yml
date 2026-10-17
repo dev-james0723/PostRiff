@@ -1,0 +1,62 @@
+# Manual-only, Depot cloud CI read-only dependency probe.
+# ONE small 2-core Linux job. No installs, credentials, provider calls, merge or deploy.
+name: Rafii Mastodon G4 isolated Linux preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 3
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SENTRY_DISABLED: "true"
+      POSTRIFF_RESEARCH: "0"
+      POSTRIFF_OAUTH_MASTODON_DISABLED: "true"
+      NO_PRODUCTION_API_CALLS: "1"
+    steps:
+      - name: Fetch exact repository with no persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify local Mastodon candidate was patched in
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test -f docs/mastodon-production-20261017/G3-R2-READONLY-20261017.md
+          test -f migrations/postriff/131_mastodon_management.sql
+          test -f migrations/postriff/132_mastodon_native_metrics.sql
+          test -f migrations/postriff/133_mastodon_connection_health.sql
+          test "$(sha256sum docs/mastodon-production-20261017/G3-R2-READONLY-20261017.md | cut -d' ' -f1)" = 9d53f7329990d3a5678688e1f125a46e01d454322029f60947ec60f2e0bb026c
+          printf 'LINUX=true; SOURCE_PATCH=G3-R2_CANDIDATE; NO_PROVIDER_CALLS=true\n'
+      - name: Inspect locally installed executables and pinned browser revisions (no installs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          import json,importlib.util,os,platform,shutil,subprocess
+          from pathlib import Path
+          root=Path.cwd()
+          def version(cmd):
+              binary=shutil.which(cmd)
+              if binary is None:return None
+              try:
+                  p=subprocess.run([binary,'--version'],capture_output=True,text=True,timeout=3)
+                  return (p.stdout or p.stderr).strip().splitlines()[0][:80]
+              except Exception:return 'unreadable'
+          browsers={}
+          for name in ['chromium','webkit']:
+              paths=list((Path.home()/'.cache/ms-playwright').glob(name+'-*'))
+              browsers[name]=bool(paths)
+          py={name:bool(importlib.util.find_spec(name)) for name in ['psycopg','cryptography','playwright','pytest']}
+          out={'os':platform.system(),'arch':platform.machine(),
+               'cpuCount':os.cpu_count(),'node':version('node'),'npm':version('npm'),
+               'python':version('python3'),'psql':version('psql'),'pg_config':version('pg_config'),
+               'pythonModules':py,'playwrightBrowserCacheAvailable':browsers,
+               'nodeModulesPresent':(root/'web/node_modules').is_dir(),
+               'attemptedDownloads':False,'ranMastodonTests':False,'ranProviderRequests':False}
+          print('DEPOT_READINESS_JSON='+json.dumps(out,sort_keys=True))
+          PYTHON
