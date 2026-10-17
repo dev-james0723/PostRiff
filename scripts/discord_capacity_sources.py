@@ -46,5 +46,9 @@ def source_paths(root):
         'tests/test_postriff_pg_suite_controls.py',
         'scripts/discord-validation-cloud.sh',
         'scripts/discord-integrated-validation-cloud.sh',
+        # Full-suite isolation fixtures and exact nonsecret classifications are release controls too.
+        'tests/test_context_lens.py',
+        'tests/test_pinterest_production_prep.py',
+        'docs/consumer-ready/secret-allowlist.json',
     })
     return tuple(sorted(paths))
