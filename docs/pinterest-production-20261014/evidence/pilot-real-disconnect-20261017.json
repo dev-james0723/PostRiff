@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-17T17:37:59.499126+00:00",
+  "status": "PASS",
+  "classification": "REAL authenticated local Rafii disconnection on approved account, not provider consent revoke",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+  "providerAccountId": "1126814906675966091",
+  "revoked": true,
+  "accessCiphertextErased": true,
+  "refreshCiphertextErased": true,
+  "uiReceipt": "Pinterest access removed. Pending jobs were canceled atomically; requests already sent require reconciliation. Provider consent revocation not confirmed.",
+  "prior403": "Resolved by normal human-completed interactive sign-in and authenticator; no security rule changed.",
+  "realPendingJobExecution": "NOT RUN: this real connection had0jobs. Local credential revocation is real; nonempty job cancellation remains disposable/synthetic evidence.",
+  "revokedAt": "2026-10-17T17:36:15.831946Z",
+  "realConnectionJobCount": 0,
+  "activeFutureJobCount": 0
+}

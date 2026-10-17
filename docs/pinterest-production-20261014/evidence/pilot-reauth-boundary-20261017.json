@@ -1,6 +1,6 @@
 {
   "checkedAt": "2026-10-17T17:21:56Z",
-  "status": "BLOCKED",
+  "status": "RESOLVED",
   "action": "Real local account disconnection/reconnection",
   "approvedActor": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
   "origin": "https://rafii.io",
@@ -13,5 +13,7 @@
     "direct privileged disconnect"
   ],
   "newSource": "c8ff84fa0c7f95e4b0be5648fd2764a244c6282e",
-  "newSourceDeployed": false
+  "newSourceDeployed": false,
+  "verification": "Normal native Profile UI showed approved email and Rafii Ops Current; actual authenticated disconnect succeeded and DB revoked/accessErased/refreshErased alltrue. No security bypass.",
+  "resolvedBeforeVerifiedDisconnectAt": "2026-10-17T17:36:15.831946Z"
 }

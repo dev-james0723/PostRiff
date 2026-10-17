@@ -34,9 +34,9 @@ Retention: disconnect erases local token ciphertext immediately. Existing histor
 
 ## Current operational state — 2026-10-17
 
-Approved private pilot C4Aqh is live on rafii.io; original BLY is the prior deployment. Exact quota migration and deployment-only credentials/config are recorded. Project-wide environment is unchanged. Active deadline **20:40:56Z /16:40:56 EDT**, with no automatic extension. Expiry fails closed for provider custody/actions; local disconnect remains available afterward.
+Approved private pilot remediation sFLeor/productc8ff84fa is live on rafii.io; C4Aqh is its prior immutable deployment, BLY earlier. Exact quota migration and deployment-only credentials/config are recorded. Project-wide environment is unchanged. Active deadline **20:40:56Z /16:40:56 EDT**, with no automatic extension. Expiry fails closed for provider custody/actions; local disconnect remains available afterward.
 
-Real OAuth exchange and business identity PASS. Boards/refresh/reconnect remain NOT RUN; actual disconnect403 is blocked on the human completing ordinary authenticator sign-in. New boards/explicit-refresh local source is not deployed. Preserve existing fresh-sign-in and independent-proof controls. [Next candidate](NEXT-ACTION-BOARDS-REFRESH.md).
+Real OAuth exchange and business identity PASS. Actual disconnect PASS after ordinary human MFA; revoked/access erased/refresh erased alltrue.0real jobs. Boards/refresh/reconnect remain NOT RUN; fresh official Pinterest Give access now awaits human. The separately approved boards/refresh source is deployed. Preserve existing fresh-sign-in and independent-proof controls. [Next candidate](NEXT-ACTION-BOARDS-REFRESH.md).
 
 Approved pilot-only emergency pause/restore may change only its reviewed flags; it never authorizes broad rollback, new costs or data deletion. Keep the quota table during pause. Existing grants must be disconnected through the authenticated account flow; do not mutate credential rows to simulate revocation. Restoring BLY would remove this pilot but also restore its older source/config, so reconcile current source/other deployments and obtain exact rollback approval before promotion. No rollback rehearsal has been executed.
 
