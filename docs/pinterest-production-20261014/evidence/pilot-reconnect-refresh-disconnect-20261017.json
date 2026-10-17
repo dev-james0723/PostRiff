@@ -1,0 +1,81 @@
+{
+  "checkedAt": "2026-10-17T19:46:54.202449+00:00",
+  "execution": "REAL authorized private read-only Trial on existing rafii.io; not public release",
+  "projectRef": "buoyhkbodnhzngaotoel",
+  "deploymentId": "dpl_sFLeor16mBEwc8NoNc49sxvFP1AP",
+  "sourceCommit": "c8ff84fa0c7f95e4b0be5648fd2764a244c6282e",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+  "providerAccountId": "1126814906675966091",
+  "username": "jamesaucreates",
+  "scopes": [
+    "boards:read",
+    "user_accounts:read"
+  ],
+  "pilotExpiresAt": "2026-10-17T20:40:56Z",
+  "reconnect": {
+    "status": "PASS",
+    "transactionId": "2a93315a-bff2-4093-a1f4-a2e5e26575b1",
+    "outcome": "exchanged",
+    "consumed": true,
+    "authorizationCodeHttp": 200,
+    "at": "2026-10-17T19:12:39.237127Z",
+    "identityHttp": 200,
+    "sameApprovedAccount": true
+  },
+  "boards": {
+    "status": "PASS",
+    "at": "2026-10-17T19:13:53.307302Z",
+    "http": 200,
+    "itemCount": 0,
+    "itemsShapeValid": true,
+    "bookmarkPresent": false,
+    "eligibleDestinationSelection": "NOT RUN: no boards returned; no board created"
+  },
+  "refresh": {
+    "status": "PASS",
+    "at": "2026-10-17T19:33:32.464496Z",
+    "grantType": "refresh_token",
+    "http": 200,
+    "identityHttp": 200,
+    "sameApprovedAccount": true,
+    "previousRotatedAt": "2026-10-17T19:12:38.883513Z",
+    "rotatedAt": "2026-10-17T19:33:31.932178Z",
+    "accessExpiresAt": "2026-11-16T19:33:32.465248Z",
+    "uiConfirmed": "Authorization refreshed and the same Pinterest account verified.",
+    "security": "Normal human sign-in and authenticator; no checks bypassed"
+  },
+  "finalDisconnect": {
+    "status": "PASS",
+    "actor": "Human completed existing approved UI action",
+    "requestAt": "2026-10-17T19:43:55.583Z",
+    "http": 200,
+    "revokedAt": "2026-10-17T19:43:55.716823Z",
+    "accessCiphertextErased": true,
+    "refreshCiphertextErased": true,
+    "realConnectionJobs": 0,
+    "activeFutureJobs": 0,
+    "nonemptyRealJobCancellation": "NOT RUN",
+    "providerConsentRevoked": "NOT VERIFIED",
+    "priorFailures": [
+      {
+        "at": "2026-10-17T19:40:29.504Z",
+        "http": 403
+      },
+      {
+        "at": "2026-10-17T19:43:15.674Z",
+        "http": 403
+      }
+    ],
+    "recovery": "Human reported normal fresh sign-in/verification and directly completed final Disconnect. Observed DELETE200 and database erasure."
+  },
+  "notRun": [
+    "Second real account isolation",
+    "Pin creation/read-back/visibility",
+    "Actual scheduled publication",
+    "Live analytics",
+    "Standard Access",
+    "Public eligible new customer acceptance"
+  ],
+  "journal": "pilot-reconnect-refresh-provider-journal-20261017.json"
+}
