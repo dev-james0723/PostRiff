@@ -1,6 +1,6 @@
 # Exact disposition required — existing READY artifact and shared configuration update
 
-Prepared2026-10-17. **PENDING explicit approval. This is no second deployment/build or credential-edit request.**
+Prepared2026-10-17. **APPROVED by direct human APPROVE and EXECUTED2026-10-17. No second build or credential edit occurred.**
 
 The prior exact code deployment was approved and executed once. Its mandatory clause says: **“Stop if expiry passes or current live source/config drifts; do not silently substitute another release.”** Promotion therefore stopped when the shared production `POSTRIFF_DISCORD_BOT_TOKEN` metadata changed: previous2026-09-25T22:38:03.931Z, current2026-10-17T20:11:17.511Z. This happened after preflight and before the20:12:30Z candidate submission.173production records,172otherwise unchanged. Actual token-value change/Discord acceptance is UNVERIFIED; no credential value was decrypted/exported or changed by this task.
 
@@ -13,3 +13,7 @@ Immutable candidate: https://postriff-phase2-private-gvudra5h2-jamesau0723-6572s
 Before promotion require current rafii.io still sFLeor, same173production metadata as the newly captured20:11 update, candidate READY/source/config/hash/health unchanged and time before **20:40:56Z /16:40:56EDT**. Stop on any further drift or expiry. Preserve analytics/public/review/policy/Agent/write gatesOFF and original expiry1792269656. After promotion verify alias/source/health and flag-off UI without reconnecting or provider calls.
 
 No new deployment/build, Git push, SQL, secret edit/reset/export, account access/scopes/OAuth, Pin/board/section/analytics call, actual schedule, Standard submission, public enablement, new infrastructure/payment or rollback is authorized. No Discord message or test is included. Waiting for the owning Discord work to confirm its setting is the alternative; no automatic continuation may cross this boundary.
+
+## Executed result
+
+Separate direct human APPROVE accepted the known shared-setting update. Fresh173production metadata matched that accepted snapshot; prior rafii.io was stillsF and candidate READY/source/services/cron unchanged. Exactly one promotion started20:28:06Z/finished20:28:14Z, CLI0, before the original expiry. Both rafii.io alias and project production target now identify **dpl_2tFM29HomWyWcrzTqTtikWN6Pvti**. Health200/configuredtrue and actual Channels GET200/read-only Trial UI PASS. Account remains locally disconnected. No second build, SQL, secret edit, OAuth, provider request, Pin, analytics, Discord message or public enablement. Known Discord behavior remains unverified. [Promotion receipt](evidence/capabilities-promotion-20261017.json).

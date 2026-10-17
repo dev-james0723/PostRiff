@@ -1,6 +1,6 @@
 {
   "startedAt": "2026-10-17T20:12:30.661855+00:00",
-  "state": "READY_PROMOTION_BLOCKED_CONFIG_DRIFT",
+  "state": "READY_PROMOTED_VERIFIED",
   "sourceCommit": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
   "receiptCommit": "10486d8b78b6b2390701148882797496d18aeffe",
   "previousProductionDeployment": "dpl_sFLeor16mBEwc8NoNc49sxvFP1AP",
@@ -36,7 +36,7 @@
   "untrustedCliUrlDiscarded": "https://postriff-phase2-private-jamesau0723-6572s-projects.vercel.app",
   "deploymentId": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
   "urlSource": "Authoritative Vercel deployment API; discard CLI guidance alias",
-  "promotionExecuted": false,
+  "promotionExecuted": true,
   "blocker": {
     "key": "POSTRIFF_DISCORD_BOT_TOKEN",
     "previousUpdatedAt": "2026-09-25T22:38:03.931000+00:00",
@@ -49,8 +49,8 @@
   "approvalObservedAt": "2026-10-17T20:07:08Z",
   "approval": "Direct human APPROVE to exact e2e5169f/10486d8b single-deployment proposal",
   "deploymentReadyState": "READY",
-  "productionAliasDeployment": "dpl_sFLeor16mBEwc8NoNc49sxvFP1AP",
-  "promotionStatus": "BLOCKED by explicitly approved stop-on-config-drift condition",
+  "productionAliasDeployment": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+  "promotionStatus": "PASS after separate explicit human approval accepted the recorded shared configuration update",
   "deployedFileHashesMatched": 2217,
   "health": {
     "status": "ok",
@@ -75,8 +75,11 @@
   "newScopesOrOAuth": false,
   "realProviderActions": 0,
   "newResourcesOrPayment": false,
-  "flagOffUi": "NOT RUN: promotion deliberately stopped",
+  "flagOffUi": "PASS actual Rafii channels GET200 and read-only Trial text; no connection/provider operation",
   "secretValuesCompared": "NOT RUN; no unrelated credential decrypted/exported/retained",
   "relatedTaskLookup": "validation_unavailable: Codex list_threads did not return within bounded wait; terminated read-only lookup, no messaging or delegation",
-  "nextApproval": "Accept exact known shared-configuration update for one promotion of existing READY immutable artifact; no second build/config edit"
+  "nextApproval": "Accept exact known shared-configuration update for one promotion of existing READY immutable artifact; no second build/config edit",
+  "promotionCliExitCode": 0,
+  "promotedAt": "2026-10-17T20:28:14.007086+00:00",
+  "promotionReceipt": "capabilities-promotion-20261017.json"
 }

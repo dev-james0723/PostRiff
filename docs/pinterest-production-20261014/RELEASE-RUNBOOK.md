@@ -49,3 +49,7 @@ The local candidate adds `20261017_pinterest_metric_reads.sql`: expand migration
 Keep `POSTRIFF_PINTEREST_ANALYTICS_ENABLED` absent/0. Enabling it also requires provider review/execution, non-read-only custody, exactly the native read scopes, global metric reads, explicit workspace admission and actual validated CHECK/definition readiness. Identity is rechecked through the same bound adapter and quota transport; no generic transport or raw token export. Missing/nonfinite/negative/bool metrics remain unavailable; explicit0 is preserved. Metrics use `pinterest-pin-utc-window-v1` and UTC date windows, not a fabricated lifetime or exact24h count.
 
 Pause new reads before rollback. The rollback refuses to remove Pinterest from the CHECK while any Pinterest read row exists; preserve historical observations and global definitions. Do not delete customer data to force rollback. Deployment/config, SQL application, extra consent and live analytics are distinct approvals. No analytics activation is covered by the original two-read-scope pilot.
+
+## Current deployed code — 2026-10-17T20:28Z
+
+Producte2e5169f/receipt10486d8b,2tFM READY and rafii.io/production-target verified;2217source hashes,health,actual private-readonly Channels UI PASS. Shared Discord-setting drift was separately accepted explicitly before one promotion. No second build or secret edit. c8/sF is prior immutable release. No metric SQL or Pinterest analytics/public/Agent/write activation; expiry20:40:56Z unchanged. Account remains disconnected. [Final receipt](FINAL-RECEIPT.md).

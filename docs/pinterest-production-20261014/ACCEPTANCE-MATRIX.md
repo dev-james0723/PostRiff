@@ -1,6 +1,6 @@
 # Pinterest acceptance and capability matrix
 
-Updated2026-10-17 UTC. Live product source `c8ff84fa0c7f95e4b0be5648fd2764a244c6282e`, approved second deployment sFLeor READY/promoted; receipt2848c722. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/boards-refresh-validation-20261017.json).
+Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69f949`, deployment2tFM READY/promoted20:28Z; source receipt10486d8b. Earlier real read-only provider acceptance was on qualified c8/sF. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/boards-refresh-validation-20261017.json).
 
 | Required acceptance | Status | Evidence / remaining requirement |
 |---|---|---|
@@ -50,3 +50,7 @@ Product ddbcdde7 plus fixture correction **e2e5169ff19ac268c0a0ad06994f67b41f69f
 ## Current deployment boundary
 
 The exact code deployment was later approved/executed once. READY2tFM/sourcee2e/receipt104 has2217matchingfiles and health/configured PASS. Promotion **BLOCKED**: shared production Discord-token updatedAt changed20:11:17Z before build; actual value change unverified. Live remains sF/c8; flag-off new-source UI NOT RUN. [Receipt](evidence/capabilities-deployment-20261017.json) · [Disposition](NEXT-ACTION-PROMOTION-CONFIG-DRIFT.md).
+
+## Final promotion result
+
+Separate direct APPROVE accepted known shared Discord-setting metadata drift. One promotion completed20:28:14Z, CLI0; rafii.io and project production target2tFM verified, health200/configuredtrue and actual Channels GET200/private read-only UI PASS. Earlier BLOCKED promotion is resolved. No second build/OAuth/provider call/SQL/analytics/public enablement; original20:40:56Z expiry unchanged. Discord behavior unverified. [Receipt](evidence/capabilities-promotion-20261017.json). All provider-write/public-release gates above remain unchanged.
