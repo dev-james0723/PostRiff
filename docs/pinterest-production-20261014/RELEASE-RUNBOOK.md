@@ -1,12 +1,12 @@
 # Controlled release and operations — candidate, not executed
 
-**Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** No replacement production project, database access or release is authorized.
+**Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** No replacement production project, production database write or release is authorized by this candidate.
 
 ## Existing-production pilot boundary (supersedes new staging)
 
 Use only existing canonical Supabase `postriff-phase2-private` / `buoyhkbodnhzngaotoel` and existing Rafii Vercel project. Both new-DB proposals are canceled. The earlier Step A new-staging design is historical, not permission to run a shared-production pilot. [READONLY-PILOT-CANDIDATE](READONLY-PILOT-CANDIDATE.md) defines the exact tenant/operator/account/time-bound read-only lane and proposed configuration/migration/deployment effects. No new subscription or resource is needed.
 
-Keep public/Agent gates closed. Two-scope profile/board consent, Sandbox-only identity/boards/token egress, daily100-call cap and disconnect are the proposed pilot scope. It now requires the reviewed quota table. No sections, Pin, analytics or Agent data action is included. Freeze actual actor/workspace/username/expiry, recheck current live source/schema/callback and obtain the specific external-operation/live-consent approval before executing. Standard and real-public-release acceptance remain separate.
+Keep public/Agent gates closed. Two-scope profile/board consent, explicitly selected official API identity/boards/token egress, daily100-call cap and disconnect are the proposed pilot scope. It now requires the reviewed quota table. No sections, Pin, analytics or Agent data action is included. Freeze actual actor/workspace/username/expiry, recheck current live source/schema/callback and obtain the specific external-operation/live-consent approval before executing. Standard and real-public-release acceptance remain separate.
 
 ## Migration and rollback
 
@@ -32,6 +32,10 @@ Support: offer eligible business-account/review guidance for PINNER_DATA_ACCESS_
 
 Retention: disconnect erases local token ciphertext immediately. Existing history purge path is reused. Budget windows contain hashes only; propose deletion older than 48h via reviewed maintenance. No production retention job or external notification was installed. Validate contractual retention/deletion periods and authorized model handling before publishing policy changes or submitting Standard.
 
-## Current operational stop
+## Current operational stop — 2026-10-17
 
-Fresh team status is Pro/overdue; do not attempt deployment or pay/change billing. The exact single developer-console callback action is separately reviewable in NEXT-ACTION-CALLBACK.md and does not depend on a deployment. Production callback-origin correction, app-credential installation, quota migration and deployment remain inactive. Avoid staging new Pinterest credentials/enable flags into an old live source that lacks the new pilot fence: concurrent Git auto-deployment could expose a partially configured connector. Before any later deployment, qualify billing, freeze the approved actor/account/window and secure deployment configuration/credential transfer, then verify the exact tested candidate and egress gates. Do not install the local staging key.
+Local7432 baseline synchronization is complete and same-type future local syncs are authorized. The [private read-only pilot bundle](NEXT-ACTION-READONLY-PILOT.md) is prepared for separate approval covering only existing-project quota SQL, secure credentials/configuration, exact tested deployment, selected actor/account4hour window and actual human OAuth consent. No real Pin/public release is included. Callback console registration is already fulfilled.
+
+Production read-only metadata still shows absent client ID/secret and quota table, PostgreSQL17.6 and protected credential/OAuth RLS. Historical billing was2026-10-15 Pro/overdue; later READY deployments mean it is not proof of a deployment rejection. Do not pay or change billing. Recheck actual deploy eligibility only in the approved operation.
+
+Avoid installing pilot settings into an older source that lacks the current admission fence. Coordinate the approved release/configuration sequence with active deployment owners, freeze exact source/settings and verify deployment before consent. Reuse the production vault key; never install the local staging key. No source/flag/config drift may silently broaden this four-hour read-only authority.

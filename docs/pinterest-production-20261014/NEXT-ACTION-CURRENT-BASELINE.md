@@ -1,11 +1,11 @@
-# Next exact local action — current production runtime baseline
+# Current production-baseline local synchronization — COMPLETE
 
-Prepared2026-10-17. **Not executed; distinct from the completed5e4 merge.**
+2026-10-17. Human approval **批准本任務同類本地同步** covers this mission's same-type already-deployed canonical baseline local merges and affected cloud validation. Do not repeat this local approval.
 
-Merge **`7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1`** into local isolated branch **`codex/rafii-pinterest-production-prep-20261014`**, whose tested source is `42f7910cb73a17cbfaf47b2265a59c4d2f0b2b59`; preserve all accepted Pinterest, quota and account-security behavior, resolve scoped conflicts, then run affected cloud validation. Create local commits only. No push, remote merge, deployment, production database/config/credential change, live OAuth consent, real Pin or Standard submission.
+Incoming `7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1` merged without conflicts as `ea4bbd36e277a80be33dbb5833ec0c51ccc4cbe1`. Exact tested source `e4dbf8b0f9358109d7aa467992c41e6fe9886bfb` passed [cloud vvmpxv3mmg](https://depot.dev/orgs/jf34f85hr0/workflows/vvmpxv3mmg):408 Python,51 Node,six PostgreSQL17.11 scripts,Agent,typecheck,lint(36warnings0errors),build and synthetic browser. [Structured results](evidence/current7432-validation.json) · [Source fingerprints](evidence/current7432-source-hashes.json) · [Authorization](evidence/local-sync-authorization-20261017.json).
 
-Why the incoming revision changed: the preceding action was reviewed on2026-10-15 and approved/executed on2026-10-17. Fresh provider lookup resolves rafii.io to READY `dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj`. An existing exact-deployment qualification receipt matches2432 allowlisted runtime source files to7432. It explicitly limits omitted binary-asset/config byte claims. [Evidence reference](evidence/current-runtime-source-receipt-reference.json). Do not equate null Git/health SHA with an independently verified whole artifact.
+Fresh provider lookup still returns READY `dpl_BLyFgcDyW85wPrEsJV5qrkXsmrLj`. The existing exact-deployment witness qualifies2432 allowlisted runtime source files to7432, with explicit omitted-binary/config limitations. No whole-artifact SHA claim. [Witness reference](evidence/current-runtime-source-receipt-reference.json).
 
-The delta5e4→7432 has91 files,9329 additions,749 deletions, including newer publishing/runtime behavior. Overlaps include hosted_app.py and shared API client/types. Importing the production baseline preserves other integrations; it does not activate or modify their production settings. The master mission separately gates merge actions; the specific preceding5e4 approval has been fulfilled. This new target is prepared for its own local-merge approval. No secret or user-data input is required.
+Pinterest, quota and inherited security/hold/risk behavior were preserved; hosted-route regressions cover fresh independent proof and account holds. Later read-only Trial engineering is recorded in [FINAL-RECEIPT](FINAL-RECEIPT.md).
 
-After this local action, a shared-production read-only Pinterest pilot still needs an exact reviewed configuration/migration/deployment bundle, selected identity/time window and real consent authorization. Public release remains NO-GO.
+Push, remote merge, deployment, production SQL/config/secrets, live OAuth, Pin creation, Standard submission and public enablement retain separate gates. The next external action is the [bounded read-only pilot](NEXT-ACTION-READONLY-PILOT.md).

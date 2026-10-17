@@ -6,11 +6,11 @@ App: Rafii, https://rafii.io, Pinterest app 1615884. Trial entitlement is carrie
 
 Rafii helps creators and small businesses draft image Pins in their own brand voice. Customers connect their own eligible Pinterest accounts through Pinterest's official OAuth flow. Rafii reads identity and available publishing destinations, presents the image, title, description, HTTPS destination and board/section for review, and executes an approved publication immediately or at the customer's selected time. Customers can reconnect, cancel future work, pause automation and disconnect. Trial/Sandbox demonstrations are labeled and do not assert public visibility.
 
-Identity consent: `user_accounts:read`. Image publication/reconciliation: `user_accounts:read,boards:read,pins:read,pins:write`. No boards:write, advertising, billing, private-resource scopes or password/cookie access. The current hosted board-plus-Pin lane includes write permission; there is no new dedicated board-only consent UI in this phase.
+Identity consent: `user_accounts:read`. Image publication/reconciliation: `user_accounts:read,boards:read,pins:read,pins:write`. No boards:write, advertising, billing, private-resource scopes or password/cookie access. The hosted UI also offers a dedicated profile/boards consent path with only user_accounts:read and boards:read. The private read-only pilot cannot publish, read sections or obtain Pin scopes.
 
 ## Data handling to verify before final wording
 
-Token exchange is server-side; access/refresh envelopes are encrypted in the tenant vault and bound to app/environment, with stable provider ID in the access envelope. Tokens/codes/states are excluded from browser/agent/evidence. Agent destination reads require an explicit current-turn request and connection-domain authorization; returned board data is untrusted input. Public candidate uses server-only rate counters with hashed app/account identifiers. Disconnect removes local credentials and stops future approval authority; Pinterest account settings must remove provider consent where no official revoke operation is available.
+Token exchange is server-side; access/refresh envelopes are encrypted in the tenant vault and bound to app/environment, with stable provider ID in the access envelope. Access/refresh tokens remain server-side. Authorization code/state transit the official browser callback and authenticated app completion; exclude them from logs, Agent context, recordings and evidence. Agent destination reads require an explicit current-turn request and connection-domain authorization; returned board data is untrusted input. Public candidate uses server-only rate counters with hashed app/account identifiers. Disconnect removes local credentials and stops future approval authority; Pinterest account settings must remove provider consent where no official revoke operation is available.
 
 Policy/terms reachability was independently HTTP-checked at `https://rafii.io/privacy` and `https://rafii.io/terms`; see evidence/public-policy-reachability.json. Reachability does not certify policy substance. Review actual Pinterest-data retention, disconnect deletion, support process and AI/model handling against [Developer Guidelines](https://policy.pinterest.com/en/developer-guidelines) and [Developer/API Terms](https://policy.pinterest.com/en/developer-terms) before submission. No policy was edited or published.
 
@@ -18,9 +18,9 @@ Current guideline review found restrictions on API-data storage/sharing and visu
 
 ## Actual video and evidence checklist
 
-No actual OAuth/application recording exists. Do not substitute the synthetic screenshots or gallery for a working demo. After staging and live-consent approval, record:
+No actual OAuth/application recording exists. Do not substitute the synthetic screenshots or gallery for a working demo. After approval of the exact test infrastructure, account and live-consent scope, record the actual environment accurately. The proposed private Trial uses existing shared production hosting and the official API, not isolated staging. The initial read-only pilot cannot complete the Pin/section/scheduling parts below; those need later scoped approvals:
 
-1. Staging Rafii login and Connect Pinterest entry.
+1. Rafii login and Connect Pinterest entry on the approved actual environment.
 2. Official provider consent screen and exact registered redirect; protect account details.
 3. Successful callback/server exchange and connected stable account ID (redacted display).
 4. Actual boards/section discovery, with accurate eligibility errors.
