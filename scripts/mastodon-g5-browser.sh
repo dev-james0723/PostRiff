@@ -108,6 +108,9 @@ for url in ('http://127.0.0.1:4348/api/health','http://127.0.0.1:4448/api/health
 print('G5_BROWSER_LOCAL_SYNTHETIC_FIXTURES_READY=true')
 PY
 cd "$ROOT/web"
+# Fail closed before launching browsers if the narrow WebKit error classifier
+# accepts a genuine runtime/CORS/provider error in its negative suite.
+node --test tests/mastodon-webkit-prefetch-guard.test.cjs
 for engine in chromium webkit; do
   export MASTODON_BROWSER_ENGINE="$engine"
   export MASTODON_BROWSER_EVIDENCE_DIR="$TASK_HOME/evidence-$engine"
