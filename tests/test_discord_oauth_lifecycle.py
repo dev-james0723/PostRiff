@@ -9,7 +9,8 @@ from urllib.parse import urlsplit
 
 from postriff_alpha.domain import AlphaError, initial_state
 from postriff_phase2.discord.oauth import DiscordConnections, stable_id, validate_context
-from postriff_phase2.oauth import CredentialVault
+from postriff_phase2.hosted import HostedPhase2Commands
+from postriff_phase2.oauth import CredentialVault, OAuthService
 from postriff_phase2.social_connectors import DiscordProvider
 from test_discord_publish_authorization import SyntheticWire, APP, BOT, USER, GUILD, NOW, WORKSPACE, ACTOR
 
@@ -26,10 +27,18 @@ class LifecycleWire(SyntheticWire):
         self.install_guild = None
         self.token_fault = False
         self.identity_revoked = False
+        self.install_token_scopes = ['identify', 'bot']
+        self.install_bearer_scopes = ['identify']
+        self.token_overrides = {}
+        self.application = APP
+        self.profile_user = None
+        self.route_overrides = {}
 
     def __call__(self, method, url, **kwargs):
         path = urlsplit(url).path.removeprefix('/api/v10')
         self.lifecycle_calls.append((method, path))
+        if (method, path) in self.route_overrides:
+            return copy.deepcopy(self.route_overrides[(method, path)])
         bearer = kwargs.get('headers', {}).get('Authorization', '').removeprefix('Bearer ')
         if path == '/oauth2/token':
             form = kwargs['form']
@@ -39,21 +48,24 @@ class LifecycleWire(SyntheticWire):
                 self.refresh_count += 1
                 scopes, guild = ['identify', 'guilds'], None
             elif form['code'].startswith('install-'):
-                scopes, guild = ['identify', 'bot'], self.install_guild or form['code'].split('-', 1)[1]
+                scopes, guild = self.install_token_scopes, self.install_guild or form['code'].split('-', 1)[1]
             else:
                 scopes, guild = ['identify', 'guilds'], None
             access = 'synthetic-access-' + str(len(self.tokens))
-            self.tokens[access] = scopes
+            # Code-exchange consent and live bearer introspection are
+            # independent provider evidence, including bot passthrough scope.
+            self.tokens[access] = copy.deepcopy(self.install_bearer_scopes if guild else scopes)
             body = {'access_token': access, 'token_type': 'Bearer', 'scope': ' '.join(scopes), 'expires_in': 3600, 'refresh_token': 'synthetic-refresh'}
             if guild:
                 body['guild'] = {'id': guild}
+            body.update(copy.deepcopy(self.token_overrides))
             return {'status': 200, 'body': body}
         if path == '/oauth2/@me':
             if self.identity_revoked:
                 return {'status': 401, 'body': {'message': 'Synthetic revoked identity'}}
-            return {'status': 200, 'body': {'application': {'id': APP}, 'user': {'id': self.user}, 'scopes': self.tokens[bearer]}}
+            return {'status': 200, 'body': {'application': {'id': self.application}, 'user': {'id': self.user}, 'scopes': self.tokens[bearer]}}
         if path == '/users/@me' and kwargs.get('headers', {}).get('Authorization', '').startswith('Bearer '):
-            return {'status': 200, 'body': {'id': self.user, 'username': 'Synthetic identity'}}
+            return {'status': 200, 'body': {'id': self.profile_user or self.user, 'username': 'Synthetic identity'}}
         if path == '/users/@me/guilds':
             return {'status': 200, 'body': [{'id': GUILD, 'name': 'Synthetic first guild', 'permissions': '32'},
                                           {'id': SECOND_GUILD, 'name': 'Synthetic second guild', 'permissions': '32'},
@@ -77,6 +89,174 @@ def service(*, with_vault=True):
 def context(purpose='identity'):
     return {'v': 1, 'purpose': purpose, 'workspaceId': WORKSPACE, 'memberId': ACTOR, 'applicationId': APP,
             'redirectUri': 'https://rafii.example.invalid/api/oauth/discord/callback', 'discoverGuilds': True}
+
+
+def installation_callback():
+    """Run real callback/custody/capability code over a synthetic locked store.
+
+    SQL isolation and commits are covered by the separate disposable-PG suite.
+    """
+    s, wire = service()
+    state = initial_state(WORKSPACE)
+    generation = 'synthetic-identity-generation'
+    record = {'id': 'synthetic-identity', 'workspaceId': WORKSPACE, 'authorizedBy': ACTOR,
+              'status': 'linked', 'authorizationGeneration': generation}
+    state['phase2'] = {'channels': [], 'assets': [], 'reviews': [], 'jobs': [],
+                       'discordIdentityLinks': [record]}
+    c = {**context('installation'), 'identityConnectionId': record['id'], 'identityGeneration': generation,
+         'userId': USER, 'guildId': GUILD}
+    encrypted, key = s.oauth.vault.encrypt(json.dumps(c))
+    row = ['synthetic-transaction', ACTOR, 'publish', s.oauth.callback_uri('discord'),
+           ['identify', 'bot'], encrypted, key, NOW + 60, False]
+    cur = Mock()
+    last_sql = ['']
+    def execute(sql, params):
+        last_sql[0] = sql
+        if sql.startswith('UPDATE public.pr_oauth_transactions SET consumed_at'):
+            row[8] = True
+    cur.execute.side_effect = execute
+    cur.fetchone.side_effect = lambda: tuple(row) if last_sql[0].startswith('SELECT id::text,member_id') else ('synthetic-installation-generation',)
+    @contextmanager
+    def local(*_):
+        yield cur, state, ACTOR
+    s.local = local
+    s.bind_identity = Mock(return_value=(('synthetic-ciphertext', 'synthetic-key', None, NOW + 3600,
+                                          generation, ['identify', 'guilds'], USER), {'user': USER}))
+    s.oauth._admit_identity = Mock()
+    s.oauth.commands = HostedPhase2Commands(clock=lambda: NOW)
+    s.oauth._capabilities = OAuthService._capabilities
+    s.save_state = Mock()
+    return s, wire, state, row, cur
+
+
+class InstallationCallback(unittest.TestCase):
+    def complete(self, s):
+        with patch('postriff_phase2.hosted.audit'):
+            return s.complete(WORKSPACE, 'synthetic-session', 's' * 32, 'install-' + GUILD)
+
+    def assert_no_installation(self, wire, state, cur):
+        self.assertEqual(state['phase2']['channels'], [])
+        self.assertFalse(any(call.args[0].startswith('INSERT INTO public.pr_encrypted_credentials')
+                             for call in cur.execute.call_args_list))
+        self.assertFalse(any(method == 'POST' and path.startswith('/channels/')
+                             for method, path in wire.lifecycle_calls))
+
+    def test_passthrough_installation_keeps_bearer_proof_separate_and_does_not_approve_destination(self):
+        for token_scopes in (['identify', 'bot'], ['bot']):
+            with self.subTest(token_scopes=token_scopes):
+                s, wire, state, row, cur = installation_callback()
+                wire.install_token_scopes = token_scopes
+                self.assertTrue(self.complete(s)['connected'])
+                channel, = state['phase2']['channels']
+                self.assertTrue(channel['capabilityVerified'])
+                self.assertEqual(channel['discordConnectionKind'], 'installation')
+                self.assertEqual(channel['scopes'], ['bot', 'identify'])
+                self.assertFalse(channel.get('defaultDestinationId'))
+                self.assertFalse(channel.get('discordDestinations'))
+                insert, = [call for call in cur.execute.call_args_list
+                            if call.args[0].startswith('INSERT INTO public.pr_encrypted_credentials')]
+                params = insert.args[1]
+                envelope = json.loads(s.oauth.vault.decrypt(params[3], params[5]))
+                self.assertEqual(envelope['authorization'], {'bearerScopes': ['identify'], 'installationScopes': ['bot']})
+                self.assertEqual((envelope['guild'], envelope['channel']), (GUILD, None))
+                self.assertNotIn('at', envelope)
+                self.assertNotIn('synthetic-access-', json.dumps(envelope))
+                self.assertIsNone(params[4])  # No transient refresh token retained.
+                matrix = {call.args[1][2]: call.args[1][3] for call in cur.execute.call_args_list
+                          if call.args[0].startswith('INSERT INTO public.pr_channel_capabilities')}
+                self.assertEqual((matrix['publish'], matrix['schedule']), ('Direct', 'Direct'))
+                self.assertIn(('GET', '/oauth2/@me'), wire.lifecycle_calls)
+                self.assertIn(('GET', '/users/@me'), wire.lifecycle_calls)
+                self.assertIn(('GET', '/guilds/' + GUILD + '/members/' + USER), wire.lifecycle_calls)
+                self.assertTrue(row[8])
+                with self.assertRaises(AlphaError):
+                    self.complete(s)
+                self.assertEqual(wire.lifecycle_calls.count(('POST', '/oauth2/token')), 1)
+                self.assertFalse(any(method == 'POST' and path.startswith('/channels/')
+                                     for method, path in wire.lifecycle_calls))
+
+    def test_installation_still_requires_live_identify_and_well_formed_scope_evidence(self):
+        for scopes in ([], ['bot'], None, 'identify', [{'name': 'identify'}]):
+            with self.subTest(scopes=scopes):
+                s, wire, state, row, cur = installation_callback()
+                wire.install_bearer_scopes = scopes
+                with self.assertRaises(AlphaError) as error:
+                    self.complete(s)
+                self.assertIn('required user permissions', str(error.exception))
+                self.assertTrue(row[8])
+                self.assertNotIn(('GET', '/guilds/' + GUILD), wire.lifecycle_calls)
+                self.assert_no_installation(wire, state, cur)
+
+    def test_wrong_application_subject_or_independent_profile_cannot_install(self):
+        for field in ('application', 'user', 'profile_user'):
+            with self.subTest(field=field):
+                s, wire, state, _, cur = installation_callback()
+                setattr(wire, field, '999888')
+                with self.assertRaises(AlphaError) as error:
+                    self.complete(s)
+                self.assertNotIn('999888', str(error.exception))
+                self.assertNotIn('synthetic-access', str(error.exception))
+                self.assert_no_installation(wire, state, cur)
+
+    def test_missing_malformed_or_different_exchange_guild_cannot_install(self):
+        for guild in (None, [], {}, {'id': SECOND_GUILD}):
+            with self.subTest(guild=guild):
+                s, wire, state, _, cur = installation_callback()
+                wire.token_overrides = {'guild': guild}
+                with self.assertRaises(AlphaError):
+                    self.complete(s)
+                self.assertNotIn(('GET', '/guilds/' + GUILD), wire.lifecycle_calls)
+                self.assert_no_installation(wire, state, cur)
+
+    def test_removed_bot_wrong_bot_application_and_lost_membership_are_not_installation_proof(self):
+        cases = [('/guilds/' + GUILD, 403, {}),
+                 ('/oauth2/applications/@me', 200, {'id': '999888'}),
+                 ('/guilds/' + GUILD + '/members/' + BOT, 404, {}),
+                 ('/guilds/' + GUILD + '/members/' + USER, 404, {})]
+        for path, status, body in cases:
+            with self.subTest(path=path):
+                s, wire, state, _, cur = installation_callback()
+                wire.route_overrides[('GET', path)] = {'status': status, 'body': body, 'headers': {}}
+                with self.assertRaises(AlphaError):
+                    self.complete(s)
+                self.assert_no_installation(wire, state, cur)
+
+    def test_restricted_user_or_no_permitted_channel_cannot_create_publish_capability(self):
+        for restriction in ('pending', 'no_channels', 'no_manage_server'):
+            with self.subTest(restriction=restriction):
+                s, wire, state, _, cur = installation_callback()
+                if restriction == 'pending':
+                    wire.restricted = {'pending': True}
+                elif restriction == 'no_channels':
+                    wire.allowed = set()
+                else:
+                    wire.route_overrides[('GET', '/guilds/' + GUILD)] = {'status': 200, 'body': {
+                        'id': GUILD, 'name': 'Synthetic server', 'owner_id': BOT,
+                        'roles': [{'id': GUILD, 'permissions': str(DiscordProvider.PERMISSIONS)}]}}
+                with self.assertRaises(AlphaError):
+                    self.complete(s)
+                self.assert_no_installation(wire, state, cur)
+
+    def test_changed_or_expired_linked_identity_cannot_commit_installation(self):
+        for change in ('generation', 'expired'):
+            with self.subTest(change=change):
+                s, wire, state, _, cur = installation_callback()
+                if change == 'generation':
+                    state['phase2']['discordIdentityLinks'][0]['authorizationGeneration'] = 'changed-generation'
+                else:
+                    row, envelope = s.bind_identity.return_value
+                    s.bind_identity.return_value = ((*row[:3], NOW - 1, *row[4:]), envelope)
+                with self.assertRaises(AlphaError):
+                    self.complete(s)
+                self.assert_no_installation(wire, state, cur)
+
+    def test_installation_request_cannot_drop_bot_or_change_to_user_only_consent(self):
+        s, wire, state, row, cur = installation_callback()
+        row[4] = ['identify']
+        with self.assertRaises(AlphaError):
+            self.complete(s)
+        self.assertEqual(wire.lifecycle_calls, [])
+        self.assert_no_installation(wire, state, cur)
 
 
 class Lifecycle(unittest.TestCase):

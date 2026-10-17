@@ -129,11 +129,12 @@ class DiscordConnections:
         if not snowflake(verified_id) or user_id is not None and verified_id != user_id:
             fail('Discord did not verify the expected identity.')
         if (not isinstance(info.get('application'), dict)
-                or info['application'].get('id') != self.adapter.client_id
-                or not isinstance(info.get('scopes'), list)
+                or info['application'].get('id') != self.adapter.client_id):
+            fail('Discord did not confirm this Rafii application. Start the connection again.')
+        if (not isinstance(info.get('scopes'), list)
                 or any(not isinstance(scope, str) for scope in info['scopes'])
                 or not set(required).issubset(info['scopes'])):
-            fail('Discord did not verify the requested identity and application.')
+            fail('Discord did not confirm the required user permissions. Link your Discord identity again.')
         return user, list(info['scopes'])
 
     def verified_user(self, bearer, required, user_id=None):
@@ -142,7 +143,7 @@ class DiscordConnections:
         authorized, scopes = self.verified_authorization(bearer, required, user_id)
         user = self._response('GET', '/users/@me', bearer, user_id=authorized['id'])
         if not isinstance(user, dict) or not snowflake(user.get('id')) or user['id'] != authorized['id']:
-            fail('Discord did not verify the requested identity and application.')
+            fail('Discord returned a different profile for this authorization. Start again.')
         return user, scopes
 
     @staticmethod
@@ -236,11 +237,16 @@ class DiscordConnections:
         if purpose == 'installation' and not context.get('connectionId'):
             self.oauth._admit_identity(workspace, adapter)
         body = self.token_body(self._response('POST', '/oauth2/token', form={'grant_type': 'authorization_code', 'code': code, 'redirect_uri': context['redirectUri']}))
-        user, scopes = self.verified_user(body['access_token'], row[4], context.get('expectedUserId') or context.get('userId'))
+        # `bot` is installation consent, not a user bearer permission. The
+        # frozen request still requires it; prove installation independently
+        # below rather than requiring it in current bearer introspection.
+        required = ['identify'] if purpose == 'installation' else row[4]
+        user, scopes = self.verified_user(body['access_token'], required, context.get('expectedUserId') or context.get('userId'))
         if context.get('expectedUserId') and user['id'] != context['expectedUserId']:
             fail('Reconnect the original Discord identity.')
         if purpose == 'installation':
-            if user['id'] != context.get('userId') or (body.get('guild') or {}).get('id') != context.get('guildId'):
+            if (user['id'] != context.get('userId') or not isinstance(body.get('guild'), dict)
+                    or body['guild'].get('id') != context.get('guildId')):
                 fail('Discord authorized a different identity or server. Start again.')
             envelope = {'v': 2, 'kind': 'installation', 'applicationId': adapter.client_id,
                         'botUserId': adapter._bot_identity(), 'user': user['id'], 'guild': context['guildId'], 'channel': None,
@@ -249,8 +255,15 @@ class DiscordConnections:
             if guild.get('id') != context['guildId']:
                 fail()
             # Fresh bot/user membership and effective permissions; channel consent stays independent.
-            adapter.destinations(json.dumps(envelope))
-            result = self.save_installation(workspace, token, context, envelope, scopes, guild)
+            if not adapter.destinations(json.dumps(envelope)):
+                fail('Rafii cannot access a publishable channel in this server. Check bot and server permissions, then reconnect.')
+            # Keep observed bearer scopes separate from independently proven
+            # installation consent. This envelope contains no bearer token.
+            # Connection capabilities combine the two only after all proofs;
+            # channel destination approval remains a separate operation.
+            envelope['authorization'] = {'bearerScopes': scopes, 'installationScopes': ['bot']}
+            connection_scopes = sorted(set(scopes) | set(envelope['authorization']['installationScopes']))
+            result = self.save_installation(workspace, token, context, envelope, connection_scopes, guild)
             # Do not revoke this transient token: Discord revocation may invalidate
             # associated identity grants. It is not retained or used to publish.
         else:
