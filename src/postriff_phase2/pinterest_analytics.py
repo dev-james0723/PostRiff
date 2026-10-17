@@ -10,6 +10,13 @@ METRICS = {'IMPRESSION': 'impressions', 'SAVE': 'saves', 'PIN_CLICK': 'pin_click
 DEFINITION = 'pinterest-pin-utc-window-v1'
 
 
+def _metric_value(value):
+    try:
+        return type(value) in (int, float) and math.isfinite(value) and value >= 0
+    except OverflowError:
+        return False
+
+
 def enabled(adapter):
     return bool(adapter and getattr(adapter, 'analytics_enabled', False) is True
                 and getattr(adapter, 'production_reviewed', False) is True
@@ -43,17 +50,38 @@ def fetch(adapter, token, pin_id, *, start_at, end_at):
     path = f'/v5/pins/{pin_id}/analytics'
     query = urlencode({'start_date': first.isoformat(), 'end_date': last.isoformat(), 'metric_types': ','.join(METRICS)})
     response = adapter.api(token, 'GET', path + '?' + query)
+    result = {'status': response.get('status'), 'found': {}, 'outcome': 'read_failed',
+              'endpoint': adapter.content_api + path + '?' + query,
+              'periodStart': datetime.combine(first, datetime.min.time(), timezone.utc).timestamp()}
+    if response.get('status') != 200:
+        return {**result, 'failure': 'http_error'}
     body = response.get('body')
-    report = (body.get('all') if 'all' in body else body.get('ALL')) if isinstance(body, dict) else None
-    summary = report.get('summary_metrics') if isinstance(report, dict) else None
-    found = {}
-    if response.get('status') == 200 and isinstance(summary, dict):
-        for native, name in METRICS.items():
-            value = summary.get(native)
-            if type(value) in (int, float) and math.isfinite(value) and value >= 0:
-                found[name] = value
-    return {'status': response.get('status'), 'found': found, 'endpoint': adapter.content_api + path + '?' + query,
-            'periodStart': datetime.combine(first, datetime.min.time(), timezone.utc).timestamp()}
+    # An empty/missing report is not evidence of an empty analytics result. A
+    # confirmed aggregate needs an empty summary or explicit empty daily report.
+    aggregate = [key for key in ('all', 'ALL') if isinstance(body, dict) and key in body]
+    report = body.get(aggregate[0]) if len(aggregate) == 1 else None
+    if not isinstance(report, dict):
+        return {**result, 'failure': 'invalid_response'}
+    if 'summary_metrics' not in report:
+        # The official schema makes the summary optional. An explicit empty daily
+        # report confirms no-data; daily-only values cannot prove requested-window
+        # totals, so preserve the failure instead of fabricating a summary.
+        daily = report.get('daily_metrics')
+        if 'daily_metrics' not in report:
+            return {**result, 'failure': 'summary_unavailable'}
+        if not isinstance(daily, list) or any(not isinstance(day, dict) for day in daily):
+            return {**result, 'failure': 'invalid_response'}
+        metrics = [day.get('metrics', {}) for day in daily]
+        if any(not isinstance(values, dict) or any(not _metric_value(value) for value in values.values()) for values in metrics):
+            return {**result, 'failure': 'invalid_response'}
+        if any(metrics) or report.get('lifetime_metrics'):
+            return {**result, 'failure': 'summary_unavailable'}
+        return {**result, 'outcome': 'no_data'}
+    summary = report['summary_metrics']
+    if not isinstance(summary, dict) or any(not _metric_value(value) for value in summary.values()):
+        return {**result, 'failure': 'invalid_response'}
+    found = {name: summary[native] for native, name in METRICS.items() if native in summary}
+    return {**result, 'found': found, 'outcome': 'success' if found else 'no_data'}
 
 
 def describe(matrix, scopes, *, analytics_enabled=False):

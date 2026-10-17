@@ -379,12 +379,18 @@ class MetricScheduler:
             _note("metric_reads.read_failed", error)
             return {"state": "transient", "failure": "error", "http": None, "providerRead": requested}
         status = fetched["status"]
+        analytics = {}
+        if row['provider'] == 'pinterest':
+            analytics = {"analyticsOutcome": fetched.get("outcome", "read_failed")}
+            if status == 200 and analytics["analyticsOutcome"] not in ("success", "no_data"):
+                return {"state": "transient", "failure": "summary_unavailable" if fetched.get("failure") == "summary_unavailable" else "invalid_response",
+                        "http": 200, "providerRead": True, "analyticsOutcome": "read_failed"}
         if status == 200:
             return {"state": "done", "found": fetched["found"], "endpoint": fetched["endpoint"], "http": 200, "providerRead": True,
-                    **({"periodStart": fetched["periodStart"]} if "periodStart" in fetched else {})}
+                    **analytics, **({"periodStart": fetched["periodStart"]} if "periodStart" in fetched else {})}
         if status in TERMINAL_HTTP:
-            return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True}
-        return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True}
+            return {"state": "unavailable", "failure": f"http_{status}", "http": status, "providerRead": True, **analytics}
+        return {"state": "transient", "failure": f"http_{status}", "http": status, "providerRead": True, **analytics}
 
     def complete(self, row, outcome):
         """Fence on this claim generation, unexpired lease and current rights."""
@@ -397,9 +403,12 @@ class MetricScheduler:
                     outcome.update(state=state, failure="not_eligible" if eligibility == "cancel" else "purge_pending")
             fence = (row["id"], self.worker_id, row["attempts"])
             if state == "done":
-                cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=NULL,
+                # Keep a successful empty report distinguishable in durable read receipts.
+                # Native zero metrics remain a successful reading; missing metrics never become zero.
+                marker = "no_data" if outcome.get("analyticsOutcome") == "no_data" else None
+                cur.execute("""UPDATE public.pr_metric_reads SET status='done', observed_at=now(), last_http_status=200, failure_class=%s,
                                       lease_owner=NULL, lease_until=NULL, updated_at=now() WHERE id=%s::uuid AND lease_owner=%s
-                                      AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""", fence)
+                                      AND attempts=%s AND lease_until>clock_timestamp() AND status='claimed'""", (marker, *fence))
                 recorded = cur.rowcount == 1
                 if recorded:
                     insights.record_observations(cur, row["workspaceId"], row["connectionId"], row["provider"], row["postId"], row["jobId"],
@@ -437,6 +446,7 @@ class MetricScheduler:
         """Bounded cron step. Returns a status dict of counts; never raises."""
         counts = {"status": "ok", "claimed": 0, "done": 0, "retry": 0, "unavailable": 0, "cancelled": 0, "dead": 0, "deferred": 0}
         counts.update(providerReads=0, providerErrors=0, costUnknownReads=0)
+        counts["pinterestAnalytics"] = {"success": 0, "no_data": 0, "read_failed": 0}
         try:
             deadline = self.monotonic() + max_seconds
             rows = self.claim(max_reads)
@@ -452,6 +462,11 @@ class MetricScheduler:
                     counts["providerReads"] += 1
                     counts["costUnknownReads"] += 1  # native response reports no invoice; never assert zero
                     counts["providerErrors"] += int(outcome["state"] != "done")
+                    if row.get("provider") == "pinterest":
+                        analytics_outcome = outcome.get("analyticsOutcome", "read_failed")
+                        if analytics_outcome not in counts["pinterestAnalytics"]:
+                            analytics_outcome = "read_failed"
+                        counts["pinterestAnalytics"][analytics_outcome] += 1
                 try:
                     recorded = self.complete(row, outcome)
                 except Exception as error:  # noqa: BLE001 - the row stays claimed and is re-read after its lease lapses

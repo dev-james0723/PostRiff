@@ -333,20 +333,27 @@ class PinterestProvider(OAuthProvider):
         client_id, secret, valid, diagnostic = cls.credential_pair(values)
         sandbox = str(values.get("POSTRIFF_PINTEREST_SANDBOX", "")).lower() == "true"
         readonly = values.get("POSTRIFF_PINTEREST_TRIAL_READONLY") == "1"
+        if not valid:
+            return None, diagnostic
         callback = values.get('POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN')
         if callback is not None and not fixed_https_origin(callback):
-            return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
+            return None, {**diagnostic, 'configurationState': 'invalid_configuration',
+                          'configurationIssueCode': 'pinterest_callback_origin_invalid'}
         # An official production-API Trial read needs an explicit server-side selection.
         trial_environment = values.get('POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT', 'sandbox')
         if readonly and (trial_environment not in ('sandbox', 'production') or sandbox != (trial_environment == 'sandbox')):
-            return None, {**diagnostic, "configurationState": "invalid_configuration"}
+            return None, {**diagnostic, "configurationState": "invalid_configuration",
+                          'configurationIssueCode': 'pinterest_trial_environment_invalid'}
         policy = None
         if readonly and valid:
             from .pinterest_pilot import PinterestTrialPolicy
             try:
                 policy = PinterestTrialPolicy.from_environment(values)
             except AlphaError:
-                return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
+                expiry = values.get('POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT')
+                expired = isinstance(expiry, str) and re.fullmatch(r'[0-9]{10}', expiry) and int(expiry) <= time.time()
+                return None, {**diagnostic, 'configurationState': 'invalid_configuration',
+                              'configurationIssueCode': 'pinterest_trial_expired' if expired else 'pinterest_trial_configuration_invalid'}
             from .pinterest_trial_evidence import PinterestReadOnlyEvidenceTransport
             def record(receipt):
                 print(json.dumps({"pinterestTrialRequest": receipt}, sort_keys=True), flush=True)

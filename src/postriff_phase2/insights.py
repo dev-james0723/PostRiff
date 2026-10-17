@@ -100,8 +100,11 @@ def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, pro
     if provider == 'pinterest':
         extra = {'provider_adapter': oauth._provider_for_access(provider, grant['accessToken']), 'period_start': now, 'now': now}
     fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id, **extra)
+    if provider == 'pinterest' and fetched.get('outcome') not in ('success', 'no_data'):
+        return {"provider": provider, "status": fetched["status"], "outcome": "read_failed", "recorded": []}
     recorded = record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, fetched["found"], fetched["endpoint"], now)
-    return {"provider": provider, "status": fetched["status"], "recorded": recorded}
+    return {"provider": provider, "status": fetched["status"], "recorded": recorded,
+            **({"outcome": fetched['outcome']} if provider == 'pinterest' else {})}
 
 
 def rate(numerator, denominator):
@@ -126,6 +129,46 @@ def latest_observations(cur, workspace_id, basis=None):
     return cur.fetchall()
 
 
+def latest_read_outcomes(cur, workspace_id, basis=None):
+    """Safe workspace-scoped read receipts, including a first failure with no observations.
+
+    Migration 035 is optional. A savepoint keeps an absent/older queue schema from
+    poisoning the caller's transaction or hiding already recorded native metrics.
+    """
+    if cur is None:
+        return [], 'unavailable'
+    mark = 'analytics_read_outcomes'
+    try:
+        cur.execute(f'SAVEPOINT {mark}')
+    except Exception:  # noqa: BLE001 - old schemas and lightweight cursors remain compatible
+        return [], 'unavailable'
+    try:
+        params = (workspace_id,) if basis is None else (workspace_id, basis)
+        window = '' if basis is None else ' AND read_offset=%s'
+        cur.execute("""SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id)
+                       provider,connection_id,provider_post_id,job_id,status,failure_class,last_http_status,
+                       extract(epoch from coalesce(observed_at,updated_at)),read_offset
+                       FROM public.pr_metric_reads WHERE workspace_id=%s AND attempts>0
+                       AND (status IN ('done','unavailable','dead') OR
+                            (status IN ('pending','claimed') AND failure_class IS NOT NULL))""" + window +
+                    " ORDER BY provider,connection_id,provider_post_id,job_id,coalesce(observed_at,updated_at) DESC,updated_at DESC,id DESC", params)
+        rows = cur.fetchall()
+        readings = []
+        for provider, connection, post, job, status, failure, http, at, offset in rows:
+            outcome = ('no_data' if failure == 'no_data' else 'success') if status == 'done' else 'read_failed'
+            readings.append({'provider': provider, 'connectionId': connection, 'providerPostId': post,
+                             'jobId': job, 'outcome': outcome, 'observedAt': float(at), 'readOffset': offset})
+        cur.execute(f'RELEASE SAVEPOINT {mark}')
+        return readings, 'available'
+    except Exception:  # noqa: BLE001 - no provider body, SQL error text or credential is returned
+        try:
+            cur.execute(f'ROLLBACK TO SAVEPOINT {mark}')
+            cur.execute(f'RELEASE SAVEPOINT {mark}')
+        except Exception:  # noqa: BLE001
+            pass
+        return [], 'unavailable'
+
+
 def summary(cur, workspace_id, jobs, now, basis=None):
     """Per-post rows with native metrics; families only group, never sum across providers. Display uses the
     latest values (basis None); anything comparing posts passes basis=COMPARISON_BASIS."""
@@ -138,9 +181,14 @@ def summary(cur, workspace_id, jobs, now, basis=None):
         # readOffset says how long after publishing this value was read; +1h and +7d values are not like-for-like.
         post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed), "ingestedAt": float(ingested), "periodStart": float(period[0]) if period and period[0] is not None else None}
         post["metrics"][metric]["definitionVersion"] = version
+    read_outcomes, read_outcome_availability = latest_read_outcomes(cur, workspace_id, basis)
+    outcome_index = {(r['provider'], r['connectionId'], r['providerPostId'], r['jobId']): r for r in read_outcomes}
     job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
     items = []
     for post in posts.values():
+        latest_read = outcome_index.get((post['provider'], post['connectionId'], post['providerPostId'], post['jobId']))
+        if latest_read:
+            post['latestRead'] = latest_read
         job = job_index.get(post["jobId"], {})
         binding = job.get("manifest", {})
         if (str(job.get("providerReference")) != post["providerPostId"] or binding.get("channelId") != post["connectionId"]
@@ -160,7 +208,8 @@ def summary(cur, workspace_id, jobs, now, basis=None):
         post["rates"] = {"likesPerView": rate(int(engagement) if engagement is not None else None, int(reach) if reach is not None else None)}
         items.append(post)
     # Connections without any observation are reported explicitly, never as zeros.
-    return {"posts": items, "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same account, provider, window, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
+    return {"posts": items, "readOutcomes": read_outcomes, "readOutcomeAvailability": read_outcome_availability,
+            "families": FAMILIES, "basis": basis, "rules": {"missing": "Unavailable, never 0", "crossPlatformReach": "never unique people; providers are listed side by side", "comparison": "same account, provider, window, language, content type and definition version only", "insufficientSample": f"< {MIN_COMPARABLE} comparable posts"}, "freshnessNow": now}
 
 
 def compare(posts, metric):
