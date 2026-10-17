@@ -1904,6 +1904,24 @@ export interface SecurityEvent {
   workspaceName: string;
 }
 
+/** A "This wasn't me" report (`GET/POST /api/auth/security/incidents`, RAPv2; 404 while the feature is off). */
+export interface SecurityIncident {
+  incidentId: string;
+  state: 'open' | 'user_confirmed' | 'recovering' | 'resolved';
+  accountHold: boolean;
+  holdEpoch: number;
+  createdAt: string | null;
+  resolvedAt: string | null;
+}
+
+/** What a report protected, and what it did not touch. */
+export interface SecurityIncidentReport extends SecurityIncident {
+  sessions: { rafiiApiRevoked: number; providerRefreshState: 'confirmed' | 'partial' | 'unknown' | 'unsupported' };
+  agents: { newSensitiveActions: string; alreadyExecutedActions: string };
+  connectedAccounts: 'not_disconnected';
+  nextAction: string;
+}
+
 /** An invitation addressed to the person's verified email (`GET /api/me/invitations`). */
 export interface PendingInvitation {
   invitationId: string;

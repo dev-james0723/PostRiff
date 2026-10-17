@@ -180,3 +180,15 @@ end $$;
 do $$ begin
  execute format('alter database %I set request.jwt.claim.session_id = %L', current_database(), 'harness-session-000000000001');
 end $$;
+
+-- RAPv2 P1: device registry (server-only, append-only login events).
+\ir ../../migrations/postriff/120_rapv2_device_registry.sql
+
+-- RAPv2 P1: account holds (monotonic hold_epoch, server-only).
+\ir ../../migrations/postriff/121_rapv2_account_holds.sql
+
+-- RAPv2 P1: "This wasn't me" incidents (server-only).
+\ir ../../migrations/postriff/122_rapv2_security_incidents.sql
+
+-- RAPv2 RAP-088: account deletion erases the session inventory and redacts sign-in history.
+\ir ../../migrations/postriff/123_rapv2_session_history_erasure.sql

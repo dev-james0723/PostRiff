@@ -37,6 +37,10 @@ WORKSPACE_SUMMARY_COLUMNS = (
     "(SELECT coalesce(op.display_name,'') FROM public.pr_memberships o JOIN public.pr_profiles op ON op.user_id=o.user_id WHERE o.workspace_id=w.id AND o.role='owner' AND o.status='active' ORDER BY o.updated_at LIMIT 1),"
     "(SELECT coalesce(jsonb_object_agg(c.role,c.n),'{}'::jsonb) FROM (SELECT role,count(*) AS n FROM public.pr_memberships WHERE workspace_id=w.id AND status='active' GROUP BY role) c)"
 )
+# New-sign-in emails (RAP-133): at most CAP sent per person per WINDOW seconds; the cron sends BATCH per run.
+SIGN_IN_ALERT_CAP = 5
+SIGN_IN_ALERT_WINDOW = 3600
+SIGN_IN_ALERT_BATCH = 50
 INVITATION_TTL = 7 * 86400
 MAX_PENDING_INVITATIONS = 25
 PROFILE_NAME_MAX = 80
@@ -117,6 +121,11 @@ def observe_session(cur, principal, session_id, client_label=""):
         setting = cur.fetchone()
         alert = bool(setting and setting[0])
         audit(cur, None, principal, "session.observed", session_id, {"client": (client_label or "")[:40], "alert": alert})
+    from . import device_trust
+    if device_trust.active():
+        # RAPv2 P1 device registry (RAFII_DEVICE_TRUST_V2): the browser behind this session and the ledger events
+        # that tell a new session apart from a new browser, in this same transaction.
+        device_trust.observe(cur, principal, session_id, client_label, fresh)
     return fresh, alert
 
 
@@ -762,8 +771,11 @@ class HostedWorkspaceService:
     def _alert_new_device(self, principal, session_id, client_label, eligible=None):
         """After a session's first sighting: one email, only if the person turned the alert on. The
         audit line records the attempt either way, so the account history shows it. `eligible` is the decision
-        already recorded at the first sighting (RAPv2 observe mode); otherwise the current preference decides."""
-        if not self.public_base_url:
+        already recorded at the first sighting (RAPv2 observe mode); otherwise the current preference decides.
+
+        In observe mode the request never sends (RAP-143): the decision is already durable on `session.observed`,
+        and the cron worker delivers it through deliver_sign_in_alerts, capped per person (RAP-133)."""
+        if not self.public_base_url or account_protection.observing():
             return
         with self.connection_factory() as db:
             with db.cursor() as cur:
@@ -774,6 +786,48 @@ class HostedWorkspaceService:
                 address = self._email_for(principal)
                 outcome = self.mailer.new_device(address, client_label or "an unrecognised device", self.clock(), f"{self.public_base_url}/app/account/profile", time_zone=row[1]) if address else {"sent": False}
                 audit(cur, None, principal, "session.alerted", session_id or "", {"sent": bool(outcome.get("sent"))})
+
+    def deliver_sign_in_alerts(self, limit=SIGN_IN_ALERT_BATCH, max_seconds=10):
+        """Cron step (observe mode): one new-sign-in email per `session.observed` whose recorded decision was to
+        notify and that has no `session.alerted` yet. At most SIGN_IN_ALERT_CAP sent per person per window; the rest
+        are recorded as suppressed, so the history still lists every sign-in and nothing is retried later. Each row
+        is its own transaction under a per-person advisory lock, so overlapping runs cannot email anyone twice."""
+        if not self.public_base_url or not account_protection.observing():
+            return {"status": "disabled"}
+        started, sent, suppressed = self.clock(), 0, 0
+        with self.connection_factory() as db:
+            with db.cursor() as cur:
+                cur.execute("SELECT o.actor::text,o.subject FROM public.pr_audit_events o JOIN public.pr_profiles p ON p.user_id=o.actor AND p.deleted_at IS NULL "
+                            "WHERE o.kind='session.observed' AND o.meta->>'alert'='true' AND o.at > now() - interval '1 day' "
+                            "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=o.actor AND s.kind='session.alerted' AND s.subject=o.subject) "
+                            "ORDER BY o.at LIMIT %s", (limit,))
+                pending = cur.fetchall()
+        for principal, session_id in pending:
+            if self.clock() - started > max_seconds:
+                break
+            with self.connection_factory() as db:
+                with db.cursor() as cur:
+                    cur.execute("SELECT pg_try_advisory_xact_lock(hashtext('rafii-sign-in-alert:' || %s))", (principal,))
+                    if not cur.fetchone()[0]:
+                        continue  # another run holds this person; it or the next run takes the row
+                    cur.execute("SELECT extract(epoch from o.at),coalesce(o.meta->>'client',''),coalesce(p.time_zone,'') FROM public.pr_audit_events o "
+                                "JOIN public.pr_profiles p ON p.user_id=o.actor AND p.deleted_at IS NULL WHERE o.actor=%s AND o.kind='session.observed' AND o.subject=%s "
+                                "AND NOT EXISTS(SELECT 1 FROM public.pr_audit_events s WHERE s.actor=o.actor AND s.kind='session.alerted' AND s.subject=o.subject) LIMIT 1",
+                                (principal, session_id))
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+                    cur.execute("SELECT count(*) FROM public.pr_audit_events WHERE actor=%s AND kind='session.alerted' AND meta->>'sent'='true' "
+                                "AND at > now() - make_interval(secs => %s)", (principal, SIGN_IN_ALERT_WINDOW))
+                    if cur.fetchone()[0] >= SIGN_IN_ALERT_CAP:
+                        audit(cur, None, principal, "session.alerted", session_id, {"sent": False, "reason": "rate_limited"})
+                        suppressed += 1
+                        continue
+                    address = self._email_for(principal)
+                    outcome = self.mailer.new_device(address, row[1] or "an unrecognised device", float(row[0]), f"{self.public_base_url}/app/account/profile", time_zone=row[2]) if address else {"sent": False}
+                    audit(cur, None, principal, "session.alerted", session_id, {"sent": bool(outcome.get("sent"))})
+                    sent += bool(outcome.get("sent"))
+        return {"status": "ok", "pending": len(pending), "sent": sent, "suppressed": suppressed}
 
     def _present(self, saved):
         shown = self.commands.present(saved["state"], saved["revision"])
@@ -1278,7 +1332,9 @@ class HostedWorkspaceService:
                     raise AlphaError("Session unavailable.", 404)
                 cur.execute("INSERT INTO public.pr_session_revocations(user_id,session_id) VALUES(%s,%s) ON CONFLICT DO NOTHING", (principal, session_id))
                 # Which session: the person's own history must say what was signed out (it already lists session ids).
-                audit(cur, None, principal, "session.revoked", session_id)
+                # Idempotent (RAP-051): a repeat on an already revoked session answers the same but writes nothing.
+                if cur.rowcount:
+                    audit(cur, None, principal, "session.revoked", session_id)
         return {"sessionId": session_id, "revoked": True, "current": session_id == self._session_id(token, principal)}
 
     def revoke_other_sessions(self, token):

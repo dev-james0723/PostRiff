@@ -96,6 +96,10 @@ class PostgresWorker:
             if job.get('privacyErased') or job.get('youtubeProviderDataRemoved') or job.get('manifest', {}).get('privacyErased'):
                 return False
             if state.get('accountDeletion') or state.get('accountBlock'): return False
+            # RAPv2 security hold on the approver (RAFII_SECURITY_INCIDENT_HOLD), at claim and immediately before
+            # dispatch: a held or unreadable account is not approved, so the job is held for a new review.
+            from . import security_holds
+            security_holds.assert_clear(cur, job.get('approvedBy'), authorized_at=job.get('approvedAt'))
             require_publishing(cur, workspace_id, self.clock())
             assert_job_authority(state, job, self.clock())
             manifest = job['manifest']
