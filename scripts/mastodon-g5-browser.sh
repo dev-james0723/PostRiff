@@ -52,6 +52,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$ROOT/src:$ROOT/tests"
 export POSTRIFF_PG_BIN="$PG_BIN" POSTRIFF_RESEARCH=0
+# The disposable fixture initdb explicitly creates postriff_test, not the runner OS username.
+# Match existing Linux browser harness loopback PostgreSQL connection defaults.
+export PGUSER=postriff_test PGHOST=127.0.0.1 PGPORT=55448 PGDATABASE=postgres
+export PGCONNECT_TIMEOUT=5 PGPASSFILE=/dev/null PGSERVICEFILE=/dev/null
 export NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_SENTRY_DISABLED=true
 export NEXT_PUBLIC_SUPABASE_URL='' NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=''
 export POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4448
