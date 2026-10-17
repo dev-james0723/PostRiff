@@ -33,6 +33,7 @@ import { AnalyticsEmptyState, chooseEmptyKind } from './empty-states';
 import { PostSheet } from './post-sheet';
 import { PostsTable, type PostRowData } from './posts-table';
 import { RulesCollapsible } from './rules-collapsible';
+import { DiscordEngagementPanel } from '@/features/channels/discord-engagement-panel';
 
 const infoContent = {
   title: 'Analytics',
@@ -172,6 +173,7 @@ export function AnalyticsView() {
         <GrowthEntry />
         <GrowthAnalytics />
         <TimeBackSection />
+        {channels.data?.channels.filter((channel) => channel.platform === 'Discord').map((channel) => <DiscordEngagementPanel key={channel.id} channel={channel} mode='analytics' />)}
         <SectionHeading id='post-performance-heading' title='Post performance' description='Each platform’s own numbers for your published posts.' className='pt-2' />
         {channels.error ? (
           <RetryState title='accounts' error={channels.error} onRetry={() => channels.refetch()} />

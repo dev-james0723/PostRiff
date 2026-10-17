@@ -11,6 +11,7 @@ from postriff_alpha.domain import AlphaError
 from .store import IN_FLIGHT, TERMINAL, find
 from .hosted import HostedPhase2Commands
 from .contracts import digest
+from .hosted_social import HostedSocial
 from .outcomes import normalize_result, unknown
 from .permissions import Membership, require
 from .learning_service import record_published
@@ -84,6 +85,19 @@ PREVIEW_PENDING_MESSAGE = 'Approved preview post; choose Publish approved post w
 def _no_provider_effect(job):
     return not any(job.get(key) for key in ('providerReference', 'container', 'providerUpload',
                                             'providerAssets', 'providerThread', 'progress', 'url', 'verification'))
+
+
+def defer_pinterest_budget(job, result, reconciliation):
+    """A trusted pre-POST budget wait consumes no provider-write retry, but keeps an audit event."""
+    if (job.get('manifest', {}).get('platform') != 'Pinterest' or reconciliation or job.get('providerReference')
+            or not isinstance(result, dict) or result.get('state') != 'scheduled'
+            or result.get('pinterestBudgetDeferred') is not True):
+        return False
+    attempts = job.get('attempts') or []
+    if attempts and attempts[-1].get('idempotencyKey') == job['manifest'].get('idempotencyKey'):
+        attempts.pop()
+    job['pinterestBudgetDeferrals'] = job.get('pinterestBudgetDeferrals', 0) + 1
+    return True
 
 
 class DisabledHostedSocial:
@@ -184,6 +198,12 @@ class PostgresWorker:
         if (provider is None or not getattr(provider, 'authorization_v2_enabled', False)
                 or not callable(getattr(oauth, 'discord_grant_for_worker', None))):
             raise AlphaError('Discord transport or grant custody is unavailable; dispatch paused.', 409)
+        if job['manifest'].get('operation') == 'discord.reply':
+            from .discord.engagement import ready
+            if not ready(provider):
+                raise AlphaError('Discord engagement rollout or shared coordinator is paused.', 409)
+            from .discord.message_content import assert_binding
+            assert_binding(provider, job['manifest']['discord']['target'], job['manifest']['engagementReply'], self._db_now(cur))
         grant = oauth.discord_grant_for_worker(workspace_id, job['manifest']['channelId'], cur=cur)
         if (provider is None or not getattr(provider, 'authorization_v2_enabled', False)
                 or not grant_matches(job['manifest'], grant, provider.session(grant['accessToken']))):
@@ -226,7 +246,7 @@ class PostgresWorker:
                 now = self._db_now(cur)
                 allowed = (not self._stopping and self._owns(job, claimed, now) and not job.get('cancelRequested')
                            and job.get('state') not in (*TERMINAL, 'held') and self._binding_matches(job)
-                           and (not claimed.get('dispatchPrincipal') or self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal']))
+                           and (not claimed.get('dispatchPrincipal') or self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal'], job))
                            and self._approved(cur, claimed['workspaceId'], state, job, now=now))
             except AlphaError:
                 allowed = False
@@ -344,9 +364,11 @@ class PostgresWorker:
             channel = find(state['phase2']['channels'], manifest['channelId'])
             if manifest.get('platform') == 'Discord':
                 from .discord.authorization import job_authorized
-                if not job_authorized(state, channel, job):
+                if not job_authorized(state, channel, job, now=now):
                     return False
-            cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
+            reply_job = job['manifest'].get('operation') == 'discord.reply'
+            permission_column = 'can_reply' if reply_job else 'can_publish'
+            cur.execute(f"SELECT m.role,m.{permission_column} FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
             member = cur.fetchone()
             expires = manifest['expiresAt']
             recovery = job.get('youtubeRecoveryApproval') or {}
@@ -357,7 +379,7 @@ class PostgresWorker:
                     and recovery['approvedAt'] <= now
                     and recovery['approvedAt'] < recovery['expiresAt'] <= recovery['approvedAt'] + 36 * 3600):
                 expires = max(expires, recovery['expiresAt'])
-            return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve')
+            return bool(member and Membership.from_row(member[0], **{permission_column: member[1]}).allows('reply' if reply_job else 'approve')
                         and (not job.get('youtubeAgent') or member[0] == 'owner')
                         and job['approvalDigest'] == digest(manifest) and job['approvedBy'] == manifest['actor']
                         and self.commands.engine.current(state, manifest)
@@ -369,10 +391,12 @@ class PostgresWorker:
             return False
 
     @staticmethod
-    def _requester_may_approve(cur, workspace_id, principal):
-        cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, principal))
+    def _requester_may_approve(cur, workspace_id, principal, job=None):
+        reply_job = (job or {}).get('manifest', {}).get('operation') == 'discord.reply'
+        permission_column = 'can_reply' if reply_job else 'can_publish'
+        cur.execute(f"SELECT m.role,m.{permission_column} FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, principal))
         member = cur.fetchone()
-        return bool(member and Membership.from_row(member[0], can_publish=member[1]).allows('approve'))
+        return bool(member and Membership.from_row(member[0], **{permission_column: member[1]}).allows('reply' if reply_job else 'approve'))
 
     def execute_job(self, repository, workspace_id, token, job_id, approval_digest):
         """An authenticated nudge of one existing approval, never a new or forced submission."""
@@ -380,11 +404,11 @@ class PostgresWorker:
                 or set(approval_digest) - set('0123456789abcdef')):
             raise AlphaError('Send the exact stored approval for this post.', 409)
         with repository.transaction(token, workspace_id) as (_, row, principal):
-            require(Membership.from_row(*row[2:7]), 'approve')
             state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
             if state.get('workspace', {}).get('sample'):
                 raise AlphaError('Hosted sample workspaces are read-only.', 403)
             job = find(state.get('phase2', {}).get('jobs', []), job_id)
+            require(Membership.from_row(*row[2:7]), 'reply' if job['manifest'].get('operation') == 'discord.reply' else 'approve')
             if job['manifest'].get('platform') != 'Discord':
                 raise AlphaError('Select an approved Discord post for this action.', 409)
             if (job['manifest'].get('workspaceId') != workspace_id
@@ -472,9 +496,9 @@ class PostgresWorker:
                         continue
                     original = json.dumps(state, sort_keys=True)
                     if scoped:
-                        if not self._requester_may_approve(cur, workspace_id, dispatch_principal):
-                            raise AlphaError("This action needs the 'approve' permission in this workspace.", 403)
                         target = find(state['phase2']['jobs'], job_id)
+                        if not self._requester_may_approve(cur, workspace_id, dispatch_principal, target):
+                            raise AlphaError('This action needs the permission for its approved operation.', 403)
                         if (target['manifest'].get('platform') != 'Discord'
                                 or target['manifest'].get('workspaceId') != workspace_id
                                 or approval_digest != target.get('approvalDigest')
@@ -608,10 +632,12 @@ class PostgresWorker:
                             except AlphaError as error:
                                 self._event(job, "held", str(error))
                                 continue
-                            cur.execute("SELECT m.role,m.can_publish FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
+                            reply_job = job['manifest'].get('operation') == 'discord.reply'
+                            permission_column = 'can_reply' if reply_job else 'can_publish'
+                            cur.execute(f"SELECT m.role,m.{permission_column} FROM public.pr_memberships m JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.workspace_id=%s AND m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL FOR SHARE OF m,p", (workspace_id, job['approvedBy']))
                             member = cur.fetchone()
                             # Re-authorize at claim time: the approver must still hold approve authority.
-                            if (not member or not Membership.from_row(member[0], can_publish=member[1]).allows("approve")
+                            if (not member or not Membership.from_row(member[0], **{permission_column: member[1]}).allows("reply" if reply_job else "approve")
                                     or (job.get('youtubeAgent') and member[0] != 'owner')
                                     or job['approvalDigest'] != digest(job['manifest'])
                                     or job['approvedBy'] != job['manifest']['actor']):
@@ -725,6 +751,7 @@ class PostgresWorker:
                         cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s',
                                     (json.dumps(state), claimed['workspaceId'], revision))
                         return False
+                defer_pinterest_budget(job, result, claimed['reconciliation'])
                 result = normalize_result(result, job, claimed['reconciliation'])
                 if result.get('discordReadDeferred') is True:
                     # A provider429 DID spend a GET. Only the private signal
@@ -852,7 +879,7 @@ class PostgresWorker:
                     return False
                 if ((job.get('cancelRequested') and not youtube_cancel)
                         or (claimed.get('youtubeForward') and not youtube_verified)
-                        or (claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal']))
+                        or (claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal'], job))
                         or not self._approved(cur, claimed['workspaceId'], state, job, now=now)):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
                     stopped = 'canceled' if job.get('cancelRequested') and not claimed['reconciliation'] else 'held'
@@ -882,7 +909,8 @@ class PostgresWorker:
         prepared = claimed.get('discordPrepared') or {}
         manifest = job['manifest']
         channel = find(state['phase2']['channels'], manifest['channelId'])
-        if (not job_authorized(state, channel, job)
+        now = self._lease_now(cur, job)
+        if (not job_authorized(state, channel, job, now=now)
                 or prepared.get('manifestDigest') != discord_digest(manifest)
                 or prepared.get('wireDigest') != manifest['discord']['wireDigest']):
             self._event(job, 'held', 'Discord approval or preflight changed before the final handoff; nothing was posted')
@@ -981,7 +1009,7 @@ class PostgresWorker:
                 or publish_binding(job,claimed['workspaceId'],self.worker_id) != binding
                 or not any(i == intent for i in job.get('discordDispatchIntents',[]))
                 or not self._approved(cur,claimed['workspaceId'],state,job,now=now)
-                or claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur,claimed['workspaceId'],claimed['dispatchPrincipal'])):
+                or claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur,claimed['workspaceId'],claimed['dispatchPrincipal'],job)):
             raise RateCoordinatorUnavailable()
         self._current_discord_grant(cur,claimed['workspaceId'],job)
         now = self._db_now(cur)  # credential/member lock waits cannot revive an expired fence
@@ -1054,6 +1082,40 @@ class PostgresWorker:
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
             return True
 
+    def _discord_reply_read_guard(self, claimed, *, reconciliation=False):
+        """No provider read after withdrawal, role loss or a changed installation.
+
+        The live lease, DB clock and credential-origin fence are rechecked at
+        each GET, including permission preflight and known-receipt reconciliation.
+        A canceled or revoked unknown delivery is retained for manual review.
+        """
+        def authorize():
+            from .discord.authorization import job_authorized
+            with self.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT revision,state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
+                row = cur.fetchone()
+                if not row:
+                    raise AlphaError('Discord reply workspace is unavailable.', 409)
+                state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                job = find(state.get('phase2', {}).get('jobs', []), claimed['job']['id'])
+                now = self._db_now(cur)
+                channel = find(state['phase2']['channels'], job['manifest']['channelId'])
+                if (self._stopping or state.get('accountDeletion') or state.get('accountBlock')
+                        or job.get('privacyErased') or job.get('cancelRequested')
+                        or not self._owns(job, claimed, now) or not self._binding_matches(job)
+                        or not job_authorized(state, channel, job, now=now)
+                        or not self._requester_may_approve(cur, claimed['workspaceId'], job['approvedBy'], job)):
+                    raise AlphaError('Discord reply consent or permission changed.', 409)
+                self._current_discord_grant(cur, claimed['workspaceId'], job)
+                from .security_holds import assert_clear
+                assert_clear(cur, job['approvedBy'], authorized_at=job['approvedAt'])
+                if not reconciliation and not self._approved(cur, claimed['workspaceId'], state, job, now=self._db_now(cur)):
+                    raise AlphaError('Discord reply approval changed.', 409)
+                if not self._owns(job, claimed, self._db_now(cur)):
+                    raise AlphaError('Discord reply lease expired during read authorization.', 409)
+            return True
+        return authorize
+
     def step(self, crash=None, *, workspace_id=None, job_id=None, approval_digest=None, dispatch_principal=None, youtube_only=False, exclude_youtube=False, linkedin_only=False, discord_only=False, exclude_discord=False):
         scope = (workspace_id, job_id, approval_digest, dispatch_principal)
         claimed = self.claim(workspace_id=workspace_id, job_id=job_id, approval_digest=approval_digest, dispatch_principal=dispatch_principal, youtube_only=youtube_only, exclude_youtube=exclude_youtube, linkedin_only=linkedin_only, discord_only=discord_only, exclude_discord=exclude_discord) if any(value is not None for value in scope) or youtube_only or exclude_youtube or linkedin_only or discord_only or exclude_discord else self.claim()
@@ -1066,7 +1128,9 @@ class PostgresWorker:
                 return True
             try:
                 from .discord.rate_limits import RateDelayed, RateCoordinatorUnavailable
-                claimed['discordPrepared'] = self.social.prepare_discord_dispatch(claimed['job']['manifest'])
+                read_options = ({'read_authorize': self._discord_reply_read_guard(claimed)}
+                                if claimed['job']['manifest'].get('operation') == 'discord.reply' else {})
+                claimed['discordPrepared'] = self.social.prepare_discord_dispatch(claimed['job']['manifest'], **read_options)
                 # Preflight refreshes an expired linked identity outside SQL locks.
                 # The unchanged strict renewal must pass before reserving any
                 # publish permit; final authorization still rechecks every fence.
@@ -1125,12 +1189,19 @@ class PostgresWorker:
         try:
             if claimed.get('instagramAction'):
                 result = self.social.advance_instagram(claimed['job']['manifest'], claimed['job'], claimed['instagramAction'])
+            elif claimed['reconciliation'] and claimed['job']['manifest'].get('operation') == 'discord.reply':
+                result = self.social.reconcile_discord(claimed['job']['manifest'], claimed['job'],
+                                                       read_authorize=self._discord_reply_read_guard(claimed, reconciliation=True))
             elif claimed["reconciliation"]:
                 result = self.social.reconcile(claimed["job"]["manifest"], claimed["job"])
             elif claimed['job']['manifest'].get('platform') == 'Discord':
                 result = self.social.submit_discord_authorized(claimed['job']['manifest'], claimed['discordDispatch'])
             else:
-                result = self.social.submit(claimed["job"]["manifest"])
+                manifest = claimed['job']['manifest']
+                if manifest.get('platform') == 'Pinterest' and isinstance(self.social, HostedSocial):
+                    result = self.social.submit(manifest, dispatch_context={'leaseId': claimed['job'].get('leaseId'), 'leaseOwner': self.worker_id})
+                else:
+                    result = self.social.submit(manifest)
         except UnconsumedPublishPermit as error:
             try:
                 if self.release_discord_expired_permit(claimed, error):

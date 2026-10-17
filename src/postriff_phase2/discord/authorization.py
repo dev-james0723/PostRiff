@@ -98,7 +98,20 @@ def wire_content(manifest):
             reject('Choose a supported Discord image.')
         files.append({'id': index, 'filename': f'rafii.{suffix}', 'description': asset.get('alt') or '',
                       'sha256': asset['hash'], 'bytes': asset['bytes'], 'mime': asset['mime']})
-    return {'content': manifest['payload']['text'], 'allowed_mentions': {'parse': []}, 'files': files}
+    wire = {'content': manifest['payload']['text'], 'allowed_mentions': {'parse': []}, 'files': files}
+    if manifest.get('operation') == 'discord.reply':
+        reply = manifest.get('engagementReply') or {}
+        text = manifest['payload']['text']
+        if (manifest.get('schema') != 'rafii.discord.reply.v1' or media
+                or not snowflake(reply.get('parentMessageId')) or not snowflake(reply.get('parentAuthorId'))
+                or not isinstance(text, str) or not text.strip() or '\x00' in text
+                or len(text.encode('utf-16-le')) // 2 > 2000 or reply.get('textDigest') != digest(text)):
+            reject('Review the exact Discord reply and parent message again.')
+        wire['allowed_mentions']['replied_user'] = False
+        wire['message_reference'] = {'type': 0, 'message_id': reply['parentMessageId'], 'fail_if_not_exists': True}
+    elif manifest.get('engagementReply'):
+        reject('The Discord reply operation changed.')
+    return wire
 
 
 def unresolved_delivery(job):
@@ -184,10 +197,15 @@ def approval(job):
     return result
 
 
-def job_authorized(state, channel, job):
+def job_authorized(state, channel, job, *, now=None):
     try:
         manifest = job['manifest']
         assert_no_unresolved_repeat(state, manifest, excluding=job['id'])
+        if manifest.get('operation') == 'discord.reply':
+            import time
+            from .engagement import reply_current
+            if job.get('automation') or not reply_current(state, manifest, time.time() if now is None else now):
+                return False
         if job.get('automation'):
             if job['automation'].get('approvedVia') != 'human' or not job.get('discordHumanApproval'):
                 return False

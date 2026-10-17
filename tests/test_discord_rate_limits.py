@@ -157,6 +157,9 @@ class MemoryLedger:
         elif "SET state='sent'" in sql:
             pid,expected=params;r=self.admissions[pid];self.rowcount=int(r['state']==expected)
             if self.rowcount:r['state']='sent'
+        elif "SET state='blocked',outcome_at=clock_timestamp() WHERE id=" in sql:
+            r=self.admissions[params[0]];self.rowcount=int(r['state']=='sent' and r['method']=='GET' and not r['publish'])
+            if self.rowcount:r['state']='blocked'
         elif "SET state='blocked'" in sql:
             for r in self.admissions.values():
                 if r['state'] in ('reserved','sealed') and params[0] in r['keys']:r['state']='blocked'
@@ -283,7 +286,7 @@ class BotIdentityCacheRegression(unittest.TestCase):
         self.p=DiscordProvider(fixture_app,'synthetic-secret','synthetic-bot','https://rafii.invalid')
         self.p.authorization_v2_enabled=self.p.connections_v2_enabled=self.p.rate_v1_enabled=True
         self.p.rate_limiter=SharedPostgresBudget(MemoryLedger().connection,fixture_app,policy=synthetic_policy())
-        self.p._bot=lambda method,path:self.wire(method,self.p.API+path)
+        self.p._bot=lambda method,path,**kwargs:self.wire(method,self.p.API+path)
         self.now=100.
         clock=patch('postriff_phase2.social_connectors.time.monotonic',side_effect=lambda:self.now)
         clock.start();self.addCleanup(clock.stop)

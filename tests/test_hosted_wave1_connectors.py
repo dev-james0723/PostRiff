@@ -355,8 +355,16 @@ class Cursor:
             self.result = None if not found else (found[0], found[1]["ciphertext"], found[1]["key_id"], found[1]["expires"], found[1]["consumed"])
         elif s.startswith("UPDATE public.pr_oauth_transactions SET verifier_ciphertext"):
             db.txns[params[2]].update(ciphertext=params[0], key_id=params[1])
+        elif s.startswith("SELECT outcome FROM public.pr_oauth_transactions"):
+            found = db.txns.get(params[0])
+            self.result = (found.get('outcome'),) if found and found['workspace'] == params[1] else None
+        elif s.startswith("UPDATE public.pr_oauth_transactions SET outcome='denied'"):
+            for txn in db.txns.values():
+                if txn['workspace'] == params[0] and txn['provider'] == 'pinterest' and (not txn['consumed'] or txn.get('outcome') == 'exchange_started'):
+                    txn.update(consumed=True,outcome='denied')
         elif s.startswith("UPDATE public.pr_oauth_transactions SET consumed_at"):
             db.txns[params[0]]["consumed"] = True
+            db.txns[params[0]]['outcome'] = 'exchange_started' if "outcome='exchange_started'" in s else 'finished'
         elif s.startswith("INSERT INTO public.pr_encrypted_credentials"):
             workspace, connection, provider, account, access, refresh, key_id, scopes, expires, refresh_supported = params
             db.credentials[connection] = {"workspace": workspace, "provider": provider, "account": account, "access": access, "key_id": key_id, "scopes": scopes, "expires": expires, "revoked": False}

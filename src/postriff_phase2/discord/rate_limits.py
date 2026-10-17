@@ -100,7 +100,7 @@ def _digest(value):
 
 
 def route_identity(method, path):
-    """Bounded REST templates. Only server-list pagination accepts a query.
+    """Bounded REST templates with exact allowlisted read query shapes.
 
     OAuth secret-bearing form bodies never contribute to a stored key. Webhook
     publishing is deliberately unsupported; its invalid404 classification is
@@ -116,9 +116,14 @@ def route_identity(method, path):
             query = parse_qs(url.query, keep_blank_values=True, strict_parsing=True)
         except ValueError:
             raise RateCoordinatorUnavailable() from None
-        if (method != 'GET' or url.path != '/users/@me/guilds' or set(query) - {'limit', 'after'}
-                or query.get('limit') != ['200'] or 'after' in query and (
-                    len(query['after']) != 1 or not _ID.fullmatch(query['after'][0]))):
+        server_list = (url.path == '/users/@me/guilds' and not set(query) - {'limit', 'after'}
+                       and query.get('limit') == ['200'] and ('after' not in query or
+                           len(query['after']) == 1 and _ID.fullmatch(query['after'][0])))
+        message_page = (re.fullmatch(r'/channels/[0-9]{5,25}/messages', url.path)
+                        and query == {'limit': ['50']})
+        guild_counts = (re.fullmatch(r'/guilds/[0-9]{5,25}', url.path)
+                        and query == {'with_counts': ['true']})
+        if method != 'GET' or not (server_list or message_page or guild_counts):
             raise RateCoordinatorUnavailable()
     parts = url.path.strip('/').split('/')
     if len(parts) > 8 or any(not p or p in ('.', '..') or not re.fullmatch(r'[A-Za-z0-9_@-]+', p) for p in parts):
@@ -902,6 +907,23 @@ class SharedPostgresBudget:
                     cur.execute(f'''UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp()
                         WHERE state IN ('reserved','sealed') AND scope_keys @> ARRAY[%s]::text[]''', (key,))
         return {**classification,'retryAfterSeconds':retry,'retryHintMalformed':bad_retry}
+
+    def abandon_unsent_read(self, permit):
+        """Retire a GET whose final local consent check denied before transport.
+
+        No quota refund, policy extension, provider observation or replacement
+        permit. The spent slot lasts through its normal window; this known
+        unsent request cannot remain an unresolved response forever.
+        """
+        if not isinstance(permit, Permit) or permit.method != 'GET' or permit.binding_hash is not None:
+            raise RateCoordinatorUnavailable()
+        with self._transaction() as cur:
+            row = self._admission(cur, permit)
+            if row['state'] != 'sent' or row['intent'] is not None:
+                raise RateCoordinatorUnavailable()
+            cur.execute(f"UPDATE {ADMISSIONS} SET state='blocked',outcome_at=clock_timestamp() WHERE id=%s::uuid AND state='sent' AND NOT is_publish AND method='GET'", (permit.id,))
+            if cur.rowcount != 1:
+                raise RateCoordinatorUnavailable()
 
     def note_transport_failure(self, permit):
         return self.observe(permit,{'status':503,'headers':{}},transport_failure=True)

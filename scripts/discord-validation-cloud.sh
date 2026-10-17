@@ -91,5 +91,8 @@ for i,part in enumerate(parts):
         'sha256':hashlib.sha256(raw).hexdigest(),'text':part}),flush=True)
 PY_INDEX_EVIDENCE
 fi
+# This fixture requires Linux/CI, the synthetic fence and the owned test role.
+# It must not inherit the ordinary generic PostgreSQL catalogue.
+discord_validation_gate engagement-sql python scripts/postriff_disposable_postgres.py tests/phase2/postgres_discord_engagement.py
 discord_validation_gate fixture python tests/discord_ui_fixture.py .depot/discord-p0-ui.json
 exit "$discord_validation_status"

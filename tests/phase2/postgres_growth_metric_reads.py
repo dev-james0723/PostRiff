@@ -420,4 +420,75 @@ with connection() as db:
     assert db.execute("SELECT status FROM pr_metric_reads WHERE id=%s", (race_row['id'],)).fetchone()[0] == 'cancelled'
 checks.append('scope revoked during HTTP prevents append and is counted as cancelled, not done')
 
+# Pinterest reuses this same worker and lease/observation path, with separate enablement and schema gates.
+from postriff_phase2.wave3_connectors import PinterestProvider
+from postriff_phase2.pinterest_analytics import SCOPES as PIN_SCOPES
+from test_hosted_wave1_connectors import Wire, ok
+pin_wire = Wire([])
+pin_provider = PinterestProvider('1615884', 'SYNTHETIC', transport=pin_wire, production_reviewed=True, analytics_enabled=True)
+pin_token = json.dumps({'v':1,'at':'SYNTHETIC','environment':'production','clientId':'1615884','accountId':'1234567','scope':sorted(PIN_SCOPES)})
+class PinOAuth:
+    providers = {'pinterest':pin_provider}
+    calls = 0
+    def token_for_worker(self, workspace_id, connection_id):
+        self.calls += 1
+        return {'provider':'pinterest','accessToken':pin_token,'scopes':sorted(PIN_SCOPES)}
+    def _provider_for_access(self, provider, token):
+        assert provider == 'pinterest'
+        pin_provider._bound(token, 'at')
+        return pin_provider
+pin_oauth = PinOAuth()
+pin_scheduler = M.MetricScheduler(connection, pin_oauth, transport=lambda *a,**k: (_ for _ in ()).throw(AssertionError('raw transport bypass')),
+    workspace_allowlist={wid}, worker_id='mr-pin')
+assert not pin_scheduler.provider_allowed('pinterest')
+with connection() as db:
+    db.execute("UPDATE pr_metric_reads SET status='cancelled',lease_owner=NULL,lease_until=NULL WHERE provider='threads' AND status IN ('pending','claimed')")
+    db.execute("INSERT INTO pr_channel_capabilities(workspace_id,connection_id,capability,level) VALUES(%s,'conn-pinterest-1','analytics','Direct')", (wid,))
+    db.execute("INSERT INTO pr_encrypted_credentials(workspace_id,connection_id,provider,provider_account_id,access_ciphertext,key_id,scopes) VALUES(%s,'conn-pinterest-1','pinterest','1234567','sealed','k1',%s)", (wid,sorted(PIN_SCOPES)))
+    assert db.execute("SELECT count(*) FROM pr_metric_reads WHERE provider='pinterest'").fetchone()[0] == 0
+migration_pin = (ROOT/'migrations/postriff/20261017_pinterest_metric_reads.sql').read_text()
+rollback_pin = (ROOT/'migrations/postriff/20261017_pinterest_metric_reads.rollback.sql').read_text()
+with psycopg.connect(DSN,autocommit=True) as db:
+    db.execute(migration_pin); db.execute(migration_pin)
+    assert pin_scheduler.provider_allowed('pinterest')
+    db.execute(rollback_pin)
+    assert not pin_scheduler.provider_allowed('pinterest')
+    db.execute(migration_pin)
+assert pin_scheduler.provider_allowed('pinterest')
+with connection() as db,db.cursor() as cur:
+    pin_scheduler.on_post_verified(cur,wid,job('1234567',platform='Pinterest',channel='conn-pinterest-1'))
+    pin_scheduler.on_post_verified(cur,wid,job('1234567',platform='Pinterest',channel='conn-pinterest-1'))
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_reads WHERE provider='pinterest'").fetchone()[0] == 4
+pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'all':{'summary_metrics':{'IMPRESSION':10,'SAVE':0,'PIN_CLICK':3,'OUTBOUND_CLICK':2}}})])
+# Transport remains the provider's bound transport, never the generic Meta transport.
+result_pin = pin_scheduler.tick(max_reads=1)
+assert result_pin['done'] == 1,result_pin
+with connection() as db:
+    native = db.execute("SELECT metric,availability,value,definition_version,period_start IS NOT NULL FROM pr_metric_observations WHERE provider='pinterest' ORDER BY metric").fetchall()
+assert len(native)==4 and all(r[3]=='pinterest-pin-utc-window-v1' and r[4] for r in native),native
+assert next(r for r in native if r[0]=='saves')[1:3] == ('available',0)
+with connection() as db:
+    db.execute("UPDATE pr_metric_reads SET due_at=now()-interval '1second' WHERE provider='pinterest' AND read_offset='1h'")
+pin_claim = pin_scheduler.claim(1)[0]
+pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'all':{'summary_metrics':{'IMPRESSION':15}}})])
+pin_outcome = pin_scheduler.read(pin_claim,{})
+with connection() as db:
+    db.execute("UPDATE pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id='conn-pinterest-1'",(wid,))
+assert pin_scheduler.complete(pin_claim,pin_outcome) is True
+assert pin_outcome['state']=='cancelled'
+with connection() as db:
+    assert db.execute("SELECT count(*) FROM pr_metric_observations WHERE provider='pinterest'").fetchone()[0] == 4
+before_pin_calls = pin_oauth.calls
+other_result = pin_scheduler.read({**pin_claim,'workspaceId':other},{})
+assert other_result['state']=='cancelled' and pin_oauth.calls==before_pin_calls
+with psycopg.connect(DSN,autocommit=True) as db:
+    try:
+        db.execute(rollback_pin)
+        raise AssertionError('Rollback must preserve existing Pinterest metric rows')
+    except psycopg.errors.RaiseException:
+        db.execute('ROLLBACK')
+assert pin_scheduler.provider_allowed('pinterest')
+checks.append('Pinterest flags/review/schema gate, migration idempotency and empty rollback, four idempotent worker offsets, native zero/definitions, existing lease revocation fence, tenant denial, and data-preserving rollback refusal PASS; synthetic provider only')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

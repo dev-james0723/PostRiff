@@ -15,6 +15,7 @@ FAMILIES = {
     "resonance": ("likes", "comments", "replies", "reposts", "quotes", "shares", "saved"),
 }
 INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares")}
+INSIGHT_METRICS['pinterest'] = ('impressions', 'saves', 'pin_clicks', 'outbound_clicks')
 MIN_COMPARABLE = 3
 # Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
 # reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
@@ -44,8 +45,12 @@ def insights_endpoint(provider, provider_post_id):
     return f"{base}/{GRAPH_VERSION}/{quote(provider_post_id)}/insights"
 
 
-def fetch_post_insights(transport, access_token, provider, provider_post_id):
+def fetch_post_insights(transport, access_token, provider, provider_post_id, *, provider_adapter=None, period_start=None, now=None):
     """One insights GET, no database. {"status", "found": {metric: value}, "endpoint"}; transport errors propagate."""
+    if provider == 'pinterest':
+        if provider_adapter is None:
+            raise AlphaError('Pinterest analytics requires bound provider custody.', 503)
+        return provider_adapter.pin_analytics(access_token, provider_post_id, start_at=period_start, end_at=now)
     metrics = INSIGHT_METRICS[provider]
     endpoint = insights_endpoint(provider, provider_post_id)
     response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": access_token}))
@@ -71,7 +76,8 @@ def record_observations(cur, workspace_id, connection_id, provider, provider_pos
     extra_vals = ",%s,to_timestamp(%s)" if read_offset is not None else ""
     for metric in INSIGHT_METRICS[provider]:
         available = type(found.get(metric)) in (int, float) and math.isfinite(found[metric]) and found[metric] >= 0
-        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, DEFINITION_VERSION, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
+        definition = 'pinterest-pin-utc-window-v1' if provider == 'pinterest' else DEFINITION_VERSION
+        params = [workspace_id, connection_id, provider, provider_post_id, job_id, metric, definition, found.get(metric) if available else None, "available" if available else "unavailable", now, endpoint]
         if read_offset is not None:
             params += [read_offset, period_start]
         cur.execute(f"INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint{extra_cols}) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'count',%s,to_timestamp(%s),%s{extra_vals})", params)
@@ -85,8 +91,15 @@ def ingest_post_insights(cur, transport, oauth, workspace_id, connection_id, pro
     if not metrics:
         cur.execute("INSERT INTO public.pr_metric_observations(workspace_id,connection_id,provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,observed_at,source_endpoint) VALUES(%s,%s,%s,%s,%s,'all',%s,NULL,'count','not_supported',to_timestamp(%s),'')", (workspace_id, connection_id, provider, provider_post_id, job_id, DEFINITION_VERSION, now))
         return {"provider": provider, "availability": "not_supported"}
+    extra = {}
+    if provider == 'pinterest':
+        from .pinterest_analytics import enabled
+        if not enabled(oauth.providers.get(provider)):
+            raise AlphaError('Pinterest analytics is not enabled for this integration.', 403)
     grant = oauth.token_for_worker(workspace_id, connection_id)
-    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id)
+    if provider == 'pinterest':
+        extra = {'provider_adapter': oauth._provider_for_access(provider, grant['accessToken']), 'period_start': now, 'now': now}
+    fetched = fetch_post_insights(transport, grant["accessToken"], provider, provider_post_id, **extra)
     recorded = record_observations(cur, workspace_id, connection_id, provider, provider_post_id, job_id, fetched["found"], fetched["endpoint"], now)
     return {"provider": provider, "status": fetched["status"], "recorded": recorded}
 

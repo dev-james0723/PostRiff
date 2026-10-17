@@ -1114,6 +1114,15 @@ class HostedApplication:
                     return self._json(start_response, 200, discord.guilds(parts[2], token, parts[5]))
                 if parts[6] == 'disconnect' and method == 'POST':
                     return self._json(start_response, 200, discord.disconnect_identity(parts[2], token, parts[5]))
+            if (len(parts) in (6, 7) and parts[:2] == ['api', 'workspaces']
+                    and parts[3] == 'channels' and parts[5] == 'discord-engagement'):
+                engagement = service.discord_engagement
+                if len(parts) == 6 and method == 'GET':
+                    return self._json(start_response, 200, engagement.status(parts[2], token, parts[4]))
+                operations = {'consent': engagement.consent, 'read': engagement.read,
+                              'preview': engagement.preview, 'approve': engagement.approve, 'cancel': engagement.cancel}
+                if len(parts) == 7 and method == 'POST' and parts[6] in operations:
+                    return self._json(start_response, 200, operations[parts[6]](parts[2], token, parts[4], self._body(environ)))
             if len(parts) >= 4 and parts[:2] == ["api", "workspaces"] and parts[3] == "channels":
                 oauth = service.oauth
                 if len(parts) == 4 and method == "GET":
@@ -1128,7 +1137,8 @@ class HostedApplication:
                     extra = {"iss": body["iss"]} if body.get("iss") is not None else {}
                     return self._json(start_response, 200, oauth.complete(parts[2], token, parts[4], body.get("state"), body.get("code"), body.get("error"), **extra))
                 if len(parts) == 6 and parts[5] == "destinations" and method == "GET":
-                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4]))
+                    board_id = self._query_str(environ, 'boardId')
+                    return self._json(start_response, 200, oauth.destinations(parts[2], token, parts[4], board_id=board_id))
                 if len(parts) == 7 and parts[5] == 'destinations' and method == 'DELETE':
                     return self._json(start_response, 200, oauth.remove_discord_destination(parts[2], token, parts[4], parts[6]))
                 if len(parts) == 6 and parts[5] == "creator-info" and method == "GET":
@@ -1148,6 +1158,9 @@ class HostedApplication:
                     if method == "GET":
                         return self._json(start_response, 200, history.status(parts[2], token, parts[4]))
                     return self._json(start_response, 202, history.request(parts[2], token, parts[4], self._body(environ)))
+                if len(parts) == 6 and parts[5] == "refresh-authorization" and method == "POST":
+                    self._body(environ)
+                    return self._json(start_response, 200, oauth.refresh_pinterest_authorization(parts[2], token, parts[4]))
                 if len(parts) == 6 and parts[5] == "verify" and method == "POST":
                     self._body(environ)
                     return self._json(start_response, 200, oauth.verify(parts[2], token, parts[4]))

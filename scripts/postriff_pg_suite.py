@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ OWNED_CLOUD_ONLY={
     'postgres_discord_rate_limits.py':'bash scripts/discord-p4-validation-cloud.sh',
     'postgres_discord_capacity.py':'bash scripts/discord-capacity-cloud.sh with an explicit predeclared stage',
     'postgres_discord_admission_index_probe.py':'bash scripts/discord-validation-cloud.sh --scope-store-probe (diagnostic only)',
+    'postgres_discord_engagement.py':'bash scripts/discord-p4-validation-cloud.sh',
 }
 
 def select_scripts(candidates, requested):
@@ -47,7 +49,7 @@ def main():
             subprocess.run([str(PG/'initdb'),'-D',str(data),'-A','trust','--no-locale','-E','UTF8'],check=True,stdout=subprocess.DEVNULL)
             server_log=Path(tmp)/'postgres.log'
             try:
-                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438','-w','start'],check=True,stdout=subprocess.DEVNULL)
+                subprocess.run([str(PG/'pg_ctl'),'-D',str(data),'-l',str(server_log),'-o','-h 127.0.0.1 -p 55438 -k '+shlex.quote(tmp),'-w','start'],check=True,stdout=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 # TemporaryDirectory otherwise removes the only startup diagnostic.
                 # This cluster has no application credentials or customer records.

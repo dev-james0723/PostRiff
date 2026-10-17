@@ -1452,6 +1452,7 @@ export interface ResearchEgress {
 export type CapabilityLevel = 'Direct' | 'Assisted' | 'Bridge' | 'Unsupported';
 
 export interface Capability {
+  availability?: 'scoped' | 'consent_required';
   level: CapabilityLevel;
   evidence: string;
   verifiedAt: number | null;
@@ -1459,6 +1460,7 @@ export interface Capability {
 }
 
 export interface ChannelView {
+  discordEngagement?: { implemented: boolean; enabled: boolean };
   defaultDestinationId?: string | null;
   discordDestinations?: DiscordDestination[];
   discordIdentityConnectionId?: string;
@@ -1489,6 +1491,8 @@ export interface ChannelView {
 
 export interface ProviderView {
   discordConnectionsV2?: boolean;
+  /** Restricted server-side Pinterest pilot; never a public release gate. */
+  trialReadonly?: boolean;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1546,8 +1550,11 @@ export interface ChannelDestination {
   authorizedId?: string | null;
   id: string;
   name: string;
-  kind: 'text' | 'announcement' | 'page' | 'board';
+  kind: 'text' | 'announcement' | 'page' | 'board' | 'section';
   selected: boolean;
+  boardId?: string;
+  privacy?: string;
+  eligible?: boolean;
 }
 
 export interface OwnedPost {

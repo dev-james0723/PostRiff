@@ -480,6 +480,8 @@ class HostedWorkspaceService:
         self.data_requests = DataRequests(self.repository, clock)
         self.audience = AudienceService(self.repository, self.oauth, clock, transport=audience_transport, reply_sender_enabled=reply_sender_enabled)
         self.audience._service = self   # reply suggestions are written by the drafting service's managed writer
+        from .discord.engagement import DiscordEngagementService
+        self.discord_engagement = DiscordEngagementService(self.repository, self.oauth, self.commands, clock)
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity

@@ -76,6 +76,7 @@ class Phase2Store(Store):
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
         if p:
+            p.pop('discordEngagement', None)
             p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
             p["art"]["providerBrief"] = self.art_brief(state)
             p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
@@ -570,6 +571,10 @@ class Phase2Store(Store):
         try:
             if m.get('privacyErased'):
                 return False
+            if m.get('operation') == 'discord.reply':
+                from .discord.engagement import reply_current, channel_for
+                from .discord.authorization import manifest_current
+                return reply_current(s, m, self.clock()) and manifest_current(s, channel_for(s, m['channelId']), m)
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
             if c['platform'] == 'Discord':
                 from .discord.authorization import manifest_current

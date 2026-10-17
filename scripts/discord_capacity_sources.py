@@ -21,4 +21,30 @@ def source_paths(root):
         'tests/test_discord_capacity_approval_receipt.py', 'tests/test_rafii_account_holds.py', 'tests/test_postriff_account_security.py',
         'tests/test_founder_product_events.py', 'tests/test_youtube_fleet.py',
     })
+    # Explicit engagement UI, regression and cloud-wrapper inputs supplement every
+    # original critical path and the complete src/migration inventory above.
+    paths.update({
+        'scripts/discord-engagement-cloud.sh',
+        'tests/discord_engagement_reuse_proof.py',
+        'tests/discord_engagement_ui_fixture.py',
+        'tests/phase2/postgres_discord_engagement.py',
+        'tests/test_discord_engagement.py',
+        'web/package.json',
+        'web/src/features/analytics/analytics-view.tsx',
+        'web/src/features/channels/channel-card.tsx',
+        'web/src/features/channels/discord-engagement-panel.tsx',
+        'web/src/features/inbox/coverage-strip.tsx',
+        'web/src/features/inbox/inbox-view.tsx',
+        'web/src/lib/api/client.ts',
+        'web/src/lib/api/types.ts',
+        'web/src/lib/channels/discord-engagement.ts',
+        'web/tests/discord-engagement-browser.cjs',
+    })
+    # Pin the additional guarded integration routing and its inert regression.
+    paths.update({
+        'scripts/postriff_pg_suite.py',
+        'tests/test_postriff_pg_suite_controls.py',
+        'scripts/discord-validation-cloud.sh',
+        'scripts/discord-integrated-validation-cloud.sh',
+    })
     return tuple(sorted(paths))
