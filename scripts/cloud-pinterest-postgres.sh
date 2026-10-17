@@ -19,4 +19,5 @@ env -i PATH="$PATH" HOME="$pg_test_home" CI=true LC_ALL=C PYTHONDONTWRITEBYTECOD
   PYTHONPATH="$PWD/src:$PWD/tests" POSTRIFF_PG_BIN="$pg_bin" POSTRIFF_RESEARCH=0 \
   "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_pinterest.py tests/phase2/postgres_browser_session_guard.py \
     tests/phase2/postgres_device_registry.py tests/phase2/postgres_account_holds.py \
-    tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py
+    tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py \
+    tests/phase2/postgres_growth_metric_reads.py

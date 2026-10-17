@@ -1088,6 +1088,9 @@ class OAuthService:
                 set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
             elif name == requested:
                 set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
+        if getattr(adapter, 'id', None) == 'pinterest':
+            from .pinterest_analytics import describe
+            matrix = describe(matrix, granted, analytics_enabled=getattr(adapter, 'analytics_enabled', False))
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
@@ -1107,6 +1110,11 @@ class OAuthService:
         views = [{**customer_view(with_youtube_credential_status(c, credentials.get((workspace_id, c['id']))), matrices.get(c['id'], assisted_matrix()), now), 'pictureDigest': pictures.get(c['id'])} for c in snapshot['state'].get('phase2', {}).get('channels', [])]
         for view in views:
             view['socialReadiness'] = self.connection_readiness(view, by_platform.get(view['platform']))
+        for view in views:
+            if view.get('platform') == 'Pinterest':
+                from .pinterest_analytics import describe
+                view['capabilities'] = describe(view.get('capabilities', {}), view.get('scopes', []),
+                    analytics_enabled=getattr(self.providers.get('pinterest'), 'analytics_enabled', False))
         return {'channels': views, 'providers': catalog}
 
     def token_for_worker(self, workspace_id, connection_id, *, youtube_policy_required=False, pinterest_force_refresh=False):

@@ -307,19 +307,24 @@ class PinterestProvider(OAuthProvider):
     AUTH = "https://www.pinterest.com/oauth/"
     API, SANDBOX = "https://api.pinterest.com", "https://api-sandbox.pinterest.com"
     SCOPES = {"identity": ["user_accounts:read"], "boards_read": ["user_accounts:read", "boards:read"], "publish": ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
-              "schedule": ["user_accounts:read", "boards:read", "pins:read", "pins:write"]}
+              "schedule": ["user_accounts:read", "boards:read", "pins:read", "pins:write"],
+              "analytics": ["user_accounts:read", "boards:read", "pins:read"]}
     EXPLAIN = {"identity": "Connect your Pinterest account. Rafii reads only your profile.",
                "boards_read": "Rafii reads your Pinterest profile and boards. This connection cannot publish or schedule Pins.",
-               "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin."}
+               "publish": "Rafii will create Pins on the board you choose only when you approve each exact Pin.",
+               "analytics": "Read available impressions, saves, Pin clicks and outbound clicks for your own Pins. No ads access or comment/reply permission."}
     account_requirement = "An eligible Pinterest account with a board. Personal account data may require Pinterest approval; business accounts are recommended."
     publish_scope = "pins:write"
     publish_required = frozenset({"user_accounts:read", "pins:read", "pins:write", "boards:read"})
     refresh_margin = 300
+    native_schedule = False
+    server_schedule = True  # Existing Rafii durable worker dispatches the approved Pin when due.
     has_destinations = True
     destination_scope, destination_label = "post", "Board"
 
-    def __init__(self, client_id, client_secret, sandbox=False, transport=None, production_reviewed=False):
+    def __init__(self, client_id, client_secret, sandbox=False, transport=None, production_reviewed=False, analytics_enabled=False):
         super().__init__(client_id, client_secret, transport=transport, production_reviewed=production_reviewed)
+        self.analytics_enabled = analytics_enabled is True
         # Trial access writes to Pinterest's sandbox; boards there are separate from the live account's boards.
         self.sandbox = bool(sandbox)
 
@@ -346,12 +351,22 @@ class PinterestProvider(OAuthProvider):
             def record(receipt):
                 print(json.dumps({"pinterestTrialRequest": receipt}, sort_keys=True), flush=True)
             transport = PinterestReadOnlyEvidenceTransport(record, environment=trial_environment, mock_transport=transport)
-        adapter = cls(client_id, secret, sandbox=sandbox, transport=transport) if valid else None
+        adapter = cls(client_id, secret, sandbox=sandbox, transport=transport,
+                      analytics_enabled=values.get("POSTRIFF_PINTEREST_ANALYTICS_ENABLED") == "1" and not readonly) if valid else None
         if adapter:
             adapter.trial_readonly = readonly
             adapter.trial_api_environment = trial_environment if readonly else None
             adapter.trial_policy = policy
         return adapter, diagnostic
+
+    def capability_scopes(self, capability):
+        if capability == 'analytics' and not self.analytics_enabled:
+            return []
+        return super().capability_scopes(capability)
+
+    def pin_analytics(self, access_token, pin_id, *, start_at, end_at):
+        from .pinterest_analytics import fetch
+        return fetch(self, access_token, pin_id, start_at=start_at, end_at=end_at)
 
     def assert_trial_context(self, workspace_id, actor_id=None, *, scopes=None, now=None):
         if not getattr(self, 'trial_readonly', False):
