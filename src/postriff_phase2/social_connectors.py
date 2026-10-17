@@ -62,6 +62,11 @@ class XProvider(OAuthProvider):
     publish_scope = "tweet.write"
     publish_required = frozenset({"tweet.write"})
     refresh_margin = 300  # X access tokens last two hours
+    # Independent release lanes. New customer OAuth and publishing both fail closed by default.
+    customer_connect_enabled = False
+    customer_connect_workspaces = frozenset()
+    publishing_release_enabled = False
+    daily_identity_limit = 0
 
     def _basic(self):
         return "Basic " + base64.b64encode(f"{quote(self.client_id, safe='')}:{quote(self.client_secret, safe='')}".encode()).decode()

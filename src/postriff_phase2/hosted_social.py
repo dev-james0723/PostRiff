@@ -69,6 +69,9 @@ class HostedSocial:
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
             return None
+        # X account-linking is NOT a publishing release, even for a previously reviewed app.
+        if manifest.get("platform") == "X" and not getattr(provider, "publishing_release_enabled", False):
+            return None
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;
         # that grant is checked again below against the exact required scopes.

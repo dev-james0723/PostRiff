@@ -91,6 +91,15 @@ class OAuthService:
                 issues.append('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.')
             if not self.vault.fernet:
                 issues.append('Server setup required: POSTRIFF_CREDENTIAL_KEY must protect connected-account tokens.')
+            if pid == 'x':
+                if not diagnostic.get('xCustomerEntitlementAttested'):
+                    issues.append('X customer OAuth entitlement needs independent Developer Console verification.')
+                if not diagnostic.get('xConnectPilotEnabled'):
+                    issues.append('X Connect-only pilot is off; publishing approval does not enable it.')
+                if not diagnostic.get('xDailyIdentityCallLimit'):
+                    issues.append('X billed identity reads have no approved daily call allowance.')
+                if not diagnostic.get('xPilotWorkspaceAllowlistSize'):
+                    issues.append('X customer pilot requires an explicit server-side workspace allowlist.')
             try:
                 callback = self.callback_uri(pid)
             except AlphaError:
@@ -126,6 +135,8 @@ class OAuthService:
                     'comments_read': bool(adapter and normalized['comments_read'] == 'supported' and adapter.capability_scopes('comments_read')),
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
+            if pid == 'x' and not getattr(adapter, 'publishing_release_enabled', False):
+                legacy['publish'] = False
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
@@ -313,6 +324,13 @@ class OAuthService:
             raise AlphaError('Expected structured connection inputs.', 400)
         lane = inputs.get('authorizationLane', 'standard') if provider_id == 'youtube' else 'standard'
         adapter = self._youtube_provider(lane) if provider_id == 'youtube' else self._provider(provider_id)
+        if provider_id == 'x':
+            if (not getattr(adapter, 'customer_connect_enabled', False)
+                    or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
+                    or not getattr(adapter, 'execution_enabled', True)):
+                raise AlphaError('X account linking is not available for this workspace yet.', 503)
+            if capability != 'identity':
+                raise AlphaError('X publishing is not part of this account-connection beta.', 409)
         if provider_id == 'youtube' and (capability == 'autopilot' and lane != 'agentic'
                 or lane == 'agentic' and inputs.get('agenticConsent') is not True):
             raise AlphaError('Explicitly approve the separate AI-agent connection before requesting its permissions.', 403, code='youtube_agentic_consent_required')
@@ -355,11 +373,23 @@ class OAuthService:
                 if not authorization or authorization[0] is not True:
                     raise AlphaError('Sensitive creator access is not authorized for this workspace.', 403)
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            expected_x_connection = None
+            if provider_id == 'x' and inputs.get('connectionId') is not None:
+                expected_x_connection = inputs['connectionId']
+                if not isinstance(expected_x_connection, str) or not re.fullmatch(r'[0-9a-f]{32}', expected_x_connection):
+                    raise AlphaError('This X connection is not available for reconnection.', 404)
+                cur.execute("SELECT provider FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND revoked_at IS NULL FOR UPDATE",
+                            (workspace_id, expected_x_connection))
+                current = cur.fetchone()
+                if not current or current[0] != 'x':
+                    raise AlphaError('This X connection is not available for reconnection.', 404)
             state = secrets.token_urlsafe(32)
             verifier, challenge = pkce_pair()
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
                                   'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
-                                  'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else verifier
+                                  'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else json.dumps(
+                                      {'pkce': verifier, 'clientId': adapter.client_id, 'expectedConnectionId': expected_x_connection}
+                                  ) if provider_id == 'x' else verifier
             ciphertext, key_id = self.vault.encrypt(custody)
             stored_capability = capability if capability in CAPABILITIES else 'identity'
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, stored_capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
@@ -413,6 +443,35 @@ class OAuthService:
 
     # --- complete (authenticated exchange) ----------------------------------------
     def complete(self, workspace_id, token, provider_id, state, code, error=None, iss=None):
+        if provider_id == 'x':
+            adapter = self._provider('x')
+            if (not getattr(adapter, 'customer_connect_enabled', False)
+                    or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
+                    or not getattr(adapter, 'execution_enabled', True)):
+                raise AlphaError('X account linking is not available for this workspace yet.', 503)
+            if not isinstance(state, str) or not 20 <= len(state) <= 128:
+                raise AlphaError('Connection request unavailable.', 404)
+            # Commit single-use state + global billed-call reservation BEFORE any X network request.
+            # Unlike a reservation in _complete, a later provider error cannot roll it back.
+            from .hosted import _membership, audit, throttle
+            with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                require(_membership(row), 'manage_connections')
+                cur.execute("SELECT id::text,member_id::text,provider,capability,scopes,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions WHERE workspace_id=%s AND state_hash=%s FOR UPDATE",
+                            (workspace_id, hashlib.sha256(state.encode()).hexdigest()))
+                txn = cur.fetchone()
+                if (not txn or txn[1] != principal or txn[2] != 'x' or txn[3] != 'identity'
+                        or set(txn[4] or []) != set(adapter.capability_scopes('identity')) or txn[6]):
+                    raise AlphaError('Connection request unavailable.', 404)
+                if txn[5] <= self.clock():
+                    raise AlphaError('This connection request expired. Start again.', 409)
+                if code and not error:
+                    limit = getattr(adapter, 'daily_identity_limit', 0)
+                    if not isinstance(limit, int) or not 1 <= limit <= 100:
+                        raise AlphaError('X API cost allowance is unavailable.', 503)
+                    throttle(cur, 'oauth-x-identity-global', limit, 86400)
+                cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchange_started' WHERE id::text=%s", (txn[0],))
+                audit(cur, workspace_id, principal, 'oauth.exchange_claimed', txn[0], {'provider': 'x'})
+            return self._complete(workspace_id, token, provider_id, state, code, error, iss, claimed=txn[0])
         if provider_id != 'youtube':
             return self._complete(workspace_id, token, provider_id, state, code, error, iss)
         if not isinstance(state, str) or not 20 <= len(state) <= 128:
@@ -502,6 +561,20 @@ class OAuthService:
                 return {"connected": False, "reason": "denied"}
             cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchanged' WHERE id::text=%s", (transaction_id,))
             verifier = self.vault.decrypt(verifier_ct, key_id)
+            expected_x_connection = None
+            if provider_id == 'x':
+                try:
+                    x_context = json.loads(verifier)
+                except (TypeError, ValueError) as exc:
+                    raise AlphaError('Connection request unavailable.', 404) from exc
+                if (not isinstance(x_context, dict) or x_context.get('clientId') != adapter.client_id
+                        or not isinstance(x_context.get('pkce'), str)):
+                    raise AlphaError('X OAuth app binding changed. Start again.', 409)
+                expected_x_connection = x_context.get('expectedConnectionId')
+                if expected_x_connection is not None and (not isinstance(expected_x_connection, str)
+                        or not re.fullmatch(r'[0-9a-f]{32}', expected_x_connection)):
+                    raise AlphaError('Connection request unavailable.', 404)
+                verifier = x_context['pkce']
             youtube_context = {}
             if provider_id == 'youtube' and verifier.startswith('{'):
                 youtube_context = json.loads(verifier)
@@ -547,10 +620,15 @@ class OAuthService:
                 reported = adapter.verify_read_access(grant['accessToken'], identity['providerAccountId'])
             granted = sorted(set(reported)) if isinstance(reported, list) and all(isinstance(s, str) for s in reported) else []
             missing = sorted(set(scopes) - set(granted))
+            if provider_id == 'x' and (missing or not grant.get('refreshToken')):
+                # Requested scopes never establish consent; do not save an unusable or short-lived X grant.
+                raise AlphaError('X did not grant the required account permissions. No connection was saved.', 409)
             if provider_id == 'youtube':
                 from .youtube.model import has_scopes
                 missing = sorted(scope for scope in scopes if not has_scopes(granted, (scope,)))
             connection_id = self._connection_id(provider_id, identity['providerAccountId'], getattr(adapter, 'authorization_lane', 'standard'))
+            if provider_id == 'x' and expected_x_connection is not None and expected_x_connection != connection_id:
+                raise AlphaError('You authorized a different X account. The original connection was not replaced.', 409)
             if youtube_context.get('connectionId') and youtube_context['connectionId'] != connection_id:
                 raise AlphaError('You selected a different YouTube channel. Connect it separately; the existing channel was not replaced.', 409, code='youtube_channel_changed')
             from .billing import require_plan_capacity
@@ -896,6 +974,7 @@ class OAuthService:
         publish_scopes = set(adapter.capability_scopes("publish"))
         publish_granted = bool(publish_scopes) and publish_scopes <= granted_set
         publisher_ready = not (
+            (getattr(adapter, 'id', None) == 'x' and not getattr(adapter, 'publishing_release_enabled', False)) or
             getattr(adapter, "publisher", None) is not None and
             (not getattr(adapter, "publish_live_tested", False) or
              not getattr(adapter, "publishing_permission", False) or
@@ -927,6 +1006,10 @@ class OAuthService:
                 set_level(matrix, name, "Direct", evidence, now, adapter.capability_version)
             elif name == requested:
                 set_level(matrix, name, "Unsupported", f"Waiting for {adapter.platform} to approve Rafii.", now, adapter.capability_version)
+        if getattr(adapter, 'id', None) == 'x' and not getattr(adapter, 'publishing_release_enabled', False):
+            for name in ('publish', 'schedule'):
+                set_level(matrix, name, 'Unsupported',
+                          'X Connect-only pilot: publishing requires a separate release.', now, adapter.capability_version)
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------
@@ -1161,6 +1244,17 @@ class OAuthService:
             stored = cur.fetchone()
             if not stored:
                 raise AlphaError("Connection unavailable.", 404)
+            if stored[0] == 'x':
+                adapter = self._provider('x')
+                if (not getattr(adapter, 'customer_connect_enabled', False)
+                        or workspace_id not in getattr(adapter, 'customer_connect_workspaces', frozenset())
+                        or not getattr(adapter, 'execution_enabled', True)):
+                    raise AlphaError('X account verification is paused.', 503)
+                limit = getattr(adapter, 'daily_identity_limit', 0)
+                if not isinstance(limit, int) or not 1 <= limit <= 100:
+                    raise AlphaError('X API cost allowance is unavailable.', 503)
+                from .hosted import throttle
+                throttle(cur, 'oauth-x-identity-global', limit, 86400)
             if stored[0] == 'youtube':
                 cur.execute("SELECT authorization_generation::text FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='youtube' AND revoked_at IS NULL", (workspace_id, connection_id))
                 generation_row = cur.fetchone()
@@ -1401,6 +1495,12 @@ class OAuthService:
             with self.repository.connection_factory() as db:
                 with db.cursor() as cur:
                     return unavailable(cur, "account_deletion_pending")
+        if provider_id == 'x' and not getattr(self._provider('x'), 'publishing_release_enabled', False):
+            # Worker re-verification belongs to Publishing Release, never Connect-only.
+            # Otherwise a queued pre-release X job could incur an unbudgeted paid identity read.
+            with self.repository.connection_factory() as db:
+                with db.cursor() as cur:
+                    return unavailable(cur, "x_publishing_release_off")
         lower_bound = False
         try:
             grant = self.token_for_worker(workspace_id, connection_id)
@@ -1484,8 +1584,11 @@ class OAuthService:
                 raise AlphaError("Connection unavailable.", 404)
             remote = None
             shared = self._shared_elsewhere(cur, workspace_id, connection_id, stored[0])
-            if shared:
-                remote = False  # another connection still uses Rafii's bot there; removing it would disconnect them too
+            if shared or stored[0] == 'x':
+                # X customer pilot never makes an unbudgeted remote revocation request.
+                # Local credentials are destroyed; X-side grant revocation requires the
+                # customer to remove Rafii via X Connected Apps until separately qualified.
+                remote = False
             else:
                 try:
                     access = self.vault.decrypt(stored[1], stored[2])
@@ -1542,6 +1645,8 @@ class OAuthService:
         # mutation here could incorrectly revoke a consent completed meanwhile.
         deferred = shared and stored[0] == 'youtube'
         note = "Local execution access removed; approved jobs for this account are held at the next claim."
+        if stored[0] == 'x':
+            note += " X-side refresh grant revocation is unverified; remove Rafii in X Connected Apps to revoke provider consent."
         if deferred:
             note += " Google project-wide revocation was deferred to protect other active Google connections. Review Google account permissions to revoke the entire project grant."
         return {"connectionId": connection_id, "disconnected": True, "remoteRevoked": bool(remote), "remoteRevocationDeferred": deferred, "revision": revision, "note": note}

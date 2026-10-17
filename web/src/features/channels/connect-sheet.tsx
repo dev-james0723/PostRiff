@@ -38,6 +38,8 @@ export interface ConnectRequest {
 
 function offeredCapabilities(provider: ProviderView | undefined): ConnectCapability[] {
   if (!provider) return [];
+  // X Connect-only never presents a request the server intentionally refuses.
+  if (provider.id === 'x') return provider.capabilities.identity === true ? ['identity'] : [];
   return CONNECT_CAPABILITIES.filter((key) => provider.capabilities[key] === true);
 }
 
@@ -147,7 +149,7 @@ export function ConnectSheet({
     const initial = providers.find((p) => p.id === requestedProviderId) ?? providers[0];
 
     setProviderId(initial?.id ?? '');
-    setCapability(defaultCapability(initial, requestedCapability));
+    setCapability(initial?.id === 'x' ? 'identity' : defaultCapability(initial, requestedCapability));
     setPending(null);
     setError(null);
     setBusy(false);
@@ -158,7 +160,7 @@ export function ConnectSheet({
   function choosePlatform(id: string) {
     const next = providers.find((p) => p.id === id);
     setProviderId(id);
-    setCapability(defaultCapability(next, capability));
+    setCapability(next?.id === 'x' ? 'identity' : defaultCapability(next, capability));
     setError(null);
     setInputValue('');
   }
@@ -168,8 +170,11 @@ export function ConnectSheet({
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
-      const started = await api.oauthStart(workspaceId, provider.id, capability, input);
+      const input = {
+        ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}),
+        ...(reconnect && provider.id === 'x' ? { connectionId: reconnect.channelId } : {})
+      };
+      const started = await api.oauthStart(workspaceId, provider.id, capability, Object.keys(input).length ? input : undefined);
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
@@ -338,6 +343,7 @@ export function ConnectSheet({
                     </details>
                   )}
                   {provider.id === 'linkedin' && !provider.historyAvailableForApp && <p>LinkedIn doesn&apos;t share past posts yet. Add your own text in Learn my voice.</p>}
+                  {provider.id === 'x' && <p>X account connection beta: posting, scheduling and analytics are unavailable. Connecting grants no publishing access.</p>}
                 </div>
               )}
 

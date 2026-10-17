@@ -342,6 +342,11 @@ class Cursor:
             db.txns[txn_id] = {"workspace": workspace, "member": member, "provider": provider, "capability": capability, "redirect": redirect, "scopes": scopes,
                                "state_hash": state_hash, "ciphertext": ciphertext, "key_id": key_id, "expires": db.clock() + ttl, "consumed": False}
             self.result = (txn_id,)
+        elif s.startswith("SELECT id::text,member_id::text,provider,capability,scopes,extract(epoch from expires_at),consumed_at IS NOT NULL FROM public.pr_oauth_transactions"):
+            workspace, state_hash = params
+            found = next(((k, t) for k, t in db.txns.items() if t["state_hash"] == state_hash and t["workspace"] == workspace), None)
+            self.result = None if not found else (found[0], found[1]["member"], found[1]["provider"], found[1]["capability"],
+                                                  found[1]["scopes"], found[1]["expires"], found[1]["consumed"])
         elif s.startswith("SELECT id::text,member_id::text,provider"):
             state_hash, workspace = params
             found = next(((k, t) for k, t in db.txns.items() if t["state_hash"] == state_hash and t["workspace"] == workspace), None)
@@ -557,6 +562,9 @@ def manifest(platform, account_id, text="Hello from Rafii https://rafii.example/
 class Publishing(unittest.TestCase):
     def reviewed(self, adapter):
         adapter.production_reviewed = True
+        if isinstance(adapter, XProvider):
+            # Prior X publishing tests use a synthetic explicit publishing release.
+            adapter.publishing_release_enabled = True
         return adapter
 
     def test_unreviewed_or_unsupported_media_never_reaches_the_network(self):
@@ -565,6 +573,7 @@ class Publishing(unittest.TestCase):
         social = HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
         self.assertEqual(social.submit(manifest("X", "42"))["state"], "held")
         x.production_reviewed = True
+        x.publishing_release_enabled = True  # Fixture only; production remains disabled.
         video = [{"id": "m", "mime": "video/mp4", "alt": ""}]
         self.assertEqual(social.submit(manifest("X", "42", media=video))["state"], "failed")
         self.assertEqual(wire.calls, [])
@@ -647,6 +656,7 @@ class DefiniteRejections(unittest.TestCase):
     def x(self, *responses):
         adapter = XProvider("c", "s", transport=Wire(responses))
         adapter.production_reviewed = True
+        adapter.publishing_release_enabled = True  # Explicit synthetic publish qualification.
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": adapter})
 
     def test_x_bad_request_duplicate_and_permission(self):
@@ -798,6 +808,7 @@ class XReconcile(unittest.TestCase):
     def social(self, wire):
         x = XProvider("c", "s", transport=wire)
         x.production_reviewed = True
+        x.publishing_release_enabled = True  # Fixture only.
         return HostedSocial(Grants(json.dumps({"v": 1, "at": "AT", "scope": ["tweet.write"]}), ["tweet.write"]), {"x": x})
 
     def test_links_are_expanded_entities_decoded_and_the_media_link_dropped(self):

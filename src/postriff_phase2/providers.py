@@ -264,6 +264,37 @@ def registry_from_environment(values, transport=None):
         adapter.production_reviewed = str(values.get(prefix + "REVIEWED", "")).lower() == "true"
         adapter.publish_live_tested = str(values.get(prefix + "PUBLISH_LIVE_TESTED", "")).lower() == "true"
         adapter.publishing_permission = str(values.get(prefix + "PUBLISH_APPROVED", "")).lower() == "true"
+        if provider_id == "x":
+            # Operator assertions do not replace console or customer OAuth acceptance evidence.
+            def enabled_flag(name):
+                return str(values.get(name, "")).lower() == "true"
+            try:
+                daily_limit = int(values.get("POSTRIFF_OAUTH_X_MAX_DAILY_IDENTITY_CALLS", "0"))
+            except (TypeError, ValueError):
+                daily_limit = 0
+            adapter.daily_identity_limit = daily_limit if 1 <= daily_limit <= 100 else 0
+            raw_workspaces = str(values.get("POSTRIFF_OAUTH_X_CONNECT_PILOT_WORKSPACES", "")).strip()
+            workspace_ids = [w for w in re.split(r"[\s,]+", raw_workspaces) if w]
+            adapter.customer_connect_workspaces = frozenset(workspace_ids) if (
+                workspace_ids and len(workspace_ids) <= 10
+                and all(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", w) for w in workspace_ids)
+            ) else frozenset()
+            adapter.customer_connect_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED")
+                and enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED")
+                and adapter.daily_identity_limit > 0
+                and bool(adapter.customer_connect_workspaces))
+            adapter.publishing_release_enabled = (
+                enabled_flag("POSTRIFF_OAUTH_X_PUBLISHING_RELEASE_ENABLED")
+                and adapter.production_reviewed and adapter.publish_live_tested
+                and adapter.publishing_permission)
+            registry.diagnostics["x"].update({
+                "xConnectPilotEnabled": enabled_flag("POSTRIFF_OAUTH_X_CONNECT_PILOT_ENABLED"),
+                "xCustomerEntitlementAttested": enabled_flag("POSTRIFF_OAUTH_X_CUSTOMER_ACCESS_APPROVED"),
+                "xDailyIdentityCallLimit": adapter.daily_identity_limit,
+                "xPilotWorkspaceAllowlistSize": len(adapter.customer_connect_workspaces),
+                "xPublishingReleaseEnabled": adapter.publishing_release_enabled,
+            })
         if provider_id == "pixelfed":
             adapter.qualified_instances = frozenset(re.split(r"[\s,]+", str(values.get(prefix + "QUALIFIED_INSTANCES", "")).strip())) - {""}
         webhook_configured = True
