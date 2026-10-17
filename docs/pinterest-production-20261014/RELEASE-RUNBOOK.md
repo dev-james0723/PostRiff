@@ -1,4 +1,4 @@
-# Controlled release and operations — private pilot active, public release gated
+# Controlled release and operations — old pilot expired, new candidate gated
 
 **Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** One exact quota/config/deployment private pilot was separately approved and executed; this does not authorize a public release or further new-source deployment.
 
@@ -67,3 +67,7 @@ Canonical production stays postriff-phase2-private/buoyhkbodnhzngaotoel. No stag
 6. Schedule and Analytics have independent feature flags/admission. Keep them off while a qualified Connect+Publish canary proceeds if those two gates eventually pass. Schedule needs actual>1h stale/refresh due execution, edits/cancel/pause/reconciliation; Analytics needs schema/consent/retention and real own-Pin metrics/no-data/failure evidence. Do not label partial GO as complete production readiness.
 7. Emergency stop: disable Pinterest provider/execution admission and its metric reads, cancel pending exact-account jobs, preserve receipts, revoke local authority/erase credentials through normal authenticated disconnect. Reconciliation of an already accepted Pin continues only within its approved read authority; never retry create on uncertainty. Provider deletion is a separately approved operation targeting exact ID.
 8. Rollback after a future delta: turn feature admission off before reverting qualified source/config to the recorded compatible immutable predecessor. Analytics migration rollback refuses nonempty Pinterest readings; retain data instead of destructive rollback. Validate backup/restore and rollback on disposable infrastructure before claiming release readiness.
+
+## New bounded private execution candidate
+
+PRIVATE-TRIAL-RUNBOOK.md supersedes the historical read-only-next-step proposal. Original grant revoked/ciphertexts erased; no authority extension. New journal and metric migrations require separate exact production approval and qualified source. Journal rollback refuses prepared/known rows; leave additive evidence in place when rolling code/config back. Four-scope consent and two real Pin approvals remain pending. First complete the one-run paid delta qualification; do not ask the user to deploy an unqualified source. New recorder helper is only source; actual compliant video not supplied.

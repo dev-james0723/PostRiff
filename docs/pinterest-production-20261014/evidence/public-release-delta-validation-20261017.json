@@ -87,5 +87,11 @@
     "web/src/features/analytics/empty-states.tsx": "2cd2d7bb2437a99f4092c289d566f77b3c547165f5fed805940736b9229ee054",
     "web/src/lib/api/types.ts": "678cd7399762675cdd0f35176e5d4935f8ed132fed1c2bb8d4e5dc78ce7c451d",
     "web/tests/agent-ui-bridges-coverage.test.cjs": "9f03fd2a4e198747ce82c53e635084cfe9d09ecbbee5ae8759ade8d1ad17ddca"
+  },
+  "laterCorrection20261017": {
+    "earlierReasonSuperseded": "Restricted-network DNS was reported as authentication unavailable. Existing network-enabled auth/doctor laterPASS; no loginrequired.",
+    "currentBlocker": "IncludedDepotCIexhausted; newpaidrunapprovalpending",
+    "followupEvidence": "private-trial-delta-20261017.json",
+    "historicalFailurePreserved": true
   }
 }

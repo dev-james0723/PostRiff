@@ -29,7 +29,8 @@
         "bytes": 76554,
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
-        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop."
+        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
+        "delivery": "Review source only. Content Studio must ingest this Rafii original into the existing private immutable workspace media storage. Freeze actual normalized asset/hash/alt and review it before approval; the worker signs only that exact object at execution. No raw external-source override."
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -57,10 +58,10 @@
           "alt_text": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
           "media_source": {
             "source_type": "image_url",
-            "url": "https://rafii.io/opengraph-image"
+            "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_AND_APPROVAL"
+        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_IMMUTABLE_ASSET_AND_APPROVAL"
       }
     },
     {
@@ -88,7 +89,8 @@
         "bytes": 76554,
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
-        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop."
+        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
+        "delivery": "Review source only. Content Studio must ingest this Rafii original into the existing private immutable workspace media storage. Freeze actual normalized asset/hash/alt and review it before approval; the worker signs only that exact object at execution. No raw external-source override."
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -101,10 +103,10 @@
       "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
       "timing": {
         "mode": "rafii_server_schedule",
-        "localTime": "2026-10-19T10:00:00-04:00",
+        "localTime": "2026-10-18T12:00:00-04:00",
         "timezone": "America/Indiana/Indianapolis",
-        "publishAt": "2026-10-19T14:00:00Z",
-        "condition": "Proposed exact time only. If the time passes before authorization, do not silently roll forward; obtain a new time approval."
+        "publishAt": "2026-10-18T16:00:00Z",
+        "condition": "Unapproved proposal revised to fit the new <=24h private Trial candidate; supersedes unapproved19Oct10:00EDT. Final pilot expiry must be later than13:00EDT for the1h analytics read. If missed, obtain a new exact time approval; never roll forward silently."
       },
       "proposedCreateRequest": {
         "method": "POST",
@@ -117,10 +119,10 @@
           "alt_text": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
           "media_source": {
             "source_type": "image_url",
-            "url": "https://rafii.io/opengraph-image"
+            "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_AND_APPROVAL"
+        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_IMMUTABLE_ASSET_AND_APPROVAL"
       }
     }
   ],
@@ -134,7 +136,8 @@
     "No current OAuth grant or active live-test window",
     "No approved write-capable private configuration",
     "No real Pin approval",
-    "New delta source cloud validation pending"
+    "New delta source cloud validation pending",
+    "Content Studio immutable delivery asset/hash not yet ingested or approved; review source is not a signed delivery URL"
   ],
   "readbackPlan": [
     "Persist provider Pin ID before reporting accepted; GET exact Pin through bound account.",
@@ -157,5 +160,6 @@
     "boardCardsObserved": 0,
     "eligibleBoardId": null,
     "classification": "No suitable existing board observed; not a fresh OAuth API eligibility proof."
-  }
+  },
+  "revisedAt": "2026-10-17T21:38:00Z"
 }

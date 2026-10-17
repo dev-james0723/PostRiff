@@ -1,0 +1,97 @@
+{
+  "checkedAt": "2026-10-17T21:23:00Z",
+  "execution": "read_only_authenticated_dashboard_and_cli",
+  "organizationId": "jf34f85hr0",
+  "sourceUrl": "https://depot.dev/orgs/jf34f85hr0/settings/billing-and-usage",
+  "browser": {
+    "deviceId": "dev_CpT8wkgZmOTp5oClI3VL4g",
+    "tabId": "F941A9A9B196FAACCECF4BD4DCB1195D",
+    "navigation": "Kynlo native controls and origin verified",
+    "contentObservation": "Chrome accessibility read twice; no financial or settings action",
+    "nativeTextMatcher": "BROWSER_VERIFICATION_FAILED; not used as passing evidence"
+  },
+  "plan": {
+    "name": "Developer",
+    "monthlyUsd": 20
+  },
+  "billingPeriod": {
+    "startDate": "2026-10-12",
+    "endDate": "2026-11-01",
+    "invoiceDate": "2026-11-01"
+  },
+  "displayedUsage": {
+    "depotCiMinutes": 29512,
+    "depotCiIncludedMinutes": 2000,
+    "depotCiIncludedRemainingMinutes": 0,
+    "dockerBuildMinutes": 3,
+    "dockerBuildIncludedMinutes": 500,
+    "githubActionsMinutes": 0,
+    "githubActionsIncludedMinutes": 2000,
+    "cacheGb": 34,
+    "cacheIncludedGb": 25,
+    "cacheAdditionalGb": 9
+  },
+  "prices": {
+    "depotCiUsdPerSecondVcpu": 5e-05,
+    "dockerUsdPerMinute": 0.04,
+    "githubActionsUsdPerMinute": 0.006,
+    "cacheUsdPerGb": 0.2
+  },
+  "upcomingInvoice": {
+    "estimatedUsd": 185.08,
+    "finalized": false
+  },
+  "usageCap": "Unlimited usage selected; additional usage is billed",
+  "creditBalance": "NOT_DISPLAYED",
+  "doctor": {
+    "command": "jcb doctor",
+    "executionContext": "require_escalated network access",
+    "exitCode": 0,
+    "sessionId": 50925,
+    "patchBytes": 370713,
+    "sourceFrozen": false,
+    "result": "authenticated, repository access positive, scripts/runtime/workflow/snapshot validated"
+  },
+  "causeRecovery": {
+    "restrictedNetworkError": "lookup api.depot.dev: no such host",
+    "existingSessionReusable": true,
+    "newLoginOrGrant": false
+  },
+  "paidExecution": {
+    "submittedRuns": 0,
+    "uploads": 0,
+    "settingsChanges": 0,
+    "newChargesCreatedByThisPreflight": 0
+  },
+  "proposedBounds": {
+    "jobs": 1,
+    "vcpu": 8,
+    "requestedProviderTimeoutMinutes": 10,
+    "requestedComputeCeilingUsd": 0.24,
+    "requestedTotalBudgetUsd": 1,
+    "readyToSubmit": false,
+    "blockers": [
+      "source not frozen",
+      "new private-trial and Trial-visibility tests not yet included in observed delta script",
+      "installed JCB hardcodes 45-minute job timeout and refuses different workflow bytes",
+      "storage/other billing and provider budget enforcement not independently bounded"
+    ]
+  },
+  "installedJcb": {
+    "path": "/Users/ouxianxing/Documents/James-Cloud-Build/scripts/jcb.py",
+    "sha256": "c841e19482804669085fa2a9ecbbc321a6f6fc610cf45f05b46ff92047fac235",
+    "generatedTimeoutMinutes": 45,
+    "supportsConfiguredJobTimeout": false,
+    "depotCliTimeoutOverride": false
+  },
+  "observedSource": {
+    "head": "1dfbf7a50bb71afe13b2c4b31bdf4869c7f55c85",
+    "dirty": true,
+    "frozenFingerprint": null,
+    "deltaScriptSha256": "6b691e9f1102a232ed11f70f6b968f53560ddeddf15407611f88eb951c2b26e9"
+  },
+  "references": [
+    "https://depot.dev/docs/account",
+    "https://depot.dev/docs/api/sdk-reference#usage-service"
+  ]
+}

@@ -72,9 +72,22 @@ Production remains e2e5169f/2tFM READY; local repaired source **776930ed3851047e
 | Analytics outcome/empty durable receipt | PASS | Two selected synthetic local Python controls2026-10-17,0.005/0.003s; not full module/DB/live proof. |
 | Stale proof before write / revocation fences | PASS | Two selected synthetic local Python controls2026-10-17,0.015/0.040s with positive+cancel/reconnect/lease/member/account/approval subcases. Actual scheduled execution NOT RUN. |
 | Expired pilot diagnosis fail-closed | PASS | One selected synthetic Python control2026-10-17,0.006s. Live message still older e2e implementation; local fix not deployed. |
-| New source Node/typecheck/build/browser/PG | BLOCKED | validation_unavailable: jcb doctor exit2, Depot authentication unavailable; no free remote capacity verified, no paid run started. Prepared sanitized delta route. |
+| New source Node/typecheck/build/browser/PG | BLOCKED | Earlier doctor exit2 was restricted-network DNS, not invalid credentials. Network-enabled doctor PASS. Actual included Depot CI minutes exhausted; one paid delta run awaits scoped cost approval, NOT RUN. Prepared sanitized delta route. |
 | Two Pin preview metadata | PASS | Frozen original PNG/HTTP200/MIME/dimensions/SHA and local JSON checked; board ID absent and no execution approval. pin-previews/. |
 | Real eligible destination | NOT RUN | Native own Saved UI has0boardcards; earlier API200empty. Named PUBLIC board creation proposal only. |
 | Review video | NOT RUN | Dedicated agent produced actual partial footage; see video receipt for format/segment limitations. Full compliant OAuth/Pin demonstration is not supplied. |
 
 Connect+Publish may proceed in an approved two-customer canary when their own gates pass, while Schedule/Analytics remain off. No current feature is public GO; this is not a blanket postponement tied to the slower optional features.
+
+## Four-capability private Trial candidate — current2026-10-17
+
+This is a separate private acceptance lane, not publicGO. The original read-only grant/window remains revoked/expired. New code binds one actor/workspace/stable provider account/exact boards/caps/<=24h policy and at most2non-refundable create attempts; no public Standard/review flags are asserted. Publish+Schedule use the existing approval/worker path and exact immutable asset source. Known returned IDs get an independent immutable response journal, allowing GET-only recovery after lost workspace proof; unknown response/noID stays uncertain without repost. Analytics admits only exact current-policy recorded Pins and the actual metric workspace/schema grant, with success/no_data/read_failed distinct. [Activation/recovery candidate](PRIVATE-TRIAL-RUNBOOK.md).
+
+| Private Trial capability | Current decision | Actual evidence / remaining gate |
+|---|---|---|
+| Connect | NO-GO for new window | Earlier owner read-only lifecycle realPASS retained; new bound four-scope consent/config/source not activated or accepted. |
+| Publish | NO-GO | Code candidate prepared; exact board/immutable image/new SQL+config/deployment/Pin approval and actual PinID/read-back NOT RUN. |
+| Schedule | NO-GO | Code/negative/concurrency/timezone preparation; actual approved18Oct12:00EDT due execution NOT RUN. The revised time is unapproved. |
+| Analytics | NO-GO | Candidate bypasses Standard only for exact private policy; full cloud/schema/deployment/native current-Pin data read NOT RUN. Confirmed zero/no-data remains legitimate Trial evidence, no fabricated engagement. |
+
+Prepared private-Trial tests and actual disposable-PG journal/RLS/concurrency cases are NOT RUN as a complete suite. Selected lightweight synthetic controls/static checks only are localPASS; see the new private-Trial delta receipt. Paid cloud qualification requires a new one-run budget; authentication is usable and included allowance is exhausted. Public Connect/Publish/Schedule/Analytics all remain NO-GO until their separate provider/customer/release gates pass.

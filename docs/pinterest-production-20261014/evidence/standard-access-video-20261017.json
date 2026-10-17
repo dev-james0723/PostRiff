@@ -29,7 +29,8 @@
     "safe_to_include": [
       "standard-access-video/standard-upgrade-form-partial-20261017.mp4",
       "standard-access-video/README.md",
-      "evidence/standard-access-video-20261017.json"
+      "evidence/standard-access-video-20261017.json",
+      "standard-access-video/StrictWindowRecorder.swift"
     ],
     "unrelated_capture_retained_in_worktree": false
   },
@@ -89,5 +90,55 @@
     "provider_writes": 0,
     "payment": 0
   },
-  "next_required": "Parent must prepare and obtain exact approval for renewed bounded OAuth/required scopes and approved live test content/destination, then capture actual OAuth, board discovery, approved API operation/read-back and disconnect at native 20–60fps with a functioning recorder. Review complete video before any separately approved upload/submission."
+  "next_required": "Parent must prepare and obtain exact approval for renewed bounded OAuth/required scopes and approved live test content/destination, then capture actual OAuth, board discovery, approved API operation/read-back and disconnect at native 20–60fps with a functioning recorder. Review complete video before any separately approved upload/submission.",
+  "readonly_recorder_investigation": {
+    "status": "PASS_METADATA_ONLY",
+    "os_version": "27.2",
+    "installed_cli": "/usr/sbin/screencapture",
+    "sources": [
+      "Installed screencapture usage output",
+      "/usr/share/man/man1/screencapture.1",
+      "Installed macOS SDK ScreenCaptureKit.framework/Headers/SCStream.h and SCRecordingOutput.h"
+    ],
+    "documented_cli_flags": {
+      "-v": "video recording",
+      "-V<seconds>": "bounded recording duration",
+      "-l<windowid>": "capture specified window",
+      "audio": "optional -g/-G/-A; omit all"
+    },
+    "CGPreflightScreenCaptureAccess_current_exec_process": true,
+    "permission_note": "Read-only function call only. No authorization request or permission change. This says nothing about QuickTime or Kynlo attribution.",
+    "candidate_cli_after_root_review": "/usr/sbin/screencapture -v -V 8 -l <fresh verified owned Chrome window ID> -x <owned output path>.mov",
+    "cli_unknowns": [
+      "Combined video/window selector behavior has not been exercised",
+      "Native file frame rate and privacy isolation remain unverified"
+    ],
+    "strict_sdk_route": "SCContentFilter initWithDesktopIndependentWindow; SCStreamConfiguration minimumFrameInterval=1/30; capturesAudio=false; captureMicrophone=false; SCRecordingOutput configured for MP4.",
+    "sdk_metadata": "Installed header documents default minimumFrameInterval 1/60 (updates at or up to60fps), strict independent-window filter and native recording output; not a frame-rate acceptance result.",
+    "helper_status": "No helper written, compiled or run. Small helper would need reviewed implementation and allowed local compute route.",
+    "recording_started": false,
+    "native_20_to_60_fps_validation": "validation_unavailable: no exact surface/method recording probe approved by root in this investigation; metadata alone cannot verify actual fps or window isolation."
+  },
+  "strict_recorder_candidate": {
+    "status": "CANDIDATE_NOT_COMPILED_NOT_RUN",
+    "source": "standard-access-video/StrictWindowRecorder.swift",
+    "sha256": "16206868d81127b39db5d1fb267ed368f13dff78bd249a5aa4f3088847facd5a",
+    "native_api": "SCContentFilter(desktopIndependentWindow:) + SCRecordingOutput",
+    "frame_rate_requested": 30,
+    "actual_frame_rate": "UNVERIFIED",
+    "max_width": 960,
+    "audio": false,
+    "nominal_seconds": 6,
+    "hard_capture_process_limit_seconds": 8,
+    "required_identity": "Fresh<=30s explicit windowID, ChromePID/com.google.Chrome, exact title, on-screen; checked before and during capture",
+    "output_safety": "New MP4 directly in owned folder; UUID mode0700 staging; no overwrite; abort cleanup; saved output remains unreviewed",
+    "fallback": "None; no display capture, other-window fallback, UI automation or permission request",
+    "limitations": [
+      "Compile and runtime APIs unverified",
+      "Requires allowed macOS compile route; not performed",
+      "Exact-title change aborts; short separate approved segments only, no continuous multi-title OAuth support",
+      "No fresh OAuth or Pin operation authorized/executed",
+      "All-frame privacy and actual20–60fps must be verified after an approved run"
+    ]
+  }
 }

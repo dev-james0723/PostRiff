@@ -21,3 +21,52 @@ No upload, Standard Access submission, new OAuth grant, provider write, producti
 Detailed observed form fields and status are in [the recording receipt](../evidence/standard-access-video-20261017.json). A complete submission video still needs actual OAuth, required functionality and provider read-back captured at native 20–60 fps after the bounded approvals in the parent release plan.
 
 Parent reconciliation also returned an empty Kynlo app inventory despite known Chrome presence; a shell process read was denied. These observations leave QuickTime state unverified and establish an automation/inventory blocker. No blind retry or permission bypass was attempted.
+
+## Bounded recorder investigation
+
+Read-only installed macOS 27.2 help and man-page inspection found the native `screencapture` CLI, with video (`-v`), duration (`-V`) and window selector (`-l`) flags. `CGPreflightScreenCaptureAccess()` returned true for the current execution process without making a permission request. This does not establish QuickTime or Kynlo permission attribution.
+
+A candidate bounded command can be reviewed by the parent using a fresh verified owned Chrome window ID, no audio flags and an owned output path. The interaction between video and window selection, actual frame rate and privacy isolation remain untested. No recording was started during this investigation.
+
+The installed Apple SDK also documents a strict independent-window ScreenCaptureKit filter, configurable frame interval and native MP4 recording with system/microphone audio disabled. No helper was written, compiled or run. Actual 20–60fps acceptance remains `validation_unavailable` until an exact reviewed surface and method can be exercised and its real output inspected; metadata is not evidence of a compliant recording.
+
+
+## Strict native recorder source candidate — not compiled or run
+
+[StrictWindowRecorder.swift](StrictWindowRecorder.swift) is a local, dependency-free macOS 15+ candidate. It requests native 30 fps through Apple's ScreenCaptureKit, uses H.264 MP4, disables microphone/system audio and cursor, preserves the selected window's proportions at no more than 960 pixels wide, and has no display or alternative-window capture path.
+
+Every run requires an explicit window ID, Chrome PID, exact window title, an observation timestamp no more than 30 seconds old, and a new MP4 destination directly inside this directory. It checks the Chrome bundle identifier, PID, selected window ID, title and on-screen state before capture and every 100 ms. A mismatch aborts. It captures nominally six seconds; a hard eight-second process watchdog removes only its newly generated private staging directory and exits on a stall. Output is never overwritten. Successful output remains explicitly unreviewed until video/privacy inspection.
+
+The exact-title guard is deliberate: a navigation that changes the title aborts this version. This helper can capture separate short approved segments; it does not yet support a continuous OAuth sequence across titles. It performs no navigation, clicks, OAuth, provider action, upload or submission.
+
+Source inspection and installed Apple SDK headers informed this candidate. **Compilation, runtime behavior, actual frame rate, finish-callback behavior and privacy isolation are unverified.** Static guard inspection is not an execution test. Do not use the unverified CLI video/window combination as a fallback.
+
+Before any run, the parent must:
+
+1. Review the source, the specific relevant browser window and the exact content to record, including actor/workspace where applicable. Exclude unrelated tabs/content and authentication codes/state from the approved surface.
+2. Establish an allowed macOS compilation path. No local compilation was performed under the cloud-first policy; no paid or cloud job was started. A bounded task-specific local compilation exception or an already authorized macOS compute route is needed where policy requires it.
+3. After compilation, obtain a fresh exact window/PID/title observation and ensure the helper's own no-prompt preflight succeeds. Any denial stops the attempt; do not open settings, request permission, switch capture surface, or retry blind.
+4. Run only the reviewed short segment, then inspect every frame and verify actual media format. Do not upsample the existing 4 fps clip to claim native compliance. Reject a changed-title or contaminated capture.
+5. Keep full OAuth/live API work behind the exact renewed consent, live-action and recording-surface scope. Review the final complete video before any separately approved upload/submission.
+
+Proposed compilation command, **not executed**:
+
+~~~sh
+xcrun swiftc -parse-as-library -swift-version 5 -Onone \
+  -framework ScreenCaptureKit -framework AVFoundation \
+  -framework AppKit -framework CoreGraphics -framework CoreMedia \
+  StrictWindowRecorder.swift -o strict-window-recorder
+~~~
+
+Proposed run shape, **not executed**; placeholders must be replaced with a fresh reviewed observation:
+
+~~~sh
+./strict-window-recorder \
+  --window-id 'FRESH_EXACT_WINDOW_ID' \
+  --chrome-pid 'FRESH_EXACT_CHROME_PID' \
+  --title 'EXACT_OBSERVED_WINDOW_TITLE' \
+  --observed-at 'FRESH_UTC_ISO8601_WITHOUT_FRACTIONAL_SECONDS' \
+  --output '/Users/ouxianxing/Documents/.agent-worktrees/rafii-pinterest-production-prep-20261014/docs/pinterest-production-20261014/standard-access-video/NEW_UNREVIEWED_FILENAME.mp4'
+~~~
+
+After an approved successful run, use lightweight local media metadata/decode inspection to verify H.264, no audio, frame rate 20–60 fps, duration at most eight seconds, expected dimensions, and all-frame privacy. This candidate does not itself establish any of those output acceptance results.
