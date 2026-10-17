@@ -112,6 +112,23 @@ for engine in chromium webkit; do
   export MASTODON_BROWSER_ENGINE="$engine"
   export MASTODON_BROWSER_EVIDENCE_DIR="$TASK_HOME/evidence-$engine"
   mkdir -p "$MASTODON_BROWSER_EVIDENCE_DIR"
+  # Queue tests advance the disposable fixture clock. Reset it before each new
+  # engine so SQL now() and the synthetic app clock agree for OAuth expiry.
+  # Never relax the actual OAuth transaction TTL or reuse an expired state.
+  "$TREND_VISUAL_TEST_PYTHON" - <<'PY_CLOCK'
+import json,time,urllib.request
+url='http://127.0.0.1:4348/dev/mastodon/tick'
+request=urllib.request.Request(url,
+    data=json.dumps({'resetClock':True}).encode(),
+    headers={'Content-Type':'application/json'},
+    method='POST')
+with urllib.request.urlopen(request,timeout=8) as result:
+    assert result.status==200
+    value=json.load(result)
+assert value['execution'].startswith('SYNTHETIC provider')
+assert abs(value['now']-time.time())<=10, 'Synthetic clock must match database wall time'
+print('G5_FIXTURE_CLOCK_REBASED_FOR_NEW_ENGINE=true')
+PY_CLOCK
   echo "G5_BROWSER_ENGINE=$engine BEGIN"
   node tests/mastodon-account-browser.cjs
   node tests/mastodon-queue-browser.cjs
