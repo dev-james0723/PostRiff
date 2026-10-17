@@ -1,12 +1,12 @@
-# Controlled release and operations — candidate, not executed
+# Controlled release and operations — private pilot active, public release gated
 
-**Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** No replacement production project, production database write or release is authorized by this candidate.
+**Production NO-GO. Canonical production Supabase: postriff-phase2-private (`buoyhkbodnhzngaotoel`).** One exact quota/config/deployment private pilot was separately approved and executed; this does not authorize a public release or further new-source deployment.
 
 ## Existing-production pilot boundary (supersedes new staging)
 
-Use only existing canonical Supabase `postriff-phase2-private` / `buoyhkbodnhzngaotoel` and existing Rafii Vercel project. Both new-DB proposals are canceled. The earlier Step A new-staging design is historical, not permission to run a shared-production pilot. [READONLY-PILOT-CANDIDATE](READONLY-PILOT-CANDIDATE.md) defines the exact tenant/operator/account/time-bound read-only lane and proposed configuration/migration/deployment effects. No new subscription or resource is needed.
+Use only existing canonical Supabase `postriff-phase2-private` / `buoyhkbodnhzngaotoel` and existing Rafii Vercel project. Both new-DB proposals are canceled. The earlier Step A new-staging design is historical, not permission to run a shared-production pilot. [READONLY-PILOT-CANDIDATE](READONLY-PILOT-CANDIDATE.md) defines the exact tenant/operator/account/time-bound read-only lane and approved configuration/migration/deployment effects. No new subscription or resource is needed.
 
-Keep public/Agent gates closed. Two-scope profile/board consent, explicitly selected official API identity/boards/token egress, daily100-call cap and disconnect are the proposed pilot scope. It now requires the reviewed quota table. No sections, Pin, analytics or Agent data action is included. Freeze actual actor/workspace/username/expiry, recheck current live source/schema/callback and obtain the specific external-operation/live-consent approval before executing. Standard and real-public-release acceptance remain separate.
+Keep public/Agent gates closed. Two-scope profile/board consent, explicitly selected official API identity/boards/token egress, daily100-call cap and disconnect are the approved pilot scope. The reviewed quota table is now applied. No sections, Pin, analytics or Agent data action is included. The exact actor/workspace/username and expiry are recorded in the real receipts. Any next deployment must recheck current live source/schema/callback and obtain the specific new-source release approval. Standard and real-public-release acceptance remain separate.
 
 ## Migration and rollback
 
@@ -32,10 +32,12 @@ Support: offer eligible business-account/review guidance for PINNER_DATA_ACCESS_
 
 Retention: disconnect erases local token ciphertext immediately. Existing history purge path is reused. Budget windows contain hashes only; propose deletion older than 48h via reviewed maintenance. No production retention job or external notification was installed. Validate contractual retention/deletion periods and authorized model handling before publishing policy changes or submitting Standard.
 
-## Current operational stop — 2026-10-17
+## Current operational state — 2026-10-17
 
-Local7432 baseline synchronization is complete and same-type future local syncs are authorized. The [private read-only pilot bundle](NEXT-ACTION-READONLY-PILOT.md) is prepared for separate approval covering only existing-project quota SQL, secure credentials/configuration, exact tested deployment, selected actor/account4hour window and actual human OAuth consent. No real Pin/public release is included. Callback console registration is already fulfilled.
+Approved private pilot C4Aqh is live on rafii.io; original BLY is the prior deployment. Exact quota migration and deployment-only credentials/config are recorded. Project-wide environment is unchanged. Active deadline **20:40:56Z /16:40:56 EDT**, with no automatic extension. Expiry fails closed for provider custody/actions; local disconnect remains available afterward.
 
-Production read-only metadata still shows absent client ID/secret and quota table, PostgreSQL17.6 and protected credential/OAuth RLS. Historical billing was2026-10-15 Pro/overdue; later READY deployments mean it is not proof of a deployment rejection. Do not pay or change billing. Recheck actual deploy eligibility only in the approved operation.
+Real OAuth exchange and business identity PASS. Boards/refresh/reconnect remain NOT RUN; actual disconnect403 is blocked on the human completing ordinary authenticator sign-in. New boards/explicit-refresh local source is not deployed. Preserve existing fresh-sign-in and independent-proof controls. [Next candidate](NEXT-ACTION-BOARDS-REFRESH.md).
 
-Avoid installing pilot settings into an older source that lacks the current admission fence. Coordinate the approved release/configuration sequence with active deployment owners, freeze exact source/settings and verify deployment before consent. Reuse the production vault key; never install the local staging key. No source/flag/config drift may silently broaden this four-hour read-only authority.
+Approved pilot-only emergency pause/restore may change only its reviewed flags; it never authorizes broad rollback, new costs or data deletion. Keep the quota table during pause. Existing grants must be disconnected through the authenticated account flow; do not mutate credential rows to simulate revocation. Restoring BLY would remove this pilot but also restore its older source/config, so reconcile current source/other deployments and obtain exact rollback approval before promotion. No rollback rehearsal has been executed.
+
+No unattended notification/retention task was installed. No local-heavy tests/build/browser/PostgreSQL are permitted. All substantial validation runs remotely through the existing sanitized JCB lane. No push, remote merge, billing/payment or Standard submission occurred.

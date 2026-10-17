@@ -1,6 +1,6 @@
 # Standard Access application draft — DO NOT SUBMIT
 
-App: Rafii, https://rafii.io, Pinterest app 1615884. Trial entitlement is carried forward from the earlier developer-console receipt; no new console observation or change in this phase. Standard status: **NOT RUN / no approval evidence**.
+App: Rafii, https://rafii.io, Pinterest app 1615884. Trial access was observed active in app1615884 developer console2026-10-17; no Standard application submitted. Standard status: **NOT RUN / no approval evidence**.
 
 ## Proposed description
 
@@ -18,7 +18,7 @@ Current guideline review found restrictions on API-data storage/sharing and visu
 
 ## Actual video and evidence checklist
 
-No actual OAuth/application recording exists. Do not substitute the synthetic screenshots or gallery for a working demo. After approval of the exact test infrastructure, account and live-consent scope, record the actual environment accurately. The proposed private Trial uses existing shared production hosting and the official API, not isolated staging. The initial read-only pilot cannot complete the Pin/section/scheduling parts below; those need later scoped approvals:
+No actual OAuth/application recording exists. Do not substitute the synthetic screenshots or gallery for a working demo. After approval of the exact test infrastructure, account and live-consent scope, record the actual environment accurately. The approved private Trial uses existing shared production hosting and the official API. Real code exchange and business identity read-back succeeded; Pinterest reused existing consent automatically, so there is no fresh consent-screen footage. Boards/refresh/reconnect/disconnect acceptance is still incomplete. The initial read-only pilot cannot complete the Pin/section/scheduling parts below; those need later scoped approvals:
 
 1. Rafii login and Connect Pinterest entry on the approved actual environment.
 2. Official provider consent screen and exact registered redirect; protect account details.

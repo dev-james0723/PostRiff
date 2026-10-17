@@ -1,6 +1,6 @@
 # Exact next external approval — private read-only Trial
 
-Prepared2026-10-17. **NOT APPROVED / NOT EXECUTED.** Local sync approval is fulfilled and remains standing for same-type local syncs. Master mission separately gates production configuration, SQL, deployment and live consent; the following bundle needs its own human approval.
+Prepared2026-10-17. **APPROVED 2026-10-17; partially executed.** Local sync approval is fulfilled and remains standing for same-type local syncs. Master mission separately gates production configuration, SQL, deployment and live consent; the following exact bundle was subsequently approved by the human APPROVE reply. Its scope is preserved below; this is not approval for unrelated new source.
 
 ## Targets and account
 
@@ -21,4 +21,8 @@ Shared production hosting/config and one new server-only quota table change. Exi
 
 No Pin, board mutation, sections, analytics, Agent provider data, scheduling, public connections, Standard submission, new resources, billing changes or payment. Existing provider consent removal uses Pinterest settings if desired; Rafii claims local disconnection only.
 
-[Fresh metadata](evidence/readonly-trial-preflight-20261017.json) still shows absent client ID/secret and quota table. Callback registration is already complete. Approval must affirm this exact account and4hour bounded bundle, or supply corrected account details before activation.
+The linked preflight records the state before activation. Subsequent [quota apply](evidence/pilot-quota-production-apply-20261017.json), [deployment](evidence/pilot-deployment-20261017.json) and [real OAuth](evidence/pilot-real-oauth-20261017.json) receipts supersede its absent-configuration state. Human approval covers the exact account/window above; no additional deployment of newly added product code is implied.
+
+## Execution update — 2026-10-17
+
+Quota applied and C4Aqh deployment promoted to rafii.io. Window **16:40:56Z–20:40:56Z**, expires **16:40:56 EDT**; no extension. Real official token exchange and business identity read-back PASS for @jamesaucreates. Pinterest reused existing consent; no fresh consent-screen demonstration. Boards/refresh NOT RUN. Disconnect returned403 and awaits the human authenticator sign-in at Rafii; reconnect NOT RUN. Local boards/manual-refresh remediation is a new candidate, not deployed under this already-used single-deployment approval. See [next release candidate](NEXT-ACTION-BOARDS-REFRESH.md).
