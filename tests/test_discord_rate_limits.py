@@ -197,8 +197,30 @@ class ScopeBatchRegression(unittest.TestCase):
             'X-RateLimit-Limit':'3','X-RateLimit-Remaining':'2','X-RateLimit-Reset-After':'1'}})
         self.assertEqual([kind for kind,_ in self.db.scope_calls],['seed','lock','store'])
         ordered=self.db.scope_calls[0][1]
-        self.assertTrue(all(keys==ordered for _,keys in self.db.scope_calls))
+        self.assertEqual(self.db.scope_calls[1][1],ordered)
+        self.assertEqual(self.db.scope_calls[2][1],tuple(key for key in ordered
+            if self.db.states[key]['kind'] in ('discovery','route')))
         self.assertEqual(max(row['left'] for row in self.db.states.values() if row['kind']=='route'),2)
+
+    def test_cold_observation_preserves_unchanged_guards_and_route_ordering(self):
+        permit=self.reserve();self.s.consume(permit,'GET',self.path)
+        guards={key:copy.deepcopy(row) for key,row in self.db.states.items()
+                if row['kind'] in ('policy','global','credential','invalid','resource')}
+        self.s.observe(permit,{'status':200,'headers':{'X-RateLimit-Bucket':'new-cold-alias',
+            'X-RateLimit-Limit':'3','X-RateLimit-Remaining':'2','X-RateLimit-Reset-After':'1'}})
+        self.assertEqual({key:self.db.states[key] for key in guards},guards)
+        self.assertEqual(self.db.admissions[permit.id]['state'],'observed')
+        self.assertTrue(all(row['seq']==self.db.admissions[permit.id]['seq']
+            for row in self.db.states.values() if row['kind']=='route'))
+
+    def test_partial_observation_store_rolls_back_alias_guards_and_outcome(self):
+        permit=self.reserve();self.s.consume(permit,'GET',self.path)
+        before=copy.deepcopy((self.db.states,self.db.maps,self.db.admissions))
+        self.db.store_fault='count'
+        with self.assertRaises(RateCoordinatorUnavailable):
+            self.s.observe(permit,{'status':429,'headers':{'X-RateLimit-Bucket':'new-failing-alias',
+                'X-RateLimit-Global':'true','Retry-After':'2'},'body':{'retry_after':2,'global':True}})
+        self.assertEqual((self.db.states,self.db.maps,self.db.admissions),before)
 
     def test_bad_locked_row_set_or_order_rolls_back_seed_and_mapping(self):
         for fault in ('missing','extra','duplicate','reordered'):

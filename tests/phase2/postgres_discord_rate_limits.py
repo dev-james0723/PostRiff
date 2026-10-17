@@ -207,6 +207,8 @@ class ScopeCursor:
     def rowcount(self):return self.raw.rowcount if self.count_override is None else self.count_override
     def execute(self,query,params=()):
         self.buffer=None;self.count_override=None
+        if self.mode=='delete-before-lock' and query.lstrip().startswith('WITH scope_lock AS MATERIALIZED'):
+            self.raw.execute('DELETE FROM public.pr_discord_rate_state WHERE scope_key=%s',(params[0][0],))
         self.raw.execute(query,params)
         operation=next((name for name,prefix in (('seed','WITH scope_seed('),('lock','WITH scope_lock AS MATERIALIZED'),
             ('store','WITH scope_store(')) if query.lstrip().startswith(prefix)),None)
@@ -257,6 +259,65 @@ for mode in ('lock-missing','store-count','store-key'):
             (identity.auth_key,)).fetchone()[0]==0
     assert limiter.reserve('GET',path,identity=identity),'Rolledback batch must not burn its cold admission'
 checks.append('batch missingrow/count/returnedkey faults roll back all SQL state/mapping;normal retry retains its slot')
+
+# A visible warm key can disappear after the seed snapshot. The complete
+# locked reread must reject the missing guard, rolling back the actual deletion
+# and preserving the prior observed evidence; no new admission may escape.
+limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+sent=limiter.reserve_read('GET',path,identity=identity)
+limiter.observe(sent,{'status':200,'headers':{'X-RateLimit-Bucket':'missing-seed-warm',
+    'X-RateLimit-Limit':'100','X-RateLimit-Remaining':'99','X-RateLimit-Reset-After':'30'}})
+template,major=route_identity('GET',path)
+warm_keys=limiter._keys(identity,_digest(template),major,_digest('missing-seed-warm'))
+def seed_snapshot():
+    with connection() as db:
+        return (db.execute('SELECT to_jsonb(s)::text FROM public.pr_discord_rate_state s WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(list(warm_keys),)).fetchall(),
+            db.execute('SELECT to_jsonb(r)::text FROM public.pr_discord_route_buckets r WHERE auth_key=%s ORDER BY route_key,major_key',(identity.auth_key,)).fetchall(),
+            db.execute('SELECT to_jsonb(a)::text FROM public.pr_discord_request_admissions a WHERE auth_key=%s ORDER BY request_seq',(identity.auth_key,)).fetchall())
+before=seed_snapshot();trace=[]
+faulty=SharedPostgresBudget(scope_connection('delete-before-lock',trace),limiter.application_id,policy=policy)
+expect_denied(lambda:faulty.reserve_read('GET',path,identity=identity),RateCoordinatorUnavailable)
+assert trace==['seed','lock'] and seed_snapshot()==before,'Missing locked guard must roll back deletion, mappings, quota and any new admission'
+checks.append('warm seed snapshot followed by actual guard deletion fails complete locked cardinality;SQL rollback restores guard/mapping/prior admission,none new')
+
+# Cold responses still lock every guard, but an unchanged common guard must not
+# acquire a new heap/index version solely for an unused response sequence.
+limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+sent=limiter.reserve_read('GET',path,identity=identity)
+with connection() as db:
+    common=db.execute("SELECT scope_key,revision,updated_at,observation_seq,limit_count,remaining,"
+        "blocked_until,circuit_until,error_streak,manual_hold FROM public.pr_discord_rate_state "
+        "WHERE scope_key=ANY((SELECT scope_keys FROM public.pr_discord_request_admissions WHERE id=%s)::text[]) "
+        "AND kind IN ('policy','global','credential','invalid','resource') ORDER BY scope_key",(sent.id,)).fetchall()
+limiter.observe(sent,{'status':200,'headers':{'X-RateLimit-Bucket':'cold-version-check',
+    'X-RateLimit-Limit':'100','X-RateLimit-Remaining':'99','X-RateLimit-Reset-After':'30'}})
+with connection() as db:
+    after=db.execute("SELECT scope_key,revision,updated_at,observation_seq,limit_count,remaining,"
+        "blocked_until,circuit_until,error_streak,manual_hold FROM public.pr_discord_rate_state "
+        "WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key",([row[0] for row in common],)).fetchall()
+    assert len(common)==5 and after==common,'Cold response rewrote unchanged guards or refunded quota'
+    admission=db.execute('SELECT state,request_seq,scope_keys FROM public.pr_discord_request_admissions WHERE id=%s',(sent.id,)).fetchone()
+    assert admission[0]=='observed'
+    sequences=db.execute("SELECT observation_seq FROM public.pr_discord_rate_state WHERE scope_key=ANY(%s::text[]) AND kind='route'",(admission[2],)).fetchall()
+    assert len(sequences)==2 and all(row[0]==admission[1] for row in sequences),'Both aliases retain response-order fences'
+checks.append('cold successful observation keeps5common guard heap/index versions and quota unchanged;both route sequences and observed outcome persist')
+
+limiter,identity,path,policy=setup(permit_ttl_seconds=10)
+sent=limiter.reserve_read('GET',path,identity=identity)
+template,major=route_identity('GET',path)
+keys=set(limiter._keys(identity,_digest(template),major,None))
+keys.add('50:'+_digest(identity.auth_key+':'+_digest('rollback-cold-alias')+':'+major))
+def observation_snapshot():
+    with connection() as db:
+        return (db.execute('SELECT to_jsonb(s)::text FROM public.pr_discord_rate_state s WHERE scope_key=ANY(%s::text[]) ORDER BY scope_key',(list(keys),)).fetchall(),
+            db.execute('SELECT to_jsonb(r)::text FROM public.pr_discord_route_buckets r WHERE auth_key=%s ORDER BY route_key,major_key',(identity.auth_key,)).fetchall(),
+            db.execute('SELECT to_jsonb(a)::text FROM public.pr_discord_request_admissions a WHERE id=%s',(sent.id,)).fetchall())
+before=observation_snapshot()
+trace=[];faulty=SharedPostgresBudget(scope_connection('store-count',trace),limiter.application_id,policy=policy)
+expect_denied(lambda:faulty.observe(sent,{'status':429,'headers':{'X-RateLimit-Bucket':'rollback-cold-alias',
+    'X-RateLimit-Global':'true','Retry-After':'2'},'body':{'retry_after':2,'global':True}}),RateCoordinatorUnavailable)
+assert observation_snapshot()==before,'Partial changed-row observation must roll back new alias,guard changes and outcome'
+checks.append('partial changed-row cold429 observation rolls back every guard/mapping/alias/outcome;sent evidence remains unresolved')
 
 # Retain all previously qualified coordinator groups. They require a NEW
 # approved remote execution after batching; prior results cover prior source.

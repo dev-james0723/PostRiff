@@ -384,14 +384,19 @@ class SharedPostgresBudget:
         for key in ordered:
             kind, cap, window = keys[key]
             parameters.extend((key,kind,cap,cap,window,self.policy.revision,self.policy.expires_at))
-        # Explicit source ordering also orders conflicting INSERT locks. Values
-        # are bound, never interpolated; only the placeholder count is dynamic.
+        # Skip only committed existing seed keys; concurrent invisible inserts still
+        # meet ON CONFLICT in the same ordered subset. Every requested scope is
+        # locked, reread and cardinality-checked below before policy/debit use.
+        # Bound values and fresh post-lock clocks are unchanged.
         values = ','.join(['(%s::text,%s::text,%s::integer,%s::integer,%s::double precision,%s::text,to_timestamp(%s::double precision))'] * len(ordered))
         cur.execute(f'''WITH scope_seed(scope_key,kind,limit_count,remaining,window_seconds,policy_revision,policy_expires_at)
             AS MATERIALIZED (VALUES {values})
             INSERT INTO {STATE}(scope_key,kind,limit_count,remaining,window_seconds,reset_at,policy_revision,policy_expires_at)
-            SELECT scope_key,kind,limit_count,remaining,window_seconds,clock_timestamp(),policy_revision,policy_expires_at
-            FROM scope_seed ORDER BY scope_key COLLATE "C" ON CONFLICT(scope_key) DO NOTHING''',tuple(parameters))
+            SELECT source.scope_key,source.kind,source.limit_count,source.remaining,source.window_seconds,
+                clock_timestamp(),source.policy_revision,source.policy_expires_at
+            FROM scope_seed AS source
+            WHERE NOT EXISTS(SELECT 1 FROM {STATE} AS existing WHERE existing.scope_key=source.scope_key)
+            ORDER BY source.scope_key COLLATE "C" ON CONFLICT(scope_key) DO NOTHING''',tuple(parameters))
         columns = '''scope_key,kind,limit_count,remaining,window_seconds,extract(epoch from reset_at)::double precision,
                 extract(epoch from blocked_until)::double precision,extract(epoch from circuit_until)::double precision,error_streak,manual_hold,
                 observation_seq,policy_revision,extract(epoch from policy_expires_at)::double precision,
@@ -746,6 +751,7 @@ class SharedPostgresBudget:
                     and {key for key in keys if key.startswith('50:')} == {header_key}):
                 shared_keys = tuple(key for key in keys if key[:3] in ('00:','10:','11:','20:','40:'))
             rows = self._locked(cur,keys,shared_keys=shared_keys) if shared_keys else self._locked(cur,keys)
+            previous = {key:dict(row) for key,row in rows.items()}
             immutable_guards = {key:dict(rows[key]) for key in shared_keys}
             if shared_keys:
                 guard_now = self._policy(cur,forward=False)
@@ -839,7 +845,11 @@ class SharedPostgresBudget:
                     row['hold'] = row['hold'] or bad_retry
                     if row['left'] is not None:
                         row['left'] = 0
-                if key not in shared_keys:
+                # Response ordering is a route/bucket fence. Common guards use
+                # locked quota/embargo state, never this response sequence.
+                # Advancing their unused sequence rewrites otherwise unchanged
+                # application-wide guards while every peer waits on app00.
+                if key not in shared_keys and row['kind'] == 'route':
                     row['seq'] = max(row['seq'],seq)
             # Apply this response once per scope, then merge final alias state.
             # Doing inheritance before increments made streaks depend on key
@@ -868,7 +878,8 @@ class SharedPostgresBudget:
             if any(rows[key] != original for key,original in immutable_guards.items()):
                 raise RateCoordinatorUnavailable()  # future mutation under SHARE fails closed
             mutable_rows = {key:row for key,row in rows.items() if key not in shared_keys}
-            self._store_batch(cur,mutable_rows,locked_keys=set(keys)-set(shared_keys),forward=False)
+            self._store_batch(cur,mutable_rows,locked_keys=set(keys)-set(shared_keys),forward=False,
+                              previous={key:previous[key] for key in mutable_rows})
             if new_bucket and seq >= seen:
                 cur.execute(f'''UPDATE {ROUTES} SET bucket_key=%s,observation_seq=%s,updated_at=clock_timestamp()
                     WHERE auth_key=%s AND route_key=%s AND major_key=%s''', (new_bucket,seq,permit.identity.auth_key,*meta))
