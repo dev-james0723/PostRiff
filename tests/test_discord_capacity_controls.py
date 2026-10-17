@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phase2.postgres_discord_capacity import (
-    DSN, Incomplete, FixtureCancelled, FixtureLedger, HarnessInterrupted, Runtime, accounting, arrivals, budget_lower_bound,
+    DSN, Incomplete, FixtureCancelled, FixtureLedger, HarnessInterrupted, Runtime, accounting, arrivals, burst_offsets, budget_lower_bound,
     collect_fixture_cohort, connection_diagnostic_profile, configure_candidate_provider,
     diagnostic, diagnostic_phase, distribution, fingerprint, MockDiscord, TimedCursor,
     profile, rate_metadata, require_fixture, sql_metadata, validate_fence,
@@ -228,6 +228,20 @@ class CapacityControls(unittest.TestCase):
         records[1]['jobId']=None
         self.assertIsNone(admission_margin(records,2))
 
+    def test_burst_producer_keeps_full_cohort_inside_original_window_with_timer_jitter(self):
+        jitter = .001614
+        self.assertGreaterEqual(9999 * 10 / 10000 + jitter, 10.)
+        for count, seconds in ((8, 1), (1000, 5), (10000, 10)):
+            with self.subTest(count=count, seconds=seconds):
+                offsets = burst_offsets(count, seconds)
+                self.assertEqual(len(offsets), count)
+                self.assertEqual(offsets[0], 0.)
+                self.assertTrue(all(a < b for a, b in zip(offsets, offsets[1:])))
+                self.assertLess(offsets[-1] + jitter, seconds)
+        for count, seconds in ((0, 10), (True, 10), (1, 0), (1, float('nan')), (1, float('inf'))):
+            with self.assertRaises(ValueError):
+                burst_offsets(count, seconds)
+
     def test_admission_burst_enforces_original_latency_drain_and_submission_gates(self):
         runtime=Runtime.__new__(Runtime)
         runtime.p=admission_diagnostic_profile();runtime.m=SimpleNamespace(event=lambda *args,**kwargs:None)
@@ -242,7 +256,7 @@ class CapacityControls(unittest.TestCase):
         self.assertEqual(result['status'],'PASS')
         self.assertEqual(set(result['gates']),{'accountingAndEligibleDelivery',
             'dispatchP95','dispatchP99','drain','submissionWindow'})
-        for limit in (10.,11.):
+        for limit in (10.,10.000613927841187,11.):
             records[1]['submittedAt']=limit
             result=observe(102.)
             self.assertFalse(result['gates']['submissionWindow'])

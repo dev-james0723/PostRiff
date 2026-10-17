@@ -584,6 +584,17 @@ def validate_fence(platform, environment, database=None, transport=None):
         raise Incomplete('Live or unknown transport refused')
 
 
+def burst_offsets(count, seconds):
+    """Finish the full producer cohort inside its unchanged strict window."""
+    if (type(count) is not int or count < 1 or type(seconds) not in (int, float)
+            or not math.isfinite(seconds) or seconds <= 0):
+        raise ValueError('Burst count and submission window must be positive and finite')
+    # The last B arrival previously left only 1ms for sleep/submit jitter.
+    # Reserve producer time; actual timestamps and the deadline gate stay strict.
+    span = seconds - min(.1, seconds * .01)
+    return [index * span / count for index in range(count)]
+
+
 def arrivals(p):
     """Fixed logical arrival times, never a retrospective shorter steady phase."""
     offsets, accumulated, emitted = [], 0.0, 0
@@ -1695,8 +1706,9 @@ class Runtime:
             started = time.time()
             due = started + (self.p['burstScheduleLeadSeconds'] if not comparison else self.p['comparisonScheduleLeadSeconds'])
             futures = []
-            for index, f in enumerate(selected):
-                arrival = started + index * duration / count
+            for index, offset in enumerate(burst_offsets(count, duration)):
+                f = selected[index]
+                arrival = started + offset
                 time.sleep(max(0, arrival - time.time()))
                 futures.append(pool.submit(approve,f,phase+'-'+str(index),due,phase,arrival,submitted_at=time.time()))
             records = [future.result() for future in futures]
