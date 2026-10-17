@@ -86,6 +86,17 @@ class PinterestPilot(unittest.TestCase):
         self.assertIsNone(service._pinterest_custody(clear,provider))
         self.assertEqual(provider.transport.calls,[])
 
+    def test_protected_custody_routing_checks_environment_and_app_before_returning_adapter(self):
+        service,repo,p=self.service()
+        access=p._grant({'access_token':'MOCK-AT','scope':'user_accounts:read boards:read'})['accessToken']
+        self.assertIs(service._provider_for_access('pinterest',access),p)
+        for field,changed in [('sandbox',False),('client_id','different-app')]:
+            prior=getattr(p,field);setattr(p,field,changed)
+            try:
+                with self.assertRaises(AlphaError):service._provider_for_access('pinterest',access)
+            finally:setattr(p,field,prior)
+        self.assertEqual(p.transport.calls,[])
+
     def test_board_consent_is_minimal_and_publish_schedule_are_denied_before_network(self):
         service,repo,p=self.service()
         started=service.start('workspace','session','pinterest','boards_read')

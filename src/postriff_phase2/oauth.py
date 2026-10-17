@@ -229,6 +229,11 @@ class OAuthService:
         return adapter
 
     def _provider_for_access(self, provider_id, access_token):
+        if provider_id == 'pinterest':
+            adapter = self._provider(provider_id)
+            # Reject old App/environment custody before a server consumer receives it.
+            adapter._bound(access_token, 'at')
+            return adapter
         if provider_id != 'youtube':
             return self._provider(provider_id)
         try:
