@@ -138,6 +138,8 @@ class InstallationCallback(unittest.TestCase):
         self.assertEqual(state['phase2']['channels'], [])
         self.assertFalse(any(call.args[0].startswith('INSERT INTO public.pr_encrypted_credentials')
                              for call in cur.execute.call_args_list))
+        self.assertFalse(any(call.args[0].startswith('INSERT INTO public.pr_channel_capabilities')
+                             for call in cur.execute.call_args_list))
         self.assertFalse(any(method == 'POST' and path.startswith('/channels/')
                              for method, path in wire.lifecycle_calls))
 
@@ -270,6 +272,18 @@ class Lifecycle(unittest.TestCase):
         with self.assertRaises(AlphaError):
             s.verified_authorization('synthetic-access', ['identify', 'guilds'], USER)
         self.assertEqual(wire.lifecycle_calls, [('GET', '/oauth2/@me'), ('GET', '/oauth2/@me')])
+
+    def test_direct_rafii_scheduling_requires_the_secure_connection_workflow(self):
+        s, wire = service(with_vault=False)
+        adapter = s.adapter
+        self.assertFalse(adapter.native_schedule)
+        for authorization, connections in ((False, False), (False, True), (True, False)):
+            with self.subTest(authorization=authorization, connections=connections):
+                adapter.authorization_v2_enabled = authorization
+                adapter.connections_v2_enabled = connections
+                matrix = OAuthService._capabilities(adapter, 'publish', ['identify', 'bot'], [], NOW)
+                self.assertNotEqual(matrix['schedule']['level'], 'Direct')
+        self.assertEqual(wire.lifecycle_calls, [])
 
     def test_current_authorization_rejects_missing_or_mismatched_grant_evidence(self):
         valid = {'application': {'id': APP}, 'user': {'id': USER}, 'scopes': ['identify', 'guilds']}

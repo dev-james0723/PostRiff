@@ -243,6 +243,12 @@ class DiscordProvider(OAuthProvider):
         self.rate_coordinator_degraded = False
         self._bot_identity_cache = None
 
+    @property
+    def server_schedule(self):
+        # Rafii's existing queue dispatches approved manifests; Discord does
+        # not schedule them. Legacy connection flows retain assisted status.
+        return self.authorization_v2_enabled and self.connections_v2_enabled
+
     @classmethod
     def mount(cls, values, transport=None):
         client_id, secret, pair_valid, diagnostic = cls.credential_pair(values)
