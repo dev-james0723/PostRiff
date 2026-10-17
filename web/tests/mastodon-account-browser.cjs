@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { mkdirSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const ENGINE = process.env.MASTODON_BROWSER_ENGINE || 'chromium';
+assert.ok(ENGINE === 'chromium' || ENGINE === 'webkit', 'A real Chromium or WebKit engine must be selected');
 assert.equal(process.platform, 'linux');
 assert.match(process.env.CI || '', /^(1|true)$/i);
 const base = process.env.MASTODON_WEB_URL || 'http://127.0.0.1:4448';
@@ -11,7 +13,7 @@ assert.equal(new URL(base).hostname, '127.0.0.1');
 const out = resolve(process.env.MASTODON_BROWSER_EVIDENCE_DIR || resolve(__dirname, '../../.jcb-artifacts/mastodon-browser'));
 mkdirSync(out, { recursive: true });
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await (ENGINE === 'webkit' ? webkit : chromium).launch({ headless: true });
   const checks = [];
   try {
     for (const width of [1440, 390, 320]) {
@@ -123,6 +125,6 @@ mkdirSync(out, { recursive: true });
       await context.close();
     }
     writeFileSync(resolve(out, 'CLOUD-SYNTHETIC-browser.json'), JSON.stringify({ status: 'PASS', realMastodonAcceptance: false, productionAcceptance: false, checks }, null, 2));
-    console.log(JSON.stringify({ status: 'PASS', execution: 'CLOUD SYNTHETIC APPLICATION BROWSER', realMastodonAcceptance: false, checks }));
+    console.log(JSON.stringify({ status: 'PASS', execution: 'CLOUD SYNTHETIC APPLICATION BROWSER', browserEngine: ENGINE, realMastodonAcceptance: false, checks }));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

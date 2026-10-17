@@ -4,7 +4,9 @@ const { randomUUID } = require('node:crypto');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { deflateSync } = require('node:zlib');
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const ENGINE = process.env.MASTODON_BROWSER_ENGINE || 'chromium';
+assert.ok(ENGINE === 'chromium' || ENGINE === 'webkit', 'A real Chromium or WebKit engine must be selected');
 assert.equal(process.platform, 'linux');
 assert.match(process.env.CI || '', /^(true|1)$/);
 const base = 'http://127.0.0.1:4448', fixture = 'http://127.0.0.1:4348';
@@ -28,7 +30,7 @@ function wav() {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true }); const checks = [];
+  const browser = await (ENGINE === 'webkit' ? webkit : chromium).launch({ headless: true }); const checks = [];
   let activePage;
   try {
     for (const width of [1440, 390, 320]) {
@@ -142,7 +144,7 @@ function wav() {
       const audioJob = await finish(await prepare('audio')); assert.equal(audioJob.manifest.media[0].normalizedLibrary, true);
       const nativeJob = await finish(await prepare('native'), true); assert.equal(nativeJob.manifest.timing.nativeProvider, 'Mastodon');
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2); assert.equal(overflow, true); assert.deepEqual(errors, []);
-      checks.push({ width, checks: ['exact UI thread approval and three verified saved IDs', 'two decoded immutable images with separate alt text', 'validated Library WAV through immutable custody and media upload', 'native accepted pending then unique media-bound publication without resubmission', 'actual shared Queue worker and SQL', 'responsive final receipt and no runtime error'], execution: 'synthetic provider; explicitly advanced fixture clock', realMastodonAcceptance: false });
+      checks.push({ width, checks: ['exact UI thread approval and three verified saved IDs', 'two decoded immutable images with separate alt text', 'validated Library WAV through immutable custody and media upload', 'native accepted pending then unique media-bound publication without resubmission', 'actual shared Queue worker and SQL', 'responsive final receipt and no runtime error'], execution: 'synthetic provider; explicitly advanced fixture clock', browserEngine: ENGINE, realMastodonAcceptance: false });
       console.log(JSON.stringify({ status: 'PASS', execution: 'CLOUD SYNTHETIC QUEUE WIDTH', width, checks: checks.at(-1) }));
       await context.close();
     }
