@@ -1,0 +1,145 @@
+{
+  "preparedAt": "2026-10-17T22:37:34.355134+00:00",
+  "status": "CANDIDATE_NOT_APPROVED_NOT_EXECUTED",
+  "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
+  "providerAppId": "1615884",
+  "canonicalSupabase": "buoyhkbodnhzngaotoel",
+  "vercelProjectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "vercelTeamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "previousReadyDeployment": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+  "boardId": "1126814837958721891",
+  "providerAccountId": "1126814906675966091",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "actorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+  "pilotId": "7e355181-2714-46fb-abfe-26fc526d0809",
+  "expiresAt": "2026-10-18T18:00:00Z",
+  "expiresUnix": 1792346400,
+  "configurationScope": "deployment-only; no project env changes",
+  "deploymentOnlyEnvironment": {
+    "POSTRIFF_OAUTH_PINTEREST_CLIENT_ID": "1615884",
+    "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN": "https://rafii.io",
+    "POSTRIFF_PINTEREST_SANDBOX": "false",
+    "POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT": "production",
+    "POSTRIFF_PINTEREST_TRIAL_READONLY": "0",
+    "POSTRIFF_PINTEREST_TRIAL_WORKSPACE_ID": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "POSTRIFF_PINTEREST_TRIAL_ACTOR_ID": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+    "POSTRIFF_PINTEREST_TRIAL_USERNAME": "jamesaucreates",
+    "POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT": "1792346400",
+    "POSTRIFF_OAUTH_PINTEREST_ENABLED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_VERIFIED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_REVIEWED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_POLICY_APPROVED": "false",
+    "POSTRIFF_OAUTH_PINTEREST_DISABLED": "false",
+    "POSTRIFF_PINTEREST_AGENT_ENABLED": "0",
+    "POSTRIFF_PINTEREST_AGENT_PROVIDER_DATA_APPROVED": "0",
+    "POSTRIFF_PINTEREST_ANALYTICS_ENABLED": "1",
+    "POSTRIFF_PINTEREST_PRIVATE_TRIAL": "1",
+    "POSTRIFF_PINTEREST_TRIAL_ACCOUNT_ID": "1126814906675966091",
+    "POSTRIFF_PINTEREST_TRIAL_BOARD_IDS": "1126814837958721891",
+    "POSTRIFF_PINTEREST_TRIAL_CAPABILITIES": "identity,boards_read,publish,schedule,analytics",
+    "POSTRIFF_PINTEREST_TRIAL_ID": "7e355181-2714-46fb-abfe-26fc526d0809",
+    "POSTRIFF_METRIC_READS": "1",
+    "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST": "568699ad-d66e-42b8-a7f1-e86d0c35ab02"
+  },
+  "comparisonToCurrentLivePinterestDeployment": {
+    "POSTRIFF_PINTEREST_TRIAL_READONLY": {
+      "before": "1",
+      "proposed": "0"
+    },
+    "POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT": {
+      "before": "1792269656",
+      "proposed": "1792346400"
+    },
+    "POSTRIFF_PINTEREST_ANALYTICS_ENABLED": {
+      "before": "0",
+      "proposed": "1"
+    },
+    "POSTRIFF_PINTEREST_PRIVATE_TRIAL": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "1"
+    },
+    "POSTRIFF_PINTEREST_TRIAL_ACCOUNT_ID": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "1126814906675966091"
+    },
+    "POSTRIFF_PINTEREST_TRIAL_BOARD_IDS": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "1126814837958721891"
+    },
+    "POSTRIFF_PINTEREST_TRIAL_CAPABILITIES": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "identity,boards_read,publish,schedule,analytics"
+    },
+    "POSTRIFF_PINTEREST_TRIAL_ID": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "7e355181-2714-46fb-abfe-26fc526d0809"
+    },
+    "POSTRIFF_METRIC_READS": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "1"
+    },
+    "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST": {
+      "before": "NOT_PRESENT_IN_OLD_PINTEREST_OVERRIDE",
+      "proposed": "568699ad-d66e-42b8-a7f1-e86d0c35ab02"
+    }
+  },
+  "globalMetricFlagBefore": "UNVERIFIED_REDACTED; proposed1",
+  "metricWorkspaceAdmissionBefore": "Project key absent; abort if another deployment override or newer project config changes admission; never overwrite shared allowlists",
+  "migrationSha256": {
+    "migrations/postriff/20261017_pinterest_trial_journal.sql": "432a509ca82201ab4e3ba7c1b78d437ed54b9457f18dd9b4d44209335ce2fc39",
+    "migrations/postriff/20261017_pinterest_trial_journal.rollback.sql": "56891be19ebedb51ff13af47f112c15d8e5bd9c0622d37b3552bb92e904299ca",
+    "migrations/postriff/20261017_pinterest_metric_reads.sql": "a01f47d11595c42665c7aa2f1bfec41b6f0a23935ca5b4d58e639577cba8dbd7",
+    "migrations/postriff/20261017_pinterest_metric_reads.rollback.sql": "dd9ab063275b8b2f15ec09a3f55daf1379238c7e8967e837faa6255de8c2baa2"
+  },
+  "migrationApplyOrder": [
+    "migrations/postriff/20261017_pinterest_trial_journal.sql",
+    "migrations/postriff/20261017_pinterest_metric_reads.sql"
+  ],
+  "existingQuotaMigrationReapply": false,
+  "oauthScopes": [
+    "user_accounts:read",
+    "boards:read",
+    "pins:read",
+    "pins:write"
+  ],
+  "oauthCallback": "https://rafii.io/api/oauth/pinterest/callback",
+  "newSecretOrRotation": false,
+  "secretHandling": "Reuse exact existing1615884 app secret through securely scoped child environment only; no secret argv/log/report/file. Human performs OAuth consent/MFA; no credentials/cookies requested.",
+  "mediaIngest": {
+    "sourceFile": "/Users/ouxianxing/Documents/.agent-worktrees/rafii-pinterest-production-prep-20261014/docs/pinterest-production-20261014/pin-previews/rafii-existing-og.png",
+    "sha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+    "destination": "Existing canonical Supabase private workspace media via Content Studio, workspace 568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "maxUploads": 1,
+    "paidGeneration": false,
+    "pinDraftsOnly": true,
+    "finalNormalizedHashAndAssetId": "NOT_RUN; freeze and review before any Pin approval"
+  },
+  "maximumExecutions": {
+    "sqlFiles": 2,
+    "vercelBuildSubmissions": 1,
+    "conditionalPromotion": 1,
+    "newOAuthAccount": 1,
+    "mediaUpload": 1,
+    "pinCreates": 0,
+    "newBoards": 0,
+    "newJcbRuns": 0,
+    "standardSubmissions": 0,
+    "publicEnablement": 0
+  },
+  "reviewedScheduledPinProposal": "2026-10-18T16:00:00Z/12:00EDT; still NOT_APPROVED",
+  "approvalDeadlineForThisExactWindow": "2026-10-18T15:00:00Z; if missed do not roll times/extend policy",
+  "cost": "One existing-project Vercel build plus bounded runtime/storage/API traffic may be metered under existing plans; amount unverified. No new org/project/subscription/resource or paid generation. CI1/1alreadyconsumed, noneadditional.",
+  "stops": [
+    "Any source/shared env/schema drift",
+    "Missing project/identity/board permission or wrong stable account",
+    "Expired or infeasible approved window",
+    "Ambiguous deployment or provider outcome: reconcile, never submit duplicate",
+    "PUBLIC board not v5eligible: stop, no alternate board/Sandbox",
+    "Pin approval absent: no createPOST"
+  ],
+  "rollback": "Pause private Pinterest, cancel own pending jobs, preserve quota/journal/knownIDs/uncertainty. Conditional promote back to2tFM only after compatibility and shared-drift checks; do not rebuild or drop nonempty journals/metrics. No Pin deletion.",
+  "externalEffectsAlreadyApprovedAndConsumed": {
+    "emptyPublicBoard": "1/1completed",
+    "paidCloudCI": "1/1completed"
+  }
+}

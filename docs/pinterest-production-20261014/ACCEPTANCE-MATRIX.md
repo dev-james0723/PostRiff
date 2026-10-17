@@ -17,7 +17,7 @@ Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69
 | Duplicate prevention | PASS | Synthetic concurrency/leases/final authority/known-ID persistence and no lost-response rePOST passed2026-10-17. Real provider behavior unobserved. |
 | Account disconnection | PASS | REAL final human-completed DELETE20019:43:55Z; DB revoked and both token ciphertexts erased.0real jobs,0active future jobs; nonempty real cancellation and Pinterest consent revoke NOT RUN. Earlier403 preserved. [Receipt](evidence/pilot-reconnect-refresh-disconnect-20261017.json). |
 | AI Agent authorized end-to-end | NOT RUN | Registration/tenant/current-intent tests PASS2026-10-17; provider-data/write gates closed. |
-| Standard Access | BLOCKED | Native My apps17Oct20:45Z says Trial access active; Upgrade form available with blank video. No active pending/approval displayed; owner mail search found only14Oct Trial approval. Actual compliant OAuth/API video and policy review missing. |
+| Standard Access | BLOCKED | Native My apps17Oct~22:35Z says Trial access active; Upgrade form available with blank video. No active pending/approval displayed; owner mail search found only14Oct Trial approval. Actual compliant OAuth/API video and policy review missing. |
 | Production release/canary | NOT RUN | One approved private Trial quota/config/deployment completed on existing production resources, not public release. No approved canary Pin. [Deployment receipt](evidence/pilot-deployment-20261017.json). |
 | Public availability | NOT RUN | Eligible customer's production journey not demonstrated. |
 | Synthetic concurrent scale | PASS |1000 simultaneous arrivals/64workers;5007.90users/s;p50/p95/p99 90.28/165.99/171.89ms;0unexpected failures;20expected uncertain outcomes;0provider traffic,2026-10-17. In-process only. |
@@ -72,9 +72,9 @@ Production remains e2e5169f/2tFM READY; local repaired source **776930ed3851047e
 | Analytics outcome/empty durable receipt | PASS | Two selected synthetic local Python controls2026-10-17,0.005/0.003s; not full module/DB/live proof. |
 | Stale proof before write / revocation fences | PASS | Two selected synthetic local Python controls2026-10-17,0.015/0.040s with positive+cancel/reconnect/lease/member/account/approval subcases. Actual scheduled execution NOT RUN. |
 | Expired pilot diagnosis fail-closed | PASS | One selected synthetic Python control2026-10-17,0.006s. Live message still older e2e implementation; local fix not deployed. |
-| New source Node/typecheck/build/browser/PG | BLOCKED | Earlier doctor exit2 was restricted-network DNS, not invalid credentials. Network-enabled doctor PASS. Actual included Depot CI minutes exhausted; one paid delta run awaits scoped cost approval, NOT RUN. Prepared sanitized delta route. |
-| Two Pin preview metadata | PASS | Frozen original PNG/HTTP200/MIME/dimensions/SHA and local JSON checked; board ID absent and no execution approval. pin-previews/. |
-| Real eligible destination | NOT RUN | Native own Saved UI has0boardcards; earlier API200empty. Named PUBLIC board creation proposal only. |
+| New source Node/typecheck/build/browser/PG | PASS | Approved exact v0czdxw6gg remote delta run completed17Oct; see latest execution below. Full-project CI NOT RUN. |
+| Two Pin preview metadata | PASS | Frozen original PNG/HTTP200/MIME/dimensions/SHA and local JSON checked; actualboardID1126814837958721891bound; immutableContentStudioasset/Pinapproval stillpending. pin-previews/. |
+| Real approved board creation | PASS |17Oct22:25UTC, onePUBLICnativeUIboard1126814837958721891,0Pins, owner/description/reload+anonymouspublicwidget verified. OAuth/v5eligibility NOT RUN. |
 | Review video | NOT RUN | Dedicated agent produced actual partial footage; see video receipt for format/segment limitations. Full compliant OAuth/Pin demonstration is not supplied. |
 
 Connect+Publish may proceed in an approved two-customer canary when their own gates pass, while Schedule/Analytics remain off. No current feature is public GO; this is not a blanket postponement tied to the slower optional features.
@@ -87,10 +87,10 @@ This is a separate private acceptance lane, not publicGO. The original read-only
 |---|---|---|
 | Connect | NO-GO for new window | Earlier owner read-only lifecycle realPASS retained; new bound four-scope consent/config/source not activated or accepted. |
 | Publish | NO-GO | Code candidate prepared; exact board/immutable image/new SQL+config/deployment/Pin approval and actual PinID/read-back NOT RUN. |
-| Schedule | NO-GO | Code/negative/concurrency/timezone preparation; actual approved18Oct12:00EDT due execution NOT RUN. The revised time is unapproved. |
-| Analytics | NO-GO | Candidate bypasses Standard only for exact private policy; full cloud/schema/deployment/native current-Pin data read NOT RUN. Confirmed zero/no-data remains legitimate Trial evidence, no fabricated engagement. |
+| Schedule | NO-GO | Code/negative/concurrency/timezone preparation; proposed, unapproved18Oct12:00EDT due execution NOT RUN. The revised time is unapproved. |
+| Analytics | NO-GO | Candidate bypasses Standard only for exact private policy; cloud deltaPASS; productionSQL/deployment/nativecurrentPindataread NOTRUN. Confirmed zero/no-data remains legitimate Trial evidence, no fabricated engagement. |
 
-Prepared private-Trial tests and actual disposable-PG journal/RLS/concurrency cases are NOT RUN as a complete suite. Selected lightweight synthetic controls/static checks only are localPASS; see the new private-Trial delta receipt. Paid cloud qualification requires a new one-run budget; authentication is usable and included allowance is exhausted. Public Connect/Publish/Schedule/Analytics all remain NO-GO until their separate provider/customer/release gates pass.
+Prepared private-Trial journal/RLS/concurrency suite passed in the approved v0czdxw6gg remote delta run. Earlier local-only limitations are superseded for that exactcandidate; liveproduction/provider acceptance remainsNOTRUN. The paidgrant is1/1consumed,0remaining. Public Connect/Publish/Schedule/Analytics all remain NO-GO until their separate provider/customer/release gates pass.
 
 ## Latest delta execution —730d0440,2026-10-17
 
@@ -99,8 +99,12 @@ The paid approval was received and executed once. [v0czdxw6gg](https://depot.dev
 | Feature | Scoped implementation acceptance | New live Trial acceptance |
 |---|---|---|
 | Connect | PASS — bound policy/scopes/account/refresh/tenant negatives; original owner read-only lifecycle realPASS retained | NOT RUN — new four-scope window/grant not activated |
-| Publish | PASS — immutable media/approval/lease/scopes/quota/knownIDjournal/read-back/uncertain-no-rePOST | NOT RUN — no approved exact board/Pin ID or provider read-back |
+| Publish | PASS — immutable media/approval/lease/scopes/quota/knownIDjournal/read-back/uncertain-no-rePOST | NOT RUN — actualboardcreatedandbound; no currentOAuth-v5eligibility/approvedPinID/providerreadback |
 | Schedule | PASS — timezone/DST/stale reverify/cancel/disconnect/lease/quota/recovery contracts | NOT RUN — no approved real scheduled due execution |
 | Analytics | PASS — native-response fixtures,zero/no_data/read_failed,tenant/schema/recordedPin/lease guards and actual disposableDB | NOT RUN — no current real Pin/native data read |
 
 All four public/newlive decisions remainNO-GO. Source qualification alone does not activate them. Full-project CI, real non-owner acceptance and compliant Standard demo remainNOTRUN. Canonical production still2tFM/e2e on fresh2026-10-17T22:07:21.583987+00:00read-onlyinspect; no source drift.
+
+## Approved board and activation preflight —17Oct~22:35UTC
+
+OnePUBLICboard1126814837958721891 actualUIcreate/readbackPASS; noPins. NativeMyappsstillTrialactive/noStandardapprovalorpendingdisplayed. CanonicalDB/quota/ownmember/revokedgrant/173productionenvmetadatapreflightPASS as scoped;8backupentriesvisible,restoreintegrityNOTRUN. Exactconfig/SQL/oneconditionaldeployment/freshconsent/mediaingestbundleprepared,notapproved. [Evidence](evidence/private-trial-activation-preflight-20261017.json). All4newlive/publicNO-GOremain; no mock-to-realpromotion.

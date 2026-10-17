@@ -1,0 +1,1912 @@
+{
+  "observedAt": "2026-10-17T22:31Z",
+  "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+  "teamId": "team_PgXY5VdAYKcsv0RLoDPHscNq",
+  "decrypt": false,
+  "count": 173,
+  "envs": [
+    {
+      "id": "jkJ8Cg1OfjtDqXGl",
+      "key": "POSTRIFF_OAUTH_THREADS_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792247396201,
+      "createdAt": 1792247396201,
+      "gitBranch": null
+    },
+    {
+      "id": "5K3NuyWNCnixDqoy",
+      "key": "RAFII_SECURITY_RETENTION_DAYS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792115565444,
+      "createdAt": 1792115565444,
+      "gitBranch": null
+    },
+    {
+      "id": "ihLMxZIAXa2lgzOp",
+      "key": "RAFII_SECURITY_RETENTION",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792202987353,
+      "createdAt": 1792115563017,
+      "gitBranch": null
+    },
+    {
+      "id": "6fR9ImhlKtOnaVUS",
+      "key": "RAFII_SIGN_IN_DETAILS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792115560866,
+      "createdAt": 1792115560866,
+      "gitBranch": null
+    },
+    {
+      "id": "2vdj6YQKtHIyvQ8z",
+      "key": "RAFII_SECURITY_INCIDENT_HOLD",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792115558279,
+      "createdAt": 1792115558279,
+      "gitBranch": null
+    },
+    {
+      "id": "k0b7NSl6mj2bcFZp",
+      "key": "RAFII_DEVICE_TRUST_V2",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792115554895,
+      "createdAt": 1792115554895,
+      "gitBranch": null
+    },
+    {
+      "id": "BbZe7J0l1wc1SfXm",
+      "key": "RAFII_DEVICE_COOKIE_KEYS",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792115392682,
+      "createdAt": 1792115392682,
+      "gitBranch": null
+    },
+    {
+      "id": "v1TU1dHtr57XvDtf",
+      "key": "RAFII_CREATION_PROJECTION_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792030476125,
+      "createdAt": 1792030476125,
+      "gitBranch": null
+    },
+    {
+      "id": "XXxAcEb7XB3OmybF",
+      "key": "RAFII_CREATION_ALL_PLATFORMS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792030476125,
+      "createdAt": 1792030476125,
+      "gitBranch": null
+    },
+    {
+      "id": "APpO863SLqGuCHul",
+      "key": "RAFII_ACCOUNT_PROTECTION_V2_MODE",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792026763784,
+      "createdAt": 1792026763784,
+      "gitBranch": null
+    },
+    {
+      "id": "ESzzVD4tBTcvFJsL",
+      "key": "POSTRIFF_OAUTH_THREADS_CLIENT_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791920242183,
+      "createdAt": 1791920242183,
+      "gitBranch": null
+    },
+    {
+      "id": "Yf711S6ZpSQhkPfX",
+      "key": "POSTRIFF_LINKEDIN_FLEET_MAX_SECONDS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791823826255,
+      "createdAt": 1791823826255,
+      "gitBranch": null
+    },
+    {
+      "id": "splquNvyoClkDsFG",
+      "key": "POSTRIFF_LINKEDIN_FLEET_MAX_JOBS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791823825288,
+      "createdAt": 1791823825288,
+      "gitBranch": null
+    },
+    {
+      "id": "HPoSA20q5Oo8yakr",
+      "key": "POSTRIFF_LINKEDIN_FLEET_WORKERS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791823824251,
+      "createdAt": 1791823824251,
+      "gitBranch": null
+    },
+    {
+      "id": "yfyeScB4VbiuXjme",
+      "key": "POSTRIFF_LINKEDIN_FLEET_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791823823219,
+      "createdAt": 1791821930207,
+      "gitBranch": null
+    },
+    {
+      "id": "cfQPY3BzrbbrC9iK",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791821929121,
+      "createdAt": 1791821929121,
+      "gitBranch": null
+    },
+    {
+      "id": "x1OhWaxRAvYvP3Js",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_OFFICIAL_SOCIAL_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791821927589,
+      "createdAt": 1791821927589,
+      "gitBranch": null
+    },
+    {
+      "id": "amPV6eLQN78yuv3H",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CONNECTION_REVIEW_JSON",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791821926390,
+      "createdAt": 1791821926390,
+      "gitBranch": null
+    },
+    {
+      "id": "mg2eDZQiVDJCkGoW",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_PRODUCT_APPROVALS_JSON",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791821924847,
+      "createdAt": 1791821924847,
+      "gitBranch": null
+    },
+    {
+      "id": "jIFwnXaDCMz2cVzq",
+      "key": "POSTRIFF_TELEGRAM_LOGIN_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791769146645,
+      "createdAt": 1791769146645,
+      "gitBranch": null
+    },
+    {
+      "id": "BTOnn2StsMH870bP",
+      "key": "POSTRIFF_TELEGRAM_LOGIN_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791769144498,
+      "createdAt": 1791769144498,
+      "gitBranch": null
+    },
+    {
+      "id": "hIRNCC1tDoL6SUvi",
+      "key": "NEXT_PUBLIC_BRAND_BRAIN_V11",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791663605923,
+      "createdAt": 1791663605923,
+      "gitBranch": null
+    },
+    {
+      "id": "4U1xy5paEfTNp8hd",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_STANDARD_CREDENTIAL_SOURCE",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791662882850,
+      "createdAt": 1791662882850,
+      "gitBranch": null
+    },
+    {
+      "id": "rnaoA6YRCnQ5h8Em",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CALLBACK_ORIGIN",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791662853471,
+      "createdAt": 1791662853471,
+      "gitBranch": null
+    },
+    {
+      "id": "EiquigciWZWXmjpW",
+      "key": "RAFII_CONTEXT_LENS_ENABLED",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791648942383,
+      "createdAt": 1791648942383,
+      "gitBranch": null
+    },
+    {
+      "id": "vEzCZ8YQ3nPfeyhi",
+      "key": "RAFII_CONTEXT_VISIBLE_STATE_ENABLED",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791648940225,
+      "createdAt": 1791648940225,
+      "gitBranch": null
+    },
+    {
+      "id": "8VHCq82wpoQ9ZXzA",
+      "key": "RAFII_CONTEXT_LENS_WORKSPACES",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791648929608,
+      "createdAt": 1791648929608,
+      "gitBranch": null
+    },
+    {
+      "id": "c9rEwMgTOYcVINVH",
+      "key": "RAFII_AGENT_LIBRARY_BROWSE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791647702898,
+      "createdAt": 1791647702898,
+      "gitBranch": null
+    },
+    {
+      "id": "dlxSgAflWkwgBFvS",
+      "key": "RAFII_AGENT_LIBRARY_BROWSE_WORKSPACES",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791647692988,
+      "createdAt": 1791647692988,
+      "gitBranch": null
+    },
+    {
+      "id": "UFZeL8Mhbh2f3MgZ",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_LEGACY_CLIENT_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791658794754,
+      "createdAt": 1791594624598,
+      "gitBranch": null
+    },
+    {
+      "id": "neH6vWJhZpGecdtL",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_AGENTIC_CLIENT_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791594623265,
+      "createdAt": 1791594623265,
+      "gitBranch": null
+    },
+    {
+      "id": "kwnh2BOVZi9IfLvM",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791594621879,
+      "createdAt": 1791594621879,
+      "gitBranch": null
+    },
+    {
+      "id": "Zw6nXr8BWB8ofrOy",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_PENDING_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791594538195,
+      "createdAt": 1791594538195,
+      "gitBranch": null
+    },
+    {
+      "id": "xMwEbdJpeuJeAYAl",
+      "key": "RAFII_GENUI_VALIDATOR_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498914218,
+      "createdAt": 1791498914218,
+      "gitBranch": null
+    },
+    {
+      "id": "JqkZ4GFuyHZhGy6T",
+      "key": "RAFII_GENUI_WORKSPACES",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791528502882,
+      "createdAt": 1791498911686,
+      "gitBranch": null
+    },
+    {
+      "id": "xH3l8fJAXiW0PHMP",
+      "key": "RAFII_GENUI_FOUNDER_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498908540,
+      "createdAt": 1791498908540,
+      "gitBranch": null
+    },
+    {
+      "id": "UMN56Z5knwNt3UQI",
+      "key": "RAFII_GENUI_EDITS_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498906039,
+      "createdAt": 1791498906039,
+      "gitBranch": null
+    },
+    {
+      "id": "zwKT0keWAFP6vX7g",
+      "key": "RAFII_GENUI_ACTIONS_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498902949,
+      "createdAt": 1791498902949,
+      "gitBranch": null
+    },
+    {
+      "id": "s6CQ7JnK6WmKAUC0",
+      "key": "RAFII_GENUI_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498900436,
+      "createdAt": 1791498900436,
+      "gitBranch": null
+    },
+    {
+      "id": "eVOdI9rt1f2W0YUe",
+      "key": "RAFII_LEGACY_HOSTS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498632030,
+      "createdAt": 1791498632030,
+      "gitBranch": null
+    },
+    {
+      "id": "uvfi55vXh95AiPQV",
+      "key": "RAFII_LEGACY_HOST_REDIRECT",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498632030,
+      "createdAt": 1791498632030,
+      "gitBranch": null
+    },
+    {
+      "id": "dgKvdXVuAHtgpwfj",
+      "key": "POSTRIFF_BLUESKY_CLIENT_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498076586,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "MRS0Vviqzg2vrAZ9",
+      "key": "NEXT_PUBLIC_PASSKEY_RP_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498076586,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "NuzZVSJq9PIZVCan",
+      "key": "POSTRIFF_OAUTH_X_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498076586,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "w9i3KthlcHzh3vtt",
+      "key": "POSTRIFF_OAUTH_DISCORD_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498076586,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "AjIOtnHUlJfXj8Ax",
+      "key": "POSTRIFF_OAUTH_THREADS_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791920332872,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "zwZBTPcCpqNDicox",
+      "key": "POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498076586,
+      "createdAt": 1791498076586,
+      "gitBranch": null
+    },
+    {
+      "id": "BLujgi4aLqwjFcms",
+      "key": "POSTRIFF_YOUTUBE_AGENTIC_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791489767938,
+      "createdAt": 1791489767938,
+      "gitBranch": null
+    },
+    {
+      "id": "n1LAc1q2DtBNIgNR",
+      "key": "POSTRIFF_YOUTUBE_CREATOR_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791489761677,
+      "createdAt": 1791489761677,
+      "gitBranch": null
+    },
+    {
+      "id": "KUEJJyX50RRxbEHX",
+      "key": "RAFII_GENUI_VALIDATOR_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791480072723,
+      "createdAt": 1791480072723,
+      "gitBranch": null
+    },
+    {
+      "id": "eBhITAuo26XkTZ3x",
+      "key": "OPENUI_TELEMETRY_DISABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791479385554,
+      "createdAt": 1791479385554,
+      "gitBranch": null
+    },
+    {
+      "id": "3Qs2t3FuBhbhXl7x",
+      "key": "POSTRIFF_PRODUCTION_PROJECT_REF",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791465401595,
+      "createdAt": 1791465401595,
+      "gitBranch": null
+    },
+    {
+      "id": "aczOqcMCaA0Q2Sb9",
+      "key": "RAFII_VIDEO_UPLOADS_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791465345652,
+      "createdAt": 1791465345652,
+      "gitBranch": null
+    },
+    {
+      "id": "pzeu8mW7ckA7ZV5D",
+      "key": "VERCEL_SUPPORT_LARGE_FUNCTIONS",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791443002682,
+      "createdAt": 1791443002682,
+      "gitBranch": null
+    },
+    {
+      "id": "ySpKRl8aF7daiYsu",
+      "key": "RAFII_CAPTURE_SOURCE_SHA",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791164660901,
+      "createdAt": 1791164660901,
+      "gitBranch": null
+    },
+    {
+      "id": "CzLSsQgE51tPoGr9",
+      "key": "RAFII_REQUEST_CAPTURE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791170354129,
+      "createdAt": 1791164179820,
+      "gitBranch": null
+    },
+    {
+      "id": "LXW8YbSAcvL4ivjb",
+      "key": "RAFII_CAPTURE_WORKSPACE_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791164177882,
+      "createdAt": 1791164177882,
+      "gitBranch": null
+    },
+    {
+      "id": "5Gnegpoom8vlxUFV",
+      "key": "RAFII_CAPTURE_KEY_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791164175980,
+      "createdAt": 1791164175980,
+      "gitBranch": null
+    },
+    {
+      "id": "X3qbZYV7kpmnzQxb",
+      "key": "RAFII_CAPTURE_SIGNING_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791164173787,
+      "createdAt": 1791164173787,
+      "gitBranch": null
+    },
+    {
+      "id": "OTCflhFWh7bluOCx",
+      "key": "RAFII_CAPTURE_ENCRYPTION_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791164169621,
+      "createdAt": 1791164169621,
+      "gitBranch": null
+    },
+    {
+      "id": "tdVObA046YCpyhYj",
+      "key": "POSTRIFF_METRIC_WORKSPACE_ALLOWLIST",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792109142509,
+      "createdAt": 1791135929010,
+      "gitBranch": null
+    },
+    {
+      "id": "7fmSBmTYTxUnV2Re",
+      "key": "POSTRIFF_METRIC_READS",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792109157381,
+      "createdAt": 1791135927555,
+      "gitBranch": null
+    },
+    {
+      "id": "tMXuPbrpeYMivwR7",
+      "key": "POSTRIFF_REPLY_SENDING_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791135925825,
+      "createdAt": 1791135925825,
+      "gitBranch": null
+    },
+    {
+      "id": "LNELM2mlAJJOvMgp",
+      "key": "POSTRIFF_HISTORY_IMPORT",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791154892034,
+      "createdAt": 1791080015283,
+      "gitBranch": null
+    },
+    {
+      "id": "mSBP8xCODlPMQZHN",
+      "key": "RAFII_TREND_ALLOWED_OPERATIONS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076285128,
+      "createdAt": 1791076285128,
+      "gitBranch": null
+    },
+    {
+      "id": "fVnXywxqpWb1gAGS",
+      "key": "RAFII_TREND_OBJECTS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076282008,
+      "createdAt": 1791076282008,
+      "gitBranch": null
+    },
+    {
+      "id": "r8JIj36EYRjL2uJP",
+      "key": "RAFII_TREND_FORECASTS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076280411,
+      "createdAt": 1791076280411,
+      "gitBranch": null
+    },
+    {
+      "id": "WILM2bRJW062ecko",
+      "key": "RAFII_TREND_MULTIMODAL_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076278881,
+      "createdAt": 1791076278881,
+      "gitBranch": null
+    },
+    {
+      "id": "hmAajjaDqzr02Hx6",
+      "key": "RAFII_TREND_OPPORTUNITY_LAB_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076277333,
+      "createdAt": 1791076277333,
+      "gitBranch": null
+    },
+    {
+      "id": "rzIEeQZuQrqU4IkF",
+      "key": "RAFII_TREND_WHITESPACE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076275764,
+      "createdAt": 1791076275764,
+      "gitBranch": null
+    },
+    {
+      "id": "Y4wU5xzkNgwluzQW",
+      "key": "RAFII_TREND_SATURATION_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076274017,
+      "createdAt": 1791076274017,
+      "gitBranch": null
+    },
+    {
+      "id": "hLP9nSePky1s0Ep9",
+      "key": "RAFII_TREND_GRAPH_GENOME_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076272501,
+      "createdAt": 1791076272501,
+      "gitBranch": null
+    },
+    {
+      "id": "iVtlN18ncHvyidlY",
+      "key": "RAFII_TREND_PROVIDER_OPERATIONS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076270913,
+      "createdAt": 1791076270913,
+      "gitBranch": null
+    },
+    {
+      "id": "FGeCKSvr16B91tCf",
+      "key": "RAFII_TREND_NOTIFICATIONS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076269329,
+      "createdAt": 1791076269329,
+      "gitBranch": null
+    },
+    {
+      "id": "omvibjF3gbsfQrnb",
+      "key": "RAFII_TREND_MODEL_ENRICHMENT_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076267824,
+      "createdAt": 1791076267824,
+      "gitBranch": null
+    },
+    {
+      "id": "bnYwjbT32g3Yr5wv",
+      "key": "RAFII_TREND_STAGE_CLAIMS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076266167,
+      "createdAt": 1791076266167,
+      "gitBranch": null
+    },
+    {
+      "id": "6MKmhyJ4bBBCTg7W",
+      "key": "RAFII_TREND_CALIBRATION_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076261458,
+      "createdAt": 1791076261458,
+      "gitBranch": null
+    },
+    {
+      "id": "c9jLpLgZ7Brtcvf4",
+      "key": "RAFII_TREND_ANALYTICS_RETENTION_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076259788,
+      "createdAt": 1791076259788,
+      "gitBranch": null
+    },
+    {
+      "id": "0jD7MueLBNq2aVer",
+      "key": "RAFII_CONTROL_READER_DSN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919605885,
+      "createdAt": 1790919605885,
+      "gitBranch": null
+    },
+    {
+      "id": "CeQ10cADm7j6HOfV",
+      "key": "RAFII_CONTROL_SESSION_DSN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919604387,
+      "createdAt": 1790919604387,
+      "gitBranch": null
+    },
+    {
+      "id": "90BgT6XtdfEVSxQp",
+      "key": "RAFII_CONTROL_PRODUCTION_PROJECT_REF",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919603004,
+      "createdAt": 1790919603004,
+      "gitBranch": null
+    },
+    {
+      "id": "ZHaFdrp0wgUovTj9",
+      "key": "RAFII_CONTROL_SUPABASE_PUBLISHABLE_KEY",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919601495,
+      "createdAt": 1790919601495,
+      "gitBranch": null
+    },
+    {
+      "id": "Z4KvUncPnfZQDVs4",
+      "key": "RAFII_CONTROL_SUPABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919600020,
+      "createdAt": 1790919600020,
+      "gitBranch": null
+    },
+    {
+      "id": "YDCe0Aq0sQ5u7yCr",
+      "key": "RAFII_CONTROL_ORIGINS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498053718,
+      "createdAt": 1790919597645,
+      "gitBranch": null
+    },
+    {
+      "id": "ESdqQlibGKd0r1nn",
+      "key": "RAFII_CONTROL_ENVIRONMENT",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919596003,
+      "createdAt": 1790919596003,
+      "gitBranch": null
+    },
+    {
+      "id": "H4u0vX4d1s9hCcd6",
+      "key": "RAFII_CONTROL_MOUNT",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919594474,
+      "createdAt": 1790919594474,
+      "gitBranch": null
+    },
+    {
+      "id": "c3BntqVf8m8VVtHo",
+      "key": "RAFII_CONTROL_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790919592997,
+      "createdAt": 1790919592997,
+      "gitBranch": null
+    },
+    {
+      "id": "lPDzoyceDw2uBOm4",
+      "key": "RAFII_TREND_TRUST_RECEIPTS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076258277,
+      "createdAt": 1790631266794,
+      "gitBranch": null
+    },
+    {
+      "id": "WyVxsyUC0b4TYOOh",
+      "key": "RAFII_TREND_RADAR_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076264098,
+      "createdAt": 1790631264380,
+      "gitBranch": null
+    },
+    {
+      "id": "ucG6GfRC6xUvP55b",
+      "key": "RAFII_TREND_INTELLIGENCE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076256681,
+      "createdAt": 1790631263007,
+      "gitBranch": null
+    },
+    {
+      "id": "XCryhh4kaiPoBZV1",
+      "key": "RAFII_TREND_CURSOR_SIGNING_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790631261364,
+      "createdAt": 1790631261364,
+      "gitBranch": null
+    },
+    {
+      "id": "ezJ45pmLie1gPvOA",
+      "key": "NEXT_PUBLIC_PASSKEY_SIGN_IN",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790621438109,
+      "createdAt": 1790621438109,
+      "gitBranch": null
+    },
+    {
+      "id": "KdfErX8qHAkF9zFA",
+      "key": "RAFII_TREND_WORKSPACE_ALLOWLIST",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076286753,
+      "createdAt": 1790603650912,
+      "gitBranch": null
+    },
+    {
+      "id": "burPYEE9pmSuIHaj",
+      "key": "POSTRIFF_OAUTH_TIKTOK_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790579069015,
+      "createdAt": 1790579069015,
+      "gitBranch": null
+    },
+    {
+      "id": "KBHy6woUMmvrFOd0",
+      "key": "POSTRIFF_TELEGRAM_BOT_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790578264342,
+      "createdAt": 1790578264342,
+      "gitBranch": null
+    },
+    {
+      "id": "YALoLx7ou1mIDVsD",
+      "key": "RAFII_AI_UNLIMITED_USER_IDS",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790573664004,
+      "createdAt": 1790573664004,
+      "gitBranch": null
+    },
+    {
+      "id": "XnCmMfWb3LKtRGhf",
+      "key": "RAFII_PHONE_INBOUND_AUTH_DAILY_USD_MICRO",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790567454737,
+      "createdAt": 1790567454737,
+      "gitBranch": null
+    },
+    {
+      "id": "D0A59FtkcCwUGFtK",
+      "key": "RAFII_PHONE_INBOUND_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790567451953,
+      "createdAt": 1790567451953,
+      "gitBranch": null
+    },
+    {
+      "id": "3sJGQaCDR6liFtld",
+      "key": "DIAL_WEBHOOK_SIGNING_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790550515668,
+      "createdAt": 1790550515668,
+      "gitBranch": null
+    },
+    {
+      "id": "LmBhthY4ubnYgj5F",
+      "key": "DIAL_AUDIO_SIGNING_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790549670765,
+      "createdAt": 1790549670765,
+      "gitBranch": null
+    },
+    {
+      "id": "Xr3WQN4pdmEukCNJ",
+      "key": "DIAL_PHONE_NUMBER",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790549554556,
+      "createdAt": 1790549554556,
+      "gitBranch": null
+    },
+    {
+      "id": "VQWmWGcmjDKy8ahN",
+      "key": "DIAL_VERIFICATION_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790549499668,
+      "createdAt": 1790549499668,
+      "gitBranch": null
+    },
+    {
+      "id": "UcryMLOqMcBcvKpK",
+      "key": "DIAL_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790549419645,
+      "createdAt": 1790549419645,
+      "gitBranch": null
+    },
+    {
+      "id": "PbyVZCGYdRposIHJ",
+      "key": "RAFII_PHONE_VERIFICATION_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790550903831,
+      "createdAt": 1790490246268,
+      "gitBranch": null
+    },
+    {
+      "id": "C8AJO1YTiDpqmMbr",
+      "key": "RAFII_PHONE_OUTBOUND_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790490243279,
+      "createdAt": 1790490243279,
+      "gitBranch": null
+    },
+    {
+      "id": "AwOjIAATna9oEhxD",
+      "key": "RAFII_PHONE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790490239795,
+      "createdAt": 1790490239795,
+      "gitBranch": null
+    },
+    {
+      "id": "5RMAXhQxlMT92mzX",
+      "key": "TWILIO_PHONE_NUMBER",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790490003853,
+      "createdAt": 1790490003853,
+      "gitBranch": null
+    },
+    {
+      "id": "sGwjBxzLX2HwmJQq",
+      "key": "TWILIO_AUTH_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790489892026,
+      "createdAt": 1790489892026,
+      "gitBranch": null
+    },
+    {
+      "id": "jBE26it8le5Ae4Lf",
+      "key": "RAFII_PHONE_PROACTIVE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790577340463,
+      "createdAt": 1790488658371,
+      "gitBranch": null
+    },
+    {
+      "id": "R1ZahSfrVnu89xI9",
+      "key": "RAFII_PHONE_SCHEDULED_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790569203587,
+      "createdAt": 1790488650105,
+      "gitBranch": null
+    },
+    {
+      "id": "FDQW02WWgU3ecgf0",
+      "key": "RAFII_PHONE_ALLOWED_COUNTRY_CODES",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790488644367,
+      "createdAt": 1790488644367,
+      "gitBranch": null
+    },
+    {
+      "id": "lGGFQ6fYb2wCpI3x",
+      "key": "RAFII_PHONE_DAILY_USD_MICRO",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790488639214,
+      "createdAt": 1790488639214,
+      "gitBranch": null
+    },
+    {
+      "id": "Q8eNo39nL1buM2SY",
+      "key": "RAFII_PHONE_USD_MICRO_PER_MINUTE",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790612127130,
+      "createdAt": 1790488627588,
+      "gitBranch": null
+    },
+    {
+      "id": "avrPnWpL7NvjfdXu",
+      "key": "RAFII_PHONE_MAX_SECONDS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790547265175,
+      "createdAt": 1790488622449,
+      "gitBranch": null
+    },
+    {
+      "id": "1Pe8QQosKAul5ijs",
+      "key": "RAFII_PHONE_PUBLIC_BASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790488618010,
+      "createdAt": 1790488618010,
+      "gitBranch": null
+    },
+    {
+      "id": "lsKAfmqMtzMZBb53",
+      "key": "RAFII_PHONE_PROVIDER",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790550954828,
+      "createdAt": 1790488612663,
+      "gitBranch": null
+    },
+    {
+      "id": "LTvVqGTEKGffNX53",
+      "key": "TWILIO_VERIFY_SERVICE_SID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790488608117,
+      "createdAt": 1790488608117,
+      "gitBranch": null
+    },
+    {
+      "id": "9ASENs21QUMsoyby",
+      "key": "TWILIO_ACCOUNT_SID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790488604342,
+      "createdAt": 1790488604342,
+      "gitBranch": null
+    },
+    {
+      "id": "Si7MG7BhOLazmcVt",
+      "key": "POSTRIFF_VIDEO_MAX_BYTES",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790468924872,
+      "createdAt": 1790468924872,
+      "gitBranch": null
+    },
+    {
+      "id": "UYa7eDMTgbzalh3a",
+      "key": "RAFII_CHAT_ATTACHMENTS_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790468902815,
+      "createdAt": 1790466797004,
+      "gitBranch": null
+    },
+    {
+      "id": "yl6VEE6A5yzFKrjv",
+      "key": "POSTRIFF_MODEL_PRICES",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790383596389,
+      "createdAt": 1790376090100,
+      "gitBranch": null
+    },
+    {
+      "id": "xb5ccGD42MWTngFd",
+      "key": "POSTRIFF_MODEL_IDS",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790383595150,
+      "createdAt": 1790376088850,
+      "gitBranch": null
+    },
+    {
+      "id": "MXHG5LwHtL73g1uR",
+      "key": "POSTRIFF_DISCORD_BOT_TOKEN",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1792267877511,
+      "createdAt": 1790375883931,
+      "gitBranch": null
+    },
+    {
+      "id": "nPzca1jQqyqGbAiJ",
+      "key": "POSTRIFF_OAUTH_DISCORD_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790375799902,
+      "createdAt": 1790375799902,
+      "gitBranch": null
+    },
+    {
+      "id": "frZajrbYih3Nivzk",
+      "key": "POSTRIFF_OAUTH_DISCORD_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790376153568,
+      "createdAt": 1790374263330,
+      "gitBranch": null
+    },
+    {
+      "id": "DIr68thTqICtv6wg",
+      "key": "POSTRIFF_OAUTH_TIKTOK_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790373625150,
+      "createdAt": 1790373625150,
+      "gitBranch": null
+    },
+    {
+      "id": "3zb4fqgn3jvWSVA4",
+      "key": "POSTRIFF_OAUTH_FACEBOOK_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790371970986,
+      "createdAt": 1790371970986,
+      "gitBranch": null
+    },
+    {
+      "id": "dveyPavYyEWto5nj",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790371912537,
+      "createdAt": 1790371912537,
+      "gitBranch": null
+    },
+    {
+      "id": "h1gRp6g4kfAH42tM",
+      "key": "POSTRIFF_OAUTH_YOUTUBE_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790371895597,
+      "createdAt": 1790371895597,
+      "gitBranch": null
+    },
+    {
+      "id": "XTwHjoJthu5V8xPH",
+      "key": "POSTRIFF_OAUTH_X_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791689386704,
+      "createdAt": 1790371876369,
+      "gitBranch": null
+    },
+    {
+      "id": "gLqjyeAAnxtU4p5r",
+      "key": "POSTRIFF_OAUTH_X_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791741300488,
+      "createdAt": 1790371851300,
+      "gitBranch": null
+    },
+    {
+      "id": "tsvPIHKWrA9HpnZH",
+      "key": "POSTRIFF_OAUTH_MASTODON_ENABLED",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790370697970,
+      "createdAt": 1790370697970,
+      "gitBranch": null
+    },
+    {
+      "id": "nCIWb619OPwa6b8y",
+      "key": "POSTRIFF_OAUTH_FACEBOOK_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790370695610,
+      "createdAt": 1790370695610,
+      "gitBranch": null
+    },
+    {
+      "id": "cN44tpc5BpungQrN",
+      "key": "POSTRIFF_TELEGRAM_WEBHOOK_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790370675491,
+      "createdAt": 1790370675491,
+      "gitBranch": null
+    },
+    {
+      "id": "YTpVSNOUghmeNT5A",
+      "key": "POSTRIFF_BLUESKY_CLIENT_JWK",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790370674127,
+      "createdAt": 1790370674127,
+      "gitBranch": null
+    },
+    {
+      "id": "TPdCquIONC8WfJOo",
+      "key": "POSTRIFF_MODEL_ID",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790366812745,
+      "createdAt": 1790366812745,
+      "gitBranch": null
+    },
+    {
+      "id": "yWnY1y5ixWFpf11B",
+      "key": "AI_GATEWAY_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790367651296,
+      "createdAt": 1790366811589,
+      "gitBranch": null
+    },
+    {
+      "id": "KDXaY47YEQxxkKew",
+      "key": "POSTRIFF_NOTIFICATION_SIGNING_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359868383,
+      "createdAt": 1790359868383,
+      "gitBranch": null
+    },
+    {
+      "id": "UebVi8MRcDuD9Tps",
+      "key": "POSTRIFF_VAPID_PRIVATE_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359866943,
+      "createdAt": 1790359866943,
+      "gitBranch": null
+    },
+    {
+      "id": "Avf2R45F4d63r2cA",
+      "key": "POSTRIFF_VAPID_SUBJECT",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359864999,
+      "createdAt": 1790359864999,
+      "gitBranch": null
+    },
+    {
+      "id": "DOmr16I5lhZltArs",
+      "key": "POSTRIFF_VAPID_PUBLIC_KEY",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359863680,
+      "createdAt": 1790359863680,
+      "gitBranch": null
+    },
+    {
+      "id": "Q17iSzs01p8bwrPP",
+      "key": "POSTRIFF_BUDGET_POLICY",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359862543,
+      "createdAt": 1790359862543,
+      "gitBranch": null
+    },
+    {
+      "id": "AdRA7NAWC2UM2gj0",
+      "key": "RAFII_GROWTH_EXPERIMENTS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359861288,
+      "createdAt": 1790359861288,
+      "gitBranch": null
+    },
+    {
+      "id": "Pq41FuyGYcuCxx3J",
+      "key": "RAFII_ENGAGEMENT_COPILOT_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359859824,
+      "createdAt": 1790359859824,
+      "gitBranch": null
+    },
+    {
+      "id": "Chxw71zf2jvZNQCF",
+      "key": "RAFII_LISTENING_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359858724,
+      "createdAt": 1790359858724,
+      "gitBranch": null
+    },
+    {
+      "id": "o55FqUkmYoees2Ku",
+      "key": "RAFII_PERFORMANCE_LEARNING_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359857570,
+      "createdAt": 1790359857570,
+      "gitBranch": null
+    },
+    {
+      "id": "vdjyA86xfOVosvfx",
+      "key": "RAFII_CREATIVE_AGENT_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359856396,
+      "createdAt": 1790359856396,
+      "gitBranch": null
+    },
+    {
+      "id": "6yejQUaqfSixqvMp",
+      "key": "RAFII_RESEARCH_BROKER_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359855246,
+      "createdAt": 1790359855246,
+      "gitBranch": null
+    },
+    {
+      "id": "wauxirZ1OW5zXmkj",
+      "key": "RAFII_WEEKLY_OPERATOR_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359854088,
+      "createdAt": 1790359854088,
+      "gitBranch": null
+    },
+    {
+      "id": "oFcBbJrqVeFfXFNB",
+      "key": "RAFII_ADAPTIVE_SKILLS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359852945,
+      "createdAt": 1790359852945,
+      "gitBranch": null
+    },
+    {
+      "id": "uXpKT6JyyjDUJtKt",
+      "key": "RAFII_WEB_PUSH_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359851438,
+      "createdAt": 1790359851438,
+      "gitBranch": null
+    },
+    {
+      "id": "bnYLuedCWWAcm0El",
+      "key": "RAFII_NOTIFICATIONS_V2_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791076283553,
+      "createdAt": 1790359850189,
+      "gitBranch": null
+    },
+    {
+      "id": "9UUnmAdobuG9ic5W",
+      "key": "RAFII_SKILL_REGISTRY_V2_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359849076,
+      "createdAt": 1790359849076,
+      "gitBranch": null
+    },
+    {
+      "id": "P8Fny0ZkAtftlMRb",
+      "key": "RAFII_PROACTIVE_V2_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359847818,
+      "createdAt": 1790359847818,
+      "gitBranch": null
+    },
+    {
+      "id": "QqGRjCN0IRINZhom",
+      "key": "RAFII_SPECIALISTS_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359846694,
+      "createdAt": 1790359846694,
+      "gitBranch": null
+    },
+    {
+      "id": "N1ME0kSk6LspvdZw",
+      "key": "RAFII_IMAGE_AGENT_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359845270,
+      "createdAt": 1790359845270,
+      "gitBranch": null
+    },
+    {
+      "id": "z3QXSQBhT5TYGOi1",
+      "key": "RAFII_VOICE_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359844139,
+      "createdAt": 1790359844139,
+      "gitBranch": null
+    },
+    {
+      "id": "TK71GHcUmbCLONBx",
+      "key": "RAFII_AGENT_V2_ENABLED",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790359842927,
+      "createdAt": 1790359842927,
+      "gitBranch": null
+    },
+    {
+      "id": "QoAG7vmtW6eyrtql",
+      "key": "OPENAI_API_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790355497290,
+      "createdAt": 1790355497290,
+      "gitBranch": null
+    },
+    {
+      "id": "hMV6iiDawo9jXmHM",
+      "key": "POSTRIFF_OAUTH_INSTAGRAM_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790052307100,
+      "createdAt": 1790052307100,
+      "gitBranch": null
+    },
+    {
+      "id": "hQDTuhGbEHSwbHRY",
+      "key": "POSTRIFF_OAUTH_INSTAGRAM_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790052280930,
+      "createdAt": 1790052280930,
+      "gitBranch": null
+    },
+    {
+      "id": "pTmmPVydOL7h6oGo",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CLIENT_ID",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790050528833,
+      "createdAt": 1790050528833,
+      "gitBranch": null
+    },
+    {
+      "id": "HnXibuz3uf27cGbA",
+      "key": "POSTRIFF_OAUTH_LINKEDIN_CLIENT_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1790050528833,
+      "createdAt": 1790050528833,
+      "gitBranch": null
+    },
+    {
+      "id": "GEfsDgP8nJazVAm4",
+      "key": "NEXT_PUBLIC_APP_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498050415,
+      "createdAt": 1789540997567,
+      "gitBranch": null
+    },
+    {
+      "id": "d5jh2ktUWmK5JgBo",
+      "key": "POSTRIFF_PUBLIC_BASE_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1791498052110,
+      "createdAt": 1789540992074,
+      "gitBranch": null
+    },
+    {
+      "id": "dkgMzxKKPV0aexiS",
+      "key": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789540984158,
+      "createdAt": 1789540984158,
+      "gitBranch": null
+    },
+    {
+      "id": "8TXZ6gy6crR3Owh0",
+      "key": "NEXT_PUBLIC_SUPABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789540970684,
+      "createdAt": 1789540970684,
+      "gitBranch": null
+    },
+    {
+      "id": "muH2vDY3GyA49En2",
+      "key": "POSTRIFF_CREDENTIAL_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789540969380,
+      "createdAt": 1789540969380,
+      "gitBranch": null
+    },
+    {
+      "id": "vAAynW6UV7eMUQTC",
+      "key": "CRON_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789440759004,
+      "createdAt": 1789440462660,
+      "gitBranch": null
+    },
+    {
+      "id": "qCkLIS9O919xMoYb",
+      "key": "POSTRIFF_SUPABASE_SECRET_KEY",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789440929472,
+      "createdAt": 1789440461049,
+      "gitBranch": null
+    },
+    {
+      "id": "lwWVSGX6ernJEx5G",
+      "key": "POSTRIFF_DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789440755830,
+      "createdAt": 1789440459286,
+      "gitBranch": null
+    },
+    {
+      "id": "EACvver2EZFbdxlQ",
+      "key": "POSTRIFF_SUPABASE_PUBLISHABLE_KEY",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789440754250,
+      "createdAt": 1789440457671,
+      "gitBranch": null
+    },
+    {
+      "id": "OXQPQmhzPkzdTpce",
+      "key": "POSTRIFF_SUPABASE_URL",
+      "type": "encrypted",
+      "target": [
+        "production"
+      ],
+      "updatedAt": 1789440752591,
+      "createdAt": 1789440455987,
+      "gitBranch": null
+    }
+  ]
+}

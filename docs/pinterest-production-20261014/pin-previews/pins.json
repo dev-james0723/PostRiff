@@ -10,13 +10,15 @@
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
       "connectionState": "DISCONNECTED; new exact consent required",
       "board": {
-        "state": "PROPOSED_NOT_CREATED",
+        "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
         "name": "Rafii — Product & Content Workflows",
-        "id": null,
+        "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
-        "method": "After explicit approval, create exactly one empty public board through the official Pinterest UI on @jamesaucreates. No boards:write scope requested. Read back the provider ID and eligibility before any Pin approval is executable.",
-        "selectionReason": "Own account native Saved UI20:57Z showed no boards/cards and no saved Pins, consistent with earlier official API200 emptyitems. Propose the single named PUBLIC board; provider ID stays pending."
+        "method": "CompletedexactapprovedUIcreateonce;descriptionpersisted/0Pins/nativeReload+anonymousofficialpublicwidgetid/owner/descriptionmatch. NotAPIv5eligibility.",
+        "selectionReason": "ApprovedsingleexistingtargetnowcreatedandIDverified; actualOAuthAPIboardread/eligibilitypending",
+        "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
+        "apiV5Eligibility": "NOT_RUN"
       },
       "sectionId": null,
       "image": {
@@ -51,7 +53,7 @@
         "method": "POST",
         "url": "https://api.pinterest.com/v5/pins",
         "body": {
-          "board_id": null,
+          "board_id": "1126814837958721891",
           "title": "Your ideas. Your voice. A clearer content workflow.",
           "description": "Bring an idea into Rafii, shape a draft for each channel, and review it before approving publication. Explore a practical approach to content planning and publishing at rafii.io. Controlled Pinterest integration test.",
           "link": "https://rafii.io/",
@@ -61,7 +63,7 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_IMMUTABLE_ASSET_AND_APPROVAL"
+        "state": "DRAFT_REQUIRES_IMMUTABLE_ASSET_CURRENT_CONSENT_AND_EXACT_PIN_APPROVAL"
       }
     },
     {
@@ -70,13 +72,15 @@
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
       "connectionState": "DISCONNECTED; new exact consent required",
       "board": {
-        "state": "PROPOSED_NOT_CREATED",
+        "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
         "name": "Rafii — Product & Content Workflows",
-        "id": null,
+        "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
-        "method": "After explicit approval, create exactly one empty public board through the official Pinterest UI on @jamesaucreates. No boards:write scope requested. Read back the provider ID and eligibility before any Pin approval is executable.",
-        "selectionReason": "Own account native Saved UI20:57Z showed no boards/cards and no saved Pins, consistent with earlier official API200 emptyitems. Propose the single named PUBLIC board; provider ID stays pending."
+        "method": "CompletedexactapprovedUIcreateonce;descriptionpersisted/0Pins/nativeReload+anonymousofficialpublicwidgetid/owner/descriptionmatch. NotAPIv5eligibility.",
+        "selectionReason": "ApprovedsingleexistingtargetnowcreatedandIDverified; actualOAuthAPIboardread/eligibilitypending",
+        "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
+        "apiV5Eligibility": "NOT_RUN"
       },
       "sectionId": null,
       "image": {
@@ -112,7 +116,7 @@
         "method": "POST",
         "url": "https://api.pinterest.com/v5/pins",
         "body": {
-          "board_id": null,
+          "board_id": "1126814837958721891",
           "title": "Plan your next week of content with Rafii",
           "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
           "link": "https://rafii.io/",
@@ -122,21 +126,22 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_VERIFIED_BOARD_ID_IMMUTABLE_ASSET_AND_APPROVAL"
+        "state": "DRAFT_REQUIRES_IMMUTABLE_ASSET_CURRENT_CONSENT_AND_EXACT_PIN_APPROVAL"
       }
     }
   ],
   "writeBudget": {
     "pins": 2,
-    "boards": 1,
-    "automaticRePOSTAfterAmbiguousResponse": 0
+    "boards": 0,
+    "automaticRePOSTAfterAmbiguousResponse": 0,
+    "classification": "PROPOSED_PIN_BUDGET_NOT_EXECUTION_AUTHORITY",
+    "pinCreatesApproved": 0,
+    "pinCreatesProposed": 2
   },
   "hardBlocks": [
-    "No verified board ID",
     "No current OAuth grant or active live-test window",
     "No approved write-capable private configuration",
     "No real Pin approval",
-    "New delta source cloud validation pending",
     "Content Studio immutable delivery asset/hash not yet ingested or approved; review source is not a signed delivery URL"
   ],
   "readbackPlan": [
@@ -161,5 +166,13 @@
     "eligibleBoardId": null,
     "classification": "No suitable existing board observed; not a fresh OAuth API eligibility proof."
   },
-  "revisedAt": "2026-10-17T21:38:00Z"
+  "revisedAt": "2026-10-17T21:38:00Z",
+  "boardConfirmedAt": "2026-10-17T22:28:12.182953+00:00",
+  "boardCreationBudget": {
+    "approved": 1,
+    "created": 1,
+    "remaining": 0
+  },
+  "updatedAt": "2026-10-17T22:37:34.355134+00:00",
+  "activationProposal": "../private-trial-activation.json"
 }

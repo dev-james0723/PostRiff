@@ -1,6 +1,6 @@
 # Standard Access application package — prepared, not submitted
 
-Checked2026-10-17. App1615884 **Trial access active**, native My apps card and available Upgrade form verified through Kynlo. **Standard NOT APPROVED. No pending application displayed.** Supporting owner-mail search found only14Oct Trial approval; do not treat that bounded search as a universal historical search. [Current receipt](evidence/public-release-preflight-20261017.json).
+Checked2026-10-17~22:35UTC nativeMyapps/App1615884. App1615884 **Trial access active**, native My apps card and available Upgrade form verified through Kynlo. **Standard NOT APPROVED. No pending application displayed.** Supporting owner-mail search found only14Oct Trial approval; do not treat that bounded search as a universal historical search. [Current receipt](evidence/public-release-preflight-20261017.json).
 
 ## Exact fields prepared for review
 
@@ -19,10 +19,10 @@ Checked2026-10-17. App1615884 **Trial access active**, native My apps card and a
 ## Missing submission assets and substantive review
 
 1. **Actual OAuth plus live API demo video**: dedicated recording agent assigned by the human. Form recommends MP4 under2GB and requires20–60fps, authentication and main Pinterest features. Kynlo’s4fps recorder cannot produce submission-compliant source footage; do not upsample to misrepresent capture. Full recording requires verified exact workspace/session (restore it only if the IDs differ), a new scoped private read-only window and human consent. The old window expired20:40:56Z and credentials remain erased. A read-only OAuth/identity/boards video can demonstrate real API activity without publishing; the mission’s complete Pin journey still needs approved writes and read-back.
-2. Actual eligible board and two approved Pin operations. [Reviewable full previews](pin-previews/index.html) and [payload metadata](pin-previews/pins.json) are prepared; no board ID fabricated.
+2. Actual eligible board and two approved Pin operations. [Reviewable full previews](pin-previews/index.html) and [payload metadata](pin-previews/pins.json) are prepared; actualPUBLICboardID1126814837958721891created/verified; OAuth/v5eligibilityandPinapprovalremainpending.
 3. Public privacy/terms both HTTP200 rechecked. They still say draft/pending legal review and contain retention/transfer/jurisdiction placeholders. [Policy review candidate](POLICY-REVIEW-CANDIDATE.md) lists exact gaps; mere reachability is insufficient.
 4. Pinterest Guidelines restrict storage and external sharing of API data. Account/token custody, essential Pin-ID receipts, retained native metrics and any AI/model egress need accurate disclosure and provider clarification; do not claim an exception to those rules. Provider-data-to-Agent/model gates remain closed. The full Developer/API Terms body did not load through official documentation, so compliance sign-off is incomplete.
-5. Local analytics/expiry/scheduling repairs need delta remote checks before deployment. Current live baseline remains e2e5169f, not these repairs.
+5. Local analytics/expiry/scheduling/privateTrial repairs730d0440passedexactv0czdxw6ggcloudvalidation; productionSQL/config/deploy/newrealacceptance remainpending. Current live baseline remains e2e5169f.
 6. A real **non-app-owner business account in its own Rafii workspace** must pass [third-party acceptance](THIRD-PARTY-ACCEPTANCE.md). Owner success is not customer acceptance. Personal accounts need separate eligibility confirmation where PINNER_DATA_ACCESS_DENIED applies.
 
 ## Review and submission procedure
