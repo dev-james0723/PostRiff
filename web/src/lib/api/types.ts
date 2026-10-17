@@ -161,7 +161,29 @@ export interface RunContentType {
   contentSkillRouteIds?: string[];
 }
 
+export interface WorkerBinding { environment: 'preview'; origin: string }
+
+export interface DiscordDestination {
+  id: string;
+  workspaceId: string;
+  connectionId: string;
+  applicationId: string;
+  botUserId: string;
+  linkedUserId: string;
+  guildId: string;
+  channelId: string;
+  guildName: string;
+  channelName: string;
+  kind: string;
+  authorizationGeneration: string;
+  resourceGeneration: string;
+  status?: 'authorized' | 'revoked' | 'reauthorization_required';
+}
+
 export interface Manifest {
+  destinationId?: string;
+  discord?: { schema: 'rafii.discord.publish.v2'; target: DiscordDestination; wireDigest: string; deliveryDigest: string; operationDigest: string; publicationId: string };
+  workerBinding?: WorkerBinding;
   workspaceId: string;
   actor: string;
   /** The connection this post goes out through (a `ChannelView.id`). */
@@ -206,6 +228,12 @@ export interface Job {
   nextAction?: string;
   cancelRequested: boolean;
   verification?: { method: string; at: number } | null;
+  workerBinding?: WorkerBinding;
+  previewDispatchPending?: boolean;
+  leaseUntil?: number;
+  providerUpload?: unknown;
+  providerAssets?: unknown;
+  providerThread?: unknown;
 }
 
 export interface Review {
@@ -388,7 +416,7 @@ export interface ChannelFolder {
 export interface Phase2State {
   execution: string;
   trial: Trial;
-  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean }[];
+  channels: { id: string; platform: string; account: string; displayState?: string; revoked?: boolean; defaultDestinationId?: string | null; discordAuthorizationGeneration?: string; discordDestinations?: DiscordDestination[] }[];
   assets: Asset[];
   reviews: Review[];
   jobs: Job[];
@@ -642,6 +670,8 @@ export interface RunSkill {
 }
 
 export interface RunItemDecision {
+  discord?: Manifest['discord'];
+  timing?: Manifest['timing'];
   decision: 'approve' | 'reject' | 'revise' | string;
   by: string;
   at: number;
@@ -655,6 +685,7 @@ export interface RunItemDecision {
 
 /** One destination of a run (orchestration §2). */
 export interface RunItem {
+  destinationId?: string | null;
   /** `<platform>|<channelId or ''>|<language>`. */
   key: string;
   platform: string;
@@ -771,6 +802,7 @@ export interface Snapshot {
   state: SnapshotState;
   membership?: Membership;
   runtimeResult?: Record<string, unknown>;
+  workerBinding?: WorkerBinding | null;
 }
 
 export interface Bootstrap extends Snapshot {
@@ -1427,6 +1459,13 @@ export interface Capability {
 }
 
 export interface ChannelView {
+  defaultDestinationId?: string | null;
+  discordDestinations?: DiscordDestination[];
+  discordIdentityConnectionId?: string;
+  discordConnectionKind?: 'installation';
+  providerAccountId?: string;
+  /** Server-recorded identity read; independent of operation approval/evidence times. */
+  identityVerifiedAt?: number | null;
   id: string;
   platform: string;
   account: string;
@@ -1449,6 +1488,7 @@ export interface ChannelView {
 }
 
 export interface ProviderView {
+  discordConnectionsV2?: boolean;
   configurationState?: string;
   credentialPresence?: { clientId: boolean; clientSecret: boolean };
   readinessState?: string;
@@ -1499,6 +1539,11 @@ export interface ProviderView {
 }
 
 export interface ChannelDestination {
+  guildName?: string;
+  guildId?: string;
+  channelId?: string;
+  stableId?: string;
+  authorizedId?: string | null;
   id: string;
   name: string;
   kind: 'text' | 'announcement' | 'page' | 'board';
@@ -2058,3 +2103,9 @@ export interface WorkspaceApiToken {
   revokedAt: number | null; createdBy: string;
 }
 export interface ApiTokenCreated { item: WorkspaceApiToken; secret: string }
+/** Server-owned Discord identity references; credentials never enter this model. */
+export interface DiscordIdentity {
+  id: string; account: string; userId: string;
+  status: 'linked' | 'reconnect_required' | 'disconnected';
+  expiresAt: number; discoverGuilds: boolean;
+}

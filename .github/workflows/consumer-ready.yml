@@ -13,8 +13,10 @@ env:
 jobs:
   local-gates:
     runs-on: ubuntu-24.04
-    # About 21 minutes of work on a typical runner; 25 left no room for runner variance and cancelled a passing run.
-    timeout-minutes: 40
+    # The expanded ordinary catalog plus the bounded15m Discord runner and
+    # remaining build/browser steps need an explicit CI execution budget.
+    # This changes no capacity workload, traffic duration or latency target.
+    timeout-minutes: 75
     env:
       PYTHONPATH: src:tests
       POSTRIFF_RESEARCH: '0'
@@ -53,6 +55,8 @@ jobs:
         run: python scripts/consumer_ready_check.py ci-python python -m unittest discover -s tests -p 'test_*.py'
       - name: Disposable DB integration, migrations and restore
         run: python scripts/consumer_ready_check.py ci-postgres python scripts/postriff_pg_suite.py
+      - name: Discord P0-P4 in the guarded owned PostgreSQL runner
+        run: python scripts/consumer_ready_check.py ci-discord-p0-p4 timeout --signal=TERM --kill-after=60s 15m bash scripts/discord-p4-validation-cloud.sh
       - name: Web contracts and locale checks
         run: |
           python scripts/consumer_ready_check.py ci-web node --test web/tests/*.test.mjs web/tests/*.test.cjs web/src/lib/locales/core.test.mjs
