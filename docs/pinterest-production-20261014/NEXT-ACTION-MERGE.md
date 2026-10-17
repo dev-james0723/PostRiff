@@ -1,11 +1,7 @@
-# Next exact action — preserve current production baseline locally
+# Approved local merge and cloud verification — completed
 
-2026-10-15 UTC. **Pending explicit approval; not executed.**
+2026-10-17 UTC. **PASS.** The human explicitly approved local merge and verification of5e4f4e13. Merge `e8d0c30da501267246ecd5f3d34ec0e6ed0915ea` incorporated `5e4f4e13773e3739d0aa9cd1f3c57f3a23c9140e` into the Pinterest isolated branch without conflicts. The earlier automatic-review refusal is superseded by this direct approval; do not ask it again.
 
-Merge observed live source **`5e4f4e13773e3739d0aa9cd1f3c57f3a23c9140e`** into local isolated branch **`codex/rafii-pinterest-production-prep-20261014`**, then resolve any scoped conflicts while preserving both Pinterest work and current account security behavior, and run cloud regression validation. The prepared command is `git merge --no-ff 5e4f4e13773e3739d0aa9cd1f3c57f3a23c9140e`. Current HEAD is `6d36716cfcc945fcc93a819ba243ffa870a1a799`, containing the independently authorized and cloud-verified quota hardening on prior2d61b536. The incoming live revision and exact isolated merge action are unchanged.
+Final tested source `42f7910cb73a17cbfaf47b2265a59c4d2f0b2b59`. [Cloud9z7g5qg736](https://depot.dev/orgs/jf34f85hr0/workflows/9z7g5qg736) exited0/0:376Python,51Node, six disposablePG17.11 scripts, Agent, typecheck/lint/build/browser. The first new DELETE test fixture was repaired and both attempt receipts retained. [Final result](evidence/approved-merge-validation.json). All quota and inherited security changes remain preserved. Temporary JCB mapping restored.
 
-The four overlapping product files are `hosted_app.py`, `hosted_worker.py`, `web/src/lib/api/client.ts` and `web/src/lib/api/types.ts`. Incoming changes include device trust, security step-up, account holds, worker authorization fences and account-deletion cleanup. The additive Pinterest quota migration is not in the incoming revision; its separate local least-privilege fix remains preserved. This action creates only a local Git merge commit and synthetic cloud validation. It does not push, merge remotely, deploy, apply production SQL, install credentials, grant live OAuth consent or publish Pins.
-
-Automatic approval review rejected the attempted local merge before execution, interpreting the mission's separately approved merge boundary as applying to this action. No workaround merge was performed. The exact native approval question is pending in this thread. Existing quota hardening and read-only infrastructure inspection are independent authorized work and continue.
-
-[Fresh source/schema/billing preflight](evidence/pilot-continuation-preflight.json). Callback registration already passed and needs no repeated approval. Production release remains **NO-GO**.
+No push, remote merge, deployment, production DB/config/credentials, OAuth consent or Pin operation was authorized or executed by this action. Production remains NO-GO. A fresh exact-deployment runtime source receipt identifies a newer7432 baseline; [that distinct local action](NEXT-ACTION-CURRENT-BASELINE.md) has its own pending scope choice.
