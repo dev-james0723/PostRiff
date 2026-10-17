@@ -323,6 +323,8 @@ class PostgresWorker:
                 if result.get("reference"):
                     job["providerReference"] = result["reference"]
                 job["providerConfirmed"] = result["confirmed"]
+                if result.get('visibility'):
+                    job['providerVisibility'] = result['visibility']
                 job["verification"] = {"method": result.get("verification"), "at": self.clock()} if result["state"] == "verified" else None
                 if result.get("container"):
                     job["container"] = result["container"]

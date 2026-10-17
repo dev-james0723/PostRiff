@@ -17,11 +17,34 @@ def _metric_value(value):
         return False
 
 
+def private_trial_enabled(adapter, workspace_id=None):
+    """A bounded private Trial is separate authority from public production review."""
+    if (not adapter or getattr(adapter, 'private_trial', False) is not True
+            or getattr(adapter, 'analytics_enabled', False) is not True
+            or getattr(adapter, 'execution_enabled', True) is not True or getattr(adapter, 'trial_readonly', False)):
+        return False
+    policy = getattr(adapter, 'trial_policy', None)
+    try:
+        if (not policy or not callable(getattr(policy, 'supports', None)) or policy.supports('analytics') is not True
+                or not callable(getattr(policy, 'require', None))
+                or not callable(getattr(policy, 'require_account', None))
+                or not callable(getattr(policy, 'require_identity', None))
+                or not callable(getattr(adapter, 'private_trial_pin_gate', None))):
+            return False
+        policy.require(policy.workspace_id if workspace_id is None else workspace_id)
+        return True
+    except Exception:  # noqa: BLE001 - expired/incomplete scoped authority is never admission
+        return False
+
+
 def enabled(adapter):
-    return bool(adapter and getattr(adapter, 'analytics_enabled', False) is True
-                and getattr(adapter, 'production_reviewed', False) is True
-                and getattr(adapter, 'execution_enabled', True) is True
-                and not getattr(adapter, 'trial_readonly', False))
+    if (not adapter or getattr(adapter, 'analytics_enabled', False) is not True
+            or getattr(adapter, 'execution_enabled', True) is not True or getattr(adapter, 'trial_readonly', False)):
+        return False
+    private = getattr(adapter, 'private_trial', False)
+    if private is True:
+        return private_trial_enabled(adapter)
+    return private is False and getattr(adapter, 'production_reviewed', False) is True
 
 
 def fetch(adapter, token, pin_id, *, start_at, end_at):
@@ -42,11 +65,19 @@ def fetch(adapter, token, pin_id, *, start_at, end_at):
     account = envelope.get('accountId')
     if not isinstance(account, str) or not re.fullmatch(r'\d{1,30}', account):
         raise AlphaError('Reconnect Pinterest to bind analytics to the expected account.', 409)
+    if getattr(adapter, 'private_trial', False) is True:
+        adapter.trial_policy.require_account(account)
     if not SCOPES <= set(envelope.get('scope') or []):
         raise AlphaError('Reconnect Pinterest with Pin analytics read permission.', 403)
     identity = adapter.identity(token)
     if identity.get('providerAccountId') != account:
         raise AlphaError('Pinterest account changed. Reconnect before reading analytics.', 409)
+    if getattr(adapter, 'private_trial', False) is True:
+        if not private_trial_enabled(adapter):
+            raise AlphaError('Pinterest private Trial analytics has expired or is paused.', 403)
+        # The token's internal binding is not permission to use another Trial account.
+        # Provider identity may already enforce this; keep the analytics boundary explicit.
+        adapter.trial_policy.require_identity(identity)
     path = f'/v5/pins/{pin_id}/analytics'
     query = urlencode({'start_date': first.isoformat(), 'end_date': last.isoformat(), 'metric_types': ','.join(METRICS)})
     response = adapter.api(token, 'GET', path + '?' + query)

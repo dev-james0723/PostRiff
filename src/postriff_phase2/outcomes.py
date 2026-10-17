@@ -72,6 +72,15 @@ def normalize_result(result, job, reconciliation=False):
     if url is not None and not valid_receipt_url(url, job.get('manifest', {}).get('platform')):
         return unknown('Invalid canonical receipt URL; manual review required')
     normalized = {key: result[key] for key in ('state', 'confirmed', 'verification') if key in result}
+    if job.get('manifest', {}).get('platform') == 'Pinterest':
+        visibility = result.get('visibility', job.get('providerVisibility'))
+        previous_visibility = job.get('providerVisibility')
+        if previous_visibility in ('creator_only_trial', 'creator_only_sandbox') and visibility == 'unverified':
+            visibility = previous_visibility  # A later runtime tier cannot make an existing Trial Pin public.
+        if visibility is not None:
+            if not isinstance(visibility, str) or visibility not in ('creator_only_trial', 'creator_only_sandbox', 'unverified'):
+                return unknown('Invalid Pinterest visibility receipt; reconcile before retry')
+            normalized['visibility'] = visibility
     progress = result.get('progress')
     if progress is not None:
         if youtube_progress:

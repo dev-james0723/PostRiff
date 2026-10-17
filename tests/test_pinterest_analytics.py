@@ -7,7 +7,7 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2 import insights
 from postriff_phase2.growth.metric_schedule import MetricScheduler
 from postriff_phase2.oauth import OAuthService
-from postriff_phase2.pinterest_analytics import SCOPES, fetch, describe
+from postriff_phase2.pinterest_analytics import SCOPES, fetch, describe, enabled
 from postriff_phase2.wave3_connectors import PinterestProvider
 from test_hosted_wave1_connectors import Wire, ok
 
@@ -20,6 +20,51 @@ def fixture(replies=(), scopes=SCOPES):
     p= PinterestProvider('1615884','SYNTHETIC',transport=Wire(replies),production_reviewed=True,analytics_enabled=True)
     token=json.dumps({'v':1,'at':'SYNTHETIC_TOKEN','environment':'production','clientId':'1615884','accountId':'1234567','scope':sorted(scopes)})
     return p,token
+
+
+class PrivateAnalyticsPolicy:
+    """Synthetic exact private scope; the real policy is independently configured server-side."""
+    workspace_id='w'
+    now=NOW
+    expires_at=NOW+600
+    analytics=True
+    account='1234567'
+    actor_id='00000000-0000-0000-0000-000000000502'
+    board_ids=('7654321',)
+    pilot_id='00000000-0000-0000-0000-000000000503'
+
+    def binding(self):
+        capabilities=['identity','boards_read']+(['analytics'] if self.analytics is True else [])
+        return {'workspace':self.workspace_id,'actor':self.actor_id,'username':'synthetic',
+                'expiresAt':self.expires_at,'account':self.account,'boards':list(self.board_ids),
+                'capabilities':sorted(capabilities),'pilot':self.pilot_id,'maxCreateAttempts':2}
+
+    def supports(self,capability):return self.analytics if capability=='analytics' else False
+
+    def require(self,workspace_id,actor_id=None,*,now=None):
+        if workspace_id!=self.workspace_id or self.now>=self.expires_at:
+            raise AlphaError('Synthetic private authority denied.',403)
+
+    def require_scopes(self,scopes):
+        permitted={'user_accounts:read','boards:read'}|({'pins:read'} if self.analytics is True else set())
+        if (not isinstance(scopes,list) or not scopes or any(not isinstance(scope,str) for scope in scopes)
+                or not set(scopes)<=permitted):
+            raise AlphaError('Synthetic private scope denied.',403)
+
+    def require_account(self,account):
+        if account!=self.account:raise AlphaError('Synthetic private account mismatch.',409)
+
+    def require_identity(self,identity):
+        self.require_account(identity.get('providerAccountId'))
+        if identity.get('handle')!='@synthetic':
+            raise AlphaError('Synthetic private account mismatch.',409)
+
+
+def private_fixture(replies=()):
+    p,t=fixture(replies);p.production_reviewed=False;p.private_trial=True;p.trial_policy=PrivateAnalyticsPolicy()
+    p.private_trial_pin_gate=Mock(side_effect=lambda pin_id:pin_id=='1')  # Provider guard ownership is tested separately.
+    envelope=json.loads(t);envelope['privateTrialBinding']=p.trial_policy.binding()
+    return p,json.dumps(envelope)
 
 
 class PinterestAnalytics(unittest.TestCase):
@@ -210,5 +255,64 @@ class PinterestAnalytics(unittest.TestCase):
         self.assertEqual(post['metrics']['saves']['value'],0);self.assertEqual(post['latestRead'],failure)
         self.assertEqual(post['freshness']['observedAt'],NOW-60)
         self.assertEqual(len(result['readOutcomes']),3)
+
+    def test_private_trial_reads_native_metrics_without_claiming_public_review(self):
+        p,t=private_fixture([IDENTITY,REPORT]);quota=[];p.quota_required=True;p.rate_gate=lambda *args:quota.append(args)
+        result=fetch(p,t,'1',start_at=NOW,end_at=NOW)
+        self.assertFalse(p.production_reviewed);self.assertTrue(enabled(p));self.assertEqual(result['outcome'],'success')
+        self.assertEqual(result['found']['saves'],0);self.assertEqual(len(quota),2)
+        oauth=SimpleNamespace(providers={'pinterest':p})
+        scheduler=MetricScheduler(None,oauth,transport=None,workspace_allowlist={'w','other'})
+        scheduler._pinterest_schema_ready=lambda:True
+        self.assertTrue(scheduler.provider_allowed('pinterest','w'));self.assertFalse(scheduler.provider_allowed('pinterest','other'))
+
+    def test_private_trial_analytics_is_default_off_expiring_paused_and_readonly_denied(self):
+        cases=('default_off','private_missing','private_malformed','missing_policy','missing_pin_gate','missing_capability','malformed_capability','expired','paused','readonly')
+        for case in cases:
+            with self.subTest(case=case):
+                p,t=private_fixture()
+                if case=='default_off':p.analytics_enabled=False
+                elif case=='private_missing':p.private_trial=False
+                elif case=='private_malformed':p.private_trial='true'
+                elif case=='missing_policy':p.trial_policy=None
+                elif case=='missing_pin_gate':p.private_trial_pin_gate=None
+                elif case=='missing_capability':p.trial_policy.analytics=False
+                elif case=='malformed_capability':p.trial_policy.analytics='true'
+                elif case=='expired':p.trial_policy.now=NOW+600
+                elif case=='paused':p.execution_enabled=False
+                else:p.trial_readonly=True
+                self.assertFalse(enabled(p))
+                with self.assertRaises(AlphaError):fetch(p,t,'1',start_at=NOW,end_at=NOW)
+                self.assertEqual(p.transport.calls,[])
+
+    def test_private_trial_wrong_workspace_denies_before_custody_even_on_metric_allowlist(self):
+        p,t=private_fixture()
+        oauth=SimpleNamespace(providers={'pinterest':p},token_for_worker=Mock(side_effect=AssertionError('foreign custody')))
+        scheduler=MetricScheduler(None,oauth,transport=None,workspace_allowlist={'w','other'})
+        scheduler._pinterest_schema_ready=lambda:True
+        outcome=scheduler.read({'workspaceId':'other','connectionId':'c','provider':'pinterest','postId':'1','anchorAt':NOW},{})
+        self.assertEqual(outcome['state'],'cancelled');oauth.token_for_worker.assert_not_called();self.assertEqual(p.transport.calls,[])
+
+    def test_private_trial_wrong_bound_account_or_identity_cannot_read_pin_metrics(self):
+        for account,username in [('999','synthetic'),('1234567','other')]:
+            with self.subTest(account=account,username=username):
+                p,t=private_fixture([ok({'id':account,'username':username})]);envelope=json.loads(t);envelope['accountId']=account
+                with self.assertRaises(AlphaError):fetch(p,json.dumps(envelope),'1',start_at=NOW,end_at=NOW)
+                self.assertLessEqual(len(p.transport.calls),1)
+                self.assertFalse(any('/pins/' in call['url'] for call in p.transport.calls))
+
+    def test_private_trial_unrecorded_pin_never_reaches_provider_pin_api(self):
+        p,t=private_fixture([IDENTITY])
+        with self.assertRaises(AlphaError):fetch(p,t,'2',start_at=NOW,end_at=NOW)
+        self.assertLessEqual(len(p.transport.calls),1)
+        self.assertFalse(any('/pins/' in call['url'] for call in p.transport.calls))
+
+    def test_private_trial_expiry_during_identity_read_stops_next_provider_request(self):
+        p,t=private_fixture([IDENTITY]);wire=p.transport
+        def identity_then_expire(*args,**kwargs):
+            result=wire(*args,**kwargs);p.trial_policy.now=NOW+600;return result
+        p.transport=identity_then_expire
+        with self.assertRaises(AlphaError):fetch(p,t,'1',start_at=NOW,end_at=NOW)
+        self.assertEqual(len(wire.calls),1)
 
 if __name__=='__main__':unittest.main()

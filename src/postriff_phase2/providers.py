@@ -280,7 +280,9 @@ def registry_from_environment(values, transport=None):
         if provider_id == 'pinterest':
             # Read-only account-bound Trial pilot is distinct from public customer connections.
             # Supplying credentials alone must never open public OAuth before release approval.
-            trial = getattr(adapter, 'trial_readonly', False)
+            trial = getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)
+            if getattr(adapter, 'private_trial', False):
+                adapter.production_reviewed = False
             policy_approved = str(values.get(prefix + 'POLICY_APPROVED', '')).lower() == 'true'
             adapter.execution_enabled = not operator_disabled and (trial or (enabled and provider_verified and adapter.production_reviewed and policy_approved))
             adapter.quota_required = True

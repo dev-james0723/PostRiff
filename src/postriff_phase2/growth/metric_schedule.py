@@ -162,15 +162,19 @@ class MetricScheduler:
     def workspace_allowed(self, workspace_id):
         return str(workspace_id) in self.workspace_allowlist
 
-    def provider_allowed(self, provider):
+    def provider_allowed(self, provider, workspace_id=None):
         adapter = (getattr(self.oauth, "providers", None) or {}).get(provider)
+        private_pinterest = False
         if provider == 'pinterest':
-            from ..pinterest_analytics import enabled
+            from ..pinterest_analytics import enabled, private_trial_enabled
             if not enabled(adapter) or not self._pinterest_schema_ready():
+                return False
+            private_pinterest = private_trial_enabled(adapter, workspace_id)
+            if getattr(adapter, 'private_trial', False) is True and not private_pinterest:
                 return False
         reviewed_or_scoped = bool(adapter and (
             getattr(adapter, "production_reviewed", False) is True or
-            getattr(adapter, "account_scoped_direct", False) is True
+            getattr(adapter, "account_scoped_direct", False) is True or private_pinterest
         ))
         return bool(provider in NATIVE_ANALYTICS_SCOPES and reviewed_or_scoped
                     and getattr(adapter, "execution_enabled", True) is True)
@@ -320,7 +324,7 @@ class MetricScheduler:
     def _eligibility(self, cur, row, *, lock=False):
         # Completion serializes with workspace disconnect/deletion commands;
         # provider I/O still runs outside this short transaction.
-        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
+        if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
             return "cancel"
         cur.execute("SELECT state ? 'accountDeletion' FROM public.pr_workspaces WHERE id=%s" +
                     (" FOR UPDATE" if lock else ""), (row["workspaceId"],))
@@ -343,7 +347,7 @@ class MetricScheduler:
         """Outcome dict: {"state": "done"|"transient"|"unavailable"|"cancelled", ...}. Never raises."""
         requested = False
         try:
-            if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"]):
+            if not self.workspace_allowed(row["workspaceId"]) or not self.provider_allowed(row["provider"], row["workspaceId"]):
                 return {"state": "cancelled", "failure": "not_admitted"}
             eligibility = self._eligible(row)
             if eligibility == "cancel":
