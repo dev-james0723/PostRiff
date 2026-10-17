@@ -200,6 +200,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
   // A draft written for one account can only be scheduled to that account; a platform-level draft needs an explicit choice.
   const channelsForVariant = channels.filter((c) => !variant || (c.platform === variant.platform && (!variant.channelId || c.id === variant.channelId)));
   const channelId = variant?.channelId ?? chosenChannelId;
+  const [discordDestinationId, setDiscordDestinationId] = useState('');
+  useEffect(() => { setDiscordDestinationId(''); }, [channelId]);
   const asset: Asset | undefined = assets.find((a) => a.id === assetId);
   // The draft's own post-role media is the default, unless the dialog was opened for a specific asset.
   const defaultAsset = preselectedAsset ? null : needsVideo
@@ -209,12 +211,15 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
     if (defaultAsset) setAssetId(defaultAsset);
   }, [variant?.id, defaultAsset]);
   const channel = channelsForVariant.find((c) => c.id === channelId);
+  const discordDestinations = channel?.discordDestinations?.filter((d) => d.status === 'authorized' && d.authorizationGeneration === channel.discordAuthorizationGeneration) ?? [];
+  const discordDestination = discordDestinations.find((d) => d.id === discordDestinationId);
   const needsOptions = Boolean(channel && NEEDS_OPTIONS.has(channel.platform));
   const youtubeNow = channel?.platform === 'YouTube' && publishOptions?.publicationMode === 'now';
   const steps = editSteps(variant, activeVoice, canEdit);
   const ready = Boolean(
     variant &&
       channel &&
+      (channel.platform !== 'Discord' || Boolean(discordDestination)) &&
       (youtubeNow || localTime) &&
       rights &&
       (!assetId || Boolean(asset)) &&
@@ -257,6 +262,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
         payload: {
           variantId: current.id,
           channelId,
+          destinationId: channel?.platform === 'Discord' ? discordDestinationId : undefined,
           assetId: asset?.id,
           alt: alt.trim(),
           rightsConfirmed: rights,
@@ -345,6 +351,20 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
                 ))}
               </SelectContent>
             </Select>
+            {channel?.platform === 'Discord' && (
+              <div className='flex flex-col gap-1.5'>
+                <Label htmlFor='schedule-discord-destination'>Discord server and channel</Label>
+                <Select value={discordDestinationId} onValueChange={(value) => setDiscordDestinationId(String(value))}>
+                  <SelectTrigger id='schedule-discord-destination' className='h-12 w-full'><SelectValue placeholder='Choose an authorized destination' /></SelectTrigger>
+                  <SelectContent>
+                    {discordDestinations.map((d) => <SelectItem key={d.id} value={d.id}>{d.guildName} · {d.channelName}</SelectItem>)}
+                    {discordDestinations.length === 0 && <SelectItem value='__none' disabled>Authorize a channel in Connections first</SelectItem>}
+                  </SelectContent>
+                </Select>
+                {discordDestination && <p className='text-muted-foreground text-xs' data-discord-target>{discordDestination.guildName} ({discordDestination.guildId}) · {discordDestination.channelName} ({discordDestination.channelId})</p>}
+                <p className='text-muted-foreground text-xs'>The preview freezes this destination. Changing the connection default will keep approved posts on their original channel.</p>
+              </div>
+            )}
             {steps.updateWaiting && canEdit && <p className='text-muted-foreground text-xs'>Uses the updated version in your current voice.</p>}
             {steps.updateWaiting && !canEdit && !steps.blocked && <p className='text-muted-foreground text-xs'>Uses the draft as it is; an editor can accept the update.</p>}
             {canPrepare && steps.blocked && (
