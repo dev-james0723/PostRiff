@@ -6,7 +6,7 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
 fi
 cd "$(dirname "$0")/.."
 export PYTHONPATH=src:tests PYTHONDONTWRITEBYTECODE=1
-python -m unittest -v test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence test_pinterest_pilot test_pinterest_production_prep test_postriff_phase2_hosted test_agent_capability_registry test_rafii_browser_session_guard test_rafii_account_protection_p0 test_postriff_account_security test_rafii_account_protection_a1 test_rafii_creation_capabilities
+python -m unittest -v test_hosted_wave3_connectors test_pinterest_trial_readiness test_pinterest_trial_evidence test_pinterest_pilot test_pinterest_production_prep test_postriff_phase2_hosted test_agent_capability_registry test_rafii_browser_session_guard test_rafii_account_protection_p0 test_postriff_account_security test_rafii_account_protection_a1 test_rafii_creation_capabilities test_rafii_device_registry test_rafii_account_holds test_rafii_risk_engine test_rafii_security_incidents test_rafii_account_protection_acceptance
 python tests/pinterest_agent_registration.py
 python scripts/pinterest-synthetic-load.py
 bash scripts/cloud-pinterest-postgres.sh

@@ -246,4 +246,60 @@ class PinterestRevocationAndAgent(unittest.TestCase):
             self.assertFalse(pinterest_agent.enabled())
 
 
+class PinterestRafiiSecurityIntegration(unittest.TestCase):
+    """Exercise actual hosted routes after merging the account-security baseline; no provider traffic."""
+
+    def setUp(self):
+        from postriff_phase2.coworker import flags
+        self.addCleanup(flags.attach, flags._values)
+        flags.attach({'RAFII_ACCOUNT_PROTECTION_V2_MODE': 'enforce'})
+
+    def app(self, *, fresh_proof=False):
+        import test_postriff_account_security as security
+        from postriff_phase2.hosted_app import HostedApplication
+        from unittest.mock import Mock
+        now = 1_800_000_000.0
+        cursor = security.FakeCursor([((False, None, False), 1), (None, 1), (None, 1)])
+        def verify(token): return security.PRINCIPAL
+        verify.session_id = lambda token, principal: 'synthetic-pinterest-security-session'
+        verify.method_time = lambda token, principal: ('totp', now - 1) if fresh_proof else (None, 0)
+        verify.aal = lambda token, principal: 'aal2' if fresh_proof else 'aal1'
+        oauth = SimpleNamespace(start=Mock(return_value={'authorizeUrl': 'https://www.pinterest.com/oauth/'}),
+                                complete=Mock(return_value={'connected': True}),
+                                disconnect=Mock(return_value={'disconnected': True}))
+        service = SimpleNamespace(repository=SimpleNamespace(verify_session=verify), oauth=oauth,
+                                  connection_factory=lambda: security.FakeDB(cursor), clock=lambda: now)
+        return HostedApplication(service, None, {'provider': 'supabase'}, 'c' * 24), oauth, cursor
+
+    def test_unproved_browser_cannot_start_or_complete_pinterest_oauth(self):
+        import test_postriff_account_security as security
+        for action in ('start', 'complete'):
+            with self.subTest(action=action):
+                app, oauth, _ = self.app()
+                status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/pinterest/oauth/{action}',
+                                               body={'capability': 'boards_read', 'state': 'synthetic-state', 'code': 'synthetic-code'}, headers=security.AUTH)
+                self.assertEqual((status, body['code']), (403, 'security_step_up_required'))
+                oauth.start.assert_not_called()
+                oauth.complete.assert_not_called()
+
+    def test_fresh_independent_proof_allows_profile_and_boards_connection(self):
+        import test_postriff_account_security as security
+        app, oauth, _ = self.app(fresh_proof=True)
+        status, body = security.invoke(app, 'POST', f'/api/workspaces/{security.WORKSPACE}/channels/pinterest/oauth/start',
+                                       body={'capability': 'boards_read'}, headers=security.AUTH)
+        self.assertEqual(status, 201, body)
+        self.assertEqual(body['authorizeUrl'], 'https://www.pinterest.com/oauth/')
+        self.assertEqual(oauth.start.call_args.args[0::2], (security.WORKSPACE, 'pinterest'))
+        self.assertEqual(oauth.start.call_args.args[-1], 'boards_read')
+
+    def test_disconnect_stays_available_while_browser_needs_step_up(self):
+        import test_postriff_account_security as security
+        app, oauth, cursor = self.app()
+        status, body = security.invoke(app, 'DELETE', f'/api/workspaces/{security.WORKSPACE}/channels/synthetic-pinterest-connection',
+                                       headers=security.AUTH)
+        self.assertEqual((status, body.get('disconnected')), (200, True))
+        oauth.disconnect.assert_called_once()
+        self.assertEqual(cursor.executed, [])
+
+
 if __name__ == '__main__': unittest.main()
