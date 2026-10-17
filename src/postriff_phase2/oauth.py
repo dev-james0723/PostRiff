@@ -258,6 +258,24 @@ class OAuthService:
             provider.assert_read_scopes(grant.get('scopes'))
         return self.youtube_policy.guarded_provider(provider, grant) if grant['provider'] == 'youtube' else provider
 
+    @staticmethod
+    def _pinterest_binding(adapter):
+        policy = getattr(adapter, 'trial_policy', None)
+        return {'clientId': adapter.client_id, 'apiEnvironment': 'sandbox' if adapter.sandbox else 'production',
+                'trialReadonly': bool(getattr(adapter, 'trial_readonly', False)),
+                'trialAuthority': {key: getattr(policy, key) for key in ('workspace_id', 'actor_id', 'username', 'expires_at')}
+                    if policy is not None else None}
+
+    def _pinterest_custody(self, cleartext, adapter):
+        try:
+            context = json.loads(cleartext)
+        except (ValueError, TypeError):
+            return None
+        if (not isinstance(context, dict) or context.get('binding') != self._pinterest_binding(adapter)
+                or not isinstance(context.get('pkce'), str) or not 20 <= len(context['pkce']) <= 128):
+            return None
+        return context
+
     def _assert_pinterest_context(self, provider_id, workspace_id, principal=None, *, scopes=None):
         if provider_id == 'pinterest':
             self._provider(provider_id).assert_trial_context(workspace_id, principal, scopes=scopes, now=self.clock())
@@ -380,6 +398,8 @@ class OAuthService:
             custody = json.dumps({'pkce': verifier, 'connectionId': (inputs or {}).get('connectionId'),
                                   'clientId': adapter.client_id, 'authorizationLane': getattr(adapter, 'authorization_lane', 'standard'),
                                   'policyAcceptance': policy_acceptance}) if provider_id == 'youtube' else verifier
+            if provider_id == 'pinterest':
+                custody = json.dumps({'pkce': verifier, 'binding': self._pinterest_binding(adapter)})
             ciphertext, key_id = self.vault.encrypt(custody)
             stored_capability = capability if capability in CAPABILITIES else 'identity'
             cur.execute("INSERT INTO public.pr_oauth_transactions(workspace_id,member_id,provider,capability,redirect_uri,scopes,state_hash,verifier_ciphertext,key_id,expires_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+make_interval(secs=>%s)) RETURNING id::text", (workspace_id, principal, provider_id, stored_capability, redirect, list(scopes), hashlib.sha256(state.encode()).hexdigest(), ciphertext, key_id, TRANSACTION_TTL))
@@ -452,8 +472,15 @@ class OAuthService:
                 if txn[8] <= self.clock():
                     raise AlphaError('This connection request expired. Start again.', 409)
                 self._assert_pinterest_context(provider_id, workspace_id, principal, scopes=txn[5])
-                cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchange_started' WHERE id::text=%s", (txn[0],))
-                audit(cur, workspace_id, principal, 'oauth.exchange_claimed', txn[0], {'provider': provider_id})
+                binding_changed = self._pinterest_custody(self.vault.decrypt(txn[6], txn[7]), adapter) is None
+                if binding_changed:
+                    cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='mismatch' WHERE id::text=%s", (txn[0],))
+                    audit(cur, workspace_id, principal, 'oauth.rejected', txn[0], {'reason': 'configuration_changed'})
+                else:
+                    cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchange_started' WHERE id::text=%s", (txn[0],))
+                    audit(cur, workspace_id, principal, 'oauth.exchange_claimed', txn[0], {'provider': provider_id})
+            if binding_changed:
+                raise AlphaError('Pinterest connection settings changed. Start a new connection request.', 409, code='pinterest_oauth_binding_changed')
             return self._complete(workspace_id, token, provider_id, state, code, error, iss, claimed=txn[0])
         if provider_id != 'youtube':
             return self._complete(workspace_id, token, provider_id, state, code, error, iss)
@@ -551,6 +578,11 @@ class OAuthService:
                 return {"connected": False, "reason": "denied"}
             cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchanged' WHERE id::text=%s", (transaction_id,))
             verifier = self.vault.decrypt(verifier_ct, key_id)
+            if provider_id == 'pinterest':
+                context = self._pinterest_custody(verifier, adapter)
+                if context is None:
+                    raise AlphaError('Pinterest connection settings changed. Start a new connection request.', 409, code='pinterest_oauth_binding_changed')
+                verifier = context['pkce']
             youtube_context = {}
             if provider_id == 'youtube' and verifier.startswith('{'):
                 youtube_context = json.loads(verifier)

@@ -47,6 +47,45 @@ class PinterestPilot(unittest.TestCase):
         disabled=registry_from_environment({**self.configured(),'POSTRIFF_OAUTH_PINTEREST_DISABLED':'true'},transport=Wire([]))
         self.assertFalse(disabled['pinterest'].execution_enabled)
 
+    def test_official_api_trial_requires_explicit_host_choice_and_keeps_public_gates_closed(self):
+        base = self.configured()
+        for extra in [
+            {'POSTRIFF_PINTEREST_SANDBOX': 'false'},
+            {'POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT': 'production'},
+            {'POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT': 'https://api.pinterest.com'},
+            {'POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT': '*'}]:
+            with self.subTest(extra=extra):
+                self.assertNotIn('pinterest',registry_from_environment({**base,**extra},transport=Wire([])))
+        values = {**base,'POSTRIFF_PINTEREST_SANDBOX':'false','POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT':'production'}
+        wire = Wire([ok({'id':'1234567','username':'mock','account_type':'BUSINESS'})])
+        registry = registry_from_environment(values,transport=wire)
+        provider = registry['pinterest']; provider.rate_gate = lambda *a: None
+        grant = provider._grant({'access_token':'MOCK','scope':'user_accounts:read boards:read','expires_in':3600})
+        self.assertEqual(provider.identity(grant['accessToken'])['handle'],'@mock')
+        self.assertFalse(provider.sandbox)
+        self.assertTrue(provider.trial_readonly and provider.execution_enabled)
+        self.assertFalse(registry.diagnostics['pinterest']['productionEnabled'])
+        self.assertEqual(registry.diagnostics['pinterest']['trialApiEnvironment'],'production')
+        self.assertEqual(wire.calls[0]['url'],'https://api.pinterest.com/v5/user_account')
+        disabled = registry_from_environment({**values,'POSTRIFF_OAUTH_PINTEREST_DISABLED':'true'},transport=Wire([]))
+        self.assertFalse(disabled['pinterest'].execution_enabled)
+
+    def test_pending_oauth_binding_rejects_legacy_and_changed_app_environment_or_policy(self):
+        service,repo,provider=self.service()
+        clear=json.dumps({'pkce':'v'*43,'binding':service._pinterest_binding(provider)})
+        self.assertIsNotNone(service._pinterest_custody(clear,provider))
+        self.assertIsNone(service._pinterest_custody('v'*43,provider))
+        self.assertIsNone(service._pinterest_custody('{}',provider))
+        provider.sandbox=False
+        self.assertIsNone(service._pinterest_custody(clear,provider))
+        provider.sandbox=True; old_id=provider.client_id; provider.client_id='different-app'
+        self.assertIsNone(service._pinterest_custody(clear,provider))
+        provider.client_id=old_id
+        p=provider.trial_policy
+        provider.trial_policy=PinterestTrialPolicy(p.workspace_id,p.actor_id,p.username,p.expires_at+1)
+        self.assertIsNone(service._pinterest_custody(clear,provider))
+        self.assertEqual(provider.transport.calls,[])
+
     def test_board_consent_is_minimal_and_publish_schedule_are_denied_before_network(self):
         service,repo,p=self.service()
         started=service.start('workspace','session','pinterest','boards_read')

@@ -12,7 +12,7 @@ from postriff_phase2.hosted import HostedWorkspaceService
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.pinterest_quota import PinterestQuota
 from postriff_phase2.pinterest_pilot import PinterestTrialPolicy
-from postriff_phase2.pinterest_trial_evidence import SandboxReadOnlyEvidenceTransport
+from postriff_phase2.pinterest_trial_evidence import SandboxReadOnlyEvidenceTransport, PinterestReadOnlyEvidenceTransport
 from postriff_phase2.wave3_connectors import PinterestProvider
 
 DSN = os.environ['POSTRIFF_TEST_DSN']
@@ -82,6 +82,23 @@ for token,wid in workspaces.items():
         row=db.execute('SELECT access_ciphertext,refresh_ciphertext FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(wid,done['connectionId'])).fetchone()
         assert 'MOCK-AT' not in row[0] and 'MOCK-RT' not in row[1]
     assert 'MOCK-AT' not in json.dumps(service.get(wid,token))
+# Pending callbacks cannot cross App IDs or API hosts; rejection is durably one-time.
+for setting, changed in [('sandbox',False),('client_id','different-synthetic-app')]:
+    start=service.oauth.start(workspaces['p2'],'p2','pinterest','publish')
+    state=parse_qs(urlparse(start['authorizeUrl']).query)['state'][0]
+    prior=getattr(provider,setting); setattr(provider,setting,changed)
+    before=len(provider_calls)
+    try:
+        try: service.oauth.complete(workspaces['p2'],'p2','pinterest',state,'MOCK-CODE')
+        except AlphaError as error: assert error.code=='pinterest_oauth_binding_changed',error
+        else: raise AssertionError('Changed OAuth host/app accepted')
+    finally: setattr(provider,setting,prior)
+    with connection() as db:
+        assert db.execute('SELECT consumed_at IS NOT NULL,outcome FROM public.pr_oauth_transactions WHERE id=%s',(start['transactionId'],)).fetchone()==(True,'mismatch')
+    try: service.oauth.complete(workspaces['p2'],'p2','pinterest',state,'MOCK-CODE')
+    except AlphaError as error: assert error.status==404,error
+    else: raise AssertionError('Configuration-mismatched callback replayed')
+    assert len(provider_calls)==before
 wid,cid=workspaces['p1'],connections['p1']
 try: service.oauth.destinations(wid,'p2',cid)
 except AlphaError as error: assert error.status in (403,404)
@@ -173,6 +190,48 @@ again=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
 again_state=parse_qs(urlparse(again['authorizeUrl']).query)['state'][0]
 assert service.oauth.complete(pilot_wid,'p2','pinterest',again_state,'MOCK-CODE')['connected']
 
+# Changing the selected account or expiry also invalidates a pending callback before exchange.
+for policy_change in ['username','expiry']:
+    start=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+    state=parse_qs(urlparse(start['authorizeUrl']).query)['state'][0]
+    prior=provider.trial_policy
+    provider.trial_policy= PinterestTrialPolicy(pilot_wid,USERS['p2'],
+        'different-synthetic' if policy_change=='username' else prior.username,
+        prior.expires_at+1 if policy_change=='expiry' else prior.expires_at)
+    before=len(provider_calls)
+    try:
+        try: service.oauth.complete(pilot_wid,'p2','pinterest',state,'MOCK-CODE')
+        except AlphaError as error: assert error.code=='pinterest_oauth_binding_changed',error
+        else: raise AssertionError('Changed pilot selection accepted pending callback')
+    finally: provider.trial_policy=prior
+    with connection() as db:
+        assert db.execute('SELECT consumed_at IS NOT NULL,outcome FROM public.pr_oauth_transactions WHERE id=%s',(start['transactionId'],)).fetchone()==(True,'mismatch')
+    assert len(provider_calls)==before
+# Explicit official-API Trial lane: synthetic network only, same real DB and two read scopes.
+provider.sandbox=False
+provider.trial_api_environment='production'
+provider.transport= PinterestReadOnlyEvidenceTransport(lambda _:None,environment='production',mock_transport=transport)
+provider.rate_gate= PinterestQuota(connection,'1615884','production',clock=lambda:clock[0],trial=True)
+before=len(provider_calls)
+try: service.oauth.token_for_worker(pilot_wid,pilot_cid)
+except AlphaError as error: assert error.status==409,error
+else: raise AssertionError('Sandbox custody accepted by official-API Trial lane')
+assert len(provider_calls)==before
+production_start=service.oauth.start(pilot_wid,'p2','pinterest','boards_read')
+production_state=parse_qs(urlparse(production_start['authorizeUrl']).query)['state'][0]
+assert set(production_start['scopes'])=={'user_accounts:read','boards:read'}
+production_connected=service.oauth.complete(pilot_wid,'p2','pinterest',production_state,'MOCK-CODE')
+assert production_connected['connected'] and production_connected['connectionId']==pilot_cid
+assert service.oauth.destinations(pilot_wid,'p2',pilot_cid)['destinations']==[]
+assert provider_calls[before:] and all(url.startswith('https://api.pinterest.com/v5/') for _,url in provider_calls[before:])
+assert all(urlparse(url).path in ('/v5/oauth/token','/v5/user_account','/v5/boards') for _,url in provider_calls[before:])
+before=len(provider_calls)
+for action in [lambda:service.oauth.start(pilot_wid,'p2','pinterest','publish'),
+               lambda:provider.transport('POST','https://api.pinterest.com/v5/pins',body={})]:
+    try: action()
+    except AlphaError as error: assert error.status==403,error
+    else: raise AssertionError('Official-API read-only Trial allowed publication')
+assert len(provider_calls)==before
 with connection() as db:
     scopes=db.execute('SELECT scopes FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',(pilot_wid,pilot_cid)).fetchone()[0]
     assert set(scopes)=={'user_accounts:read','boards:read'}
@@ -216,6 +275,8 @@ assert not trial_reserve(0), 'Minute change reset daily pilot budget'
 clock[0]+=86400
 assert trial_reserve(1), 'Daily pilot budget did not recover'
 print('PINTEREST_POSTGRES_PASS '+json.dumps({'execution':'disposable_postgres_synthetic_provider','oauthReplayDenied':True,
+    'oauthHostAppBindingConsumed':True,'oauthHostAppBindingReplayNoNetwork':True,'pilotUsernameExpiryBindingNoNetwork':True,
+    'explicitOfficialApiReadOnlyConnected':True,'oldSandboxCustodyDenied':True,'officialApiTrialWriteDenied':True,
     'encryptedCustody':True,'tenantNegativeRead':True,'refreshConcurrentCallers':12,'providerRefreshes':refreshes,
     'disconnectCancelsClaimedCallback':True,'canceledCallbackNoNetwork':True,'freshExplicitReconnectPassed':True,
     'failedExchangeStateConsumed':True,'failedExchangeReplayNoNetwork':True,'pilotTenantAndActorFences':True,'pilotBroadGrantDenied':True,'pilotCallbackAuthorityRechecked':True,

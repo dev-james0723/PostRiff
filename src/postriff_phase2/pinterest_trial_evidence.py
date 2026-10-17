@@ -1,4 +1,4 @@
-"""Redacted Sandbox probe transport around the existing Hosted Pinterest adapter.
+"""Redacted fixed-environment read-only probe transport around the existing Hosted Pinterest adapter.
 
 This records requests, not acceptance. A 2xx receipt alone is not identity, OAuth,
 Board-selection, refresh, or Standard verification. Resource mutations are denied.
@@ -10,11 +10,15 @@ from urllib.parse import parse_qs, urlsplit
 from postriff_alpha.domain import AlphaError
 
 
-class SandboxReadOnlyEvidenceTransport:
-    HOST = 'api-sandbox.pinterest.com'
+class PinterestReadOnlyEvidenceTransport:
+    HOSTS = {'sandbox': 'api-sandbox.pinterest.com', 'production': 'api.pinterest.com'}
     SCOPES = frozenset({'user_accounts:read', 'boards:read', 'pins:read', 'pins:write'})
 
-    def __init__(self, record, *, mock_transport=None):
+    def __init__(self, record, *, environment='sandbox', mock_transport=None):
+        if not isinstance(environment, str) or environment not in self.HOSTS:
+            raise AlphaError('Choose a fixed Pinterest Trial API environment.', 503, code='pinterest_trial_configuration')
+        self.environment = environment
+        self.HOST = self.HOSTS[environment]
         from .providers import http_transport
         self.transport = mock_transport if mock_transport is not None else http_transport
         self.mode = 'mock' if mock_transport is not None else 'real_trial_request'
@@ -30,9 +34,9 @@ class SandboxReadOnlyEvidenceTransport:
                          and body is None and data is None)
         if (parts.scheme != 'https' or parts.hostname != self.HOST or parts.port not in (None, 443)
                 or parts.username or parts.password or parts.fragment or not (safe_read or token_request)):
-            raise AlphaError('The Trial evidence probe permits only Sandbox identity, board reads and OAuth token operations.', 403)
+            raise AlphaError('The Trial evidence probe permits only identity, board reads and OAuth token operations in its selected environment.', 403)
         base = {'requestId': uuid.uuid4().hex, 'mode': self.mode, 'method': method,
-                'origin': 'https://' + self.HOST, 'path': parts.path, 'queryKeys': sorted(query),
+                'apiEnvironment': self.environment, 'origin': 'https://' + self.HOST, 'path': parts.path, 'queryKeys': sorted(query),
                 'grantType': form.get('grant_type') if token_request else None}
         # If the journal cannot record intent, do not issue the request.
         self.record({**base, 'phase': 'started', 'at': datetime.now(timezone.utc).isoformat()})
@@ -57,3 +61,11 @@ class SandboxReadOnlyEvidenceTransport:
         self.record({**base, 'phase': 'response', 'at': datetime.now(timezone.utc).isoformat(),
                      'status': status if isinstance(status, int) else None, 'summary': summary})
         return response
+
+
+class SandboxReadOnlyEvidenceTransport(PinterestReadOnlyEvidenceTransport):
+    """Compatibility wrapper: Sandbox callers cannot select production."""
+    HOST = 'api-sandbox.pinterest.com'
+
+    def __init__(self, record, *, mock_transport=None):
+        super().__init__(record, environment='sandbox', mock_transport=mock_transport)

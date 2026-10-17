@@ -331,7 +331,9 @@ class PinterestProvider(OAuthProvider):
         callback = values.get('POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN')
         if callback is not None and not fixed_https_origin(callback):
             return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
-        if readonly and not sandbox:
+        # An official production-API Trial read needs an explicit server-side selection.
+        trial_environment = values.get('POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT', 'sandbox')
+        if readonly and (trial_environment not in ('sandbox', 'production') or sandbox != (trial_environment == 'sandbox')):
             return None, {**diagnostic, "configurationState": "invalid_configuration"}
         policy = None
         if readonly and valid:
@@ -340,13 +342,14 @@ class PinterestProvider(OAuthProvider):
                 policy = PinterestTrialPolicy.from_environment(values)
             except AlphaError:
                 return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
-            from .pinterest_trial_evidence import SandboxReadOnlyEvidenceTransport
+            from .pinterest_trial_evidence import PinterestReadOnlyEvidenceTransport
             def record(receipt):
                 print(json.dumps({"pinterestTrialRequest": receipt}, sort_keys=True), flush=True)
-            transport = SandboxReadOnlyEvidenceTransport(record, mock_transport=transport)
+            transport = PinterestReadOnlyEvidenceTransport(record, environment=trial_environment, mock_transport=transport)
         adapter = cls(client_id, secret, sandbox=sandbox, transport=transport) if valid else None
         if adapter:
             adapter.trial_readonly = readonly
+            adapter.trial_api_environment = trial_environment if readonly else None
             adapter.trial_policy = policy
         return adapter, diagnostic
 
