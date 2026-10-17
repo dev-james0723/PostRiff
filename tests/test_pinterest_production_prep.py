@@ -296,7 +296,7 @@ class PinterestRafiiSecurityIntegration(unittest.TestCase):
         import test_postriff_account_security as security
         app, oauth, cursor = self.app()
         status, body = security.invoke(app, 'DELETE', f'/api/workspaces/{security.WORKSPACE}/channels/synthetic-pinterest-connection',
-                                       headers=security.AUTH)
+                                       body={}, headers=security.AUTH)
         self.assertEqual((status, body.get('disconnected')), (200, True))
         oauth.disconnect.assert_called_once()
         self.assertEqual(cursor.executed, [])
