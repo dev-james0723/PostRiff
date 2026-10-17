@@ -1,6 +1,6 @@
 # Pinterest acceptance and capability matrix
 
-Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69f949`, deployment2tFM READY/promoted20:28Z; source receipt10486d8b. Earlier real read-only provider acceptance was on qualified c8/sF. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/boards-refresh-validation-20261017.json).
+Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69f949`, deployment2tFM READY/promoted20:28Z; source receipt10486d8b. Earlier real read-only provider acceptance was on qualified c8/sF. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/capabilities-validation-20261017.json).
 
 | Required acceptance | Status | Evidence / remaining requirement |
 |---|---|---|
@@ -17,12 +17,12 @@ Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69
 | Duplicate prevention | PASS | Synthetic concurrency/leases/final authority/known-ID persistence and no lost-response rePOST passed2026-10-17. Real provider behavior unobserved. |
 | Account disconnection | PASS | REAL final human-completed DELETE20019:43:55Z; DB revoked and both token ciphertexts erased.0real jobs,0active future jobs; nonempty real cancellation and Pinterest consent revoke NOT RUN. Earlier403 preserved. [Receipt](evidence/pilot-reconnect-refresh-disconnect-20261017.json). |
 | AI Agent authorized end-to-end | NOT RUN | Registration/tenant/current-intent tests PASS2026-10-17; provider-data/write gates closed. |
-| Standard Access | NOT RUN | Official console observed Trial active2026-10-17. No submission/approval evidence or actual demo video. |
+| Standard Access | BLOCKED | Native My apps17Oct20:45Z says Trial access active; Upgrade form available with blank video. No active pending/approval displayed; owner mail search found only14Oct Trial approval. Actual compliant OAuth/API video and policy review missing. |
 | Production release/canary | NOT RUN | One approved private Trial quota/config/deployment completed on existing production resources, not public release. No approved canary Pin. [Deployment receipt](evidence/pilot-deployment-20261017.json). |
 | Public availability | NOT RUN | Eligible customer's production journey not demonstrated. |
 | Synthetic concurrent scale | PASS |1000 simultaneous arrivals/64workers;5007.90users/s;p50/p95/p99 90.28/165.99/171.89ms;0unexpected failures;20expected uncertain outcomes;0provider traffic,2026-10-17. In-process only. |
 | Quota/security/callback binding | PASS | DisposablePG17.11 verifies app/host/username/expiry callback rejection and durable consumption, old-env custody denial, forced RLS/bounded DML/no TRUNCATE, quotas/recovery,2026-10-17. Actual PostgreSQL17.6 apply and privilege metadata PASS2026-10-17; no destructive/DML probe. [Apply receipt](evidence/pilot-quota-production-apply-20261017.json). |
-| Scoped CI/browser | PASS | New local candidate e2e5169f:463Python/51Node,7PG scripts,Agent,typecheck/lint36warnings0errors/build/synthetic browser,2026-10-17. [Receipt](evidence/capabilities-validation-20261017.json). Full-project CI NOT RUN. |
+| Scoped CI/browser | PASS | Deployed baseline e2e5169f:463Python/51Node,7PG scripts,Agent,typecheck/lint36warnings0errors/build/synthetic browser,2026-10-17. [Receipt](evidence/capabilities-validation-20261017.json). Full-project CI NOT RUN. |
 | Real private pilot execution | PASS | Bounded read-only exchange/identity/empty boards/real refresh/reconnect/final local disconnect verified2026-10-17. No publication, analytics, Agent or new-user/public proof. Original expiry20:40:56Z unchanged. [Receipt](evidence/pilot-reconnect-refresh-disconnect-20261017.json). |
 | Provider retention/AI-data policy | BLOCKED | Exact data-flow clarification unresolved; policy/Agent provider-data gates remain closed. |
 
@@ -54,3 +54,27 @@ The exact code deployment was later approved/executed once. READY2tFM/sourcee2e/
 ## Final promotion result
 
 Separate direct APPROVE accepted known shared Discord-setting metadata drift. One promotion completed20:28:14Z, CLI0; rafii.io and project production target2tFM verified, health200/configuredtrue and actual Channels GET200/private read-only UI PASS. Earlier BLOCKED promotion is resolved. No second build/OAuth/provider call/SQL/analytics/public enablement; original20:40:56Z expiry unchanged. Discord behavior unverified. [Receipt](evidence/capabilities-promotion-20261017.json). All provider-write/public-release gates above remain unchanged.
+
+
+## Current feature-specific decision — 2026-10-17
+
+Production remains e2e5169f/2tFM READY; local repaired source **776930ed3851047ee5d9022cc49a1a69fe128830 is not deployed**. The private read-only window expired20:40:56Z; no new grant/extension. These decisions concern public third-party use, not previously passed owner read-only tests.
+
+| Feature | Decision | Exact remaining gate / owner |
+|---|---|---|
+| Connect | NO-GO | Pinterest Standard/eligibility; restore intended session and separately approve fresh bounded demo authority; real non-owner onboarding/isolation/refresh/disconnect; policy/security release review. Pinterest + customer/human + engineering. |
+| Publish | NO-GO | Connect gates, real board ID and exact approved Pin; qualified private write authority, actual POST ID/read-back/visibility/no duplicate proof. Human + engineering/provider. |
+| Schedule | NO-GO | Publish gates, delta remote qualification/deployment and actual>1h due execution, edit/cancel/pause/timezone/refresh/recovery proof. Engineering + human test operator. |
+| Analytics | NO-GO | Delta remote qualification/deployment, approved schema/flag/read grant, own real Pin/window success/no-data/failure and retention permission. Engineering + Pinterest/product owner. |
+
+| New delta acceptance | Status | Evidence |
+|---|---|---|
+| Analytics outcome/empty durable receipt | PASS | Two selected synthetic local Python controls2026-10-17,0.005/0.003s; not full module/DB/live proof. |
+| Stale proof before write / revocation fences | PASS | Two selected synthetic local Python controls2026-10-17,0.015/0.040s with positive+cancel/reconnect/lease/member/account/approval subcases. Actual scheduled execution NOT RUN. |
+| Expired pilot diagnosis fail-closed | PASS | One selected synthetic Python control2026-10-17,0.006s. Live message still older e2e implementation; local fix not deployed. |
+| New source Node/typecheck/build/browser/PG | BLOCKED | validation_unavailable: jcb doctor exit2, Depot authentication unavailable; no free remote capacity verified, no paid run started. Prepared sanitized delta route. |
+| Two Pin preview metadata | PASS | Frozen original PNG/HTTP200/MIME/dimensions/SHA and local JSON checked; board ID absent and no execution approval. pin-previews/. |
+| Real eligible destination | NOT RUN | Native own Saved UI has0boardcards; earlier API200empty. Named PUBLIC board creation proposal only. |
+| Review video | NOT RUN | Dedicated agent produced actual partial footage; see video receipt for format/segment limitations. Full compliant OAuth/Pin demonstration is not supplied. |
+
+Connect+Publish may proceed in an approved two-customer canary when their own gates pass, while Schedule/Analytics remain off. No current feature is public GO; this is not a blanket postponement tied to the slower optional features.

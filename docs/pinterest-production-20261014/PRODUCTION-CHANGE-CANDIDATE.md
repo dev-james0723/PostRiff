@@ -1,3 +1,5 @@
+> Current continuation2026-10-17: e2e5169f/receipt10486d8b **is deployed** as2tFM and approved promotion completed20:28Z. Original private window expired20:40:56Z; revoked credentials remain erased. Historical rollout entries below are retained as history. New local analytics/scheduling/diagnostic delta is **not deployed**. No new staging/resources. See FINAL-RECEIPT.md and evidence/public-release-preflight-20261017.json.
+
 # Existing production Pinterest change record
 
 Updated2026-10-17 UTC. **Private read-only Trial acceptance complete for one business account; public production NO-GO.** Canonical Supabase **postriff-phase2-private / buoyhkbodnhzngaotoel**, existing Vercel **prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L**, origin **https://rafii.io**. No new organization/project/database/subscription/payment.
