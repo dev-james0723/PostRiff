@@ -161,6 +161,16 @@ function wav() {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2); assert.equal(overflow, true);
       const abortedPrefetches = errors.filter(error => isWebKitNavigationPrefetchAbort(ENGINE, error));
       const unexplained = errors.filter(error => !isWebKitNavigationPrefetchAbort(ENGINE, error));
+      if (ENGINE === 'webkit' && unexplained.length) console.log('G5_WEBKIT_DIAGNOSTIC='+JSON.stringify({
+        width, totalPageErrors: errors.length, classifiedNavigationRscAborts: abortedPrefetches.length,
+        unexpectedCount: unexplained.length,
+        sample: unexplained.slice(0, 8).map(error => ({
+          name: error.name, nearHardNavigation: error.nearHardNavigation,
+          looksLikeLocalRsc: /127\.0\.0\.1:4448\/app/.test(error.message),
+          hasRscKey: /[?&]_rsc=/.test(error.message),
+          lastWords: error.message.slice(-48)
+        }))
+      }));
       assert.deepEqual(unexplained.map(error => error.message), [], 'Unclassified WebKit JS errors are always release-blocking.');
       if (abortedPrefetches.length) console.log('G5_WEBKIT_NAVIGATION_PREFETCH_ABORTS='+JSON.stringify({
         width, count: abortedPrefetches.length, class: 'same-origin Next.js _rsc prefetch during hard navigation; not a successful fetch',

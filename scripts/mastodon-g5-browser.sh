@@ -111,7 +111,10 @@ cd "$ROOT/web"
 # Fail closed before launching browsers if the narrow WebKit error classifier
 # accepts a genuine runtime/CORS/provider error in its negative suite.
 node --test tests/mastodon-webkit-prefetch-guard.test.cjs
-for engine in chromium webkit; do
+# Diagnostic may scope to WebKit alone; full release acceptance runs both.
+G5_BROWSER_ENGINES="$(printenv G5_BROWSER_ENGINES 2>/dev/null || printf 'chromium webkit')"
+case "$G5_BROWSER_ENGINES" in "chromium webkit"|"webkit") ;; *) echo 'Unsupported G5 browser selection'; exit 64 ;; esac
+for engine in $G5_BROWSER_ENGINES; do
   export MASTODON_BROWSER_ENGINE="$engine"
   export MASTODON_BROWSER_EVIDENCE_DIR="$TASK_HOME/evidence-$engine"
   mkdir -p "$MASTODON_BROWSER_EVIDENCE_DIR"
