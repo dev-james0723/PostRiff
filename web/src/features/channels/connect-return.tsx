@@ -49,6 +49,7 @@ export function ConnectReturn() {
         void client.invalidateQueries({ queryKey: keys.audit(workspaceId) });
         await client.invalidateQueries({ queryKey: keys.snapshot(workspaceId) });
         if (value.connected && connectionId) {
+          if ((value as { discordPurpose?: string }).discordPurpose === 'identity') toast.success('Discord identity linked', { description: 'Authorize a server and channel from Channels before approving a post.' });
           if (value.missingScopes?.length) {
             toast.warning('Some permissions weren’t granted', { description: `Missing: ${value.missingScopes.join(', ')}. Publishing stays Assisted.` });
           }

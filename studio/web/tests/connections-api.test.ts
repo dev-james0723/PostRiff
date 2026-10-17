@@ -74,7 +74,7 @@ test('Threads publication sends the exact approval-bound manifest',async()=>{
  assert.equal(result.threadId,'1');
 });
 test('Pinterest locks the approved account and explicit per-Pin scope',async()=>{
- globalThis.fetch=async(path,options)=>{assert.equal(path,'/api/connections/pinterest/prepare');assert.deepEqual(JSON.parse(String(options?.body)),{username:'jamesaucreates',scope:'user_accounts:read,boards:read,boards:write,boards:read_secret,boards:write_secret,pins:read,pins:write,pins:read_secret,pins:write_secret,ads:read,ads:write,billing:read,billing:write',identityConsent:true});return Response.json({authorizationPath:'/api/connections/pinterest/authorize'});};
+ globalThis.fetch=async(path,options)=>{assert.equal(path,'/api/connections/pinterest/prepare');assert.deepEqual(JSON.parse(String(options?.body)),{username:'jamesaucreates',scope:'user_accounts:read',identityConsent:true});return Response.json({authorizationPath:'/api/connections/pinterest/authorize'});};
  assert.equal(await connectionsApi.preparePinterest('jamesaucreates'),'/api/connections/pinterest/authorize');
 });
 test('Pinterest verification sends no account override or credential',async()=>{
