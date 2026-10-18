@@ -247,13 +247,15 @@ def register():
          {'connectionId': dict(IDENTIFIER), 'action': {'type': 'string', 'enum': ['edit', 'delete', 'favourite', 'unfavourite', 'reblog', 'unreblog', 'bookmark', 'unbookmark', 'follow', 'unfollow', 'mute', 'unmute', 'block', 'unblock', 'native_schedule', 'native_reschedule', 'native_cancel', 'thread_prepare', 'report_account', 'filter_create', 'filter_update', 'filter_delete'], 'required': True},
           'targetId': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}, 'text': {'type': 'string', 'maxLength': 100000},
           'reportComment': {'type': 'string', 'maxLength': 1000}, 'reportForward': {'type': 'boolean'},
-          'reportCategory': {'type': 'string', 'enum': ['other', 'spam']},
+          'reportCategory': {'type': 'string', 'enum': ['other', 'spam', 'violation', 'legal']},
           'reportStatusIds': {'type': 'array', 'maxItems': 20, 'items': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}},
+          'reportRuleIds': {'type': 'array', 'maxItems': 20, 'items': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}},
           'filter': {'type': 'object', 'additionalProperties': False, 'properties': {
               'title': {'type': 'string', 'maxLength': 100},
               'context': {'type': 'array', 'maxItems': 5, 'items': {'type': 'string', 'enum': ['home', 'notifications', 'public', 'thread', 'account']}},
               'filter_action': {'type': 'string', 'enum': ['warn', 'hide', 'blur']},
-              'expires_in': {'type': 'integer', 'minimum': 60, 'maximum': 31536000},
+              'expires_in': {'type': ['integer', 'null'], 'minimum': 60, 'maximum': 31536000,
+                             'description': 'Seconds until expiry. Null clears expiry; omit to keep it unchanged.'},
               'keywords_attributes': {'type': 'array', 'maxItems': 20, 'items': {'type': 'object', 'additionalProperties': False, 'properties': {
                   'id': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}, 'keyword': {'type': 'string', 'maxLength': 100},
                   'whole_word': {'type': 'boolean'}, '_destroy': {'type': 'boolean'}}}}}},

@@ -657,6 +657,66 @@ class JournalTests(unittest.TestCase):
         with self.assertRaises(AlphaError): self.execute(preview)
         self.assertEqual(self.posts, [])
 
+    def test_rule_report_freezes_instance_rule_text_and_never_resends(self):
+        rules = [{'id': '7', 'text': 'No harassment'}]
+        writes = []
+        def transport(method, url, **kw):
+            if url.endswith('/api/v1/instance/rules'):
+                return ok([dict(rule) for rule in rules])
+            if method == 'POST' and url.endswith('/api/v1/reports'):
+                writes.append(dict(kw['body']))
+                return ok({'id': '77', 'target_account': {'id': '99'}, 'category': 'violation',
+                           'rule_ids': ['7'], 'forwarded': False})
+            return None
+        self.scoped_transport(['read:accounts', 'write:reports'], transport)
+        payload = {'action': 'report_account', 'targetId': '99', 'reportCategory': 'violation', 'reportRuleIds': ['7']}
+        preview = self.manager.preview(self.workspace, self.actor, self.connection_id, payload)
+        saved = self.manager.saved_preview(self.workspace, self.actor, self.connection_id, preview['actionId'])
+        self.assertEqual(saved['preview']['reportRules'], rules)
+        self.assertEqual(saved['digest'], preview['digest'])
+        result = self.execute(preview)
+        self.assertEqual(result['state'], 'accepted'); self.assertTrue(result['reportFiled'])
+        self.assertTrue(self.execute(preview)['replayed'])
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0]['rule_ids'], ['7']); self.assertIs(writes[0]['forward'], False)
+        changed = self.manager.preview(self.workspace, self.actor, self.connection_id, payload)
+        rules[0]['text'] = 'Different rule text after approval preview'
+        result = self.execute(changed)
+        self.assertEqual(result['state'], 'uncertain')
+        self.assertEqual(len(writes), 1)  # No report with changed rule meaning.
+        self.assertTrue(self.execute(changed)['replayed'])
+        with self.assertRaises(AlphaError):
+            self.manager.preview(self.workspace, self.actor, self.connection_id,
+                                 {**payload, 'reportRuleIds': ['999']})
+        self.assertEqual(len(writes), 1)
+
+    def test_filter_clear_expiry_survives_json_journal_and_independent_readback(self):
+        current = {'id': '88', 'title': 'Existing filter', 'expires_at': '2027-01-01T00:00:00Z'}
+        writes, reads = [], []
+        def transport(method, url, **kw):
+            if not url.endswith('/api/v2/filters/88'):
+                return None
+            if method == 'PUT':
+                writes.append(dict(kw['body']))
+                if 'expires_in' in kw['body'] and kw['body']['expires_in'] is None:
+                    current['expires_at'] = None
+            else:
+                reads.append(dict(current))
+            return ok(dict(current))
+        self.scoped_transport(['read:accounts', 'read:filters', 'write:filters'], transport)
+        preview = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'filter_update', 'targetId': '88', 'filter': {'expires_in': None}})
+        saved = self.manager.saved_preview(self.workspace, self.actor, self.connection_id, preview['actionId'])
+        self.assertEqual(saved['preview']['body'], {'expires_in': None})
+        result = self.execute(preview)
+        self.assertEqual(result['state'], 'accepted'); self.assertTrue(result['expiryCleared'])
+        self.assertEqual(result['expiryVerification'], 'provider_lookup')
+        self.assertEqual(writes, [{'expires_in': None}])
+        self.assertEqual(len(reads), 2)
+        self.assertIsNotNone(reads[0]['expires_at']); self.assertIsNone(reads[1]['expires_at'])
+        self.assertTrue(self.execute(preview)['replayed'])
+        self.assertEqual(len(writes), 1)
+
     def test_repeated_confirmation_never_sends_twice(self):
         preview = self.preview()
         self.assertEqual(self.execute(preview)['state'], 'accepted')

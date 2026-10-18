@@ -21,7 +21,7 @@ const actions = [
   ['report_account', 'Report account'], ['filter_create', 'Create content filter'],
   ['filter_update', 'Update content filter'], ['filter_delete', 'Delete content filter']
 ] as const;
-type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; media?: Record<string, { id: string; hash: string; bytes: number }> } };
+type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; reportRules?: { id: string; text: string }[]; media?: Record<string, { id: string; hash: string; bytes: number }> } };
 
 function readable(value: unknown): string {
   if (Array.isArray(value)) return value.map(readable).join(', ');
@@ -39,7 +39,7 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
       {value.resource === 'live_events' && <p role='status' className='mb-2'>Live updates: {String(value.state ?? 'unavailable')}. {typeof value.reason === 'string' ? value.reason : 'Only this foreground window was read; use notifications for missed events.'}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'context', 'filter_action', 'keywords', 'expires_at', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
+        const fields = ['id', 'event', 'excerpt', 'title', 'text', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'context', 'filter_action', 'keywords', 'expires_at', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>
@@ -59,9 +59,11 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
   const [accountIds, setAccountIds] = useState('');
   const [reportForward, setReportForward] = useState(false);
   const [reportCategory, setReportCategory] = useState('other');
+  const [reportRuleIds, setReportRuleIds] = useState('');
   const [filterContexts, setFilterContexts] = useState<string[]>([]);
   const [filterPolicy, setFilterPolicy] = useState('keep');
   const [filterExpiry, setFilterExpiry] = useState('');
+  const [filterNeverExpires, setFilterNeverExpires] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,12 +101,13 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       if (action === 'list_add' || action === 'list_remove') payload.account_ids = accountIds.split(',').map((id) => id.trim()).filter(Boolean);
       if (action === 'report_account') Object.assign(payload, {
         reportComment: text, reportForward, reportCategory,
-        reportStatusIds: accountIds.split(',').map((id) => id.trim()).filter(Boolean)
+        reportStatusIds: accountIds.split(',').map((id) => id.trim()).filter(Boolean),
+        ...(reportCategory === 'violation' ? { reportRuleIds: reportRuleIds.split(',').map((id) => id.trim()).filter(Boolean) } : {})
       });
       if (action === 'filter_create' || action === 'filter_update') payload.filter = {
         ...(title.trim() ? { title } : {}), ...(filterContexts.length ? { context: filterContexts } : {}),
         ...(filterPolicy !== 'keep' ? { filter_action: filterPolicy } : {}),
-        ...(filterExpiry ? { expires_in: Number(filterExpiry) } : {}),
+        ...(filterNeverExpires ? { expires_in: null } : filterExpiry ? { expires_in: Number(filterExpiry) } : {}),
         ...(text.trim() ? { keywords_attributes: text.split('\n').map((keyword) => keyword.trim()).filter(Boolean).map((keyword) => ({ keyword, whole_word: wholeWord })) } : {})
       };
       if (needsTime) {
@@ -132,7 +135,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       <div className='mt-3 flex flex-col gap-3'>
         <p className='text-muted-foreground text-xs'>All requests use {account}. Private content stays within this workspace. Server schedules publish on your instance; Rafii-managed schedules send at your approved calendar time.</p>
         <div className='flex flex-wrap gap-2'>
-          {['health', 'capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'filters', 'trending_tags', 'trending_statuses'].map((resource) => (
+          {['health', 'capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'filters', 'rules', 'trending_tags', 'trending_statuses'].map((resource) => (
             <Button key={resource} variant='outline' size='sm' disabled={busy} onClick={() => void read(resource)}>{resource === 'live_events' ? 'Read live updates' : resource.replace('_', ' ')}</Button>
           ))}
         </div>
@@ -143,14 +146,15 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
             <p className='text-sm'>Approve {preview.preview.action.replaceAll('_', ' ')} for {preview.preview.accountId} on {preview.preview.instance}</p>
             {preview.preview.targetId && <p className='text-sm'>Target ID: {preview.preview.targetId}</p>}
             {preview.preview.action === 'report_account' && <p className='text-sm'>This files a report; it does not apply a moderation decision. {preview.preview.body.forward === true ? 'You are approving forwarding this report to the reported account’s server moderators.' : 'Forwarding to the reported account’s server moderators is off.'} Rafii cannot retract a filed report.</p>}
-            <div className='max-h-40 overflow-auto text-sm'>{Object.entries(preview.preview.body).map(([key, value]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(value)}</p>)}</div>
+            <div className='max-h-40 overflow-auto text-sm'>{Object.entries(preview.preview.body).map(([key, value]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{key === 'expires_in' && value === null ? 'Never expire (clear any current expiry)' : readable(value)}</p>)}</div>
+            {preview.preview.reportRules?.map((rule) => <p key={rule.id} className='text-sm'>Instance rule {rule.id}: {rule.text}</p>)}
             {preview.preview.media && Object.entries(preview.preview.media).map(([role, image]) => <p key={role} className='break-all text-xs'>{role}: Library image {image.id} · {image.bytes} bytes · SHA256 {image.hash}</p>)}
             <div className='flex gap-2'><Button disabled={busy} onClick={() => void approve()}>Approve exact action</Button><Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>Back</Button></div>
           </div>
         ) : (
           <>
             <Label htmlFor={fieldId + '-action'}>Account action</Label>
-            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); setTitle(''); setAccountIds(''); setReportForward(false); setReportCategory('other'); setFilterContexts([]); setFilterPolicy('keep'); setFilterExpiry(''); setWholeWord(false); }}>
+            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); setTitle(''); setAccountIds(''); setReportForward(false); setReportCategory('other'); setReportRuleIds(''); setFilterContexts([]); setFilterPolicy('keep'); setFilterExpiry(''); setFilterNeverExpires(false); setWholeWord(false); }}>
               <SelectTrigger id={fieldId + '-action'} aria-label='Mastodon account action'><SelectValue /></SelectTrigger>
               <SelectContent>{actions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
             </Select>
@@ -163,7 +167,11 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
             {['list_add', 'list_remove'].includes(action) && <label htmlFor={fieldId + '-accounts'} className='flex flex-col gap-1 text-sm'>Account IDs separated by commas<Input id={fieldId + '-accounts'} value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>}
             {action === 'report_account' && <>
               <Label htmlFor={fieldId + '-report-category'}>Report category</Label>
-              <Select value={reportCategory} onValueChange={(value) => setReportCategory(String(value))}><SelectTrigger id={fieldId + '-report-category'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='other'>Other</SelectItem><SelectItem value='spam'>Spam</SelectItem></SelectContent></Select>
+              <Select value={reportCategory} onValueChange={(value) => setReportCategory(String(value))}><SelectTrigger id={fieldId + '-report-category'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='other'>Other</SelectItem><SelectItem value='spam'>Spam</SelectItem><SelectItem value='violation'>Rule violation (Mastodon 3.5+)</SelectItem><SelectItem value='legal'>Illegal content (Mastodon 4.2+)</SelectItem></SelectContent></Select>
+              {reportCategory === 'violation' && <>
+                <Button variant='outline' size='sm' disabled={busy} onClick={() => void read('rules')}>View instance rules</Button>
+                <label htmlFor={fieldId + '-report-rules'} className='flex flex-col gap-1 text-sm'>Broken instance rule IDs, separated by commas<Input id={fieldId + '-report-rules'} value={reportRuleIds} onChange={(event) => setReportRuleIds(event.target.value)} /></label>
+              </>}
               <label className='flex flex-col gap-1 text-sm'>Supporting status IDs (optional, comma-separated)<Input value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>
               <label htmlFor={fieldId + '-report-forward'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-report-forward'} checked={reportForward} onCheckedChange={(value) => setReportForward(value === true)} />Forward this report to the reported account&apos;s server moderators</label>
               <p className='text-muted-foreground text-xs'>A filed report is not a moderation decision. Rafii cannot retract it. Review the target, reason and forwarding choice before approving.</p>
@@ -173,7 +181,8 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
               <Label htmlFor={fieldId + '-filter-policy'}>Filter policy</Label>
               <Select value={filterPolicy} onValueChange={(value) => setFilterPolicy(String(value))}><SelectTrigger id={fieldId + '-filter-policy'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='keep'>Default / keep current</SelectItem><SelectItem value='warn'>Warn</SelectItem><SelectItem value='hide'>Hide</SelectItem><SelectItem value='blur'>Blur (Mastodon4.4+)</SelectItem></SelectContent></Select>
               <label htmlFor={fieldId + '-whole-word'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-whole-word'} checked={wholeWord} onCheckedChange={(value) => setWholeWord(value === true)} />Match whole words for new keywords</label>
-              <label className='flex flex-col gap-1 text-sm'>Expiry in seconds (optional)<Input type='number' min={60} max={31536000} value={filterExpiry} onChange={(event) => setFilterExpiry(event.target.value)} /></label>
+              <label htmlFor={fieldId + '-never-expire'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-never-expire'} checked={filterNeverExpires} onCheckedChange={(value) => setFilterNeverExpires(value === true)} />Never expire (clear any current expiry)</label>
+              <label className='flex flex-col gap-1 text-sm'>Expiry in seconds (optional)<Input type='number' min={60} max={31536000} disabled={filterNeverExpires} value={filterExpiry} onChange={(event) => setFilterExpiry(event.target.value)} /></label>
               <p className='text-muted-foreground text-xs'>Filters affect this account only. Blank fields keep existing settings when updating. A new filter needs a title and at least one context.</p>
             </>}
             <Button variant='outline' disabled={busy} onClick={() => void prepare()}>Review action</Button>

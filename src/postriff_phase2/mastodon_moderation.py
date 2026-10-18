@@ -14,6 +14,24 @@ def identifiers(value, limit=20):
     return value
 
 
+def report_rules(rows, requested):
+    """Bind a violation report to this instance's exact current rule IDs and text."""
+    identifiers(requested)
+    if not isinstance(rows, list) or len(rows) > 256:
+        raise AlphaError('The server returned invalid or oversized instance rules.', 502)
+    selected = {}
+    for row in rows:
+        if not isinstance(row, dict) or row.get('id') not in requested:
+            continue
+        identifier, text = row['id'], row.get('text')
+        if identifier in selected or not isinstance(text, str) or not 1 <= len(text.strip()) <= 4096:
+            raise AlphaError('The server returned ambiguous instance rules. Read its current rules again.', 502)
+        selected[identifier] = {'id': identifier, 'text': text}
+    if set(selected) != set(requested):
+        raise AlphaError('A selected instance rule is no longer available. Review the current rules.', 409)
+    return [selected[identifier] for identifier in requested]
+
+
 def spec(action, payload, capabilities):
     target = payload.get('targetId')
     if action != 'filter_create' and (not isinstance(target, str) or not ID.fullmatch(target)):
@@ -23,18 +41,26 @@ def spec(action, payload, capabilities):
         if not version_at_least(version, (2, 3, 0)):
             raise AlphaError('This report integration requires Mastodon2.3 or later.', 409)
         comment, forward = payload.get('reportComment', ''), payload.get('reportForward', False)
-        statuses, category = identifiers(payload.get('reportStatusIds', [])), payload.get('reportCategory', 'other')
+        statuses = identifiers(payload.get('reportStatusIds', []))
+        rules = identifiers(payload.get('reportRuleIds', []))
+        category = payload.get('reportCategory', 'violation' if rules else 'other')
         if not isinstance(comment, str) or len(comment) > 1000 or type(forward) is not bool:
             raise AlphaError('Use a report reason up to1000 characters and an explicit forwarding choice.', 400)
-        if category not in ('other', 'spam'):
-            raise AlphaError('This integration supports Other or Spam; rule/legal/collection reports are not offered.', 400)
+        if category not in ('other', 'spam', 'violation', 'legal'):
+            raise AlphaError('Choose Other, Spam, Rule violation or Illegal content.', 400)
+        if (category == 'violation') != bool(rules):
+            raise AlphaError('Choose exact instance rule IDs for a Rule violation report only.', 400)
         if category == 'other' and not comment.strip() and not statuses:
             raise AlphaError('Give the report a reason or exact supporting status IDs.', 400)
         if category != 'other' and not version_at_least(version, (3, 5, 0)):
             raise AlphaError('Report categories require Mastodon3.5 or later.', 409)
+        if category == 'legal' and not version_at_least(version, (4, 2, 0)):
+            raise AlphaError('Illegal-content reports require Mastodon4.2 or later.', 409)
         body = {'account_id': target, 'status_ids': statuses, 'comment': comment, 'forward': forward}
         if version_at_least(version, (3, 5, 0)):
             body['category'] = category
+        if rules:
+            body['rule_ids'] = rules
         return 'POST', '/api/v1/reports', body, ('write:reports',) + (('read:statuses',) if statuses else ()), 'moderate'
     if not version_at_least(version, (4, 0, 0)):
         raise AlphaError('Server-side V2 filters require Mastodon4.0 or later.', 409)
@@ -67,8 +93,10 @@ def spec(action, payload, capabilities):
         body['filter_action'] = policy
     if 'expires_in' in value:
         seconds = value['expires_in']
-        if type(seconds) is not int or not 60 <= seconds <= 31536000:
-            raise AlphaError('Choose an expiry between60 seconds and one year, or leave it unchanged.', 400)
+        # Mastodon's Expireable setter uses JSON null to clear expires_at. Omitting
+        # this field preserves an existing expiry, so never collapse the two cases.
+        if seconds is not None and (type(seconds) is not int or not 60 <= seconds <= 31536000):
+            raise AlphaError('Choose 60 seconds to one year, null for no expiry, or omit to keep the current expiry.', 400)
         body['expires_in'] = seconds
     if 'keywords_attributes' in value:
         keywords = value['keywords_attributes']

@@ -12,7 +12,7 @@ from .contracts import digest
 from .permissions import require
 from .mastodon_protocol import ID, discover, has_scopes, status_options, validate_status
 from .mastodon_release import write_qualified as mastodon_write_qualified
-from .mastodon_moderation import ACTIONS as MODERATION_ACTIONS, spec as moderation_spec
+from .mastodon_moderation import ACTIONS as MODERATION_ACTIONS, report_rules, spec as moderation_spec
 
 
 # Compatibility import: Connect and management use the same strict application custody.
@@ -31,6 +31,7 @@ READS = {
     "mutes": ("/api/v1/mutes?limit=40", ("read:mutes",)),
     "blocks": ("/api/v1/blocks?limit=40", ("read:blocks",)),
     "filters": ("/api/v2/filters", ("read:filters",)),
+    "rules": ("/api/v1/instance/rules", ()),
     "trending_tags": ("/api/v1/trends/tags?limit=20", ("read:statuses",)),
     "trending_statuses": ("/api/v1/trends/statuses?limit=20", ("read:statuses",)),
 }
@@ -279,6 +280,7 @@ class MastodonManagement:
         capabilities = discover(provider.transport, session["instance"])
         method, path, body, scopes, permission = action_spec(action, payload, capabilities, now=self.clock())
         self._scopes(grant, scopes)
+        selected_rules = None
         if action == 'report_account':
             for status in body['status_ids']:
                 original = self._result(provider.api(session, 'GET', '/api/v1/statuses/' + status))
@@ -286,11 +288,15 @@ class MastodonManagement:
                         or not isinstance(original.get('account'), dict)
                         or str(original['account'].get('id')) != body['account_id']):
                     raise AlphaError('A supporting status does not belong to the reported account.', 409)
+            if body.get('rule_ids'):
+                selected_rules = report_rules(self._result(provider.api(session, 'GET', '/api/v1/instance/rules')), body['rule_ids'])
             self._read_fence(workspace, token, connection, grant)
         from .hosted import _membership, audit, throttle
         preview = {"connectionId": connection, "accountId": grant["providerAccountId"], "instance": session["instance"],
                    "action": action, "targetId": payload.get('targetId'), "method": method, "path": path, "body": body, "scopes": list(scopes), "permission": permission,
                    "authorizationBinding": grant.get('_mastodonCredentialBinding'), "authorizationScopes": sorted(grant.get('scopes') or [])}
+        if selected_rules is not None:
+            preview['reportRules'] = selected_rules
         if not isinstance(preview['authorizationBinding'], str) or not re.fullmatch(r'[a-f0-9]{64}', preview['authorizationBinding']):
             raise AlphaError('The Mastodon grant lacks a secure generation binding. Reconnect before preparing an action.', 409)
         with self.repository.transaction(token, workspace) as (cur, row, actor):
@@ -383,6 +389,10 @@ class MastodonManagement:
                 if not active or active[2] != preview["accountId"] or self.oauth.vault.decrypt(active[0], active[1]) != grant["accessToken"]:
                     raise AlphaError("The connection changed. No action was sent.", 409)
                 self.oauth.assert_mastodon_dispatch(cur, workspace, connection, grant, preview['scopes'])
+                if preview['action'] == 'report_account' and preview['body'].get('rule_ids'):
+                    current_rules = report_rules(self._result(provider.api(session, 'GET', '/api/v1/instance/rules')), preview['body']['rule_ids'])
+                    if current_rules != preview.get('reportRules'):
+                        raise AlphaError('The selected instance rules changed. Review a new report before filing.', 409)
                 if preview['action'] in ('filter_update', 'filter_delete'):
                     original = self._result(provider.api(session, 'GET', preview['path']))
                     if not isinstance(original, dict) or str(original.get('id')) != preview['targetId']:
@@ -441,12 +451,30 @@ class MastodonManagement:
                     or not isinstance(body.get('target_account'), dict)
                     or str(body['target_account'].get('id')) != preview['body']['account_id']):
                 return {'state': 'uncertain', 'reason': 'The report response did not identify the approved target. Do not resend.'}
+            requested_category = preview['body'].get('category')
+            if requested_category in ('violation', 'legal') and body.get('category') != requested_category:
+                return {'state': 'uncertain', 'reason': 'The report response did not confirm the approved category. Check Mastodon; do not resend.'}
+            if requested_category == 'violation':
+                reported_rules = body.get('rule_ids')
+                if (not isinstance(reported_rules, list)
+                        or any(not isinstance(rule, str) for rule in reported_rules)
+                        or sorted(reported_rules) != sorted(preview['body']['rule_ids'])):
+                    return {'state': 'uncertain', 'reason': 'The report response did not confirm the approved instance rules. Check Mastodon; do not resend.'}
             result.update(reportFiled=True, forwarded=body.get('forwarded') if type(body.get('forwarded')) is bool else None,
                           moderationOutcome='Report filing is not moderator enforcement.')
         if action in ('filter_create', 'filter_update'):
             if (not isinstance(body, dict) or not ID.fullmatch(str(body.get('id', '')))
                     or action == 'filter_update' and str(body['id']) != preview['targetId']):
                 return {'state': 'uncertain', 'reason': 'The filter response did not identify the approved filter. Do not resend.'}
+            if 'expires_in' in preview['body'] and preview['body']['expires_in'] is None:
+                checked = provider.api(session, 'GET', '/api/v2/filters/' + str(body['id']))
+                value = checked.get('body')
+                cleared = (checked.get('status') == 200 and isinstance(value, dict)
+                           and str(value.get('id')) == str(body['id'])
+                           and 'expires_at' in value and value['expires_at'] is None)
+                # This proves only expiry clearing, not every changed filter field.
+                result.update(expiryCleared=True if cleared else None,
+                              expiryVerification='provider_lookup' if cleared else 'unavailable')
         if action in ("delete", "native_cancel", "filter_delete"):
             checked = provider.api(session, "GET", preview["path"])
             if checked.get("status") == 404:
