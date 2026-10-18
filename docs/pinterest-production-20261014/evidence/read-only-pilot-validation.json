@@ -1,0 +1,120 @@
+{
+  "checkedAt": "2026-10-15T00:43:53Z",
+  "sourceCommit": "cb49fe87b718b880d7ccf3feb6352f04277356c7",
+  "baselineProductionSource": "7da3375cc0409d8e3a434955a75f57478889372b",
+  "runId": "md6ps00zt7",
+  "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/md6ps00zt7",
+  "runner": "depot-ubuntu-24.04-16",
+  "remoteExitCode": 0,
+  "controllerExitCode": 0,
+  "elapsedSeconds": 117.972,
+  "pythonTests": 214,
+  "nodeTestGroups": [
+    15,
+    24,
+    3,
+    4
+  ],
+  "nodeTests": 46,
+  "pythonResult": "PASS",
+  "postgres": {
+    "execution": "disposable_postgres_synthetic_provider",
+    "oauthReplayDenied": true,
+    "encryptedCustody": true,
+    "tenantNegativeRead": true,
+    "refreshConcurrentCallers": 12,
+    "providerRefreshes": 1,
+    "disconnectCancelsClaimedCallback": true,
+    "canceledCallbackNoNetwork": true,
+    "freshExplicitReconnectPassed": true,
+    "failedExchangeStateConsumed": true,
+    "failedExchangeReplayNoNetwork": true,
+    "pilotTenantAndActorFences": true,
+    "pilotBroadGrantDenied": true,
+    "pilotCallbackAuthorityRechecked": true,
+    "pilotTwoReadScopesConnected": true,
+    "pilotExpiryStopsCustody": true,
+    "pilotDisconnectAfterExpiry": true,
+    "trialDailyConcurrentReservations": 120,
+    "trialDailyAccepted": 100,
+    "trialDailyDenied": 20,
+    "trialMinuteCannotResetDaily": true,
+    "trialDailyRecovery": true,
+    "disconnectStopsTokenAccess": true,
+    "otherTenantUnaffected": true,
+    "quotaConcurrentReservations": 120,
+    "quotaAccepted": 100,
+    "quotaDenied": 20,
+    "quotaNextWindowRecovered": true,
+    "clientBudgetAccessDenied": true
+  },
+  "browserSessionPostgres": "PASS (live/revoked/missing/deleted/AAL1 synthetic sessions)",
+  "agentRegistry": "PASS (feature-on registration; no publication tool)",
+  "typecheck": "PASS",
+  "lint": {
+    "warnings": 36,
+    "errors": 0
+  },
+  "hostedBuild": "PASS",
+  "fieldsBrowser": {
+    "execution": "synthetic_actual_component",
+    "boardSelection": true,
+    "secretBoardDisabled": true,
+    "sectionSelection": true,
+    "httpLinkRejected": true,
+    "httpsLinkAccepted": true,
+    "accountSwitchClearsApprovalOptions": true,
+    "realProviderRequests": 0
+  },
+  "previewBrowser": {
+    "classification": "Mock PASS",
+    "fixtureOverlay": true,
+    "realPinterestApiRequests": 0,
+    "realIdentityVerified": false,
+    "exactTitle": true,
+    "boardVisible": true,
+    "exactDestination": true,
+    "noTitleInference": true,
+    "unsafeLinkNoCTA": true,
+    "externalRequestsBlocked": 0
+  },
+  "syntheticLoad": {
+    "at": "2026-10-15T00:42:48.691822+00:00",
+    "createCalls": 1000,
+    "elapsedSeconds": 0.21643120000000238,
+    "execution": "synthetic_in_process",
+    "failureTypes": [],
+    "injectedLostCreateResponses": 20,
+    "latencyMs": {
+      "p50": 96.09935000000291,
+      "p95": 180.678020000002,
+      "p99": 186.30458999999888
+    },
+    "limitations": [
+      "No HTTP hosting, database scheduler, production OAuth or provider rate-limit measurement.",
+      "Lost responses need manual provider reconciliation; no automatic resubmission."
+    ],
+    "lostResponsesPreservedUncertain": true,
+    "observedPeakWorkers": 64,
+    "outcomes": {
+      "failed": 0,
+      "uncertain": 20,
+      "verified": 980
+    },
+    "providerCalls": 0,
+    "simulatedProviderLatencyMs": 2,
+    "simultaneousArrivals": 1000,
+    "unexpectedFailureRate": 0.0,
+    "users": 1000,
+    "usersPerSecond": 4620.405930383369,
+    "workerLimit": 64
+  },
+  "liveProviderCalls": 0,
+  "fullProjectCI": "NOT RUN",
+  "productionDeployment": "NOT RUN",
+  "receiptPath": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261015T004353475690Z-ci.json",
+  "notes": [
+    "Scoped cloud validation only; real OAuth/Pin/Standard/production acceptance NOT RUN.",
+    "Existing vendor submodule cleanup warning; remote and controller exited0."
+  ]
+}

@@ -57,6 +57,8 @@ def auto_blockers(state: dict, task: dict, occurrence: dict, item: dict, variant
     """Why this draft may not publish without a person looking at it (empty = eligible for auto-publish)."""
     authority = task.get("publishAuthority") or {}
     reasons = []
+    if item.get('platform') == 'Discord':
+        reasons.append('Discord requires a human to approve each exact post, server, channel and publication time.')
     if not authority or authority.get("definitionDigest") != task.get("definitionDigest"):
         reasons.append("Automatic publishing needs to be confirmed again after the automation changed.")
     if variant.get("unknowns"):
@@ -107,6 +109,8 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
         raise AlphaError("Run unavailable.", 404)
     task = next((t for t in root["recurringTasks"] if t.get("id") == occurrence["taskId"]), None)
     item = campaigns.item_of(occurrence, payload.get("itemKey"))
+    if item.get('platform') == 'Discord' and item.get('approvedVia') != 'human':
+        raise AlphaError('Discord requires a human approval for each exact destination and post.', 409, code='discord_approval_required')
     if item.get("jobId"):
         return {"jobId": item["jobId"], "state": item["state"], "note": "Already queued."}
     if item.get("state") != "approved" or task is None:
@@ -124,6 +128,14 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
         raise AlphaError("This post can be queued only shortly before its publish time.", 409, code="not_due")
     variant = engine._variant(state, item["variantId"])
     decision = item.get("decision") or {}
+    if item['platform'] == 'Discord':
+        from .discord.authorization import campaign_binding
+        channel = next((c for c in state['phase2']['channels'] if c['id'] == item['channelId']), None)
+        if not channel or not decision.get('discord') or not decision.get('timing'):
+            raise AlphaError('Legacy Discord decisions need a fresh destination and time approval.', 409, code='discord_approval_required')
+        binding = campaign_binding(state, channel, variant, item.get('destinationId'), publish_at, task['schedule']['timeZone'], now)
+        if binding['discord'] != decision['discord'] or binding['timing'] != decision['timing']:
+            raise AlphaError('The approved Discord destination, content or time changed.', 409, code='discord_approval_required')
     # Every approval, human or standing, is for this exact draft: an edit, a new candidate or new sources void it.
     if decision.get("variantRevision") != variant["revision"] or decision.get("textDigest") != digest(variant.get("text", "")) or variant.get("proposedUpdate"):
         raise AlphaError("The draft changed after it was approved. Approve the current version.", 409, code="draft_changed")
@@ -133,7 +145,9 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
             raise AlphaError("Held for your approval: " + blockers[0], 409, code="auto_blocked")
     jobs = state["phase2"]["jobs"]
     # Never two posts for one draft on one account.
-    live = next((j for j in jobs if j["manifest"].get("variantId") == variant["id"] and j["manifest"].get("channelId") == item["channelId"] and j.get("state") not in ("failed", "canceled")), None)
+    live = next((j for j in jobs if j["manifest"].get("variantId") == variant["id"] and j["manifest"].get("channelId") == item["channelId"]
+                 and (item['platform'] != 'Discord' or j['manifest'].get('destinationId') == item.get('destinationId'))
+                 and j.get("state") not in ("failed", "canceled")), None)
     if live is None:
         device = {"id": "automation", "user_id": principal}
         if variant.get("needsReview") or variant.get("unknowns"):
@@ -157,14 +171,32 @@ def commit(engine, state: dict, principal: str, payload: dict, now: float) -> di
         warnings = variant.get("warnings") or []
         if item.get("approvedVia") == "human" and sorted(decision.get("acknowledgedWarnings") or []) != sorted(warnings):
             raise AlphaError("The draft's warnings changed after it was approved. Approve it again.", 409, code="draft_changed")
-        timing = _manifest_time(item["publishAt"], task["schedule"]["timeZone"], now)
-        engine.apply_phase2(_NoDatabase(), state, "review", {"variantId": variant["id"], "channelId": item["channelId"], "acknowledgedWarnings": list(warnings), **timing}, device)
+        timing = ({'localTime': decision['timing']['local'], 'timeZone': decision['timing']['timeZone'], 'fold': decision['timing']['fold']}
+                  if item['platform'] == 'Discord' else _manifest_time(item['publishAt'], task['schedule']['timeZone'], now))
+        engine.apply_phase2(_NoDatabase(), state, "review", {"variantId": variant["id"], "channelId": item["channelId"], 'destinationId': item.get('destinationId'), "acknowledgedWarnings": list(warnings), **timing}, device)
         review = state["phase2"]["reviews"][-1]
+        if item['platform'] == 'Discord':
+            queued = review['manifest']['discord']
+            if any(queued[k] != decision['discord'][k] for k in ('schema', 'target', 'wireDigest', 'deliveryDigest', 'operationDigest')):
+                raise AlphaError('The Discord preview changed after human approval.', 409, code='discord_approval_required')
+            # The publication record was allocated by the original human
+            # decision. Queue commit cannot allocate a different approval.
+            queued['publicationId'] = decision['discord']['publicationId']
+            review['manifest'].pop('idempotencyKey', None)
+            review['manifest']['idempotencyKey'] = digest(review['manifest'])
+            review['digest'] = digest(review['manifest'])
         engine.apply_phase2(_NoDatabase(), state, "approve", {"reviewId": review["id"], "digest": review["digest"], "confirmed": True}, device)
         review = next(r for r in state["phase2"]["reviews"] if r["id"] == review["id"])
         live = next(j for j in jobs if j["id"] == review["jobId"])
         item["reviewId"] = review["id"]
     live["automation"] = {"taskId": task["id"], "occurrenceId": occurrence["id"], "itemKey": item["key"], "approvedVia": item.get("approvedVia")}
+    if item['platform'] == 'Discord':
+        from .discord.authorization import approval
+        if live.get('approvedBy') != decision.get('by') or live['manifest']['discord'] != decision['discord']:
+            raise AlphaError('Another Discord approval cannot be reused for this decision.', 409)
+        live['discordHumanApproval'] = {'by': decision['by'], 'at': decision['at'],
+                                       'occurrenceId': occurrence['id'], 'itemKey': item['key']}
+        live['discordAuthorization'] = approval(live)
     item["jobId"] = live["id"]
     item["lastError"] = None
     lifecycle.move(item, "scheduled", at=now)

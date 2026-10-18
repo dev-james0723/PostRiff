@@ -1,0 +1,384 @@
+{
+  "checkedAt": "2026-10-17T19:46:54.202449+00:00",
+  "classification": "REAL official API v5 Trial access; redacted journal only",
+  "requests": [
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:12:38.941527+00:00",
+      "grantType": "authorization_code",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "49e8d380141c4027af1c7b531580c3b4"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:12:39.237127+00:00",
+      "grantType": "authorization_code",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "49e8d380141c4027af1c7b531580c3b4",
+      "status": 200,
+      "summary": {
+        "accessTokenPresent": true,
+        "recognizedScopes": [
+          "boards:read",
+          "user_accounts:read"
+        ],
+        "refreshTokenPresent": true,
+        "unexpectedScopesPresent": false
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:12:39.279107+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "ff978d43a8a44b37911a2699389fbaca"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:12:39.381602+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "ff978d43a8a44b37911a2699389fbaca",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:13:52.905731+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "07306e33cd1e45dfaa10cc7780421a44"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:13:53.148672+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "07306e33cd1e45dfaa10cc7780421a44",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:13:53.172235+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "started",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "fcdd8efaf05d4c15aa3b1cb2e7c12e8b"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:13:53.307302+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "response",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "fcdd8efaf05d4c15aa3b1cb2e7c12e8b",
+      "status": 200,
+      "summary": {
+        "bookmarkPresent": false,
+        "itemCount": 0,
+        "itemsShapeValid": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:08.436671+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "63b8f6c3bbc147f0ab53ce1b56fa3a9c"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:08.560588+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "63b8f6c3bbc147f0ab53ce1b56fa3a9c",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:08.584675+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "started",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "dd22553882e94a12874b13853c6ee666"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:08.723242+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "response",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "dd22553882e94a12874b13853c6ee666",
+      "status": 200,
+      "summary": {
+        "bookmarkPresent": false,
+        "itemCount": 0,
+        "itemsShapeValid": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:10.380493+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "0b7cb45385da490c854f8f6c0f0f9478"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:10.527452+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "0b7cb45385da490c854f8f6c0f0f9478",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:10.557161+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "started",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "dad9be75854541fb926505f8fca54986"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:10.692554+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "response",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "dad9be75854541fb926505f8fca54986",
+      "status": 200,
+      "summary": {
+        "bookmarkPresent": false,
+        "itemCount": 0,
+        "itemsShapeValid": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:32.006576+00:00",
+      "grantType": "refresh_token",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "96c68eff3e844630ab915c09f332c33e"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:32.464496+00:00",
+      "grantType": "refresh_token",
+      "method": "POST",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/oauth/token",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "96c68eff3e844630ab915c09f332c33e",
+      "status": 200,
+      "summary": {
+        "accessTokenPresent": true,
+        "recognizedScopes": [
+          "boards:read",
+          "user_accounts:read"
+        ],
+        "refreshTokenPresent": true,
+        "unexpectedScopesPresent": false
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:32.680190+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "3c3d44a84a5c41a1832575fcfb42bfd2"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:32.811590+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "3c3d44a84a5c41a1832575fcfb42bfd2",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:34.888117+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "started",
+      "queryKeys": [],
+      "requestId": "5b7bb5bc50b8450faf90e20f157e28e2"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:35.044549+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/user_account",
+      "phase": "response",
+      "queryKeys": [],
+      "requestId": "5b7bb5bc50b8450faf90e20f157e28e2",
+      "status": 200,
+      "summary": {
+        "accountIdPresent": true,
+        "usernamePresent": true
+      }
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:35.079147+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "started",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "6a417cfce6e2433ebf4365bc1f6809ef"
+    },
+    {
+      "apiEnvironment": "production",
+      "at": "2026-10-17T19:33:35.447464+00:00",
+      "grantType": null,
+      "method": "GET",
+      "mode": "real_trial_request",
+      "origin": "https://api.pinterest.com",
+      "path": "/v5/boards",
+      "phase": "response",
+      "queryKeys": [
+        "page_size"
+      ],
+      "requestId": "6a417cfce6e2433ebf4365bc1f6809ef",
+      "status": 200,
+      "summary": {
+        "bookmarkPresent": false,
+        "itemCount": 0,
+        "itemsShapeValid": true
+      }
+    }
+  ]
+}

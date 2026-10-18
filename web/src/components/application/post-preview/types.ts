@@ -22,6 +22,11 @@ export interface PreviewPost {
   text: string;
   videoTitle?: string;
   youtubeMode?: 'video' | 'short';
+  /** Pinterest-specific fields from the exact frozen per-Pin approval options. */
+  pinterestTitle?: string;
+  pinterestBoardId?: string;
+  pinterestSectionId?: string;
+  pinterestLink?: string;
   media: PreviewMedia[];
   /** When the post goes out; templates show it where the app shows a time. */
   publishAt: Date;

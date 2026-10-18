@@ -1,0 +1,66 @@
+{
+  "state": "PROMOTED_VERIFIED",
+  "approval": "Latest direct human APPROVE explicitly accepts known20:11Discord metadata update and one promotion only",
+  "startedAt": "2026-10-17T20:28:06.703824+00:00",
+  "deploymentId": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+  "sourceCommit": "e2e5169ff19ac268c0a0ad06994f67b41f69f949",
+  "receiptCommit": "10486d8b78b6b2390701148882797496d18aeffe",
+  "previousProductionDeployment": "dpl_sFLeor16mBEwc8NoNc49sxvFP1AP",
+  "expiryExtended": false,
+  "expiresUnix": 1792269656,
+  "newBuild": false,
+  "projectEnvEdited": false,
+  "sqlApplied": false,
+  "providerActions": 0,
+  "pid": 87077,
+  "cliExitCode": 0,
+  "finishedAt": "2026-10-17T20:28:14.007086+00:00",
+  "checkedAt": "2026-10-17T20:34:09.981629+00:00",
+  "approvalObservedAt": "2026-10-17T20:27:35Z",
+  "productionAliasDeploymentId": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+  "productionTarget": {
+    "projectId": "prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L",
+    "productionDeploymentId": "dpl_2tFM29HomWyWcrzTqTtikWN6Pvti",
+    "url": "postriff-phase2-private-gvudra5h2-jamesau0723-6572s-projects.vercel.app",
+    "readyState": "READY"
+  },
+  "health": {
+    "status": "ok",
+    "execution": "phase2-hosted-candidate",
+    "configured": true,
+    "phase0": "incomplete",
+    "customerValidated": false,
+    "sourceRevision": null
+  },
+  "deployedFileHashesMatched": 2217,
+  "acceptedConfigurationUpdate": {
+    "key": "POSTRIFF_DISCORD_BOT_TOKEN",
+    "updatedAt": "2026-10-17T20:11:17.511Z",
+    "actualTokenValueChange": "UNVERIFIED",
+    "discordBehavior": "NOT RUN; no Discord message/test performed"
+  },
+  "projectProductionEnvMetadata": {
+    "records": 173,
+    "equalToExplicitlyAcceptedSnapshot": true,
+    "secretsDecrypted": false
+  },
+  "ui": {
+    "status": "PASS",
+    "classification": "Actual Rafii UI flag-off check; not provider acceptance",
+    "tabId": "508B4B28DC658D8C5361703F8A183BC7",
+    "url": "https://rafii.io/app/channels",
+    "channelsHttp": 200,
+    "channelsRequestAt": "2026-10-17T20:29:02.214Z",
+    "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+    "observedText": "Read-only Trial for the approved operator and Pinterest account, using the official production API.",
+    "pinterestConnectedCard": "Absent after prior verified disconnection",
+    "oauthStarted": false,
+    "providerActions": 0,
+    "limitation": "No new connected-account or other-tenant/public journey tested"
+  },
+  "runtimeSourceRevision": {
+    "healthField": null,
+    "proof": "Vercel deployment metadata pins producte2e5169f/receipt10486d8b plus2217matching source-file hashes"
+  },
+  "productionReady": false
+}

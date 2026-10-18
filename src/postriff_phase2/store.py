@@ -76,6 +76,7 @@ class Phase2Store(Store):
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
         if p:
+            p.pop('discordEngagement', None)
             p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
             p["art"]["providerBrief"] = self.art_brief(state)
             p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
@@ -88,7 +89,17 @@ class Phase2Store(Store):
             return "Connect"
         if c["revoked"] or c["expiresAt"] <= self.clock():
             return "Reconnect"
-        if not c["identityVerified"] or not c["capabilityVerified"] or c["verifiedAt"]+3600 < self.clock():
+        # A bot installation has no hourly OAuth expiry. Its durable consent
+        # is checked against the credential generation, and the worker checks
+        # the exact server/channel permissions again before every send. Aging
+        # this setup observation alone must not hold an unchanged approval.
+        discord_installation = (c.get('platform') == 'Discord'
+            and c.get('discordConnectionKind') == 'installation'
+            and c.get('qualification') == 'server_verified'
+            and c.get('evidenceSource') == 'live_provider'
+            and bool(c.get('discordAuthorizationGeneration')))
+        if (not c["identityVerified"] or not c["capabilityVerified"]
+                or not discord_installation and c["verifiedAt"]+3600 < self.clock()):
             return "Finish setup"
         return "Ready for posting"
 
@@ -102,6 +113,18 @@ class Phase2Store(Store):
                     and c.get('configured') and not c.get('revoked')
                     and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
                     and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
+
+    def pinterest_reverification_due(self, channel):
+        """An existing hosted Pin approval may wait for a fresh server read proof.
+
+        This does not make the channel ready or restore a revoked/downgraded grant.
+        Keep separate from composer recovery, whose current flow is YouTube-specific.
+        """
+        return bool(getattr(self, 'hosted_entitlements', False) and channel.get('platform') == 'Pinterest'
+                    and channel.get('configured') and not channel.get('revoked')
+                    and channel.get('identityVerified') and channel.get('capabilityVerified') and channel.get('scopes')
+                    and (channel.get('expiresAt', 0) <= self.clock()
+                         or channel.get('verifiedAt', 0) + 3600 < self.clock()))
 
     def mutate(self, wid, token, expected_revision, action, payload):
         if wid in self.samples:
@@ -322,9 +345,20 @@ class Phase2Store(Store):
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
+            if manifest.get('platform') == 'Discord' and manifest.get('actor') != device['user_id']:
+                raise AlphaError('Prepare and approve the Discord preview as the same workspace member.', 409)
+            if (getattr(self, 'worker_binding', None) is not None
+                    and manifest.get('workerBinding') != self.worker_binding):
+                raise AlphaError('This review belongs to another deployment. Prepare a new review.', 409)
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
+            if manifest['platform'] == 'Discord':
+                from .discord.authorization import assert_no_unresolved_repeat
+                assert_no_unresolved_repeat(s, manifest, excluding=existing['id'] if existing else None)
+                same_id = next((j for j in data['jobs'] if j['id'] == manifest['discord']['publicationId']), None)
+                if same_id and same_id.get('approvalDigest') != review['digest']:
+                    raise AlphaError('This Discord publication record already has another approval. Prepare a new review.', 409)
             if existing:
                 if existing.get('privacyErased') or existing.get('youtubeProviderDataRemoved'):
                     raise AlphaError('This YouTube operation was erased and cannot be resumed.', 409, code='youtube_data_removed')
@@ -339,9 +373,17 @@ class Phase2Store(Store):
                 raise AlphaError(f"{channel['platform']} allows {limit} posts per 24 hours for this account; this approval would exceed it.", 409)
             review["status"] = "approved"
             youtube_early = manifest['platform'] == 'YouTube' and (manifest.get('publishOptions', {}).get('publishAt') or manifest.get('publishOptions', {}).get('publicationMode') == 'now')
-            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
+            job = {"id": uid(), "manifest": copy.deepcopy(manifest), "approvalDigest": review["digest"], "approvedAt": now, "approvedBy": device["user_id"], "state": "approved", "events": [], "attempts": [], "checks": 0, "leaseOwner": None, "leaseUntil": 0, "nextAt": now if youtube_early or manifest.get("nativeScheduleAt") else manifest["timing"]["timestamp"], "cancelRequested": False, "scheduleId": p.get("scheduleId")}
+            if manifest['platform'] == 'Discord':
+                from .discord.authorization import approval
+                job['id'] = manifest['discord']['publicationId']
+                job['discordAuthorization'] = approval(job)
             self.event(job, "approved", "Exact local fixture approval recorded")
-            self.event(job, "scheduled", "Waiting for the local durable worker")
+            if getattr(self, 'worker_binding', None) is not None:
+                job['previewDispatchPending'] = True
+                self.event(job, 'held', 'Approved preview post; choose Publish approved post when due.')
+            else:
+                self.event(job, "scheduled", "Waiting for the local durable worker")
             data["jobs"].append(job)
             review["jobId"] = job["id"]
         elif action == "approve_many":
@@ -487,6 +529,11 @@ class Phase2Store(Store):
         from .growth.advice_context import prediction_current
         if prediction_current(advice, s, {**v, "text": text}):
             manifest["postDoctor"] = copy.deepcopy(advice)
+        if getattr(self, 'worker_binding', None) is not None:
+            manifest['workerBinding'] = copy.deepcopy(self.worker_binding)
+        if c['platform'] == 'Discord':
+            from .discord.authorization import freeze_manifest
+            freeze_manifest(s, c, manifest, p.get('destinationId'))
         root_key = digest({**manifest, 'timing': {'mode': 'now'}, 'expiresAt': None}) if immediate_youtube else digest(manifest)
         if immediate_youtube:
             manifest['retryRoot'] = root_key
@@ -536,7 +583,17 @@ class Phase2Store(Store):
         try:
             if m.get('privacyErased'):
                 return False
+            if m.get('operation') == 'discord.reply':
+                from .discord.engagement import reply_current, channel_for
+                from .discord.authorization import manifest_current
+                return reply_current(s, m, self.clock()) and manifest_current(s, channel_for(s, m['channelId']), m)
             v, c = self._variant(s, m["variantId"]), find(s["phase2"]["channels"], m["channelId"])
+            if c['platform'] == 'Discord':
+                from .discord.authorization import manifest_current
+                if not manifest_current(s, c, m):
+                    return False
+            if c['platform'] == 'Facebook' and (not c.get('destinationId') or m.get('destinationId') != c['destinationId']):
+                return False
             if (m.get("workspaceId") != s["workspace"]["id"]
                     or m.get("brandHubId") != s["brandHub"]["id"]
                     or m.get("briefRevision") != s["brief"]["revision"]
@@ -572,7 +629,8 @@ class Phase2Store(Store):
             if j["state"] not in ("scheduled", "approved", "claimed"):
                 continue
             c = find(data["channels"], j["manifest"]["channelId"])
-            unavailable = self.channel_state(c) != "Ready for posting" and not self.channel_reverification_due(c)
+            unavailable = (self.channel_state(c) != "Ready for posting"
+                           and not self.channel_reverification_due(c) and not self.pinterest_reverification_due(c))
             if not self.current(s, j["manifest"]) or unavailable or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
                 self.event(j, "held", "Approval, capability or entitlement changed. Review timing and approve a new job; reconnection does not release this one.")
 

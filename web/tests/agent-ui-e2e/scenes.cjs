@@ -46,7 +46,11 @@ async function openPanel(t, page) {
   const launcher = page.locator('#rafii-launcher');
   await launcher.waitFor({ state: 'visible', timeout: 240000 });
   await page.waitForFunction(() => document.querySelector('#rafii-launcher') && !document.querySelector('#rafii-launcher').disabled, null, { timeout: 240000 });
-  if (!(await page.locator('#rafii-panel').isVisible().catch(() => false))) await launcher.click();
+  if (!(await page.locator('#rafii-panel').isVisible().catch(() => false))) {
+    t.tracePage(page, 'launcher-click-start');
+    await launcher.click();
+    t.tracePage(page, 'launcher-click-complete');
+  }
   const composer = page.locator('#rafii-panel').getByLabel('Ask Rafii', { exact: true });
   await composer.waitFor({ timeout: 60000 });
   return composer;
@@ -85,7 +89,9 @@ async function generated(t, page, { prompt = ELIGIBLE, wait = 'ready', timeout =
     const build = page.locator('#rafii-panel').getByRole('button', { name: /build interactive view/i }).last();
     let clicked = false;
     if (await build.count()) {
+      t.tracePage(page, 'build-view-click-start');
       await build.click();
+      t.tracePage(page, 'build-view-click-complete');
       clicked = true;
       await region.waitFor({ state: 'attached', timeout: 45000 }).catch(() => {});
     }
@@ -435,6 +441,7 @@ scene('viewports', async (t) => {
     t.assert(fits, `${vp.id}: no sideways page scroll`);
     t.assert(!box || box.width <= vp.width + 1, `${vp.id}: generated view fits the viewport width`, box);
     out.push(`${vp.id}✓`);
+    t.tracePage(page, `harness-context-close-requested:viewports:${vp.id}`);
     await page.context().close();   // one live context at a time
     t.step(`${vp.id}:closed`);
   }
