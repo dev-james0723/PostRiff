@@ -108,3 +108,16 @@ All four public/newlive decisions remainNO-GO. Source qualification alone does n
 ## Approved board and activation preflight —17Oct~22:35UTC
 
 OnePUBLICboard1126814837958721891 actualUIcreate/readbackPASS; noPins. NativeMyappsstillTrialactive/noStandardapprovalorpendingdisplayed. CanonicalDB/quota/ownmember/revokedgrant/173productionenvmetadatapreflightPASS as scoped;8backupentriesvisible,restoreintegrityNOTRUN. Exactconfig/SQL/oneconditionaldeployment/freshconsent/mediaingestbundleprepared,notapproved. [Evidence](evidence/private-trial-activation-preflight-20261017.json). All4newlive/publicNO-GOremain; no mock-to-realpromotion.
+
+## Approved activation execution —18Oct02:39–03:01UTC
+
+| Test | Status | Evidence |
+|---|---|---|
+| Two canonical migrations | PASS | Journal20261018023938, metrics20261018023956; RLS/grants/trigger/definitions verified. [SQL](evidence/private-trial-sql-production-apply-20261018.json). |
+| One build and promotion | PASS | Eobk/730d0440,2217source matches,3services/cron,alias+target and HTTP200health. [Promotion](evidence/private-trial-promotion-20261018.json). |
+| Four-scope OAuth start and official screen | PASS |9af24e11, exact workspace/actor/callback/scopes, Giveaccess displayed. |
+| New exchange/identity/boards/refresh | BLOCKED | Human consent pending as of03:01UTC; old grant revoked/erased. Start is not completed OAuth. |
+| Approved image ingest | NOT RUN | Actual immutable object/hash pending return. |
+| Pin/schedule/native analytics | NOT RUN |0Pin creates; exact publication approval and actual provider receipts still needed. |
+
+Earlier unapplied/undeployed statements are superseded by this execution. Public all4features remainNO-GO; Standard/actual compliant video/non-owner journey remain gated.

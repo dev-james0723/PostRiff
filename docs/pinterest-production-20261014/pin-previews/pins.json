@@ -8,7 +8,7 @@
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "DISCONNECTED; new exact consent required",
+      "connectionState": "PENDING_FRESH_FOUR_SCOPE_HUMAN_CONSENT",
       "board": {
         "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
         "name": "Rafii — Product & Content Workflows",
@@ -70,7 +70,7 @@
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "DISCONNECTED; new exact consent required",
+      "connectionState": "PENDING_FRESH_FOUR_SCOPE_HUMAN_CONSENT",
       "board": {
         "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
         "name": "Rafii — Product & Content Workflows",
@@ -139,8 +139,8 @@
     "pinCreatesProposed": 2
   },
   "hardBlocks": [
+    "Human four-scope consent/exchange and API-v5 board eligibility pending; old grant revoked",
     "No current OAuth grant or active live-test window",
-    "No approved write-capable private configuration",
     "No real Pin approval",
     "Content Studio immutable delivery asset/hash not yet ingested or approved; review source is not a signed delivery URL"
   ],
@@ -174,5 +174,12 @@
     "remaining": 0
   },
   "updatedAt": "2026-10-17T22:37:34.355134+00:00",
-  "activationProposal": "../private-trial-activation.json"
+  "activationProposal": "../private-trial-activation.json",
+  "runtime": {
+    "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
+    "deploymentId": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+    "status": "PRIVATE_TRIAL_DEPLOYED_CONSENT_PENDING",
+    "pilotId": "7e355181-2714-46fb-abfe-26fc526d0809",
+    "expiresAt": "2026-10-18T18:00:00Z"
+  }
 }

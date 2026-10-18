@@ -1,6 +1,6 @@
 {
   "preparedAt": "2026-10-17T22:37:34.355134+00:00",
-  "status": "CANDIDATE_NOT_APPROVED_NOT_EXECUTED",
+  "status": "APPROVED_SQL_AND_DEPLOYMENT_EXECUTED_CONSENT_PENDING",
   "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
   "providerAppId": "1615884",
   "canonicalSupabase": "buoyhkbodnhzngaotoel",
@@ -141,5 +141,18 @@
   "externalEffectsAlreadyApprovedAndConsumed": {
     "emptyPublicBoard": "1/1completed",
     "paidCloudCI": "1/1completed"
+  },
+  "approval": "Direct human APPROVE continue to exact4b4a6b07 package",
+  "executed": {
+    "sqlFiles": 2,
+    "builds": 1,
+    "promotions": 1,
+    "liveDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
+    "verifiedAt": "2026-10-18T02:49:07.492844Z",
+    "sourceHashMatches": 2217,
+    "oauthStarts": 1,
+    "humanConsentCompleted": false,
+    "mediaUploads": 0,
+    "pinCreates": 0
   }
 }

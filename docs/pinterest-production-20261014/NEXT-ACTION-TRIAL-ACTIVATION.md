@@ -1,4 +1,6 @@
-# Exact private Trial activation approval package — not executed
+# Approved private Trial activation — execution verified
+
+**Executed under the human's APPROVE continue:** both canonical SQL migrations, one build and one promotion completed18Oct02:39–02:49UTC. Live Eobk/product730d0440;2217source hashes match, services/cron preserved, rafii.io and production target agree, healthHTTP200. Four-scope transaction9af24e11 is pending human Give access and expires03:03:06UTC. Image ingest0; Pin creates0. Existing18Oct18UTC policy expiry unchanged. [Final receipt](FINAL-RECEIPT.md). This document's original scope below is preserved as the authorization record.
 
 Prepared 2026-10-17T22:37:34.355134+00:00. Qualified product **730d044078434638f31eb5ca0e57280307ff8317**, [scoped cloud PASS](evidence/private-trial-cloud-validation-20261017.json). Canonical **postriff-phase2-private/buoyhkbodnhzngaotoel** and rafii.io only. No staging/new organization/resources. [Exact non-secret configuration](private-trial-activation.json). [Read-only preflight](evidence/private-trial-activation-preflight-20261017.json).
 
@@ -6,7 +8,7 @@ Prepared 2026-10-17T22:37:34.355134+00:00. Qualified product **730d044078434638f
 
 One empty **PUBLIC** board **Rafii — Product & Content Workflows**, **ID 1126814837958721891**, [actual board](https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/), owner **@jamesaucreates/1126814906675966091**. Exact description saved;0Pins; one Create submission, budget1/1consumed. Native reload and anonymous official public widget confirm ID/owner/description/0Pins. This is not OAuth/v5 destination acceptance. [Receipt](evidence/approved-public-board-20261017.json). Approved cloud validation v0czdxw6gg also1/1consumed; do not rerun.
 
-## One combined authorization requested
+## Approved scope reference — do not repeat approval or execution
 
 1. **Apply exactly two reviewed additive SQL files** on buoyhkbodnhzngaotoel, journal then metric provider definitions. No data copies, existing credential changes or quota reapply. Journal uses forcedRLS/server-only immutable response IDs; metric adds Pinterest to existing threads/instagram CHECK and four native definitions. Five-second lock timeout; abort unexpected schema drift. SQL/checksums and exact rollback hashes below.
 2. **One Vercel production-target build, initially without domain assignment**, using exact tested product730d0440 plus excluded receipt documents. Reuse existing1615884secret securely in child environment; no secret rotation or project-env edits. After exact source hashes, READY, project, canonical DB,3services/API300s/phone660s/minutecron, health and flag checks pass, **one conditional promotion to rafii.io**. Stop on current production or shared configuration drift; preserve other integrations. The existing2tFMartifact is the reviewed rollback candidate.

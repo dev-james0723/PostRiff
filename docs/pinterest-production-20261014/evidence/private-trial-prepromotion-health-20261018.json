@@ -1,0 +1,15 @@
+{
+  "checkedAt": "2026-10-18T02:47:52.536771+00:00",
+  "method": "ActualnativeChromeimmutable/api/healthreadusingexistingVercelAuthsession;nobypasslink/protectionsettingcreated",
+  "body": {
+    "status": "ok",
+    "execution": "phase2-hosted-candidate",
+    "configured": true,
+    "phase0": "incomplete",
+    "customerValidated": false,
+    "sourceRevision": null
+  },
+  "networkStatusCode": "NOT_CAPTURED_FROM_NATIVE_UI",
+  "priorDirectAnonymousRequest": "HTTP200VercelloginHTMLredirect,notAPIhealth;separatereceiptpreserved",
+  "deploymentId": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ"
+}
