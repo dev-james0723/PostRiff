@@ -28,9 +28,15 @@ def prepare(connection, dsn, *, fixture_route='management'):
     expected_port, expected_prefixes = routes[fixture_route]
     if fixture_route == 'management-browser' and os.environ.get('POSTRIFF_MASTODON_AFTER134_BROWSER_FIXTURE') != '1':
         raise RuntimeError('Browser schema setup requires the explicit after134 browser fixture opt-in.')
-    if (not sys.platform.startswith('linux') or os.environ.get('CI', '').lower() not in ('1', 'true')
-            or os.environ.get('POSTRIFF_MASTODON_AFTER134_FIXTURE') != '1'):
-        raise RuntimeError('Use only the approved management-after134-only disposable cloud PG route.')
+    # James authorized an explicit zero-cost isolated Mac runner on 2026-10-18.
+    # This is a separate truthful execution route, not a spoofed Linux/CI flag.
+    # Exact DSN, live server identity, owned directory prefixes and all SQL hashes
+    # below remain mandatory before any schema preparation.
+    cloud = sys.platform.startswith('linux') and os.environ.get('CI', '').lower() in ('1', 'true')
+    local = sys.platform == 'darwin' and os.environ.get('POSTRIFF_MASTODON_AFTER134_LOCAL_FIXTURE') == '1'
+    if os.environ.get('POSTRIFF_MASTODON_AFTER134_FIXTURE') != '1' or not (cloud or local):
+        raise RuntimeError('Use an explicitly opted-in disposable management PostgreSQL runner.')
+    execution = 'synthetic disposable local PostgreSQL only' if local else 'synthetic disposable cloud PostgreSQL only'
     params = conninfo_to_dict(dsn)
     if (set(params) - {'host', 'port', 'dbname', 'user'} or params.get('host') != '127.0.0.1'
             or params.get('port') != expected_port or params.get('dbname') != 'postgres'):
@@ -117,7 +123,7 @@ def prepare(connection, dsn, *, fixture_route='management'):
         _postcheck(db, meta)
         db.execute('CREATE TABLE postriff_private.mastodon_after134_fixture(core_sha256 text NOT NULL,cache_sha256 text NOT NULL)')
         db.execute('INSERT INTO postriff_private.mastodon_after134_fixture VALUES(%s,%s)', (meta['payload_sha256'], meta['requires134_sha256']))
-    print(json.dumps({'execution': 'synthetic disposable cloud PostgreSQL only', 'schema': meta['custom_ledger_name'],
+    print(json.dumps({'execution': execution, 'schema': meta['custom_ledger_name'],
                       'sha256': meta['payload_sha256'], 'connect134Sha256': meta['requires134_sha256'],
                       'historicalLedgers': 'synthetic precondition models; not production adoption',
                       'preexistingSyntheticPinterestRow': 'unchanged', 'production': 'NOT RUN'}))
