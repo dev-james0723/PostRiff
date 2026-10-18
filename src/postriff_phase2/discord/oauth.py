@@ -451,6 +451,155 @@ class DiscordConnections:
                 fail('Reconnect this legacy installation through a linked Discord identity.')
         self._fresh_identity(workspace, None, envelope['identityConnectionId'])
 
+    def reverify_installation(self, workspace, connection, *, token=None,
+                              authenticated=None, actor=None, audit_event=None):
+        """Preserve installation consent; observe user and destination access.
+
+        Explicit member verification may restore existing publish/schedule
+        capability. Worker/composer checks only renew still-verified authority.
+        Neither path registers destinations, approves posts or changes scopes.
+        """
+        from ..hosted import audit
+        adapter = self.adapter
+        event = audit_event or ('channel.verified' if token is not None else self.oauth.WORKER_REVERIFIED)
+        bound_fields = ('providerAccountId', 'discordConnectionKind', 'discordIdentityConnectionId',
+                        'discordAuthorizationGeneration', 'scopes', 'revoked',
+                        'defaultDestinationId', 'discordDestinations', 'enabledPermissionGroups',
+                        'configured', 'identityVerified', 'capabilityVerified', 'verifiedAt',
+                        'capabilityVersion', 'discordVerificationGeneration')
+
+        def installation(cur, state, *, fresh=False):
+            if state.get('accountDeletion') or state.get('accountBlock'):
+                fail('This workspace cannot verify connections right now.')
+            channel = next((c for c in state.get('phase2', {}).get('channels', [])
+                            if c.get('id') == connection and c.get('platform') == 'Discord'), None)
+            if not channel or channel.get('revoked'):
+                fail('This Discord installation is unavailable.', 404)
+            row, envelope = self.read_credential(cur, workspace, connection)
+            if (envelope.get('kind') != 'installation' or channel.get('discordConnectionKind') != 'installation'
+                    or envelope.get('guild') != row[6] or row[6] != channel.get('providerAccountId')
+                    or not row[4] or row[4] != channel.get('discordAuthorizationGeneration')
+                    or envelope.get('identityConnectionId') != channel.get('discordIdentityConnectionId')):
+                fail('The Discord installation binding changed. Reconnect it.')
+            scopes = row[5]
+            if (not isinstance(scopes, (list, tuple)) or any(not isinstance(s, str) for s in scopes)
+                    or not {'bot', 'identify'}.issubset(scopes)):
+                fail('The required Discord installation consent is missing. Reconnect it.')
+            # New envelopes preserve the callback's two kinds of evidence.
+            # Older envelopes retain their recorded credential scopes; never
+            # manufacture optional scopes lost by earlier generic verification.
+            proof = envelope.get('authorization')
+            if proof is not None:
+                if (not isinstance(proof, dict)
+                        or any(not isinstance(proof.get(k), list)
+                               or any(not isinstance(s, str) for s in proof[k])
+                               for k in ('bearerScopes', 'installationScopes'))
+                        or 'identify' not in proof['bearerScopes'] or 'bot' not in proof['installationScopes']):
+                    fail('The Discord installation consent evidence is incomplete. Reconnect it.')
+            if fresh:
+                self.validate_installation(cur, workspace, envelope)
+            else:
+                # Capture structural custody before I/O. Expiry is handled by
+                # the existing rotating-token path, then rechecked at commit.
+                record = identity_record(state, envelope['identityConnectionId'])
+                credential, identity = self.bind_identity(cur, workspace, record)
+                if (credential[4] != envelope.get('identityGeneration')
+                        or identity['user'] != envelope.get('user') or record.get('refreshClaim')):
+                    fail('The installation\u2019s linked identity changed. Reconnect.')
+            return channel, row, envelope
+
+        with self.local(workspace, token) as (cur, state, member):
+            channel, starting, envelope = installation(cur, state)
+            before = copy.deepcopy({k: channel.get(k) for k in bound_fields})
+            scopes = list(starting[5])
+            if token is not None:
+                actor = member
+        outcome, identity_verified = 'read_verified', False
+        try:
+            identity = self._fresh_identity(workspace, None, envelope['identityConnectionId'])
+            if (identity['authorizationGeneration'] != envelope.get('identityGeneration')
+                    or identity['userId'] != envelope.get('user') or 'identify' not in identity['scopes']):
+                fail('The linked Discord identity changed. Reconnect it.')
+            live = adapter.destinations(json.dumps(envelope))
+            identity_verified = True
+            # A live unrelated channel cannot stand in for a previously
+            # approved destination whose permissions have since been removed.
+            targets = [d for d in before.get('discordDestinations') or []
+                       if d.get('status') == 'authorized']
+            for target in targets:
+                if (target.get('workspaceId') != workspace or target.get('connectionId') != connection
+                        or target.get('authorizationGeneration') != starting[4]
+                        or not any(all(e.get(k) == target.get(k) for k in
+                                       ('applicationId', 'botUserId', 'linkedUserId', 'guildId', 'channelId'))
+                                   for e in live)):
+                    outcome = 'permission_missing'
+            if not live:
+                outcome = 'permission_missing'
+            if 'publish' not in (before.get('enabledPermissionGroups') or []):
+                outcome = 'consent_missing'
+        except Exception as error:
+            # Provider transports may raise stdlib, httpx or adapter-specific
+            # failures. An unavailable observation never extends authority.
+            outcome = ('reauthorization_required' if isinstance(error, AlphaError)
+                       and (getattr(error, 'discord_permanent', False)
+                            or error.code == 'discord_connection_required' and error.status < 500)
+                       else 'verification_unavailable')
+
+        @contextmanager
+        def commit():
+            if authenticated is not None:
+                with self.oauth._reverification_commit(workspace, authenticated) as (cur, row, principal):
+                    if not row:
+                        fail('Workspace unavailable.', 404)
+                    state = json.loads(row[0]) if isinstance(row[0], str) else copy.deepcopy(row[0])
+                    yield cur, state, principal
+            else:
+                with self.local(workspace, token) as locked:
+                    yield locked
+
+        with commit() as (cur, state, member):
+            actor = member if token is not None or authenticated is not None else actor
+            try:
+                channel, current, _ = installation(cur, state, fresh=True)
+                unchanged = (current[0] == starting[0] and current[4] == starting[4]
+                             and list(current[5]) == scopes
+                             and {k: channel.get(k) for k in bound_fields} == before)
+            except AlphaError:
+                unchanged = False
+            if not unchanged:
+                audit(cur, workspace, actor, event, connection, {'state': 'verification_unavailable', 'reason': 'connection_changed'})
+                return {'connectionId': connection, 'state': 'verification_unavailable',
+                        'identityVerified': False, 'scopes': scopes, 'ready': False}
+            if outcome == 'verification_unavailable':
+                # No freshness extension or authority change from an outage.
+                audit(cur, workspace, actor, event, connection, {'state': outcome})
+                return {'connectionId': connection, 'state': outcome, 'identityVerified': False,
+                        'scopes': scopes, 'ready': False}
+            channel['identityVerified'] = identity_verified
+            if outcome == 'read_verified':
+                if set(channel.get('scopes') or []) != set(scopes):
+                    outcome = 'scope_changed'
+                else:
+                    channel['verifiedAt'] = self.oauth.clock()
+                    if token is not None:
+                        matrix = self.oauth._capabilities(adapter, 'publish', scopes, [], self.oauth.clock(), json.dumps(envelope))
+                        channel['capabilityVerified'] = matrix['publish']['level'] == 'Direct'
+                        channel['capabilityVersion'] = adapter.capability_version
+                        for name in ('identity', 'publish', 'schedule'):
+                            value = matrix[name]
+                            cur.execute("INSERT INTO public.pr_channel_capabilities(workspace_id,connection_id,capability,level,evidence,capability_version,verified_at) VALUES(%s,%s,%s,%s,%s,%s,to_timestamp(%s)) ON CONFLICT(workspace_id,connection_id,capability) DO UPDATE SET level=excluded.level,evidence=excluded.evidence,capability_version=excluded.capability_version,verified_at=excluded.verified_at,updated_at=now()", (workspace, connection, name, value['level'], value['evidence'], value['capabilityVersion'], value['verifiedAt']))
+            if outcome != 'read_verified':
+                channel['capabilityVerified'] = False
+                cur.execute("UPDATE public.pr_channel_capabilities SET level='Unsupported',evidence='Discord identity or destination permissions could not be verified; review the connection.',updated_at=now() WHERE workspace_id=%s AND connection_id=%s AND capability<>'identity'", (workspace, connection))
+            # Fence an older success against a newer denial, even when both
+            # observations began with capabilityVerified already false.
+            channel['discordVerificationGeneration'] = str(uuid.uuid4())
+            self.save_state(cur, workspace, state)
+            audit(cur, workspace, actor, event, connection, {'state': outcome, 'proof': 'discord_installation'})
+            ready = outcome == 'read_verified' and self.oauth.commands.engine.channel_state(channel) == 'Ready for posting'
+            return {'connectionId': connection, 'state': outcome, 'identityVerified': identity_verified,
+                    'scopes': scopes, 'ready': ready}
+
     def validate_installation(self, cur, workspace, envelope):
         if envelope.get('kind') != 'installation' or not envelope.get('identityConnectionId'):
             fail('An identity grant cannot publish. Reconnect the server installation.')

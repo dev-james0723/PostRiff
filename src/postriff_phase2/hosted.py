@@ -23,7 +23,7 @@ from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
 from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
-from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
+from . import account_protection, brand_brain, campaigns, locales, manual_drafts, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
 
@@ -217,6 +217,9 @@ class PostgresWorkspaceRepository:
             audit_event = lambda state: ("connector.egress_decided", "cloud", {"cloud": productivity_connectors.egress_decision(state).get("cloud") is True})
         if action == writer_defaults.ACTION:
             audit_event = lambda state: ("writer.default_decided", "writer", {"model": writer_defaults.settings(state)["model"]})
+        if action == manual_drafts.ACTION:
+            audit_event = lambda state: ("draft.manual_saved", payload["requestId"], {
+                "draftCount": sum(v.get("manualRequestId") == payload["requestId"] for v in state.get("variants", []))})
         if action.startswith(('voice_sample', 'brand_brain_')) or action == 'voice_profile_analyze':
             audit_event = lambda state: ('voice.' + action, payload.get('sourceId', ''), {'requestId': payload.get('requestId'), 'activeRevision': state.get('speaker', {}).get('activeRevision')})
         after = None
@@ -280,6 +283,10 @@ class HostedPhase2Commands:
             raise AlphaError("Expected a structured command.")
         if state.get("workspace", {}).get("sample"):
             raise AlphaError("Hosted sample workspaces are read-only.", 403)
+        if action == manual_drafts.ACTION:
+            # Saving author text must not run a writer, change the shared brief,
+            # or invalidate existing research drafts, approvals or scheduled jobs.
+            return manual_drafts.create(state, principal, payload, self.clock())
         ensure_content_state(state)
         previous_jobs = {job["id"] for job in state.get("phase2", {}).get("jobs", [])}
         if source_policy.apply_policy_action(state, action, payload, principal, self.clock()):
