@@ -311,10 +311,13 @@ class HostedPhase2Acceptance(unittest.TestCase):
             encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
             return "header." + encoded + ".signature"
         principal = "00000000-0000-0000-0000-000000000001"
-        self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_000}), principal), 1_800_000_000.0)
-        self.assertEqual(verified_auth_time(token({"sub": principal}), principal), 0)
-        with self.assertRaises(AlphaError):
-            verified_auth_time(token({"sub": "other", "iat": 1}), principal)
+        with patch('time.time', return_value=1_800_000_000):
+            self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_000,
+                             "amr": [{"method": "oauth", "timestamp": 1_799_999_970}]}), principal), 1_799_999_970.0)
+            self.assertEqual(verified_auth_time(token({"sub": principal, "iat": 1_800_000_000}), principal), 0)
+            self.assertEqual(verified_auth_time(token({"sub": principal}), principal), 0)
+            with self.assertRaises(AlphaError):
+                verified_auth_time(token({"sub": "other", "iat": 1}), principal)
 
     def test_client_address_and_label_are_bounded(self):
         self.assertEqual(client_address({"HTTP_X_FORWARDED_FOR": "203.0.113.5, 10.0.0.1", "REMOTE_ADDR": "10.0.0.2"}), "203.0.113.5")
