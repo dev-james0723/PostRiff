@@ -52,7 +52,7 @@ def prepare(connection, dsn, *, fixture_route='management'):
     expected = [json.loads(s) for s in re.findall(r'\$expected\$(.*?)\$expected\$::jsonb', core, re.S)]
     native, custom = expected[:2]
     with connection() as db:
-        address, port, database, data = db.execute("SELECT inet_server_addr()::text,inet_server_port(),current_database(),current_setting('data_directory')").fetchone()
+        address, port, database, data = db.execute("SELECT host(inet_server_addr()),inet_server_port(),current_database(),current_setting('data_directory')").fetchone()
         if (address != '127.0.0.1' or str(port) != expected_port or database != 'postgres'
                 or not Path(data).parent.name.startswith(expected_prefixes)):
             raise RuntimeError('Server is not the existing harness-owned disposable cluster.')
