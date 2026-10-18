@@ -35,3 +35,12 @@ test('paused, expired and disconnected channels cannot start imports', () => {
   assert.ok(historyBlocker({ ...c, connectionState: 'token_expired' }, p));
   assert.ok(historyBlocker(c, { ...p, configured: false }));
 });
+
+test('Pinterest read-only reconnect retains boards without requesting any write permission', () => {
+  const { defaultConnectCapability } = helpers();
+  const p = { id: 'pinterest', trialReadonly: true, capabilities: { identity: true, boards_read: true, publish: false } };
+  assert.equal(defaultConnectCapability(p, 'identity'), 'boards_read');
+  assert.equal(defaultConnectCapability(p, 'publish'), 'boards_read');
+  assert.equal(defaultConnectCapability(p), 'boards_read');
+  assert.equal(defaultConnectCapability({ ...p, trialReadonly: false }, 'identity'), 'identity');
+});

@@ -4,8 +4,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
 import {createPinterestBroker,PINTEREST_SCOPE} from '../pinterest-broker.mjs';
+import {privateStore} from '../private-store.mjs';
 
 const identity={username:'jamesaucreates',scope:PINTEREST_SCOPE};
+test('desktop identity requests only user_accounts:read, never ads, billing, secret or Pin-writing scopes',()=>{
+ assert.equal(PINTEREST_SCOPE,'user_accounts:read');
+ for(const disallowed of ['ads:read','ads:write','billing:read','billing:write','pins:write','boards:write','read_secret','write_secret'])assert.equal(PINTEREST_SCOPE.includes(disallowed),false);
+});
 const freePort=()=>new Promise((resolve,reject)=>{const server=net.createServer();server.listen(0,'127.0.0.1',()=>{const {port}=server.address();server.close(error=>error?reject(error):resolve(port));});});
 async function fixture(t,options={}){
  const root=await fs.mkdtemp(path.join(process.cwd(),'.pinterest-broker-')),port=4317,studioPort=await freePort(),capability='a'.repeat(64),calls=[];let clock=Date.now();
@@ -28,3 +33,16 @@ for(const user of [{username:'otheraccount'},{id:undefined}])test('substituted a
 test('callback requires a nonce, exact state, and can only be used once',async t=>{const f=await fixture(t),b=await begin(f);assert.equal((await f.request(b.callback)).status,400);assert.equal(f.calls.length,0);await f.request(b.callback,{headers:{Cookie:b.cookie}});assert.equal((await f.request(b.callback,{headers:{Cookie:b.cookie}})).status,400);assert.equal(f.calls.length,2);});
 test('denied consent and unknown callback parameters never exchange a token',async t=>{const f=await fixture(t),b=await begin(f);assert.equal((await f.request(`/callback?state=${b.auth.searchParams.get('state')}&error=access_denied`,{headers:{Cookie:b.cookie}})).status,303);assert.equal(f.calls.length,0);const c=await begin(f);assert.equal((await f.request(c.callback+'&unexpected=value',{headers:{Cookie:c.cookie}})).status,400);assert.equal(f.calls.length,0);});
 test('restart requires independent identity verification and has no write routes',async t=>{const f=await fixture(t);await connect(f);const restarted=await createPinterestBroker(f.config);assert.equal(restarted.status().state,'verification_required');assert.equal((await f.request('/publish',{method:'POST'})).status,404);assert.equal((await f.request('/boards',{method:'POST'})).status,404);assert.equal((await f.request('/pins/delete',{method:'POST'})).status,404);assert.equal((await f.request('/tokens',{method:'GET'})).status,404);});
+
+test('legacy expanded scopes require fresh consent instead of being silently trusted',async t=>{
+ const f=await fixture(t);
+ await connect(f);
+ const control=(await privateStore(f.root))('pinterest-control');
+ const record=await control.get('identity');
+ await control.set('identity',{...record,scope:'user_accounts:read,ads:write'});
+ const migrated=await createPinterestBroker(f.config);
+ assert.equal(migrated.status().state,'reauthorization_required');
+ assert.equal(migrated.status().scope,'user_accounts:read');
+ assert.equal(migrated.status().publishReady,false);
+ migrated.server.closeAllConnections();
+});

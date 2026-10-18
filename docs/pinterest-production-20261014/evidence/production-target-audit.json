@@ -1,0 +1,82 @@
+{
+  "checkedAt": "2026-10-14T23:27Z",
+  "productionRef": "buoyhkbodnhzngaotoel",
+  "name": "postriff-phase2-private",
+  "liveSource": "7da3375cc0409d8e3a434955a75f57478889372b",
+  "liveDeployment": "dpl_38xMcnzCb1atSQmdjAUACQcLxw5V",
+  "ledgerCount": 62,
+  "policies": [
+    {
+      "table": "pr_jobs",
+      "name": "rapv2_browser_session",
+      "mode": "RESTRICTIVE"
+    },
+    {
+      "table": "pr_jobs",
+      "name": "tenant_read",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_jobs",
+      "name": "trusted_write",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_recurring_tasks",
+      "name": "rapv2_browser_session",
+      "mode": "RESTRICTIVE"
+    },
+    {
+      "table": "pr_recurring_tasks",
+      "name": "tenant_read",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_recurring_tasks",
+      "name": "trusted_write",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_workspaces",
+      "name": "capture_scope_read",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_workspaces",
+      "name": "own_workspace",
+      "mode": "PERMISSIVE"
+    },
+    {
+      "table": "pr_workspaces",
+      "name": "rapv2_browser_session",
+      "mode": "RESTRICTIVE"
+    }
+  ],
+  "quotaTableExists": false,
+  "credentialRlsEnabled": true,
+  "credentialRlsForced": true,
+  "credentialClientReadDenied": true,
+  "oauthRlsEnabled": true,
+  "oauthRlsForced": true,
+  "oauthClientReadDenied": true,
+  "envMetadata": {
+    "readExit": 0,
+    "pinterestCallbackOriginPresent": true,
+    "pinterestClientIdPresent": false,
+    "pinterestClientSecretPresent": false,
+    "publicPinterestGatesPresent": false,
+    "secretValuesRead": false
+  },
+  "externalMutations": 0,
+  "newProjectsCreated": 0,
+  "newOrganizationsCreated": 0,
+  "sourceCandidate": "f54028edc1eb5bd8e78d089899c694505cd15c0e",
+  "providerConsole": {
+    "appId": "1615884",
+    "tier": "Trial access active",
+    "observedAt": "2026-10-14T23:33Z",
+    "standardAccess": "NOT APPROVED",
+    "secretValuesRead": false,
+    "settingsChanged": false
+  }
+}

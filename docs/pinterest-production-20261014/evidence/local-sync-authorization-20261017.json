@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-17",
+  "humanReply": "批准本任務同類本地同步",
+  "allowed": [
+    "local merges of same-mission already-deployed canonical production baselines into isolated Pinterest branch",
+    "affected cloud verification"
+  ],
+  "separatelyGated": [
+    "push",
+    "remote merge",
+    "deployment",
+    "production SQL/configuration/credentials",
+    "live OAuth consent",
+    "real Pin",
+    "Standard submission",
+    "public enablement"
+  ],
+  "canonicalSupabase": "buoyhkbodnhzngaotoel",
+  "appliesTo7432": true
+}

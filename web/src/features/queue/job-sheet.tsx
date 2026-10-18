@@ -2,6 +2,8 @@
 import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
 
 import { PublicationReceipt } from './publication-receipt';
+import { canPublishApprovedJob, recoverablePreviewHold } from './job-dispatch';
+import { PublishApprovedPostButton } from './publish-approved-post-button';
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { toast } from 'sonner';
@@ -14,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMe } from '@/lib/api/hooks';
+import type { WorkerBinding } from '@/lib/api/types';
 import { formatDateTime, relativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { FixtureBadge, JobStateBadge } from './job-row';
@@ -47,6 +50,7 @@ export interface JobSheetProps {
   jobs: QueueJob[];
   ready: boolean;
   nowSeconds: number;
+  workerBinding?: WorkerBinding | null;
   canApprove: boolean;
   canSchedule: boolean;
   cancelPending: boolean;
@@ -229,14 +233,19 @@ function ApprovedBy({ job }: { job: QueueJob }) {
   );
 }
 
-function FooterActions({ job, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, draftAvailable }: JobSheetProps & { job: QueueJob }) {
+function FooterActions({ job, nowSeconds, workerBinding, canApprove, canSchedule, cancelPending, holdEpoch, onCancel, onPrepareAgain, draftAvailable }: JobSheetProps & { job: QueueJob }) {
   const failed = job.state === 'failed';
-  const prepare = canSchedule && (HELD.has(job.state) || failed);
+  const recoverable = recoverablePreviewHold(job, workerBinding);
+  const expired = recoverable && job.manifest.expiresAt <= nowSeconds;
+  const prepare = canSchedule && (HELD.has(job.state) || failed) && (!recoverable || expired);
   const cancel = canApprove && canCancel(job);
-  if (!prepare && !cancel) return null;
+  const publish = job.manifest.platform === 'Discord' && canPublishApprovedJob(job, nowSeconds, canApprove, workerBinding);
+  if (!prepare && !cancel && !publish) return null;
   const available = draftAvailable(job.manifest.variantId);
   return (
     <div className='flex flex-wrap items-center gap-2 [&_button]:min-h-11'>
+      {expired && <p className='text-muted-foreground w-full text-xs'>Approval window closed. Prepare this post again for a fresh review.</p>}
+      {publish && <PublishApprovedPostButton job={job} nowSeconds={nowSeconds} allowed={canApprove} workerBinding={workerBinding} />}
       {prepare && (
         <Button
           variant={failed ? 'action' : 'glass'}
