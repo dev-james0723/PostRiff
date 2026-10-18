@@ -69,6 +69,8 @@ class HostedSocial:
             pass
 
     def _provider(self, manifest):
+        if manifest['platform'] == 'Mastodon':
+            return None  # Connect-only release; review flags cannot unlock dispatch.
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
             return None
@@ -121,6 +123,8 @@ class HostedSocial:
 
     # --- submit -------------------------------------------------------------------
     def submit(self, manifest, *, dispatch_context=None):
+        if manifest['platform'] == 'Mastodon':
+            return {'state': 'held', 'confirmed': 'Mastodon currently supports account connection only. Nothing was posted.'}
         provider = self._provider(manifest)
         if provider is None:
             return {"state": "held", "confirmed": "Publishing to this platform isn't available yet. Nothing was posted."}
@@ -256,27 +260,7 @@ class HostedSocial:
         return media_id, None
 
     def _submit_mastodon(self, manifest, provider, token):
-        refusal = self._unsupported_media(manifest)
-        if refusal:
-            return refusal
-        session = provider.session(token)
-        media_ids = []
-        image = self._image(manifest)
-        if image:
-            media_id, outcome = self._mastodon_media(provider, session, image)
-            if outcome:
-                return outcome
-            media_ids.append(media_id)
-        # Mastodon keeps an Idempotency-Key for an hour, so a retried request returns the same status.
-        response = provider.api(session, "POST", "/api/v1/statuses", headers={"Idempotency-Key": manifest["idempotencyKey"][:64]},
-                                body={"status": manifest["payload"]["text"], "media_ids": media_ids, "visibility": "public"})
-        status_id = str(response.get("body", {}).get("id", "")) if isinstance(response.get("body"), dict) else ""
-        if response.get("status") == 200 and status_id.isdigit():
-            return {"state": "provider_accepted", "reference": status_id, "confirmed": "Mastodon created the post; read-back pending"}
-        early = self._classify_status(response.get("status"), response.get("body"), "Mastodon")
-        if early:
-            return early
-        return _uncertain("No conclusive Mastodon create response; do not resubmit")
+        return {'state': 'held', 'confirmed': 'Mastodon currently supports account connection only. Nothing was posted.'}
 
     def _submit_telegram(self, manifest, provider, token):
         refusal = self._unsupported_media(manifest)
