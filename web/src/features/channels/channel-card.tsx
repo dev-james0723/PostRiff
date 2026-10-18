@@ -141,6 +141,8 @@ function DisconnectButton({
             <AlertDialogDescription>
               {youtube
                 ? `Rafii removes its stored credentials and associated local YouTube data for ${account}. Approved Rafii jobs are held at the next claim. This does not cancel a native publication schedule already accepted by YouTube. Google authorization may remain active when it is shared with another connection; the result will state whether token revocation was confirmed or deferred.`
+                : platform === 'Mastodon'
+                  ? `Rafii removes its stored access to ${account} and requests token revocation on your Mastodon server. The result will say whether your server confirmed revocation. Approved Rafii posts are held; posts or schedules already accepted by your server remain there.`
                 : `Rafii loses access to ${account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.`}
             </AlertDialogDescription>
             <AlertDialogDescription lang={lang}>{copy.purge}</AlertDialogDescription>

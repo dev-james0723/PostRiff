@@ -211,10 +211,15 @@ class MastodonProvider(OAuthProvider):
         if context.get("pkce", True):
             form["code_verifier"] = context["verifier"]
         body = self._ok(self.transport("POST", f"https://{host}/oauth/token", form=form), "access_token")
+        if not _credential_shape(body.get('access_token')):
+            raise AlphaError('This Mastodon server returned an invalid access token.', 502)
+        expires = body.get('expires_in')
+        if expires is not None and (type(expires) is not int or not 1 <= expires <= 315360000):
+            raise AlphaError('This Mastodon server returned an invalid token lifetime.', 502)
         scopes = body["scope"].split() if isinstance(body.get("scope"), str) else []
         session = {"v": 1, "at": body["access_token"], "instance": host, "clientId": context["clientId"], "clientSecret": context["clientSecret"], "scope": scopes,
                    "capabilities": context.get("capabilities")}
-        return {"accessToken": json.dumps(session), "refreshToken": None, "expiresIn": body.get("expires_in"), "scopes": scopes}
+        return {"accessToken": json.dumps(session), "refreshToken": None, "expiresIn": expires, "scopes": scopes}
 
     def session(self, access_token):
         session = _load(access_token)

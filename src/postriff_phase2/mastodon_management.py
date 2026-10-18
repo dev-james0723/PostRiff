@@ -15,29 +15,8 @@ from .mastodon_release import write_qualified as mastodon_write_qualified
 from .mastodon_moderation import ACTIONS as MODERATION_ACTIONS, spec as moderation_spec
 
 
-class ApplicationCache:
-    def __init__(self, oauth, provider):
-        self.oauth, self.provider = oauth, provider
-
-    def __call__(self, host, redirect, scopes, value=None):
-        binding = digest({"redirect": redirect, "scopes": sorted(scopes), "website": self.provider.website})
-        with self.oauth.repository.connection_factory() as db, db.cursor() as cur:
-            # Serialize per binding across processes; do not register thousands of duplicate apps.
-            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("mastodon-app:" + host + binding,))
-            cur.execute("SELECT credentials_ciphertext,key_id FROM public.pr_mastodon_applications WHERE instance=%s AND binding_digest=%s", (host, binding))
-            stored = cur.fetchone()
-            if stored:
-                credentials = json.loads(self.oauth.vault.decrypt(stored[0], stored[1]))
-                expiry = credentials.get("client_secret_expires_at", 0)
-                if type(expiry) is int and (expiry == 0 or expiry > self.oauth.clock() + 600):
-                    return credentials
-            response = self.provider.transport("POST", "https://" + host + "/api/v1/apps", form={
-                "client_name": "Rafii", "redirect_uris": redirect, "scopes": " ".join(scopes), "website": self.provider.website})
-            body = self.provider._ok(response, "client_id", "client_secret")
-            credentials = {key: body[key] for key in ("client_id", "client_secret", "client_secret_expires_at") if key in body}
-            ciphertext, key_id = self.oauth.vault.encrypt(json.dumps(credentials))
-            cur.execute("INSERT INTO public.pr_mastodon_applications(instance,binding_digest,credentials_ciphertext,key_id) VALUES(%s,%s,%s,%s) ON CONFLICT(instance,binding_digest) DO UPDATE SET credentials_ciphertext=excluded.credentials_ciphertext,key_id=excluded.key_id,updated_at=now()", (host, binding, ciphertext, key_id))
-            return credentials
+# Compatibility import: Connect and management use the same strict application custody.
+from .mastodon_connect import ApplicationCache
 
 
 READS = {

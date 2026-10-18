@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
@@ -20,6 +20,7 @@ import { CONNECT_CAPABILITY_OPTIONS } from '@/lib/channels/capabilities';
 import { historyImportCopy } from '@/lib/channels/history-import-copy';
 import { usePreferences } from '@/lib/preferences';
 import { defaultConnectCapability } from '@/lib/channels/onboarding';
+import { mastodonReconnectServer } from '@/lib/channels/mastodon-connect';
 import { rememberExpectedReconnect } from '@/lib/channels/connect-expect';
 import { CONNECT_CAPABILITIES, type ConnectCapability } from '@/lib/channels/state';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
@@ -110,6 +111,7 @@ export function ConnectSheet({
   const [providerId, setProviderId] = useState<string>('');
   const [capability, setCapability] = useState<ConnectCapability>('publish');
   const [busy, setBusy] = useState(false);
+  const attempt = useRef(0);
   const [pending, setPending] = useState<OAuthStart | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A Bluesky handle or a Mastodon server, when the platform needs one before connecting.
@@ -137,6 +139,7 @@ export function ConnectSheet({
   // must not reset an in-progress choice, so depend on the stable provider id signature.
   const providerSignature = providers.map((provider) => provider.id).join('|');
   useEffect(() => {
+    attempt.current += 1;
     if (!open) return;
     const search = new URLSearchParams(window.location.search);
     const urlProviderId = search.get('connect') ?? undefined;
@@ -151,34 +154,43 @@ export function ConnectSheet({
     setPending(null);
     setError(null);
     setBusy(false);
-    setInputValue('');
+    setInputValue(initial?.id === 'mastodon' ? mastodonReconnectServer(request?.reconnect?.account) : '');
     setNotSeenYet(false);
-  }, [open, providerSignature, request?.providerId, request?.capability]);
+    return () => { attempt.current += 1; };
+  }, [open, providerSignature, request?.providerId, request?.capability, request?.reconnect?.account, workspaceId]);
 
   function choosePlatform(id: string) {
+    attempt.current += 1;
+    setBusy(false);
     const next = providers.find((p) => p.id === id);
     setProviderId(id);
-    setCapability(defaultCapability(next, capability));
+    setCapability(defaultCapability(next, id === 'mastodon' ? undefined : capability));
     setError(null);
     setInputValue('');
   }
 
   async function start() {
     if (!provider) return;
+    const currentAttempt = ++attempt.current;
     setBusy(true);
     setError(null);
     try {
-      const input = provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : undefined;
+      const input = provider.startInput || (provider.id === 'mastodon' && reconnect) ? {
+        ...(provider.startInput ? { [provider.startInput.name]: inputValue.trim() } : {}),
+        ...(provider.id === 'mastodon' && reconnect ? { connectionId: reconnect.channelId } : {})
+      } : undefined;
       const started = await api.oauthStart(workspaceId, provider.id, capability, input);
+      // A closed sheet or changed workspace/provider must never display an old grant.
+      if (currentAttempt !== attempt.current) return;
       if (reconnect) {
         rememberExpectedReconnect({ channelId: reconnect.channelId, account: reconnect.account, transactionId: started.transactionId });
       }
       setPending(started);
     } catch (err) {
       // Shown inline above the choices; no toast on top of it.
-      setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
+      if (currentAttempt === attempt.current) setError(err instanceof ApiError ? err.message : 'Try again in a moment.');
     } finally {
-      setBusy(false);
+      if (currentAttempt === attempt.current) setBusy(false);
     }
   }
 
@@ -209,9 +221,11 @@ export function ConnectSheet({
 
   const needsInput = Boolean(provider?.startInput) && inputValue.trim().length === 0;
   const title = reconnect ? `Reconnect ${reconnect.account}` : 'Connect account';
-  // Reconnect keeps its one real gotcha visible: signing in as someone else adds a new account.
+  // Mastodon binds the return to this connection; other providers may add a different account.
   const description = reconnect
-    ? `Sign in as ${reconnect.account}${provider ? ` on ${provider.platform}` : ''}. Another account would be added separately.`
+    ? providerId === 'mastodon'
+      ? `Sign in as ${reconnect.account} on Mastodon. A different account cannot replace this connection.`
+      : `Sign in as ${reconnect.account}${provider ? ` on ${provider.platform}` : ''}. Another account would be added separately.`
     : 'Choose a platform and what Rafii may do.';
 
   return (
@@ -350,12 +364,18 @@ export function ConnectSheet({
                     id='connect-start-input'
                     value={inputValue}
                     onChange={(event) => setInputValue(event.target.value)}
-                    placeholder={provider.startInput.placeholder ?? undefined}
+                    placeholder={providerId === 'mastodon' ? 'your-server.example or @name@your-server.example' : provider.startInput.placeholder ?? undefined}
+                    aria-describedby={providerId === 'mastodon' ? 'mastodon-server-help' : undefined}
+                    inputMode={providerId === 'mastodon' ? 'url' : 'text'}
+                    disabled={busy}
                     autoComplete='off'
                     autoCapitalize='none'
                     spellCheck={false}
                     maxLength={253}
                   />
+                  {providerId === 'mastodon' && (
+                    <p id='mastodon-server-help' className='text-muted-foreground text-xs leading-relaxed'>Your Mastodon server hosts your account. Enter its domain, HTTPS URL or @name@server. You will approve access on that server. Each connected account keeps its own permissions.</p>
+                  )}
                 </div>
               )}
 
@@ -364,9 +384,6 @@ export function ConnectSheet({
                   force={capability !== 'identity' && capability !== 'posts_read'}
                   onAvailabilityChange={onPolicyAvailabilityChange} />
               )}
-              {providerId === 'mastodon' && (
-                <p className='text-muted-foreground text-xs leading-relaxed'>Your Mastodon server hosts your account. Enter its domain or @name@server. Each connected account keeps its own permissions and destination.</p>
-              )}
               <section className='flex flex-col gap-2' aria-labelledby='connect-capability-heading' data-tour='connect-capability'>
                 <h3 id='connect-capability-heading' className='text-sm font-medium'>
                   What Rafii may do
@@ -374,7 +391,12 @@ export function ConnectSheet({
                 {offered.length === 0 ? (
                   <StateMessage kind='unsupported' layout='inline' title={`Nothing to connect on ${provider?.platform ?? 'this platform'} yet.`} />
                 ) : (
-                  <RadioGroup value={capability} onValueChange={(value) => setCapability(value as ConnectCapability)} aria-labelledby='connect-capability-heading'>
+                  <RadioGroup value={capability} onValueChange={(value) => {
+                    attempt.current += 1;
+                    setBusy(false);
+                    setError(null);
+                    setCapability(value as ConnectCapability);
+                  }} aria-labelledby='connect-capability-heading'>
                     {CONNECT_CAPABILITY_OPTIONS.filter((option) => offered.includes(option.key)).map((option) => (
                       <RadioGroupItem
                         key={option.key}
@@ -389,7 +411,7 @@ export function ConnectSheet({
                 )}
                 {provider && (provider.executionPaused || !provider.productionReviewed) && (
                   <p className='text-muted-foreground text-xs leading-relaxed'>
-                    {provider.executionPaused ? `${provider.platform} is paused.` : 'Publishing awaits platform review. Test accounts can still connect.'}
+                    {provider.executionPaused ? `${provider.platform} is paused.` : providerId === 'mastodon' ? 'Connecting your account does not enable publishing. Publishing is available only when Rafii reports it ready.' : 'Publishing awaits platform review. Test accounts can still connect.'}
                   </p>
                 )}
               </section>

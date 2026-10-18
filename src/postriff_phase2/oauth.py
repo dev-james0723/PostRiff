@@ -77,7 +77,7 @@ class OAuthService:
         self.history = SocialHistoryService(self)
         mastodon = self.providers.get('mastodon')
         if mastodon is not None and getattr(mastodon, 'id', None) == 'mastodon':
-            from .mastodon_management import ApplicationCache
+            from .mastodon_connect import ApplicationCache
             mastodon.application_cache = ApplicationCache(self, mastodon)
 
     def provider_catalog(self):
@@ -381,6 +381,13 @@ class OAuthService:
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
             throttle(cur, f"oauth-start:{workspace_id}", 20, 600)
+            reconnect_id = inputs.get('connectionId') if provider_id == 'mastodon' else None
+            if reconnect_id is not None:
+                if not isinstance(reconnect_id, str) or not 1 <= len(reconnect_id) <= 128:
+                    raise AlphaError('Choose a Mastodon connection to reconnect.', 400)
+                cur.execute("SELECT provider_account_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon'", (workspace_id, reconnect_id))
+                if not cur.fetchone():
+                    raise AlphaError('Connection unavailable.', 404)
         verifier, challenge = pkce_pair()
         extra, authorize_url = {}, None
         if adapter.connect_kind == "bot_code":
@@ -401,6 +408,8 @@ class OAuthService:
             begun = adapter.begin(redirect, state, verifier, challenge, scopes, value.strip() if isinstance(value, str) else None)
             context, authorize_url = begun["context"], begun["authorizeUrl"]
             scopes = begun.get('scopes', scopes)
+            if provider_id == 'mastodon' and reconnect_id is not None:
+                context['connectionId'] = reconnect_id
         ciphertext, key_id = self.vault.encrypt(json.dumps({"verifier": verifier, **context}))
         with self.repository.transaction(token, workspace_id) as (cur, row, principal):
             require(_membership(row), "manage_connections")
@@ -527,6 +536,14 @@ class OAuthService:
             cur.execute("UPDATE public.pr_oauth_transactions SET consumed_at=now(),outcome='exchanged' WHERE id::text=%s", (transaction_id,))
             verifier = self.vault.decrypt(verifier_ct, key_id)
             youtube_context = {}
+            mastodon_context = {}
+            if provider_id == 'mastodon':
+                try:
+                    mastodon_context = json.loads(verifier)
+                except (TypeError, ValueError) as error:
+                    raise AlphaError('Connection request unavailable.', 404) from error
+                if not isinstance(mastodon_context, dict):
+                    raise AlphaError('Connection request unavailable.', 404)
             if provider_id == 'youtube' and verifier.startswith('{'):
                 youtube_context = json.loads(verifier)
                 verifier = youtube_context['pkce']
@@ -576,7 +593,12 @@ class OAuthService:
             if provider_id == 'youtube':
                 from .youtube.model import has_scopes
                 missing = sorted(scope for scope in scopes if not has_scopes(granted, (scope,)))
+            if provider_id == 'mastodon':
+                from .mastodon_protocol import has_scopes
+                missing = sorted(scope for scope in scopes if not has_scopes(granted, (scope,)))
             connection_id = self._connection_id(provider_id, identity['providerAccountId'], getattr(adapter, 'authorization_lane', 'standard'))
+            if mastodon_context.get('connectionId') and mastodon_context['connectionId'] != connection_id:
+                raise AlphaError('You selected a different Mastodon account. Connect it separately; the existing account was not replaced.', 409, code='mastodon_account_changed')
             if youtube_context.get('connectionId') and youtube_context['connectionId'] != connection_id:
                 raise AlphaError('You selected a different YouTube channel. Connect it separately; the existing channel was not replaced.', 409, code='youtube_channel_changed')
             from .billing import require_plan_capacity
@@ -1151,6 +1173,8 @@ class OAuthService:
                             cur.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,refresh_ciphertext=%s,key_id=%s,refresh_supported=%s,updated_at=now() WHERE workspace_id=%s AND connection_id=%s', (access_ct, refresh_ct, key_id, bool(refresh_supported), workspace_id, connection_id))
                     now = self.clock()
                     expired = bool(expires and expires <= now)
+                    if provider == 'mastodon' and expired:
+                        raise AlphaError('Mastodon access expired. Reconnect this account to authorize Rafii again.', 409, code='reauthorization_required')
                     if provider == 'instagram' and expired:
                         raise AlphaError('Instagram access expired; re-authorization required. Expired long-lived tokens cannot be refreshed.', 409, code='reauthorization_required')
                     # Refresh requires a still-valid token at least 24 hours old.
