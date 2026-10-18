@@ -10,12 +10,43 @@ from postriff_alpha.domain import AlphaError
 from postriff_phase2.mastodon_connect import ApplicationCache
 from postriff_phase2.mastodon_protocol import instance_host
 from postriff_phase2.oauth import OAuthService
+from postriff_phase2.hosted_social import HostedSocial
 from postriff_phase2.social_connectors import MastodonProvider
 from test_hosted_wave1_connectors import BASE, PUBLIC, Wire, ok
 import test_hosted_wave1_connectors as wave1
 
 
 class MastodonConnectContracts(unittest.TestCase):
+    def test_connect_only_boundary_survives_review_flags_and_existing_write_grants(self):
+        provider = MastodonProvider(BASE, transport=Mock(), resolver=PUBLIC)
+        provider.production_reviewed = provider.publish_live_tested = provider.publishing_permission = True
+        provider.account_scoped_direct = provider.server_schedule = True
+        provider.publisher = Mock()  # A mounted publisher must not bypass this release boundary.
+        grants = ['read:accounts', 'read:statuses', 'write:statuses', 'write:media']
+        matrix = OAuthService._capabilities(provider, 'publish', grants, [], 100, 'old-token')
+        self.assertEqual(matrix['identity']['level'], 'Direct')
+        self.assertTrue(all(value['level'] == 'Unsupported' for key, value in matrix.items() if key != 'identity'))
+        service = OAuthService(SimpleNamespace(), SimpleNamespace(), SimpleNamespace(fernet=True),
+                               {'mastodon': provider}, BASE, clock=lambda: 100)
+        catalog = next(row for row in service.provider_catalog() if row['id'] == 'mastodon')
+        self.assertTrue(catalog['capabilities']['identity'])
+        self.assertFalse(any(value for key, value in catalog['capabilities'].items() if key != 'identity'))
+        self.assertEqual(catalog['readinessChecklist']['requestedScopes'], ['read:accounts'])
+        with self.assertRaises(AlphaError) as error:
+            service.start('workspace', 'session', 'mastodon', 'publish')
+        self.assertEqual(error.exception.code, 'mastodon_connect_only')
+        oauth = SimpleNamespace(token_for_worker=Mock(side_effect=AssertionError('Must refuse before token custody')))
+        telegram = SimpleNamespace(production_reviewed=True, execution_enabled=True, publisher=None)
+        social = HostedSocial(oauth, {'mastodon': provider, 'telegram': telegram})
+        manifest = {'platform': 'Mastodon', 'workspaceId': 'workspace', 'channelId': 'connection'}
+        self.assertEqual(social.submit(manifest)['state'], 'held')
+        self.assertEqual(social._submit_mastodon(manifest, provider, 'old-write-token')['state'], 'held')
+        self.assertIsNone(social._provider(manifest))
+        self.assertIs(social._provider({'platform': 'Telegram'}), telegram)
+        oauth.token_for_worker.assert_not_called()
+        provider.transport.assert_not_called()
+        provider.publisher.submit.assert_not_called()
+
     def test_rejects_url_credentials_paths_ports_and_nonpublic_hosts(self):
         for value in ('https://name:secret@mastodon.social', 'https://mastodon.social/path',
                       'https://mastodon.social?target=local', 'https://mastodon.social:8443',

@@ -131,6 +131,11 @@ class OAuthService:
                     'reply': bool(adapter and normalized['comments_reply'] == 'supported' and adapter.capability_scopes('reply')),
                 }
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
+            if pid == 'mastodon':
+                # This release authorizes Connect only. Review/config flags cannot
+                # advertise management or publishing from the legacy adapter.
+                legacy = {cap: cap == 'identity' and bool(adapter) for cap in legacy}
+                requested = list(cls.SCOPES['identity'])
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
@@ -317,6 +322,8 @@ class OAuthService:
             raise AlphaError('Expected structured connection inputs.', 400)
         lane = inputs.get('authorizationLane', 'standard') if provider_id == 'youtube' else 'standard'
         adapter = self._youtube_provider(lane) if provider_id == 'youtube' else self._provider(provider_id)
+        if provider_id == 'mastodon' and capability != 'identity':
+            raise AlphaError('Mastodon currently supports account connection only. Publishing and management are not enabled.', 409, code='mastodon_connect_only')
         if provider_id == 'youtube' and (capability == 'autopilot' and lane != 'agentic'
                 or lane == 'agentic' and inputs.get('agenticConsent') is not True):
             raise AlphaError('Explicitly approve the separate AI-agent connection before requesting its permissions.', 403, code='youtube_agentic_consent_required')
@@ -926,6 +933,12 @@ class OAuthService:
         and an account-scoped Standard Access grant remain distinct: the latter can prove Direct
         execution only for the exact connected account.
         """
+        if getattr(adapter, 'id', None) == 'mastodon':
+            from .mastodon_protocol import has_scopes
+            matrix = unsupported_matrix()
+            if has_scopes(granted, ('read:accounts',)):
+                set_level(matrix, 'identity', 'Direct', 'Mastodon account connected. Publishing and management are not enabled.', now, adapter.capability_version)
+            return matrix
         if getattr(adapter, 'id', None) == 'youtube':
             from .youtube.model import READ, UPLOAD, MANAGE, ANALYTICS, has_scopes, project_public_gate
             matrix = unsupported_matrix()
