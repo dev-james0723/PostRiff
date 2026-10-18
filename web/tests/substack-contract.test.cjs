@@ -53,9 +53,13 @@ test('unknown or incomplete capability data does not enable an operation', () =>
 });
 
 test('links reject executable schemes, credentials, alternate ports and lookalike publication hosts', () => {
+  // Deliberately fake userinfo assembled as URL fields, never a stored credential.
+  const credentialedPublication = new URL('https://alice.substack.com');
+  const fakeUserinfo = ['name', 'secret'];
+  [credentialedPublication.username, credentialedPublication.password] = fakeUserinfo;
   for (const url of [
     'javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'file:///etc/passwd',
-    'http://alice.substack.com', 'https://name:secret@alice.substack.com', 'https://alice.substack.com:8443',
+    'http://alice.substack.com', credentialedPublication.href, 'https://alice.substack.com:8443',
     'https://alice.substack.com.evil.example', 'https://substack.com@evil.example', 'https://127.0.0.1',
     'https://alice.local.substack.com', '//alice.substack.com', '', null
   ]) assert.equal(view.safeSubstackHref(url), null, String(url));

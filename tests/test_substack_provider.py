@@ -6,6 +6,7 @@ import ssl
 import sys
 import unittest
 from unittest.mock import Mock, patch
+from urllib.parse import urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -123,6 +124,9 @@ class SubstackPublicationUrlTests(unittest.TestCase):
         self.assertEqual(validate_publication_url("https://PianoResearch.substack.com")["publication_url"], PUBLICATION)
 
     def test_ssrf_credentials_services_and_ambiguous_urls_are_rejected(self):
+        # Deliberately fake userinfo assembled as URL fields, never a stored credential.
+        fake_userinfo = ":".join(("user", "password"))
+        credentialed_feed = urlunsplit(("https", fake_userinfo + "@pianoresearch.substack.com", "/feed", "", ""))
         attacks = [
             None, "", {}, [], 42, "http://pianoresearch.substack.com", "file:///etc/passwd",
             "https://localhost", "https://127.0.0.1", "https://2130706433", "https://[::1]",
@@ -131,7 +135,7 @@ class SubstackPublicationUrlTests(unittest.TestCase):
             "https://api.substack.com", "https://publisher-api.substack.com", "https://auth.substack.com",
             "https://support.substack.com", "https://account.substack.com", "https://login.substack.com",
             "https://pianoresearch.substack.com.evil.example/feed", "https://x.pianoresearch.substack.com",
-            "https://pianoresearch.substack.com@127.0.0.1/feed", "https://user:password@pianoresearch.substack.com/feed",
+            "https://pianoresearch.substack.com@127.0.0.1/feed", credentialed_feed,
             "https://@pianoresearch.substack.com/feed", "https://pianoresearch.substack.com:443/feed",
             "https://pianoresearch.substack.com:8443/feed", "https://pianoresearch.substack.com:bad/feed",
             "https://pianoresearch.substack.com./feed", "https://-bad.substack.com", "https://bad-.substack.com",

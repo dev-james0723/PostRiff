@@ -1088,7 +1088,8 @@ class HostedApplication:
                 if len(parts) == 4 and method == "GET":
                     from .connection_health import annotate_channels, environment
                     channels = annotate_channels(oauth.channels(parts[2], token), parts[2], environment(service))
-                    channels["substack"] = {"available": bool(getattr(getattr(service, "substack", None), "enabled", False))}
+                    if bool(getattr(getattr(service, "substack", None), "enabled", False)):
+                        channels["substack"] = {"available": True}
                     return self._json(start_response, 200, channels)
                 if len(parts) == 7 and parts[5] == "oauth" and parts[6] == "start" and method == "POST":
                     body = self._body(environ)
