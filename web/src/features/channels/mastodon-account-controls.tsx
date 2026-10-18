@@ -36,7 +36,7 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
       {value.resource === 'live_events' && <p role='status' className='mb-2'>Live updates: {String(value.state ?? 'unavailable')}. {typeof value.reason === 'string' ? value.reason : 'Only this foreground window was read; use notifications for missed events.'}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
+        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>

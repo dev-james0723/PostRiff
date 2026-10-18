@@ -536,6 +536,12 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(post['metrics']['likes']['value'], 5); self.assertEqual(post['metrics']['likes']['nativeName'], 'favourites_count')
         self.assertNotIn('reach', post['metrics']); self.assertEqual(post['rates']['likesPerView']['value'], None)
 
+    def test_thread_context_cross_tenant_denial_precedes_provider_io(self):
+        self.calls.clear()
+        with self.assertRaises(AlphaError):
+            self.manager.thread_context(self.foreign, self.actor, self.connection_id, '123')
+        self.assertEqual(self.calls, [])
+
     def test_cross_tenant_denial_sends_no_provider_request(self):
         before = len(self.calls)
         for workspace, actor in ((self.workspace, self.other), (self.foreign, self.other)):

@@ -5,6 +5,7 @@ outcomes are never resubmitted. Read responses stay ephemeral and out of AI/hist
 """
 import json
 import re
+from urllib.parse import parse_qs
 
 from postriff_alpha.domain import AlphaError
 from .contracts import digest
@@ -235,7 +236,8 @@ class MastodonManagement:
                 return {"connectionId": connection, "instance": session["instance"], "posts": rows, "coverage": "latest 40; not complete history"}
             # Only public/unlisted authored posts may enter this broader analytics response.
             metrics = [{"id": r["id"], "url": r.get("url"), "createdAt": r.get("created_at"),
-                        "favourites": r.get("favourites_count"), "boosts": r.get("reblogs_count"), "replies": r.get("replies_count")}
+                        "favourites": r.get("favourites_count"), "boosts": r.get("reblogs_count"), "replies": r.get("replies_count"),
+                        "quotes": r.get("quotes_count") if type(r.get("quotes_count")) is int and 0 <= r["quotes_count"] <= 2**53 - 1 else None}
                        for r in rows if isinstance(r, dict) and r.get("id") and r.get("visibility") in ("public", "unlisted")
                        and not r.get("reblog") and str((r.get("account") or {}).get("id")) == account_id]
             profile = self._result(provider.api(session, "GET", "/api/v1/accounts/verify_credentials"))
@@ -255,6 +257,28 @@ class MastodonManagement:
         self._read_fence(workspace, token, connection, grant)
         return {"connectionId": connection, "instance": session["instance"], "resource": resource,
                 "data": data, "coverage": "instance-local, bounded page"}
+
+    def thread_context(self, workspace, token, connection, post_id, cursor=None):
+        from .mastodon_context import checked_cursor, page, public_excerpt
+        if not isinstance(post_id, str) or not ID.fullmatch(post_id):
+            raise AlphaError('Choose an instance-local Mastodon status ID, never a URL.', 400)
+        checked_cursor(cursor)
+        # _grant proves tenant/role ownership before any discovery/token/provider read.
+        provider, grant, session = self._grant(workspace, token, connection)
+        self._scopes(grant, ('read:statuses',))
+        target = self._result(provider.api(session, 'GET', '/api/v1/statuses/' + post_id))
+        if not isinstance(target, dict) or str(target.get('id')) != post_id:
+            raise AlphaError('Mastodon returned another thread target.', 502)
+        if public_excerpt(target, 'target') is None:
+            raise AlphaError('Public thread context is unavailable for this status.', 403)
+        response = provider.api(session, 'GET', '/api/v1/statuses/' + post_id + '/context')
+        data = self._result(response)
+        result = page(target, data, cursor, binding=[workspace, connection, session['instance']])
+        self._read_fence(workspace, token, connection, grant)
+        headers = response.get('headers') or {}
+        return {'connectionId': connection, 'instance': session['instance'], 'resource': 'thread_context',
+                **result, 'upstreamRefreshPending': any(str(k).lower() == 'mastodon-async-refresh' for k in headers),
+                'privateContentPolicy': 'Only public/unlisted non-CW, non-sensitive excerpts; no remote URL followed.'}
 
     def preview(self, workspace, token, connection, payload):
         if not isinstance(payload, dict):
@@ -408,6 +432,18 @@ def handle(app, environ, start_response, service, token, method, parts):
     # /api/workspaces/{workspace}/channels/{connection}/mastodon/{resource|actions}
     manager = MastodonManagement(service)
     workspace, connection = parts[2], parts[4]
+    if len(parts) == 8 and parts[6] == 'context' and method == 'GET':
+        raw_query = environ.get('QUERY_STRING', '')
+        if not isinstance(raw_query, str) or len(raw_query) > 256:
+            raise AlphaError('Thread context query exceeds its bound.', 400)
+        try:
+            query = parse_qs(raw_query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
+        except ValueError:
+            raise AlphaError('Choose one bounded thread context cursor.', 400) from None
+        if set(query) - {'cursor'} or any(len(values) != 1 for values in query.values()):
+            raise AlphaError('Choose one bounded thread context cursor.', 400)
+        return app._json(start_response, 200, manager.thread_context(
+            workspace, token, connection, parts[7], query.get('cursor', [None])[0]))
     if len(parts) == 7 and method == "GET":
         return app._json(start_response, 200, manager.read(workspace, token, connection, parts[6]))
     if len(parts) == 7 and parts[6] == "actions" and method == "POST":

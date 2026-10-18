@@ -38,6 +38,21 @@ class NativeMetricsTests(unittest.TestCase):
         result = self.fetch(self.client(favourites_count=None, reblogs_count='3', replies_count=True))
         self.assertEqual(result['found'], {})
 
+    def test_native_quotes_are_presence_based_not_inferred_from_server_version(self):
+        # Native quotes_count exists from Mastodon4.5; older/omitted/null is unavailable.
+        for value in (None, True, -1, '4', 4.0, 2**53):
+            with self.subTest(value=value):
+                self.assertNotIn('quotes', self.fetch(self.client(quotes_count=value))['found'])
+        for value in (0, 4):
+            self.assertEqual(self.fetch(self.client(quotes_count=value))['found']['quotes'], value)
+        self.assertNotIn('quotes', self.fetch(self.client())['found'])
+        cur = Mock()
+        recorded = insights.record_observations(cur, 'w', 'c', 'mastodon', '123', None,
+                                                {}, 'https://mastodon.social/api/v1/statuses/123', 1)
+        self.assertEqual(next(row for row in recorded if row['metric'] == 'quotes')['availability'], 'unavailable')
+        quote_params = next(call.args[1] for call in cur.execute.call_args_list if call.args[1][5] == 'quotes')
+        self.assertIsNone(quote_params[7])
+
     def test_private_observation_is_not_recorded(self):
         cur = Mock(); client = self.client(visibility='private')
         oauth = SimpleNamespace(providers={'mastodon': client}, token_for_worker=lambda *_: {'accessToken': 'synthetic', 'providerAccountId': '10@mastodon.social'})

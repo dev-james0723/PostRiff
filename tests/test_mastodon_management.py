@@ -144,7 +144,7 @@ class ProtocolTests(unittest.TestCase):
             result = analytics_summary(ctx, {'connectionId': 'connected'})
         self.assertEqual(result['data']['following'], None)
         self.assertEqual(result['data']['postCount'], None)
-        self.assertEqual(result['data']['observations'], [{'id': '123', 'createdAt': None, 'favourites': 3, 'boosts': None, 'replies': 0}])
+        self.assertEqual(result['data']['observations'], [{'id': '123', 'createdAt': None, 'favourites': 3, 'boosts': None, 'replies': 0, 'quotes': None}])
         self.assertNotIn('Ignore', json.dumps(result))
 
     def test_existing_mastodon_automation_requires_authority_and_can_pause(self):

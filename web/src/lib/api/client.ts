@@ -372,6 +372,8 @@ export function createApi(getToken: TokenSource) {
       get<{ connectionId: string; scope?: 'connection' | 'post'; destinations: ChannelDestination[] }>(`${ws(w)}/channels/${encodeURIComponent(id)}/destinations`),
     mastodonRead: (w: string, id: string, resource: string) =>
       get<Record<string, unknown>>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/${encodeURIComponent(resource)}`),
+    mastodonThreadContext: (w: string, id: string, postId: string, cursor?: string) =>
+      get<Record<string, unknown>>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/context/${encodeURIComponent(postId)}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
     mastodonSavedPreview: (w: string, id: string, actionId: string) =>
       get<{ actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown> } }>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/actions/${encodeURIComponent(actionId)}`),
     mastodonPreview: (w: string, id: string, payload: Record<string, unknown>) =>

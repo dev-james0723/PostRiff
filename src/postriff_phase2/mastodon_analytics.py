@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from .mastodon_protocol import ID
 
-METRICS = ('likes', 'reposts', 'replies')
+METRICS = ('likes', 'reposts', 'replies', 'quotes')
 OFFSETS = ('t0', '1h', '24h', '7d', 'backfill')
 
 

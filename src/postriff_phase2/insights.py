@@ -16,7 +16,7 @@ FAMILIES = {
     "resonance": ("likes", "comments", "replies", "reposts", "quotes", "shares", "saved"),
 }
 INSIGHT_METRICS = {"threads": ("views", "likes", "replies", "reposts", "quotes", "shares"), "instagram": ("reach", "views", "likes", "comments", "saved", "shares"),
-                   "mastodon": ("likes", "reposts", "replies")}
+                   "mastodon": ("likes", "reposts", "replies", "quotes")}
 MIN_COMPARABLE = 3
 # Cross-post comparisons (coworker performance, campaign triggers) read every post at the same age: the +24h scheduled
 # reading, or a legacy row with no offset. Values read at t0, +1h, +7d or by a backfill are not like-for-like.
@@ -61,8 +61,9 @@ def fetch_post_insights(transport, access_token, provider, provider_post_id, *, 
                 or str((body.get('account') or {}).get('id')) + '@' + session['instance'] != account_id
                 or body.get('visibility') not in ('public', 'unlisted') or body.get('reblog')):
             return {'status': 200, 'found': {}, 'endpoint': endpoint, 'privacyExcluded': True}
-        found = {metric: body[native] for metric, native in (('likes', 'favourites_count'), ('reposts', 'reblogs_count'), ('replies', 'replies_count'))
-                 if type(body.get(native)) is int and body[native] >= 0}
+        found = {metric: body[native] for metric, native in (('likes', 'favourites_count'), ('reposts', 'reblogs_count'), ('replies', 'replies_count'), ('quotes', 'quotes_count'))
+                 if type(body.get(native)) is int and body[native] >= 0
+                 and (metric != 'quotes' or body[native] <= 2**53 - 1)}
         return {'status': 200, 'found': found, 'endpoint': endpoint, 'dataScope': 'counts observed by this instance; Fediverse coverage is incomplete'}
     endpoint = insights_endpoint(provider, provider_post_id)
     response = transport("GET", endpoint + "?" + urlencode({"metric": ",".join(metrics), "access_token": access_token}))
@@ -128,7 +129,7 @@ def latest_observations(cur, workspace_id, basis=None):
     period = "extract(epoch from o.period_start)" if offset != "NULL::text" else "NULL::numeric"
     where = "" if basis is None else f" AND coalesce({offset}, %s)=%s"
     # Mastodon counts must remain bound to the live tenant/account/instance, including central Analytics.
-    where += " AND (o.provider <> 'mastodon' OR (o.observed_at >= now()-interval '90 days' AND o.metric IN ('likes','reposts','replies') AND EXISTS (SELECT 1 FROM public.pr_encrypted_credentials c WHERE c.workspace_id=o.workspace_id AND c.connection_id=o.connection_id AND c.provider='mastodon' AND c.revoked_at IS NULL AND o.source_endpoint='https://' || split_part(c.provider_account_id,'@',2) || '/api/v1/statuses/' || o.provider_post_id)))"
+    where += " AND (o.provider <> 'mastodon' OR (o.observed_at >= now()-interval '90 days' AND o.metric IN ('likes','reposts','replies','quotes') AND EXISTS (SELECT 1 FROM public.pr_encrypted_credentials c WHERE c.workspace_id=o.workspace_id AND c.connection_id=o.connection_id AND c.provider='mastodon' AND c.revoked_at IS NULL AND o.source_endpoint='https://' || split_part(c.provider_account_id,'@',2) || '/api/v1/statuses/' || o.provider_post_id)))"
     params = (workspace_id,) if basis is None else (workspace_id, basis, basis)
     cur.execute(f"SELECT DISTINCT ON (provider,connection_id,provider_post_id,job_id,metric) provider,provider_post_id,job_id,metric,definition_version,value,unit,availability,extract(epoch from observed_at),extract(epoch from ingested_at),connection_id,{offset},{period} FROM public.pr_metric_observations o WHERE workspace_id=%s" + where + " ORDER BY provider,connection_id,provider_post_id,job_id,metric,(availability='available') DESC,observed_at DESC,ingested_at DESC,id DESC", params)
     return cur.fetchall()
@@ -147,7 +148,7 @@ def summary(cur, workspace_id, jobs, now, basis=None):
         post["metrics"][metric] = {"value": float(value) if availability == "available" else None, "display": (str(int(value)) if value is not None and float(value).is_integer() else str(value)) if availability == "available" else "Unavailable", "availability": availability, "unit": unit, "nativeName": metric, "readOffset": read_offset, "observedAt": float(observed), "ingestedAt": float(ingested), "periodStart": float(period[0]) if period and period[0] is not None else None}
         post["metrics"][metric]["definitionVersion"] = version
         if provider == 'mastodon':
-            post['metrics'][metric]['nativeName'] = {'likes': 'favourites_count', 'reposts': 'reblogs_count', 'replies': 'replies_count'}.get(metric, metric)
+            post['metrics'][metric]['nativeName'] = {'likes': 'favourites_count', 'reposts': 'reblogs_count', 'replies': 'replies_count', 'quotes': 'quotes_count'}.get(metric, metric)
             post['dataScope'] = 'Counts observed by the connected instance; not Fediverse-wide coverage.'
 
     job_index = {j.get("id"): j for j in jobs if j.get("id") and j.get("providerReference")}
