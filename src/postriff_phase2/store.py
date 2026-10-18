@@ -322,6 +322,8 @@ class Phase2Store(Store):
             if review["digest"] != p.get("digest") or p.get("confirmed") is not True or review["status"] not in ("needs_review", "approved"):
                 raise AlphaError("Review and explicitly approve this exact destination manifest.", 409)
             manifest = review["manifest"]
+            if manifest.get('mastodonNativePoll') is not None and digest(manifest) != review['digest']:
+                raise AlphaError('The exact poll review changed. Prepare a new review.', 409)
             if not self.current(s, manifest) or manifest["expiresAt"] <= now or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= now) or self.channel_state(find(data["channels"], manifest["channelId"])) != "Ready for posting":
                 raise AlphaError("This approval is stale. Prepare a new review.", 409)
             existing = next((j for j in data["jobs"] if j["manifest"]["idempotencyKey"] == manifest["idempotencyKey"]), None)
@@ -402,11 +404,14 @@ class Phase2Store(Store):
         # Language is not part of the match: a channel can carry drafts in several languages (languages plan §6).
         if v["voiceRevision"] != s["speaker"]["activeRevision"] or v["platform"] != c["platform"]:
             raise AlphaError("The variant and current speaker must match this destination.")
-        # A native format other than the platform's default (a Story, Reel, carousel…) has no format-aware publisher:
-        # it is never approved as a default post. Export it and post it by hand (creation projection, spec §12).
+        # Only default formats and the explicitly bound native Mastodon poll have a publisher.
+        # Other native formats are never silently approved as default posts.
         from .creation_capabilities import DEFAULT_FORMATS, EXPORT_ONLY_NOTE
         native_format = (v.get("native") or {}).get("formatId") if isinstance(v.get("native"), dict) else None
-        if any(f and f != DEFAULT_FORMATS.get(c["platform"]) for f in (v.get("format"), native_format)):
+        allowed_formats = {DEFAULT_FORMATS.get(c["platform"])}
+        if c["platform"] == 'Mastodon':
+            allowed_formats.add('mastodon.poll')
+        if any(f and f not in allowed_formats for f in (v.get("format"), native_format)):
             raise AlphaError(EXPORT_ONLY_NOTE, 409, code="format_not_publishable")
         text = v["text"]
         # Measured the way the platform counts (X weighs CJK and emoji as two), so an over-length post never reaches it.
@@ -453,6 +458,8 @@ class Phase2Store(Store):
             raise AlphaError(f"{c['platform']} requires a decoded image. Upload one and confirm its rights.")
         # Provider-specific choices are frozen into the exact approved manifest and idempotency key.
         options = publish_options.normalize(c["platform"], p.get("publishOptions"), media, text, now=self.clock())
+        from .mastodon_polls import binding as poll_binding
+        native_poll = poll_binding(v, p.get('publishOptions'), media)
         immediate_youtube = c['platform'] == 'YouTube' and options.get('publicationMode') == 'now'
         native_mastodon = c['platform'] == 'Mastodon' and bool((options or {}).get('scheduled_at'))
         if immediate_youtube or native_mastodon:
@@ -487,6 +494,8 @@ class Phase2Store(Store):
         manifest["providerAccountId"] = c.get("providerAccountId", c["account"])
         if options is not None:
             manifest["publishOptions"] = options
+        if native_poll is not None:
+            manifest['mastodonNativePoll'] = native_poll
         if c['platform'] == 'YouTube' and options.get('thumbnailAssetId'):
             image = find(data['assets'], options['thumbnailAssetId'])
             if image.get('deleted') or image.get('processing') != 'decoded' or not str(image.get('mime', '')).startswith('image/') or p.get('rightsConfirmed') is not True:
@@ -558,6 +567,9 @@ class Phase2Store(Store):
                     or m.get("sourceDigest") != self.source_digest(s, v)
                     or m.get("providerAccountId") != c.get("providerAccountId", c["account"])
                     or m["capability"]["scopes"] != c["scopes"]):
+                return False
+            from .mastodon_polls import binding as poll_binding
+            if poll_binding(v, m.get('publishOptions'), m.get('media', [])) != m.get('mastodonNativePoll'):
                 return False
             if m.get("trendLineage") or v.get("trendLineage") or m.get("scoutLineage"):
                 from .growth.trends.opportunities import manifest_current

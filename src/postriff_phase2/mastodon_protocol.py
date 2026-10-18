@@ -132,8 +132,15 @@ def status_options(options, media=(), *, capabilities=None, now=None):
         result["language"] = options["language"]
     if "poll" in options:
         poll = options["poll"]
+        if not isinstance(poll, dict) or set(poll) - {'options', 'expires_in', 'multiple', 'hide_totals'}:
+            raise AlphaError("Use only the supported Mastodon poll fields.", 400)
         limits = (capabilities or {}).get("pollLimits", {})
-        choices = poll.get("options") if isinstance(poll, dict) else None
+        defaults = {'max_options': 4, 'max_characters_per_option': 50, 'min_expiration': 300, 'max_expiration': 2629746}
+        if not isinstance(limits, dict) or any(type(limits.get(key, default)) is not int or limits.get(key, default) < (2 if key == 'max_options' else 1) for key, default in defaults.items()):
+            raise AlphaError("This server returned invalid poll limits.", 502)
+        if limits.get('min_expiration', 300) > limits.get('max_expiration', 2629746):
+            raise AlphaError("This server returned inconsistent poll duration limits.", 502)
+        choices = poll.get("options")
         if media or not isinstance(choices, list) or not 2 <= len(choices) <= limits.get("max_options", 4):
             raise AlphaError("A poll needs supported answer choices and cannot include media.", 400)
         if not all(isinstance(c, str) and 0 < len(c.strip()) <= limits.get("max_characters_per_option", 50) for c in choices):

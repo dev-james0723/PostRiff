@@ -27,6 +27,7 @@ import {
 import { useWorkspaceApi } from '@/lib/workspace/provider';
 import { YouTubeOptions } from '@/features/youtube/youtube-options';
 import { MastodonFields } from './mastodon-fields';
+import type { NativeDraft } from '@/lib/creation/capabilities';
 
 /** Platforms whose review carries per-post choices; the server refuses a review without them. */
 export const NEEDS_OPTIONS = new Set(['TikTok', 'YouTube', 'Pinterest', 'Google Business Profile', 'Mastodon']);
@@ -38,6 +39,7 @@ interface Props {
   channelId: string;
   asset: Asset | undefined;
   text: string;
+  nativeDraft?: NativeDraft | null;
   /** Called with the complete options, or null while something is still missing. */
   onChange: (options: PublishOptionsValue) => void;
 }
@@ -52,7 +54,7 @@ function Caution({ children }: { children: ReactNode }) {
 }
 
 export function PublishOptions(props: Props) {
-  if (props.platform === 'Mastodon') return <MastodonFields onChange={props.onChange} />;
+  if (props.platform === 'Mastodon') return <MastodonFields onChange={props.onChange} nativeDraft={props.nativeDraft} text={props.text} />;
   if (props.platform === 'TikTok') return <TikTokFields {...props} />;
   if (props.platform === 'YouTube') return <YouTubeOptions {...props} />;
   if (props.platform === 'Pinterest') return <PinterestFields {...props} />;

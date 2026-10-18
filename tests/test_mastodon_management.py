@@ -16,7 +16,7 @@ CAPS = {'maxCharacters': 500, 'maxMediaAttachments': 4, 'edit': True, 'schedule'
 
 
 class MastodonNativeFormatGateTests(unittest.TestCase):
-    def test_status_default_remains_publishable_but_poll_export_only(self):
+    def test_status_default_and_native_poll_require_exact_publication_checks(self):
         from postriff_phase2.creation_capabilities import DEFAULT_FORMATS, native_draft, projection
         from postriff_phase2.coworker import flags
         self.assertEqual(DEFAULT_FORMATS['Mastodon'], 'mastodon.status')
@@ -29,7 +29,7 @@ class MastodonNativeFormatGateTests(unittest.TestCase):
             poll = native_draft({'platform': 'Mastodon', 'format': 'mastodon.poll',
                                  'text': 'SYNTHETIC poll'}, proj=available)
             self.assertEqual(status['readiness']['publish'], 'not_checked')
-            self.assertEqual(poll['readiness']['publish'], 'export_only')
+            self.assertEqual(poll['readiness']['publish'], 'not_checked')
         finally:
             flags.attach(None)
 

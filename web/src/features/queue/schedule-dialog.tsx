@@ -254,6 +254,7 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
       (!asset || kindOf(asset) !== 'image' || alt.trim()) &&
       (!mastodonMedia || extraMedia.every((item) => Boolean(item.assetId && item.alt.trim() && assets.some((a) => a.id === item.assetId && isPostableImage(a))))) &&
       (!steps.confirmUnknowns || resolveUnknowns) &&
+      (!mastodonMedia || !publishOptions?.poll || (!assetId && extraMedia.length === 0)) &&
       (!needsOptions || publishOptions !== null) && (!mastodonMedia || threadParts.every((text) => text.trim().length > 0))
   );
 
@@ -518,8 +519,8 @@ export function ScheduleDialog({ open, onOpenChange, variantId: preselected, ass
           </div>}
 
           {channel && needsOptions && (
-            // Keyed by account: switching accounts starts the choices again instead of carrying them over.
-            <PublishOptions key={channel.id} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} onChange={setPublishOptions} />
+            // Keyed by account and draft: neither may inherit another native poll’s answers.
+            <PublishOptions key={`${channel.id}:${variant?.id}`} platform={channel.platform} channelId={channel.id} asset={asset} text={variant?.text ?? ''} nativeDraft={variant?.native} onChange={setPublishOptions} />
           )}
 
           <Label className='flex items-start gap-2 text-sm font-normal'>
