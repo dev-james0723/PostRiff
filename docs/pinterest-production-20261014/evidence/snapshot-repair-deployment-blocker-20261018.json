@@ -7,7 +7,7 @@
   "canonicalSupabase": "buoyhkbodnhzngaotoel",
   "productionDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
   "preflight": {
-    "at": "2026-10-18T05:18:56.601909Z",
+    "at": "2026-10-18T05:58:41.023343+00:00",
     "status": "PASS",
     "productionAliasAndTargetAgree": true,
     "envMetadataRecords": 173,
@@ -60,5 +60,23 @@
   "policyExpiry": "2026-10-18T18:00:00Z unchanged",
   "pinCreates": 0,
   "publicEnablement": 0,
-  "standardSubmissions": 0
+  "standardSubmissions": 0,
+  "continuedAt": "2026-10-18T06:02:58.740676+00:00",
+  "latestStandardCheck": {
+    "at": "2026-10-18T05:59Z",
+    "method": "Native existing My apps tab; exact visible text verification",
+    "visible": [
+      "Rafii",
+      "Trial access active",
+      "Upgrade"
+    ],
+    "approved": false
+  },
+  "newDeploymentOrPromotionAttempt": false,
+  "releaseControls": {
+    "status": "CANDIDATE_AST_PASS_ONLY",
+    "receipt": "snapshot-repair-continuation-20261018.json",
+    "manualCopyProvenanceRequiredBeforeClipboardRead": true,
+    "qualifiedOrPromoted": false
+  }
 }
