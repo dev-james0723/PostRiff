@@ -1,0 +1,21 @@
+{
+  "purpose": "SYNTHETIC cloud DB fixture only; never production ledger adoption",
+  "connect134_source_commit": "01c9c742f44ebc67e9d9a8cff88672695a8801ec",
+  "management_runtime_base": "b6cb22438783eb1ce75ca680bbc6690db6c7ccf2",
+  "files": {
+    "PROPOSAL-METADATA.json": "262f7d824bc67619f56002cfc36e58a131692e54d84f52c089dd9abc5e68a9f8",
+    "20261018160407_mastodon_management_after_connect_134_pg17.sql": "03c1b5cafddfcf49befda60139ddd982da766f955258fd0cc3e853e52ae2d2dc",
+    "SHARED-INDEXES-CONCURRENT-PROPOSAL.sql": "d2de32727718fcadc68e3f170932017c8e51272bce020ef219f8753bd9dcd4fa",
+    "134_mastodon_connect_applications.sql": "d2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3"
+  },
+  "connect134_sha256": "d2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3",
+  "schema_source_basis_commit": "0114c94206eab037a3cdf74cfb2218e56075783b",
+  "schema_revision": "pg17-variable-alias-fix-20261018",
+  "supersedes_fixture": "mastodon_after134_20261018",
+  "supersedes_payload_sha256": "66afc61f47add5747fd819dab89d98a2d84f357f0f4e250df8974eda69b1b3ea",
+  "runtime_patch_sha256": [
+    "218b5fcf8759fdbd3580855388372ac98507580ff139e781d16f4925553b9d40",
+    "09dbb0ee6a7e858a7610bf0d431b0dd0b80f085acc8e2e596c1358b5ffeab49f",
+    "b3dcb93fdf3966d47708599889a766f1df8a745b1090856263555703ad0174d1"
+  ]
+}

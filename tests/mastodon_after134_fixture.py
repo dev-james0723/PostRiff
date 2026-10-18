@@ -15,7 +15,7 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'tests/fixtures/mastodon_after134_20261018'
+FIXTURE = ROOT / 'tests/fixtures/mastodon_after134_pg17_20261018'
 
 
 def prepare(connection, dsn, *, fixture_route='management'):
@@ -100,7 +100,7 @@ def prepare(connection, dsn, *, fixture_route='management'):
         if before != db.execute('SELECT to_jsonb(r) FROM public.pr_metric_reads r WHERE workspace_id=%s', (workspace,)).fetchall():
             raise AssertionError('Existing synthetic Pinterest reading changed during core upgrade.')
         db.execute('INSERT INTO postriff_private.schema_migrations(name,sha256) VALUES(%s,%s)', (meta['custom_ledger_name'], meta['payload_sha256']))
-        db.execute("INSERT INTO supabase_migrations.schema_migrations(version,name) VALUES('20261018160406',%s)", (meta['native_name'],))
+        db.execute("INSERT INTO supabase_migrations.schema_migrations(version,name) VALUES(%s,%s)", (meta['native_version'], meta['native_name']))
         db.execute('DELETE FROM public.pr_workspaces WHERE id=%s', (workspace,))  # This fixture's row only.
     # Concurrent indexes require one autocommit command at a time, outside core DDL.
     indexes = (FIXTURE / 'SHARED-INDEXES-CONCURRENT-PROPOSAL.sql').read_text()
