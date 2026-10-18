@@ -1,6 +1,8 @@
+> Current continuation2026-10-17: e2e5169f/receipt10486d8b **is deployed** as2tFM and approved promotion completed20:28Z. Original private window expired20:40:56Z; revoked credentials remain erased. Historical rollout entries below are retained as history. New local analytics/scheduling/diagnostic delta is **not deployed**. No new staging/resources. See FINAL-RECEIPT.md and evidence/public-release-preflight-20261017.json.
+
 # Existing production Pinterest change record
 
-Updated2026-10-17 UTC. **Private read-only Trial partially executed; public production NO-GO.** Canonical Supabase **postriff-phase2-private / buoyhkbodnhzngaotoel**, existing Vercel **prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L**, origin **https://rafii.io**. No new organization/project/database/subscription/payment.
+Updated2026-10-17 UTC. **Private read-only Trial acceptance complete for one business account; public production NO-GO.** Canonical Supabase **postriff-phase2-private / buoyhkbodnhzngaotoel**, existing Vercel **prj_6ufJVDjTyWltj4SWT9sRKid4Kk5L**, origin **https://rafii.io**. No new organization/project/database/subscription/payment.
 
 The human approved the exact [four-hour bundle](NEXT-ACTION-READONLY-PILOT.md). Existing7432 baseline and security fixes through product01cdf494 are incorporated. One reviewed deployment was built remotely and promoted: **dpl_C4AqhCMXcy7LYB4eeCBvXgxQWSVv**, docs/source6d102fa7. All **2215** listed artifact files match reviewed local bytes; three services, API timeouts and worker cron are preserved. [Deployment](evidence/pilot-deployment-20261017.json) · [Source qualification](evidence/pilot-deployed-source-qualification-20261017.json).
 
@@ -12,4 +14,6 @@ Real authorization-code exchange and official identity read-back PASS. Existing 
 
 Human separately approved the exact boards/manual-renewal remediation. Productc8ff84fa/receipt2848c722 is now deployed as sFLeor;2216 artifact hashes match, services/cron and original expiry preserved. No further new-source deployment is implied. [Next exact candidate](NEXT-ACTION-BOARDS-REFRESH.md). Standard, real publishing/read-back/visibility, scheduling, two-account isolation, operational recovery and public/canary release remain separate acceptance gates.
 
-Fresh reconnection reached the actual official Pinterest Give access screen; human action pending. Boards/refresh/reconnect acceptance is not yet passed. [Real disconnect](evidence/pilot-real-disconnect-20261017.json) · [Second deployment](evidence/boards-refresh-deployment-20261017.json).
+Fresh real reconnection exchanged19:12Z; identity/empty boards200, actual refresh_token20019:33Z and final human-completed local disconnect19:43Z passed. Tokens are erased;0connection jobs. [Final real receipt](evidence/pilot-reconnect-refresh-disconnect-20261017.json). [Real disconnect](evidence/pilot-real-disconnect-20261017.json) · [Second deployment](evidence/boards-refresh-deployment-20261017.json).
+
+New local source e2e5169f adds gated native Pin analytics, correct Rafii server-scheduling metadata and truthful comment/reply explanations. JCB qd2tzg2hn0 passed; no deployment, hosted metric migration, analytics activation or additional scopes have occurred. [Next exact proposal](NEXT-ACTION-CAPABILITIES.md).

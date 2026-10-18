@@ -70,7 +70,12 @@ class OAuthService:
         pinterest = self.providers.get('pinterest')
         if pinterest is not None and getattr(pinterest, 'quota_required', False):
             from .pinterest_quota import PinterestQuota
-            pinterest.rate_gate = PinterestQuota(repository.connection_factory, pinterest.client_id, pinterest.environment, clock, trial=getattr(pinterest, 'trial_readonly', False))
+            pinterest.rate_gate = PinterestQuota(repository.connection_factory, pinterest.client_id, pinterest.environment, clock, trial=getattr(pinterest, 'trial_readonly', False) or getattr(pinterest, 'private_trial', False))
+            if getattr(pinterest, 'private_trial', False):
+                pinterest.private_trial_create_gate = pinterest.rate_gate.reserve_trial_create
+                pinterest.private_trial_ack_gate = pinterest.rate_gate.acknowledge_trial_create
+                pinterest.private_trial_recover_reference = pinterest.rate_gate.recovered_trial_pin
+                pinterest.private_trial_pin_gate = self._pinterest_private_pin_allowed
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.youtube_public_base_url = youtube_public_base_url or None
         self.picture_fetch = account_pictures.fetch_image  # replaced in tests; never reached without a picture URL
@@ -92,6 +97,46 @@ class OAuthService:
         from .social_history import SocialHistoryService
         self.history = SocialHistoryService(self)
 
+    def _pinterest_private_pin_allowed(self, pin_id):
+        """Only IDs durably returned by an approved intent in this exact active trial."""
+        adapter = self.providers.get('pinterest')
+        policy = getattr(adapter, 'trial_policy', None)
+        if not getattr(adapter, 'private_trial', False) or not getattr(adapter, 'execution_enabled', False):
+            return False
+        try:
+            policy.require(policy.workspace_id, now=self.clock())
+            with self.repository.connection_factory() as db, db.cursor() as cur:
+                cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s', (policy.workspace_id,))
+                row = cur.fetchone()
+            state = row[0] if row and isinstance(row[0], dict) else json.loads(row[0]) if row else {}
+            if state.get('accountDeletion') or state.get('accountBlock'):
+                return False
+            data = state.get('phase2') or {}
+            for job in data.get('jobs', []):
+                manifest = job.get('manifest') or {}
+                if (job.get('state') not in ('submitting', 'provider_accepted', 'processing', 'published', 'verifying', 'verified', 'uncertain')
+                        or manifest.get('platform') != 'Pinterest' or manifest.get('workspaceId') != policy.workspace_id
+                        or manifest.get('actor') != policy.actor_id or manifest.get('providerAccountId') != policy.provider_account_id
+                        or (manifest.get('publishOptions') or {}).get('boardId') not in policy.board_ids):
+                    continue
+                try:
+                    policy.require_manifest(manifest, now=self.clock())
+                except AlphaError:
+                    continue
+                recorded = job.get('pinterestTrialPilot') == policy.pilot_id and job.get('providerReference') == pin_id
+                if not recorded:
+                    recover = getattr(adapter, 'private_trial_recover_reference', None)
+                    if not callable(recover) or recover(policy, manifest.get('idempotencyKey')) != pin_id:
+                        continue
+                channel = next((c for c in data.get('channels', []) if c.get('id') == manifest.get('channelId')), None)
+                if channel and not channel.get('revoked') and channel.get('providerAccountId') == policy.provider_account_id:
+                    return True
+        except AlphaError:
+            return False
+        except Exception:
+            raise AlphaError('Private Trial Pin authorization storage is unavailable.', 503) from None
+        return False
+
     def provider_catalog(self):
         """Secret-free deployment readiness; an unconfigured tile is never an adapter."""
         from .providers import ADAPTERS
@@ -105,7 +150,13 @@ class OAuthService:
             if adapter is None:
                 prefix = f'POSTRIFF_OAUTH_{pid.upper()}_'
                 missing = diagnostic.get('missingVariables', [prefix + 'CLIENT_ID', prefix + 'CLIENT_SECRET'])
-                issues.append('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.')
+                pinterest_issue = {
+                    'pinterest_trial_expired': 'The approved private Pinterest Trial window has expired. Connections stay closed until a new scoped pilot or public release is explicitly approved. No credential reset is indicated.',
+                    'pinterest_trial_configuration_invalid': 'The private Pinterest Trial needs valid server-side workspace, operator, account and bounded expiry settings. Connections stay closed; review the approved pilot configuration.',
+                    'pinterest_trial_environment_invalid': 'The private Pinterest Trial API environment and Sandbox setting do not match. Connections stay closed; review the approved environment configuration.',
+                    'pinterest_callback_origin_invalid': 'The Pinterest callback origin must be a fixed HTTPS origin without a path, query or fragment. Connections stay closed; review it against the registered callback.',
+                }.get(diagnostic.get('configurationIssueCode')) if pid == 'pinterest' else None
+                issues.append(pinterest_issue or ('Server setup required: configure ' + ' and '.join(missing) + '. These are channel credentials, not app sign-in providers.' if missing else 'The OAuth credential pair contains a blank, whitespace or placeholder value. Correct it in secure server configuration.'))
             if not self.vault.fernet:
                 issues.append('Server setup required: POSTRIFF_CREDENTIAL_KEY must protect connected-account tokens.')
             try:
@@ -113,6 +164,8 @@ class OAuthService:
             except AlphaError:
                 callback = None
                 issues.append('Set POSTRIFF_PUBLIC_BASE_URL to the fixed HTTPS app origin and register its callback with the provider.')
+            if pid == 'pinterest' and diagnostic.get('configurationIssueCode') == 'pinterest_callback_origin_invalid':
+                callback = None
             wave = getattr(cls, 'wave', None)
             paused = adapter is not None and (bool(diagnostic.get('operatorDisabled')) if wave else not getattr(adapter, 'execution_enabled', True))
             if paused:
@@ -149,9 +202,13 @@ class OAuthService:
                     legacy = {key: key in ('identity', 'boards_read') for key in (*legacy, 'boards_read')}
                     # The exact workspace/operator is enforced at every authenticated operation.
                     connect_ready = bool(callback and self.vault.fernet and getattr(adapter, 'execution_enabled', False))
+            if pid == 'pinterest' and getattr(adapter, 'private_trial', False):
+                connect_ready = bool(callback and self.vault.fernet and getattr(adapter, 'execution_enabled', False))
             requested = list(getattr(cls, 'documented_scopes', ())) or sorted({scope for scopes in cls.SCOPES.values() for scope in scopes})
             if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False):
                 requested = sorted(adapter.capability_scopes('boards_read'))
+            if pid == 'pinterest' and getattr(adapter, 'private_trial', False):
+                requested = sorted({scope for cap in adapter.trial_policy.capabilities for scope in adapter.capability_scopes(cap)})
             checklist = {
                 'clientIdConfigured': bool(presence.get('clientId')), 'clientSecretConfigured': bool(presence.get('clientSecret')),
                 'redirectUriConfigured': callback is not None,
@@ -165,15 +222,15 @@ class OAuthService:
             readiness = configuration if adapter is None else 'paused' if paused else 'configuration_blocked' if not connect_ready else 'identity_connection_available' if reviewed else 'configured_awaiting_provider_review'
             entries.append({'id': pid, 'platform': cls.platform, 'configured': adapter is not None,
                             'connectReady': connect_ready, 'configurationState': configuration, 'credentialPresence': presence,
-                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed and not getattr(adapter, 'trial_readonly', False), 'liveVerified': False,
+                            'readinessState': readiness, 'publicConnectionReady': connect_ready and reviewed and not (getattr(adapter, 'trial_readonly', False) or getattr(adapter, 'private_trial', False)), 'liveVerified': False,
                             'reviewStatus': 'operator_declared_reviewed' if reviewed else 'not_confirmed',
                             'reviewNote': 'Review readiness is operator-declared, not independently verified with the platform. Unreviewed apps may be limited to eligible app-role test accounts.',
                             'productionReviewed': reviewed, 'executionPaused': paused,
-                            **({'trialReadonly': bool(getattr(adapter, 'trial_readonly', False))} if pid == 'pinterest' else {}),
+                            **({'trialReadonly': bool(getattr(adapter, 'trial_readonly', False)), 'privateTrial': bool(getattr(adapter, 'private_trial', False)), 'trialVisibility': 'creator_only' if getattr(adapter, 'private_trial', False) else None} if pid == 'pinterest' else {}),
                             'callbackUri': callback, 'setupIssues': issues, 'commentsReadImplemented': pid in COMMENT_READ_PROVIDERS,
                             'historyAvailableForApp': history,
                             'accountRequirement': (f"Read-only Trial for the approved operator and Pinterest account, using the {'Sandbox' if adapter.sandbox else 'official production'} API."
-                                                   if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False) else cls.account_requirement),
+                                                   if pid == 'pinterest' and getattr(adapter, 'trial_readonly', False) else 'Private account-bound Trial: only individually approved Pins on the configured boards; Trial Pins are creator-only.' if pid == 'pinterest' and getattr(adapter, 'private_trial', False) else cls.account_requirement),
                             'wave': getattr(cls, 'wave', None), 'featureFlagEnabled': feature_enabled,
                             'normalizedCapabilities': normalized, 'readinessChecklist': checklist,
                             'connectKind': cls.connect_kind, 'startInput': cls.start_input, 'hasDestinations': cls.has_destinations,
@@ -280,10 +337,13 @@ class OAuthService:
     @staticmethod
     def _pinterest_binding(adapter):
         policy = getattr(adapter, 'trial_policy', None)
-        return {'clientId': adapter.client_id, 'apiEnvironment': 'sandbox' if adapter.sandbox else 'production',
+        binding = {'clientId': adapter.client_id, 'apiEnvironment': 'sandbox' if adapter.sandbox else 'production',
                 'trialReadonly': bool(getattr(adapter, 'trial_readonly', False)),
                 'trialAuthority': {key: getattr(policy, key) for key in ('workspace_id', 'actor_id', 'username', 'expires_at')}
                     if policy is not None else None}
+        if getattr(adapter, 'private_trial', False):
+            binding.update(privateTrial=True, privateAuthority=policy.binding())
+        return binding
 
     def _pinterest_custody(self, cleartext, adapter):
         try:
@@ -827,7 +887,7 @@ class OAuthService:
                 "destinations": choices}
 
     @contextmanager
-    def pinterest_dispatch(self, manifest, access_token, fence):
+    def pinterest_dispatch(self, manifest, access_token, fence, *, trial_pin=None):
         """Serialize the last authorized POST with disconnect and lease takeover.
 
         Discovery runs outside this lock. A valid create ID is persisted before
@@ -842,6 +902,9 @@ class OAuthService:
         if not isinstance(fence, dict) or not fence.get('leaseId') or not fence.get('leaseOwner'):
             raise AlphaError('Pinterest publication needs an active approved worker lease.', 409)
         workspace_id, connection_id = manifest['workspaceId'], manifest['channelId']
+        private = getattr(adapter, 'private_trial', False)
+        if private:
+            adapter.trial_policy.require_manifest(manifest, now=self.clock())
         with self.repository.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (workspace_id,))
             row = cur.fetchone()
@@ -870,9 +933,15 @@ class OAuthService:
             if not credential or credential[2] != manifest.get('providerAccountId') or self.vault.decrypt(credential[0], credential[1]) != access_token:
                 raise AlphaError('Pinterest authorization changed. Nothing was posted.', 409)
             proof = {}
-            yield proof
+            if private:
+                with adapter.private_trial_dispatch(manifest, trial_pin):
+                    yield proof
+            else:
+                yield proof
             if proof.get('pinId'):
                 job['providerReference'] = proof['pinId']
+                if private:
+                    job['pinterestTrialPilot'] = adapter.trial_policy.pilot_id
                 job.setdefault('events', []).append({'at': self.clock(), 'state': job['state'],
                     'execution': manifest.get('execution', 'synthetic'), 'message': 'Pinterest returned a Pin ID; exact provider read-back is pending.'})
                 cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), workspace_id))
@@ -1210,6 +1279,10 @@ class OAuthService:
         if getattr(adapter, 'id', None) == 'pinterest':
             from .pinterest_analytics import describe
             matrix = describe(matrix, granted, analytics_enabled=getattr(adapter, 'analytics_enabled', False))
+            if getattr(adapter, 'private_trial', False):
+                for name in ('publish', 'schedule', 'analytics'):
+                    if matrix.get(name, {}).get('level') == 'Direct':
+                        matrix[name]['evidence'] = 'Private account-bound Trial only; every Pin needs exact approval and Trial Pins are creator-only.'
         return matrix
 
     # --- read / refresh / disconnect -------------------------------------------------

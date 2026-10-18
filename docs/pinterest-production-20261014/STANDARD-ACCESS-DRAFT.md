@@ -1,36 +1,32 @@
-# Standard Access application draft — DO NOT SUBMIT
+# Standard Access application package — prepared, not submitted
 
-App: Rafii, https://rafii.io, Pinterest app 1615884. Trial access was observed active in app1615884 developer console2026-10-17; no Standard application submitted. Standard status: **NOT RUN / no approval evidence**.
+Checked2026-10-17. App1615884 **Trial access active**, native My apps card and available Upgrade form verified through Kynlo. **Standard NOT APPROVED. No pending application displayed.** Supporting owner-mail search found only14Oct Trial approval; do not treat that bounded search as a universal historical search. [Current receipt](evidence/public-release-preflight-20261017.json).
 
-## Proposed description
+## Exact fields prepared for review
 
-Rafii helps creators and small businesses draft image Pins in their own brand voice. Customers connect their own eligible Pinterest accounts through Pinterest's official OAuth flow. Rafii reads identity and available publishing destinations, presents the image, title, description, HTTPS destination and board/section for review, and executes an approved publication immediately or at the customer's selected time. Customers can reconnect, cancel future work, pause automation and disconnect. Trial/Sandbox demonstrations are labeled and do not assert public visibility.
+- App name / company display: Rafii / Rafii, preserving existing entries. Public policy identifies operator Au Hin Sing; no invented corporate entity.
+- Website: **https://rafii.io** (form currently has old postriff-phase2-private.vercel.app).
+- Privacy: **https://rafii.io/privacy** (form currently has old host/privacy).
+- Audience: Creators and Businesses, existing checked values observed. Business accounts are the initial acceptance cohort; personal-account entitlement is conditional.
+- Purpose text candidate:
 
-Identity consent: `user_accounts:read`. Image publication/reconciliation: `user_accounts:read,boards:read,pins:read,pins:write`. No boards:write, advertising, billing, private-resource scopes or password/cookie access. The hosted UI also offers a dedicated profile/boards consent path with only user_accounts:read and boards:read. The private read-only pilot cannot publish, read sections or obtain Pin scopes.
+> Rafii is a content workspace for creators and small businesses. Each customer connects their own eligible Pinterest account using Pinterest’s official Authorization Code OAuth flow. Rafii reads that account’s identity and authorized boards, helps prepare original image Pin drafts from customer-supplied content, and presents the image, title, description, destination link and selected board for review. Each Pin requires explicit approval. Approved Pins are published immediately or by Rafii’s durable queue at the chosen local time; Rafii reads back the provider Pin ID and destination before reporting verified publication. Optional analytics shows available impressions, saves, Pin clicks and outbound clicks for that customer’s own Pins, with successful, no-data and failed reads distinguished. Users can cancel pending jobs, pause automation, reconnect or disconnect. We do not request Pinterest passwords or session cookies, scrape Pinterest, train models on Pinterest data, provide competitor benchmarking, or sell Pinterest data. Trial demonstrations are labeled creator-only and do not assert public visibility. Public access remains disabled until Standard and production acceptance pass.
 
-## Data handling to verify before final wording
+- Reporting: **candidate change from currently unchecked to checked only if submitting the tested optional own-Pin analytics use case**. Disclose that its release is separately gated; do not claim live analytics succeeded.
+- Read-only scopes: user_accounts:read,boards:read. Image publishing plus read-back: user_accounts:read,boards:read,pins:read,pins:write. Optional native analytics: user_accounts:read,boards:read,pins:read. No ads/billing/boards:write/secret-board/comment scopes.
+- Callback: https://rafii.io/api/oauth/pinterest/callback, already registered. No developer-console redirect modification proposed.
 
-Token exchange is server-side; access/refresh envelopes are encrypted in the tenant vault and bound to app/environment, with stable provider ID in the access envelope. Access/refresh tokens remain server-side. Authorization code/state transit the official browser callback and authenticated app completion; exclude them from logs, Agent context, recordings and evidence. Agent destination reads require an explicit current-turn request and connection-domain authorization; returned board data is untrusted input. Public candidate uses server-only rate counters with hashed app/account identifiers. Disconnect removes local credentials and stops future approval authority; Pinterest account settings must remove provider consent where no official revoke operation is available.
+## Missing submission assets and substantive review
 
-Policy/terms reachability was independently HTTP-checked at `https://rafii.io/privacy` and `https://rafii.io/terms`; see evidence/public-policy-reachability.json. Reachability does not certify policy substance. Review actual Pinterest-data retention, disconnect deletion, support process and AI/model handling against [Developer Guidelines](https://policy.pinterest.com/en/developer-guidelines) and [Developer/API Terms](https://policy.pinterest.com/en/developer-terms) before submission. No policy was edited or published.
+1. **Actual OAuth plus live API demo video**: dedicated recording agent assigned by the human. Form recommends MP4 under2GB and requires20–60fps, authentication and main Pinterest features. Kynlo’s4fps recorder cannot produce submission-compliant source footage; do not upsample to misrepresent capture. Full recording requires verified exact workspace/session (restore it only if the IDs differ), a new scoped private read-only window and human consent. The old window expired20:40:56Z and credentials remain erased. A read-only OAuth/identity/boards video can demonstrate real API activity without publishing; the mission’s complete Pin journey still needs approved writes and read-back.
+2. Actual eligible board and two approved Pin operations. [Reviewable full previews](pin-previews/index.html) and [payload metadata](pin-previews/pins.json) are prepared; no board ID fabricated.
+3. Public privacy/terms both HTTP200 rechecked. They still say draft/pending legal review and contain retention/transfer/jurisdiction placeholders. [Policy review candidate](POLICY-REVIEW-CANDIDATE.md) lists exact gaps; mere reachability is insufficient.
+4. Pinterest Guidelines restrict storage and external sharing of API data. Account/token custody, essential Pin-ID receipts, retained native metrics and any AI/model egress need accurate disclosure and provider clarification; do not claim an exception to those rules. Provider-data-to-Agent/model gates remain closed. The full Developer/API Terms body did not load through official documentation, so compliance sign-off is incomplete.
+5. Local analytics/expiry/scheduling repairs need delta remote checks before deployment. Current live baseline remains e2e5169f, not these repairs.
+6. A real **non-app-owner business account in its own Rafii workspace** must pass [third-party acceptance](THIRD-PARTY-ACCEPTANCE.md). Owner success is not customer acceptance. Personal accounts need separate eligibility confirmation where PINNER_DATA_ACCESS_DENIED applies.
 
-Current guideline review found restrictions on API-data storage/sharing and visual imitation. The candidate now uses a Rafii-native review card and keeps Agent provider-data access behind a separate disabled permission gate. Exact retention and third-party/model processing need provider clarification. The official Terms article was unavailable through the inspected URLs; this package does not certify compliance or claim provider permission.
+## Review and submission procedure
 
-## Actual video and evidence checklist
+Present final20–60fps actual footage, its source/deployment/tier and redacted receipts, final field values, scopes and policy text to James. Do not upload files, modify saved app fields or click Submit upgrade request until separately approved. Do not create duplicate requests if the app later shows pending review. After an approved submission, capture the actual provider status and any decision; no review-time estimate.
 
-No actual OAuth/application recording exists. Do not substitute the synthetic screenshots or gallery for a working demo. After approval of the exact test infrastructure, account and live-consent scope, record the actual environment accurately. The approved private Trial uses existing shared production hosting and the official API. Real code exchange and business identity read-back succeeded; Pinterest reused existing consent automatically, so there is no fresh consent-screen footage. A later explicit reconnect showed the actual official two-read-scope consent screen, awaiting human Give access. Local disconnect was verified after normal MFA. Boards/refresh/reconnect acceptance and recorded video remain incomplete. The initial read-only pilot cannot complete the Pin/section/scheduling parts below; those need later scoped approvals:
-
-1. Rafii login and Connect Pinterest entry on the approved actual environment.
-2. Official provider consent screen and exact registered redirect; protect account details.
-3. Successful callback/server exchange and connected stable account ID (redacted display).
-4. Actual boards/section discovery, with accurate eligibility errors.
-5. Draft/review showing exact asset, metadata and destination.
-6. Separately approved live API action; for a Pin, obtain its frozen action approval first.
-7. Provider Pin ID, exact GET read-back and separately recorded visibility/tier.
-8. Refresh/reconnect recovery, scheduling when authorized, and disconnect stopping future jobs.
-
-Record environment, tier, source/deployment SHA, date and authorized account/workspace for each take. Hide tokens, codes, state, private boards and unrelated users. Present final recording and application fields to James before submission. Preserve the provider's actual pending/approved/rejected status; approval timeline remains unknown.
-
-## Controlled Pin approval template — currently incomplete
-
-Account/stable ID, Rafii tenant/connection, board and section/privacy, exact image/source/hash/MIME/bytes/rights/alt, title, description, HTTPS link, timing/time zone, access tier/host, visibility, exact `POST /v5/pins` payload, allowed read-back, and deletion/rollback proposal. These facts must be verified together before approval. No account/board/image has been chosen or approved for a real Pin.
+The recording agent’s actual partial clip is preparation evidence only until the missing OAuth/API segments and format requirements pass. Its detailed receipt is maintained in standard-access-video/ and evidence/standard-access-video-20261017.json.

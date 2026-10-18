@@ -1,6 +1,7 @@
 """Server-configured, time-limited Pinterest Trial authority. No user input enables it."""
 from dataclasses import dataclass
 import re
+import math
 import time
 import uuid
 from postriff_alpha.domain import AlphaError
@@ -56,3 +57,85 @@ class PinterestTrialPolicy:
         if identity.get('handle', '').removeprefix('@').casefold() != self.username:
             raise AlphaError('A different Pinterest account was selected. Reconnect the approved Trial account.',
                              409, code='pinterest_trial_account_mismatch')
+
+
+@dataclass(frozen=True)
+class PinterestExecutionTrialPolicy(PinterestTrialPolicy):
+    """Private account-bound capability trial; never an assertion of Standard Access."""
+    provider_account_id: str
+    board_ids: tuple
+    capabilities: frozenset
+    pilot_id: str
+
+    @classmethod
+    def from_environment(cls, values):
+        base = PinterestTrialPolicy.from_environment(values)
+        prefix = 'POSTRIFF_PINTEREST_TRIAL_'
+        account = values.get(prefix + 'ACCOUNT_ID', '')
+        board_value = values.get(prefix + 'BOARD_IDS', '')
+        cap_value = values.get(prefix + 'CAPABILITIES', '')
+        pilot = values.get(prefix + 'ID', '')
+        allowed = {'identity', 'boards_read', 'publish', 'schedule', 'analytics'}
+        try:
+            if not isinstance(board_value, str) or not isinstance(cap_value, str):
+                raise ValueError('list configuration')
+            boards, caps = board_value.split(','), cap_value.split(',')
+            if not re.fullmatch(r'[0-9]{5,30}', account):
+                raise ValueError('account')
+            if not 1 <= len(boards) <= 4 or len(set(boards)) != len(boards) or any(not re.fullmatch(r'[0-9]{5,30}', b) for b in boards):
+                raise ValueError('boards')
+            if len(set(caps)) != len(caps) or not {'identity', 'boards_read'} <= set(caps) <= allowed:
+                raise ValueError('capabilities')
+            # Rafii's immediate and future Pins share the durable queue. This
+            # bounded execution mode therefore admits both actions together.
+            if ('schedule' in caps) != ('publish' in caps):
+                raise ValueError('publish and schedule must be scoped together')
+            if str(uuid.UUID(pilot)) != pilot:
+                raise ValueError('pilot')
+        except (ValueError, TypeError, AttributeError):
+            raise AlphaError('Private Pinterest Trial needs a stable account, exact boards, capability list and pilot ID.', 503,
+                             code='pinterest_trial_configuration') from None
+        return cls(base.workspace_id, base.actor_id, base.username, base.expires_at, account,
+                   tuple(sorted(boards)), frozenset(caps), pilot)
+
+    def binding(self):
+        return {'workspace': self.workspace_id, 'actor': self.actor_id, 'username': self.username,
+                'expiresAt': self.expires_at, 'account': self.provider_account_id,
+                'boards': list(self.board_ids), 'capabilities': sorted(self.capabilities), 'pilot': self.pilot_id,
+                'maxCreateAttempts': 2}
+
+    def supports(self, capability):
+        return capability in self.capabilities
+
+    def require_scopes(self, scopes):
+        permitted = set(READ_SCOPES)
+        if self.supports('analytics') or self.supports('publish'):
+            permitted.add('pins:read')
+        if self.supports('publish'):
+            permitted.add('pins:write')
+        if not isinstance(scopes, list) or not scopes or any(not isinstance(s, str) for s in scopes) or not set(scopes) <= permitted:
+            raise AlphaError('The requested Pinterest scope is outside this private Trial.', 403, code='pinterest_trial_denied')
+
+    def require_account(self, account_id):
+        if account_id != self.provider_account_id:
+            raise AlphaError('This Pinterest account is outside the approved private Trial.', 403, code='pinterest_trial_account_mismatch')
+
+    def require_identity(self, identity):
+        super().require_identity(identity)
+        self.require_account(identity.get('providerAccountId'))
+
+    def require_board(self, board_id):
+        if board_id not in self.board_ids:
+            raise AlphaError('Choose an explicitly approved private Trial board.', 403, code='pinterest_trial_denied')
+
+    def require_manifest(self, manifest, *, now=None):
+        self.require(manifest.get('workspaceId'), manifest.get('actor'), now=now)
+        if manifest.get('actor') != self.actor_id:
+            raise AlphaError('Only the approved operator can authorize this private Trial Pin.', 403, code='pinterest_trial_denied')
+        self.require_account(manifest.get('providerAccountId'))
+        self.require_board((manifest.get('publishOptions') or {}).get('boardId'))
+        if manifest.get('platform') != 'Pinterest' or not self.supports('publish') or not self.supports('schedule') or not manifest.get('idempotencyKey'):
+            raise AlphaError('This Pinterest operation is outside the private Trial.', 403, code='pinterest_trial_denied')
+        at = (manifest.get('timing') or {}).get('timestamp')
+        if type(at) not in (int, float) or not math.isfinite(at) or not 0 < at < self.expires_at:
+            raise AlphaError('Schedule this approved Pin inside the private Trial window.', 403, code='pinterest_trial_denied')

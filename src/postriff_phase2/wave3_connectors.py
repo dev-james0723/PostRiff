@@ -14,6 +14,8 @@ import json
 import math
 import re
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .provider_base import GRAPH_VERSION, OAuthProvider, default_transport, fixed_https_origin
@@ -327,39 +329,55 @@ class PinterestProvider(OAuthProvider):
         self.analytics_enabled = analytics_enabled is True
         # Trial access writes to Pinterest's sandbox; boards there are separate from the live account's boards.
         self.sandbox = bool(sandbox)
+        self._private_dispatch = ContextVar("pinterest_private_dispatch", default=None)
 
     @classmethod
     def mount(cls, values, transport=None):
         client_id, secret, valid, diagnostic = cls.credential_pair(values)
         sandbox = str(values.get("POSTRIFF_PINTEREST_SANDBOX", "")).lower() == "true"
         readonly = values.get("POSTRIFF_PINTEREST_TRIAL_READONLY") == "1"
+        private = values.get("POSTRIFF_PINTEREST_PRIVATE_TRIAL") == "1"
+        if not valid:
+            return None, diagnostic
+        if private and (readonly or client_id != '1615884'):
+            return None, {**diagnostic, 'configurationState': 'invalid_configuration', 'configurationIssueCode': 'pinterest_trial_configuration_invalid'}
         callback = values.get('POSTRIFF_OAUTH_PINTEREST_CALLBACK_ORIGIN')
         if callback is not None and not fixed_https_origin(callback):
-            return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
+            return None, {**diagnostic, 'configurationState': 'invalid_configuration',
+                          'configurationIssueCode': 'pinterest_callback_origin_invalid'}
         # An official production-API Trial read needs an explicit server-side selection.
         trial_environment = values.get('POSTRIFF_PINTEREST_TRIAL_API_ENVIRONMENT', 'sandbox')
-        if readonly and (trial_environment not in ('sandbox', 'production') or sandbox != (trial_environment == 'sandbox')):
-            return None, {**diagnostic, "configurationState": "invalid_configuration"}
+        if (readonly or private) and (trial_environment not in ('sandbox', 'production') or sandbox != (trial_environment == 'sandbox')):
+            return None, {**diagnostic, "configurationState": "invalid_configuration",
+                          'configurationIssueCode': 'pinterest_trial_environment_invalid'}
         policy = None
-        if readonly and valid:
-            from .pinterest_pilot import PinterestTrialPolicy
+        if (readonly or private) and valid:
+            from .pinterest_pilot import PinterestTrialPolicy, PinterestExecutionTrialPolicy
             try:
-                policy = PinterestTrialPolicy.from_environment(values)
+                policy = (PinterestExecutionTrialPolicy if private else PinterestTrialPolicy).from_environment(values)
             except AlphaError:
-                return None, {**diagnostic, 'configurationState': 'invalid_configuration'}
-            from .pinterest_trial_evidence import PinterestReadOnlyEvidenceTransport
-            def record(receipt):
-                print(json.dumps({"pinterestTrialRequest": receipt}, sort_keys=True), flush=True)
-            transport = PinterestReadOnlyEvidenceTransport(record, environment=trial_environment, mock_transport=transport)
+                expiry = values.get('POSTRIFF_PINTEREST_TRIAL_EXPIRES_AT')
+                expired = isinstance(expiry, str) and re.fullmatch(r'[0-9]{10}', expiry) and int(expiry) <= time.time()
+                return None, {**diagnostic, 'configurationState': 'invalid_configuration',
+                              'configurationIssueCode': 'pinterest_trial_expired' if expired else 'pinterest_trial_configuration_invalid'}
+            if readonly:
+                from .pinterest_trial_evidence import PinterestReadOnlyEvidenceTransport
+                def record(receipt):
+                    print(json.dumps({'pinterestTrialRequest': receipt}, sort_keys=True), flush=True)
+                transport = PinterestReadOnlyEvidenceTransport(record, environment=trial_environment, mock_transport=transport)
         adapter = cls(client_id, secret, sandbox=sandbox, transport=transport,
                       analytics_enabled=values.get("POSTRIFF_PINTEREST_ANALYTICS_ENABLED") == "1" and not readonly) if valid else None
         if adapter:
             adapter.trial_readonly = readonly
-            adapter.trial_api_environment = trial_environment if readonly else None
+            adapter.private_trial = private
+            adapter.account_scoped_direct = private
+            adapter.trial_api_environment = trial_environment if readonly or private else None
             adapter.trial_policy = policy
         return adapter, diagnostic
 
     def capability_scopes(self, capability):
+        if getattr(self, 'private_trial', False) and not self.trial_policy.supports(capability):
+            return []
         if capability == 'analytics' and not self.analytics_enabled:
             return []
         return super().capability_scopes(capability)
@@ -369,7 +387,7 @@ class PinterestProvider(OAuthProvider):
         return fetch(self, access_token, pin_id, start_at=start_at, end_at=end_at)
 
     def assert_trial_context(self, workspace_id, actor_id=None, *, scopes=None, now=None):
-        if not getattr(self, 'trial_readonly', False):
+        if not (getattr(self, 'trial_readonly', False) or getattr(self, 'private_trial', False)):
             return
         policy = getattr(self, 'trial_policy', None)
         if policy is None:
@@ -378,16 +396,72 @@ class PinterestProvider(OAuthProvider):
         if scopes is not None:
             policy.require_scopes(scopes)
 
-    def _admit_request(self, method, path, account_id=None):
+    def _admit_request(self, method, path, account_id=None, *, body=None):
         if getattr(self, 'trial_readonly', False):
             self.trial_policy.require(self.trial_policy.workspace_id)
             if method != 'GET' and path != '/v5/oauth/token':
                 raise AlphaError('This Pinterest Trial cannot change provider content.', 403, code='pinterest_trial_readonly')
+        context = None
+        if getattr(self, 'private_trial', False):
+            self.trial_policy.require(self.trial_policy.workspace_id)
+            route = path.split('?', 1)[0]
+            # The first identity lookup binds the new grant. Other resource reads
+            # and all writes require that persisted stable provider identity.
+            if account_id is not None or not (method == 'GET' and route == '/v5/user_account' or method == 'POST' and route == '/v5/oauth/token'):
+                self.trial_policy.require_account(account_id)
+            if method == 'POST' and route == '/v5/oauth/token':
+                pass
+            elif method == 'POST' and route == '/v5/pins':
+                context = self._private_dispatch.get()
+                if not context or context['body'] != body or account_id is None:
+                    raise AlphaError('Private Trial publication requires the exact approved fenced intent.', 403, code='pinterest_trial_denied')
+                self.trial_policy.require_manifest(context['manifest'])
+            elif method == 'GET' and route in ('/v5/user_account', '/v5/boards'):
+                pass
+            elif method == 'GET' and re.fullmatch(r'/v5/boards/[0-9]{5,30}/sections', route):
+                self.trial_policy.require_board(route.split('/')[3])
+            elif method == 'GET' and re.fullmatch(r'/v5/pins/[0-9]{1,30}(/analytics)?', route):
+                gate = getattr(self, 'private_trial_pin_gate', None)
+                if not callable(gate) or gate(route.split('/')[3]) is not True:
+                    raise AlphaError('Only Pins recorded for this private Trial may be read.', 403, code='pinterest_trial_denied')
+                if route.endswith('/analytics') and not self.trial_policy.supports('analytics'):
+                    raise AlphaError('Analytics is outside this private Trial.', 403, code='pinterest_trial_denied')
+            else:
+                raise AlphaError('This Pinterest endpoint is outside the private Trial.', 403, code='pinterest_trial_denied')
         if getattr(self, 'quota_required', False):
             gate = getattr(self, 'rate_gate', None)
             if gate is None:
                 raise AlphaError('Pinterest rate budgets are unavailable. Requests are paused.', 503)
             gate(method, path, account_id)
+        if context is not None:
+            reserve = getattr(self, 'private_trial_create_gate', None)
+            if not callable(reserve) or not callable(getattr(self, 'private_trial_ack_gate', None)):
+                raise AlphaError('Private Trial attempt storage is unavailable.', 503, code='pinterest_quota_unavailable')
+            reserve(self.trial_policy, context['manifest']['idempotencyKey'])
+
+    @contextmanager
+    def private_trial_dispatch(self, manifest, pin):
+        self.trial_policy.require_manifest(manifest)
+        options = manifest.get('publishOptions') or {}
+        media = manifest.get('media') or []
+        source = (pin.get('media_source') or {}).get('url') if isinstance(pin, dict) and isinstance(pin.get('media_source'), dict) else None
+        media_gate = getattr(self, 'private_trial_media_gate', None)
+        if len(media) != 1 or not callable(media_gate) or media_gate(manifest, source) is not True:
+            raise AlphaError('The Pin image is outside its approved private workspace asset.', 409)
+        expected = {'board_id': options.get('boardId'), 'description': (manifest.get('payload') or {}).get('text'),
+                    'media_source': {'source_type': 'image_url', 'url': source}}
+        for field, option in (('title', 'title'), ('link', 'link'), ('board_section_id', 'boardSectionId')):
+            if options.get(option):
+                expected[field] = options[option]
+        if media[0].get('alt'):
+            expected['alt_text'] = media[0]['alt']
+        if pin != expected:
+            raise AlphaError('The Pin differs from its reviewed private Trial intent.', 409)
+        marker = self._private_dispatch.set({'manifest': manifest, 'body': json.loads(json.dumps(pin))})
+        try:
+            yield
+        finally:
+            self._private_dispatch.reset(marker)
 
     @property
     def content_api(self):
@@ -407,6 +481,15 @@ class PinterestProvider(OAuthProvider):
                 or any(ord(c) < 32 for c in value[field])):
             # Legacy grants have no environment provenance. Re-consent; never guess or migrate them.
             raise AlphaError("Reconnect Pinterest in this environment before using this grant.", 409)
+        private = getattr(self, 'private_trial', False)
+        if private:
+            self.trial_policy.require(self.trial_policy.workspace_id)
+            if value.get('privateTrialBinding') != self.trial_policy.binding():
+                raise AlphaError('Reconnect Pinterest for this exact private Trial.', 409, code='pinterest_oauth_binding_changed')
+            if value.get('accountId') is not None:
+                self.trial_policy.require_account(value['accountId'])
+        elif 'privateTrialBinding' in value:
+            raise AlphaError('Private Trial authorization cannot be reused outside its scope.', 409, code='pinterest_oauth_binding_changed')
         return value
 
     def _grant(self, body, refresh_token=None):
@@ -429,6 +512,9 @@ class PinterestProvider(OAuthProvider):
             from .pinterest_pilot import PinterestTrialPolicy
             PinterestTrialPolicy.require_scopes(scopes)
         binding = {"v": 1, "environment": self.environment, "clientId": self.client_id}
+        if getattr(self, "private_trial", False):
+            self.trial_policy.require_scopes(scopes)
+            binding["privateTrialBinding"] = self.trial_policy.binding()
         refresh_binding = {**binding, 'rt': renewed, **({'expiresAt': time.time() + refresh_expires} if refresh_expires else {})}
         return {"accessToken": json.dumps({**binding, "at": token, "scope": scopes}),
                 "refreshToken": json.dumps(refresh_binding) if renewed else refresh_token,
@@ -457,15 +543,32 @@ class PinterestProvider(OAuthProvider):
     def api(self, access_token, method, path, content=False, **kwargs):
         if not isinstance(path, str) or not path.startswith('/v5/') or '#' in path or '\\' in path:
             raise AlphaError('Invalid Pinterest API path.', 400)
+        # Authorization-code exchange and refresh use the server-only methods above.
+        # A stored bearer grant cannot turn this generic resource API into a token endpoint.
+        if getattr(self, 'private_trial', False) and method != 'GET' and (method != 'POST' or path != '/v5/pins'):
+            raise AlphaError('This Pinterest endpoint is outside the private Trial.', 403, code='pinterest_trial_denied')
         headers = {**kwargs.pop('headers', {}), "Authorization": "Bearer " + self.bearer(access_token)}
         envelope = self._bound(access_token, 'at')
-        if getattr(self, 'trial_readonly', False):
+        if getattr(self, 'trial_readonly', False) or getattr(self, 'private_trial', False):
             self.trial_policy.require_scopes(envelope.get('scope'))
         if method == 'GET' and path.startswith('/v5/boards') and 'boards:read' not in envelope.get('scope', []):
             raise AlphaError('Reconnect Pinterest with board read permission to choose a board.', 403, code='pinterest_boards_scope_required')
-        self._admit_request(method, path, envelope.get('accountId'))
+        self._admit_request(method, path, envelope.get('accountId'), body=kwargs.get('body'))
         # The grant came from this environment; never use a Sandbox token against production.
-        return self.transport(method, self.content_api + path, headers=headers, **kwargs)
+        response = self.transport(method, self.content_api + path, headers=headers, **kwargs)
+        if getattr(self, 'private_trial', False) and method == 'POST' and path == '/v5/pins':
+            context = self._private_dispatch.get()
+            body = response.get('body') if isinstance(response.get('body'), dict) else {}
+            pin_id = body.get('id')
+            if response.get('status') in (200, 201) and isinstance(pin_id, str) and re.fullmatch(r'[0-9]{5,30}', pin_id):
+                try:
+                    self.private_trial_ack_gate(self.trial_policy, context['manifest']['idempotencyKey'], pin_id)
+                except AlphaError:
+                    # Preserve a known response for the existing workspace proof path
+                    # even if the independent receipt store becomes unavailable.
+                    response = {**response, 'privateTrialJournal': 'unavailable'}
+                    print(json.dumps({'pinterestTrialJournal': 'unavailable'}), flush=True)
+        return response
 
     def preserve_destination(self, previous, renewed):
         old, new = self._bound(previous, 'at'), self._bound(renewed, 'at')
@@ -480,7 +583,7 @@ class PinterestProvider(OAuthProvider):
             raise AlphaError('Pinterest did not return a stable account ID. Reconnect; this account cannot publish yet.', 409)
         identity = {"providerAccountId": account, "handle": "@" + str(body["username"]), "accountType": str(body.get("account_type") or "profile").lower(),
                     "pictureUrl": body.get("profile_image") if isinstance(body.get("profile_image"), str) else None}
-        if getattr(self, 'trial_readonly', False):
+        if getattr(self, 'trial_readonly', False) or getattr(self, 'private_trial', False):
             self.trial_policy.require_identity(identity)
             identity['pictureUrl'] = None  # No CDN download/storage in this narrow pilot.
         return identity
@@ -533,7 +636,8 @@ class PinterestProvider(OAuthProvider):
             self.identity(access_token)  # Reconfirm the exact approved account before returning any boards.
         return [{'id': str(b['id']), 'name': str(b.get('name') or b['id']), 'kind': 'board', 'selected': False,
                  'privacy': b.get('privacy') or 'UNKNOWN',
-                 'eligible': b.get('privacy') == 'PUBLIC' and b.get('is_ads_only') is not True}
+                 'eligible': b.get('privacy') == 'PUBLIC' and b.get('is_ads_only') is not True
+                    and (not getattr(self, 'private_trial', False) or str(b['id']) in self.trial_policy.board_ids)}
                 for b in self._items(access_token, '/v5/boards')]
 
     def sections(self, access_token, board_id):

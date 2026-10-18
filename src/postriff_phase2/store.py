@@ -114,6 +114,18 @@ class Phase2Store(Store):
                     and c.get('identityVerified') and c.get('capabilityVerified') and c.get('scopes')
                     and (c.get('expiresAt', 0) <= self.clock() or c.get('verifiedAt', 0) + 3600 < self.clock()))
 
+    def pinterest_reverification_due(self, channel):
+        """An existing hosted Pin approval may wait for a fresh server read proof.
+
+        This does not make the channel ready or restore a revoked/downgraded grant.
+        Keep separate from composer recovery, whose current flow is YouTube-specific.
+        """
+        return bool(getattr(self, 'hosted_entitlements', False) and channel.get('platform') == 'Pinterest'
+                    and channel.get('configured') and not channel.get('revoked')
+                    and channel.get('identityVerified') and channel.get('capabilityVerified') and channel.get('scopes')
+                    and (channel.get('expiresAt', 0) <= self.clock()
+                         or channel.get('verifiedAt', 0) + 3600 < self.clock()))
+
     def mutate(self, wid, token, expected_revision, action, payload):
         if wid in self.samples:
             return super().mutate(wid, token, expected_revision, action, payload)
@@ -617,7 +629,8 @@ class Phase2Store(Store):
             if j["state"] not in ("scheduled", "approved", "claimed"):
                 continue
             c = find(data["channels"], j["manifest"]["channelId"])
-            unavailable = self.channel_state(c) != "Ready for posting" and not self.channel_reverification_due(c)
+            unavailable = (self.channel_state(c) != "Ready for posting"
+                           and not self.channel_reverification_due(c) and not self.pinterest_reverification_due(c))
             if not self.current(s, j["manifest"]) or unavailable or (not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock()) or j["manifest"]["expiresAt"] < self.clock():
                 self.event(j, "held", "Approval, capability or entitlement changed. Review timing and approve a new job; reconnection does not release this one.")
 

@@ -491,4 +491,70 @@ with psycopg.connect(DSN,autocommit=True) as db:
 assert pin_scheduler.provider_allowed('pinterest')
 checks.append('Pinterest flags/review/schema gate, migration idempotency and empty rollback, four idempotent worker offsets, native zero/definitions, existing lease revocation fence, tenant denial, and data-preserving rollback refusal PASS; synthetic provider only')
 
+# Real disposable SQL coverage for analytics result receipts, distinct from provider traffic.
+# Restore only this synthetic credential; all existing worker/revocation checks above stay intact.
+with connection() as db, db.cursor() as cur:
+    cur.execute("UPDATE pr_encrypted_credentials SET revoked_at=NULL WHERE workspace_id=%s AND connection_id='conn-pinterest-1'", (wid,))
+    cur.execute("UPDATE pr_metric_reads SET status='cancelled',lease_owner=NULL,lease_until=NULL WHERE provider='pinterest' AND status IN ('pending','claimed')")
+    M.schedule(cur,wid,'conn-pinterest-1','pinterest','11223344','job-11223344',time.time()-10,'verification',(('t0',0),))
+pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'message':'SYNTHETIC_SECRET'})])
+failed_pin = pin_scheduler.tick(max_reads=1)
+assert failed_pin['retry']==1 and failed_pin['done']==0 and failed_pin['pinterestAnalytics']['read_failed']==1,failed_pin
+with connection() as db, db.cursor() as cur:
+    cur.execute("SELECT status,failure_class,last_http_status,due_at>now() FROM pr_metric_reads WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='11223344'", (wid,))
+    assert cur.fetchone()==('pending','invalid_response',200,True)
+    cur.execute("SELECT count(*) FROM pr_metric_observations WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='11223344'", (wid,))
+    assert cur.fetchone()[0]==0
+    receipts,available=insights.latest_read_outcomes(cur,wid)
+    first=next(r for r in receipts if r['provider']=='pinterest' and r['providerPostId']=='11223344')
+    assert available=='available' and first['outcome']=='read_failed' and first['connectionId']=='conn-pinterest-1' and first['jobId']=='job-11223344',first
+    assert 'SYNTHETIC_SECRET' not in json.dumps(receipts)
+    # Same provider/post/account-shaped ids in another tenant must not share a receipt.
+    cur.execute("""INSERT INTO pr_metric_reads(workspace_id,connection_id,provider,provider_post_id,job_id,read_offset,source,anchor_at,due_at,status,attempts,failure_class,observed_at)
+                   VALUES(%s,'conn-pinterest-1','pinterest','11223344','other-job','t0','verification',now(),now(),'done',1,'no_data',now())""", (other,))
+    other_receipts,other_available=insights.latest_read_outcomes(cur,other)
+    same=next(r for r in other_receipts if r['provider']=='pinterest' and r['providerPostId']=='11223344')
+    assert other_available=='available' and same['outcome']=='no_data' and same['jobId']=='other-job'
+    own_receipts,_=insights.latest_read_outcomes(cur,wid)
+    assert all(r.get('jobId')!='other-job' for r in own_receipts)
+    # Hold this retry in the future so the next claim deterministically exercises the existing Pin.
+    cur.execute("UPDATE pr_metric_reads SET due_at=now()+interval '1 day' WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='11223344'", (wid,))
+    cur.execute("UPDATE pr_metric_reads SET status='pending',attempts=0,observed_at=NULL,failure_class=NULL,lease_owner=NULL,lease_until=NULL,due_at=now()-interval '1 second' WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='1234567' AND read_offset='24h'", (wid,))
+pin_provider.transport = Wire([ok({'id':'1234567','username':'synthetic'}),ok({'all':{'summary_metrics':{}}})])
+empty_pin=pin_scheduler.tick(max_reads=1)
+assert empty_pin['done']==1 and empty_pin['providerErrors']==0 and empty_pin['pinterestAnalytics']['no_data']==1,empty_pin
+with connection() as db, db.cursor() as cur:
+    cur.execute("SELECT status,failure_class,last_http_status FROM pr_metric_reads WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='1234567' AND read_offset='24h'", (wid,))
+    assert cur.fetchone()==('done','no_data',200)
+    cur.execute("SELECT availability,value FROM pr_metric_observations WHERE workspace_id=%s AND provider='pinterest' AND provider_post_id='1234567' AND read_offset='24h'", (wid,))
+    empty_values=cur.fetchall()
+    assert len(empty_values)==4 and all(r==('unavailable',None) for r in empty_values),empty_values
+    # A different connection/job with the same provider Pin cannot replace this post's metadata.
+    cur.execute("""INSERT INTO pr_metric_reads(workspace_id,connection_id,provider,provider_post_id,job_id,read_offset,source,anchor_at,due_at,status,attempts,failure_class,last_http_status)
+                   VALUES(%s,'other-connection','pinterest','1234567','wrong-job','backfill','backfill',now(),now(),'unavailable',1,'http_403',403)""", (wid,))
+    summary=insights.summary(cur,wid,[job('1234567',platform='Pinterest',channel='conn-pinterest-1')],time.time())
+    native_post=next(p for p in summary['posts'] if p['provider']=='pinterest' and p['providerPostId']=='1234567')
+    assert native_post['metrics']['saves']['value']==0 and native_post['metrics']['saves']['availability']=='available',native_post
+    assert native_post['latestRead']['outcome']=='no_data' and native_post['latestRead']['jobId']=='job-1234567' and native_post['latestRead']['connectionId']=='conn-pinterest-1',native_post
+    assert any(r['providerPostId']=='11223344' and r['outcome']=='read_failed' for r in summary['readOutcomes'])
+    assert not any(p['provider']=='pinterest' and p['providerPostId']=='11223344' for p in summary['posts'])
+    by_window,available=insights.latest_read_outcomes(cur,wid,basis='24h')
+    assert available=='available' and by_window and all(r['readOffset']=='24h' for r in by_window)
+# Rename is transaction-local and rolled back: emulate migration 035's absence while
+# proving the helper savepoint keeps the outer transaction and old observations usable.
+with connection() as db, db.cursor() as cur:
+    cur.execute('ALTER TABLE public.pr_metric_reads RENAME TO pr_metric_reads_optional_fixture')
+    fallback=insights.summary(cur,wid,[],time.time())
+    assert fallback['readOutcomeAvailability']=='unavailable' and fallback['readOutcomes']==[],fallback
+    native_post=next(p for p in fallback['posts'] if p['provider']=='pinterest' and p['providerPostId']=='1234567')
+    assert native_post['metrics']['saves']['value']==0
+    cur.execute('SELECT 1')
+    assert cur.fetchone()==(1,)
+    db.rollback()
+with connection() as db:
+    assert db.execute("SELECT to_regclass('public.pr_metric_reads') IS NOT NULL").fetchone()[0]
+    db.execute("UPDATE pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id='conn-pinterest-1'", (wid,))
+    db.execute("UPDATE pr_metric_reads SET status='cancelled',lease_owner=NULL,lease_until=NULL WHERE provider='pinterest' AND status IN ('pending','claimed')")
+checks.append('Pinterest first failed200 persists retry receipt with zero observations; no_data persists done marker and unavailable rather than fabricated zero; prior native zero remains visible; workspace/connection/Pin/job and reporting-window bindings stay separate; missing optional queue schema rolls back only helper savepoint and preserves outer transaction/metrics; synthetic provider only')
+
 print(json.dumps({"status": "pass", "execution": "disposable-local-postgres; synthetic transport only", "checks": checks}, indent=2))

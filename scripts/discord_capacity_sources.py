@@ -51,4 +51,19 @@ def source_paths(root):
         'tests/test_pinterest_production_prep.py',
         'docs/consumer-ready/secret-allowlist.json',
     })
+    # Preserve every current-public730d changed test, UI and wrapper input too.
+    paths.update({
+        'scripts/cloud-pinterest-release-delta-validation.sh',
+        'tests/phase2/postgres_growth_metric_reads.py',
+        'tests/phase2/postgres_pinterest.py',
+        'tests/test_pinterest_analytics.py',
+        'tests/test_pinterest_configuration_diagnostics.py',
+        'tests/test_pinterest_private_trial.py',
+        'tests/test_pinterest_private_trial_recovery.py',
+        'tests/test_pinterest_schedule_reverification.py',
+        'tests/test_pinterest_trial_visibility.py',
+        'web/src/features/analytics/coverage.ts',
+        'web/src/features/analytics/empty-states.tsx',
+        'web/tests/agent-ui-bridges-coverage.test.cjs',
+    })
     return tuple(sorted(paths))

@@ -599,6 +599,9 @@ class PostgresWorker:
                         forward = instagram and stage in ('container_created', 'container_ready') and job['state'] == 'processing'
                         youtube_forward = (job['manifest']['platform'] == 'YouTube' and bool(getattr(self.social, 'youtube', None))
                                            and (stage not in ('native_scheduled', 'native_schedule_reconciling') or job.get('cancelRequested')))
+                        pinterest_forward = (job['manifest']['platform'] == 'Pinterest'
+                                             and isinstance(self.social, HostedSocial)
+                                             and job.get('state') not in IN_FLIGHT)
                         if job.get("cancelRequested") and (job.get("state") not in IN_FLIGHT or forward):
                             self._event(job, "canceled", "Canceled before provider submission")
                             continue
@@ -679,7 +682,7 @@ class PostgresWorker:
                             job["checks"] = job.get("checks", 0) + 1
                         elif not forward:
                             self._event(job, "claimed", "Hosted worker acquired the fenced lease")
-                            if not youtube_forward:
+                            if not youtube_forward and not pinterest_forward:
                                 job.setdefault("attempts", []).append({"number": len(job.get("attempts", [])) + 1, "startedAt": now, "idempotencyKey": job["manifest"]["idempotencyKey"]})
                                 self._event(job, "submitting", "Hosted worker began the approved provider operation")
                         if discord_managed:
@@ -691,6 +694,8 @@ class PostgresWorker:
                             selected['youtubeAuthorizationGeneration'] = youtube_generation
                         if youtube_forward:
                             selected.update(youtubeForward=True, previousState=previous_state)
+                        if pinterest_forward:
+                            selected.update(pinterestForward=True, previousState=previous_state)
                         if instagram and not reconciliation:
                             action = 'status' if stage == 'container_created' else 'publish' if stage == 'container_ready' else 'create'
                             if action != 'status':
@@ -768,7 +773,9 @@ class PostgresWorker:
                 if result.get("reference"):
                     job["providerReference"] = result["reference"]
                 job["providerConfirmed"] = result["confirmed"]
-                job["verification"] = {"method": result.get("verification"), "at": now} if result["state"] == "verified" else None
+                if result.get('visibility'):
+                    job['providerVisibility'] = result['visibility']
+                job["verification"] = {"method": result.get("verification"), "at": now if job['manifest'].get('platform') == 'Discord' else self.clock()} if result["state"] == "verified" else None
                 if result.get("container"):
                     job["container"] = result["container"]
                 if result.get("url"):
@@ -830,7 +837,7 @@ class PostgresWorker:
                 cur.execute("UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s AND revision=%s", (json.dumps(state), claimed["workspaceId"], revision))
                 return cur.rowcount == 1
 
-    def authorize_dispatch(self, claimed, *, youtube_verified=False):
+    def authorize_dispatch(self, claimed, *, youtube_verified=False, pinterest_verified=False):
         """Re-read cancellation, exact approval and fence immediately before forward work."""
         with self.connection_factory() as db:
             with db.cursor() as cur:
@@ -879,6 +886,7 @@ class PostgresWorker:
                     return False
                 if ((job.get('cancelRequested') and not youtube_cancel)
                         or (claimed.get('youtubeForward') and not youtube_verified)
+                        or (claimed.get('pinterestForward') and not pinterest_verified)
                         or (claimed.get('dispatchPrincipal') and not self._requester_may_approve(cur, claimed['workspaceId'], claimed['dispatchPrincipal'], job))
                         or not self._approved(cur, claimed['workspaceId'], state, job, now=now)):
                     # No call has been made by this fenced dispatch. Preserve any prior container.
@@ -887,7 +895,7 @@ class PostgresWorker:
                     job['leaseOwner'], job['leaseUntil'] = None, 0
                     cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
                     return False
-                if claimed.get('youtubeForward') and not claimed['reconciliation']:
+                if (claimed.get('youtubeForward') or claimed.get('pinterestForward')) and not claimed['reconciliation']:
                     job.setdefault('attempts', []).append({'number': len(job.get('attempts', [])) + 1,
                         'startedAt': self.clock(), 'idempotencyKey': job['manifest']['idempotencyKey']})
                     self._event(job, 'submitting', 'Hosted worker began the approved provider operation')
@@ -1064,7 +1072,10 @@ class PostgresWorker:
         return True
 
     def defer_youtube_dispatch(self, claimed):
-        """Release an unsent fenced operation after unavailable grant verification."""
+        return self._defer_verified_dispatch(claimed, 'YouTube')
+
+    def _defer_verified_dispatch(self, claimed, platform):
+        """Release only this unsent lease; a transient read never consumes a write attempt."""
         with self.connection_factory() as db, db.cursor() as cur:
             cur.execute('SELECT state FROM public.pr_workspaces WHERE id=%s FOR UPDATE', (claimed['workspaceId'],))
             row = cur.fetchone()
@@ -1076,7 +1087,7 @@ class PostgresWorker:
                     or job.get('leaseUntil', 0) <= self.clock()):
                 return False
             if job['state'] == 'claimed':
-                self._event(job, claimed['previousState'], 'YouTube verification unavailable; no provider operation was sent')
+                self._event(job, claimed['previousState'], f'{platform} verification unavailable; no provider operation was sent')
             job['leaseOwner'], job['leaseUntil'] = None, 0
             job['nextAt'] = self.clock() + 60
             cur.execute('UPDATE public.pr_workspaces SET state=%s::jsonb,revision=revision+1 WHERE id=%s', (json.dumps(state), claimed['workspaceId']))
@@ -1174,6 +1185,19 @@ class PostgresWorker:
                 return True
             verified = verification.get('state') == 'read_verified' and verification.get('ready') is True
             if not self.authorize_dispatch(claimed, youtube_verified=verified):
+                return True
+        elif claimed.get('pinterestForward'):
+            try:
+                verification = self.social.oauth.reverify_for_worker(claimed['workspaceId'], claimed['job']['manifest']['channelId'])
+            except AlphaError as error:
+                verification = {'state': 'reauthorization_required' if error.status == 404 else 'verification_unavailable'}
+            except (AttributeError, OSError, KeyError, TypeError, ValueError):
+                verification = {'state': 'verification_unavailable'}
+            if verification.get('state') == 'verification_unavailable':
+                self._defer_verified_dispatch(claimed, 'Pinterest')
+                return True
+            verified = verification.get('state') == 'read_verified' and verification.get('ready') is True
+            if not self.authorize_dispatch(claimed, pinterest_verified=verified):
                 return True
         elif not claimed['reconciliation'] and not self.authorize_dispatch(claimed):
             return True
