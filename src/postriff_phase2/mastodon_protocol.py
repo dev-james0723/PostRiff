@@ -67,4 +67,3 @@ def discover(transport, host):
 def has_scopes(granted, required):
     granted = set(granted or [])
     return all(s in granted or s.split(":", 1)[0] in granted for s in required)
-

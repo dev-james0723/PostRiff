@@ -14,4 +14,3 @@ create policy service_only on public.pr_mastodon_applications
   for all to service_role using (true) with check (true);
 revoke all on public.pr_mastodon_applications from public, anon, authenticated;
 grant select, insert, update, delete on public.pr_mastodon_applications to service_role;
-
