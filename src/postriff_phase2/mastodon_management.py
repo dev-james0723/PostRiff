@@ -411,7 +411,7 @@ class MastodonManagement:
                 else:
                     response = provider.api(session, preview["method"], preview["path"], body=preview["body"],
                                             headers={"Idempotency-Key": action_id})
-                result = self._receipt(provider, session, preview, response)
+                result = self._receipt(provider, session, preview, response, granted_scopes=grant.get('scopes') or [])
                 if preview['action'] in ('native_cancel', 'native_reschedule'):
                     from .mastodon_native import synchronize
                     state = json.loads(row[1]) if isinstance(row[1], str) else row[1]
@@ -429,7 +429,7 @@ class MastodonManagement:
         return {"actionId": action_id, **result}
 
     @staticmethod
-    def _receipt(provider, session, preview, response):
+    def _receipt(provider, session, preview, response, *, granted_scopes=()):
         status, body = response.get("status"), response.get("body")
         if status in (400, 401, 403, 404, 422, 429):
             return {"state": "rejected", "httpStatus": status, "reason": "Mastodon rejected this action; review permissions, limits or retry after reset.",
@@ -446,6 +446,9 @@ class MastodonManagement:
             url = body.get("url")
             if isinstance(url, str) and url.startswith("https://" + session["instance"] + "/"):
                 result["url"] = url
+        if action in STATUS_ACTIONS or action in ACCOUNT_ACTIONS:
+            from .mastodon_interactions import readback
+            result.update(readback(provider, session, preview, granted_scopes))
         if action == 'report_account':
             if (not isinstance(body, dict) or not ID.fullmatch(str(body.get('id', '')))
                     or not isinstance(body.get('target_account'), dict)

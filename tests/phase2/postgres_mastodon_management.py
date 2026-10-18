@@ -200,6 +200,69 @@ class JournalTests(unittest.TestCase):
             return handled if handled is not None else original(method, url, **kw)
         self.provider.transport = transport
 
+    def test_independent_interaction_state_is_journaled_and_never_replayed(self):
+        from postriff_phase2.mastodon_interactions import STATUS_FIELDS, RELATIONSHIP_FIELDS
+        writes, reads = [], []
+        current = {}
+        def transport(method, url, **kw):
+            for action, fields in {**STATUS_FIELDS, **RELATIONSHIP_FIELDS}.items():
+                resource = 'statuses' if action in STATUS_FIELDS else 'accounts'
+                if method == 'POST' and url.endswith('/api/v1/' + resource + '/123/' + action):
+                    current.clear(); current.update(fields); writes.append((action, kw['headers']['Idempotency-Key']))
+                    # An HTTP 200 body alone is deliberately insufficient evidence.
+                    return ok({'id': '123'})
+            if method == 'GET' and url.endswith('/api/v1/statuses/123'):
+                reads.append(url); return ok({'id': '123', **current, 'content': 'PRIVATE_BODY_NOT_IN_RECEIPT'})
+            if method == 'GET' and url.endswith('/api/v1/accounts/relationships?id%5B%5D=123'):
+                reads.append(url); return ok([{'id': '123', **current, 'note': 'PRIVATE_NOTE_NOT_IN_RECEIPT'}])
+            return None
+        self.scoped_transport(['read:accounts', 'read:statuses', 'read:follows', 'write:favourites',
+            'write:statuses', 'write:bookmarks', 'write:follows', 'write:mutes', 'write:blocks'], transport)
+        for action, fields in {**STATUS_FIELDS, **RELATIONSHIP_FIELDS}.items():
+            with self.subTest(action=action):
+                preview = self.manager.preview(self.workspace, self.actor, self.connection_id,
+                    {'action': action, 'targetId': '123'})
+                before = (len(writes), len(reads), len(self.calls))
+                with self.assertRaises(AlphaError):
+                    self.manager.execute(self.foreign, self.other, self.connection_id, preview['actionId'],
+                        {'confirmed': True, 'digest': preview['digest']})
+                self.assertEqual((len(writes), len(reads), len(self.calls)), before)
+                result = self.execute(preview)
+                self.assertEqual(result['state'], 'verified')
+                self.assertEqual(result['readback']['observed'], fields)
+                self.assertEqual(writes[-1], (action, preview['actionId']))
+                self.assertEqual(len(reads), before[1] + 1)
+                with connection() as db:
+                    saved = db.execute('SELECT status,receipt FROM public.pr_mastodon_actions WHERE workspace_id=%s AND id=%s',
+                        (self.workspace, preview['actionId'])).fetchone()
+                self.assertEqual(saved[0], 'verified'); self.assertEqual(saved[1]['readback'], result['readback'])
+                self.assertNotIn('PRIVATE_', json.dumps(saved[1]))
+                before = (len(writes), len(reads), len(self.calls))
+                replay = self.execute(preview)
+                self.assertTrue(replay['replayed']); self.assertEqual(replay['receipt']['readback'], result['readback'])
+                self.assertEqual((len(writes), len(reads), len(self.calls)), before)
+
+    def test_rate_limited_independent_read_persists_acceptance_without_another_write(self):
+        operations = []
+        def transport(method, url, **kw):
+            if url.endswith('/api/v1/statuses/123/favourite'):
+                operations.append(method); return ok({'id': '123', 'favourited': True})
+            if method == 'GET' and url.endswith('/api/v1/statuses/123'):
+                operations.append(method); return ok({}, 429)
+            return None
+        self.scoped_transport(['read:accounts', 'read:statuses', 'write:favourites'], transport)
+        preview = self.preview()
+        result = self.execute(preview)
+        self.assertEqual(result['state'], 'accepted')
+        self.assertEqual(result['verification'], 'unavailable')
+        self.assertEqual(result['readback']['httpStatus'], 429)
+        self.assertEqual(operations, ['POST', 'GET'])
+        with connection() as db:
+            saved = db.execute('SELECT status,receipt FROM public.pr_mastodon_actions WHERE workspace_id=%s AND id=%s',
+                (self.workspace, preview['actionId'])).fetchone()
+        self.assertEqual(saved[0], 'accepted'); self.assertEqual(saved[1]['readback'], result['readback'])
+        self.assertTrue(self.execute(preview)['replayed']); self.assertEqual(operations, ['POST', 'GET'])
+
     def test_exact_native_reschedule_and_cancellation_sync_existing_queue_atomically(self):
         native = {'at': datetime.fromtimestamp(self.now + 600, timezone.utc).isoformat(), 'gone': False}
         writes = []
