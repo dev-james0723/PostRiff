@@ -1,5 +1,5 @@
 {
-  "preparedAt": "2026-10-17T20:55:22.286319+00:00",
+  "preparedAt": "2026-10-18T03:44:00Z",
   "state": "REVIEWABLE_DRAFT_NOT_EXECUTABLE",
   "providerAppId": "1615884",
   "productionSupabase": "buoyhkbodnhzngaotoel",
@@ -8,17 +8,17 @@
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "PENDING_FRESH_FOUR_SCOPE_HUMAN_CONSENT",
+      "connectionState": "CONNECTED_REAL_FOUR_SCOPE_EXCHANGE_PASS_REFRESH_CURRENT403",
       "board": {
-        "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
+        "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
         "name": "Rafii — Product & Content Workflows",
         "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
-        "method": "CompletedexactapprovedUIcreateonce;descriptionpersisted/0Pins/nativeReload+anonymousofficialpublicwidgetid/owner/descriptionmatch. NotAPIv5eligibility.",
-        "selectionReason": "ApprovedsingleexistingtargetnowcreatedandIDverified; actualOAuthAPIboardread/eligibilitypending",
+        "method": "Actual18Oct03:33UTC app View boards shows exact name/Public board; private adapter labels only policy-allowlisted public/non-ad-only board eligible. Existing native/provider public-widget ID proof retained; raw numeric API body not exported.",
+        "selectionReason": "Approved exact PUBLIC board now returned as eligible through the current four-scope connection; no new board needed.",
         "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
-        "apiV5Eligibility": "NOT_RUN"
+        "apiV5Eligibility": "PASS actual current API-backed UI eligible Public board label"
       },
       "sectionId": null,
       "image": {
@@ -32,7 +32,9 @@
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
         "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Review source only. Content Studio must ingest this Rafii original into the existing private immutable workspace media storage. Freeze actual normalized asset/hash/alt and review it before approval; the worker signs only that exact object at execution. No raw external-source override."
+        "delivery": "Existing private workspace Content Studio ingest already approved but blocked by snapshot500. Source66c5cedd repairs the missing legacy trial projection locally; await approved validation/deployment, then freeze normalized asset/object/hash/alt before final Pin approval.",
+        "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
+        "finalNormalizedAsset": null
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -63,24 +65,24 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_IMMUTABLE_ASSET_CURRENT_CONSENT_AND_EXACT_PIN_APPROVAL"
+        "state": "DRAFT_REQUIRES_REPAIRED_LIVE_SNAPSHOT_IMMUTABLE_ASSET_AND_EXACT_PIN_APPROVAL"
       }
     },
     {
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "PENDING_FRESH_FOUR_SCOPE_HUMAN_CONSENT",
+      "connectionState": "CONNECTED_REAL_FOUR_SCOPE_EXCHANGE_PASS_REFRESH_CURRENT403",
       "board": {
-        "state": "CREATED_PUBLIC_UI_ID_VERIFIED",
+        "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
         "name": "Rafii — Product & Content Workflows",
         "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
-        "method": "CompletedexactapprovedUIcreateonce;descriptionpersisted/0Pins/nativeReload+anonymousofficialpublicwidgetid/owner/descriptionmatch. NotAPIv5eligibility.",
-        "selectionReason": "ApprovedsingleexistingtargetnowcreatedandIDverified; actualOAuthAPIboardread/eligibilitypending",
+        "method": "Actual18Oct03:33UTC app View boards shows exact name/Public board; private adapter labels only policy-allowlisted public/non-ad-only board eligible. Existing native/provider public-widget ID proof retained; raw numeric API body not exported.",
+        "selectionReason": "Approved exact PUBLIC board now returned as eligible through the current four-scope connection; no new board needed.",
         "url": "https://www.pinterest.com/jamesaucreates/rafii-product-content-workflows/",
-        "apiV5Eligibility": "NOT_RUN"
+        "apiV5Eligibility": "PASS actual current API-backed UI eligible Public board label"
       },
       "sectionId": null,
       "image": {
@@ -94,7 +96,9 @@
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
         "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Review source only. Content Studio must ingest this Rafii original into the existing private immutable workspace media storage. Freeze actual normalized asset/hash/alt and review it before approval; the worker signs only that exact object at execution. No raw external-source override."
+        "delivery": "Existing private workspace Content Studio ingest already approved but blocked by snapshot500. Source66c5cedd repairs the missing legacy trial projection locally; await approved validation/deployment, then freeze normalized asset/object/hash/alt before final Pin approval.",
+        "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
+        "finalNormalizedAsset": null
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -126,7 +130,7 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_IMMUTABLE_ASSET_CURRENT_CONSENT_AND_EXACT_PIN_APPROVAL"
+        "state": "DRAFT_REQUIRES_REPAIRED_LIVE_SNAPSHOT_IMMUTABLE_ASSET_AND_EXACT_PIN_APPROVAL"
       }
     }
   ],
@@ -139,10 +143,10 @@
     "pinCreatesProposed": 2
   },
   "hardBlocks": [
-    "Human four-scope consent/exchange and API-v5 board eligibility pending; old grant revoked",
-    "No current OAuth grant or active live-test window",
-    "No real Pin approval",
-    "Content Studio immutable delivery asset/hash not yet ingested or approved; review source is not a signed delivery URL"
+    "Actual workspace snapshot500 prevents revision-fenced Content Studio image ingest;66c5cedd repair is local only pending cloud+deployment approval.",
+    "Actual normalized immutable asset/object/hash unavailable;0upload attempts.",
+    "No real Pin approval; both proposed creates remain NOT_RUN.",
+    "Current fresh-grant refresh returns Rafii403; same-account human normal sign-in requested."
   ],
   "readbackPlan": [
     "Persist provider Pin ID before reporting accepted; GET exact Pin through bound account.",

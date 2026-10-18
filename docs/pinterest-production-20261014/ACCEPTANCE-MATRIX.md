@@ -1,5 +1,7 @@
 # Pinterest acceptance and capability matrix
 
+**Current18Oct03:44UTC:** live730d0440/Eobk. New four-scope real OAuth exchange and eligible named board read PASS. Fresh-grant refreshBLOCKED403; live workspace snapshotFAIL500/missingtrial; approved image upload0attempts. Repair66c5cedd local targeted testsPASS, cloud/deploymentNOTRUN. Publicall4NO-GO. Latest evidence is the final section; historical sections below retain their execution dates.
+
 Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69f949`, deployment2tFM READY/promoted20:28Z; source receipt10486d8b. Earlier real read-only provider acceptance was on qualified c8/sF. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/capabilities-validation-20261017.json).
 
 | Required acceptance | Status | Evidence / remaining requirement |
@@ -121,3 +123,18 @@ OnePUBLICboard1126814837958721891 actualUIcreate/readbackPASS; noPins. NativeMya
 | Pin/schedule/native analytics | NOT RUN |0Pin creates; exact publication approval and actual provider receipts still needed. |
 
 Earlier unapplied/undeployed statements are superseded by this execution. Public all4features remainNO-GO; Standard/actual compliant video/non-owner journey remain gated.
+
+## Current four-scope acceptance and recoverable authoring defect —18Oct03:44UTC
+
+| Test | Status | Evidence |
+|---|---|---|
+| Fresh human OAuth + correct binding/vault | PASS |69297f6a exchanged03:29:14Z; correct actor/workspace/stable account; all4scopes; token-presence booleans only. |
+| Actual eligible destination | PASS | Real View boards for @jamesaucreates shows Rafii — Product & Content Workflows / Public board; exact policy allowlist ties eligibility to approved1126814837958721891. Raw response body not exported; sectionsNOTRUN. |
+| New-grant explicit refresh | BLOCKED | Two RafiiPOST403, unchanged rotation; human normal same-account fresh sign-in requested. Earlier2-scope real refreshPASS is historical, not current proof. |
+| Actual workspace snapshot / Library authoring | FAIL | GET500/KeyError; canonical own workspace revision104 lacks phase2.trial and has0SQLtrialrows. Librarylist200; metadata-change list503. Upload disabled,0attempts. |
+| Snapshot repair regression | PASS | LOCAL SYNTHETIC candidate66c5cedd: missing/null/active/expired4cases and existing YouTube authority/provenance test; diffcheckPASS. Broader remote validation and deployed acceptanceNOTRUN. |
+| Approved immutable image ingest | BLOCKED | No matching sourceHash assets; repair/approved deployed acceptance needed.0uploads. |
+| Real Pin / due schedule / native Analytics | NOT RUN |0creates/0Pinterestjobs,0exactPinapprovals. Drafts remain nonexecutable until final actual normalized object/hash review. |
+| Standard Access | BLOCKED | Native Myapps rechecked~03:41UTC: Rafii/Trialaccessactive/Upgrade. No Standard approval or submission by this task. Dedicated recording agent progressing installedOBS qualification; full compliant videoNOTRUN. |
+
+[Exact current receipt](evidence/private-trial-four-scope-acceptance-20261018.json) · [Concrete new revision validation/deployment approval](NEXT-ACTION-SNAPSHOT-REPAIR.md). Earlier expired9af transaction remains preserved as historical evidence; it was not reused. Policy still18Oct18UTC; no new resources/SQL/build/promotion/CI/Pin effects this continuation.

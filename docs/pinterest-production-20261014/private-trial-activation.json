@@ -1,6 +1,6 @@
 {
   "preparedAt": "2026-10-17T22:37:34.355134+00:00",
-  "status": "APPROVED_SQL_AND_DEPLOYMENT_EXECUTED_CONSENT_PENDING",
+  "status": "APPROVED_ACTIVATION_EXECUTED_FOUR_SCOPE_OAUTH_PASS_MEDIA_BLOCKED_SNAPSHOT500",
   "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
   "providerAppId": "1615884",
   "canonicalSupabase": "buoyhkbodnhzngaotoel",
@@ -112,7 +112,7 @@
     "maxUploads": 1,
     "paidGeneration": false,
     "pinDraftsOnly": true,
-    "finalNormalizedHashAndAssetId": "NOT_RUN; freeze and review before any Pin approval"
+    "finalNormalizedHashAndAssetId": "BLOCKED snapshot500;0upload attempts; repair66c5cedd local only"
   },
   "maximumExecutions": {
     "sqlFiles": 2,
@@ -150,9 +150,17 @@
     "liveDeployment": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
     "verifiedAt": "2026-10-18T02:49:07.492844Z",
     "sourceHashMatches": 2217,
-    "oauthStarts": 1,
-    "humanConsentCompleted": false,
+    "oauthStarts": 2,
+    "humanConsentCompleted": true,
     "mediaUploads": 0,
-    "pinCreates": 0
+    "pinCreates": 0,
+    "oauthExchangedAt": "2026-10-18T03:29:14.463047Z",
+    "boardRead": "PASS actual app eligible Public board",
+    "refresh": "BLOCKED actual403; no new rotation"
+  },
+  "newRepairCandidate": {
+    "source": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+    "approval": "PENDING_NEW_CI_AND_CONDITIONAL_DEPLOYMENT",
+    "proposal": "NEXT-ACTION-SNAPSHOT-REPAIR.md"
   }
 }
