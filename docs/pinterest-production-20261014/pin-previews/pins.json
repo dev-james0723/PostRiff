@@ -11,7 +11,7 @@
       "connectionState": "REAL_FOUR_SCOPE_CONNECTED; CURRENT_REFRESH_NOT_YET_ACCEPTED_403_FRESH_HUMAN_LOGIN_PENDING",
       "board": {
         "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
-        "name": "Rafii — Product & Content Workflows",
+        "name": "Rafii \u2014 Product & Content Workflows",
         "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
@@ -109,7 +109,7 @@
       "connectionState": "REAL_FOUR_SCOPE_CONNECTED; CURRENT_REFRESH_NOT_YET_ACCEPTED_403_FRESH_HUMAN_LOGIN_PENDING",
       "board": {
         "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
-        "name": "Rafii — Product & Content Workflows",
+        "name": "Rafii \u2014 Product & Content Workflows",
         "id": "1126814837958721891",
         "privacy": "PUBLIC",
         "description": "Rafii product ideas and practical workflows for planning, reviewing and publishing original content.",
@@ -166,13 +166,13 @@
       "execution": "NOT_RUN",
       "proposalId": "rafii-pinterest-scheduled-20261017",
       "title": "Plan your next week of content with Rafii",
-      "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
+      "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii\u2019s Pinterest integration.",
       "timing": {
         "mode": "rafii_server_schedule",
-        "localTime": "2026-10-18T12:00:00-04:00",
+        "localTime": "2026-10-18T12:45:00-04:00",
         "timezone": "America/Indiana/Indianapolis",
-        "publishAt": "2026-10-18T16:00:00Z",
-        "condition": "Unapproved proposal revised to fit the new <=24h private Trial candidate; supersedes unapproved19Oct10:00EDT. Final pilot expiry must be later than13:00EDT for the1h analytics read. If missed, obtain a new exact time approval; never roll forward silently."
+        "publishAt": "2026-10-18T16:45:00Z",
+        "condition": "NEW UNAPPROVED proposal after12:00EDT elapsed.12:45EDT permits the separately approved CI/deployment and human fresh sign-in, with proposed13:45EDT one-hour Analytics read before14:00EDT expiry. No job exists. If missed, stop and obtain a new exact time approval; never catch up or roll forward."
       },
       "proposedCreateRequest": {
         "method": "POST",
@@ -180,7 +180,7 @@
         "body": {
           "board_id": "1126814837958721891",
           "title": "Plan your next week of content with Rafii",
-          "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii’s Pinterest integration.",
+          "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii\u2019s Pinterest integration.",
           "link": "https://rafii.io/",
           "alt_text": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
           "media_source": {
@@ -198,7 +198,7 @@
           "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
         }
       },
-      "humanReviewContentSha256": "f3043d9841b2532b51d27dc00cba622a9cde5fd67148f577f774cf6e19be8627",
+      "humanReviewContentSha256": "6501be228954df315025272c26edd31bc83d42b27112a93ac6cf620e0fff98ce",
       "fingerprintPurpose": "Local reviewed-content fingerprint only; not a persisted server manifest, human approval record or provider receipt."
     }
   ],
@@ -232,7 +232,7 @@
       "Edit profile control"
     ],
     "savedTab": "https://www.pinterest.com/jamesaucreates/_saved/",
-    "text": "You haven’t saved any Pins yet",
+    "text": "You haven\u2019t saved any Pins yet",
     "boardCardsObserved": 0,
     "eligibleBoardId": null,
     "classification": "No suitable existing board observed; not a fresh OAuth API eligibility proof."
@@ -244,7 +244,7 @@
     "created": 1,
     "remaining": 0
   },
-  "updatedAt": "2026-10-18T14:52:35.562651+00:00",
+  "updatedAt": "2026-10-18T16:15:40.292233+00:00",
   "activationProposal": "../private-trial-activation.json",
   "runtime": {
     "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
@@ -253,5 +253,13 @@
     "pilotId": "7e355181-2714-46fb-abfe-26fc526d0809",
     "expiresAt": "2026-10-18T18:00:00Z",
     "deploymentReceiptCommit": "0281699f7663275118fef4ff5ca6a2b391ee8647"
+  },
+  "scheduleSupersession": {
+    "previousTime": "2026-10-18T16:00:00Z",
+    "previousState": "UNAPPROVED_NOT_SCHEDULED_ELAPSED",
+    "previousContentHash": "f3043d9841b2532b51d27dc00cba622a9cde5fd67148f577f774cf6e19be8627",
+    "newProposal": "2026-10-18T16:45:00Z",
+    "newState": "UNAPPROVED_NOT_SCHEDULED",
+    "interim1230Proposal": "Mentioned only; not approved, queued or executed; final review now12:45EDT"
   }
 }

@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-10-18T15:59:06.975577+00:00",
+  "environment": "rafii.io / canonical buoyhkbodnhzngaotoel",
+  "deployedProduct": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+  "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+  "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+  "actorId": "b167161d-37f4-4bc3-ae22-2482c982e5a0",
+  "connectionId": "909e9784cdcde21f2bb7cf521ce67f43",
+  "providerAccountId": "1126814906675966091",
+  "boardsRead": {
+    "status": "PASS",
+    "actualHttpStatus": 200,
+    "timestamp": "2026-10-18T15:42:08.265Z",
+    "requestId": "dgfcw-1792338126000-0caea33d2d79",
+    "requestPath": "/api/workspaces/568699ad-d66e-42b8-a7f1-e86d0c35ab02/channels/909e9784cdcde21f2bb7cf521ce67f43/destinations",
+    "nativeExactBoardNameVerification": true,
+    "boardId": "1126814837958721891",
+    "boardName": "Rafii \u2014 Product & Content Workflows"
+  },
+  "ownMembershipReadback": {
+    "role": "owner",
+    "status": "active",
+    "can_publish": true,
+    "can_manage_connections": true
+  },
+  "credentialMetadataReadback": {
+    "provider": "pinterest",
+    "revoked": false,
+    "accessPresent": true,
+    "refreshPresent": true,
+    "refreshSupported": true,
+    "scopes": [
+      "boards:read",
+      "pins:read",
+      "pins:write",
+      "user_accounts:read"
+    ],
+    "rotatedAt": "2026-10-18T03:29:14.463047Z",
+    "accessExpiresAt": "2026-11-17T03:29:15.037084Z",
+    "method": "SELECT only exact own workspace/connection; booleans and dates, no credential values"
+  },
+  "currentGrantRefresh": {
+    "status": "BLOCKED",
+    "reason": "Previous Rafii403; normal human fresh sign-in/MFA not yet confirmed. No proven Pinterest refresh/rotation. No new refresh attempt this phase."
+  },
+  "currentGrantReconnect": "NOT RUN",
+  "currentGrantDisconnect": "NOT RUN",
+  "liveSecondAccountIsolation": "NOT RUN",
+  "pinCreates": 0,
+  "scheduledPinterestJobs": 0,
+  "exactPinApprovalsReceived": 0,
+  "pilotExpiresAt": "2026-10-18T18:00:00Z",
+  "scope": "No SQL mutation, secret read, Pin creation, scheduling, production config change or provider submission."
+}

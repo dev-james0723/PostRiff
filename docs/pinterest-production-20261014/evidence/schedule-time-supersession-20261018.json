@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-10-18T16:15:40.292233+00:00",
+  "oldTiming": {
+    "mode": "rafii_server_schedule",
+    "localTime": "2026-10-18T12:00:00-04:00",
+    "timezone": "America/Indiana/Indianapolis",
+    "publishAt": "2026-10-18T16:00:00Z",
+    "condition": "Unapproved proposal revised to fit the new <=24h private Trial candidate; supersedes unapproved19Oct10:00EDT. Final pilot expiry must be later than13:00EDT for the1h analytics read. If missed, obtain a new exact time approval; never roll forward silently."
+  },
+  "oldContentHash": "f3043d9841b2532b51d27dc00cba622a9cde5fd67148f577f774cf6e19be8627",
+  "oldStatus": "NOT_APPROVED_NOT_SCHEDULED_ELAPSED",
+  "newTiming": {
+    "mode": "rafii_server_schedule",
+    "localTime": "2026-10-18T12:45:00-04:00",
+    "timezone": "America/Indiana/Indianapolis",
+    "publishAt": "2026-10-18T16:45:00Z",
+    "condition": "NEW UNAPPROVED proposal after12:00EDT elapsed.12:45EDT permits the separately approved CI/deployment and human fresh sign-in, with proposed13:45EDT one-hour Analytics read before14:00EDT expiry. No job exists. If missed, stop and obtain a new exact time approval; never catch up or roll forward."
+  },
+  "newContentHash": "6501be228954df315025272c26edd31bc83d42b27112a93ac6cf620e0fff98ce",
+  "newStatus": "NOT_APPROVED_NOT_SCHEDULED",
+  "actualPinCreates": 0,
+  "actualScheduledJobs": 0,
+  "pilotExpiry": "2026-10-18T18:00:00Z"
+}

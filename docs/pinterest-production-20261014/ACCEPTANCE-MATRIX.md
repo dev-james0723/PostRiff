@@ -1,3 +1,9 @@
+# Current acceptance pointer — 18Oct2026
+
+**Current live66c5cedd/5Z6; local AMR hardening candidatee40f3869. Public all four NO-GO.** Use [CURRENT-ACCEPTANCE-20261018.md](CURRENT-ACCEPTANCE-20261018.md) for the current dated matrix. Everything below is retained historical source-specific evidence; pending/consumed budgets below must not be reused.
+
+---
+
 # Pinterest acceptance and capability matrix
 
 **Current18Oct~05:30UTC:** live730d/Eobk; real4scopeOAuth/eligibleboardPASS; refresh403/snapshot500remain. Repair66c5cedd cloud08m85w3gj9PASS32tests+3476hashmatch; deploymentapproved but0submissions because protectedsecretCopyrequireshuman. CIbudgetconsumed/build1+promotion1remain. Publicall4NO-GO. Latestsectionbelow supersedes pending-CIrows.
