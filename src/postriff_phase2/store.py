@@ -76,7 +76,11 @@ class Phase2Store(Store):
         result["state"]["contentTypes"] = content_projection(result["state"])
         p = result["state"].get("phase2")
         if p:
-            p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
+            # Some hosted workspaces never had the legacy embedded trial grant.
+            # Present their saved content without inventing a trial or allowance;
+            # hosted publishing entitlements are checked separately against SQL.
+            if isinstance(p.get("trial"), dict):
+                p["trial"]["status"] = "active" if self.clock() < p["trial"]["expiresAt"] else "expired"
             p["art"]["providerBrief"] = self.art_brief(state)
             p["art"]["briefHash"] = digest(p["art"]["providerBrief"]) if p["art"]["providerBrief"] else None
             p["plans"] = [{"id": key, **value} for key, value in PLANS.items()]
