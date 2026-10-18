@@ -36,6 +36,7 @@
     "e2e:brand-brain:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-brand-brain-validation.sh frontend",
     "ci:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh",
     "test:mastodon-automation:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-automation.sh",
+    "ci:mastodon-management-after134:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-management-after134.sh",
     "e2e:mastodon:jcb": "bash ../scripts/cloud-python-bootstrap.sh bash ../scripts/cloud-mastodon-validation.sh frontend"
   },
   "dependencies": {
