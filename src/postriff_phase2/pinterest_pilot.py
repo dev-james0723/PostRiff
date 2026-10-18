@@ -9,6 +9,20 @@ from postriff_alpha.domain import AlphaError
 READ_SCOPES = frozenset({'user_accounts:read', 'boards:read'})
 
 
+def _internal_scopes(scopes):
+    """Validate scopes from OAuth grants, PostgreSQL arrays and internal callers.
+
+    PostgreSQL/client adapters may return an ordered list or tuple; internal
+    analytics callers may supply a set/frozenset. Never interpret a string,
+    mapping or malformed scalar as a grant (including comma-joined text).
+    """
+    if type(scopes) not in (list, tuple, set, frozenset) or not scopes:
+        return None
+    if any(type(scope) is not str or not scope for scope in scopes):
+        return None
+    return frozenset(scopes)
+
+
 @dataclass(frozen=True)
 class PinterestTrialPolicy:
     workspace_id: str
@@ -48,8 +62,8 @@ class PinterestTrialPolicy:
 
     @staticmethod
     def require_scopes(scopes):
-        if (not isinstance(scopes, list) or not scopes or any(not isinstance(s, str) for s in scopes)
-                or not set(scopes) <= READ_SCOPES):
+        granted = _internal_scopes(scopes)
+        if granted is None or not granted <= READ_SCOPES:
             raise AlphaError('Reconnect Pinterest with profile and board read permissions only for this Trial.',
                              403, code='pinterest_trial_readonly')
 
@@ -113,7 +127,8 @@ class PinterestExecutionTrialPolicy(PinterestTrialPolicy):
             permitted.add('pins:read')
         if self.supports('publish'):
             permitted.add('pins:write')
-        if not isinstance(scopes, list) or not scopes or any(not isinstance(s, str) for s in scopes) or not set(scopes) <= permitted:
+        granted = _internal_scopes(scopes)
+        if granted is None or not granted <= permitted:
             raise AlphaError('The requested Pinterest scope is outside this private Trial.', 403, code='pinterest_trial_denied')
 
     def require_account(self, account_id):

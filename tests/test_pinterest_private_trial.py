@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from unittest.mock import patch
 from types import SimpleNamespace
 from postriff_alpha.domain import AlphaError
-from postriff_phase2.pinterest_pilot import PinterestExecutionTrialPolicy
+from postriff_phase2.pinterest_pilot import PinterestExecutionTrialPolicy, PinterestTrialPolicy
 from postriff_phase2.pinterest_quota import PinterestQuota
 from postriff_phase2.providers import registry_from_environment
 from postriff_phase2.oauth import OAuthService
@@ -106,6 +106,27 @@ class PrivateTrial(unittest.TestCase):
         for cap in ('publish','schedule','analytics'):self.assertEqual(matrix[cap]['level'],'Direct')
         self.assertIn('Private',matrix['publish']['evidence'])
         self.assertEqual(set(entry['readinessChecklist']['requestedScopes']),set(p.publish_required))
+
+    def test_analytics_internal_scope_formats_preserve_trial_ceiling(self):
+        _, provider, token = fixture()
+        approved = ['user_accounts:read', 'boards:read', 'pins:read']
+        for collection in (list, tuple, set, frozenset):
+            with self.subTest(collection=collection.__name__):
+                scopes = collection(approved)
+                provider.assert_trial_context(W, A, scopes=scopes)
+                provider.trial_policy.require_scopes(scopes)
+                PinterestTrialPolicy.require_scopes(collection(approved[:2]))
+                with self.assertRaises(AlphaError):
+                    PinterestTrialPolicy.require_scopes(scopes)  # read-only must still deny Pin scopes
+                with self.assertRaises(AlphaError):
+                    provider.trial_policy.require_scopes(collection(approved + ['boards:write']))
+        for malformed in (None, [], (), '', 'user_accounts:read,boards:read,pins:read',
+                          {'user_accounts:read': True}, [None], [True], [123], [''],
+                          ('pins:write', 'ads:read')):
+            with self.subTest(malformed=repr(malformed)):
+                with self.assertRaises(AlphaError):
+                    provider.trial_policy.require_scopes(malformed)
+        self.assertEqual(provider.transport.calls, [])  # no provider action from scope normalization
 
     def test_policy_identity_board_expiry_and_time_never_broaden_authority(self):
         _,p,t=fixture();m=manifest();p.trial_policy.require_manifest(m)
