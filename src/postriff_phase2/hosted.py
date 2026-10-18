@@ -283,7 +283,7 @@ class HostedPhase2Commands:
             raise AlphaError("Expected a structured command.")
         if state.get("workspace", {}).get("sample"):
             raise AlphaError("Hosted sample workspaces are read-only.", 403)
-        if action == manual_drafts.ACTION:
+        if action == "manual_draft_create":
             # Saving author text must not run a writer, change the shared brief,
             # or invalidate existing research drafts, approvals or scheduled jobs.
             return manual_drafts.create(state, principal, payload, self.clock())
