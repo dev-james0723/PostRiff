@@ -22,6 +22,7 @@ from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.social_connectors import MastodonProvider
 from postriff_phase2.mastodon_management import MastodonManagement
 from test_hosted_wave1_connectors import PUBLIC, ok
+from mastodon_after134_fixture import prepare as prepare_after134
 
 DSN = os.environ.get('POSTRIFF_TEST_DSN', 'host=127.0.0.1 port=55438 dbname=postgres')
 
@@ -38,14 +39,7 @@ class JournalTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sql = (ROOT / 'migrations/postriff/131_mastodon_management.sql').read_text()
-        with connection() as db:
-            db.execute(cls.sql)
-            db.execute(cls.sql)
-            metrics = (ROOT / 'migrations/postriff/132_mastodon_native_metrics.sql').read_text()
-            db.execute(metrics); db.execute(metrics)
-            health = (ROOT / 'migrations/postriff/133_mastodon_connection_health.sql').read_text()
-            db.execute(health); db.execute(health)
+        prepare_after134(connection, DSN)
 
     def setUp(self):
         self.actor = str(uuid.uuid4())
@@ -536,6 +530,62 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(post['metrics']['likes']['value'], 5); self.assertEqual(post['metrics']['likes']['nativeName'], 'favourites_count')
         self.assertNotIn('reach', post['metrics']); self.assertEqual(post['rates']['likesPerView']['value'], None)
 
+    def test_management_tables_reject_foreign_workspace_connection_pairs(self):
+        for statement, params in (
+                ("INSERT INTO public.pr_mastodon_actions(workspace_id,connection_id,actor_id,action,preview,digest) VALUES(%s,%s,%s,'fixture','{}',%s)",
+                 (self.foreign, self.connection_id, self.other, 'a' * 64)),
+                ('INSERT INTO public.pr_mastodon_health(workspace_id,connection_id) VALUES(%s,%s)',
+                 (self.foreign, self.connection_id))):
+            with connection() as db, self.assertRaises(psycopg.errors.ForeignKeyViolation):
+                db.execute('SET LOCAL ROLE service_role')
+                db.execute(statement, params)
+
+    def test_service_role_crud_on_action_health_and_encrypted_cache(self):
+        instance = 'synthetic-' + uuid.uuid4().hex + '.invalid'
+        ciphertext, key = self.vault.encrypt(json.dumps({'client_secret': self.sample_app_secret}))
+        with connection() as db:
+            db.execute('SET LOCAL ROLE service_role')
+            db.execute('INSERT INTO public.pr_mastodon_applications(instance,binding_digest,credentials_ciphertext,key_id) VALUES(%s,%s,%s,%s)', (instance, 'a' * 64, ciphertext, key))
+            cache = db.execute('SELECT credentials_ciphertext,key_id FROM public.pr_mastodon_applications WHERE instance=%s', (instance,)).fetchone()
+            self.assertEqual(json.loads(self.vault.decrypt(*cache)), {'client_secret': self.sample_app_secret})
+            db.execute('UPDATE public.pr_mastodon_applications SET updated_at=now() WHERE instance=%s', (instance,))
+            db.execute('DELETE FROM public.pr_mastodon_applications WHERE instance=%s', (instance,))
+            action = db.execute("INSERT INTO public.pr_mastodon_actions(workspace_id,connection_id,actor_id,action,preview,digest) VALUES(%s,%s,%s,'fixture','{}',%s) RETURNING id", (self.workspace, self.connection_id, self.actor, 'b' * 64)).fetchone()[0]
+            db.execute("UPDATE public.pr_mastodon_actions SET status='cancelled' WHERE id=%s", (action,))
+            self.assertEqual(db.execute('SELECT status FROM public.pr_mastodon_actions WHERE id=%s', (action,)).fetchone(), ('cancelled',))
+            db.execute('DELETE FROM public.pr_mastodon_actions WHERE id=%s', (action,))
+            db.execute('INSERT INTO public.pr_mastodon_health(workspace_id,connection_id) VALUES(%s,%s)', (self.workspace, self.connection_id))
+            db.execute('UPDATE public.pr_mastodon_health SET failures=1 WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+            self.assertEqual(db.execute('SELECT failures FROM public.pr_mastodon_health WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id)).fetchone(), (1,))
+            db.execute('DELETE FROM public.pr_mastodon_health WHERE workspace_id=%s AND connection_id=%s', (self.workspace, self.connection_id))
+
+    def test_shared_metric_reads_preserve_all_current_providers_and_reject_unknown(self):
+        with connection() as db:
+            for provider in ('threads', 'instagram', 'pinterest', 'mastodon'):
+                db.execute("INSERT INTO public.pr_metric_reads(workspace_id,connection_id,provider,provider_post_id,read_offset,source,anchor_at,due_at) VALUES(%s,%s,%s,%s,'t0','verification',now(),now())",
+                    (self.workspace, self.connection_id, provider, 'synthetic-' + provider))
+            self.assertEqual(db.execute('SELECT provider FROM public.pr_metric_reads WHERE workspace_id=%s ORDER BY provider', (self.workspace,)).fetchall(),
+                [('instagram',), ('mastodon',), ('pinterest',), ('threads',)])
+        with connection() as db, self.assertRaises(psycopg.errors.CheckViolation):
+            db.execute("INSERT INTO public.pr_metric_reads(workspace_id,connection_id,provider,provider_post_id,read_offset,source,anchor_at,due_at) VALUES(%s,%s,'unknown-provider','synthetic-invalid','t0','verification',now(),now())", (self.workspace, self.connection_id))
+
+    def test_optional_quotes_use_actual_native_field_and_persist_missing_as_null(self):
+        from postriff_phase2.insights import fetch_post_insights, record_observations
+        token = json.dumps({'v': 1, 'at': 'synthetic-token', 'instance': 'mastodon.social', 'scope': ['read:accounts', 'read:statuses']})
+        with connection() as db:
+            self.assertEqual(db.execute("SELECT native_name,definition_version FROM public.pr_metric_definitions WHERE provider='mastodon' AND metric='quotes'").fetchall(), [('quotes_count', '2026-09')])
+        for index, value in enumerate((7, 0, None, True, -1, 2**53, '7')):
+            body = {'id': str(800 + index), 'account': {'id': '100'}, 'visibility': 'public', 'favourites_count': 1, 'reblogs_count': 2, 'replies_count': 3}
+            if value is not None:
+                body['quotes_count'] = value
+            with patch.object(self.provider, 'transport', return_value=ok(body)):
+                result = fetch_post_insights(None, token, 'mastodon', body['id'], mastodon=self.provider, account_id=self.account)
+            with connection() as db, db.cursor() as cur:
+                record_observations(cur, self.workspace, self.connection_id, 'mastodon', body['id'], None,
+                    result['found'], result['endpoint'], self.now, read_offset='t0')
+                stored = cur.execute("SELECT value,availability FROM public.pr_metric_observations WHERE workspace_id=%s AND provider_post_id=%s AND metric='quotes'", (self.workspace, body['id'])).fetchone()
+                self.assertEqual(stored, (value, 'available') if index in (0, 1) else (None, 'unavailable'))
+
     def test_thread_context_cross_tenant_denial_precedes_provider_io(self):
         self.calls.clear()
         with self.assertRaises(AlphaError):
@@ -634,13 +684,14 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len([c for c in self.calls if c[0] == 'POST' and c[1].endswith('/api/v1/apps')]), 1)
         with connection() as db:
-            row = db.execute('SELECT credentials_ciphertext FROM public.pr_mastodon_applications').fetchone()
-            self.assertNotIn('fixture-secret', row[0])
+            row = db.execute('SELECT credentials_ciphertext,key_id FROM public.pr_mastodon_applications').fetchone()
+            self.assertNotIn(self.sample_app_secret, row[0])
+            self.assertEqual(json.loads(self.vault.decrypt(*row)), first)
 
     def test_browser_roles_cannot_read_credentials_or_action_bodies(self):
         self.preview()
         for role in ('anon', 'authenticated'):
-            for table in ('pr_mastodon_applications', 'pr_mastodon_actions'):
+            for table in ('pr_mastodon_applications', 'pr_mastodon_actions', 'pr_mastodon_health'):
                 with connection() as db:
                     db.execute('SET LOCAL ROLE ' + role)
                     with self.assertRaises(psycopg.errors.InsufficientPrivilege): db.execute('SELECT * FROM public.' + table)

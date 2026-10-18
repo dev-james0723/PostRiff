@@ -1,0 +1,26 @@
+{
+  "state": "FUTURE MANAGEMENT CANDIDATE; NEVER APPLIED",
+  "base_connect": "01c9c742f44ebc67e9d9a8cff88672695a8801ec",
+  "g7": "5fa36745320a28de7fff84541bfef2f378b14447",
+  "management_metrics_source": "a96ee77fae5f83a331287517ee0d06004b8f0cf7",
+  "native_name": "mastodon_management_after_connect_134_20261018160404",
+  "custom_ledger_name": "20261018160404_mastodon_management_after_connect_134.sql",
+  "payload_sha256": "66afc61f47add5747fd819dab89d98a2d84f357f0f4e250df8974eda69b1b3ea",
+  "requires134_sha256": "d2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3",
+  "live_readback_at": "2026-10-18T16:04:04.564147+00:00",
+  "live_state": "134/apps/actions/health absent; future preflight must currently block",
+  "definition_version": "2026-09 matches existing G7/E observation writer; quotes optional actual field required",
+  "shared_provider_before": [
+    "threads",
+    "instagram",
+    "pinterest"
+  ],
+  "shared_provider_after": [
+    "threads",
+    "instagram",
+    "pinterest",
+    "mastodon"
+  ],
+  "execution": "metadata SELECT only; no DDL/data writes/jobs",
+  "runtime_ddl_rls": "NOT RUN"
+}

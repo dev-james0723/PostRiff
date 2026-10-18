@@ -21,6 +21,7 @@ from postriff_phase2.hosted_worker import PostgresWorker
 from postriff_phase2.oauth import CredentialVault
 from postriff_phase2.social_connectors import MastodonProvider
 from mastodon_browser_fixture import SyntheticMastodon
+from mastodon_after134_fixture import prepare as prepare_after134
 
 DSN = os.environ.get('POSTRIFF_TEST_DSN', 'host=127.0.0.1 port=55438 dbname=postgres')
 clock = [time.time()]
@@ -72,9 +73,8 @@ class Writer(FixtureAgentRuntime):
                 variant['warnings'] = [w for w in variant['warnings'] if 'Deterministic writing preview' not in w]
         return result
 
+prepare_after134(connection, DSN)
 with connection() as db:
-    for name in ('131_mastodon_management.sql', '132_mastodon_native_metrics.sql', '133_mastodon_connection_health.sql'):
-        db.execute((ROOT / 'migrations/postriff' / name).read_text())
     db.execute('INSERT INTO auth.users VALUES(%s)', (actor,))
 api = API(); provider = MastodonProvider('https://rafii.io', production_reviewed=True, transport=api,
     resolver=lambda *_args, **_kw: [(2, 1, 6, '', ('93.184.216.34', 443))])

@@ -40,7 +40,7 @@ PY
   exit 0
 fi
 pg_major=16
-case "${1:-}" in youtube-disconnect-only|release-preflight-only) pg_major=17 ;; esac
+case "${1:-}" in youtube-disconnect-only|release-preflight-only|management-after134-only) pg_major=17 ;; esac
 if [ ! -x "/usr/lib/postgresql/$pg_major/bin/initdb" ]; then
   sudo -n apt-get -qq update
   if [ "$pg_major" = 17 ]; then
@@ -51,6 +51,9 @@ if [ ! -x "/usr/lib/postgresql/$pg_major/bin/initdb" ]; then
 fi
 export POSTRIFF_PG_BIN="/usr/lib/postgresql/$pg_major/bin"
 case "${1:-}" in
+  management-after134-only)
+    export POSTRIFF_MASTODON_AFTER134_FIXTURE=1
+    "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_mastodon_management.py tests/phase2/postgres_mastodon_automation.py ;;
   youtube-disconnect-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_youtube_workspace_provider_data ;;
   release-preflight-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_consumer_migrations postgres_mastodon_automation_legacy ;;
   sql-only) "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_pg_suite.py postgres_mastodon_management ;;
