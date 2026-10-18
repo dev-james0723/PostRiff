@@ -20,3 +20,8 @@ Before promotion: recheck actual Eobk baseline, shared production env metadata a
 If acceptance fails, pause private Pinterest and cancel only own pending jobs when necessary; preserve knownIDs/journal/quota/metrics/uncertain outcomes. After shared-compatibility checks, rollback by promoting the **existing Eobk artifact** without rebuild. Its known snapshot500 is a documented limitation; rollback restores the preceding release, not successful authoring. No destructive SQL or Pin deletion.
 
 Policy still expires **18Oct14:00EDT /18:00UTC**. Scheduled test proposal18Oct12:00EDT/16:00UTC remains unapproved. If the window becomes infeasible, stop and prepare a new exact proposal; never roll it forward. Final live Pin approvals follow the actual normalized immutable image. Separate Standard submission/public-release approvals remain pending.
+
+
+## Executed — 2026-10-18T15:00:42.735265+00:00
+
+Human confirmed protected Copy; one repair build and one qualified promotion completed. Actual live deployment5Z6/source66c5cedd/receipt0281699f. All2217sourcehashes/services/cron/health/env/alias gates passed; own workspace GET200; one approved image ingest andmediaGET200 verified. No furtherCI/build/promotion/upload allowance remains. This original proposal is retained as authorization history, not a reusable budget. See FINAL-RECEIPT and NEXT-ACTION-REAL-PINS-20261018.md.0realPins approved or created.

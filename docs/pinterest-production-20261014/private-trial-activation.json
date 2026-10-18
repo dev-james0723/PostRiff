@@ -112,7 +112,14 @@
     "maxUploads": 1,
     "paidGeneration": false,
     "pinDraftsOnly": true,
-    "finalNormalizedHashAndAssetId": "BLOCKED snapshot500;0upload attempts; repair66c5cedd local only"
+    "finalNormalizedHashAndAssetId": {
+      "assetId": "6c6ca81eae6843b5b28deaec96485925",
+      "sha256": "b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6"
+    },
+    "status": "PASS_ONE_APPROVED_UPLOAD_AND_READBACK",
+    "uploads": 1,
+    "remainingUploads": 0,
+    "evidence": "evidence/private-trial-image-ingest-20261018.json"
   },
   "maximumExecutions": {
     "sqlFiles": 2,
@@ -164,8 +171,13 @@
     "proposal": "NEXT-ACTION-SNAPSHOT-REPAIR.md",
     "cloudRun": "08m85w3gj9",
     "cloudStatus": "PASS32_TESTS_SOURCE_FINGERPRINT_MATCH",
-    "buildSubmissions": 0,
-    "promotions": 0,
-    "blocker": "SECURE_INPUT_BLOCKED; human existing masked App secret Copy required, no new approval"
+    "buildSubmissions": 1,
+    "promotions": 1,
+    "blocker": null,
+    "status": "DEPLOYED_AND_VERIFIED",
+    "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "deploymentReceiptCommit": "0281699f7663275118fef4ff5ca6a2b391ee8647",
+    "evidence": "evidence/snapshot-repair-deployed-20261018.json",
+    "verifiedAt": "2026-10-18T15:00:42.735265+00:00"
   }
 }

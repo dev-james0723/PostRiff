@@ -1,6 +1,6 @@
 {
-  "preparedAt": "2026-10-18T05:30:00Z",
-  "state": "REVIEWABLE_DRAFT_NOT_EXECUTABLE",
+  "preparedAt": "2026-10-18T14:52:35.562651+00:00",
+  "state": "READY_FOR_EXACT_HUMAN_PIN_APPROVAL_NOT_EXECUTION_AUTHORITY",
   "providerAppId": "1615884",
   "productionSupabase": "buoyhkbodnhzngaotoel",
   "pins": [
@@ -8,7 +8,7 @@
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "CONNECTED_REAL_FOUR_SCOPE_EXCHANGE_PASS_REFRESH_CURRENT403",
+      "connectionState": "REAL_FOUR_SCOPE_CONNECTED; CURRENT_REFRESH_NOT_YET_ACCEPTED_403_FRESH_HUMAN_LOGIN_PENDING",
       "board": {
         "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
         "name": "Rafii — Product & Content Workflows",
@@ -31,10 +31,34 @@
         "bytes": 76554,
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
-        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Existing private workspace image ingest already approved but blocked by live snapshot500. Repair66c5cedd qualified by cloud08m85w3gj9/32PASS; deploymentapproved but awaits human protected secretCopy. Then freeze normalized asset/object/hash/alt before final Pin approval.",
-        "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
-        "finalNormalizedAsset": null
+        "sourceValidation": "Original PNG checksum and dimensions rechecked immediately before the one approved upload; server normalized JPEG stored and actual media GET200 verified.",
+        "delivery": {
+          "method": "Runtime signed URL for exact approved immutable asset; token is a delivery credential, never a new image choice",
+          "origin": "https://buoyhkbodnhzngaotoel.supabase.co",
+          "path": "/storage/v1/object/sign/postriff-private/568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "expiresSeconds": 600,
+          "mintWhen": "Only inside approved dispatch; no token minted or persisted in this preview",
+          "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
+        },
+        "ingestStatus": "PASS_REAL_SINGLE_IMAGE_INGEST_AND_READBACK",
+        "finalNormalizedAsset": {
+          "assetId": "6c6ca81eae6843b5b28deaec96485925",
+          "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+          "sourceSha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+          "sha256": "b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6",
+          "mime": "image/jpeg",
+          "bytes": 58781,
+          "width": 1200,
+          "height": 630,
+          "decoder": "pillow",
+          "execution": "hosted-private-storage",
+          "bucket": "postriff-private",
+          "bucketPublic": false,
+          "objectName": "6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "storagePath": "568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "createdAt": "2026-10-18T14:39:09.699981Z",
+          "deleted": false
+        }
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -65,14 +89,24 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_REPAIRED_LIVE_SNAPSHOT_IMMUTABLE_ASSET_AND_EXACT_PIN_APPROVAL"
-      }
+        "state": "REVIEWABLE_FIXED_ASSET_PAYLOAD; EPHEMERAL_SIGNED_URL_MINTED_ONLY_AT_APPROVED_EXECUTION",
+        "deliverySource": {
+          "method": "Runtime signed URL for exact approved immutable asset; token is a delivery credential, never a new image choice",
+          "origin": "https://buoyhkbodnhzngaotoel.supabase.co",
+          "path": "/storage/v1/object/sign/postriff-private/568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "expiresSeconds": 600,
+          "mintWhen": "Only inside approved dispatch; no token minted or persisted in this preview",
+          "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
+        }
+      },
+      "humanReviewContentSha256": "d1114bb4de90e01c0f5fb3e92bb2364f4504bcaa4c01e6e7a6878952534bf86c",
+      "fingerprintPurpose": "Local reviewed-content fingerprint only; not a persisted server manifest, human approval record or provider receipt."
     },
     {
       "account": "@jamesaucreates",
       "providerAccountId": "1126814906675966091",
       "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
-      "connectionState": "CONNECTED_REAL_FOUR_SCOPE_EXCHANGE_PASS_REFRESH_CURRENT403",
+      "connectionState": "REAL_FOUR_SCOPE_CONNECTED; CURRENT_REFRESH_NOT_YET_ACCEPTED_403_FRESH_HUMAN_LOGIN_PENDING",
       "board": {
         "state": "ELIGIBLE_API_BACKED_APP_READ_PASS",
         "name": "Rafii — Product & Content Workflows",
@@ -95,10 +129,34 @@
         "bytes": 76554,
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
-        "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Existing private workspace image ingest already approved but blocked by live snapshot500. Repair66c5cedd qualified by cloud08m85w3gj9/32PASS; deploymentapproved but awaits human protected secretCopy. Then freeze normalized asset/object/hash/alt before final Pin approval.",
-        "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
-        "finalNormalizedAsset": null
+        "sourceValidation": "Original PNG checksum and dimensions rechecked immediately before the one approved upload; server normalized JPEG stored and actual media GET200 verified.",
+        "delivery": {
+          "method": "Runtime signed URL for exact approved immutable asset; token is a delivery credential, never a new image choice",
+          "origin": "https://buoyhkbodnhzngaotoel.supabase.co",
+          "path": "/storage/v1/object/sign/postriff-private/568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "expiresSeconds": 600,
+          "mintWhen": "Only inside approved dispatch; no token minted or persisted in this preview",
+          "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
+        },
+        "ingestStatus": "PASS_REAL_SINGLE_IMAGE_INGEST_AND_READBACK",
+        "finalNormalizedAsset": {
+          "assetId": "6c6ca81eae6843b5b28deaec96485925",
+          "workspaceId": "568699ad-d66e-42b8-a7f1-e86d0c35ab02",
+          "sourceSha256": "8b0a4150bcf7adcbe8de83baa063b05f8f2246c3a3e918c3f40263b5e37dc030",
+          "sha256": "b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6",
+          "mime": "image/jpeg",
+          "bytes": 58781,
+          "width": 1200,
+          "height": 630,
+          "decoder": "pillow",
+          "execution": "hosted-private-storage",
+          "bucket": "postriff-private",
+          "bucketPublic": false,
+          "objectName": "6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "storagePath": "568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "createdAt": "2026-10-18T14:39:09.699981Z",
+          "deleted": false
+        }
       },
       "destinationUrl": "https://rafii.io/",
       "accessTier": "Trial; Standard not approved",
@@ -130,8 +188,18 @@
             "url": null
           }
         },
-        "state": "DRAFT_REQUIRES_REPAIRED_LIVE_SNAPSHOT_IMMUTABLE_ASSET_AND_EXACT_PIN_APPROVAL"
-      }
+        "state": "REVIEWABLE_FIXED_ASSET_PAYLOAD; EPHEMERAL_SIGNED_URL_MINTED_ONLY_AT_APPROVED_EXECUTION",
+        "deliverySource": {
+          "method": "Runtime signed URL for exact approved immutable asset; token is a delivery credential, never a new image choice",
+          "origin": "https://buoyhkbodnhzngaotoel.supabase.co",
+          "path": "/storage/v1/object/sign/postriff-private/568699ad-d66e-42b8-a7f1-e86d0c35ab02/media/6c6ca81eae6843b5b28deaec96485925-b59f132e2368e144f7d6dd95a29dacc8cac532fd06e28b7355dd73c32c55c4c6.jpg",
+          "expiresSeconds": 600,
+          "mintWhen": "Only inside approved dispatch; no token minted or persisted in this preview",
+          "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
+        }
+      },
+      "humanReviewContentSha256": "f3043d9841b2532b51d27dc00cba622a9cde5fd67148f577f774cf6e19be8627",
+      "fingerprintPurpose": "Local reviewed-content fingerprint only; not a persisted server manifest, human approval record or provider receipt."
     }
   ],
   "writeBudget": {
@@ -143,10 +211,9 @@
     "pinCreatesProposed": 2
   },
   "hardBlocks": [
-    "Actual workspace snapshot500 prevents Content Studio ingest.66c5cedd cloudPASS/deploymentapproved; human must use protected existingsecretCopycontrol before one build.",
-    "Actual normalized immutable asset/object/hash unavailable;0upload attempts.",
-    "No real Pin approval; both proposed creates remain NOT_RUN.",
-    "Current fresh-grant refresh returns Rafii403; same-account human normal sign-in requested."
+    "No exact real Pin approval; both creates and scheduled intent remain NOT_RUN.",
+    "Current-grant refresh needs normal human fresh Rafii sign-in after observed403; do not bypass step-up.",
+    "Compliant actual OAuth/API recording and eligible non-owner customer acceptance remain missing for public release."
   ],
   "readbackPlan": [
     "Persist provider Pin ID before reporting accepted; GET exact Pin through bound account.",
@@ -177,13 +244,14 @@
     "created": 1,
     "remaining": 0
   },
-  "updatedAt": "2026-10-17T22:37:34.355134+00:00",
+  "updatedAt": "2026-10-18T14:52:35.562651+00:00",
   "activationProposal": "../private-trial-activation.json",
   "runtime": {
-    "productSource": "730d044078434638f31eb5ca0e57280307ff8317",
-    "deploymentId": "dpl_EobkKis5yGDJGFyT8qzrCAm3SBvQ",
-    "status": "PRIVATE_TRIAL_DEPLOYED_CONSENT_PENDING",
+    "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+    "deploymentId": "dpl_5Z6zzXpASpk5iB5roLGkSy2oTXZg",
+    "status": "PRIVATE_TRIAL_REPAIR_DEPLOYED_AND_IMAGE_VERIFIED",
     "pilotId": "7e355181-2714-46fb-abfe-26fc526d0809",
-    "expiresAt": "2026-10-18T18:00:00Z"
+    "expiresAt": "2026-10-18T18:00:00Z",
+    "deploymentReceiptCommit": "0281699f7663275118fef4ff5ca6a2b391ee8647"
   }
 }

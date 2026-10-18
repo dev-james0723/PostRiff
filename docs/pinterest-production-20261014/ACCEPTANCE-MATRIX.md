@@ -151,3 +151,23 @@ Earlier unapplied/undeployed statements are superseded by this execution. Public
 | FullStandardAccessvideo | BLOCKED |DedicatedagentissuednoStartRecording/scene/profile/source/windowcreation; CUAgetAppOBSblocked6120s thenparentinterrupted. Rootprobe4527stimeout. No newfootage; existing4fpspartialinsufficient. ExistingOBSstateunknown/MissingFilesuntouched. |
 
 [NewCI/sourceproof](evidence/snapshot-repair-cloud-validation-20261018.json) · [currentexecutionhandoff](evidence/snapshot-repair-deployment-blocker-20261018.json) · [recordingattempt](evidence/obs-qualification-attempt-20261018.json). No realPin/schedule/nativeAnalytics/Standard/nonowner/publicresultadded.
+
+
+## Repair deployment and image acceptance — 2026-10-18T14:52:35.562651+00:00
+
+This section supersedes earlier snapshot500/image0 status only. Source66c5cedd; deployment5Z6; canonical project unchanged.
+
+| Acceptance | Status | Evidence |
+|---|---|---|
+| Actual uploaded source/runtime/cron | PASS | [Deployment](evidence/snapshot-repair-deployed-20261018.json),2217/2217rawSHA1 |
+| Production alias/target/health/config | PASS |14:34UTC,HTTP200,173envmetadata unchanged |
+| Own legacy workspace GET | PASS |14:36:06Z,requestrswj2-1792334166381-9bfcf56cd87a,HTTP200,revision104 before upload |
+| Single private image ingest/readback | PASS | [Asset](evidence/private-trial-image-ingest-20261018.json),revision105,oneasset/object,mediaGET200 |
+| Current-grant refresh/full lifecycle | BLOCKED | Rafii403; normal fresh human sign-in pending |
+| Actual immediate Pin | NOT RUN | Exact preview approval pending;0creates |
+| Actual scheduled execution | NOT RUN |18Oct12EDT/16UTC proposed,not approved/scheduled |
+| Actual own Pin Analytics | NOT RUN | No approved test Pin ID yet |
+| Compliant Standard video/approval | BLOCKED | No qualified source/video; no submission or approval |
+| Eligible non-owner public journey | NOT RUN | Public gates all NO-GO |
+
+Optional Library metadata503: both required tables absent by read-only catalog check; migration112 not applied. No source fallback or undeclared SQL.
