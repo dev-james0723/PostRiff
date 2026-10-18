@@ -204,7 +204,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
                 <Button variant='outline' size='sm' disabled={busy} onClick={() => void read('rules')}>View instance rules</Button>
                 <label htmlFor={fieldId + '-report-rules'} className='flex flex-col gap-1 text-sm'>Broken instance rule IDs, separated by commas<Input id={fieldId + '-report-rules'} value={reportRuleIds} onChange={(event) => setReportRuleIds(event.target.value)} /></label>
               </>}
-              <label className='flex flex-col gap-1 text-sm'>Supporting status IDs (optional, comma-separated)<Input value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>
+              <label htmlFor={fieldId + '-report-statuses'} className='flex flex-col gap-1 text-sm'>Supporting status IDs (optional, comma-separated)<Input id={fieldId + '-report-statuses'} value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>
               <label htmlFor={fieldId + '-report-forward'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-report-forward'} checked={reportForward} onCheckedChange={(value) => setReportForward(value === true)} />Forward this report to the reported account&apos;s server moderators</label>
               <p className='text-muted-foreground text-xs'>A filed report is not a moderation decision. Rafii cannot retract it. Review the target, reason and forwarding choice before approving.</p>
             </>}
@@ -214,7 +214,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
               <Select value={filterPolicy} onValueChange={(value) => setFilterPolicy(String(value))}><SelectTrigger id={fieldId + '-filter-policy'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='keep'>Default / keep current</SelectItem><SelectItem value='warn'>Warn</SelectItem><SelectItem value='hide'>Hide</SelectItem><SelectItem value='blur'>Blur (Mastodon4.4+)</SelectItem></SelectContent></Select>
               <label htmlFor={fieldId + '-whole-word'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-whole-word'} checked={wholeWord} onCheckedChange={(value) => setWholeWord(value === true)} />Match whole words for new keywords</label>
               <label htmlFor={fieldId + '-never-expire'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-never-expire'} checked={filterNeverExpires} onCheckedChange={(value) => setFilterNeverExpires(value === true)} />Never expire (clear any current expiry)</label>
-              <label className='flex flex-col gap-1 text-sm'>Expiry in seconds (optional)<Input type='number' min={60} max={31536000} disabled={filterNeverExpires} value={filterExpiry} onChange={(event) => setFilterExpiry(event.target.value)} /></label>
+              <label htmlFor={fieldId + '-filter-expiry'} className='flex flex-col gap-1 text-sm'>Expiry in seconds (optional)<Input id={fieldId + '-filter-expiry'} type='number' min={60} max={31536000} disabled={filterNeverExpires} value={filterExpiry} onChange={(event) => setFilterExpiry(event.target.value)} /></label>
               <p className='text-muted-foreground text-xs'>Filters affect this account only. Blank fields keep existing settings when updating. A new filter needs a title and at least one context.</p>
             </>}
             <Button variant='outline' disabled={busy} onClick={() => void prepare()}>Review action</Button>
