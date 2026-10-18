@@ -65,5 +65,7 @@ def source_paths(root):
         'web/src/features/analytics/coverage.ts',
         'web/src/features/analytics/empty-states.tsx',
         'web/tests/agent-ui-bridges-coverage.test.cjs',
+    'web/tests/agent-ui-e2e/run.cjs',
+    'web/tests/agent-ui-e2e/scenes.cjs',
     })
     return tuple(sorted(paths))
