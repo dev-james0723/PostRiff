@@ -4,6 +4,20 @@ if [ "$(uname -s)" != Linux ] || [ "${CI:-}" != true ]; then
   echo 'Use JCB Linux cloud CI for disposable PostgreSQL.' >&2; exit 64
 fi
 cd "$(dirname "$0")/.."
+pg_scripts=(tests/phase2/postgres_pinterest.py tests/phase2/postgres_browser_session_guard.py
+  tests/phase2/postgres_device_registry.py tests/phase2/postgres_account_holds.py
+  tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py
+  tests/phase2/postgres_growth_metric_reads.py)
+if [ "$#" -gt 0 ]; then
+  # A recovery run may select an existing suite without rerunning passed suites.
+  for pg_script in "$@"; do
+    case "$pg_script" in
+      tests/phase2/postgres_pinterest.py|tests/phase2/postgres_browser_session_guard.py|tests/phase2/postgres_device_registry.py|tests/phase2/postgres_account_holds.py|tests/phase2/postgres_security_incidents.py|tests/phase2/postgres_rapv2_acceptance.py|tests/phase2/postgres_growth_metric_reads.py) ;;
+      *) echo 'Choose an existing allowlisted disposable PostgreSQL suite.' >&2; exit 64 ;;
+    esac
+  done
+  pg_scripts=("$@")
+fi
 pg_bin=/usr/lib/postgresql/17/bin
 if [ ! -x "$pg_bin/initdb" ]; then
   sudo -n apt-get -qq update
@@ -17,7 +31,4 @@ pg_test_home="$(mktemp -d)"
 trap 'rm -rf -- "$pg_test_home"' EXIT
 env -i PATH="$PATH" HOME="$pg_test_home" CI=true LC_ALL=C PYTHONDONTWRITEBYTECODE=1 \
   PYTHONPATH="$PWD/src:$PWD/tests" POSTRIFF_PG_BIN="$pg_bin" POSTRIFF_RESEARCH=0 \
-  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py tests/phase2/postgres_pinterest.py tests/phase2/postgres_browser_session_guard.py \
-    tests/phase2/postgres_device_registry.py tests/phase2/postgres_account_holds.py \
-    tests/phase2/postgres_security_incidents.py tests/phase2/postgres_rapv2_acceptance.py \
-    tests/phase2/postgres_growth_metric_reads.py
+  "$TREND_VISUAL_TEST_PYTHON" scripts/postriff_disposable_postgres.py "${pg_scripts[@]}"
