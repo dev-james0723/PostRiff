@@ -17,7 +17,7 @@ import { ActiveFilters, CollectionRow, SegmentedControl, StateMessage, Surface }
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { keys, useAct, useSnapshot } from '@/lib/api/hooks';
+import { keys, useAct, useChannels, useSnapshot } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
 import type { Manifest } from '@/lib/api/types';
 import { checkAccess, useWorkspaceAccess } from '@/lib/auth/access';
@@ -52,6 +52,8 @@ import { useElementWidth, useWide } from './use-wide';
 import { useSiteAgentPageContext } from '@/features/site-agent/use-page-context';
 import { isPostableImage, isPostableVideo } from '@/lib/media/asset-kinds';
 import { YouTubeManifestDetails } from '@/features/youtube/manifest-details';
+import { substackManualEntries } from '@/lib/substack/manual-queue';
+import { SubstackManualQueue } from './substack-manual-queue';
 
 /** How often the snapshot refreshes while a job is with the provider or about to be picked up. */
 const LIVE_REFRESH_MS = 15_000;
@@ -457,6 +459,7 @@ export function QueueView() {
 
 function Queue() {
   const snapshot = useSnapshot();
+  const connectedChannels = useChannels();
   const act = useAct();
   const access = useWorkspaceAccess();
   const { reduced } = useMotionPreference();
@@ -515,6 +518,8 @@ function Queue() {
 
   const allReviews: QueueReview[] = phase2?.reviews ?? [];
   const allJobs: QueueJob[] = phase2?.jobs ?? [];
+  const manualHandoffs = substackManualEntries(snapshot.data?.state, workspaceId, !connectedChannels.isError && connectedChannels.data?.substack?.available === true, nowSeconds)
+    .filter((entry) => !channelId || entry.connectionId === channelId);
   // Keyed by the manifest's idempotency key: a review whose key is already a job cannot schedule anything new.
   const jobByKey = new Map(allJobs.map((job) => [job.manifest.idempotencyKey, job] as const));
   const waitingReviews = allReviews.filter((r) => r.status === 'needs_review' && inChannel(r.manifest));
@@ -551,7 +556,7 @@ function Queue() {
       [...allJobs, ...allReviews].map((item) => item.manifest).find((m) => m.channelId === channelId) ??
       null)
     : null;
-  const firstRun = loaded && !channelId && allJobs.length === 0 && !allReviews.some((r) => r.status === 'needs_review' || r.status === 'stale');
+  const firstRun = loaded && !channelId && allJobs.length === 0 && manualHandoffs.length === 0 && !allReviews.some((r) => r.status === 'needs_review' || r.status === 'stale');
 
   // Live refresh: only while a job is with the provider or the worker picks one up within two minutes.
   const live = isLive(allJobs, nowSeconds);
@@ -719,6 +724,8 @@ function Queue() {
             clearLabel='Show all accounts'
           />
         )}
+
+        <SubstackManualQueue entries={manualHandoffs} />
 
         {firstRun ? (
           // One empty state instead of two; it carries both tour anchors of the sections it replaces.

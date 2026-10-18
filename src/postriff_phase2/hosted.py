@@ -419,7 +419,7 @@ class HostedPhase2Commands:
 
 class HostedWorkspaceService:
     """Compose verified Supabase principals, PostgreSQL state, and private media."""
-    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None):
+    def __init__(self, connection_factory, verify_session, assets=None, clock=time.time, identity=None, vault=None, providers=None, public_base_url=None, audience_transport=None, billing_provider=None, mailer=None, ideas_runtime=None, image_runtime=None, email_lookup=None, credits_enabled=False, credit_purchases_enabled=False, chat_media=None, productivity_providers=None, productivity_flags=None, reply_sender_enabled=False, youtube_public_base_url=None, substack_enabled=False):
         self.connection_factory = connection_factory
         self.public_base_url = (public_base_url or "").rstrip("/")
         self.verify_session = verify_session
@@ -449,6 +449,8 @@ class HostedWorkspaceService:
             flags=productivity_flags or {}, clock=clock,
         )
         self.ideas.productivity_connectors = self.productivity_connectors
+        from .substack_service import HostedSubstackService
+        self.substack = HostedSubstackService(self.repository, enabled=substack_enabled, clock=clock)
         # Chat cards say where an automation can really publish (capabilities.publish_route); set live by hosted_app.
         self.publishing_live = False
         self.ideas.service_ref = self
