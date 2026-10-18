@@ -963,4 +963,3 @@ class TwitchService:
             if expected == found:
                 self._finish(cur,action,'succeeded',result={'action':action['action'],'status':'confirmed','confirmed':True,'data':result['data'],'reconciledBy':'twitch.clip.lookup'})
             return self._present(self._action(cur,ws,conn,identifier))
-

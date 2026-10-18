@@ -67,7 +67,8 @@ Please direct us to the appropriate official review process and specify what wri
 
 Kind regards,
 
-Rafii Team  
+Rafii Team
+
 https://rafii.io
 
 ## Complete before sending

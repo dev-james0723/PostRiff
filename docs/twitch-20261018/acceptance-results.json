@@ -1474,8 +1474,8 @@
       "status": "pass"
     }
   ],
-  "durationSeconds": 5.795,
-  "finishedAt": "2026-10-18T17:31:25.251844+00:00",
+  "durationSeconds": 5.927,
+  "finishedAt": "2026-10-18T17:41:36.841584+00:00",
   "groups": {
     "test_twitch_agent": {
       "pass": 24,
@@ -1515,15 +1515,15 @@
   "postgresTarget": "127.0.0.1:55439/rafii_twitch_test",
   "productionDatabaseUsed": false,
   "python": "3.12.14",
-  "sourceBaseCommit": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+  "sourceBaseCommit": "691616e8dad6e135dc9a7aeceb21bedf10c90e6a",
   "sourceSha256": {
     "migrations/postriff/134_twitch_native.sql": "d5b40899556ba9ef00b1b0a452e6280eaf492650335227b937f8ba041c66e4b4",
     "src/postriff_phase2/twitch_agent.py": "db45f71958d7aeb3468789dd53f6c0fa5e0fff241c4967723081a1f6b06dc023",
     "src/postriff_phase2/twitch_eventsub.py": "7b7a2c6aecb8e5750d5025c75e6261c7148a21ba35a32be519f054ccff51e941",
     "src/postriff_phase2/twitch_http.py": "a486a2f3e39a498a94548b02cc6e17bbdaad9f6b86df2bd02e68878d5bf4b4ab",
-    "src/postriff_phase2/twitch_native.py": "a1faa848cd384e2c4770936a0f48d7e028589d44bebe294052bea8a1ea6f4022",
+    "src/postriff_phase2/twitch_native.py": "219efda968a68f86c2141e8e4d81393fa3f0cdcad52cf86614e93fbab11ab00b",
     "src/postriff_phase2/twitch_oauth.py": "8141e20cbe953d5766ddef2165efbcc010e7f79bc6f7f014b4fa351e6e57e11c",
-    "src/postriff_phase2/twitch_service.py": "c9baca47a4334f0265c74aef7fa7003790d9282394fd81ad96f8b17bed87b150",
+    "src/postriff_phase2/twitch_service.py": "c86b71008a8b89942af9ffc5f0e2b893664e96c4bcc418e9fb966b64167859f7",
     "src/postriff_phase2/twitch_worker.py": "21b9493238b63937b75579e09afb9915bf7a9e1db64328f1604a090f26f77708",
     "tests/test_twitch_agent.py": "a5a1022c8113b4c5727f5cb4fe7db35dab5f4b3f193be51bc4a4c963df6a2c74",
     "tests/test_twitch_eventsub.py": "91647b3a67880c2a3f63391e44ed5d2ca51afd1a4bb4c821763f7b00577920b9",
@@ -1534,7 +1534,7 @@
     "tests/test_twitch_refresh_projection.py": "7f3843b75e41f6b60721938ea82ec723bda1b06a06f32ec6c636de2cfda47ec0",
     "tests/test_twitch_runtime.py": "2deebe50ee31fbddab60165012aa306f2b55cc688330910d20dfc1cfc9af46eb"
   },
-  "startedAt": "2026-10-18T17:31:19.457136+00:00",
+  "startedAt": "2026-10-18T17:41:30.915054+00:00",
   "successful": true,
   "testsRun": 368,
   "totals": {

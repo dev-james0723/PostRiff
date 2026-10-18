@@ -368,6 +368,6 @@ test_revoked_and_absent_custody_override_stale_verified_channel (test_twitch_ref
 test_serialized_mixed_provider_profiles_preserve_unrelated_state (test_twitch_refresh_projection.TwitchRefreshProjectionTests.test_serialized_mixed_provider_profiles_preserve_unrelated_state) ... ok
 
 ----------------------------------------------------------------------
-Ran 368 tests in 5.793s
+Ran 368 tests in 5.925s
 
 OK

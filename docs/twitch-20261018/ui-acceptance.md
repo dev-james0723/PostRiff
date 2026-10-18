@@ -14,7 +14,7 @@ Implemented in `/workspace/scratch/84c4d423cd8c/rafii-twitch-worktree`. This rec
 | Frontend/backend Site Agent route manifests | Byte-identical, `cmp` exit 0 |
 | Diff whitespace validation | `git diff --check` exit 0 |
 
-The last schema receipt is bound to `src/postriff_phase2/twitch_native.py` SHA-256 `a1faa848cd384e2c4770936a0f48d7e028589d44bebe294052bea8a1ea6f4022`, following the native extreme-numeric-input hardening. The generator validates fixture payloads against the actual Python registry. The browser runner rejects a stale source hash and parses the same payloads through the production TypeScript parser. These are 112 operation-contract checks in addition to the 27 Node test cases.
+The last schema receipt is bound to `src/postriff_phase2/twitch_native.py` SHA-256 `219efda968a68f86c2141e8e4d81393fa3f0cdcad52cf86614e93fbab11ab00b`, following native extreme-numeric-input hardening and final whitespace normalization. The 112 schema checks were rerun after normalization; Python AST equivalence was also verified. The generator validates fixture payloads against the actual Python registry. The browser runner rejects a stale source hash and parses the same payloads through the production TypeScript parser. These are 112 operation-contract checks in addition to the 27 Node test cases.
 
 Earlier intermediate counts were 20 behavioral tests and 5 rendering tests. The final counts are **21 and 6** after adding accepted-clip reconciliation coverage.
 

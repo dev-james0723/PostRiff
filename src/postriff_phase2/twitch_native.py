@@ -1353,4 +1353,3 @@ def verify_resource_access(kind, resource_ids, *, client_id, access_token, subje
                           creator_app_verified=kind == "reward", reuse_authorized=reuse_authorized,
                           storage_authorized=storage_authorized,
                           metadata_json=_json({"resources": metadata}) if metadata else "{}")
-
