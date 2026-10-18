@@ -28,7 +28,8 @@ def checked_cursor(value):
 
 def public_excerpt(value, relation):
     if (not isinstance(value, dict) or value.get('visibility') not in ('public', 'unlisted')
-            or value.get('sensitive') is not False or value.get('spoiler_text') or value.get('reblog')):
+            or value.get('sensitive') is not False or not isinstance(value.get('spoiler_text'), str)
+            or value['spoiler_text'] != '' or value.get('reblog')):
         return None
     account = value.get('account')
     identifier = str(value.get('id', ''))

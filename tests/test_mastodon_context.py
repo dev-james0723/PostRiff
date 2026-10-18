@@ -53,6 +53,19 @@ class ContextTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(AlphaError):
                 page(target, {'ancestors': [], 'descendants': []})
 
+    def test_cw_metadata_requires_an_explicit_empty_string(self):
+        missing = post(1)
+        missing.pop('spoiler_text')
+        malformed = [missing] + [post(1, spoiler_text=value) for value in (None, False, 0, [], {}, 'CW', ' ')]
+        for target in malformed:
+            with self.subTest(target=target):
+                with self.assertRaises(AlphaError):
+                    page(target, {'ancestors': [], 'descendants': []})
+                result = page(post(123), {'ancestors': [], 'descendants': [target]})
+                self.assertEqual(result['posts'], [])
+        result = page(post(123), {'ancestors': [], 'descendants': [post(1, spoiler_text='')]})
+        self.assertEqual([row['postId'] for row in result['posts']], ['1'])
+
     def test_cursor_is_snapshot_tenant_connection_and_instance_bound(self):
         context = {'ancestors': [], 'descendants': [post(i) for i in range(1, 30)]}
         result = page(post(123), context, binding=['workspace', 'connection', 'social.example'])
