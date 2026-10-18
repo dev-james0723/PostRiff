@@ -223,7 +223,7 @@ destinations = [{'platform': 'Mastodon', 'language': 'en', 'channelId': channel_
 survivor = create('daily practice observations', 'Publish automatically')
 advance_to_commit(survivor); complete(survivor, 'mastodon.online')
 assert api.writes_by_instance == {'mastodon.social': 2, 'mastodon.online': 2}
-print(json.dumps({'status': 'PASS', 'execution': 'CLOUD SYNTHETIC writer/provider; actual Automation/Queue/SQL',
+print(json.dumps({'status': 'PASS', 'execution': 'SYNTHETIC writer/provider; actual Automation/Queue/SQL',
     'checks': ['current account/instance and Brand Brain draft routing', 'review default has no provider writes',
                'exact human approval through existing Queue and real worker', 'explicit definition-bound owner authority',
                'persisted verified native status readback and restart no duplicate', 'pause after queuing fences external dispatch',
