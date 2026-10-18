@@ -4,8 +4,9 @@ Candidate only. Prepared in an isolated sparse worktree; no push, provider actio
 
 - Public integration base: `7dc95e2e005cd10069b835867c5b8f8c47a9e391`.
 - Complete private repair input: `4fdc09c362f19d41b3d7e66d9a004dfd78f9783a` (includes installation re-verification, original-text manual drafts and literal action classification fix).
+- Native-input follow-up: `f54d103bd1583e6cddc25c59663042617ce0ef16`, applied by no-commit cherry-pick onto candidate `17e3844c69a61754fcf65c5c72db9eb26e303005`; all five input file blobs remain exact. The receipt update joins the same local integration commit.
 - Verified common ancestor: `730d044078434638f31eb5ca0e57280307ff8317`. Private repair base 7f434 is not an ancestor of the public source.
-- Scope: 105 selected paths from the complete common-to-repair delta, plus this receipt. All 47 runtime paths, four schema migrations, requirements dependency, 30 Python/SQL test paths, browser tests and shared CI validation are retained.
+- Scope: the original105 selected paths plus four additional follow-up paths and this receipt (110 paths relative to public). The five-file native-input follow-up modifies one already-selected browser path and adds two composer paths, one wiring regression and one non-deploy workflow. All original47 runtime paths, four schema migrations, requirements dependency, 30 Python/SQL test paths, browser tests and shared CI validation remain; the two additional runtime paths are the compact and expanded composers.
 - Existing source worktree and other branches/worktrees were not edited.
 
 ## Preservation and resolution
@@ -16,7 +17,7 @@ Candidate only. Prepared in an isolated sparse worktree; no push, provider actio
 - Public store input SHA256 verified: `3544297905808d81032e6387fca03522cf248b210d5ea29baa7914fccbf032f9`.
 - All78 public-only changed paths remain byte-identical to the public base, including public tests, Pinterest validation/native recording scripts and evidence. The sole shared path preserves the public trial hunk in the union.
 - Public AMR freshness blob remains `fd4fde903ce8bdcec4e78e7f3bf887ffc7bd5d4e`; Pinterest scope validation remains `ac5617a585cfc34ffa478ab9ba8fef2471902519`; web platform/Trial copy remains `60ddc4dae8083af1a08188cd51555414e64fef07`.
-- All103 other selected paths are byte-identical to the private repair. The two explicit adaptations are store.py and omission of only package.json script test:discord:capacity:jcb. All other package metadata and commands remain identical to the repair input.
+- Of the original105 selected paths,102 remain byte-identical to the private4fdc repair. The explicit adaptations are the combined store.py, omission of only package.json script test:discord:capacity:jcb, and the browser regression updated by exact f54d103b. All other package metadata and commands remain identical to the repair input.
 - Both .james-cloud-build.json and .depot/workflows/james-cloud-build.yml retain exact public bytes in the index and sparse working tree.
 
 ## Explicit exclusions
@@ -44,13 +45,31 @@ The shared consumer-ready workflow retains the guarded, bounded Discord P0–P4 
 ## Lightweight validation
 
 - PASS: git diff --cached --check; no unmerged entries; store.py AST syntax; package JSON parsing and exact one-command omission.
-- PASS: all selected paths and modes accounted for; all78 public-only path blobs preserved; all103 unadapted private path blobs preserved; public runtime pins; both public routing files; exact combined store blob.
-- validation_unavailable: runtime/unit/SQL/browser/build validation was not authorized in this delegated materialization task. Root will review this commit and use the separately authorized free GitHub CI route. Earlier private-source passes do not qualify the combined source.
+- PASS: all selected paths and modes accounted for; all78 public-only path blobs preserved; the five native-input follow-up files match exact f54d103b blobs;102 untouched private4fdc paths remain exact; public runtime pins; both public routing files physically and in the index; exact combined store blob.
+- validation_unavailable: runtime/unit/SQL/browser/build validation was not authorized in this delegated materialization or follow-up integration task. Root must qualify the new combined commit through the separately authorized cloud CI and affected actual Home browser lane. Prior private-source or base-candidate passes do not qualify this exact combined source. No CI was dispatched here.
 - No provider intent, environment, secret, approval, entitlement or activation was changed. Migration source presence does not establish database application.
+
+## Native-input follow-up and remaining qualification
+
+The compact and expanded textareas adopt exact currentTarget.value on standard input events, retain the existing onChange path, attachment ordering, caret and IME behavior, and deduplicate the same native event across the two callbacks. Home free-save guards, entitlement checks and backend commands remain unchanged.
+
+The updated component regression covers exact Unicode/whitespace and callback behavior. The actual Home browser lane covers instance and prototype native setters, destination re-render, Expand, normal typing, free-save readiness without generation, and zero API writes at1280/390. This is prepared coverage, not a claimed browser pass.
+
+The dedicated workflow is an exact-PR-head, same-repository, non-deploy Linux cloud lane. It installs existing pinned dependencies, runs the focused unit/type/lint checks, prepares a provider-fenced synthetic fixture, and exercises real Home in isolated Chromium. Workflow source presence is not execution or a result. Root owns its later qualification and any push/PR.
+
+Five exact follow-up Git paths:
+
+```text
+.github/workflows/discord-composer-input.yml
+web/src/features/agent/home/expanded-idea-dialog.tsx
+web/src/features/agent/home/idea-composer.tsx
+web/tests/discord-connections-browser.cjs
+web/tests/home-attachments-wiring.test.cjs
+```
 
 ## Selected delta paths
 
-Git paths below are the complete selected common-to-repair delta; the receipt itself is the only additional tracked path.
+Git paths below are the original105 selected common-to-repair delta. The native-input list above contributes four additional unique paths; its connections-browser path was already selected. This receipt is the only other tracked path.
 
 ```text
 .env.example

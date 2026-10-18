@@ -71,6 +71,64 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
           if (path.endsWith('/memory/proposals')) return send({pending: [], recent: [], learning: {items: []}});
           return send({error: 'Unhandled synthetic read'}, 404);
         });
+        stage = 'home-native-input-' + width;
+        await page.goto(base + '/app', {waitUntil: 'domcontentloaded'});
+        const message = page.getByRole('textbox', {name: 'Message', exact: true});
+        const saveOriginal = page.getByRole('button', {name: /^Save as draft/});
+        const saveBrief = page.getByRole('button', {name: 'Save brief', exact: true});
+        await page.waitForFunction(() => {
+          const field = document.querySelector('textarea[aria-label="Message"]');
+          return field && !field.disabled;
+        });
+        assert.equal(await saveOriginal.isDisabled(), true);
+        assert.equal(await saveBrief.isDisabled(), true);
+        // Using the element's own setter also updates React's value tracker. A
+        // bubbling native input must still reach the controlled state.
+        const exactText = '  原文 café e\u0301 👩🏽‍💻\n\nkeep  spaces\t\n  ';
+        await message.evaluate((element, value) => {
+          element.value = value;
+          element.dispatchEvent(new Event('input', {bubbles: true}));
+        }, exactText);
+        await page.waitForFunction(() => Array.from(document.querySelectorAll('button'))
+          .some(button => button.textContent.trim().startsWith('Save as draft') && !button.disabled));
+        assert.equal(await saveBrief.isEnabled(), true);
+        assert.equal(await message.inputValue(), exactText);
+        // A destination-choice render must keep the controlled text, not wipe it.
+        await page.getByRole('button', {name: /^Choose channels,/}).click();
+        const platforms = page.getByRole('dialog');
+        await platforms.getByRole('checkbox', {name: /^Instagram/}).click();
+        await platforms.getByRole('button', {name: /^Done ·/}).click();
+        assert.equal(await message.inputValue(), exactText);
+        assert.equal(await saveOriginal.isEnabled(), true);
+        await page.getByRole('button', {name: 'Expand writing space', exact: true}).click();
+        const expanded = page.getByRole('textbox', {name: 'Expanded writing space', exact: true});
+        assert.equal(await expanded.inputValue(), exactText);
+        const expandedText = exactText + '展開後\n  unchanged  ';
+        await expanded.evaluate((element, value) => {
+          element.value = value;
+          element.dispatchEvent(new Event('input', {bubbles: true}));
+        }, expandedText);
+        await page.getByRole('dialog').getByRole('button', {name: 'Done', exact: true}).click();
+        assert.equal(await message.inputValue(), expandedText);
+        assert.equal(await saveOriginal.isEnabled(), true);
+        // Also retain normal typing and the native prototype-setter event path.
+        await message.fill('Normal typing  保留');
+        assert.equal(await saveOriginal.isEnabled(), true);
+        await message.evaluate((element, value) => {
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(element, value);
+          element.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: value}));
+        }, exactText);
+        await saveBrief.click();
+        assert.equal(await saveBrief.isDisabled(), true);
+        assert.equal(await message.inputValue(), exactText);
+        assert.equal(await saveOriginal.isEnabled(), true);
+        assert.equal(unexpectedMutations, 0, 'input and free-save readiness must not invoke generation or any API write');
+        await message.evaluate(element => {
+          element.value = '';
+          element.dispatchEvent(new Event('input', {bubbles: true}));
+        });
+        assert.equal(await saveOriginal.isDisabled(), true);
+        assert.equal(await saveBrief.isDisabled(), true);
         stage = 'identity-' + width;
         await page.goto(base + '/app/channels?connect=discord&capability=identity', {waitUntil: 'domcontentloaded'});
         await page.getByRole('checkbox', {name: 'Allow Rafii to list servers I manage for server selection', exact: true}).check();
@@ -93,7 +151,7 @@ app.stdout.on('data', c => process.stdout.write(c)); app.stderr.on('data', c => 
         assert.equal(starts.length, 2); assert.equal(disconnects, 1); assert.equal(unexpectedMutations, 0);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
         checks.push({width, separateIdentityAndInstallation: true, optionalGuildListConsent: true, explicitGuildSelection: true,
-          localIdentityDisconnect: true, frozenApprovalSuite: 'separate P0 browser', realDiscordAcceptance: 'NOT_RUN'});
+          localIdentityDisconnect: true, nativeInputAdoptsControlledText: true, expandedInputSharesText: true, unicodeWhitespacePreserved: true, destinationRerenderKeepsText: true, freeSaveReadyWithoutGeneration: true, frozenApprovalSuite: 'separate P0 browser', realDiscordAcceptance: 'NOT_RUN'});
       } catch (error) {
         failures.push({width, stage, error: String(error).slice(0, 1200)});
         console.error('RAFII_DISCORD_CONNECTIONS_BROWSER_VIEWPORT_FAILURE ' + JSON.stringify(failures.at(-1)));
