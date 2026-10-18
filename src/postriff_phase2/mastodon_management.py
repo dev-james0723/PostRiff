@@ -80,6 +80,11 @@ def action_spec(action, payload, capabilities, *, now):
         return "POST", f"/api/v1/statuses/{target}/{action}", {}, (STATUS_ACTIONS[action],), "approve"
     if action in ACCOUNT_ACTIONS:
         return "POST", f"/api/v1/accounts/{target}/{action}", {}, (ACCOUNT_ACTIONS[action],), "moderate" if action in ("mute", "unmute", "block", "unblock") else "manage_connections"
+    if action == 'poll_vote':
+        from .mastodon_poll_actions import choices
+        if not capabilities.get('polls'):
+            raise AlphaError('This Mastodon instance does not support native polls.', 409)
+        return 'POST', f'/api/v1/polls/{target}/votes', {'choices': choices(payload.get('pollChoices'))}, ('read:statuses', 'write:statuses'), 'approve'
     if action in ("edit", "delete"):
         if action == "edit" and not capabilities.get("edit"):
             raise AlphaError("Editing is unavailable on this server version.", 409)
@@ -244,6 +249,18 @@ class MastodonManagement:
         return {"connectionId": connection, "instance": session["instance"], "resource": resource,
                 "data": data, "coverage": "instance-local, bounded page"}
 
+    def poll(self, workspace, token, connection, poll_id):
+        from .mastodon_poll_actions import view
+        if not isinstance(poll_id, str) or not ID.fullmatch(poll_id):
+            raise AlphaError('Choose an instance-local Mastodon poll ID, never a URL.', 400)
+        provider, grant, session = self._grant(workspace, token, connection)
+        self._scopes(grant, ('read:statuses',))
+        value = self._result(provider.api(session, 'GET', '/api/v1/polls/' + poll_id))
+        data = view(value, poll_id)
+        self._read_fence(workspace, token, connection, grant)
+        return {'connectionId': connection, 'instance': session['instance'], 'resource': 'poll', 'data': data,
+                'coverage': 'One poll as observed by this instance. Hidden or unavailable counts remain unavailable.'}
+
     def thread_context(self, workspace, token, connection, post_id, cursor=None):
         from .mastodon_context import checked_cursor, page, public_excerpt
         if not isinstance(post_id, str) or not ID.fullmatch(post_id):
@@ -281,6 +298,12 @@ class MastodonManagement:
         method, path, body, scopes, permission = action_spec(action, payload, capabilities, now=self.clock())
         self._scopes(grant, scopes)
         selected_rules = None
+        poll_snapshot = None
+        if action == 'poll_vote':
+            from .mastodon_poll_actions import vote_binding
+            poll_value = self._result(provider.api(session, 'GET', '/api/v1/polls/' + payload['targetId']))
+            poll_snapshot = vote_binding(poll_value, payload['targetId'], body['choices'], self.clock())
+            self._read_fence(workspace, token, connection, grant)
         if action == 'report_account':
             for status in body['status_ids']:
                 original = self._result(provider.api(session, 'GET', '/api/v1/statuses/' + status))
@@ -297,6 +320,8 @@ class MastodonManagement:
                    "authorizationBinding": grant.get('_mastodonCredentialBinding'), "authorizationScopes": sorted(grant.get('scopes') or [])}
         if selected_rules is not None:
             preview['reportRules'] = selected_rules
+        if poll_snapshot is not None:
+            preview['pollSnapshot'] = poll_snapshot
         if not isinstance(preview['authorizationBinding'], str) or not re.fullmatch(r'[a-f0-9]{64}', preview['authorizationBinding']):
             raise AlphaError('The Mastodon grant lacks a secure generation binding. Reconnect before preparing an action.', 409)
         with self.repository.transaction(token, workspace) as (cur, row, actor):
@@ -389,6 +414,12 @@ class MastodonManagement:
                 if not active or active[2] != preview["accountId"] or self.oauth.vault.decrypt(active[0], active[1]) != grant["accessToken"]:
                     raise AlphaError("The connection changed. No action was sent.", 409)
                 self.oauth.assert_mastodon_dispatch(cur, workspace, connection, grant, preview['scopes'])
+                if preview['action'] == 'poll_vote':
+                    from .mastodon_poll_actions import vote_binding
+                    poll_value = self._result(provider.api(session, 'GET', '/api/v1/polls/' + preview['targetId']))
+                    current_poll = vote_binding(poll_value, preview['targetId'], preview['body']['choices'], self.clock())
+                    if current_poll != preview.get('pollSnapshot'):
+                        raise AlphaError('The Mastodon poll answers or settings changed. Review a fresh vote; no vote was sent.', 409)
                 if preview['action'] == 'report_account' and preview['body'].get('rule_ids'):
                     current_rules = report_rules(self._result(provider.api(session, 'GET', '/api/v1/instance/rules')), preview['body']['rule_ids'])
                     if current_rules != preview.get('reportRules'):
@@ -449,6 +480,9 @@ class MastodonManagement:
         if action in STATUS_ACTIONS or action in ACCOUNT_ACTIONS:
             from .mastodon_interactions import readback
             result.update(readback(provider, session, preview, granted_scopes))
+        if action == 'poll_vote':
+            from .mastodon_poll_actions import vote_readback
+            result.update(vote_readback(provider, session, preview, response, granted_scopes))
         if action == 'report_account':
             if (not isinstance(body, dict) or not ID.fullmatch(str(body.get('id', '')))
                     or not isinstance(body.get('target_account'), dict)
@@ -507,6 +541,8 @@ def handle(app, environ, start_response, service, token, method, parts):
     # /api/workspaces/{workspace}/channels/{connection}/mastodon/{resource|actions}
     manager = MastodonManagement(service)
     workspace, connection = parts[2], parts[4]
+    if len(parts) == 8 and parts[6] == 'polls' and method == 'GET':
+        return app._json(start_response, 200, manager.poll(workspace, token, connection, parts[7]))
     if len(parts) == 8 and parts[6] == 'context' and method == 'GET':
         raw_query = environ.get('QUERY_STRING', '')
         if not isinstance(raw_query, str) or len(raw_query) > 256:

@@ -19,6 +19,7 @@ SCOPES = list(MastodonProvider.SCOPES['management'])
 class SyntheticMastodon:
     def __init__(self):
         self.deleted = set()
+        self.poll_votes = {}
 
     def __call__(self, method, url, **kwargs):
         parsed = urlsplit(url)
@@ -57,6 +58,19 @@ class SyntheticMastodon:
             if method == 'DELETE': self.deleted.add(path)
             elif path in self.deleted: status = 404
             else: value = {'id': '123', 'account': {'id': '100'}, 'visibility': 'public', 'content': '<p>SYNTHETIC public post</p>'}
+        elif path.startswith('/api/v1/polls/'):
+            poll_id = path.split('/')[4]
+            key = (parsed.hostname, poll_id)
+            if method == 'POST' and path.endswith('/votes'):
+                if key in self.poll_votes:
+                    return {'status': 422, 'body': {'error': 'Synthetic account already voted'}, 'headers': {}}
+                self.poll_votes[key] = kwargs['body']['choices']
+            elif method != 'GET':
+                raise AssertionError('Unsupported synthetic poll operation')
+            value = {'id': poll_id, 'expires_at': '2099-01-01T00:00:00Z', 'expired': False, 'multiple': False,
+                     'voted': key in self.poll_votes, 'own_votes': self.poll_votes.get(key, []), 'votes_count': None,
+                     'options': [{'title': 'SYNTHETIC first poll answer', 'votes_count': None},
+                                 {'title': 'SYNTHETIC second poll answer', 'votes_count': None}]}
         elif method == 'GET':
             value = []
         else:

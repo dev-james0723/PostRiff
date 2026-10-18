@@ -263,6 +263,76 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(saved[0], 'accepted'); self.assertEqual(saved[1]['readback'], result['readback'])
         self.assertTrue(self.execute(preview)['replayed']); self.assertEqual(operations, ['POST', 'GET'])
 
+    def test_native_poll_vote_binds_exact_answers_and_persists_independent_vote_proof(self):
+        value = {'id': '42', 'expires_at': datetime.fromtimestamp(self.now + 1800, timezone.utc).isoformat(),
+            'expired': False, 'multiple': False, 'voted': False, 'own_votes': [], 'votes_count': None,
+            'options': [{'title': 'PRIVATE_FIRST_ANSWER', 'votes_count': None}, {'title': 'PRIVATE_SECOND_ANSWER', 'votes_count': None}]}
+        operations = []
+        def transport(method, url, **kw):
+            if '/api/v1/polls/42' not in url: return None
+            operations.append((method, url))
+            if method == 'POST':
+                self.assertTrue(url.endswith('/votes'))
+                self.assertEqual(kw['body'], {'choices': [1]})
+                value.update(voted=True, own_votes=kw['body']['choices'])
+            return ok(json.loads(json.dumps(value)))
+        self.scoped_transport(['read:accounts', 'read:statuses', 'write:statuses'], transport)
+        with self.assertRaises(AlphaError): self.manager.poll(self.foreign, self.other, self.connection_id, '42')
+        self.assertEqual(operations, [])
+        read = self.manager.poll(self.workspace, self.actor, self.connection_id, '42')
+        self.assertIsNone(read['data']['votesCount']); self.assertEqual(read['data']['options'][1]['title'], 'PRIVATE_SECOND_ANSWER')
+        preview = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'poll_vote', 'targetId': '42', 'pollChoices': [1]})
+        saved = self.manager.saved_preview(self.workspace, self.actor, self.connection_id, preview['actionId'])
+        self.assertEqual(saved['preview']['pollSnapshot'], preview['preview']['pollSnapshot'])
+        before = len(operations)
+        result = self.execute(preview)
+        self.assertEqual(result['state'], 'verified'); self.assertEqual(result['verification'], 'provider_poll_lookup')
+        self.assertEqual(result['readback']['ownVotes'], [1])
+        self.assertEqual([method for method, _ in operations[before:]], ['GET', 'POST', 'GET'])
+        with connection() as db:
+            journal = db.execute('SELECT status,receipt FROM public.pr_mastodon_actions WHERE workspace_id=%s AND id=%s',
+                (self.workspace, preview['actionId'])).fetchone()
+        self.assertEqual(journal[0], 'verified'); self.assertNotIn('PRIVATE_', json.dumps(journal[1]))
+        before = len(operations)
+        self.assertTrue(self.execute(preview)['replayed']); self.assertEqual(len(operations), before)
+
+    def test_changed_expired_or_already_voted_poll_never_receives_approved_vote(self):
+        value = {}
+        writes = []
+        def transport(method, url, **kw):
+            if '/api/v1/polls/42' not in url: return None
+            if method == 'POST': writes.append(kw['body'])
+            return ok(json.loads(json.dumps(value)))
+        self.scoped_transport(['read:accounts', 'read:statuses', 'write:statuses'], transport)
+        for change in ('answers', 'order', 'multiple', 'expired', 'voted'):
+            with self.subTest(change=change):
+                value.clear(); value.update(id='42', expires_at=datetime.fromtimestamp(self.now + 1800, timezone.utc).isoformat(),
+                    expired=False, multiple=False, voted=False, own_votes=[],
+                    options=[{'title': 'First answer'}, {'title': 'Second answer'}])
+                preview = self.manager.preview(self.workspace, self.actor, self.connection_id,
+                    {'action': 'poll_vote', 'targetId': '42', 'pollChoices': [1]})
+                if change == 'answers': value['options'][1]['title'] = 'Changed answer'
+                elif change == 'order': value['options'].reverse()
+                else: value[change] = True
+                result = self.execute(preview)
+                self.assertEqual(result['state'], 'uncertain')
+                self.assertEqual(writes, [])
+                self.assertTrue(self.execute(preview)['replayed']); self.assertEqual(writes, [])
+
+    def test_poll_read_does_not_escape_after_concurrent_credential_revocation(self):
+        def transport(method, url, **kw):
+            if not url.endswith('/api/v1/polls/42'): return None
+            with connection() as db:
+                db.execute('UPDATE public.pr_encrypted_credentials SET revoked_at=now() WHERE workspace_id=%s AND connection_id=%s',
+                    (self.workspace, self.connection_id))
+            return ok({'id': '42', 'expires_at': None, 'expired': False, 'multiple': False, 'voted': False,
+                'options': [{'title': 'PRIVATE_REVOKED_ANSWER'}, {'title': 'PRIVATE_REVOKED_ALTERNATIVE'}]})
+        self.scoped_transport(['read:accounts', 'read:statuses'], transport)
+        with self.assertRaises(AlphaError) as caught:
+            self.manager.poll(self.workspace, self.actor, self.connection_id, '42')
+        self.assertEqual(caught.exception.code, 'mastodon_read_changed')
+
     def test_exact_native_reschedule_and_cancellation_sync_existing_queue_atomically(self):
         native = {'at': datetime.fromtimestamp(self.now + 600, timezone.utc).isoformat(), 'gone': False}
         writes = []

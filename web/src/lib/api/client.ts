@@ -101,6 +101,11 @@ export class ApiError extends Error {
 }
 
 export type TokenSource = () => Promise<string | null>;
+export type MastodonPollView = {
+  id: string; expiresAt: string | null; expired: boolean; multiple: boolean;
+  voted: boolean | null; ownVotes: number[] | null; votesCount: number | null; votersCount: number | null;
+  options: { index: number; title: string; votes: number | null }[];
+};
 
 const ws = (id: string) => `/api/workspaces/${encodeURIComponent(id)}`;
 /** A drafting request that has not answered by then is treated as a lost response and resent with its key. */
@@ -374,6 +379,8 @@ export function createApi(getToken: TokenSource) {
       get<Record<string, unknown>>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/${encodeURIComponent(resource)}`),
     mastodonThreadContext: (w: string, id: string, postId: string, cursor?: string) =>
       get<Record<string, unknown>>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/context/${encodeURIComponent(postId)}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    mastodonPoll: (w: string, id: string, pollId: string) =>
+      get<{ connectionId: string; instance: string; resource: 'poll'; data: MastodonPollView; coverage: string }>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/polls/${encodeURIComponent(pollId)}`),
     mastodonSavedPreview: (w: string, id: string, actionId: string) =>
       get<{ actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown> } }>(`${ws(w)}/channels/${encodeURIComponent(id)}/mastodon/actions/${encodeURIComponent(actionId)}`),
     mastodonPreview: (w: string, id: string, payload: Record<string, unknown>) =>

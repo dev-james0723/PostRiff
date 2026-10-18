@@ -185,10 +185,18 @@ def action_prepare(ctx, args):
             raise AlphaError('Request this Mastodon report or filter preparation explicitly in this message.', 403)
     if args['action'] == 'thread_prepare':
         return thread_prepare(ctx, args)
+    if args['action'] == 'poll_vote':
+        text = _human_prose(str(ctx.request_text or ''))
+        if (not re.search(r'\bvote\b|投票', text, re.I)
+                or re.search(r'\b(?:how to|what is|tutorial|hypothetical|example)\b|如何|教我|例子', text, re.I)):
+            raise AlphaError('Request preparation of this Mastodon poll vote explicitly in this message.', 403)
     payload = {key: value for key, value in args.items() if key != 'connectionId'}
     result = MastodonManagement(ctx.service).preview(ctx.workspace_id, ctx.token, args['connectionId'], payload)
+    # Poll titles can belong to a private status. The exact server snapshot stays
+    # in tenant-scoped Channels review, never in this model-facing tool response.
+    model_preview = {key: value for key, value in result['preview'].items() if key != 'pollSnapshot'}
     return {'ok': True, 'verified': True, 'needsUser': True, 'actionId': result['actionId'],
-            'preview': result['preview'], 'expiresAt': result['expiresAt'], 'executed': False,
+            'preview': model_preview, 'expiresAt': result['expiresAt'], 'executed': False,
             'href': '/app/channels?mastodonAction=' + result['actionId'] + '&connection=' + args['connectionId'],
             'note': 'Review and approve this exact action in Channels. This tool grants no external or automation authority.'}
 
@@ -244,12 +252,14 @@ def register():
         ('mastodon_analytics_summary', contracts.READ, 'read', 'Read requested Mastodon native counts for at most 40 public/unlisted authored posts. Exact connected account and current human analytics request required; no private content.',
          {'connectionId': dict(IDENTIFIER)}, analytics_summary, ('analytics', 'connections')),
         ('mastodon_action_prepare', contracts.PREPARE_EXTERNAL, 'edit', 'Save a Mastodon action preview for human review in Channels. No execution, approval or background authority.',
-         {'connectionId': dict(IDENTIFIER), 'action': {'type': 'string', 'enum': ['edit', 'delete', 'favourite', 'unfavourite', 'reblog', 'unreblog', 'bookmark', 'unbookmark', 'follow', 'unfollow', 'mute', 'unmute', 'block', 'unblock', 'native_schedule', 'native_reschedule', 'native_cancel', 'thread_prepare', 'report_account', 'filter_create', 'filter_update', 'filter_delete'], 'required': True},
+          {'connectionId': dict(IDENTIFIER), 'action': {'type': 'string', 'enum': ['edit', 'delete', 'favourite', 'unfavourite', 'reblog', 'unreblog', 'bookmark', 'unbookmark', 'follow', 'unfollow', 'mute', 'unmute', 'block', 'unblock', 'poll_vote', 'native_schedule', 'native_reschedule', 'native_cancel', 'thread_prepare', 'report_account', 'filter_create', 'filter_update', 'filter_delete'], 'required': True},
           'targetId': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}, 'text': {'type': 'string', 'maxLength': 100000},
           'reportComment': {'type': 'string', 'maxLength': 1000}, 'reportForward': {'type': 'boolean'},
           'reportCategory': {'type': 'string', 'enum': ['other', 'spam', 'violation', 'legal']},
           'reportStatusIds': {'type': 'array', 'maxItems': 20, 'items': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}},
           'reportRuleIds': {'type': 'array', 'maxItems': 20, 'items': {'type': 'string', 'pattern': r'^[0-9]{1,40}$'}},
+          'pollChoices': {'type': 'array', 'minItems': 1, 'maxItems': 64, 'uniqueItems': True,
+                          'items': {'type': 'integer', 'minimum': 0, 'maximum': 63}},
           'filter': {'type': 'object', 'additionalProperties': False, 'properties': {
               'title': {'type': 'string', 'maxLength': 100},
               'context': {'type': 'array', 'maxItems': 5, 'items': {'type': 'string', 'enum': ['home', 'notifications', 'public', 'thread', 'account']}},

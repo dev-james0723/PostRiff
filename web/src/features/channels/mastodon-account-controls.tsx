@@ -9,19 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MastodonProfileFields, type ProfileEdit } from './mastodon-profile-fields';
 import { MastodonFields } from '@/features/queue/mastodon-fields';
 import { useWorkspaceApi } from '@/lib/workspace/provider';
+import type { MastodonPollView } from '@/lib/api/client';
 
 const actions = [
   ['edit', 'Edit post'], ['delete', 'Delete post'], ['favourite', 'Favourite'], ['unfavourite', 'Undo favourite'],
   ['reblog', 'Boost'], ['unreblog', 'Undo boost'], ['bookmark', 'Bookmark'], ['unbookmark', 'Remove bookmark'],
   ['follow', 'Follow account'], ['unfollow', 'Unfollow account'], ['mute', 'Mute account'], ['unmute', 'Unmute account'],
-  ['block', 'Block account'], ['unblock', 'Unblock account'], ['profile_update', 'Edit profile'],
+  ['block', 'Block account'], ['unblock', 'Unblock account'], ['poll_vote', 'Vote on poll'], ['profile_update', 'Edit profile'],
   ['native_schedule', 'Schedule on Mastodon'], ['native_reschedule', 'Reschedule on Mastodon'], ['native_cancel', 'Cancel server schedule'],
   ['list_create', 'Create list'], ['list_update', 'Rename list'], ['list_delete', 'Delete list'],
   ['list_add', 'Add accounts to list'], ['list_remove', 'Remove accounts from list'],
   ['report_account', 'Report account'], ['filter_create', 'Create content filter'],
   ['filter_update', 'Update content filter'], ['filter_delete', 'Delete content filter']
 ] as const;
-type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; reportRules?: { id: string; text: string }[]; media?: Record<string, { id: string; hash: string; bytes: number }> } };
+type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; reportRules?: { id: string; text: string }[]; pollSnapshot?: { id: string; multiple: boolean; expiresAt: string | null; options: { index: number; title: string }[] }; media?: Record<string, { id: string; hash: string; bytes: number }> } };
 
 function readable(value: unknown): string {
   if (Array.isArray(value)) return value.map(readable).join(', ');
@@ -39,7 +40,7 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
       {value.resource === 'live_events' && <p role='status' className='mb-2'>Live updates: {String(value.state ?? 'unavailable')}. {typeof value.reason === 'string' ? value.reason : 'Only this foreground window was read; use notifications for missed events.'}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'event', 'excerpt', 'title', 'text', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'context', 'filter_action', 'keywords', 'expires_at', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
+        const fields = ['id', 'event', 'excerpt', 'title', 'text', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'poll', 'favourites', 'boosts', 'replies', 'quotes', 'context', 'filter_action', 'keywords', 'expires_at', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>
@@ -65,6 +66,8 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
   const [filterExpiry, setFilterExpiry] = useState('');
   const [filterNeverExpires, setFilterNeverExpires] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
+  const [poll, setPoll] = useState<MastodonPollView | null>(null);
+  const [pollChoices, setPollChoices] = useState<number[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -98,6 +101,10 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       const payload: Record<string, unknown> = { action, targetId: target, text, title, options };
       if (['edit', 'native_schedule'].includes(action) && options === null) throw new Error('Check the Mastodon post settings.');
       if (action === 'profile_update') Object.assign(payload, profileEdit);
+      if (action === 'poll_vote') {
+        if (!poll || poll.id !== target || poll.expired || poll.voted !== false || !pollChoices.length) throw new Error('Read the exact poll and select your answers first.');
+        payload.pollChoices = pollChoices;
+      }
       if (action === 'list_add' || action === 'list_remove') payload.account_ids = accountIds.split(',').map((id) => id.trim()).filter(Boolean);
       if (action === 'report_account') Object.assign(payload, {
         reportComment: text, reportForward, reportCategory,
@@ -129,6 +136,15 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Outcome unavailable. Check Mastodon before trying again.'); }
     finally { setBusy(false); }
   }
+  async function readPoll() {
+    setBusy(true); setMessage(''); setPoll(null); setPollChoices([]);
+    try {
+      if (!/^[0-9]{1,40}$/.test(target)) throw new Error('Enter the poll ID from a Mastodon status.');
+      const result = await api.mastodonPoll(workspaceId, connectionId, target);
+      setPoll(result.data); setDetails(result);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'This poll is unavailable.'); }
+    finally { setBusy(false); }
+  }
   return (
     <details ref={detailsRef} className='rounded-[var(--rafii-radius-control)] border p-3'>
       <summary className='rafii-focus cursor-pointer text-sm'>Mastodon account controls</summary>
@@ -148,18 +164,34 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
             {preview.preview.action === 'report_account' && <p className='text-sm'>This files a report; it does not apply a moderation decision. {preview.preview.body.forward === true ? 'You are approving forwarding this report to the reported account’s server moderators.' : 'Forwarding to the reported account’s server moderators is off.'} Rafii cannot retract a filed report.</p>}
             <div className='max-h-40 overflow-auto text-sm'>{Object.entries(preview.preview.body).map(([key, value]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{key === 'expires_in' && value === null ? 'Never expire (clear any current expiry)' : readable(value)}</p>)}</div>
             {preview.preview.reportRules?.map((rule) => <p key={rule.id} className='text-sm'>Instance rule {rule.id}: {rule.text}</p>)}
+            {preview.preview.pollSnapshot && <div className='rounded border p-2 text-sm'>
+              <p>Your selected poll answers:</p>
+              {preview.preview.pollSnapshot.options.filter((option) => Array.isArray(preview.preview.body.choices) && preview.preview.body.choices.includes(option.index)).map((option) => <p key={option.index}>{option.title}</p>)}
+              <p>Votes cannot be changed or withdrawn through the Mastodon API. Review these exact answers before approving.</p>
+            </div>}
             {preview.preview.media && Object.entries(preview.preview.media).map(([role, image]) => <p key={role} className='break-all text-xs'>{role}: Library image {image.id} · {image.bytes} bytes · SHA256 {image.hash}</p>)}
             <div className='flex gap-2'><Button disabled={busy} onClick={() => void approve()}>Approve exact action</Button><Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>Back</Button></div>
           </div>
         ) : (
           <>
             <Label htmlFor={fieldId + '-action'}>Account action</Label>
-            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); setTitle(''); setAccountIds(''); setReportForward(false); setReportCategory('other'); setReportRuleIds(''); setFilterContexts([]); setFilterPolicy('keep'); setFilterExpiry(''); setFilterNeverExpires(false); setWholeWord(false); }}>
+            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); setTitle(''); setAccountIds(''); setReportForward(false); setReportCategory('other'); setReportRuleIds(''); setFilterContexts([]); setFilterPolicy('keep'); setFilterExpiry(''); setFilterNeverExpires(false); setWholeWord(false); setPoll(null); setPollChoices([]); }}>
               <SelectTrigger id={fieldId + '-action'} aria-label='Mastodon account action'><SelectValue /></SelectTrigger>
               <SelectContent>{actions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
             </Select>
             {action === 'profile_update' && <MastodonProfileFields connectionId={connectionId} onChange={setProfileEdit} />}
-            {needsTarget && <label htmlFor={fieldId + '-target'} className='flex flex-col gap-1 text-sm'>Post, account, list or schedule ID<Input id={fieldId + '-target'} value={target} inputMode='numeric' onChange={(event) => setTarget(event.target.value)} /></label>}
+            {needsTarget && <label htmlFor={fieldId + '-target'} className='flex flex-col gap-1 text-sm'>{action === 'poll_vote' ? 'Poll ID' : 'Post, account, list or schedule ID'}<Input id={fieldId + '-target'} value={target} inputMode='numeric' onChange={(event) => { setTarget(event.target.value); setPoll(null); setPollChoices([]); }} /></label>}
+            {action === 'poll_vote' && <>
+              <Button variant='outline' disabled={busy} onClick={() => void readPoll()}>Read poll</Button>
+              {poll?.id === target && <fieldset className='flex flex-col gap-2' disabled={busy || poll.expired || poll.voted !== false}>
+                <legend className='text-sm'>{poll.multiple ? 'Choose one or more answers' : 'Choose one answer'}</legend>
+                {poll.options.map((option) => <label key={option.index} htmlFor={fieldId + '-poll-' + option.index} className='flex items-center gap-2 text-sm'>
+                  <Checkbox id={fieldId + '-poll-' + option.index} checked={pollChoices.includes(option.index)} onCheckedChange={(checked) => setPollChoices((previous) => checked === true ? poll.multiple ? [...previous.filter((index) => index !== option.index), option.index] : [option.index] : previous.filter((index) => index !== option.index))} />{option.title}
+                </label>)}
+              </fieldset>}
+              {poll?.id === target && (poll.expired || poll.voted !== false) && <p className='text-sm'>This poll has ended, this account already voted, or its voting state could not be confirmed.</p>}
+              <p className='text-muted-foreground text-xs'>Find the poll ID in a status&apos;s poll details. Rafii reviews your exact answers before sending one vote.</p>
+            </>}
             {needsText && <label htmlFor={fieldId + '-text'} className='flex flex-col gap-1 text-sm'>{action === 'report_account' ? 'Report reason (up to1000 characters)' : action.startsWith('filter_') ? 'Keywords to add (one per line)' : 'Post text'}<textarea aria-label={action === 'report_account' ? 'Report reason (up to1000 characters)' : action.startsWith('filter_') ? 'Keywords to add (one per line)' : 'Post text'} id={fieldId + '-text'} maxLength={action === 'report_account' ? 1000 : action.startsWith('filter_') ? 2100 : undefined} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setText(event.target.value)} /></label>}
             {['edit', 'native_schedule'].includes(action) && <MastodonFields onChange={setOptions} />}
             {needsTime && <label htmlFor={fieldId + '-time'} className='flex flex-col gap-1 text-sm'>Schedule time (your local time)<Input id={fieldId + '-time'} type='datetime-local' value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>}
