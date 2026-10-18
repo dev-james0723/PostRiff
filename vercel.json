@@ -107,7 +107,8 @@
   ],
   "git": {
     "deploymentEnabled": {
-      "codex/rafii-brand-brain-v11": false
+      "codex/rafii-brand-brain-v11": false,
+      "wip/no-vercel/mastodon-connect-review-20261018": false
     }
   }
 }
