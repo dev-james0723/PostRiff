@@ -1304,6 +1304,29 @@ class OAuthService:
                       "state": "reauthorization_required" if drift else "scope_missing" if not reported else "read_verified" if lower_bound or not changed else "scope_changed",
                       **({'refreshBindingRequired': grant.get('refreshBindingRequired') is True} if provider_id == 'youtube' else {})}
         except AlphaError as error:
+            if provider_id == 'mastodon':
+                rejected = error.code == 'mastodon_authorization_revoked'
+                if rejected:
+                    # token_for_worker may already have persisted this exact 401.
+                    # A later identity request uses the same observed credential;
+                    # neither response may revoke a concurrent replacement consent.
+                    self.mark_mastodon_revoked(workspace_id, connection_id,
+                        expected_ciphertext=getattr(error, 'mastodon_observed_ciphertext', starting_ciphertext))
+                with self.repository.transaction(token, workspace_id) as (cur, row, principal):
+                    from .hosted import _membership, audit
+                    require(_membership(row), 'manage_connections')
+                    cur.execute("SELECT access_ciphertext,revoked_at IS NOT NULL FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s AND provider='mastodon' FOR SHARE", (workspace_id, connection_id))
+                    observed = cur.fetchone()
+                    if (not observed or (rejected and not observed[1])
+                            or (not rejected and (observed[1] or observed[0] != starting_ciphertext))):
+                        raise AlphaError('Connection changed during verification; reload and verify again.', 409)
+                    state = ('reauthorization_required' if rejected else
+                             'token_expired' if error.code == 'reauthorization_required' else 'verification_unavailable')
+                    audit(cur, workspace_id, principal, 'channel.verified', connection_id, {'state': state})
+                # A failed provider observation must not clear previously verified
+                # permissions, rewrite identity state or extend its verification age.
+                return {'connectionId': connection_id, 'identityVerified': False,
+                        'scopes': [] if rejected else list(scopes), 'state': state}
             if provider_id == 'youtube' and error.code in ('youtube_verification_unavailable', 'youtube_oauth_binding_required', 'youtube_oauth_binding_changed', 'youtube_capacity_schema', 'youtube_capacity_delay'):
                 # Manual Verify must preserve the same authority as worker revalidation
                 # when Google cannot provide an authoritative scope observation.

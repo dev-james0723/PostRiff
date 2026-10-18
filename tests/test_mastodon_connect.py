@@ -17,6 +17,46 @@ import test_hosted_wave1_connectors as wave1
 
 
 class MastodonConnectContracts(unittest.TestCase):
+    def _manual_verification_error(self, code, current):
+        cursor = Mock()
+        cursor.fetchone.side_effect = [
+            ('mastodon', '100@mastodon.social', ['read:accounts'], 'observed-ciphertext', 'key'), current]
+        @contextmanager
+        def transaction(token, workspace):
+            yield cursor, (1, {}, 'owner', False, False, False, False), 'owner'
+        repository = SimpleNamespace(transaction=transaction)
+        commands = SimpleNamespace(engine=SimpleNamespace(invalidate=Mock()))
+        service = OAuthService(repository, commands, SimpleNamespace(fernet=True), {}, BASE)
+        service.token_for_worker = Mock(side_effect=AlphaError('Synthetic provider outcome', 503, code=code))
+        service.mark_mastodon_revoked = Mock(return_value=current[1])
+        return service, cursor, commands
+
+    def test_manual_reverify_transient_error_preserves_grant_and_last_verification(self):
+        service, cursor, commands = self._manual_verification_error('mastodon_verification_unavailable', ('observed-ciphertext', False))
+        result = service.verify('workspace', 'session', 'connection')
+        self.assertEqual(result['state'], 'verification_unavailable')
+        self.assertEqual(result['scopes'], ['read:accounts'])
+        service.mark_mastodon_revoked.assert_not_called()
+        commands.engine.invalidate.assert_not_called()
+        self.assertFalse(any(call.args[0].lstrip().upper().startswith('UPDATE') for call in cursor.execute.call_args_list))
+
+    def test_manual_reverify_definitive_revocation_returns_reconnect_state(self):
+        service, cursor, commands = self._manual_verification_error('mastodon_authorization_revoked', ('', True))
+        result = service.verify('workspace', 'session', 'connection')
+        self.assertEqual(result['state'], 'reauthorization_required')
+        self.assertFalse(result['identityVerified'])
+        self.assertEqual(result['scopes'], [])
+        service.mark_mastodon_revoked.assert_called_once_with('workspace', 'connection', expected_ciphertext='observed-ciphertext')
+
+    def test_manual_reverify_error_cannot_overwrite_a_new_consent(self):
+        for code in ('mastodon_verification_unavailable', 'mastodon_authorization_revoked'):
+            with self.subTest(code=code):
+                service, cursor, commands = self._manual_verification_error(code, ('new-consent-ciphertext', False))
+                with self.assertRaises(AlphaError) as refused:
+                    service.verify('workspace', 'session', 'connection')
+                self.assertEqual(refused.exception.status, 409)
+                commands.engine.invalidate.assert_not_called()
+
     def test_connect_only_boundary_survives_review_flags_and_existing_write_grants(self):
         provider = MastodonProvider(BASE, transport=Mock(), resolver=PUBLIC)
         provider.production_reviewed = provider.publish_live_tested = provider.publishing_permission = True
