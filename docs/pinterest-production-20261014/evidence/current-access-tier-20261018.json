@@ -1,14 +1,15 @@
 {
-  "recordedAt": "2026-10-18T15:10:38.406423+00:00",
+  "recordedAt": "2026-10-18T16:52:13.625816+00:00",
   "status": "TRIAL_ACTIVE_STANDARD_NOT_APPROVED",
   "appId": "1615884",
-  "method": "Actual native Kynlo deterministic text verification on existing exact App1615884 details tab, no mutation",
-  "url": "https://developers.pinterest.com/apps/1615884/",
+  "method": "Actual native Kynlo Configure tab selection and independent visible-text verification; no credential reads or console writes",
+  "url": "https://developers.pinterest.com/apps/1615884/configure/",
   "nativeVerification": {
     "completed": true,
     "verified": true,
     "backend": "native",
-    "tabId": "241D47907FE19A9627203D3F7E58434E"
+    "tabId": "241D47907FE19A9627203D3F7E58434E",
+    "actions": 1
   },
   "verifiedVisibleText": [
     "Rafii",
@@ -20,5 +21,16 @@
   "publicGates": "Connect/Publish/Schedule/Analytics NO-GO",
   "officialAccessTierReference": "https://dev.pinterest.com/docs/key-concepts/access-tiers/",
   "officialCapabilities": "Trial supports Pin Analytics and creator-only Pin creation; do not equate Trial acceptance with public production.",
-  "scope": "Read-only; did not activate Upgrade, submit form, view/copy/reveal secrets, reset credentials or generate tokens."
+  "scope": "Read-only; did not activate Upgrade, submit form, view/copy/reveal secrets, reset credentials or generate tokens.",
+  "previousVerification": {
+    "recordedAt": "2026-10-18T15:10:38.406423+00:00",
+    "url": "https://developers.pinterest.com/apps/1615884/",
+    "nativeVerification": {
+      "completed": true,
+      "verified": true,
+      "backend": "native",
+      "tabId": "241D47907FE19A9627203D3F7E58434E"
+    }
+  },
+  "copyHandoffLocation": "Configure, not description-edit Details; human protected masked App secret Copy pending"
 }
