@@ -1,3 +1,5 @@
+> Current final unapproved proposal:18Oct13:15EDT/17:15UTC.12:00,12:30and12:45all expired/unapproved/unexecuted. First Analytics API read after actual readback before14EDT; no promise of immediate data. Later metric offsets remain stopped after expiry. Previous time-specific approvals cannot authorize this new time.
+
 > Current unapproved schedule proposal:18Oct12:45EDT/16:45UTC, after the original12:00 elapsed. No job or Pin was created. Earlier12:00/12:30 questions cannot authorize this new time. Proposed one-hour Analytics13:45EDT before unchanged14:00expiry.
 
 # Next exact actions — real Pinterest Trial Pins

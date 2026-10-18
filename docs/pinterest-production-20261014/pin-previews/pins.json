@@ -169,10 +169,10 @@
       "description": "Draft your ideas, review the image and wording, then choose when each approved post should go out. Keep a clear view of what is planned and what has actually published. Controlled scheduling test for Rafii\u2019s Pinterest integration.",
       "timing": {
         "mode": "rafii_server_schedule",
-        "localTime": "2026-10-18T12:45:00-04:00",
+        "localTime": "2026-10-18T13:15:00-04:00",
         "timezone": "America/Indiana/Indianapolis",
-        "publishAt": "2026-10-18T16:45:00Z",
-        "condition": "NEW UNAPPROVED proposal after12:00EDT elapsed.12:45EDT permits the separately approved CI/deployment and human fresh sign-in, with proposed13:45EDT one-hour Analytics read before14:00EDT expiry. No job exists. If missed, stop and obtain a new exact time approval; never catch up or roll forward."
+        "publishAt": "2026-10-18T17:15:00Z",
+        "condition": "NEW UNAPPROVED13:15EDT proposal after12:45elapsed. Only after exact human approval and normal sign-in/refresh/deployment gates; actual readback and first Analytics API read before14:00EDT expiry. NewPin metrics may be no_data. Later automated metric offsets after policy expiry remain unauthorized and must stop. No job exists; no catch-up if missed."
       },
       "proposedCreateRequest": {
         "method": "POST",
@@ -198,7 +198,7 @@
           "binding": "HostedSocial._pinterest_source_matches checks exact canonical host/bucket/workspace/object path and token query shape."
         }
       },
-      "humanReviewContentSha256": "6501be228954df315025272c26edd31bc83d42b27112a93ac6cf620e0fff98ce",
+      "humanReviewContentSha256": "b48d0e124bdc2f9a3c8938692015c4f3e59a7fd3cc5c4b3a2bd646188504b43e",
       "fingerprintPurpose": "Local reviewed-content fingerprint only; not a persisted server manifest, human approval record or provider receipt."
     }
   ],
@@ -244,7 +244,7 @@
     "created": 1,
     "remaining": 0
   },
-  "updatedAt": "2026-10-18T16:15:40.292233+00:00",
+  "updatedAt": "2026-10-18T16:47:11.862301+00:00",
   "activationProposal": "../private-trial-activation.json",
   "runtime": {
     "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
@@ -261,5 +261,20 @@
     "newProposal": "2026-10-18T16:45:00Z",
     "newState": "UNAPPROVED_NOT_SCHEDULED",
     "interim1230Proposal": "Mentioned only; not approved, queued or executed; final review now12:45EDT"
+  },
+  "scheduleSupersession1315": {
+    "prior": {
+      "timing": {
+        "mode": "rafii_server_schedule",
+        "localTime": "2026-10-18T12:45:00-04:00",
+        "timezone": "America/Indiana/Indianapolis",
+        "publishAt": "2026-10-18T16:45:00Z",
+        "condition": "NEW UNAPPROVED proposal after12:00EDT elapsed.12:45EDT permits the separately approved CI/deployment and human fresh sign-in, with proposed13:45EDT one-hour Analytics read before14:00EDT expiry. No job exists. If missed, stop and obtain a new exact time approval; never catch up or roll forward."
+      },
+      "hash": "6501be228954df315025272c26edd31bc83d42b27112a93ac6cf620e0fff98ce",
+      "state": "NOT_APPROVED_NOT_SCHEDULED_ELAPSED"
+    },
+    "currentTime": "2026-10-18T17:15:00Z",
+    "currentState": "UNAPPROVED_NOT_SCHEDULED"
   }
 }
