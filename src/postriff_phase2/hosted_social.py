@@ -19,6 +19,7 @@ from .provider_candidates import LinkedInCandidate, little_plain
 from .providers import GRAPH_VERSION, http_transport
 from .outcomes import valid_receipt_url
 from .social_connectors import multipart
+from .mastodon_release import write_qualified as mastodon_write_qualified
 from .wave3_connectors import provider_host
 
 WAVE1 = ("Bluesky", "Mastodon", "Telegram", "Discord", "X")
@@ -68,6 +69,8 @@ class HostedSocial:
     def _provider(self, manifest):
         provider = self.providers.get(HOSTED_PUBLISHERS.get(manifest["platform"]))
         if provider is None or not getattr(provider, "execution_enabled", True):
+            return None
+        if manifest['platform'] == 'Mastodon' and not mastodon_write_qualified(provider):
             return None
         # Provider-wide review unlocks public accounts. Instagram Standard Access can also
         # issue a real grant to an app-role owned/managed account before Advanced Access;

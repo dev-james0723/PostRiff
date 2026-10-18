@@ -10,6 +10,7 @@ from postriff_alpha.domain import AlphaError
 from .contracts import digest
 from .permissions import require
 from .mastodon_protocol import ID, discover, has_scopes, status_options, validate_status
+from .mastodon_release import write_qualified as mastodon_write_qualified
 
 
 class ApplicationCache:
@@ -297,10 +298,11 @@ class MastodonManagement:
     def execute(self, workspace, token, connection, action_id, payload):
         if payload.get("confirmed") is not True or not isinstance(payload.get("digest"), str):
             raise AlphaError("Approve the exact Mastodon action preview first.", 403)
-        from .hosted import _membership, audit, throttle
         provider, grant, session = self._grant(workspace, token, connection)
-        if not provider.production_reviewed:
-            raise AlphaError('Mastodon live execution is awaiting production acceptance. Nothing was sent.', 409)
+        if not mastodon_write_qualified(provider):
+            raise AlphaError('Mastodon account writes await independent publishing acceptance. Nothing was sent.',
+                             409, code='mastodon_write_release_required')
+        from .hosted import _membership, audit, throttle
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             cur.execute("SELECT preview,digest,status,receipt,actor_id::text,extract(epoch from expires_at)::float8 FROM public.pr_mastodon_actions WHERE workspace_id=%s AND connection_id=%s AND id::text=%s FOR UPDATE", (workspace, connection, action_id))
             stored = cur.fetchone()

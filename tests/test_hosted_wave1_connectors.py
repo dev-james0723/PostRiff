@@ -595,6 +595,8 @@ def manifest(platform, account_id, text="Hello from Rafii https://rafii.example/
 class Publishing(unittest.TestCase):
     def reviewed(self, adapter):
         adapter.production_reviewed = True
+        if adapter.id == 'mastodon':
+            adapter.publish_live_tested = adapter.publishing_permission = True  # Synthetic fixture only.
         return adapter
 
     def test_unreviewed_or_unsupported_media_never_reaches_the_network(self):
@@ -861,6 +863,7 @@ class MinorFixes(unittest.TestCase):
         wire = Wire([ok({"version": "4.2.9"}), ok({"id": "990"}, 202), ok({"id": "990", "url": None}, 206), ok({"id": "990", "url": "https://files.example/990.png"}), ok({"id": "111"})])
         mastodon = MastodonProvider(BASE, transport=wire, resolver=PUBLIC)
         mastodon.production_reviewed = True
+        mastodon.publish_live_tested = mastodon.publishing_permission = True  # Synthetic fixture only.
         token = json.dumps({"v": 1, "at": "MT", "instance": "mastodon.social", "capabilities": {"maxCharacters": 500, "maxMediaAttachments": 4}, "clientId": "c", "clientSecret": "s", "scope": ["write:statuses", "write:media"]})
         social = HostedSocial(Grants(token, ["write:statuses", "write:media"]), {"mastodon": mastodon}, storage, sleep=lambda seconds: None)
         self.assertEqual(social.submit(manifest("Mastodon", "1099@mastodon.social", media=image))["state"], "provider_accepted")

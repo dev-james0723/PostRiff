@@ -67,6 +67,7 @@ class JournalTests(unittest.TestCase):
                 return ok({'id': '123'})
             return ok({}, 404)
         self.provider = MastodonProvider('https://rafii.io', transport=transport, production_reviewed=True, resolver=PUBLIC)
+        self.provider.publish_live_tested = self.provider.publishing_permission = True  # Synthetic fixture only.
         self.vault = CredentialVault(CredentialVault.generate_key())
         with connection() as db:
             db.execute('INSERT INTO auth.users VALUES(%s),(%s)', (self.actor, self.other))

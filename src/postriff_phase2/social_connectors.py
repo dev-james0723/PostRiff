@@ -17,6 +17,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from postriff_alpha.domain import AlphaError
 from .net_guard import assert_public, public_host, pinned_public_json_transport
 from .mastodon_protocol import discover, instance_host
+from .mastodon_release import write_qualified as mastodon_write_qualified
 from .provider_base import OAuthProvider, _credential_shape, default_transport
 
 
@@ -223,6 +224,11 @@ class MastodonProvider(OAuthProvider):
     def api(self, session, method, path, **kwargs):
         if not isinstance(path, str) or not path.startswith("/api/") or "\\" in path or "#" in path or any(ord(c) < 32 for c in path):
             raise AlphaError("Unsupported Mastodon API path.", 400)
+        # Check again at the actual bearer dispatch, after any earlier grant/read work.
+        # App registration, token exchange and revoke use separate OAuth transports.
+        if self.id == 'mastodon' and method not in ('GET', 'HEAD', 'OPTIONS') and not mastodon_write_qualified(self):
+            raise AlphaError('Mastodon account writes await independent publishing acceptance. Nothing was sent.',
+                             409, code='mastodon_write_release_required')
         host = self._server(session.get("instance"))
         extra = kwargs.pop("headers", {})
         if any(k.lower() in ("authorization", "host") for k in extra):

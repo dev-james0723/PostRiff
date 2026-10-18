@@ -18,6 +18,7 @@ from postriff_alpha.domain import AlphaError, clean
 from .audience import COMMENT_READ_PROVIDERS
 from . import account_pictures
 from .permissions import require
+from .mastodon_release import write_qualified as mastodon_write_qualified
 from .channels import CAPABILITIES, assisted_matrix, customer_view, set_level, unsupported_matrix, with_youtube_credential_status, youtube_credential_status
 
 TRANSACTION_TTL = 600
@@ -933,6 +934,8 @@ class OAuthService:
              not getattr(adapter, "publishing_permission", False) or
              not getattr(adapter, "write_qualified", lambda _token: True)(access_token))
         )
+        if getattr(adapter, 'id', None) == 'mastodon':
+            publisher_ready = mastodon_write_qualified(adapter)
         if publish_granted and direct_allowed and publisher_ready:
             evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "You approve each post; Rafii publishes it."
             set_level(matrix, "publish", "Direct", evidence, now, adapter.capability_version)
@@ -953,6 +956,9 @@ class OAuthService:
         for name in ("analytics", "comments_read", "reply", "moderate"):
             required = set(adapter.capability_scopes(name))
             if not required or not required <= granted_set:
+                continue
+            if getattr(adapter, 'id', None) == 'mastodon' and name in ('reply', 'moderate') and not publisher_ready:
+                set_level(matrix, name, 'Unsupported', 'Mastodon account writes await independent publishing acceptance.', now, adapter.capability_version)
                 continue
             if direct_allowed:
                 evidence = "Granted by the provider for this account." if account_scoped and not adapter.production_reviewed else "Granted."

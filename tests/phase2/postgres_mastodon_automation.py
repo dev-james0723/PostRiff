@@ -78,6 +78,7 @@ with connection() as db:
     db.execute('INSERT INTO auth.users VALUES(%s)', (actor,))
 api = API(); provider = MastodonProvider('https://rafii.io', production_reviewed=True, transport=api,
     resolver=lambda *_args, **_kw: [(2, 1, 6, '', ('93.184.216.34', 443))])
+provider.publish_live_tested = provider.publishing_permission = True  # Synthetic fixture only.
 service = HostedWorkspaceService(connection, verify, clock=lambda: clock[0], vault=CredentialVault(CredentialVault.generate_key()),
     providers={'mastodon': provider}, public_base_url='https://rafii.io')
 workspace = service.bootstrap(actor, 'studio')['workspaceId']; approve_budgets(connection, workspace)

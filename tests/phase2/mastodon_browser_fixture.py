@@ -68,6 +68,7 @@ def service(*args, **kwargs):
         db.execute((ROOT / 'migrations/postriff/131_mastodon_management.sql').read_text())
     provider = MastodonProvider('http://127.0.0.1:4448', transport=SyntheticMastodon(), production_reviewed=True,
                                resolver=lambda *_args, **_kwargs: [(2, 1, 6, '', ('93.184.216.34', 443))])
+    provider.publish_live_tested = provider.publishing_permission = True  # Synthetic fixture only.
     from postriff_phase2.mastodon_streaming import parse_events
     def stream(origin, token):
         if origin not in ('https://mastodon.social', 'https://mastodon.online') or token != 'synthetic-token':
