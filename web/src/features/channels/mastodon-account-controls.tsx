@@ -133,6 +133,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       const result = await api.mastodonApprove(workspaceId, connectionId, preview.actionId, preview.digest);
       setMessage(`${result.state}: ${result.reason ?? result.publication ?? 'Mastodon returned an action receipt.'}${action === 'report_account' ? ' A report receipt is not a moderation decision.' : ''}`);
       setUrl(result.url ?? null); setPreview(null);
+      if (action === 'poll_vote') { setPoll(null); setPollChoices([]); }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Outcome unavailable. Check Mastodon before trying again.'); }
     finally { setBusy(false); }
   }
@@ -186,7 +187,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
               {poll?.id === target && <fieldset className='flex flex-col gap-2' disabled={busy || poll.expired || poll.voted !== false}>
                 <legend className='text-sm'>{poll.multiple ? 'Choose one or more answers' : 'Choose one answer'}</legend>
                 {poll.options.map((option) => <label key={option.index} htmlFor={fieldId + '-poll-' + option.index} className='flex items-center gap-2 text-sm'>
-                  <Checkbox id={fieldId + '-poll-' + option.index} checked={pollChoices.includes(option.index)} onCheckedChange={(checked) => setPollChoices((previous) => checked === true ? poll.multiple ? [...previous.filter((index) => index !== option.index), option.index] : [option.index] : previous.filter((index) => index !== option.index))} />{option.title}
+                  <Checkbox id={fieldId + '-poll-' + option.index} disabled={busy || poll.expired || poll.voted !== false} checked={pollChoices.includes(option.index)} onCheckedChange={(checked) => setPollChoices((previous) => checked === true ? poll.multiple ? [...previous.filter((index) => index !== option.index), option.index] : [option.index] : previous.filter((index) => index !== option.index))} />{option.title}
                 </label>)}
               </fieldset>}
               {poll?.id === target && (poll.expired || poll.voted !== false) && <p className='text-sm'>This poll has ended, this account already voted, or its voting state could not be confirmed.</p>}
