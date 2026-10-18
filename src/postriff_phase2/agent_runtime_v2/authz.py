@@ -140,12 +140,12 @@ _GROUPS = {
     ("read_analyze", ("memory_brand",)): ("memory_context", "memory_summary", "voice_check", "overlay_context", "brand_summary", "voice_profile"),
     ("read_analyze", ("web",)): ("web_research", "research_search", "research_fetch", "source_normalize", "weather_now"),
     ("read_analyze", ("library",)): ("library_search", "library_read", "library_browse"),
-    ("read_analyze", ("connections",)): ("channels_capabilities",),
+    ("read_analyze", ("connections",)): ("channels_capabilities", "twitch_connection_context"),
     ("read_analyze", ("members",)): ("member_activity",),
     ("read_analyze", ("notifications",)): ("notification_list",),
     ("read_analyze", ("usage_billing",)): ("entitlements_summary",),
     ("read_analyze", ("content", "connections")): ("engagement_triage", "youtube_plan_context", "youtube_recommendations"),
-    ("read_analyze", ("analytics", "connections")): ("youtube_analytics_summary",),
+    ("read_analyze", ("analytics", "connections")): ("youtube_analytics_summary", "twitch_metrics_snapshot"),
     ("read_analyze", ("content",)): ("queue_summary", "job_get", "draft_get", "calendar_range", "reviews_list", "publishing_summary",
                                      "content_search", "entity_status", "workspace_search", "workspace_summary", "attention_summary",
                                      "attention_summary_v2", "weekly_plan_get", "strategy_context", "creative_plan", "image_analyze",
@@ -154,7 +154,7 @@ _GROUPS = {
     ("create_edit", ("content",)): ("draft_edit", "weekly_plan_prepare", "engagement_draft_create", "source_campaign_create",
                                     "image_generate", "image_edit", "image_variant"),
     ("create_edit", ("campaigns", "content")): ("campaign_link", "campaign_unlink"),
-    ("create_edit", ("content", "connections")): ("youtube_plan_prepare",),
+    ("create_edit", ("content", "connections")): ("youtube_plan_prepare", "twitch_action_prepare"),
     ("execute_automations", ("content", "automations")): ("proposal_apply",),
     ("execute_automations", ("content", "connections")): ("schedule_propose",),
     ("execute_automations", ("automations",)): ("automation_change_propose",),
@@ -162,7 +162,8 @@ _GROUPS = {
 CLASSIFICATION = {name: (category, grants) for (category, grants), names in _GROUPS.items() for name in names}
 COST = {"draft_create": "text_credits", "draft_rewrite": "text_credits", "weekly_plan_prepare": "text_credits",
         "image_generate": "media_credits", "image_edit": "media_credits", "image_variant": "media_credits"}
-SINCE = {"library_browse": 2}   # LIB-D5b: added after the freeze, so never part of LEGACY_BASELINE_V1
+SINCE = {"library_browse": 2, "twitch_connection_context": 2, "twitch_metrics_snapshot": 2,
+         "twitch_action_prepare": 2}   # Post-freeze tools never join LEGACY_BASELINE_V1.
 
 
 def _derived(spec) -> Capability:
@@ -288,11 +289,19 @@ def _youtube_requested(text: str, *, analytics=False) -> bool:
                 and (not analytics or (not youtube._NO_ACCESS.search(text) and explicit_read)))
 
 
+def _twitch_requested(text: str, *, kind="context") -> bool:
+    from ..twitch_agent import requested
+    return requested(text, kind=kind)
+
+
 EXPLICIT_REQUEST: dict[str, Callable[[str], bool]] = {
     "tool.youtube_plan_context": _youtube_requested,
     "tool.youtube_plan_prepare": _youtube_requested,
     "tool.youtube_recommendations": _youtube_requested,
     "tool.youtube_analytics_summary": functools.partial(_youtube_requested, analytics=True),
+    "tool.twitch_connection_context": _twitch_requested,
+    "tool.twitch_metrics_snapshot": functools.partial(_twitch_requested, kind="metrics"),
+    "tool.twitch_action_prepare": functools.partial(_twitch_requested, kind="prepare"),
 }
 
 

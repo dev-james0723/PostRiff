@@ -386,6 +386,8 @@ class Phase2Store(Store):
         if blockers:
             raise AlphaError(blockers[0]["message"], 409)
         c = find(data["channels"], p.get("channelId"))
+        if c.get('platform') == 'Twitch':
+            raise AlphaError('Use Twitch native actions to approve chat, channel, schedule or moderation operations.', 409, code='twitch_native_only')
         if v.get("channelId") and v["channelId"] != c["id"]:
             raise AlphaError("This draft was written for another account. Schedule it to that account, or draft again for this one.", 409)
         if not getattr(self, "hosted_entitlements", False) and data["trial"]["expiresAt"] <= self.clock():

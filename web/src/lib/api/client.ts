@@ -4,6 +4,7 @@ import type { RadarCatalog, RadarScan, RadarRequest } from '@/lib/growth/radar-t
 import type { PhoneAuthChallenge, TrustedCaller } from '@/lib/phone/types';
 import type { HistoryImportStatus } from '@/lib/channels/history-import';
 import type { ConnectionHealth } from '@/lib/channels/health';
+import type { TwitchAction, TwitchConnectionList, TwitchOverview, TwitchPreviewInput, TwitchReadResult, TwitchSecretResult } from '@/features/twitch/types';
 /**
  * Browser client for the hosted PostRiff API. Every request carries the
  * application guard header and, when signed in, the session bearer token.
@@ -267,6 +268,23 @@ export function createApi(getToken: TokenSource) {
     /* `connectionHealth` is present only where the server admits this workspace to the Health Center (RAFII_CONNECTION_HEALTH_ENABLED). */
     channels: (w: string) => get<{ channels: ChannelView[]; providers: ProviderView[]; connectionHealth?: { available: boolean; href: string } }>(`${ws(w)}/channels`),
     connectionHealth: (w: string) => get<ConnectionHealth>(`${ws(w)}/connection-health`),
+    /* Native Twitch actions have their own exact-payload approval queue. */
+    twitchConnections: (w: string) => get<TwitchConnectionList>(`${ws(w)}/twitch`),
+    twitchOverview: (w: string, c: string) => get<TwitchOverview>(`${ws(w)}/twitch/${encodeURIComponent(c)}`),
+    twitchRead: (w: string, c: string, action: string, payload: Record<string, unknown>) =>
+      send<TwitchReadResult>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/read/${encodeURIComponent(action)}`, { payload }),
+    twitchPreview: (w: string, c: string, body: TwitchPreviewInput) =>
+      send<TwitchAction>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/preview`, body),
+    twitchApprove: (w: string, c: string, id: string, payloadHash: string) =>
+      send<TwitchAction>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/approve`, { payloadHash, confirmed: true }),
+    twitchPause: (w: string, c: string, id: string) =>
+      send<TwitchAction>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/pause`),
+    twitchCancel: (w: string, c: string, id: string) =>
+      send<TwitchAction>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/cancel`),
+    twitchReconcile: (w: string, c: string, id: string) =>
+      send<TwitchAction>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/reconcile`),
+    twitchSecretAccess: (w: string, c: string, id: string, payloadHash: string) =>
+      send<TwitchSecretResult>('POST', `${ws(w)}/twitch/${encodeURIComponent(c)}/actions/${encodeURIComponent(id)}/secret-access`, { payloadHash, confirmed: true }),
     youtubePolicy: (w: string) => get<YouTubePolicyStatus>(`${ws(w)}/youtube-policy`),
     acceptYouTubePolicy: (w: string, body: { policyId: string; privacyRevision: string; termsRevision: string; confirmed: true }) =>
       send<YouTubePolicyStatus>('POST', `${ws(w)}/youtube-policy`, body),

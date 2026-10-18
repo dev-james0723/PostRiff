@@ -21,7 +21,8 @@ from .contracts import FixtureImages, FixtureSocial, PLANS, digest
 from .store import Phase2Store, IN_FLIGHT, find
 from .content_types import ensure_content_state, projection as content_projection
 from .permissions import Membership, ROLES, STEP_UP_ACTIONS, STEP_UP_WINDOW, classify, require, validate_grant
-from .channels import connection_state, with_youtube_credential_status, youtube_credential_status
+from .channels import (connection_state, with_youtube_credential_status, youtube_credential_status,
+                       with_twitch_credential_status, twitch_credential_status)
 from . import account_protection, brand_brain, campaigns, locales, media_consent, memory, productivity_connectors, research, source_policy, suggestions, voice_analysis, voice_sources, writer_defaults
 from .agent_runtime_v2 import style as agent_style
 from .ideas import IdeasService
@@ -393,7 +394,7 @@ class HostedPhase2Commands:
     SERVER_VERIFIED_PLATFORMS = (
         "LinkedIn", "Instagram", "Threads", "Facebook", "X", "YouTube", "TikTok", "Pinterest",
         "Bluesky", "Mastodon", "Telegram", "Discord", "Weibo", "Bilibili", "Douyin", "Kuaishou",
-        "Google Business Profile", "LINE Official Account", "Reddit", "Zhihu", "Pixelfed", "Xiaohongshu",
+        "Google Business Profile", "LINE Official Account", "Reddit", "Zhihu", "Pixelfed", "Xiaohongshu", "Twitch",
     )
 
     def upsert_verified_channel(self, state, principal, channel, capability_verified=True):
@@ -468,6 +469,8 @@ class HostedWorkspaceService:
         from .youtube.service import YouTubeCreatorService
         self.youtube = YouTubeCreatorService(self)
         self.commands.youtube_capacity = self.youtube.capacity
+        from .twitch_service import TwitchService
+        self.twitch = TwitchService(self)
         from .learning_service import HostedLearning
         # Preference learning: every command's implied events are captured in that command's transaction.
         self.learning = HostedLearning(connection_factory, clock)
@@ -1024,9 +1027,12 @@ class HostedWorkspaceService:
                 cur.execute(f"SELECT m.workspace_id::text,{MEMBER_COLUMNS},coalesce(w.state->'workspace'->>'name',''),coalesce(w.state->'phase2'->'channels','[]'::jsonb) FROM public.pr_memberships m JOIN public.pr_workspaces w ON w.id=m.workspace_id JOIN public.pr_profiles p ON p.user_id=m.user_id WHERE m.user_id=%s AND m.status='active' AND p.deleted_at IS NULL ORDER BY w.created_at", (principal,))
                 rows = cur.fetchall()
                 # Who connected each channel: the newest channel.connected audit event names the actor.
-                cur.execute("SELECT DISTINCT ON (e.subject) e.subject,e.actor::text,coalesce(p.display_name,''),extract(epoch from e.at) FROM public.pr_audit_events e LEFT JOIN public.pr_profiles p ON p.user_id=e.actor WHERE e.kind='channel.connected' AND e.workspace_id=ANY(%s::uuid[]) ORDER BY e.subject,e.at DESC", ([row[0] for row in rows],))
-                connected = {item[0]: {"userId": item[1], "displayName": item[2], "at": float(item[3])} for item in cur.fetchall()}
+                cur.execute("SELECT DISTINCT ON (e.workspace_id,e.subject) e.workspace_id::text,e.subject,e.actor::text,coalesce(p.display_name,''),extract(epoch from e.at) FROM public.pr_audit_events e LEFT JOIN public.pr_profiles p ON p.user_id=e.actor WHERE e.kind='channel.connected' AND e.workspace_id=ANY(%s::uuid[]) ORDER BY e.workspace_id,e.subject,e.at DESC", ([row[0] for row in rows],))
+                connected = {(item[0], item[1]): {"userId": item[2], "displayName": item[3], "at": float(item[4])} for item in cur.fetchall()}
                 credentials = youtube_credential_status(cur, [row[0] for row in rows])
+                has_twitch = any(item.get('platform') == 'Twitch' for entry in rows for item in
+                    (entry[7] if isinstance(entry[7],list) else json.loads(entry[7]) if isinstance(entry[7],str) else []) if isinstance(item,dict))
+                twitch_credentials = twitch_credential_status(cur,[entry[0] for entry in rows],validate_binding=self.oauth._twitch_projection_binding) if has_twitch else {}
         channels = []
         for row in rows:
             membership = Membership.from_row(*row[1:6])
@@ -1035,13 +1041,14 @@ class HostedWorkspaceService:
                 if not isinstance(channel, dict) or not channel.get("configured"):
                     continue
                 channel = with_youtube_credential_status(channel, credentials.get((row[0], channel.get("id"))))
+                channel = with_twitch_credential_status(channel, twitch_credentials.get((row[0], channel.get('id'))))
                 channels.append({
                     "workspaceId": row[0], "workspaceName": row[6] or "My workspace",
                     "id": channel.get("id"), "platform": channel.get("platform"), "account": channel.get("account"), "accountType": channel.get("accountType"),
                     "connectionState": connection_state(channel, now), "expiresAt": channel.get("expiresAt"), "verifiedAt": channel.get("verifiedAt"),
                     "refreshSupported": channel.get("refreshSupported") is True, "authorizationLane": channel.get("authorizationLane", "standard"), "refreshBindingRequired": channel.get("refreshBindingRequired") is True, "accessTokenExpiresAt": channel.get("accessTokenExpiresAt"),
                     "evidenceSource": channel.get("evidenceSource", "synthetic"), "canManage": membership.allows("manage_connections"),
-                    "connectedBy": connected.get(channel.get("id")),
+                    "connectedBy": connected.get((row[0], channel.get("id"))),
                 })
         return {"channels": channels}
 

@@ -269,6 +269,29 @@ export const channels: Channel[] = [
     notes: [hostedPending, 'Until TikTok audits Rafii, posts are private: only you can see them.']
   },
   {
+    slug: 'twitch',
+    name: 'Twitch',
+    group: 'hosted',
+    capability: 'unsupported',
+    reviewStatus: 'native integration awaiting live verification',
+    capabilities: {
+      identity: 'Unsupported',
+      publish: 'Unsupported',
+      schedule: 'Unsupported',
+      analytics: 'Unsupported',
+      comments_read: 'Unsupported',
+      reply: 'Unsupported'
+    },
+    description: 'Native channel, chat, moderation and live community operations with separately verified account permissions.',
+    formats: [],
+    region: 'global',
+    notes: [
+      'Public connection and native actions remain gated until the server records their release approval and live verification.',
+      'Twitch schedule entries announce broadcasts. Starting an encoder is a separate operation.',
+      'Analytics is limited to data actually exposed by Twitch; generic social feed publishing is not available.'
+    ]
+  },
+  {
     slug: 'pinterest',
     name: 'Pinterest',
     group: 'hosted',
