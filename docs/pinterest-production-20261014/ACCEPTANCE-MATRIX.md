@@ -1,6 +1,6 @@
 # Pinterest acceptance and capability matrix
 
-**Current18Oct03:44UTC:** live730d0440/Eobk. New four-scope real OAuth exchange and eligible named board read PASS. Fresh-grant refreshBLOCKED403; live workspace snapshotFAIL500/missingtrial; approved image upload0attempts. Repair66c5cedd local targeted testsPASS, cloud/deploymentNOTRUN. Publicall4NO-GO. Latest evidence is the final section; historical sections below retain their execution dates.
+**Current18Oct~05:30UTC:** live730d/Eobk; real4scopeOAuth/eligibleboardPASS; refresh403/snapshot500remain. Repair66c5cedd cloud08m85w3gj9PASS32tests+3476hashmatch; deploymentapproved but0submissions because protectedsecretCopyrequireshuman. CIbudgetconsumed/build1+promotion1remain. Publicall4NO-GO. Latestsectionbelow supersedes pending-CIrows.
 
 Updated2026-10-17 UTC. Live product source `e2e5169ff19ac268c0a0ad06994f67b41f69f949`, deployment2tFM READY/promoted20:28Z; source receipt10486d8b. Earlier real read-only provider acceptance was on qualified c8/sF. Baseline7432 incorporated. **NOT PRODUCTION-READY.** Synthetic/disposable checks do not supply real acceptance. [Deployed-source cloud result](evidence/capabilities-validation-20261017.json).
 
@@ -138,3 +138,16 @@ Earlier unapplied/undeployed statements are superseded by this execution. Public
 | Standard Access | BLOCKED | Native Myapps rechecked~03:41UTC: Rafii/Trialaccessactive/Upgrade. No Standard approval or submission by this task. Dedicated recording agent progressing installedOBS qualification; full compliant videoNOTRUN. |
 
 [Exact current receipt](evidence/private-trial-four-scope-acceptance-20261018.json) · [Concrete new revision validation/deployment approval](NEXT-ACTION-SNAPSHOT-REPAIR.md). Earlier expired9af transaction remains preserved as historical evidence; it was not reused. Policy still18Oct18UTC; no new resources/SQL/build/promotion/CI/Pin effects this continuation.
+
+## Approved snapshot repair validation —18Oct~05:30UTC
+
+| Test | Status | Evidence |
+|---|---|---|
+| Newsource focused cloud compatibility | PASS |08m85w3gj9:32tests0.562s,controller87.782s,all3exit0;3476inputfingerprintmatch,3mappingexactrestore. UnchangedPG/Node/frontendresultsreused. |
+| Current production/env preflight | PASS |05:18UTC Eobkalias+projecttargetREADY;173productionenvmetadata recordsunchanged; privateexistingbucketverified. Mustrefreshbeforebuild. |
+| Repair deployment | BLOCKED |HumanCI+conditionaldeployapprovalgranted;0buildsubmissions/0promotions. ProtectedCopycontrolreturnsSECURE_INPUT_BLOCKED; humanmustcopyexistingmaskedkey. No newapproval or bypass. |
+| SourcefixedactualsnapshotGET200/Library | NOT RUN |Live730d500 remains; candidate66c5cedd isnotdeployed. |
+| ApprovedPNGingest/finalPinasset | BLOCKED |0attempts; revision-fenceduploaddisabledbysnapshot500. |
+| FullStandardAccessvideo | BLOCKED |DedicatedagentissuednoStartRecording/scene/profile/source/windowcreation; CUAgetAppOBSblocked6120s thenparentinterrupted. Rootprobe4527stimeout. No newfootage; existing4fpspartialinsufficient. ExistingOBSstateunknown/MissingFilesuntouched. |
+
+[NewCI/sourceproof](evidence/snapshot-repair-cloud-validation-20261018.json) · [currentexecutionhandoff](evidence/snapshot-repair-deployment-blocker-20261018.json) · [recordingattempt](evidence/obs-qualification-attempt-20261018.json). No realPin/schedule/nativeAnalytics/Standard/nonowner/publicresultadded.

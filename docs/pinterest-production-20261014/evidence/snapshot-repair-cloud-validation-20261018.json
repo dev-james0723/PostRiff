@@ -1,0 +1,161 @@
+{
+  "status": "PASS",
+  "execution": "SANITIZED_REMOTE_FOCUSED_PYTHON",
+  "productSource": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
+  "tests": {
+    "count": 32,
+    "seconds": 0.562,
+    "modules": [
+      "test_hosted_legacy_trial_projection",
+      "test_youtube_workspace_projection",
+      "test_postriff_phase2_hosted",
+      "test_hosted_storage_library"
+    ],
+    "execution": "CLOUD_ONLY; localcontrols separately dated"
+  },
+  "receipt": {
+    "task": "test",
+    "provider": "depot",
+    "runner": "depot-ubuntu-24.04-8",
+    "orgId": "jf34f85hr0",
+    "sourceHead": "dfac870ba95ea9ebd45e73ec76919d352ccafac2",
+    "startedAt": "2026-10-18T03:59:18.194156+00:00",
+    "runId": "08m85w3gj9",
+    "runUrl": "https://depot.dev/orgs/jf34f85hr0/workflows/08m85w3gj9",
+    "elapsedSeconds": 87.782,
+    "exitCode": 0,
+    "submissionExitCode": 0,
+    "remoteExitCode": 0,
+    "snapshot": {
+      "baseSha": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+      "baseRef": "refs/remotes/origin/consumer-saas",
+      "branch": "codex/rafii-pinterest-production-prep-20261014",
+      "sourceHead": "dfac870ba95ea9ebd45e73ec76919d352ccafac2",
+      "sourceFingerprint": "488cd83741e34ecc6cda8a1c7cb8d3559dbc9d5df6969a363925392f14f9dcc8",
+      "includedFileCount": 3476,
+      "includedBytes": 1573682,
+      "patchBytes": 491973,
+      "patchSha256": "0c27b73092ffbb449ce77538e9242f756228aad1daed317d0764af140b2dd693",
+      "excludedForbiddenCount": 29,
+      "inputExcludes": [
+        "docs/**",
+        "desktop/**",
+        "vendor/**",
+        "motion/**",
+        "downloads/**",
+        "artifacts/**",
+        "*.zip",
+        ".claude/**",
+        ".agents/**",
+        ".token-pilot/**",
+        "studio/tiktok-runtime/**",
+        "studio/bilibili/**"
+      ]
+    },
+    "transport": {
+      "patchUploaded": true,
+      "patchApplied": true,
+      "providerBase": "7432c56d96bc9d042b6f00bdbb6acc1b5bb271f1",
+      "providerHead": "dfac870ba95ea9ebd45e73ec76919d352ccafac2",
+      "remoteExitCode": 0,
+      "remoteSource": {
+        "includedFileCount": 3476,
+        "sourceFingerprint": "488cd83741e34ecc6cda8a1c7cb8d3559dbc9d5df6969a363925392f14f9dcc8",
+        "sourceHead": "dfac870ba95ea9ebd45e73ec76919d352ccafac2"
+      },
+      "finalStatus": {
+        "org_id": "jf34f85hr0",
+        "run_id": "08m85w3gj9",
+        "status": "finished",
+        "workflows": [
+          {
+            "workflow_id": "76cr2vn412",
+            "status": "finished",
+            "name": "James Cloud Build",
+            "jobs": [
+              {
+                "job_display_name": "test",
+                "job_id": "2gmmntzbt9",
+                "job_key": "_inline_0.yaml:test",
+                "status": "finished",
+                "attempts": [
+                  {
+                    "attempt_id": "7dj9j1n878",
+                    "attempt": 1,
+                    "status": "finished",
+                    "sandbox_id": "4g50hfrppqrx6f96h8fq",
+                    "session_id": "851e4aa9-69af-4bee-ad8d-43ddd33db9ae",
+                    "logs_command": "depot ci logs 7dj9j1n878 --org jf34f85hr0",
+                    "download_available": true,
+                    "download_command": "depot ci logs 7dj9j1n878 --output-file logs.txt --org jf34f85hr0",
+                    "view_url": "https://depot.dev/orgs/jf34f85hr0/workflows/76cr2vn412?job=2gmmntzbt9&attempt=7dj9j1n878",
+                    "ssh_available": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "logAttemptId": "7dj9j1n878",
+      "cacheBefore": [
+        {
+          "bytes": 323482840,
+          "files": 1686,
+          "path": "/mnt/jcb-package-cache/_cacache"
+        },
+        {
+          "bytes": 394979995,
+          "files": 32,
+          "path": "/mnt/jcb-framework-cache"
+        }
+      ],
+      "cacheAfter": [
+        {
+          "bytes": 323482840,
+          "files": 1686,
+          "path": "/mnt/jcb-package-cache/_cacache"
+        },
+        {
+          "bytes": 394979995,
+          "files": 32,
+          "path": "/mnt/jcb-framework-cache"
+        }
+      ]
+    }
+  },
+  "receiptSha256": "ee89b0010c1b03a16f1e72d4ec319fb9047afc9327f04fa4bb4570c4a1d7bb93",
+  "inventorySha256": "832390e2c2f6af72b0385b53a115f79d7687a31e287e53b9902d899f1a663ac8",
+  "logSha256": "5cad4eca47ce2a91bf7653841cce2bbc0326036be2698ac24908a97fa172ce96",
+  "macResourcesKeys": [
+    "intervalSeconds",
+    "maxDuringSamples",
+    "samples",
+    "processArgvStored",
+    "samplingThreadStopped",
+    "limitations"
+  ],
+  "sourceProof": {
+    "currentInputSha256File": "snapshot-repair-input-sha256-20261018.json",
+    "all3476SourceHashesRecorded": true,
+    "temporaryMappings": 3,
+    "restoredToOriginalBytes": true,
+    "sourceFingerprintMatches": true,
+    "originalHashes": {
+      ".james-cloud-build.json": "672b367cb3464001df37cd02304fd23ee0cd12000f6b78a38fd71f5ea901e7ad",
+      ".depot/workflows/james-cloud-build.yml": "b00506cf80d27610d467a2042c309190851ffd1da9d3ac7583392fc56afdba99",
+      "web/package.json": "266fbeda4396e978c7d45f13e7a737f5259b62253348e001f3983be99e4a1f45"
+    }
+  },
+  "limitations": [
+    "32 tests are synthetic compatibility/hosted contract checks, not real Pinterest acceptance.",
+    "Unchanged prior PG/Node/frontend results reused; no new full-project CI.",
+    "Post-job git cleanup warned about excluded vendor/xiaohongshu submodule metadata; tests/job/submission/controller exit0.",
+    "Controller87.782s is not an invoiced provider compute measurement; actual invoice and cache/result metering unknown.",
+    "CurrentProduct66c5cedd is not deployed; no Pin is approved or created."
+  ],
+  "rawLocalReceipts": {
+    "jcb": "/Users/ouxianxing/Documents/James-Cloud-Build/receipts/20261018T040045918834Z-test.json",
+    "controllerLog": "/private/tmp/rafii-pinterest-snapshot-ci-20261018-66c5cedd/run.log"
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "preparedAt": "2026-10-18T03:44:00Z",
+  "preparedAt": "2026-10-18T05:30:00Z",
   "state": "REVIEWABLE_DRAFT_NOT_EXECUTABLE",
   "providerAppId": "1615884",
   "productionSupabase": "buoyhkbodnhzngaotoel",
@@ -32,7 +32,7 @@
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
         "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Existing private workspace Content Studio ingest already approved but blocked by snapshot500. Source66c5cedd repairs the missing legacy trial projection locally; await approved validation/deployment, then freeze normalized asset/object/hash/alt before final Pin approval.",
+        "delivery": "Existing private workspace image ingest already approved but blocked by live snapshot500. Repair66c5cedd qualified by cloud08m85w3gj9/32PASS; deploymentapproved but awaits human protected secretCopy. Then freeze normalized asset/object/hash/alt before final Pin approval.",
         "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
         "finalNormalizedAsset": null
       },
@@ -96,7 +96,7 @@
         "rightsBasis": "Existing Rafii-owned source web/src/app/opengraph-image.tsx, reused unchanged; no generation or editing.",
         "altText": "Rafii: Your AI teammate for social media. Rewritten per platform, approved by you, published with a receipt.",
         "sourceValidation": "HTTP200 image/png, PNG header and checksum verified2026-10-17; repeat checksum guard before execution; landscape original, no crop.",
-        "delivery": "Existing private workspace Content Studio ingest already approved but blocked by snapshot500. Source66c5cedd repairs the missing legacy trial projection locally; await approved validation/deployment, then freeze normalized asset/object/hash/alt before final Pin approval.",
+        "delivery": "Existing private workspace image ingest already approved but blocked by live snapshot500. Repair66c5cedd qualified by cloud08m85w3gj9/32PASS; deploymentapproved but awaits human protected secretCopy. Then freeze normalized asset/object/hash/alt before final Pin approval.",
         "ingestStatus": "BLOCKED_LIVE_SNAPSHOT500_ZERO_UPLOAD_ATTEMPTS",
         "finalNormalizedAsset": null
       },
@@ -143,7 +143,7 @@
     "pinCreatesProposed": 2
   },
   "hardBlocks": [
-    "Actual workspace snapshot500 prevents revision-fenced Content Studio image ingest;66c5cedd repair is local only pending cloud+deployment approval.",
+    "Actual workspace snapshot500 prevents Content Studio ingest.66c5cedd cloudPASS/deploymentapproved; human must use protected existingsecretCopycontrol before one build.",
     "Actual normalized immutable asset/object/hash unavailable;0upload attempts.",
     "No real Pin approval; both proposed creates remain NOT_RUN.",
     "Current fresh-grant refresh returns Rafii403; same-account human normal sign-in requested."

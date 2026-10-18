@@ -160,7 +160,12 @@
   },
   "newRepairCandidate": {
     "source": "66c5cedd6b6dfdc7017eaef1691dfaf27df775a6",
-    "approval": "PENDING_NEW_CI_AND_CONDITIONAL_DEPLOYMENT",
-    "proposal": "NEXT-ACTION-SNAPSHOT-REPAIR.md"
+    "approval": "APPROVED_CI_PLUS_ONE_CONDITIONAL_DEPLOYMENT",
+    "proposal": "NEXT-ACTION-SNAPSHOT-REPAIR.md",
+    "cloudRun": "08m85w3gj9",
+    "cloudStatus": "PASS32_TESTS_SOURCE_FINGERPRINT_MATCH",
+    "buildSubmissions": 0,
+    "promotions": 0,
+    "blocker": "SECURE_INPUT_BLOCKED; human existing masked App secret Copy required, no new approval"
   }
 }
