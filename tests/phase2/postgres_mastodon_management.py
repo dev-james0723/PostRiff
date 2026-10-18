@@ -549,6 +549,55 @@ class JournalTests(unittest.TestCase):
                 self.manager.read(workspace, actor, self.connection_id, 'profile')
         self.assertEqual(len(self.calls), before)
 
+    def test_moderation_denial_and_generation_rotation_precede_provider_io(self):
+        self.calls.clear()
+        with self.assertRaises(AlphaError):
+            self.manager.preview(self.foreign, self.actor, self.connection_id,
+                                 {'action': 'report_account', 'targetId': '99', 'reportComment': 'Reason'})
+        self.assertEqual(self.calls, [])
+        preview = self.preview()
+        with connection() as db:
+            raw, key = db.execute('SELECT access_ciphertext,key_id FROM public.pr_encrypted_credentials WHERE workspace_id=%s AND connection_id=%s',
+                                 (self.workspace, self.connection_id)).fetchone()
+            replacement, new_key = self.vault.encrypt(self.vault.decrypt(raw, key))
+            db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s WHERE workspace_id=%s AND connection_id=%s',
+                       (replacement, new_key, self.workspace, self.connection_id))
+        self.calls.clear()
+        with self.assertRaises(AlphaError): self.execute(preview)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.posts, [])
+
+    def test_native_report_and_filter_use_exact_journal_once(self):
+        scopes = ['read:accounts', 'read:statuses', 'read:filters', 'write:filters', 'write:reports']
+        encrypted, key = self.vault.encrypt(json.dumps({'v': 1, 'at': 'fixture-token', 'instance': 'mastodon.social',
+            'clientId': 'fixture-client', 'clientSecret': self.sample_app_secret, 'scope': scopes}))
+        with connection() as db:
+            db.execute('UPDATE public.pr_encrypted_credentials SET access_ciphertext=%s,key_id=%s,scopes=%s WHERE workspace_id=%s AND connection_id=%s',
+                       (encrypted, key, scopes, self.workspace, self.connection_id))
+        def transport(method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            if url.endswith('/api/v2/instance'): return ok({'version': '4.2.9'})
+            if url.endswith('/api/v1/accounts/verify_credentials'): return ok({'id': '100', 'username': 'fixture'})
+            if url.endswith('/api/v1/apps/verify_credentials'): return ok({'scopes': scopes})
+            if method == 'POST' and url.endswith('/api/v1/reports'):
+                self.posts.append(url)
+                return ok({'id': '77', 'target_account': {'id': '99'}, 'forwarded': False})
+            if method == 'POST' and url.endswith('/api/v2/filters'):
+                self.posts.append(url)
+                return ok({'id': '88', **kwargs['body']})
+            raise AssertionError('Unexpected synthetic moderation request')
+        self.provider.transport = transport
+        report = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'report_account', 'targetId': '99', 'reportComment': 'Exact reason'})
+        result = self.execute(report)
+        self.assertEqual(result['state'], 'accepted'); self.assertTrue(result['reportFiled'])
+        self.assertTrue(self.execute(report)['replayed']); self.assertEqual(len(self.posts), 1)
+        filtered = self.manager.preview(self.workspace, self.actor, self.connection_id,
+            {'action': 'filter_create', 'filter': {'title': 'Exact filter', 'context': ['home'],
+                                                'keywords_attributes': [{'keyword': 'example', 'whole_word': True}]}})
+        self.assertEqual(self.execute(filtered)['state'], 'accepted')
+        self.assertEqual(len(self.posts), 2)
+
     def test_approval_digest_and_expiry(self):
         preview = self.preview()
         self.assertEqual(self.posts, [])

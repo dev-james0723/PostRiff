@@ -56,7 +56,7 @@ class WriteReleaseContract(unittest.TestCase):
                 self.assertIs(select(SimpleNamespace(providers={'mastodon': provider}),
                                      {'platform': 'Mastodon'}), provider if ready else None)
                 if not ready:
-                    manager = SimpleNamespace(_grant=lambda *args: (provider, {}, session))
+                    manager = SimpleNamespace(_approved_action=lambda *args: None, _grant=lambda *args: (provider, {}, session))
                     with self.assertRaises(Refusal) as refusal:
                         execute(manager, 'workspace', 'actor', 'connection', 'action',
                                 {'confirmed': True, 'digest': 'exact'})

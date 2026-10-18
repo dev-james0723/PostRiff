@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MastodonProfileFields, type ProfileEdit } from './mastodon-profile-fields';
 import { MastodonFields } from '@/features/queue/mastodon-fields';
@@ -16,7 +17,9 @@ const actions = [
   ['block', 'Block account'], ['unblock', 'Unblock account'], ['profile_update', 'Edit profile'],
   ['native_schedule', 'Schedule on Mastodon'], ['native_reschedule', 'Reschedule on Mastodon'], ['native_cancel', 'Cancel server schedule'],
   ['list_create', 'Create list'], ['list_update', 'Rename list'], ['list_delete', 'Delete list'],
-  ['list_add', 'Add accounts to list'], ['list_remove', 'Remove accounts from list']
+  ['list_add', 'Add accounts to list'], ['list_remove', 'Remove accounts from list'],
+  ['report_account', 'Report account'], ['filter_create', 'Create content filter'],
+  ['filter_update', 'Update content filter'], ['filter_delete', 'Delete content filter']
 ] as const;
 type Preview = { actionId: string; digest: string; preview: { accountId: string; instance: string; action: string; targetId?: string; body: Record<string, unknown>; media?: Record<string, { id: string; hash: string; bytes: number }> } };
 
@@ -36,7 +39,7 @@ function AccountData({ value }: { value: Record<string, unknown> }) {
       {value.resource === 'live_events' && <p role='status' className='mb-2'>Live updates: {String(value.state ?? 'unavailable')}. {typeof value.reason === 'string' ? value.reason : 'Only this foreground window was read; use notifications for missed events.'}</p>}
       {rows ? rows.length ? rows.map((item, index) => {
         const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
+        const fields = ['id', 'event', 'excerpt', 'title', 'name', 'username', 'createdAt', 'created_at', 'scheduled_at', 'visibility', 'content', 'favourites', 'boosts', 'replies', 'quotes', 'context', 'filter_action', 'keywords', 'expires_at', 'type', 'postId', 'metric', 'value', 'observedAt', 'readOffset'];
         return <div key={String(row.id ?? index)} className='mb-3 border-b pb-2'>{fields.filter((key) => row[key] != null).map((key) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(row[key])}</p>)}</div>;
       }) : <p>No items in this server page.</p> : single && typeof single === 'object' ? Object.entries(single).map(([key, entry]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(entry)}</p>) : <p>{readable(single)}</p>}
     </div>
@@ -54,15 +57,21 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
   const [scheduledAt, setScheduledAt] = useState('');
   const [title, setTitle] = useState('');
   const [accountIds, setAccountIds] = useState('');
+  const [reportForward, setReportForward] = useState(false);
+  const [reportCategory, setReportCategory] = useState('other');
+  const [filterContexts, setFilterContexts] = useState<string[]>([]);
+  const [filterPolicy, setFilterPolicy] = useState('keep');
+  const [filterExpiry, setFilterExpiry] = useState('');
+  const [wholeWord, setWholeWord] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [details, setDetails] = useState<Record<string, unknown> | null>(null);
   const [options, setOptions] = useState<Record<string, unknown> | null>({});
   const [url, setUrl] = useState<string | null>(null);
-  const needsText = ['edit', 'native_schedule'].includes(action);
+  const needsText = ['edit', 'native_schedule', 'report_account', 'filter_create', 'filter_update'].includes(action);
   const needsTime = ['native_schedule', 'native_reschedule'].includes(action);
-  const needsTarget = !['profile_update', 'native_schedule', 'list_create'].includes(action);
+  const needsTarget = !['profile_update', 'native_schedule', 'list_create', 'filter_create'].includes(action);
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const actionId = query.get('mastodonAction');
@@ -88,6 +97,16 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       if (['edit', 'native_schedule'].includes(action) && options === null) throw new Error('Check the Mastodon post settings.');
       if (action === 'profile_update') Object.assign(payload, profileEdit);
       if (action === 'list_add' || action === 'list_remove') payload.account_ids = accountIds.split(',').map((id) => id.trim()).filter(Boolean);
+      if (action === 'report_account') Object.assign(payload, {
+        reportComment: text, reportForward, reportCategory,
+        reportStatusIds: accountIds.split(',').map((id) => id.trim()).filter(Boolean)
+      });
+      if (action === 'filter_create' || action === 'filter_update') payload.filter = {
+        ...(title.trim() ? { title } : {}), ...(filterContexts.length ? { context: filterContexts } : {}),
+        ...(filterPolicy !== 'keep' ? { filter_action: filterPolicy } : {}),
+        ...(filterExpiry ? { expires_in: Number(filterExpiry) } : {}),
+        ...(text.trim() ? { keywords_attributes: text.split('\n').map((keyword) => keyword.trim()).filter(Boolean).map((keyword) => ({ keyword, whole_word: wholeWord })) } : {})
+      };
       if (needsTime) {
         const at = new Date(scheduledAt);
         if (!Number.isFinite(at.getTime())) throw new Error('Choose a valid schedule time.');
@@ -102,7 +121,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
     setBusy(true);
     try {
       const result = await api.mastodonApprove(workspaceId, connectionId, preview.actionId, preview.digest);
-      setMessage(`${result.state}: ${result.reason ?? result.publication ?? 'Mastodon returned an action receipt.'}`);
+      setMessage(`${result.state}: ${result.reason ?? result.publication ?? 'Mastodon returned an action receipt.'}${action === 'report_account' ? ' A report receipt is not a moderation decision.' : ''}`);
       setUrl(result.url ?? null); setPreview(null);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Outcome unavailable. Check Mastodon before trying again.'); }
     finally { setBusy(false); }
@@ -113,7 +132,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
       <div className='mt-3 flex flex-col gap-3'>
         <p className='text-muted-foreground text-xs'>All requests use {account}. Private content stays within this workspace. Server schedules publish on your instance; Rafii-managed schedules send at your approved calendar time.</p>
         <div className='flex flex-wrap gap-2'>
-          {['health', 'capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'trending_tags', 'trending_statuses'].map((resource) => (
+          {['health', 'capabilities', 'analytics', 'posts', 'notifications', 'live_events', 'scheduled', 'lists', 'bookmarks', 'profile', 'home', 'preferences', 'favourites', 'mutes', 'blocks', 'filters', 'trending_tags', 'trending_statuses'].map((resource) => (
             <Button key={resource} variant='outline' size='sm' disabled={busy} onClick={() => void read(resource)}>{resource === 'live_events' ? 'Read live updates' : resource.replace('_', ' ')}</Button>
           ))}
         </div>
@@ -123,6 +142,7 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
           <div className='flex flex-col gap-2 rounded border p-3'>
             <p className='text-sm'>Approve {preview.preview.action.replaceAll('_', ' ')} for {preview.preview.accountId} on {preview.preview.instance}</p>
             {preview.preview.targetId && <p className='text-sm'>Target ID: {preview.preview.targetId}</p>}
+            {preview.preview.action === 'report_account' && <p className='text-sm'>This files a report; it does not apply a moderation decision. {preview.preview.body.forward === true ? 'You are approving forwarding this report to the reported account’s server moderators.' : 'Forwarding to the reported account’s server moderators is off.'} Rafii cannot retract a filed report.</p>}
             <div className='max-h-40 overflow-auto text-sm'>{Object.entries(preview.preview.body).map(([key, value]) => <p key={key}><span className='font-medium'>{key.replaceAll('_', ' ')}: </span>{readable(value)}</p>)}</div>
             {preview.preview.media && Object.entries(preview.preview.media).map(([role, image]) => <p key={role} className='break-all text-xs'>{role}: Library image {image.id} · {image.bytes} bytes · SHA256 {image.hash}</p>)}
             <div className='flex gap-2'><Button disabled={busy} onClick={() => void approve()}>Approve exact action</Button><Button variant='outline' disabled={busy} onClick={() => setPreview(null)}>Back</Button></div>
@@ -130,17 +150,32 @@ export function MastodonAccountControls({ connectionId, account }: { connectionI
         ) : (
           <>
             <Label htmlFor={fieldId + '-action'}>Account action</Label>
-            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); }}>
+            <Select value={action} onValueChange={(value) => { setAction(String(value)); setProfileEdit({ profile: {}, profileMedia: {} }); setText(''); setTarget(''); setMessage(''); setTitle(''); setAccountIds(''); setReportForward(false); setReportCategory('other'); setFilterContexts([]); setFilterPolicy('keep'); setFilterExpiry(''); setWholeWord(false); }}>
               <SelectTrigger id={fieldId + '-action'} aria-label='Mastodon account action'><SelectValue /></SelectTrigger>
               <SelectContent>{actions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
             </Select>
             {action === 'profile_update' && <MastodonProfileFields connectionId={connectionId} onChange={setProfileEdit} />}
             {needsTarget && <label htmlFor={fieldId + '-target'} className='flex flex-col gap-1 text-sm'>Post, account, list or schedule ID<Input id={fieldId + '-target'} value={target} inputMode='numeric' onChange={(event) => setTarget(event.target.value)} /></label>}
-            {needsText && <label htmlFor={fieldId + '-text'} className='flex flex-col gap-1 text-sm'>{action === 'profile_update' ? 'Profile description' : 'Post text'}<textarea aria-label={action === 'profile_update' ? 'Profile description' : 'Post text'} id={fieldId + '-text'} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setText(event.target.value)} /></label>}
+            {needsText && <label htmlFor={fieldId + '-text'} className='flex flex-col gap-1 text-sm'>{action === 'report_account' ? 'Report reason (up to1000 characters)' : action.startsWith('filter_') ? 'Keywords to add (one per line)' : 'Post text'}<textarea aria-label={action === 'report_account' ? 'Report reason (up to1000 characters)' : action.startsWith('filter_') ? 'Keywords to add (one per line)' : 'Post text'} id={fieldId + '-text'} maxLength={action === 'report_account' ? 1000 : action.startsWith('filter_') ? 2100 : undefined} className='min-h-24 rounded border p-2' value={text} onChange={(event) => setText(event.target.value)} /></label>}
             {['edit', 'native_schedule'].includes(action) && <MastodonFields onChange={setOptions} />}
             {needsTime && <label htmlFor={fieldId + '-time'} className='flex flex-col gap-1 text-sm'>Schedule time (your local time)<Input id={fieldId + '-time'} type='datetime-local' value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>}
-            {['list_create', 'list_update'].includes(action) && <label htmlFor={fieldId + '-title'} className='flex flex-col gap-1 text-sm'>List title<Input id={fieldId + '-title'} value={title} onChange={(event) => setTitle(event.target.value)} /></label>}
+            {['list_create', 'list_update', 'filter_create', 'filter_update'].includes(action) && <label htmlFor={fieldId + '-title'} className='flex flex-col gap-1 text-sm'>{action.startsWith('filter_') ? 'Filter title' : 'List title'}<Input id={fieldId + '-title'} value={title} onChange={(event) => setTitle(event.target.value)} /></label>}
             {['list_add', 'list_remove'].includes(action) && <label htmlFor={fieldId + '-accounts'} className='flex flex-col gap-1 text-sm'>Account IDs separated by commas<Input id={fieldId + '-accounts'} value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>}
+            {action === 'report_account' && <>
+              <Label htmlFor={fieldId + '-report-category'}>Report category</Label>
+              <Select value={reportCategory} onValueChange={(value) => setReportCategory(String(value))}><SelectTrigger id={fieldId + '-report-category'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='other'>Other</SelectItem><SelectItem value='spam'>Spam</SelectItem></SelectContent></Select>
+              <label className='flex flex-col gap-1 text-sm'>Supporting status IDs (optional, comma-separated)<Input value={accountIds} onChange={(event) => setAccountIds(event.target.value)} /></label>
+              <label htmlFor={fieldId + '-report-forward'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-report-forward'} checked={reportForward} onCheckedChange={(value) => setReportForward(value === true)} />Forward this report to the reported account&apos;s server moderators</label>
+              <p className='text-muted-foreground text-xs'>A filed report is not a moderation decision. Rafii cannot retract it. Review the target, reason and forwarding choice before approving.</p>
+            </>}
+            {['filter_create', 'filter_update'].includes(action) && <>
+              <div className='flex flex-wrap gap-3' role='group' aria-label='Filter contexts'>{['home', 'notifications', 'public', 'thread', 'account'].map((context) => <label key={context} htmlFor={fieldId + '-context-' + context} className='flex items-center gap-1 text-sm'><Checkbox id={fieldId + '-context-' + context} checked={filterContexts.includes(context)} onCheckedChange={(value) => setFilterContexts((previous) => value === true ? [...previous, context] : previous.filter((item) => item !== context))} />{context}</label>)}</div>
+              <Label htmlFor={fieldId + '-filter-policy'}>Filter policy</Label>
+              <Select value={filterPolicy} onValueChange={(value) => setFilterPolicy(String(value))}><SelectTrigger id={fieldId + '-filter-policy'}><SelectValue /></SelectTrigger><SelectContent><SelectItem value='keep'>Default / keep current</SelectItem><SelectItem value='warn'>Warn</SelectItem><SelectItem value='hide'>Hide</SelectItem><SelectItem value='blur'>Blur (Mastodon4.4+)</SelectItem></SelectContent></Select>
+              <label htmlFor={fieldId + '-whole-word'} className='flex items-center gap-2 text-sm'><Checkbox id={fieldId + '-whole-word'} checked={wholeWord} onCheckedChange={(value) => setWholeWord(value === true)} />Match whole words for new keywords</label>
+              <label className='flex flex-col gap-1 text-sm'>Expiry in seconds (optional)<Input type='number' min={60} max={31536000} value={filterExpiry} onChange={(event) => setFilterExpiry(event.target.value)} /></label>
+              <p className='text-muted-foreground text-xs'>Filters affect this account only. Blank fields keep existing settings when updating. A new filter needs a title and at least one context.</p>
+            </>}
             <Button variant='outline' disabled={busy} onClick={() => void prepare()}>Review action</Button>
           </>
         )}

@@ -12,6 +12,7 @@ from .contracts import digest
 from .permissions import require
 from .mastodon_protocol import ID, discover, has_scopes, status_options, validate_status
 from .mastodon_release import write_qualified as mastodon_write_qualified
+from .mastodon_moderation import ACTIONS as MODERATION_ACTIONS, spec as moderation_spec
 
 
 class ApplicationCache:
@@ -50,6 +51,7 @@ READS = {
     "scheduled": ("/api/v1/scheduled_statuses?limit=40", ("read:statuses",)),
     "mutes": ("/api/v1/mutes?limit=40", ("read:mutes",)),
     "blocks": ("/api/v1/blocks?limit=40", ("read:blocks",)),
+    "filters": ("/api/v2/filters", ("read:filters",)),
     "trending_tags": ("/api/v1/trends/tags?limit=20", ("read:statuses",)),
     "trending_statuses": ("/api/v1/trends/statuses?limit=20", ("read:statuses",)),
 }
@@ -86,6 +88,10 @@ def action_spec(action, payload, capabilities, *, now):
     """No arbitrary URLs/methods; the allowlist defines exact authority and canonical data."""
     if not isinstance(payload, dict):
         raise AlphaError("Expected structured Mastodon action settings.", 400)
+    if not isinstance(action, str):
+        raise AlphaError('Choose a named Mastodon action.', 400)
+    if action in MODERATION_ACTIONS:
+        return moderation_spec(action, payload, capabilities)
     target = payload.get("targetId")
     if action not in ("profile_update", "list_create", "native_schedule"):
         if not isinstance(target, str) or not ID.fullmatch(target):
@@ -284,13 +290,30 @@ class MastodonManagement:
         if not isinstance(payload, dict):
             raise AlphaError('Choose a structured Mastodon action.', 400)
         action = payload.get("action")
+        if not isinstance(action, str):
+            raise AlphaError('Choose a named Mastodon action.', 400)
+        if action in MODERATION_ACTIONS:
+            from .hosted import _membership
+            with self.repository.transaction(token, workspace) as (_cur, row, _actor):
+                require(_membership(row), 'moderate')
         provider, grant, session = self._grant(workspace, token, connection)
         capabilities = discover(provider.transport, session["instance"])
         method, path, body, scopes, permission = action_spec(action, payload, capabilities, now=self.clock())
         self._scopes(grant, scopes)
+        if action == 'report_account':
+            for status in body['status_ids']:
+                original = self._result(provider.api(session, 'GET', '/api/v1/statuses/' + status))
+                if (not isinstance(original, dict) or str(original.get('id')) != status
+                        or not isinstance(original.get('account'), dict)
+                        or str(original['account'].get('id')) != body['account_id']):
+                    raise AlphaError('A supporting status does not belong to the reported account.', 409)
+            self._read_fence(workspace, token, connection, grant)
         from .hosted import _membership, audit, throttle
         preview = {"connectionId": connection, "accountId": grant["providerAccountId"], "instance": session["instance"],
-                   "action": action, "targetId": payload.get('targetId'), "method": method, "path": path, "body": body, "scopes": list(scopes), "permission": permission}
+                   "action": action, "targetId": payload.get('targetId'), "method": method, "path": path, "body": body, "scopes": list(scopes), "permission": permission,
+                   "authorizationBinding": grant.get('_mastodonCredentialBinding'), "authorizationScopes": sorted(grant.get('scopes') or [])}
+        if not isinstance(preview['authorizationBinding'], str) or not re.fullmatch(r'[a-f0-9]{64}', preview['authorizationBinding']):
+            raise AlphaError('The Mastodon grant lacks a secure generation binding. Reconnect before preparing an action.', 409)
         with self.repository.transaction(token, workspace) as (cur, row, actor):
             require(_membership(row), permission)
             if action == 'profile_update' and payload.get('profileMedia'):
@@ -319,9 +342,33 @@ class MastodonManagement:
                 raise AlphaError('Prepare a fresh action preview; this preview expired or was already handled.', 409)
             return {'actionId': action_id, 'digest': stored[1], 'preview': stored[0], 'expiresAt': stored[4]}
 
+    def _approved_action(self, workspace, token, connection, action_id, payload):
+        # Admit the exact actor/role/digest before _grant contacts any provider.
+        from .hosted import _membership
+        with self.repository.transaction(token, workspace) as (cur, row, actor):
+            cur.execute("SELECT preview,digest,status,receipt,actor_id::text,extract(epoch from expires_at)::float8 FROM public.pr_mastodon_actions WHERE workspace_id=%s AND connection_id=%s AND id::text=%s", (workspace, connection, action_id))
+            stored = cur.fetchone()
+            if not stored or stored[4] != actor:
+                raise AlphaError('Action preview unavailable.', 404)
+            preview, fingerprint, state, receipt, _, expires = stored
+            require(_membership(row), preview['permission'])
+            if payload['digest'] != fingerprint or digest(preview) != fingerprint:
+                raise AlphaError('The action changed. Prepare and approve a new preview.', 409)
+            if state != 'preview':
+                return {'actionId': action_id, 'state': state, 'receipt': receipt, 'replayed': True}
+            if expires <= self.clock():
+                raise AlphaError('This action preview expired. Prepare a fresh preview.', 409)
+            self.oauth.assert_mastodon_dispatch(cur, workspace, connection,
+                {'providerAccountId': preview['accountId'], '_mastodonCredentialBinding': preview.get('authorizationBinding'),
+                 'scopes': preview.get('authorizationScopes') or []}, preview['scopes'])
+        return None
+
     def execute(self, workspace, token, connection, action_id, payload):
         if payload.get("confirmed") is not True or not isinstance(payload.get("digest"), str):
             raise AlphaError("Approve the exact Mastodon action preview first.", 403)
+        replay = self._approved_action(workspace, token, connection, action_id, payload)
+        if replay is not None:
+            return replay
         provider, grant, session = self._grant(workspace, token, connection)
         if not mastodon_write_qualified(provider):
             raise AlphaError('Mastodon account writes await independent publishing acceptance. Nothing was sent.',
@@ -338,7 +385,9 @@ class MastodonManagement:
                 raise AlphaError("The action changed. Prepare and approve a new preview.", 409)
             if state != "preview":
                 return {"actionId": action_id, "state": state, "receipt": receipt, "replayed": True}
-            if expires <= self.clock() or preview["accountId"] != grant["providerAccountId"]:
+            if (expires <= self.clock() or preview["accountId"] != grant["providerAccountId"]
+                    or preview.get('authorizationBinding') != grant.get('_mastodonCredentialBinding')
+                    or preview.get('authorizationScopes') != sorted(grant.get('scopes') or [])):
                 raise AlphaError("This approval expired or the connected account changed.", 409)
             self._scopes(grant, preview["scopes"])
             throttle(cur, "mastodon-instance:" + session["instance"], 250, 300)
@@ -354,6 +403,11 @@ class MastodonManagement:
                 active = cur.fetchone()
                 if not active or active[2] != preview["accountId"] or self.oauth.vault.decrypt(active[0], active[1]) != grant["accessToken"]:
                     raise AlphaError("The connection changed. No action was sent.", 409)
+                self.oauth.assert_mastodon_dispatch(cur, workspace, connection, grant, preview['scopes'])
+                if preview['action'] in ('filter_update', 'filter_delete'):
+                    original = self._result(provider.api(session, 'GET', preview['path']))
+                    if not isinstance(original, dict) or str(original.get('id')) != preview['targetId']:
+                        raise AlphaError('The server did not identify the exact owned filter. No action was sent.', 409)
                 if preview["action"] in ("edit", "delete"):
                     original = self._result(provider.api(session, "GET", preview["path"]))
                     if str((original.get("account") or {}).get("id")) + "@" + session["instance"] != preview["accountId"]:
@@ -403,7 +457,18 @@ class MastodonManagement:
             url = body.get("url")
             if isinstance(url, str) and url.startswith("https://" + session["instance"] + "/"):
                 result["url"] = url
-        if action in ("delete", "native_cancel"):
+        if action == 'report_account':
+            if (not isinstance(body, dict) or not ID.fullmatch(str(body.get('id', '')))
+                    or not isinstance(body.get('target_account'), dict)
+                    or str(body['target_account'].get('id')) != preview['body']['account_id']):
+                return {'state': 'uncertain', 'reason': 'The report response did not identify the approved target. Do not resend.'}
+            result.update(reportFiled=True, forwarded=body.get('forwarded') if type(body.get('forwarded')) is bool else None,
+                          moderationOutcome='Report filing is not moderator enforcement.')
+        if action in ('filter_create', 'filter_update'):
+            if (not isinstance(body, dict) or not ID.fullmatch(str(body.get('id', '')))
+                    or action == 'filter_update' and str(body['id']) != preview['targetId']):
+                return {'state': 'uncertain', 'reason': 'The filter response did not identify the approved filter. Do not resend.'}
+        if action in ("delete", "native_cancel", "filter_delete"):
             checked = provider.api(session, "GET", preview["path"])
             if checked.get("status") == 404:
                 result.update(state="verified", verification="provider_lookup_absent")

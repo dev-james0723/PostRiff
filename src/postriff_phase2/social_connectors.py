@@ -121,7 +121,7 @@ class XProvider(OAuthProvider):
 
 # --- Mastodon ---------------------------------------------------------------------------------------------------
 class MastodonProvider(OAuthProvider):
-    id, platform, capability_version = "mastodon", "Mastodon", 2
+    id, platform, capability_version = "mastodon", "Mastodon", 3
     SCOPES = {"identity": ["read:accounts"],
               "publish": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
               "schedule": ["read:accounts", "read:statuses", "write:statuses", "write:media"],
@@ -129,14 +129,14 @@ class MastodonProvider(OAuthProvider):
               "analytics": ["read:accounts", "read:statuses"],
               "comments_read": ["read:accounts", "read:statuses", "read:notifications"],
               "reply": ["read:accounts", "read:statuses", "write:statuses"],
-              "moderate": ["read:accounts", "write:mutes", "write:blocks"],
+              "moderate": ["read:accounts", "read:statuses", "read:filters", "write:mutes", "write:blocks", "write:reports", "write:filters"],
               "profile": ["read:accounts", "write:accounts"],
               "interactions": ["read:accounts", "read:statuses", "read:follows", "read:lists", "read:bookmarks",
                                "write:follows", "write:lists", "write:bookmarks", "write:favourites", "write:statuses"],
               "management": ["read:accounts", "read:statuses", "read:notifications", "read:follows",
                              "read:lists", "read:bookmarks", "read:favourites", "read:mutes", "read:blocks",
                              "write:statuses", "write:media", "write:accounts", "write:follows", "write:lists",
-                             "write:bookmarks", "write:favourites", "write:mutes", "write:blocks"]}
+                             "write:bookmarks", "write:favourites", "write:mutes", "write:blocks", "read:filters", "write:filters", "write:reports"]}
     EXPLAIN = {"identity": "Connect your Mastodon account. Rafii registers itself on your server and reads only your profile.",
                "publish": "Rafii will post to this Mastodon account only when you approve each exact post."}
     account_requirement = "An account on any Mastodon server."
