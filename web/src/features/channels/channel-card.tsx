@@ -141,6 +141,8 @@ function DisconnectButton({
             <AlertDialogDescription>
               {youtube
                 ? `Rafii removes its stored credentials and associated local YouTube data for ${account}. Approved Rafii jobs are held at the next claim. This does not cancel a native publication schedule already accepted by YouTube. Google authorization may remain active when it is shared with another connection; the result will state whether token revocation was confirmed or deferred.`
+                : platform === 'Mastodon'
+                  ? `Rafii removes its stored access to ${account} and requests token revocation on your Mastodon server. The result will say whether your server confirmed revocation. Approved Rafii posts are held; posts or schedules already accepted by your server remain there.`
                 : `Rafii loses access to ${account}. Writing samples imported from it are deleted, and Writing DNA built from them must be rebuilt. Manual samples stay. Approved posts are held until you reconnect.`}
             </AlertDialogDescription>
             <AlertDialogDescription lang={lang}>{copy.purge}</AlertDialogDescription>
@@ -329,12 +331,12 @@ export function ChannelCard({ channel, provider, canManage, activity, highlight 
       className='flex h-full scroll-mt-24 flex-col gap-4'
     >
       <header className='flex flex-wrap items-start justify-between gap-3'>
-        <div className='flex min-w-0 items-center gap-3'>
+        <div className='flex min-w-0 max-w-full items-center gap-3'>
           <ChannelIcon platform={channel.platform} name={channel.platform} size='md' />
           <div className='min-w-0'>
-            <p className='text-foreground truncate text-base font-medium'>{channel.account}</p>
-            <p className='text-muted-foreground truncate text-sm'>
-              {channel.platform} · {channel.accountType || 'account'}
+            <p title={channel.account} className='text-foreground truncate text-base font-medium'>{channel.account}</p>
+            <p className={cn('text-muted-foreground text-sm', channel.platform === 'Mastodon' ? 'break-all' : 'truncate')}>
+              {channel.platform} · {channel.platform === 'Mastodon' ? channel.account.split('@').at(-1) : channel.accountType || 'account'}
             </p>
           </div>
           {highlight && <SuccessCheck className='text-foreground size-5 shrink-0' />}
