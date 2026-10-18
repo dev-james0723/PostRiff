@@ -2,6 +2,12 @@
 # Genuine Linux Chromium and WebKit E2E with synthetic local Mastodon provider.
 # Scoped 20-minute Depot sandbox, no real OAuth, provider traffic or hosted DB.
 set -euo pipefail
+# Retired source-forensic route. Current acceptance uses the guarded after134 harness.
+if [ "${POSTRIFF_MASTODON_G7_FORENSIC_ONLY:-}" != 1 ]; then
+  echo 'BLOCKED: historical G7 fixture route; not current schema/release acceptance. Use separately approved after134 validation.' >&2
+  exit 64
+fi
+echo 'HISTORICAL_G7_FORENSIC_ONLY=true; CURRENT_ACCEPTANCE=false; PRODUCTION=false'
 test "$(uname -s)" = Linux
 test "$CI" = true || test "$CI" = 1
 test "$G5_SYNTHETIC_ONLY" = 1
@@ -11,7 +17,7 @@ test "$NEXT_PUBLIC_APP_URL" = "http://127.0.0.1:4448"
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$ROOT"
 test -f tests/phase2/mastodon_queue_browser_fixture.py
-test -f migrations/postriff/131_mastodon_management.sql
+test -f tests/fixtures/mastodon_legacy_g7_20261017/131_mastodon_management.sql
 test "$(node -v)" = v24.15.0
 PG_BIN=/usr/lib/postgresql/16/bin
 if [ ! -x "$PG_BIN/initdb" ] || [ ! -x "$PG_BIN/pg_ctl" ]; then

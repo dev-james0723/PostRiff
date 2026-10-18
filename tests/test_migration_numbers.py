@@ -1,4 +1,5 @@
 """Hosted migrations keep unique numbers, and 031 chat media keeps its contract (chat-context SPEC §10)."""
+import hashlib
 import re
 import sys
 import unittest
@@ -19,6 +20,24 @@ class MigrationNumberTests(unittest.TestCase):
         numbers = [p.name.split("_")[0] for p in paths]
         self.assertEqual(len(numbers), len(set(numbers)))
         self.assertIn("031_chat_media.sql", [p.name for p in paths])
+
+    def test_retired_mastodon_sources_stay_outside_discovery(self):
+        discovered = {p.name: p for p in postriff_migrate.migrations()}
+        historical = ROOT / 'tests/fixtures/mastodon_legacy_g7_20261017'
+        expected = {
+            '131_mastodon_management.sql': 'c85e2d27f79947692a1bf28a7087fcbe7b0d3ea9d3c57e2e0fe2dd654bacf694',
+            '132_mastodon_native_metrics.sql': 'c3a887b379958bdb32282120f6b9dc5515b02882da279898453fedb8f7886d3b',
+            '133_mastodon_connection_health.sql': 'eeae6a4f48fb7616ce168f672c05d6ba7e169aa91951c17fc1c4c187fb437905',
+        }
+        for name, checksum in expected.items():
+            self.assertNotIn(name, discovered)
+            self.assertEqual(hashlib.sha256((historical / name).read_bytes()).hexdigest(), checksum)
+        self.assertEqual(sorted(name for name in discovered if 'mastodon' in name.lower()),
+                         ['134_mastodon_connect_applications.sql'])
+        cache = discovered['134_mastodon_connect_applications.sql']
+        self.assertEqual(hashlib.sha256(cache.read_bytes()).hexdigest(),
+                         'd2012caa4dbd5684c89b7d8fd50746c84bb4a770657202f6366e99007425ccc3')
+        self.assertFalse(any('after_connect_134' in name for name in discovered))
 
     def test_duplicate_is_refused(self):
         import tempfile

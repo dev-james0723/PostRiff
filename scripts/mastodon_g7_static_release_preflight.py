@@ -1,4 +1,4 @@
-"""G7 Mastodon OFFLINE release source + checksum ledger preflight.
+"""HISTORICAL G7 OFFLINE source + checksum ledger forensic comparison.
 
 READ-ONLY on project files and an operator-provided JSON snapshot of the
 Production custom migration ledger. No network, API, credentials, or database
@@ -54,27 +54,30 @@ def examine(ledger_path: pathlib.Path) -> dict:
             missing.append(name)
         elif sha256(path) != digest:
             drift.append(name)
+    legacy = ROOT / 'tests/fixtures/mastodon_legacy_g7_20261017'
     sql = {}
     for name, digest in EXACT_SQL.items():
-        path = directory / name
-        assert path.is_file(), f"Missing pending migration: {name}"
+        path = legacy / name
+        assert path.is_file(), f"Missing historical unapplied source: {name}"
         assert sha256(path) == digest, f"Mastodon migration drift: {name}"
         assert name not in ledger, f"Migration already applied in selected ledger: {name}"
         sql[name] = digest
-    app_sql = (directory / "131_mastodon_management.sql").read_text().lower()
-    health_sql = (directory / "133_mastodon_connection_health.sql").read_text().lower()
+    app_sql = (legacy / "131_mastodon_management.sql").read_text().lower()
+    health_sql = (legacy / "133_mastodon_connection_health.sql").read_text().lower()
     assert app_sql.count("force row level security") >= 2
     assert health_sql.count("force row level security") >= 1
     assert "revoke all" in app_sql and "revoke all" in health_sql
     assert "service_role" in app_sql and "service_role" in health_sql
     result = {
-        "execution": "offline_read_only_preflight",
+        "execution": "historical_g7_offline_forensic_only",
+        "current_acceptance": False,
+        "auto_discovery_excluded": True,
         "canonical_production_ref": PROJECT_REF,
         "applied_migrations_in_snapshot": len(items),
         "applied_source_matches": len(items) - len(missing) - len(drift),
         "missing_from_source": missing,
         "applied_hash_mismatch": drift,
-        "pending_mastodon_migrations": sql,
+        "historical_unapplied_mastodon_sources": sql,
         "new_tables_force_rls_and_service_only_source": True,
         "independent_restore_verified": False,
         "real_oauth_verified": False,
@@ -87,9 +90,12 @@ def examine(ledger_path: pathlib.Path) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--historical-g7-only", action="store_true", help="Acknowledge retired source comparison; never current acceptance")
     p.add_argument("--ledger", required=True, type=pathlib.Path)
     p.add_argument("--output", type=pathlib.Path, default=None)
     args = p.parse_args()
+    if not args.historical_g7_only:
+        p.error('Retired G7 source only: --historical-g7-only is required; not current release acceptance')
     try:
         result = examine(args.ledger)
     except (AssertionError, OSError, json.JSONDecodeError, KeyError) as err:

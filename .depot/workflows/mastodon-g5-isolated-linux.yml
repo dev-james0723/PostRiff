@@ -1,6 +1,8 @@
+# HISTORICAL G7 FORENSIC WORKFLOW; not current Connect/after134 release acceptance.
+# Existing entry scripts fail closed without explicit forensic-only opt-in; no execution authorized.
 # Manual-only two-job Depot Linux acceptance, each submitted separately with --job.
 # Never register on default branch, never automatically retry, no real Mastodon/Production calls.
-name: Rafii Mastodon G5 isolated Linux synthetic qualification
+name: HISTORICAL Rafii Mastodon G5 isolated Linux synthetic qualification
 on:
   workflow_dispatch:
 permissions:
@@ -39,7 +41,7 @@ jobs:
           set -euo pipefail
           test -f docs/mastodon-production-20261017/G4-DEPOT-PREFLIGHT-20261017.md
           for f in 131_mastodon_management 132_mastodon_native_metrics 133_mastodon_connection_health; do
-            test -f "migrations/postriff/$f.sql"
+            test -f "tests/fixtures/mastodon_legacy_g7_20261017/$f.sql"
           done
           test "$G5_SYNTHETIC_ONLY" = 1
           echo "LINUX=YES; G5_SOURCE=ISOLATED_LOCAL_PATCH; PROVIDER_EGRESS=MOCKED"

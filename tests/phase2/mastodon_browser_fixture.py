@@ -6,11 +6,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'scripts')]
+sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'scripts'), str(ROOT / 'tests')]
 # Reuse the existing disposable PostgreSQL socket/privilege wrapper. Replace
 # only its service factory; no Google fixture or provider is mounted here.
 import youtube_browser_fixture as disposable
 from postriff_phase2.social_connectors import MastodonProvider
+from mastodon_after134_fixture import prepare as prepare_after134
 
 SCOPES = list(MastodonProvider.SCOPES['management'])
 
@@ -64,8 +65,9 @@ class SyntheticMastodon:
 
 
 def service(*args, **kwargs):
-    with args[0]() as db:
-        db.execute((ROOT / 'migrations/postriff/131_mastodon_management.sql').read_text())
+    # This is the existing dev harness's dedicated loopback cluster, not the
+    # focused PG suite. Shared setup verifies actual server port/data directory.
+    prepare_after134(args[0], 'host=127.0.0.1 port=55448 dbname=postgres', fixture_route='management-browser')
     provider = MastodonProvider('http://127.0.0.1:4448', transport=SyntheticMastodon(), production_reviewed=True,
                                resolver=lambda *_args, **_kwargs: [(2, 1, 6, '', ('93.184.216.34', 443))])
     provider.publish_live_tested = provider.publishing_permission = True  # Synthetic fixture only.
@@ -84,5 +86,6 @@ disposable.harness.HostedWorkspaceService = service
 if __name__ == '__main__':
     if sys.platform != 'linux' or os.environ.get('CI', '').lower() not in ('1', 'true'):
         raise SystemExit('Requires cloud Linux CI.')
-    print(json.dumps({'execution': 'CLOUD SYNTHETIC MASTODON BROWSER', 'realMastodonAcceptance': False}), flush=True)
+    print(json.dumps({'execution': 'CLOUD SYNTHETIC MASTODON BROWSER AFTER134', 'realMastodonAcceptance': False,
+                      'schema': 'locked separately approved management-after134 proposal; never production adoption'}), flush=True)
     disposable.harness.main()

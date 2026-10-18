@@ -91,6 +91,7 @@ env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true \
 env -i PATH="$PATH" HOME="$jcb_yb_home" TMPDIR=/tmp CI=true LC_ALL=C \
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$jcb_yb_root/src:$jcb_yb_root/tests" \
   POSTRIFF_PG_BIN="$jcb_yb_pg" POSTRIFF_RESEARCH=0 POSTRIFF_DEV_WEB_ORIGIN=http://127.0.0.1:4448 \
+  POSTRIFF_MASTODON_AFTER134_FIXTURE=1 POSTRIFF_MASTODON_AFTER134_BROWSER_FIXTURE=1 \
   PGUSER=postriff_test PGHOST=127.0.0.1 PGPORT=55448 PGDATABASE=postgres \
   PGCONNECT_TIMEOUT=5 PGPASSFILE=/dev/null PGSERVICEFILE=/dev/null \
   "$TREND_VISUAL_TEST_PYTHON" "$jcb_yb_root/tests/phase2/mastodon_queue_browser_fixture.py" --port 4348 --pg-port 55448 \

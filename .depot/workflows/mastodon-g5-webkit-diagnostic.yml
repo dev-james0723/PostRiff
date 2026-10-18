@@ -1,5 +1,7 @@
+# HISTORICAL G7 FORENSIC WORKFLOW; not current Connect/after134 release acceptance.
+# Existing entry scripts fail closed without explicit forensic-only opt-in; no execution authorized.
 # Manual one-shot WebKit-only diagnostics, no provider calls.
-name: Rafii Mastodon G5 isolated WebKit diagnostic
+name: HISTORICAL Rafii Mastodon G5 isolated WebKit diagnostic
 on:
   workflow_dispatch:
 permissions:

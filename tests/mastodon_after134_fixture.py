@@ -18,13 +18,22 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/mastodon_after134_20261018'
 
 
-def prepare(connection, dsn):
+def prepare(connection, dsn, *, fixture_route='management'):
+    # Each caller selects one existing harness identity; never accept arbitrary
+    # ports/directories merely because an address is loopback.
+    routes = {'management': ('55438', ('postriff-cw-pg-', 'consumer-pg-')),
+              'management-browser': ('55448', ('postriff-dev-pg-',))}
+    if fixture_route not in routes:
+        raise RuntimeError('Unknown disposable Mastodon schema fixture route.')
+    expected_port, expected_prefixes = routes[fixture_route]
+    if fixture_route == 'management-browser' and os.environ.get('POSTRIFF_MASTODON_AFTER134_BROWSER_FIXTURE') != '1':
+        raise RuntimeError('Browser schema setup requires the explicit after134 browser fixture opt-in.')
     if (not sys.platform.startswith('linux') or os.environ.get('CI', '').lower() not in ('1', 'true')
             or os.environ.get('POSTRIFF_MASTODON_AFTER134_FIXTURE') != '1'):
         raise RuntimeError('Use only the approved management-after134-only disposable cloud PG route.')
     params = conninfo_to_dict(dsn)
     if (set(params) - {'host', 'port', 'dbname', 'user'} or params.get('host') != '127.0.0.1'
-            or params.get('port') != '55438' or params.get('dbname') != 'postgres'):
+            or params.get('port') != expected_port or params.get('dbname') != 'postgres'):
         raise RuntimeError('Only the existing disposable loopback fixture DSN is accepted.')
     if any(os.environ.get(k) for k in ('PGHOSTADDR', 'PGSERVICE', 'PGPASSWORD', 'PGSSLCERT', 'PGSSLKEY')):
         raise RuntimeError('Unexpected credential or routing environment in synthetic PG fixture.')
@@ -36,16 +45,16 @@ def prepare(connection, dsn):
     core = (FIXTURE / meta['custom_ledger_name']).read_text()
     if hashlib.sha256(core.encode()).hexdigest() != meta['payload_sha256']:
         raise RuntimeError('Future core payload hash mismatch.')
-    cache = (FIXTURE / '134_mastodon_connect_applications.sql').read_text()
+    cache = (ROOT / 'migrations/postriff/134_mastodon_connect_applications.sql').read_text()
     if hashlib.sha256(cache.encode()).hexdigest() != meta['requires134_sha256']:
         raise RuntimeError('Current Connect134 source hash mismatch.')
     # The locked SQL itself contains the exact two prerequisite ledger snapshots.
     expected = [json.loads(s) for s in re.findall(r'\$expected\$(.*?)\$expected\$::jsonb', core, re.S)]
     native, custom = expected[:2]
     with connection() as db:
-        address, database, data = db.execute("SELECT inet_server_addr()::text,current_database(),current_setting('data_directory')").fetchone()
-        if (address != '127.0.0.1' or database != 'postgres'
-                or not Path(data).parent.name.startswith(('postriff-cw-pg-', 'consumer-pg-'))):
+        address, port, database, data = db.execute("SELECT inet_server_addr()::text,inet_server_port(),current_database(),current_setting('data_directory')").fetchone()
+        if (address != '127.0.0.1' or str(port) != expected_port or database != 'postgres'
+                or not Path(data).parent.name.startswith(expected_prefixes)):
             raise RuntimeError('Server is not the existing harness-owned disposable cluster.')
         marker = db.execute("SELECT to_regclass('postriff_private.mastodon_after134_fixture')").fetchone()[0]
         if marker:

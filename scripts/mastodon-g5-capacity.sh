@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Single-use disposable Linux capacity runner; pinned Python deps, no real provider calls.
 set -euo pipefail
+# Retired source-forensic route. Current acceptance uses the guarded after134 harness.
+if [ "${POSTRIFF_MASTODON_G7_FORENSIC_ONLY:-}" != 1 ]; then
+  echo 'BLOCKED: historical G7 fixture route; not current schema/release acceptance. Use separately approved after134 validation.' >&2
+  exit 64
+fi
+echo 'HISTORICAL_G7_FORENSIC_ONLY=true; CURRENT_ACCEPTANCE=false; PRODUCTION=false'
 test "$(uname -s)" = Linux
 test "$CI" = true || test "$CI" = 1
 test "$G5_SYNTHETIC_ONLY" = 1
@@ -8,7 +14,7 @@ test -z "$OPENAI_API_KEY" && test -z "$POSTRIFF_DATABASE_URL"
 test "$(id -u)" -ne 0 || { echo 'BLOCKER: do not run PostgreSQL as OS root'; exit 64; }
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$ROOT"
-test -f migrations/postriff/131_mastodon_management.sql
+test -f tests/fixtures/mastodon_legacy_g7_20261017/131_mastodon_management.sql
 PG_BIN=/usr/lib/postgresql/16/bin
 if [ ! -x "$PG_BIN/initdb" ] || [ ! -x "$PG_BIN/pg_ctl" ]; then
   echo 'G5_CAPACITY: ephemeral runner lacks PG16 server binaries; install PostgreSQL 16 only inside this Depot sandbox'
