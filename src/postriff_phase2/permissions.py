@@ -66,7 +66,7 @@ ACTION_CLASSES = {
 EDIT_ACTIONS = frozenset({
     "brand_brain_import", "brand_brain_analyze", "brand_brain_review", "brand_brain_preview", "brand_brain_discard", "brand_brain_feedback", "brand_brain_clean_restore", "brand_brain_manual",
     "accept_update", "adapt", "approve_source", "context", "generate", "idea", "import_propose", "language_settings", "mode",
-    "opening", "p2_art_delete", "p2_art_generate", "p2_art_select", "p2_content_context", "p2_content_format", "p2_content_install_pack",
+    "manual_draft_create", "opening", "p2_art_delete", "p2_art_generate", "p2_art_select", "p2_content_context", "p2_content_format", "p2_content_install_pack",
     "p2_content_interview_answer", "p2_content_interview_start", "p2_content_proposal_edit", "p2_content_proposal_save", "p2_content_proposal_test",
     "p2_content_select", "p2_content_suggest", "p2_delete_account", "p2_folder_delete", "p2_folder_move", "p2_folder_save", "p2_link_identity",
     "p2_logout", "p2_media_delete", "p2_media_upload", "p2_revoke_device", "p2_template_archive", "p2_template_create", "p2_template_duplicate",
