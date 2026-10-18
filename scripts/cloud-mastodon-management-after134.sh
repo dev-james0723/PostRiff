@@ -16,7 +16,7 @@ export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tests POSTRIFF_RESEARCH=0 NO_PRO
 bash scripts/cloud-mastodon-automation.sh management-after134-only
 
 cd web
-node --test tests/channel-list.test.cjs tests/channels-connect-deeplink.test.cjs tests/publishing-status.test.mjs tests/publishing-support.test.mjs tests/receipt.test.mjs tests/calendar-card.test.cjs
+node --test tests/channel-list.test.cjs tests/channels-connect-deeplink.test.cjs tests/mastodon-connect.test.cjs tests/publishing-status.test.mjs tests/publishing-support.test.mjs tests/receipt.test.mjs tests/calendar-card.test.cjs
 npm run lint
 npm run typecheck
 POSTRIFF_API_ORIGIN=http://127.0.0.1:4348 NEXT_PUBLIC_APP_URL=http://127.0.0.1:4448 POSTRIFF_DEV_SSR=1 npm run build
